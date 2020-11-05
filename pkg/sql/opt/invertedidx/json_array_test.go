@@ -212,3 +212,107 @@ func TestTryJoinJsonOrArrayIndex(t *testing.T) {
 		}
 	}
 }
+
+func TestTryFilterJsonOrArrayIndex(t *testing.T) {
+	semaCtx := tree.MakeSemaContext()
+	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+
+	tc := testcat.New()
+	if _, err := tc.ExecuteDDL(
+		"CREATE TABLE t (j JSON, a INT[], INVERTED INDEX (j), INVERTED INDEX (a))",
+	); err != nil {
+		t.Fatal(err)
+	}
+	var f norm.Factory
+	f.Init(evalCtx, tc)
+	md := f.Metadata()
+	tn := tree.NewUnqualifiedTableName("t")
+	tab := md.AddTable(tc.Table(tn), tn)
+	jsonOrd, arrayOrd := 1, 2
+
+	testCases := []struct {
+		filters      string
+		indexOrd     int
+		ok           bool
+		noDuplicates bool
+	}{
+		// If we can create an inverted filter with the given filter expression and
+		// index, ok=true. If the spans in the resulting inverted index constraint
+		// do not have duplicate primary keys, noDuplicates=true.
+		{
+			filters:      "j @> '1'",
+			indexOrd:     jsonOrd,
+			ok:           true,
+			noDuplicates: true,
+		},
+		{
+			// Contained by is not yet supported.
+			filters:  "j <@ '1'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
+			filters:      "a @> '{1}'",
+			indexOrd:     arrayOrd,
+			ok:           true,
+			noDuplicates: true,
+		},
+		{
+			// Contained by is not yet supported.
+			filters:  "a <@ '{1}'",
+			indexOrd: arrayOrd,
+			ok:       false,
+		},
+		{
+			// Wrong index ordinal.
+			filters:  "a @> '{1}'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
+			// Wrong index ordinal.
+			filters:  "j @> '1'",
+			indexOrd: arrayOrd,
+			ok:       false,
+		},
+		{
+			// When operations affecting two different variables are OR-ed, we cannot
+			// constrain either index.
+			filters:  "j @> '1' OR a @> '{1}'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
+			// We can constrain either index when the functions are AND-ed.
+			filters:      "j @> '1' AND a @> '{1}'",
+			indexOrd:     jsonOrd,
+			ok:           true,
+			noDuplicates: false,
+		},
+		{
+			// We can constrain either index when the functions are AND-ed.
+			filters:      "j @> '1' AND a @> '{1}'",
+			indexOrd:     arrayOrd,
+			ok:           true,
+			noDuplicates: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Logf("test case: %v", tc)
+		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, tc.filters)
+
+		// We're not testing that the correct SpanExpression is returned here;
+		// that is tested elsewhere. This is just testing that we are constraining
+		// the index when we expect to.
+		_, _, _, _, noDuplicates, ok := invertedidx.TryFilterInvertedIndex(
+			evalCtx, &f, filters, tab, md.Table(tab).Index(tc.indexOrd),
+		)
+		if tc.ok != ok {
+			t.Fatalf("expected %v, got %v", tc.ok, ok)
+		}
+		if tc.noDuplicates != noDuplicates {
+			t.Fatalf("expected noDuplicates=%v, but got %v", tc.noDuplicates, noDuplicates)
+		}
+	}
+}

@@ -22,18 +22,21 @@ import (
 // datum according to the JSON or Array contains (@>) operator. If it is not
 // possible to create such a SpanExpression, JSONOrArrayToContainingSpanExpr
 // returns nil. If the provided datum is not a JSON or Array, returns an error.
+//
+// Returns noDuplicates=true if the spans are guaranteed not to produce
+// duplicate primary keys. Otherwise, returns noDuplicates=false.
 func JSONOrArrayToContainingSpanExpr(
 	evalCtx *tree.EvalContext, d tree.Datum,
-) (*SpanExpression, error) {
+) (_ *SpanExpression, noDuplicates bool, _ error) {
 	var b []byte
-	spansSlice, tight, err := rowenc.EncodeContainingInvertedIndexSpans(
+	spansSlice, tight, noDuplicates, err := rowenc.EncodeContainingInvertedIndexSpans(
 		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion,
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if len(spansSlice) == 0 {
-		return nil, errors.AssertionFailedf("trying to use null key in index lookup")
+		return nil, false, errors.AssertionFailedf("trying to use null key in index lookup")
 	}
 
 	// The spans returned by EncodeContainingInvertedIndexSpans represent the
@@ -60,7 +63,7 @@ func JSONOrArrayToContainingSpanExpr(
 	}
 
 	if spanExpr, ok := invExpr.(*SpanExpression); ok {
-		return spanExpr, nil
+		return spanExpr, noDuplicates, nil
 	}
-	return nil, nil
+	return nil, false, nil
 }

@@ -1672,7 +1672,8 @@ project
  ├── key: (1)
  └── scan b@inv_idx
       ├── columns: k:1!null
-      ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
 memo
@@ -1682,16 +1683,16 @@ memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k) (project G4 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G4 G3 k)
- │         └── cost: 118.42
+ │         └── cost: 119.56
  ├── G2: (select G5 G6) (index-join G4 b,cols=(1,4))
  │    └── []
  │         ├── best: (index-join G4 b,cols=(1,4))
- │         └── cost: 783.92
+ │         └── cost: 789.51
  ├── G3: (projections)
- ├── G4: (scan b@inv_idx,cols=(1),constrained)
+ ├── G4: (scan b@inv_idx,cols=(1),constrained inverted)
  │    └── []
- │         ├── best: (scan b@inv_idx,cols=(1),constrained)
- │         └── cost: 117.31
+ │         ├── best: (scan b@inv_idx,cols=(1),constrained inverted)
+ │         └── cost: 118.45
  ├── G5: (scan b,cols=(1,4))
  │    └── []
  │         ├── best: (scan b,cols=(1,4))
@@ -1717,7 +1718,8 @@ project
       ├── fd: (1)-->(2,4)
       └── scan b@inv_idx
            ├── columns: k:1!null
-           ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+           ├── inverted constraint: /6/1
+           │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
            └── key: (1)
 
 opt
@@ -1730,7 +1732,8 @@ index-join b
  ├── fd: (1)-->(4)
  └── scan b@inv_idx
       ├── columns: k:1!null
-      ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
 opt
@@ -1743,38 +1746,61 @@ index-join b
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── scan b@inv_idx
       ├── columns: k:1!null
-      ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
+# TODO(rytaft): ensure that the stats prevent us from using the inverted index.
 opt
 SELECT * FROM b WHERE j @> '{}'
 ----
-select
+index-join b
  ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── scan b
- │    ├── columns: k:1!null u:2 v:3 j:4
- │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── filters
-      └── j:4 @> '{}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true
+      │    └── union spans
+      │         ├── ["7\x00\x019", "7\x00\x019"]
+      │         └── ["7\x00\xff", "8")
+      ├── key: (1)
+      └── scan b@inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7\x00\x019", "7\x00\x019"]
+           │         └── ["7\x00\xff", "8")
+           ├── key: (1)
+           └── fd: (1)-->(6)
 
+# TODO(rytaft): ensure that the stats prevent us from using the inverted index.
 opt
 SELECT * FROM b WHERE j @> '[]'
 ----
-select
+index-join b
  ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── scan b
- │    ├── columns: k:1!null u:2 v:3 j:4
- │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── filters
-      └── j:4 @> '[]' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true
+      │    └── union spans
+      │         ├── ["7\x00\x018", "7\x00\x018"]
+      │         └── ["7\x00\x03", "7\x00\x03"]
+      ├── key: (1)
+      └── scan b@inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7\x00\x018", "7\x00\x018"]
+           │         └── ["7\x00\x03", "7\x00\x03"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
 
 opt
 SELECT * FROM b WHERE j @> '2'
@@ -1786,55 +1812,168 @@ index-join b
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── scan b@inv_idx
       ├── columns: k:1!null
-      ├── constraint: /4/1
-      │    ├── [/'2' - /'2']
-      │    └── [/'[2]' - /'[2]']
+      ├── inverted constraint: /6/1
+      │    └── spans
+      │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+      │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
       └── key: (1)
+
+# Disjunction.
+opt
+SELECT k FROM b WHERE j @> '2' OR j @> '1'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true
+      │    └── union spans
+      │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+      │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      ├── key: (1)
+      └── scan b@inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+           │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+           │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+           │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
+
+# Disjunction with non-tight predicate.
+opt
+SELECT * FROM b WHERE j @> '[[1, 2]]' OR j @> '[[3, 4]]'
+----
+select
+ ├── columns: k:1!null u:2 v:3 j:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false
+ │         │    ├── union spans: empty
+ │         │    └── UNION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false
+ │         │         │    ├── union spans: empty
+ │         │         │    └── INTERSECTION
+ │         │         │         ├── span expression
+ │         │         │         │    ├── tight: false
+ │         │         │         │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+ │         │         │         └── span expression
+ │         │         │              ├── tight: false
+ │         │         │              └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+ │         │         └── span expression
+ │         │              ├── tight: false
+ │         │              ├── union spans: empty
+ │         │              └── INTERSECTION
+ │         │                   ├── span expression
+ │         │                   │    ├── tight: false
+ │         │                   │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
+ │         │                   └── span expression
+ │         │                        ├── tight: false
+ │         │                        └── union spans: ["7\x00\x03\x00\x03\x00\x01*\b\x00", "7\x00\x03\x00\x03\x00\x01*\b\x00"]
+ │         ├── key: (1)
+ │         └── scan b@inv_idx
+ │              ├── columns: k:1!null j_inverted_key:6!null
+ │              ├── inverted constraint: /6/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+ │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+ │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
+ │              │         └── ["7\x00\x03\x00\x03\x00\x01*\b\x00", "7\x00\x03\x00\x03\x00\x01*\b\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(6)
+ └── filters
+      └── (j:4 @> '[[1, 2]]') OR (j:4 @> '[[3, 4]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT * FROM b WHERE j @> '[{}]'
 ----
-select
+index-join b
  ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── scan b
- │    ├── columns: k:1!null u:2 v:3 j:4
- │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── filters
-      └── j:4 @> '[{}]' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true
+      │    └── union spans
+      │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
+      │         └── ["7\x00\x03\x00\xff", "7\x00\x04")
+      ├── key: (1)
+      └── scan b@inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
+           │         └── ["7\x00\x03\x00\xff", "7\x00\x04")
+           ├── key: (1)
+           └── fd: (1)-->(6)
 
 opt
 SELECT * FROM b WHERE j @> '{"a": {}}'
 ----
-select
+index-join b
  ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── scan b
- │    ├── columns: k:1!null u:2 v:3 j:4
- │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── filters
-      └── j:4 @> '{"a": {}}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true
+      │    └── union spans
+      │         ├── ["7a\x00\x019", "7a\x00\x019"]
+      │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
+      ├── key: (1)
+      └── scan b@inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x019", "7a\x00\x019"]
+           │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
+           ├── key: (1)
+           └── fd: (1)-->(6)
 
 opt
 SELECT * FROM b WHERE j @> '{"a": []}'
 ----
-select
+index-join b
  ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── scan b
- │    ├── columns: k:1!null u:2 v:3 j:4
- │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── filters
-      └── j:4 @> '{"a": []}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true
+      │    └── union spans
+      │         ├── ["7a\x00\x018", "7a\x00\x018"]
+      │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
+      ├── key: (1)
+      └── scan b@inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x018", "7a\x00\x018"]
+           │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
 
 opt
 SELECT * FROM b WHERE j @> '{"a":[[{"b":{"c":[{"d":"e"}]}}]]}'
@@ -1846,7 +1985,8 @@ index-join b
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── scan b@inv_idx
       ├── columns: k:1!null
-      ├── constraint: /4/1: [/'{"a": [[{"b": {"c": [{"d": "e"}]}}]]}' - /'{"a": [[{"b": {"c": [{"d": "e"}]}}]]}']
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01"]
       └── key: (1)
 
 # GenerateInvertedIndexScans propagates row-level locking information.
@@ -1859,7 +1999,8 @@ project
  ├── key: (1)
  └── scan b@inv_idx
       ├── columns: k:1!null
-      ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       ├── locking: for-update
       ├── volatile
       └── key: (1)
@@ -1874,8 +2015,30 @@ project
  ├── key: (1)
  └── scan c@inv_idx
       ├── columns: k:1!null
-      ├── constraint: /2/1: [/ARRAY[1] - /ARRAY[1]]
+      ├── inverted constraint: /5/1
+      │    └── spans: ["\x89", "\x89"]
       └── key: (1)
+
+# Disjunction.
+opt
+SELECT k FROM c WHERE a @> ARRAY[1] OR a @> ARRAY[2]
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /5
+      │    ├── tight: true
+      │    └── union spans: ["\x89", "\x8b")
+      ├── key: (1)
+      └── scan c@inv_idx
+           ├── columns: k:1!null a_inverted_key:5!null
+           ├── inverted constraint: /5/1
+           │    └── spans: ["\x89", "\x8b")
+           ├── key: (1)
+           └── fd: (1)-->(5)
 
 opt
 SELECT k FROM c WHERE a @> ARRAY[]::INT[]
@@ -1884,17 +2047,18 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── select
-      ├── columns: k:1!null a:2!null
-      ├── immutable
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /5
+      │    ├── tight: true
+      │    └── union spans: ["", ""]
       ├── key: (1)
-      ├── fd: (1)-->(2)
-      ├── scan c
-      │    ├── columns: k:1!null a:2
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2)
-      └── filters
-           └── a:2 @> ARRAY[] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── scan c@inv_idx
+           ├── columns: k:1!null a_inverted_key:5!null
+           ├── inverted constraint: /5/1
+           │    └── spans: ["", ""]
+           ├── key: (1)
+           └── fd: (1)-->(5)
 
 opt
 SELECT k FROM c WHERE a IS NULL
@@ -2779,7 +2943,8 @@ project
  ├── key: (1)
  └── scan pi@idx,partial
       ├── columns: k:1!null
-      ├── constraint: /3/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /5/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
 exec-ddl
@@ -2801,7 +2966,8 @@ project
  ├── key: (1)
  └── scan pi@idx,partial
       ├── columns: k:1!null
-      ├── constraint: /3/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
 exec-ddl
@@ -2824,7 +2990,8 @@ index-join pi
  ├── fd: ()-->(2), (1)-->(3)
  └── scan pi@idx,partial
       ├── columns: k:1!null
-      ├── constraint: /3/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /7/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
 exec-ddl
@@ -2849,11 +3016,29 @@ select
  │    ├── columns: k:1!null s:2 j:3
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
- │    └── scan pi@idx,partial
+ │    └── inverted-filter
  │         ├── columns: k:1!null
- │         ├── constraint: /3/1: [/'{"a": "b"}' - /'{"a": "b"}']
- │         └── key: (1)
+ │         ├── inverted expression: /8
+ │         │    ├── tight: false
+ │         │    ├── union spans: empty
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: true
+ │         │         │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+ │         │         └── span expression
+ │         │              ├── tight: true
+ │         │              └── union spans: ["7group\x00\x01*\x02\x00", "7group\x00\x01*\x02\x00"]
+ │         ├── key: (1)
+ │         └── scan pi@idx,partial
+ │              ├── columns: k:1!null j_inverted_key:8!null
+ │              ├── inverted constraint: /8/1
+ │              │    └── spans
+ │              │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+ │              │         └── ["7group\x00\x01*\x02\x00", "7group\x00\x01*\x02\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(8)
  └── filters
+      ├── j:3 @> '{"a": "b"}' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
       ├── j:3 @> '{"group": 1}' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
       └── s:2 = 'foo' [outer=(2), constraints=(/2: [/'foo' - /'foo']; tight), fd=()-->(2)]
 
@@ -2875,35 +3060,38 @@ CREATE INVERTED INDEX idx2 ON pi (j) WHERE s = 'bar'
 memo
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'bar'
 ----
-memo (optimized, ~10KB, required=[presentation: k:1,s:2,j:3])
- ├── G1: (select G2 G3) (select G4 G5) (index-join G6 pi,cols=(1-3))
+memo (optimized, ~11KB, required=[presentation: k:1,s:2,j:3])
+ ├── G1: (select G2 G3) (select G4 G3) (index-join G5 pi,cols=(1-3))
  │    └── [presentation: k:1,s:2,j:3]
- │         ├── best: (index-join G6 pi,cols=(1-3))
- │         └── cost: 11.82
+ │         ├── best: (index-join G5 pi,cols=(1-3))
+ │         └── cost: 11.87
  ├── G2: (scan pi,cols=(1-3))
  │    └── []
  │         ├── best: (scan pi,cols=(1-3))
  │         └── cost: 1064.02
- ├── G3: (filters G7 G8)
- ├── G4: (index-join G9 pi,cols=(1-3))
+ ├── G3: (filters G6 G7)
+ ├── G4: (index-join G8 pi,cols=(1-3))
  │    └── []
- │         ├── best: (index-join G9 pi,cols=(1-3))
- │         └── cost: 19.62
- ├── G5: (filters G8)
- ├── G6: (scan pi@idx2,partial,cols=(1),constrained)
+ │         ├── best: (index-join G8 pi,cols=(1-3))
+ │         └── cost: 19.83
+ ├── G5: (scan pi@idx2,partial,cols=(1),constrained inverted)
  │    └── []
- │         ├── best: (scan pi@idx2,partial,cols=(1),constrained)
- │         └── cost: 5.14
- ├── G7: (contains G10 G11)
- ├── G8: (eq G12 G13)
- ├── G9: (scan pi@idx,partial,cols=(1),constrained)
+ │         ├── best: (scan pi@idx2,partial,cols=(1),constrained inverted)
+ │         └── cost: 5.15
+ ├── G6: (contains G9 G10)
+ ├── G7: (eq G11 G12)
+ ├── G8: (inverted-filter G13 j_inverted_key)
  │    └── []
- │         ├── best: (scan pi@idx,partial,cols=(1),constrained)
- │         └── cost: 6.28
- ├── G10: (variable j)
- ├── G11: (const '{"a": "b"}')
- ├── G12: (variable s)
- └── G13: (const 'bar')
+ │         ├── best: (inverted-filter G13 j_inverted_key)
+ │         └── cost: 6.35
+ ├── G9: (variable j)
+ ├── G10: (const '{"a": "b"}')
+ ├── G11: (variable s)
+ ├── G12: (const 'bar')
+ └── G13: (scan pi@idx,partial,cols=(1,9),constrained inverted)
+      └── []
+           ├── best: (scan pi@idx,partial,cols=(1,9),constrained inverted)
+           └── cost: 6.32
 
 exec-ddl
 DROP INDEX idx
@@ -4171,24 +4359,35 @@ project
 opt expect-not=GenerateInvertedIndexZigzagJoins
 SELECT * FROM b WHERE j @> '{"a":1, "c":2}' FOR UPDATE
 ----
-select
+index-join b
  ├── columns: k:1!null u:2 v:3 j:4!null
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── index-join b
- │    ├── columns: k:1!null u:2 v:3 j:4
- │    ├── volatile
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- │    └── scan b@inv_idx
- │         ├── columns: k:1!null
- │         ├── constraint: /4/1: [/'{"a": 1}' - /'{"a": 1}']
- │         ├── locking: for-update
- │         ├── volatile
- │         └── key: (1)
- └── filters
-      └── j:4 @> '{"a": 1, "c": 2}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true
+      │         │    └── union spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      │         └── span expression
+      │              ├── tight: true
+      │              └── union spans: ["7c\x00\x01*\x04\x00", "7c\x00\x01*\x04\x00"]
+      ├── volatile
+      ├── key: (1)
+      └── scan b@inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+           │         └── ["7c\x00\x01*\x04\x00", "7c\x00\x01*\x04\x00"]
+           ├── locking: for-update
+           ├── volatile
+           ├── key: (1)
+           └── fd: (1)-->(6)
 
 exec-ddl
 CREATE TABLE inv_zz_partial (
@@ -4211,21 +4410,27 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── inner-join (lookup inv_zz_partial)
-      ├── columns: k:1!null j:2!null b:3!null
-      ├── key columns: [1] = [1]
-      ├── lookup columns are key
-      ├── immutable
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true
+      │         │    └── union spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      │         └── span expression
+      │              ├── tight: true
+      │              └── union spans: ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
       ├── key: (1)
-      ├── fd: ()-->(3), (1)-->(2)
-      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
-      │    ├── columns: k:1!null
-      │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [2] = ['{"a": 1}']
-      │    ├── right fixed columns: [2] = ['{"b": 2}']
-      │    └── filters (true)
-      └── filters
-           └── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── scan inv_zz_partial@zz_idx,partial
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+           │         └── ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
 
 # Generate a zigzag join on a single index with a remaining filter.
 opt expect=GenerateInvertedIndexZigzagJoins
@@ -4576,7 +4781,8 @@ project
       │         ├── fd: (7)-->(10)
       │         └── scan b@inv_idx
       │              ├── columns: k:7!null
-      │              ├── constraint: /10/7: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
+      │              ├── inverted constraint: /12/7
+      │              │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
       │              └── key: (7)
       └── aggregations
            └── const-agg [as=j:4, outer=(4)]
@@ -4614,7 +4820,8 @@ project
       │         ├── fd: (6)-->(7)
       │         └── scan c@inv_idx
       │              ├── columns: k:6!null
-      │              ├── constraint: /7/6: [/ARRAY[2] - /ARRAY[2]]
+      │              ├── inverted constraint: /10/6
+      │              │    └── spans: ["\x8a", "\x8a"]
       │              └── key: (6)
       └── aggregations
            └── const-agg [as=a:2, outer=(2)]
@@ -5607,7 +5814,8 @@ project
       │         ├── fd: (7)-->(8,10)
       │         └── scan b@inv_idx
       │              ├── columns: k:7!null
-      │              ├── constraint: /10/7: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
+      │              ├── inverted constraint: /12/7
+      │              │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
       │              └── key: (7)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
@@ -5649,7 +5857,8 @@ project
       │         ├── fd: (6)-->(7,8)
       │         └── scan c@inv_idx
       │              ├── columns: k:6!null
-      │              ├── constraint: /7/6: [/ARRAY[2] - /ARRAY[2]]
+      │              ├── inverted constraint: /10/6
+      │              │    └── spans: ["\x8a", "\x8a"]
       │              └── key: (6)
       └── aggregations
            ├── const-agg [as=a:2, outer=(2)]

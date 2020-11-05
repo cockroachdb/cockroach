@@ -251,6 +251,112 @@ func evalInvertedExpr(
 	}
 }
 
+// TryFilterInvertedIndex tries to derive an inverted filter condition for
+// the given inverted index from the specified filters. If an inverted filter
+// condition is derived, it is returned with ok=true. If no condition can be
+// derived, then TryFilterInvertedIndex returns ok=false.
+//
+// In addition to the inverted filter condition (spanExpr), returns:
+// - a constraint of the prefix columns if there are any,
+// - remaining filters that must be applied if the span expression is not tight,
+// - pre-filterer state that can be used by the invertedFilterer operator to
+//   reduce the number of false positives returned by the span expression,
+// - noDuplicates=true if the spans are guaranteed not to produce duplicate
+//   primary keys. Otherwise, returns noDuplicates=false, and
+// - ok=true if the spanExpr is a valid inverted filter condition. Otherwise,
+//   returns ok=false.
+func TryFilterInvertedIndex(
+	evalCtx *tree.EvalContext,
+	factory *norm.Factory,
+	filters memo.FiltersExpr,
+	tabID opt.TableID,
+	index cat.Index,
+) (
+	spanExpr *invertedexpr.SpanExpression,
+	constraint *constraint.Constraint,
+	remainingFilters memo.FiltersExpr,
+	preFiltererState *invertedexpr.PreFiltererStateForInvertedFilterer,
+	noDuplicates bool,
+	ok bool,
+) {
+	// Attempt to constrain the prefix columns, if there are any. If they cannot
+	// be constrained to single values, the index cannot be used.
+	constraint, filters, ok = constrainPrefixColumns(evalCtx, factory, filters, tabID, index)
+	if !ok {
+		return nil, nil, nil, nil, false, false
+	}
+
+	config := index.GeoConfig()
+	var typ *types.T
+	var filterPlanner invertedFilterPlanner
+	if geoindex.IsGeographyConfig(config) {
+		filterPlanner = &geoFilterPlanner{
+			factory:     factory,
+			tabID:       tabID,
+			index:       index,
+			getSpanExpr: getSpanExprForGeographyIndex,
+		}
+		typ = types.Geography
+	} else if geoindex.IsGeometryConfig(config) {
+		filterPlanner = &geoFilterPlanner{
+			factory:     factory,
+			tabID:       tabID,
+			index:       index,
+			getSpanExpr: getSpanExprForGeometryIndex,
+		}
+		typ = types.Geometry
+	} else {
+		filterPlanner = &jsonOrArrayFilterPlanner{
+			tabID: tabID,
+			index: index,
+		}
+		col := index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()
+		typ = factory.Metadata().Table(tabID).Column(col).DatumType()
+	}
+
+	var invertedExpr invertedexpr.InvertedExpression
+	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
+
+	// We can only guarantee that there are no duplicate primary keys if there is
+	// one filter that is also guaranteed not to produce duplicates.
+	noDuplicates = len(filters) == 1
+	for i := range filters {
+		invertedExprLocal, pfStateLocal, noDupsLocal := extractInvertedFilterCondition(
+			evalCtx, filters[i].Condition, filterPlanner,
+		)
+		if invertedExpr == nil {
+			invertedExpr = invertedExprLocal
+			pfState = pfStateLocal
+		} else {
+			invertedExpr = invertedexpr.And(invertedExpr, invertedExprLocal)
+			// Do pre-filtering using the first of the conjuncts that provided
+			// non-nil pre-filtering state.
+			if pfState == nil {
+				pfState = pfStateLocal
+			}
+		}
+		noDuplicates = noDuplicates && noDupsLocal
+	}
+
+	if invertedExpr == nil {
+		return nil, nil, nil, nil, false, false
+	}
+
+	spanExpr, ok = invertedExpr.(*invertedexpr.SpanExpression)
+	if !ok {
+		return nil, nil, nil, nil, false, false
+	}
+	if pfState != nil {
+		pfState.Typ = typ
+	}
+
+	if spanExpr.Tight {
+		// If the span expression is tight, there are no remaining filters.
+		return spanExpr, constraint, nil /* remainingFilters */, pfState, noDuplicates, true
+	}
+	return spanExpr, constraint, filters, pfState, noDuplicates, true
+}
+
 // constrainPrefixColumns attempts to build a constraint for the non-inverted
 // prefix columns of the given index. If a constraint is successfully built, it
 // is returned along with remaining filters and ok=true. The function is only
@@ -303,4 +409,62 @@ func constrainPrefixColumns(
 	copy := *constraint
 	remainingFilters = ic.RemainingFilters()
 	return &copy, remainingFilters, true
+}
+
+type invertedFilterPlanner interface {
+	// extractInvertedFilterConditionFromLeaf extracts an inverted filter
+	// condition from the given expression, which represents a leaf of an
+	// expression tree in which the internal nodes are And and/or Or expressions.
+	// Returns an empty InvertedExpression if no inverted filter condition could
+	// be extracted.
+	//
+	// Additionally, returns:
+	// - pre-filterer state that can be used to reduce false positives, and
+	// - noDuplicates=true if the spans in the InvertedExpression are guaranteed
+	//   not to produce duplicate primary keys. Otherwise, returns
+	//   noDuplicates=false.
+	extractInvertedFilterConditionFromLeaf(evalCtx *tree.EvalContext, expr opt.ScalarExpr) (
+		_ invertedexpr.InvertedExpression,
+		_ *invertedexpr.PreFiltererStateForInvertedFilterer,
+		noDuplicates bool,
+	)
+}
+
+// extractInvertedFilterCondition extracts an InvertedExpression from the given
+// filter condition, where the InvertedExpression represents an inverted filter
+// over the given inverted index. Returns an empty InvertedExpression if no
+// inverted filter condition could be extracted.
+//
+// The filter condition should be an expression tree of And, Or, and leaf
+// expressions. Extraction of the InvertedExpression from the leaves is
+// delegated to the given invertedFilterPlanner.
+//
+// In addition to the InvertedExpression, returns:
+// - pre-filterer state that can be used to reduce false positives, and
+// - noDuplicates=true if the spans in the InvertedExpression are guaranteed
+//   not to produce duplicate primary keys. Otherwise, returns
+//   noDuplicates=false.
+func extractInvertedFilterCondition(
+	evalCtx *tree.EvalContext, filterCond opt.ScalarExpr, filterPlanner invertedFilterPlanner,
+) (
+	_ invertedexpr.InvertedExpression,
+	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
+	noDuplicates bool,
+) {
+	switch t := filterCond.(type) {
+	// For both And and Or cases, return noDuplicates=false since we cannot
+	// guarantee that two different filters will produce different primary keys.
+	case *memo.AndExpr:
+		l, _, _ := extractInvertedFilterCondition(evalCtx, t.Left, filterPlanner)
+		r, _, _ := extractInvertedFilterCondition(evalCtx, t.Right, filterPlanner)
+		return invertedexpr.And(l, r), nil, false /* noDuplicates */
+
+	case *memo.OrExpr:
+		l, _, _ := extractInvertedFilterCondition(evalCtx, t.Left, filterPlanner)
+		r, _, _ := extractInvertedFilterCondition(evalCtx, t.Right, filterPlanner)
+		return invertedexpr.Or(l, r), nil, false /* noDuplicates */
+
+	default:
+		return filterPlanner.extractInvertedFilterConditionFromLeaf(evalCtx, filterCond)
+	}
 }

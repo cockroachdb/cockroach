@@ -907,24 +907,28 @@ vectorized: true
 • scan
   missing stats
   table: inv@i (partial index)
-  spans: [/'{"x": "y"}' - /'{"x": "y"}']
+  spans: 1 span
 
 query T
 EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'foo'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
-│ filter: c = 'foo'
+│ filter: (b @> '{"x": "y"}') AND (c = 'foo')
 │
 └── • index join
     │ table: inv@primary
     │
-    └── • scan
-          missing stats
-          table: inv@i (partial index)
-          spans: [/'{"x": "y"}' - /'{"x": "y"}']
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 1
+        │
+        └── • scan
+              missing stats
+              table: inv@i (partial index)
+              spans: 1 span
 
 query T
 EXPLAIN SELECT * FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
@@ -938,4 +942,4 @@ vectorized: true
 └── • scan
       missing stats
       table: inv@i (partial index)
-      spans: [/'{"x": "y"}' - /'{"x": "y"}']
+      spans: 1 span

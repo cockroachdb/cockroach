@@ -1,0 +1,222 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE json_tab (
+  a INT PRIMARY KEY,
+  b JSONB
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON json_tab(b)
+
+statement ok
+CREATE TABLE array_tab (
+  a INT PRIMARY KEY,
+  b INT[]
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON array_tab(b)
+
+statement ok
+INSERT INTO json_tab VALUES
+  (1, '{"a": "b"}'),
+  (2, '[1,2,3,4, "foo"]'),
+  (3, '{"a": {"b": "c"}}'),
+  (4, '{"a": {"b": [1]}}'),
+  (5, '{"a": {"b": [1, [2]]}}'),
+  (6, '{"a": {"b": [[2]]}}'),
+  (7, '{"a": "b", "c": "d"}'),
+  (8, '{"a": {"b":true}}'),
+  (9, '{"a": {"b":false}}'),
+  (10, '"a"'),
+  (11, 'null'),
+  (12, 'true'),
+  (13, 'false'),
+  (14, '1'),
+  (15, '1.23'),
+  (16, '[{"a": {"b": [1, [2]]}}, "d"]'),
+  (17, '{}'),
+  (18, '[]'),
+  (19, '["a", "a"]'),
+  (20, '[{"a": "a"}, {"a": "a"}]'),
+  (21, '[[[["a"]]], [[["a"]]]]'),
+  (22, '[1,2,3,1]'),
+  (23, '{"a": 123.123}'),
+  (24, '{"a": 123.123000}'),
+  (25, '{"a": [{}]}'),
+  (26, '[[], {}]'),
+  (27, '[true, false, null, 1.23, "a"]'),
+  (28, '{"a": {}}'),
+  (29, NULL),
+  (30, '{"a": []}'),
+  (31, '{"a": {"b": "c", "d": "e"}, "f": "g"}'),
+  (32, '{"a": [1]}'),
+  (33, '[1, "bar"]')
+
+statement ok
+ALTER TABLE json_tab SPLIT AT VALUES (10), (20)
+
+statement ok
+ALTER TABLE json_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10), (ARRAY[3], 20)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE json_tab] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /10      {1}       1
+/10        /20      {2}       2
+/20        NULL     {3}       3
+
+# Filter with a scalar.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '1' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFr20AQhe_9FcNc3NIt0rq3PamtVSJwLEcyJMERZq0dOwrKrrK7Cgaj_x4sJSQOOCTHefPeN4_Zo3uoUWAeT-N_C2htDf-z9ByW8dV8-ieZwfdJki_yi-kPeLbIwXDnjF55uYbLsziLYQ3RTRuGvwlGfARpNokz-HsNskCG2iiayXtyKJbIsWDYWFOSc8YepH1vSNQORciw0k3rD3LBsDSWUOzRV74mFLiQ65oykopsECJDRV5WdY99qRNtjFlV-hEZ5o3UTkDAfwU8mFvaVLtYK5BaAQfjb8kiw7T1AiKORcfQtP71tvNySyh4xz7fLzfWkw34cbWI_zyJH38Fn5FrjHZ0hD9FDruCIaktDS92prUlza0p-zPDmPa5XlDk_LDlw5DoYXUo-DbMPwyP34WL7ttTAAAA__9zosNt
+
+# Filter with a fully-specified array. This should use a zigzag join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1, 2]' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk9v1DAQxe98itFcCsLSxtmbT6E0iK2WTUkq8WeJKjcZIpfUE2wHAat8d5QEFRbaVfc48-a995PlHfqvLSos0nX68hJ618KrPHsD2_T9xfrFagNPz1bFZfF2_Qx-n-j54MazvQr6Gt69TvMUriH51EfRkuBkKwXE5Qlk-Vmaw-kH0CUKtFzTRt-SR7VFiaXAznFF3rMbV7vpYFV_RxUJNLbrw7guBVbsCNUOgwktocKPpvmpm3M2ltwiQoE1BW3aKbcwNUGk7uCSz8xXxn5DMUvyXinrg4JEYjkI5D78qfZBN4RKDuLxeCNYTromt5D7cHfNnTO32v1AgWvmL30HN2wssJ0gBGYbSJb_PadS6rzINqeP4I2P4S3YBXKLeJ81kc8fjF8eE5-T79h62ot_KDkaSoFUNzT_CM-9q-jCcTXVzGM2-aZFTT7MqpyHlZ2lEfBvszxojg-b44Pm5T_mcnjyKwAA___NrxBc
+
+# Filter with fully-specified arrays. This should use an inverted filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1, 2]' OR b @> '[3, 4]' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUmFv0zAU_M6veHpftoFR4gQJyZ86WCYilbUklQA10eTWbyMo2MF2pkpV_ztKzIAgtbAvTt69u_Od5D267y0KLLN59nYFvW3huli8h3X2aTm_zG_g_CovV-WH-QX8pMhA-OqMvvVyAx_fZUUG5xuYVX0cpwRna84gqc8uYFFM8ZTBq4BfZQW8-QyyRobaKLqR38ihWCPHmmFnzZacM3aA9iMhVzsUMcNGd70f4Jrh1lhCsUff-JZQ4EpuWipIKrJRjAwVedm0o-1j2tmdMbeNfkCGZSe1ExBdWhvxl-ETLS3dNbtMK5BaQQrGfyHrsD4wNL3_fbXz8p5Q8AP7_3i5fiDrSV03rSdLNuLTjI_7bNdZMBpmXIAbQoLz0npR4euqiuN4ONJff_z5cCZhRiCt_k3kFcK0IMNF7wXM-NGqyVOqlsZ6slEyLTjjL47ap0-xL8h1Rjua2B9zjg81Q1L3FB6TM73d0tKa7XhNGBejbgQUOR-2PAy5Dqsh4J9iflKcnBYnJ8XpX-L68OxHAAAA__-W8SfB
+
+# Filter with a path ending in an empty object.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUktFr1EAQxt_9K4Z5qeJKsncP4j5FbYqBs3cmByrdUPay0xqJu3F3Uw5C_ndJYrVXuKN9CZlv5vvmN7A9-t8NCizSVfpxC51r4CJff4ar9Ntm9T67hJfnWbEtvqxewd8RNQ_89NZcB7WDr5_SPIUdJLKL4yXBWS9RSRTQD8MZrPPzNIcP30GVyNBYTZfqF3kUV8ixZNg6W5H31o1SPw1keo8iZlibtgujXDKsrCMUPYY6NIQCt2rXUE5Kk4tiZKgpqLqZYu_Bkhtrr2tzhwyLVhkvIJrAon548-8v2ji6qfep0aCMBg42_CCH5cDQduH_fh_ULaHgA3s6Y2buyAXSF3UTyJGL-CHofT_dtw6sgYQL8CMp-KBcEBLfKinjOB4__J1EIKMfqUIiPCT3yHDdBQEJP3rE4jlHFNYFctHiED3hr4_GL58Tn5NvrfF0EH8sOR5KhqRvaX4r3nauoo2z1bRmLteTbxI0-TB3-VxkZm6NgA_N_KR5cdq8OGlePjKXw4s_AQAA__9oexw3
+
+# Filter with a path ending in an empty array.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '{"a": []}' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUktFr1EAQxt_9K4Z5qeJKsncP6j5FbYqBs1eTA5XLUvayY43E3bi7KYWQ_12StNgr3NF7CZlv5vvmN7A9-r8NCizSVfppA51r4CJff4Ft-v1q9SG7hJfnWbEpvq5ewf2Imgd-e2uug9rBt89pnsIOkrKL4yXBWV-iKlHAVg5nsM7P0xw-_gAlkaGxmi7VH_IotshRMmydrch760apnwYyfYciZlibtgujLBlW1hGKHkMdGkKBG7VrKCelyUUxMtQUVN1MsQ9gyU9rr2tziwyLVhkvIJrAoq18c__XD6CMBg42_CKHcmBou_B_qw_qhlDwgT2fLDO35ALpi7oJ5MhFfB_voZ_etQ6sgYQL8CMf-KBcECW-VWUZx_H44e9KBDL6ifq-RHhM7pHhugsCEn7wiMUpRxTWBXLRYh894a8Pxi9Pic_Jt9Z42os_lBwPkiHpG5pfiLedq-jK2WpaM5fryTcJmnyYu3wuMjO3RsDHZn7UvDhuXhw1L5-Y5fDiXwAAAP__7rAYAQ==
+
+# Filter with a nested array. This index expression is not tight.
+# This should use a zigzag join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[[1, 2]]' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zAUxd_5FFf3ZSAsNU7f_BTGguhUmpFM4k-xJq-5VB6Zb7AdBFT57igJGnTaqvXx3nPPOT9Z3mH43qDCKl_mry-h8w28KYt3sM4_XixfLVbw_GxRXVbvly_g74mZDm4Cu6toruHD27zM4RqyL12SzAlO1mspINX6BIryLC_h9BMYjQId17QytxRQrVGiFth63lAI7IfVbjxY1D9RJQKta7s4rLXADXtCtcNoY0Oo8LPd_jbbc7aO_CxBgTVFY5sxt7I1QaLu8LKvzFfW_UAxSfJBqeiigkyi7gVyF_9Vh2i2hEr24ul4A1hJpiY_k_twd82tt7fG_0KBS-ZvXQs3bB2wGyEEFivI5g88qFLqvCpWp08gTo8hrthH8rN0nzaTLx-Nnx8TX1Jo2QXai38sOem1QKq3NP2JwJ3f0IXnzVgzjcXoGxc1hTipchoWbpIGwP_N8qA5PWxOD5rn98y6f_YnAAD__2R8Ecw=
+
+# Filter with a nested array. This index expression is not tight.
+# This should use an inverted filter
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[[1, 2]]' OR b @> '[[3, 4]]' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU1Fv2jAQft-vON1L6eaJOEGa5Ke0a6pRMWAJ0jZBVBly7TKldmY7FRPiv09J6ChVicoDlu_u-_x9x102aP8UKDCJRtHnGVSmgOt48hXm0Y_p6GI4ht7VMJkl30bnsIPIFvDbanXr5BK-f4niCHpLCBeV5wUEZ_M5Z-Cn6dk5TOIXlYDBYFe5imK4_AkyRYZKZzSWD2RRzJFjyrA0ekXWalOnNg1gmK1ReAxzVVauTqcMV9oQig263BWEAmdyWVBMMiPT95BhRk7mRfPsk-PwTuvbXD0iw6SUygroXxjT_PjH_bU_NXSXryOVgVQZBKDdLzIW0y1DXbm9BevkPaHgW_Z2m0P1SMZRdp0XjgyZPj_0-lSP1qUBrSDkAmxtFqyTxokFflosPM-rj-CVG39fn34bI5DKTqHwBcJh0wwnlRMQ8qPt-6e0f6NztRuSf2RIpckfpPm7V2ahf1Q8OEU80caR6QeHwiH_gAzbeQjohf4r-yyEuEkm48t2rw8hu8X-D3nDXzY4xXVMttTK0oHrYy9725QhZffUfjxWV2ZFU6NXjUwbThpek8jIurbK22Co2lJt8DmZd5L9brLfSQ66yUEnefCCnG7f_QsAAP__2umEPg==
+
+# Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
+# This should use a zigzag join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' AND b @> '[2]' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1v00AQfOdXrPalqTgpPuftntwSI1IFu9iV-AhWdY2X6Ep6a-7OCIjy35HtqtSojZrHm9mZnVndDv2PLSos02X65gpat4W3Rf4eVumny-XZIoPJfFFelR-Wp3A_ooeBW8_2Ougb-PguLVKY3EDytY2iGcHJSlYnp3CWzcdo3KF5MU8LOP8MukKBlmvK9B15VCuUWAlsHK_Je3YdtOsHFvUvVJFAY5s2dHAlcM2OUO0wmLAlVPjFbP7ozQUbS24aocCagjbb3rc0NUGkHhIn35ivjf2JYqDkk1TeBgWJxGovkNvwb7UPekOo5F68PF4XrCBdk5vKcbiHzY0zd9r9RoFL5u9tA7dsLLDtQwjMM5gks_GNlVIXZZ6d3996RMeP6Be0iY9pU7IL5KbxuEkiXz9rPzvGviDfsPU0sn_OOdpXAqne0PBfPLduTZeO1_2a4Zn3uh6oyYeBlcNjYQeqC_hYLA-K48Pi-KB49p-42r_6GwAA__8MxBzL
+
+# Combine predicates with OR.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab@foo_inv WHERE b @> '[1]' OR b @> '[2]' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1r2zAUfd-vuNyXtpuGLedhoKd0q8sMWZPZgW3EpijRbefhSd6VXAIh_33Y3kdTSLa-yL7nnnN0DmiH_keDCot0lr5bQscNXOfzD7BKPy9ml9kNnF9lxbL4OLuAXxQ9Er55Z2-DXk_vnLut7QN8ep_mKZyvYVp2cTwhOFvJ6uwC5vkhmIzgVZrD2y-gKxRonaEb_Z08qhVKrAS27DbkveMe2g2EzGxRxQJr23ahhyuBG8eEaoehDg2hwqVeN5STNsRRjAINBV03g-3TvCiwaLX1CqJL5ki-Hj_Rgumu3qbWgLYGJLjwlRirvUDXhb83-6DvCZXci_9Pl9kH4kDmum4CMXEkDyP-3qfblsFZmEoFvs8IPmgOqsQ3ZRnHcX9M_vzJl_2ZjDMCWfNvoiwRHvfzKHDeBQVTebRq8pyqheNAHCWHBafy1VH7yXPsc_Kts54O7I85x_tKIJl7Gt-Sdx1vaMFuM1wzjvNBNwCGfBi3chwyO676gI_F8qQ4OS1OToonT8TV_sXPAAAA__-cIyl7
+
+# More complex combination.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab
+WHERE (b @> '[1]'::json OR b @> '[2]'::json) AND (b @> '3'::json OR b @> '"bar"'::json)
+ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFr2zAUhd_3Ky73pQnTiOUwBnpKu7gsI4szO7CN2BQluu08PMmT5BII-e_DdkPqQbL2xVj33O_oHNAe3Z8SBabRPPq4gtqWcJvEX2AdfV_Or2cLGExn6Sr9Oh_C04rsFn45o--83MC3T1ESwWCwgUlWB8GY4GrN8yshPqfx4mYIcQI9LTxpQ7heTPvo-CyY4UbaDJ_BcTKNErj5ATJHhtooWsjf5FCskWPOsLJmS84Z24z27cJM7VAEDAtd1b4Z5wy3xhKKPfrCl4QCV3JTUkJSkR0FyFCRl0XZ2h5LT-6NuSv0IzJMK6mdgNFTvHfHn9HS0n2xi7QCqRW8B-N_knWYHxia2p-ud14-EAp-YC-PONOPZD2p26L0ZMmOeD_nUY92lQWjYcIFuCYoOC-tFxl-yLIgCJoPz7IgDJvMpwkCafWfrTBD6FdjGNdewISfLRm-pmRqrCc7CvvVJvztWfvxa-wTcpXRjnr255yDQ86Q1AN1T8mZ2m5pac22vaY7xi3XDhQ536m8O8x0JzUBn8P8IhxehsOL8PgfOD-8-RsAAP__85I68g==
+
+# Combined with non-JSON predicates.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' AND a % 2 = 0 ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUku9q2zwUxr-_V3E48NJk07BlFzYEA7ery1yyJLMD20hMUeLT4uFKniSXjJB7H7bTrRkka77IOn-eR79jaYP2R4UCs3gUf5hBYyq4TiefYB5_nY4ukjEMrpJsln0eDWHXIvuG71arWyeX8OVjnMYwWEK0aHw_JDib8_xsCBfjKxgMJPwPwRDegz-ESXoVp3D5DWSODJUuaCwfyKKYI8ecYW30iqzVpk1tuoakWKPwGZaqblybzhmutCEUG3SlqwgFzuSyopRkQcbzkWFBTpZVZ_sEGd1pfVuqR2SY1VJZAd6FMR5_03-8qaG7ch2rAhlel5UjI2AQ8ZZdCJGMZ--6EXZ7zLcMdeP-IFkn7wkF37KXYyfqkYyjoj-PjMf32Z_q8bo2oBVEXIBt4cE6aZxY4NvFwvf9dgl_7_irdg36GIFU8e9GvkBAhpPGCYj4wemCU6a70aXa3Ulw4E5qUz5I8_PZL4-C_UckhLjJJuPLF8CFp8Bl2jgyXrgPFvHXB-3PT7FPydZaWdqzP-Tsb3OGVNxT_-itbsyKpkavumP6cNLpukRB1vVV3geJ6kst4HMxPyoOjouDo-LwuDg8Kj7_S5xv__sVAAD__8LZa0g=
+
+# The split disjunction rule allows us to use the index for this query.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' OR a = 44 ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUktFv2jAQxt_3V1i3h1LNKDgxfYg0Kd3INCYGLEHaJhZVJrlWmVI7s52pE-J_n5K0oqAmhSfw-T7_vi93WzB_CvAhDmfhxxWpdEE-RYuvZB3-WM6up3MymEzjVfxtdkkeW0Tb8NsoeWPFhnz_HEYhGWxI8KsajTwkF2uWXFySRUQGgrwnnNf_J2FEPvwkIgEKUmU4F_dowF8DAwoeJBRKrVI0Rum6vG2aptkD-CMKuSwrW5cTCqnSCP4WbG4LBB9WYlNghCJD7YyAQoZW5EXz9JPF4Fapm1z-BQpxKaTxiXOttcOG7Y-z1HibP4QyAwqLyvokYJDsKKjK7rnGijsEn-3o6d6-qFw-WmMd1kqd3wv9b0-mgdsJdzvhe2Yllc5QY3YATHYv2JuroSod76jxZTQ_J3estEXt8MPMAXvXmWx8zvOT3NhcptYZHwPqz9imb4b4-jivDrjs9FVzX53n06pxPnQ4d952evDOyR6hKZU0eNLQRvXUMbvDdkWMqnSKS63SBtMeF42uKWRobHvL2sNUtle1wedi1it2D8TsWOz2ir1-stcr5v1i3iu-6hePz8qc7N78DwAA__-vKLp4
+
+# We cannot use the index for this query.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMktGL00AQxt_9K4Z5uRS3JLv1aUHI3TWHkV5zJgWVGmTbDEckl83tbkAp_d8lidKLXCXigz7OzvftzG_4DmgfK5SYRavoegOtqeAmTW5hG324W13Ga_CWcbbJ3q1m8EOiBsEXq-vPTu3g_ZsojcDbQfipDYIFwcWW5xczSFLw7KNxnpJyGV3Ht5erGbwG0XWWUQpXH0HlyLDWBa3VA1mUW-TIUCDDBeYMG6P3ZK02XevQC-PiK8qAYVk3reuec4Z7bQjlAV3pKkKJG7WrKCVVkPEDZFiQU2XVf_9z6bAx5YMy35Bh1qjaSpj7vNPelJUjI8ELxZhHSvk2S9ZXT7hCPgaTpxIZJq2TEHLMjwx1607rWqfuCSU_sjNIJxJtCjJUjBlC_hLz4zPcaz3Xjb8Yqc9NF6PpfPpB-dSD-jyY--Jf3lRMpxKTqUQw_09i8gxSSrbRtaVJEQi6DFFxT0PmrG7Nnu6M3vdjhjLpff1DQdYNXT4Ucd23-gWfmvlvza9G5uBXs_ibyYs_MufHF98DAAD__5J4ij8=
+
+statement ok
+INSERT INTO array_tab VALUES
+  (1, '{}'),
+  (2, '{1}'),
+  (3, '{1, 2}'),
+  (4, '{1, 3}'),
+  (5, '{1, 2, 3, 4}')
+
+statement ok
+ALTER TABLE array_tab SPLIT AT VALUES (3), (3)
+
+statement ok
+ALTER TABLE array_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 3), (ARRAY[3], 5)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE array_tab] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /3       {1}       1
+/3         NULL     {3}       3
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM array_tab@foo_inv WHERE b @> '{}' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd-K1DAUh-99isO5WcXINO3FQq6qbhcLdbq2IyrbsmSa41KoSU3SZaX03aWtoqPMsHMTOH--3_kgI7rvHQoskyx5u4PBdnBd5O_hNvl8k71Ot_D8Ki135YfsBfxakeuCtFb-uPNyH3815q7VD_DpXVIksIe4GoIgIrgYpwvIi6ukgDdfQNbIUBtFW_mNHIpb5Fgz7K1pyDlj59a4LKTqEUXAsNX94Od2zbAxllCM6FvfEQrcyX1HBUlFdhMgQ0Vett0S-58YMix7qZ2AV5vtxyxbHqwnhmbwf044L-8JBZ_Y0zVS_UDWk7puO0-W7IYfuvyeJ4-9BaMh5gLc7AKklaiwqqLLy_VBQIb54AXE_KhceI5caawnuwkPlWL-8mh8dE58Qa432tFB_LHkYKoZkrqn9ZudGWxDN9Y0y5m1zBduaShyfp3ytUj1OpoF_4b5STg8DYcn4egfuJ6e_QwAAP__txEHZg==
+
+# This should use a zigzag join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM array_tab@foo_inv WHERE b @> '{1, 2}' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkkFv00AQhe_8itFcCmKleJ0L2pMDNcIoxGUdCUqwqm08RAvpjtldI0rk_45iV5RAG7U3z7x5732ydofh-xYVVvk8f7WEzm_htS7fwSr_eDafFQt4elpUy-r9_BncnJjxwHhvri-iucy-MF9Y9wM-vMl1DpeQfe6SZEpwspMC0v4ESn2aa3h5DqZGgY4bWpgrCqhWKLEW2HpeUwjs96vdcFA0P1ElAq1ru7hf1wLX7AnVDqONW0KFn-zml9m8ZevITxIU2FA0djvkVrYhSNT_lChGTd6tlV1UkEmse4HcxdvyEM2GUMlePBxwj6bJNOQn8hDvtrr19sr4axQ4Z_7WtfCVrQN2A4XAcgHZ9M8fnWk9O19JpVSxWL4Q6c1H_QDw9DHgFftIfpIeQmfy-b3x08fEawotu0AH8fclJ30tkJoNjY8jcOfXdOZ5PdSMYzn4hkVDIY6qHIfCjdIe8G-zPGpOj5vTo-bpP-a6f_I7AAD__5XSF-k=
+
+# Combined with non-Array predicates.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM array_tab WHERE b @> '{1}' AND a % 2 = 0 ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9r2zAUxd_3KS4XRhOmEcvpwxAMnC0u88iSzglsJTZFie-KwZU8SS4twd99-M-6ZhDTvPn-Oef-ONYB7e8CBa7DRfh5A5Up4CpefYNt-PN6MYuWMJpH6836-2IM_YrsFqQx8unWyR38-BLGIYx2ECSV500JLg68vhjDbDmH0UjCW_DH8BG8MazieRjDpxuQKTJUOqOlvCeLYoscU4al0XuyVpumdWgXouwRhccwV2XlmnbKcK8NoTigy11BKHAjdwXFJDMyEw8ZZuRkXrS2z5TBL61vc_WADNelVFbAhL-f-MjwKi8cGQGjgDeoQohoufnQEvffmNYMdeX-EVgn7wgFr9nrKSP1QMZR1t0jM-HHqH_n4WNpQCsIuADboIJ10jiRYJL4nCcIpLK-8hMEZLiqnICAn-T0z-H8qnPVh-mfCrM0-b00Ty_SC_zn3z-L49nNlvfhpa_gm57Dt9bGkZlMj9kC_u6k_eU59jHZUitLR_annL06ZUjZHXUP1urK7Ona6H17pitXra5tZGRdN-VdEalu1AC-FPNBsT8s9gfF02HxdFB8-Z84rd_8CQAA__8zGVme
+
+# The split disjunction rule allows us to use the index for this query.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM array_tab WHERE b @> '{1}' OR a = 1 ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFvmzwUhu-_X3F0bprqc2QMyS6QJrEtTMuUJR1E2qYOVQ6cVUgUM9tMqyL--wRUTRMN2mh3YJ_Hz3uOvUfzs0Af43AVvttCrQt4H20-wXX49Wr1ZrmGyWIZb-PPq0t4KJF9gdRa3t9YuYMvH8IohMkOgu-143gEF3vRXFzCJoKJhNcg2s9FGMHbbyATZFiqjNbyjgz61ygwYVhplZIxSrdL-65gmf1G32GYl1Vt2-WEYao0ob9Hm9uC0Met3BUUkcxIcwcZZmRlXnTHPsYLfih1k5e_kGFcydL4wMWUu8hwU1sfAoFJw1DV9qAxVt4S-qJhL4_yUeXlQxIxlKTS-Z3U9wc1C9xBu3uO_ekg3Of1j4PgzpQLPjwCbzDEwa10RpqyYysmzV9irtVUVdw7Kh1SO-f0HyttSfPZcYhA_D_Y2eyc4xe5sXmZWj4_FbR32fffPaXnH9X8HG9EplKloRcOLGFI2S3112NUrVO60irtNP3vpuO6hYyM7XdF_7Ms-6024FNYjMLeESxOYfdfYG8Uno3Hno3C83F4Pgq_OoGT5r8_AQAA__-T5LR0
+
+# We cannot use the index for this query.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMkVGLm0AUhd_7Ky73ZQ2dEEdfysCCaeNSITVbE2gXK2USL4vgOnZmhC7B_14cQ7aWTUnf-njPnOO93_GI5keNArfxOv6wg07XcJdtPkEef71fL5MUvFWy3W0_r2dwssjRILWWz9-t3MOXj3EWg-ftIfrW-X5IcHMM-psZLNMVeBJuIZzNYJOBt8_9Am5BDtMqzuD9A8gCGTaqpFQ-kUGRI0eGIRYMW60OZIzSg3x0pqT8icJnWDVtZwe5YHhQmlAc0Va2JhS4k_uaMpIl6YWPDEuysqrdp883R62unqR-RobbVjZGwHwRIsO7qrakBXheFJxpllm2fMgDIUSS7t4VJ66ID2An8cTntCjI_bMXGW46KyDiWPQMVWdfDjdWPhIK3rMLcC9MSpekqZzSRPwtFv0rDaRqrtpFMHFf2h5MtvPrq-VXV7sI5_9dta_AZWRa1Ri6qjZ_6J3KRxr_k1GdPtC9Vge3Zhw3LueEkowdX_k4JI17cgf-HuZ_DYeTsP9nOPinzUX_5lcAAAD__zvmOHw=

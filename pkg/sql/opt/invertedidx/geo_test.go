@@ -310,7 +310,7 @@ func TestTryJoinGeoIndex(t *testing.T) {
 	}
 }
 
-func TestTryConstrainGeoIndex(t *testing.T) {
+func TestTryFilterGeoIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.NewTestingEvalContext(nil /* st */)
 
@@ -490,11 +490,14 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 		// We're not testing that the correct SpanExpression is returned here;
 		// that is tested elsewhere. This is just testing that we are constraining
 		// the index when we expect to.
-		_, _, _, pfState, ok := invertedidx.TryConstrainGeoIndex(
+		_, _, _, pfState, noDuplicates, ok := invertedidx.TryFilterInvertedIndex(
 			evalCtx, &f, filters, tab, md.Table(tab).Index(tc.indexOrd),
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
+		}
+		if noDuplicates {
+			t.Fatalf("geospatial indexes should never have noDuplicates=true")
 		}
 		if ok {
 			if len(tc.preFilterExpr) == 0 {
