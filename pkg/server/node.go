@@ -146,22 +146,24 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // stores, which in turn direct the commands to specific ranges. Each
 // node has access to the global, monolithic Key-Value abstraction via
 // its client.DB reference. Nodes use this to allocate node and store
-// IDs for bootstrapping the node itself or new stores as they're added
-// on subsequent instantiations.
+// IDs for bootstrapping the node itself or initializing new stores as
+// they're added on subsequent instantiations.
 type Node struct {
-	stopper              *stop.Stopper
-	clusterID            *base.ClusterIDContainer // UUID for Cockroach cluster
-	Descriptor           roachpb.NodeDescriptor   // Node ID, network/physical topology
-	storeCfg             kvserver.StoreConfig     // Config to use and pass to stores
-	eventLogger          sql.EventLogger
-	stores               *kvserver.Stores // Access to node-local stores
-	metrics              nodeMetrics
-	recorder             *status.MetricsRecorder
-	startedAt            int64
-	lastUp               int64
-	initialStart         bool // True if this is the first time this node has started.
-	txnMetrics           kvcoord.TxnMetrics
-	bootstrapNewStoresCh chan struct{}
+	stopper      *stop.Stopper
+	clusterID    *base.ClusterIDContainer // UUID for Cockroach cluster
+	Descriptor   roachpb.NodeDescriptor   // Node ID, network/physical topology
+	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
+	eventLogger  sql.EventLogger
+	stores       *kvserver.Stores // Access to node-local stores
+	metrics      nodeMetrics
+	recorder     *status.MetricsRecorder
+	startedAt    int64
+	lastUp       int64
+	initialStart bool // True if this is the first time this node has started.
+	txnMetrics   kvcoord.TxnMetrics
+
+	// Used to signal when additional stores, if any, have been initialized.
+	additionalStoreInitCh chan struct{}
 
 	perReplicaServer kvserver.Server
 }
@@ -268,13 +270,12 @@ func bootstrapCluster(
 
 	state := &initState{
 		initDiskState: initDiskState{
-			nodeID:             FirstNodeID,
-			clusterID:          clusterID,
-			clusterVersion:     bootstrapVersion,
-			initializedEngines: engines,
-			newEngines:         nil,
+			nodeID:               FirstNodeID,
+			clusterID:            clusterID,
+			clusterVersion:       bootstrapVersion,
+			initializedEngines:   engines,
+			uninitializedEngines: nil,
 		},
-		firstStoreID: firstStoreID,
 	}
 	return state, nil
 }
@@ -417,19 +418,15 @@ func (n *Node) start(
 	// Start the closed timestamp subsystem.
 	n.storeCfg.ClosedTimestamp.Start(n.Descriptor.NodeID)
 
-	// Create stores from the engines that were already bootstrapped.
+	// Create stores from the engines that were already initialized.
 	for _, e := range state.initializedEngines {
 		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
 		}
-		capacity, err := s.Capacity(ctx, false /* useCached */)
-		if err != nil {
-			return errors.Errorf("could not query store capacity: %s", err)
-		}
-		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
 
 		n.addStore(ctx, s)
+		log.Infof(ctx, "initialized store s%s", s.StoreID())
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
@@ -462,27 +459,32 @@ func (n *Node) start(
 		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
 	}
 
-	// Bootstrap uninitialized stores, if any.
-	if len(state.newEngines) > 0 {
-		// We need to bootstrap additional stores asynchronously. Consider the range that
-		// houses the store ID allocator. When restarting the set of nodes that holds a
-		// quorum of these replicas, when restarting them with additional stores, those
-		// additional stores will require store IDs to get fully bootstrapped. But if we're
-		// gating node start (specifically opening up the RPC floodgates) on having all
-		// stores fully bootstrapped, we'll simply hang when trying to allocate store IDs.
-		// See TestAddNewStoresToExistingNodes and #39415 for more details.
+	// Initialize remaining stores/engines, if any.
+	if len(state.uninitializedEngines) > 0 {
+		// We need to initialize any remaining stores asynchronously.
+		// Consider the range that houses the store ID allocator. When we
+		// restart the set of nodes that holds a quorum of these replicas,
+		// specifically when we restart them with auxiliary stores, these stores
+		// will require store IDs during initialization[1]. But if we're gating
+		// node start up (specifically the opening up of RPC floodgates) on
+		// having all stores in the node fully initialized, we'll simply hang
+		// when trying to allocate store IDs. See
+		// TestAddNewStoresToExistingNodes and #39415 for more details.
 		//
-		// Instead we opt to bootstrap additional stores asynchronously, and rely on the
-		// blocking function n.waitForBootstrapNewStores() to signal to the caller that
-		// all stores have been fully bootstrapped.
-		n.bootstrapNewStoresCh = make(chan struct{})
-		if err := n.stopper.RunAsyncTask(ctx, "bootstrap-stores", func(ctx context.Context) {
-			if err := n.bootstrapStores(ctx, state.firstStoreID, state.newEngines, n.stopper); err != nil {
-				log.Fatalf(ctx, "while bootstrapping additional stores: %v", err)
+		// So instead we opt to initialize additional stores asynchronously, and
+		// rely on the blocking function n.waitForAdditionalStoreInit() to
+		// signal to the caller that all stores have been fully initialized.
+		//
+		// [1]: It's important to note that store IDs are allocated via a
+		// sequence ID generator stored in a system key.
+		n.additionalStoreInitCh = make(chan struct{})
+		if err := n.stopper.RunAsyncTask(ctx, "initialize-additional-stores", func(ctx context.Context) {
+			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines, n.stopper); err != nil {
+				log.Fatalf(ctx, "while initializing additional stores: %v", err)
 			}
-			close(n.bootstrapNewStoresCh)
+			close(n.additionalStoreInitCh)
 		}); err != nil {
-			close(n.bootstrapNewStoresCh)
+			close(n.additionalStoreInitCh)
 			return err
 		}
 	}
@@ -498,7 +500,7 @@ func (n *Node) start(
 	n.startGossiping(ctx, n.stopper)
 
 	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
-	allEngines = append(allEngines, state.newEngines...)
+	allEngines = append(allEngines, state.uninitializedEngines...)
 	for _, e := range allEngines {
 		t := e.Type()
 		log.Infof(ctx, "started with engine type %v", t)
@@ -507,11 +509,11 @@ func (n *Node) start(
 	return nil
 }
 
-// waitForBootstrapNewStores blocks until all additional empty stores,
-// if any, have been bootstrapped.
-func (n *Node) waitForBootstrapNewStores() {
-	if n.bootstrapNewStoresCh != nil {
-		<-n.bootstrapNewStoresCh
+// waitForAdditionalStoreInit blocks until all additional empty stores,
+// if any, have been initialized.
+func (n *Node) waitForAdditionalStoreInit() {
+	if n.additionalStoreInitCh != nil {
+		<-n.additionalStoreInitCh
 	}
 }
 
@@ -555,7 +557,7 @@ func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
 	}
 	if cv == (clusterversion.ClusterVersion{}) {
 		// The store should have had a version written to it during the store
-		// bootstrap process.
+		// initialization process.
 		log.Fatal(ctx, "attempting to add a store without a version")
 	}
 	n.stores.AddStore(store)
@@ -576,47 +578,34 @@ func (n *Node) validateStores(ctx context.Context) error {
 	})
 }
 
-// bootstrapStores bootstraps uninitialized stores once the cluster
-// and node IDs have been established for this node. Store IDs are
-// allocated via a sequence id generator stored at a system key per
-// node. The new stores are added to n.stores.
-func (n *Node) bootstrapStores(
-	ctx context.Context,
-	firstStoreID roachpb.StoreID,
-	emptyEngines []storage.Engine,
-	stopper *stop.Stopper,
+// initializeAdditionalStores initializes the given set of engines once the
+// cluster and node ID have been established for this node. Store IDs are
+// allocated via a sequence id generator stored at a system key per node. The
+// new stores are added to n.stores.
+func (n *Node) initializeAdditionalStores(
+	ctx context.Context, engines []storage.Engine, stopper *stop.Stopper,
 ) error {
 	if n.clusterID.Get() == uuid.Nil {
-		return errors.New("ClusterID missing during store bootstrap of auxiliary store")
+		return errors.New("missing cluster ID during initialization of additional store")
 	}
 
 	{
-		// Bootstrap all waiting stores by allocating a new store id for
-		// each and invoking storage.Bootstrap() to persist it and the cluster
-		// version and to create stores. The -1 comes from the fact that our
-		// first store ID has already been pre-allocated for us.
-		storeIDAlloc := int64(len(emptyEngines)) - 1
-		if firstStoreID == 0 {
-			// We lied, we don't have a firstStoreID; we'll need to allocate for
-			// that too.
-			//
-			// TODO(irfansharif): We get here if we're falling back to
-			// gossip-based connectivity. This can be removed in 21.1.
-			storeIDAlloc++
-		}
+		// Initialize all waiting stores by allocating a new store id for each
+		// and invoking kvserver.InitEngine() to persist it. We'll then
+		// construct a new store out of the initialized engine and attach it to
+		// ourselves.
+		storeIDAlloc := int64(len(engines))
 		startID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, storeIDAlloc, n.storeCfg.DB)
-		if firstStoreID == 0 {
-			firstStoreID = startID
-		}
 		if err != nil {
 			return errors.Errorf("error allocating store ids: %s", err)
 		}
+
 		sIdent := roachpb.StoreIdent{
 			ClusterID: n.clusterID.Get(),
 			NodeID:    n.Descriptor.NodeID,
-			StoreID:   firstStoreID,
+			StoreID:   startID,
 		}
-		for _, eng := range emptyEngines {
+		for _, eng := range engines {
 			if err := kvserver.InitEngine(ctx, eng, sIdent); err != nil {
 				return err
 			}
@@ -625,8 +614,10 @@ func (n *Node) bootstrapStores(
 			if err := s.Start(ctx, stopper); err != nil {
 				return err
 			}
+
 			n.addStore(ctx, s)
-			log.Infof(ctx, "bootstrapped store %s", s)
+			log.Infof(ctx, "initialized store s%s", s.StoreID())
+
 			// Done regularly in Node.startGossiping, but this cuts down the time
 			// until this store is used for range allocations.
 			if err := s.GossipStore(ctx, false /* useCached */); err != nil {
@@ -637,7 +628,7 @@ func (n *Node) bootstrapStores(
 		}
 	}
 
-	// write a new status summary after all stores have been bootstrapped; this
+	// Write a new status summary after all stores have been initialized; this
 	// helps the UI remain responsive when new nodes are added.
 	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */); err != nil {
 		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)

@@ -34,14 +34,14 @@ import (
 func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIdent) error {
 	exIdent, err := ReadStoreIdent(ctx, eng)
 	if err == nil {
-		return errors.Errorf("engine %s is already bootstrapped with ident %s", eng, exIdent.String())
+		return errors.Errorf("engine %s is already initialized with ident %s", eng, exIdent.String())
 	}
 	if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
 		return err
 	}
 
 	if err := checkCanInitializeEngine(ctx, eng); err != nil {
-		return errors.Wrap(err, "while trying to initialize store")
+		return errors.Wrap(err, "while trying to initialize engine")
 	}
 
 	batch := eng.NewBatch()
@@ -58,13 +58,13 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 		return err
 	}
 	if err := batch.Commit(true /* sync */); err != nil {
-		return errors.Wrap(err, "persisting bootstrap data")
+		return errors.Wrap(err, "persisting engine initialization data")
 	}
 
 	return nil
 }
 
-// WriteInitialClusterData writes bootstrapping data to an engine. It creates
+// WriteInitialClusterData writes initialization data to an engine. It creates
 // system ranges (filling in meta1 and meta2) and the default zone config.
 //
 // Args:

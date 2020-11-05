@@ -755,7 +755,7 @@ func inspectEngines(
 	for _, eng := range engines {
 		storeIdent, err := kvserver.ReadStoreIdent(ctx, eng)
 		if errors.HasType(err, (*kvserver.NotBootstrappedError)(nil)) {
-			state.newEngines = append(state.newEngines, eng)
+			state.uninitializedEngines = append(state.uninitializedEngines, eng)
 			continue
 		} else if err != nil {
 			return nil, err
@@ -1503,7 +1503,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
-	// NB: if this store is freshly bootstrapped (or no upper bound was
+	// NB: if this store is freshly initialized (or no upper bound was
 	// persisted), hlcUpperBound will be zero.
 	hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
 	if err != nil {
@@ -1533,7 +1533,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	startGossipFn()
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
-	// init all the replicas. At this point *some* store has been bootstrapped or
+	// init all the replicas. At this point *some* store has been initialized or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
 	if err := s.node.start(
@@ -1612,16 +1612,17 @@ func (s *Server) PreStart(ctx context.Context) error {
 	})
 
 	// After setting modeOperational, we can block until all stores are fully
-	// bootstrapped.
+	// initialized.
 	s.grpc.setMode(modeOperational)
 
-	// We'll block here until all stores are fully bootstrapped. We do this here for
-	// two reasons:
-	// - some of the components below depend on all stores being fully bootstrapped
-	// (like the debug server registration for e.g.)
-	// - we'll need to do it after having opened up the RPC floodgates (due to the
-	// hazard described in Node.start, around bootstrapping additional stores)
-	s.node.waitForBootstrapNewStores()
+	// We'll block here until all stores are fully initialized. We do this here
+	// for two reasons:
+	// - some of the components below depend on all stores being fully
+	//   initialized (like the debug server registration for e.g.)
+	// - we'll need to do it after having opened up the RPC floodgates (due to
+	//   the hazard described in Node.start, around initializing additional
+	//   stores)
+	s.node.waitForAdditionalStoreInit()
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)

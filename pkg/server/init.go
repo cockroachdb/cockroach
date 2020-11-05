@@ -111,10 +111,10 @@ type initDiskState struct {
 	// TODO(tbg): see TODO above.
 	nodeID roachpb.NodeID
 	// All fields below are always set.
-	clusterID          uuid.UUID
-	clusterVersion     clusterversion.ClusterVersion
-	initializedEngines []storage.Engine
-	newEngines         []storage.Engine
+	clusterID            uuid.UUID
+	clusterVersion       clusterversion.ClusterVersion
+	initializedEngines   []storage.Engine
+	uninitializedEngines []storage.Engine
 }
 
 // initState contains the cluster and node IDs as well as the stores, from which
@@ -125,12 +125,10 @@ type initDiskState struct {
 // running server will be wholly reconstructed if reloading from disk. It
 // could if we always persisted any changes made to it back to disk. Right now
 // when initializing after a successful join attempt, we don't persist back the
-// disk state back to disk (we'd need to bootstrap the first store here, in the
+// disk state back to disk (we'd need to initialize the first store here, in the
 // same we do when `cockroach init`-ialized).
 type initState struct {
 	initDiskState
-
-	firstStoreID roachpb.StoreID
 }
 
 // NeedsInit is like needsInitLocked, except it acquires the necessary locks.
@@ -205,7 +203,7 @@ func (s *initServer) ServeAndWait(
 	}
 	s.mu.Unlock()
 
-	log.Info(ctx, "no stores bootstrapped")
+	log.Info(ctx, "no stores initialized")
 	log.Info(ctx, "awaiting `cockroach init` or join with an already initialized node")
 
 	joinCtx, cancelJoin := context.WithCancel(ctx)
@@ -310,10 +308,6 @@ func (s *initServer) ServeAndWait(
 
 			log.Infof(ctx, "joined cluster %s through join rpc", state.clusterID)
 			log.Infof(ctx, "received node ID %d", state.nodeID)
-
-			s.mu.Lock()
-			s.mu.inspectState.clusterID = state.clusterID
-			s.mu.Unlock()
 
 			return state, true, nil
 		case <-gossipConnectedCh:
@@ -535,29 +529,58 @@ func (s *initServer) attemptJoinTo(ctx context.Context, addr string) (*initState
 		return nil, err
 	}
 
-	s.mu.Lock()
-	s.mu.inspectState.clusterID = clusterID
-	s.mu.inspectState.nodeID = roachpb.NodeID(resp.NodeID)
-	s.mu.inspectState.clusterVersion = clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
-	diskState := *s.mu.inspectState
-	s.mu.Unlock()
+	nodeID, storeID := roachpb.NodeID(resp.NodeID), roachpb.StoreID(resp.StoreID)
+	clusterVersion := clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
 
-	state := &initState{
-		initDiskState: diskState,
-		firstStoreID:  roachpb.StoreID(resp.StoreID),
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.mu.inspectState.clusterID = clusterID
+	s.mu.inspectState.nodeID = nodeID
+	s.mu.inspectState.clusterVersion = clusterVersion
+
+	if len(s.mu.inspectState.uninitializedEngines) < 1 {
+		log.Fatal(ctx, "expected to find at least one uninitialized engine")
 	}
 
+	// We initialize the very first store here, using the store ID handed to us.
+	sIdent := roachpb.StoreIdent{
+		ClusterID: clusterID,
+		NodeID:    nodeID,
+		StoreID:   storeID,
+	}
+
+	firstEngine := s.mu.inspectState.uninitializedEngines[0]
+	if err := kvserver.InitEngine(ctx, firstEngine, sIdent); err != nil {
+		return nil, err
+	}
+
+	// We construct the appropriate initState to indicate that we've initialized
+	// the first engine. We similarly trim it off the uninitializedEngines list
+	// so that when initializing auxiliary stores, if any, we know to avoid
+	// re-initializing the first store.
+	initializedEngines := []storage.Engine{firstEngine}
+	uninitializedEngines := s.mu.inspectState.uninitializedEngines[1:]
+	state := &initState{
+		initDiskState: initDiskState{
+			nodeID:               nodeID,
+			clusterID:            clusterID,
+			clusterVersion:       clusterVersion,
+			initializedEngines:   initializedEngines,
+			uninitializedEngines: uninitializedEngines,
+		},
+	}
 	return state, nil
 }
 
 func (s *initServer) tryBootstrapLocked(ctx context.Context) (*initState, error) {
 	// We use our binary version to bootstrap the cluster.
 	cv := clusterversion.ClusterVersion{Version: s.config.binaryVersion}
-	if err := kvserver.WriteClusterVersionToEngines(ctx, s.mu.inspectState.newEngines, cv); err != nil {
+	if err := kvserver.WriteClusterVersionToEngines(ctx, s.mu.inspectState.uninitializedEngines, cv); err != nil {
 		return nil, err
 	}
 	return bootstrapCluster(
-		ctx, s.mu.inspectState.newEngines, &s.config.defaultZoneConfig, &s.config.defaultSystemZoneConfig,
+		ctx, s.mu.inspectState.uninitializedEngines, &s.config.defaultZoneConfig, &s.config.defaultSystemZoneConfig,
 	)
 }
 
