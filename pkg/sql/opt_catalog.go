@@ -1038,6 +1038,18 @@ func (ot *optTable) InboundForeignKey(i int) cat.ForeignKeyConstraint {
 	return &ot.inboundFKs[i]
 }
 
+// UniqueCount is part of the cat.Table interface.
+func (ot *optTable) UniqueCount() int {
+	// TODO(rytaft): return the number of unique constraints (both with and
+	//  without indexes).
+	return 0
+}
+
+// Unique is part of the cat.Table interface.
+func (ot *optTable) Unique(i int) cat.UniqueConstraint {
+	panic(errors.AssertionFailedf("unique constraint [%d] does not exist", i))
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
@@ -1213,7 +1225,7 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 // VirtualInvertedColumn is part of the cat.Index interface.
 func (oi *optIndex) VirtualInvertedColumn() cat.IndexColumn {
 	if !oi.IsInverted() {
-		panic("non-inverted indexes do not have inverted virtual columns")
+		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted virtual columns"))
 	}
 	ord := len(oi.desc.ColumnIDs) - 1
 	return oi.Column(ord)
@@ -1647,7 +1659,7 @@ func newOptVirtualTable(
 	for i := range ot.desc.Indexes {
 		idxDesc := &ot.desc.Indexes[i]
 		if len(idxDesc.ColumnIDs) > 1 {
-			panic("virtual indexes with more than 1 col not supported")
+			panic(errors.AssertionFailedf("virtual indexes with more than 1 col not supported"))
 		}
 
 		// Add 1, since the 0th index will the the primary that we added above.
@@ -1753,7 +1765,7 @@ func (ot *optVirtualTable) StatisticCount() int {
 
 // Statistic is part of the cat.Table interface.
 func (ot *optVirtualTable) Statistic(i int) cat.TableStatistic {
-	panic("no stats")
+	panic(errors.AssertionFailedf("no stats"))
 }
 
 // CheckCount is part of the cat.Table interface.
@@ -1787,7 +1799,7 @@ func (ot *optVirtualTable) OutboundForeignKeyCount() int {
 
 // OutboundForeignKeyCount is part of the cat.Table interface.
 func (ot *optVirtualTable) OutboundForeignKey(i int) cat.ForeignKeyConstraint {
-	panic("no FKs")
+	panic(errors.AssertionFailedf("no FKs"))
 }
 
 // InboundForeignKeyCount is part of the cat.Table interface.
@@ -1797,7 +1809,17 @@ func (ot *optVirtualTable) InboundForeignKeyCount() int {
 
 // InboundForeignKey is part of the cat.Table interface.
 func (ot *optVirtualTable) InboundForeignKey(i int) cat.ForeignKeyConstraint {
-	panic("no FKs")
+	panic(errors.AssertionFailedf("no FKs"))
+}
+
+// UniqueCount is part of the cat.Table interface.
+func (ot *optVirtualTable) UniqueCount() int {
+	return 0
+}
+
+// Unique is part of the cat.Table interface.
+func (ot *optVirtualTable) Unique(i int) cat.UniqueConstraint {
+	panic(errors.AssertionFailedf("no unique constraints"))
 }
 
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
@@ -1900,7 +1922,7 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 
 // VirtualInvertedColumn is part of the cat.Index interface.
 func (oi *optVirtualIndex) VirtualInvertedColumn() cat.IndexColumn {
-	panic("virtual indexes are not inverted")
+	panic(errors.AssertionFailedf("virtual indexes are not inverted"))
 }
 
 // Predicate is part of the cat.Index interface.
@@ -1910,12 +1932,12 @@ func (oi *optVirtualIndex) Predicate() (string, bool) {
 
 // Zone is part of the cat.Index interface.
 func (oi *optVirtualIndex) Zone() cat.Zone {
-	panic("no zone")
+	panic(errors.AssertionFailedf("no zone"))
 }
 
 // Span is part of the cat.Index interface.
 func (oi *optVirtualIndex) Span() roachpb.Span {
-	panic("no span")
+	panic(errors.AssertionFailedf("no span"))
 }
 
 // Table is part of the cat.Index interface.
@@ -1940,7 +1962,7 @@ func (oi *optVirtualIndex) InterleaveAncestorCount() int {
 
 // InterleaveAncestor is part of the cat.Index interface.
 func (oi *optVirtualIndex) InterleaveAncestor(i int) (table, index cat.StableID, numKeyCols int) {
-	panic("no interleavings")
+	panic(errors.AssertionFailedf("no interleavings"))
 }
 
 // InterleavedByCount is part of the cat.Index interface.
@@ -1950,7 +1972,7 @@ func (oi *optVirtualIndex) InterleavedByCount() int {
 
 // InterleavedBy is part of the cat.Index interface.
 func (oi *optVirtualIndex) InterleavedBy(i int) (table, index cat.StableID) {
-	panic("no interleavings")
+	panic(errors.AssertionFailedf("no interleavings"))
 }
 
 // GeoConfig is part of the cat.Index interface.
