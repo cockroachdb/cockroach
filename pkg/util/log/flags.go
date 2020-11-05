@@ -26,7 +26,7 @@ func init() {
 		&logging.noColor,
 		&redactableLogsRequested, // NB: see doc on the variable definition.
 		&logging.vmoduleConfig.mu.vmodule,
-		&LogFileMaxSize, &LogFilesCombinedMaxSize,
+		&logFileMaxSize, &logFilesCombinedMaxSize,
 	)
 	// We define these flags here because they have the type Severity
 	// which we can't pass to logflags without creating an import cycle.
