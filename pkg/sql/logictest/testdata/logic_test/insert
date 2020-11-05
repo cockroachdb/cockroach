@@ -480,12 +480,12 @@ CREATE TABLE public.sw (
    e STRING NULL,
    f STRING(3) NULL,
    g "char" NULL,
-   ac CHAR COLLATE en NULL,
-   bc CHAR(3) COLLATE en NULL,
-   cc VARCHAR COLLATE en NULL,
-   dc VARCHAR(3) COLLATE en NULL,
-   ec STRING COLLATE en NULL,
-   fc STRING(3) COLLATE en NULL,
+   ac CHAR COLLATE "en" NULL,
+   bc CHAR(3) COLLATE "en" NULL,
+   cc VARCHAR COLLATE "en" NULL,
+   dc VARCHAR(3) COLLATE "en" NULL,
+   ec STRING COLLATE "en" NULL,
+   fc STRING(3) COLLATE "en" NULL,
    FAMILY "primary" (a, b, c, d, e, f, g, ac, bc, cc, dc, ec, fc, rowid)
 )
 
@@ -502,7 +502,7 @@ INSERT INTO sw VALUES (
 statement error value too long for type CHAR \(column "a"\)
 INSERT INTO sw(a) VALUES ('ab')
 
-statement error value too long for type CHAR COLLATE en \(column "ac"\)
+statement error value too long for type CHAR COLLATE "en" \(column "ac"\)
 INSERT INTO sw(ac) VALUES ('ab' COLLATE en)
 
 statement ok
@@ -513,19 +513,19 @@ INSERT INTO sw (b, c, d, e, f, g, bc, cc, dc, ec, fc) VALUES (
 statement error value too long for type CHAR\(3\) \(column "b"\)
 INSERT INTO sw(b) VALUES ('abcd')
 
-statement error value too long for type CHAR\(3\) COLLATE en \(column "bc"\)
+statement error value too long for type CHAR\(3\) COLLATE "en" \(column "bc"\)
 INSERT INTO sw(bc) VALUES ('abcd' COLLATE en)
 
 statement error value too long for type VARCHAR\(3\) \(column "d"\)
 INSERT INTO sw(d) VALUES ('abcd')
 
-statement error value too long for type VARCHAR\(3\) COLLATE en \(column "dc"\)
+statement error value too long for type VARCHAR\(3\) COLLATE "en" \(column "dc"\)
 INSERT INTO sw(dc) VALUES ('abcd' COLLATE en)
 
 statement error value too long for type STRING\(3\) \(column "f"\)
 INSERT INTO sw(f) VALUES ('abcd')
 
-statement error value too long for type STRING\(3\) COLLATE en \(column "fc"\)
+statement error value too long for type STRING\(3\) COLLATE "en" \(column "fc"\)
 INSERT INTO sw(fc) VALUES ('abcd' COLLATE en)
 
 subtest regression_26742

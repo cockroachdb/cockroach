@@ -1128,7 +1128,7 @@ SELECT s FROM x WHERE s < 'hello' COLLATE en_u_ks_level1
 ----
 scan x
  ├── columns: s:1!null
- ├── constraint: /1: [ - /'hello' COLLATE en_u_ks_level1)
+ ├── constraint: /1: [ - /'hello' COLLATE "en_u_ks_level1")
  └── key: (1)
 
 opt
@@ -1136,7 +1136,7 @@ SELECT s FROM x WHERE s = 'hello' COLLATE en_u_ks_level1
 ----
 scan x
  ├── columns: s:1!null
- ├── constraint: /1: [/'hello' COLLATE en_u_ks_level1 - /'hello' COLLATE en_u_ks_level1]
+ ├── constraint: /1: [/'hello' COLLATE en_u_ks_level1 - /'hello' COLLATE "en_u_ks_level1"]
  ├── cardinality: [0 - 1]
  ├── key: ()
  └── fd: ()-->(1)
@@ -1152,7 +1152,7 @@ select
  │    ├── columns: s:1!null
  │    └── key: (1)
  └── filters
-      └── s:1 COLLATE en = 'hello' COLLATE en [outer=(1)]
+      └── s:1 COLLATE en = 'hello' COLLATE "en" [outer=(1)]
 
 # Realistic example where using constraints as filters help.
 # An even more realistic example would have a creation timestamp instead of a

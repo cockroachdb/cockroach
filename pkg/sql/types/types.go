@@ -1758,8 +1758,15 @@ func (t *T) Equivalent(other *T) bool {
 
 	switch t.Family() {
 	case CollatedStringFamily:
-		if t.Locale() != "" && other.Locale() != "" && t.Locale() != other.Locale() {
-			return false
+		// CockroachDB differs from Postgres by comparing collation names
+		// case-insensitively and equating hyphens/underscores.
+		if t.Locale() != "" && other.Locale() != "" {
+			var tBuf, otherBuf bytes.Buffer
+			lex.EncodeLocaleName(&tBuf, t.Locale())
+			lex.EncodeLocaleName(&otherBuf, other.Locale())
+			if !strings.EqualFold(tBuf.String(), otherBuf.String()) {
+				return false
+			}
 		}
 
 	case TupleFamily:

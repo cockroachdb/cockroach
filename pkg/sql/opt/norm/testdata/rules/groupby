@@ -2104,8 +2104,8 @@ distinct-on
  └── values
       ├── columns: column1:1!null
       ├── cardinality: [2 - 2]
-      ├── (e'\u00E4' COLLATE en,)
-      └── (e'a\u0308' COLLATE en,)
+      ├── (e'\u00E4' COLLATE "en",)
+      └── (e'a\u0308' COLLATE "en",)
 
 # Composite decimal type should be considered as not distinct.
 norm expect-not=EliminateDistinctOnValues

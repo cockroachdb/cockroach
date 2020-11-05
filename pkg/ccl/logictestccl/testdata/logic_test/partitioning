@@ -270,7 +270,7 @@ CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
     PARTITION p1 VALUES FROM (MINVALUE, MAXVALUE) TO (MAXVALUE, MAXVALUE)
 )
 
-statement error PARTITION p1: empty range: lower bound \(e'\\u00FC' COLLATE da\) is greater than upper bound \('x' COLLATE da\)
+statement error PARTITION p1: empty range: lower bound \(e'\\u00FC' COLLATE "da"\) is greater than upper bound \('x' COLLATE "da"\)
 CREATE TABLE t (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM ('ü' COLLATE da) TO ('x' COLLATE da)
 )
@@ -280,7 +280,7 @@ CREATE TABLE collate_da (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a)
     PARTITION p1 VALUES FROM ('x' COLLATE da) TO ('ü' COLLATE da)
 )
 
-statement error PARTITION p1: empty range: lower bound \('x' COLLATE de\) is greater than upper bound \(e'\\u00FC' COLLATE de\)
+statement error PARTITION p1: empty range: lower bound \('x' COLLATE "de"\) is greater than upper bound \(e'\\u00FC' COLLATE "de"\)
 CREATE TABLE t (a STRING COLLATE de PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM ('x' COLLATE de) TO ('ü' COLLATE de)
 )

@@ -336,10 +336,10 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (x, y FAMILY f1) AS SELECT * FROM b`},
 		{`CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT * FROM b`},
 
-		{`CREATE TABLE a (b STRING COLLATE de)`},
-		{`CREATE TABLE a (b STRING(3) COLLATE de)`},
-		{`CREATE TABLE a (b STRING[] COLLATE de)`},
-		{`CREATE TABLE a (b STRING(3)[] COLLATE de)`},
+		{`CREATE TABLE a (b STRING COLLATE "de")`},
+		{`CREATE TABLE a (b STRING(3) COLLATE "de")`},
+		{`CREATE TABLE a (b STRING[] COLLATE "de")`},
+		{`CREATE TABLE a (b STRING(3)[] COLLATE "en_US")`},
 
 		{`CREATE TABLE a (LIKE b)`},
 		{`CREATE TABLE a (LIKE b, c INT8)`},
@@ -868,7 +868,7 @@ func TestParse(t *testing.T) {
 		{`SELECT ((() AS a)).@1`},
 		{`SELECT (TABLE a)`},
 		{`SELECT 0x1`},
-		{`SELECT 'Deutsch' COLLATE de`},
+		{`SELECT 'Deutsch' COLLATE "de"`},
 		{`SELECT a @> b`},
 		{`SELECT a <@ b`},
 		{`SELECT a ? b`},

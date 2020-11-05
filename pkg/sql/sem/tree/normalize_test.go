@@ -250,8 +250,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`NULL IS DISTINCT FROM d`, `d IS DISTINCT FROM NULL`},
 		// #15454: ensure that operators are pretty-printed correctly after normalization.
 		{`(random() + 1.0)::INT8`, `(random() + 1.0)::INT8`},
-		{`('a' || left('b', random()::INT8)) COLLATE en`, `('a' || left('b', random()::INT8)) COLLATE en`},
-		{`NULL COLLATE en`, `CAST(NULL AS STRING) COLLATE en`},
+		{`('a' || left('b', random()::INT8)) COLLATE en`, `('a' || left('b', random()::INT8)) COLLATE "en""`},
+		{`NULL COLLATE en`, `CAST(NULL AS STRING) COLLATE "en"`},
 		{`(1.0 + random()) IS OF (INT8)`, `(1.0 + random()) IS OF (INT8)`},
 		// #14687: ensure that negative divisors flip the inequality when rotating.
 		{`1 < a / -2`, `a < -2`},

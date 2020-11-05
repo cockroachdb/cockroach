@@ -112,6 +112,9 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags lexbase.Encode
 // need to be quoted, and they are considered equivalent to dash characters by
 // the CLDR standard: http://cldr.unicode.org/.
 func EncodeLocaleName(buf *bytes.Buffer, s string) {
+	// We don't need to worry about escaping " in the name since no locale name
+	// contains quotes.
+	buf.WriteByte('"')
 	for i, n := 0, len(s); i < n; i++ {
 		ch := s[i]
 		if ch == '-' {
@@ -120,6 +123,7 @@ func EncodeLocaleName(buf *bytes.Buffer, s string) {
 			buf.WriteByte(ch)
 		}
 	}
+	buf.WriteByte('"')
 }
 
 // EncodeSQLBytes encodes the SQL byte array in 'in' to buf, to a
