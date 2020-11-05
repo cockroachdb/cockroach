@@ -7,10 +7,10 @@ SELECT 'A' COLLATE en = 'a'
 statement error pq: unsupported comparison operator: <collatedstring{en}> = <collatedstring{de}>
 SELECT 'A' COLLATE en = 'a' COLLATE de
 
-statement error pq: unsupported comparison operator: \('a' COLLATE en_u_ks_level1\) IN \('A' COLLATE en_u_ks_level1, 'b' COLLATE en\): expected 'b' COLLATE en to be of type collatedstring{en_u_ks_level1}, found type collatedstring{en}
+statement error pq: unsupported comparison operator: \('a' COLLATE en_u_ks_level1\) IN \('A' COLLATE en_u_ks_level1, 'b' COLLATE en\): expected 'b' COLLATE en to be of type collatedstring\{en_u_ks_level1\}, found type collatedstring\{en\}
 SELECT ('a' COLLATE en_u_ks_level1) IN ('A' COLLATE en_u_ks_level1, 'b' COLLATE en)
 
-statement error pq: tuples \('a' COLLATE en_u_ks_level1, 'a' COLLATE en\), \('A' COLLATE en, 'B' COLLATE en\) are not comparable at index 1: unsupported comparison operator: <collatedstring{en_u_ks_level1}> < <collatedstring{en}
+statement error pq: tuples \('a' COLLATE en_u_ks_level1, 'a' COLLATE en\), \('A' COLLATE en, 'B' COLLATE en\) are not comparable at index 1: unsupported comparison operator: <collatedstring\{en_u_ks_level1\}> < <collatedstring\{en\}>
 SELECT ('a' COLLATE en_u_ks_level1, 'a' COLLATE en) < ('A' COLLATE en, 'B' COLLATE en)
 
 
@@ -356,9 +356,9 @@ SHOW CREATE TABLE quoted_coll
 quoted_coll  CREATE TABLE public.quoted_coll (
              a STRING COLLATE en NULL,
              b STRING COLLATE en_US NULL,
-             c STRING COLLATE en_Us NULL DEFAULT 'c':::STRING COLLATE en_us,
+             c STRING COLLATE en_US NULL DEFAULT 'c':::STRING COLLATE en_US,
              d STRING COLLATE en_u_ks_level1 NULL DEFAULT 'd':::STRING COLLATE en_u_ks_level1,
-             e STRING COLLATE en_us NULL AS (a COLLATE en_us) STORED,
+             e STRING COLLATE en_US NULL AS (a COLLATE en_US) STORED,
              FAMILY "primary" (a, b, c, d, e, rowid)
 )
 
@@ -427,3 +427,50 @@ default_collation       default
 no_collation_str        default
 no_collation_str_array  default
 rowid                   NULL
+
+# Regression test for collated string lowercase and hyphen/underscore equality.
+subtest nocase_strings
+
+statement ok
+CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-level2");
+
+statement ok
+INSERT INTO nocase_strings VALUES ('Aaa' COLLATE "en-US-u-ks-level2"), ('Bbb' COLLATE "en-US-u-ks-level2");
+
+query T
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-US-u-ks-level2")
+----
+Bbb
+
+query T
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-level2")
+----
+Bbb
+
+query T
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en_US_u_ks_level2")
+----
+Bbb
+
+statement ok
+CREATE TABLE collation_name_case (s STRING COLLATE en_us_u_ks_level2);
+
+query TT
+SHOW CREATE TABLE collation_name_case
+----
+collation_name_case   CREATE TABLE public.collation_name_case (
+                      s STRING COLLATE en_US_u_ks_level2 NULL,
+                      FAMILY "primary" (s, rowid)
+)
+
+statement error invalid locale en-US-u-ks-le"vel2: language: tag is not well-formed
+CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-le""vel2");
+
+statement error syntax error: invalid locale en-US-u-ks-le: language: tag is not well-formed
+CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-le"vel2");
+
+statement error invalid locale en-us-u-ks-l"evel2: language: tag is not well-formed
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-l""evel2")
+
+statement error at or near "evel2": syntax error
+SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-l"evel2")
