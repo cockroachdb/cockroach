@@ -96,13 +96,10 @@ func (n *explainVecNode) startExec(params runParams) error {
 	tp := treeprinter.NewWithStyle(treeprinter.CompactStyle)
 	root := tp.Child("│")
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
-	thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
-		scheduledOnRemoteNode := flow.nodeID != thisNodeID
-		opChains, err := colflow.SupportsVectorized(
-			params.ctx, flowCtx, flow.flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
-		)
+		opChains, cleanup, err := colflow.ConvertToVecTree(params.ctx, flowCtx, flow.flow, !willDistribute)
+		defer cleanup()
 		if err != nil {
 			return err
 		}

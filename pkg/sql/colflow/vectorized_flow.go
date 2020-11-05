@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -87,26 +88,17 @@ func (s *countingSemaphore) Release(n int) int {
 
 type vectorizedFlow struct {
 	*flowinfra.FlowBase
-	// operatorConcurrency is set if any operators are executed in parallel.
-	operatorConcurrency bool
+
+	// creator is the object that created this flow. It must be cleaned up in
+	// order to shut down the memory monitoring infrastructure and should be
+	// released back to the pool.
+	creator *vectorizedFlowCreator
 
 	// countingSemaphore is a wrapper over a semaphore.Semaphore that keeps track
 	// of the number of resources held in a semaphore.Semaphore requested from the
 	// context of this flow so that these can be released unconditionally upon
 	// Cleanup.
 	countingSemaphore *countingSemaphore
-
-	// streamingMemAccounts are the memory accounts that are tracking the static
-	// memory usage of the whole vectorized flow as well as all dynamic memory of
-	// the streaming components.
-	streamingMemAccounts []*mon.BoundAccount
-
-	// monitors are the monitors (of both memory and disk usage) of the
-	// buffering components.
-	monitors []*mon.BytesMonitor
-	// accounts are the accounts that are tracking the dynamic memory and disk
-	// usage of the buffering components.
-	accounts []*mon.BoundAccount
 
 	tempStorage struct {
 		// path is the path to this flow's temporary storage directory.
@@ -137,6 +129,7 @@ type vectorizedFlow struct {
 }
 
 var _ flowinfra.Flow = &vectorizedFlow{}
+var _ execinfra.Releasable = &vectorizedFlow{}
 
 var vectorizedFlowPool = sync.Pool{
 	New: func() interface{} {
@@ -202,9 +195,11 @@ func (f *vectorizedFlow) Setup(
 	// (in the case of local flows). In this case the directory will be prefixed
 	// with "local-flow" and a uuid is generated on the spot to provide a unique
 	// name.
-	tempDirName := f.GetID().String()
-	if f.GetID().Equal(uuid.Nil) {
+	var tempDirName string
+	if id := f.GetID(); id.Equal(uuid.Nil) {
 		tempDirName = "local-flow" + uuid.FastMakeV4().String()
+	} else {
+		tempDirName = id.String()
 	}
 	f.tempStorage.path = filepath.Join(f.Cfg.TempStoragePath, tempDirName)
 	diskQueueCfg := colcontainer.DiskQueueCfg{
@@ -229,7 +224,7 @@ func (f *vectorizedFlow) Setup(
 	}
 	f.countingSemaphore = &countingSemaphore{Semaphore: f.Cfg.VecFDSemaphore, globalCount: f.Cfg.Metrics.VecOpenFDs}
 	flowCtx := f.GetFlowCtx()
-	creator := newVectorizedFlowCreator(
+	f.creator = newVectorizedFlowCreator(
 		helper,
 		vectorizedRemoteComponentCreator{},
 		recordingStats,
@@ -239,20 +234,15 @@ func (f *vectorizedFlow) Setup(
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
-		colexec.DefaultExprDeserialization,
 		flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
 	)
 	if f.testingKnobs.onSetupFlow != nil {
-		f.testingKnobs.onSetupFlow(creator)
+		f.testingKnobs.onSetupFlow(f.creator)
 	}
-	_, err = creator.setupFlow(ctx, flowCtx, spec.Processors, opt)
+	_, err = f.creator.setupFlow(ctx, flowCtx, spec.Processors, opt)
 	if err == nil {
-		f.testingInfo.numClosers = creator.numClosers
-		f.testingInfo.numClosed = &creator.numClosed
-		f.operatorConcurrency = creator.operatorConcurrency
-		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
-		f.monitors = append(f.monitors, creator.monitors...)
-		f.accounts = append(f.accounts, creator.accounts...)
+		f.testingInfo.numClosers = f.creator.numClosers
+		f.testingInfo.numClosed = &f.creator.numClosed
 		if log.V(1) {
 			log.Info(ctx, "vectorized flow setup succeeded")
 		}
@@ -261,15 +251,8 @@ func (f *vectorizedFlow) Setup(
 	// It is (theoretically) possible that some of the memory monitoring
 	// infrastructure was created even in case of an error, and we need to clean
 	// that up.
-	for _, acc := range creator.streamingMemAccounts {
-		acc.Close(ctx)
-	}
-	for _, acc := range creator.accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range creator.monitors {
-		mon.Stop(ctx)
-	}
+	f.creator.cleanup(ctx)
+	f.creator.Release()
 	if log.V(1) {
 		log.Infof(ctx, "failed to vectorize: %s", err)
 	}
@@ -288,11 +271,12 @@ func (f *vectorizedFlow) IsVectorized() bool {
 // value), because only unordered synchronizers introduce operator concurrency
 // at the time of writing.
 func (f *vectorizedFlow) ConcurrentTxnUse() bool {
-	return f.operatorConcurrency || f.FlowBase.ConcurrentTxnUse()
+	return f.creator.operatorConcurrency || f.FlowBase.ConcurrentTxnUse()
 }
 
-// Release releases this vectorizedFlow back to the pool.
+// Release implements the execinfra.Releasable interface.
 func (f *vectorizedFlow) Release() {
+	f.creator.Release()
 	*f = vectorizedFlow{}
 	vectorizedFlowPool.Put(f)
 }
@@ -300,15 +284,7 @@ func (f *vectorizedFlow) Release() {
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
-	for _, acc := range f.streamingMemAccounts {
-		acc.Close(ctx)
-	}
-	for _, acc := range f.accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range f.monitors {
-		mon.Stop(ctx)
-	}
+	f.creator.cleanup(ctx)
 
 	if f.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
 		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
@@ -479,7 +455,7 @@ type vectorizedFlowCreator struct {
 	syncFlowConsumer               execinfra.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
-	exprHelper                     colexec.ExprHelper
+	exprHelper                     *colexec.ExprHelper
 	typeResolver                   *descs.DistSQLTypeResolver
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
@@ -501,6 +477,9 @@ type vectorizedFlowCreator struct {
 	// accounts contains all monitors (for both memory and disk usage) of the
 	// buffering components in the vectorized flow.
 	accounts []*mon.BoundAccount
+	// releasables contains all components that should be released back to their
+	// pools during the flow cleanup.
+	releasables []execinfra.Releasable
 
 	diskQueueCfg colcontainer.DiskQueueCfg
 	fdSemaphore  semaphore.Semaphore
@@ -509,6 +488,17 @@ type vectorizedFlowCreator struct {
 	// expected number of components are closed.
 	numClosers int32
 	numClosed  int32
+}
+
+var _ execinfra.Releasable = &vectorizedFlowCreator{}
+
+var vectorizedFlowCreatorPool = sync.Pool{
+	New: func() interface{} {
+		return &vectorizedFlowCreator{
+			streamIDToInputOp: make(map[execinfrapb.StreamID]opDAGWithMetaSources),
+			exprHelper:        colexec.NewExprHelper(),
+		}
+	},
 }
 
 func newVectorizedFlowCreator(
@@ -521,24 +511,63 @@ func newVectorizedFlowCreator(
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	exprDeserialization colexec.ExprDeserialization,
 	typeResolver *descs.DistSQLTypeResolver,
 ) *vectorizedFlowCreator {
-	return &vectorizedFlowCreator{
+	creator := vectorizedFlowCreatorPool.Get().(*vectorizedFlowCreator)
+	*creator = vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
 		remoteComponentCreator:         componentCreator,
-		streamIDToInputOp:              make(map[execinfrapb.StreamID]opDAGWithMetaSources),
+		streamIDToInputOp:              creator.streamIDToInputOp,
 		recordingStats:                 recordingStats,
-		vectorizedStatsCollectorsQueue: make([]colexec.VectorizedStatsCollector, 0, 2),
+		vectorizedStatsCollectorsQueue: creator.vectorizedStatsCollectorsQueue,
 		waitGroup:                      waitGroup,
 		syncFlowConsumer:               syncFlowConsumer,
 		nodeDialer:                     nodeDialer,
 		flowID:                         flowID,
+		exprHelper:                     creator.exprHelper,
+		typeResolver:                   typeResolver,
+		leaves:                         creator.leaves,
+		streamingMemAccounts:           creator.streamingMemAccounts,
+		monitors:                       creator.monitors,
+		accounts:                       creator.accounts,
+		releasables:                    creator.releasables,
 		diskQueueCfg:                   diskQueueCfg,
 		fdSemaphore:                    fdSemaphore,
-		exprHelper:                     colexec.NewExprHelper(exprDeserialization),
-		typeResolver:                   typeResolver,
 	}
+	return creator
+}
+
+func (s *vectorizedFlowCreator) cleanup(ctx context.Context) {
+	for _, acc := range s.streamingMemAccounts {
+		acc.Close(ctx)
+	}
+	for _, acc := range s.accounts {
+		acc.Close(ctx)
+	}
+	for _, mon := range s.monitors {
+		mon.Stop(ctx)
+	}
+}
+
+// Release implements the execinfra.Releasable interface.
+func (s *vectorizedFlowCreator) Release() {
+	for k := range s.streamIDToInputOp {
+		delete(s.streamIDToInputOp, k)
+	}
+	for _, r := range s.releasables {
+		r.Release()
+	}
+	*s = vectorizedFlowCreator{
+		streamIDToInputOp:              s.streamIDToInputOp,
+		vectorizedStatsCollectorsQueue: s.vectorizedStatsCollectorsQueue[:0],
+		exprHelper:                     s.exprHelper,
+		leaves:                         s.leaves[:0],
+		streamingMemAccounts:           s.streamingMemAccounts[:0],
+		monitors:                       s.monitors[:0],
+		accounts:                       s.accounts[:0],
+		releasables:                    s.releasables[:0],
+	}
+	vectorizedFlowCreatorPool.Put(s)
 }
 
 // createBufferingUnlimitedMemMonitor instantiates an unlimited memory monitor.
@@ -1047,13 +1076,16 @@ func (s *vectorizedFlowCreator) setupFlow(
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,
 			}
-			var result colexec.NewColOperatorResult
+			var result *colexec.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
-			// Even when err is non-nil, it is possible that the buffering memory
-			// monitor and account have been created, so we always want to accumulate
-			// them for a proper cleanup.
-			s.monitors = append(s.monitors, result.OpMonitors...)
-			s.accounts = append(s.accounts, result.OpAccounts...)
+			if result != nil {
+				// Even when err is non-nil, it is possible that the buffering memory
+				// monitor and account have been created, so we always want to accumulate
+				// them for a proper cleanup.
+				s.monitors = append(s.monitors, result.OpMonitors...)
+				s.accounts = append(s.accounts, result.OpAccounts...)
+				s.releasables = append(s.releasables, result)
+			}
 			if err != nil {
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
@@ -1254,51 +1286,41 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
 }
 
-// SupportsVectorized checks whether flow is supported by the vectorized engine
-// and returns an error if it isn't. Note that it does so by setting up the
-// full flow without running the components asynchronously.
-// It returns a list of the leaf operators of all flows for the purposes of
-// EXPLAIN output.
-// Note that passed-in output can be nil, but if it is non-nil, only Types()
-// method on it might be called (nothing will actually get Push()'ed into it).
-// - scheduledOnRemoteNode indicates whether the flow that processorSpecs
-// represent is scheduled to be run on a remote node (different from the one
-// performing this check).
-func SupportsVectorized(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	processorSpecs []execinfrapb.ProcessorSpec,
-	isPlanLocal bool,
-	output execinfra.RowReceiver,
-	scheduledOnRemoteNode bool,
-) (leaves []execinfra.OpNode, err error) {
-	if output == nil {
-		output = &execinfra.RowChannel{}
+// IsSupported returns whether a flow specified by spec can be vectorized.
+func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpec) error {
+	for _, p := range spec.Processors {
+		if err := colbuilder.IsSupported(mode, &p); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// ConvertToVecTree converts the flow to a tree of vectorized operators
+// returning a list of the leap operators or an error if the flow vectorization
+// is not supported. Note that it does so by setting up the full flow without
+// running the components asynchronously, so it is pretty expensive.
+// It also returns a non-nil cleanup function that releases all
+// execinfra.Releasable objects which can *only* be performed once leaves are
+// no longer needed.
+func ConvertToVecTree(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, flow *execinfrapb.FlowSpec, isPlanLocal bool,
+) (leaves []execinfra.OpNode, cleanup func(), err error) {
 	fuseOpt := flowinfra.FuseNormally
 	if isPlanLocal {
 		fuseOpt = flowinfra.FuseAggressively
 	}
-	exprDeserialization := colexec.DefaultExprDeserialization
-	if scheduledOnRemoteNode {
-		// We want to force the expression deserialization if this flow is actually
-		// scheduled to be on the remote node in order to make sure that during
-		// actual execution the remote node will be able to deserialize the
-		// expressions without an error.
-		exprDeserialization = colexec.ForcedExprDeserialization
-	}
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
-		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		flowCtx.Cfg.VecFDSemaphore, exprDeserialization,
-		flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
+		nil, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+		flowCtx.Cfg.VecFDSemaphore, flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
 	)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying
 	// attention to the memory since it is node-dependent in the distributed
 	// case).
 	memoryMonitor := mon.NewMonitor(
-		"supports-vectorized",
+		"convert-to-vec-tree",
 		mon.MemoryResource,
 		nil,           /* curCount */
 		nil,           /* maxHist */
@@ -1308,18 +1330,9 @@ func SupportsVectorized(
 	)
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
-	defer func() {
-		for _, acc := range creator.streamingMemAccounts {
-			acc.Close(ctx)
-		}
-		for _, acc := range creator.accounts {
-			acc.Close(ctx)
-		}
-		for _, mon := range creator.monitors {
-			mon.Stop(ctx)
-		}
-	}()
-	return creator.setupFlow(ctx, flowCtx, processorSpecs, fuseOpt)
+	defer creator.cleanup(ctx)
+	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, fuseOpt)
+	return leaves, creator.Release, err
 }
 
 // VectorizeAlwaysException is an object that returns whether or not execution
