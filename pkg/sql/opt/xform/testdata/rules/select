@@ -3806,6 +3806,50 @@ project
            ├── b1:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
            └── s:6 = 'foo' [outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
 
+exec-ddl
+DROP INDEX i
+----
+
+exec-ddl
+DROP INDEX b1
+----
+
+exec-ddl
+DROP INDEX j
+----
+
+exec-ddl
+CREATE INDEX i ON zz_partial (i) WHERE b1
+----
+
+exec-ddl
+CREATE INDEX j ON zz_partial (j) WHERE b1
+----
+
+# Generate a zigzag join on two partial indexes with the same predicate.
+opt
+SELECT k FROM zz_partial WHERE i = 10 AND j = 20 AND b1
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── inner-join (lookup zz_partial)
+      ├── columns: k:1!null i:2!null j:3!null b1:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── key: (1)
+      ├── fd: ()-->(2-4)
+      ├── inner-join (zigzag zz_partial@i,partial zz_partial@j,partial)
+      │    ├── columns: k:1!null i:2!null j:3!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [10]
+      │    ├── right fixed columns: [3] = [20]
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── i:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      │         └── j:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
+      └── filters (true)
+
 # Don't generate a zigzag which has the PK as its equality columns against
 # nullable unique indexes where the primary key is not part of the indexed
 # columns.

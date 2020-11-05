@@ -743,40 +743,6 @@ func (cfg *ExecutorConfig) Organization() string {
 	return ClusterOrganization.Get(&cfg.Settings.SV)
 }
 
-// StmtDiagnosticsRecorder is the interface into *stmtdiagnostics.Registry to
-// record statement diagnostics.
-type StmtDiagnosticsRecorder interface {
-
-	// ShouldCollectDiagnostics checks whether any data should be collected for the
-	// given query, which is the case if the registry has a request for this
-	// statement's fingerprint; in this case ShouldCollectDiagnostics will not
-	// return true again on this note for the same diagnostics request.
-	//
-	// If data is to be collected, the returned finish() function must always be
-	// called once the data was collected. If collection fails, it can be called
-	// with a collectionErr.
-	ShouldCollectDiagnostics(ctx context.Context, ast tree.Statement) (
-		shouldCollect bool,
-		finish StmtDiagnosticsTraceFinishFunc,
-	)
-
-	// InsertStatementDiagnostics inserts a trace into system.statement_diagnostics.
-	//
-	// traceJSON is either DNull (when collectionErr should not be nil) or a *DJSON.
-	InsertStatementDiagnostics(ctx context.Context,
-		stmtFingerprint string,
-		stmt string,
-		traceJSON tree.Datum,
-		bundleZip []byte,
-	) (id int64, err error)
-}
-
-// StmtDiagnosticsTraceFinishFunc is the type of function returned from
-// ShouldCollectDiagnostics to report the outcome of a trace.
-type StmtDiagnosticsTraceFinishFunc = func(
-	ctx context.Context, traceJSON tree.Datum, bundle []byte, collectionErr error,
-)
-
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -844,7 +810,7 @@ type ExecutorTestingKnobs struct {
 
 	// WithStatementTrace is called after the statement is executed in
 	// execStmtInOpenState.
-	WithStatementTrace func(span *tracing.Span, stmt string)
+	WithStatementTrace func(trace tracing.Recording, stmt string)
 
 	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
 	// a given table id.

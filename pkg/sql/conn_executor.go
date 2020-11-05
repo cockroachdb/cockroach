@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -1119,7 +1120,7 @@ type connExecutor struct {
 
 	// stmtDiagnosticsRecorder is used to track which queries need to have
 	// information collected.
-	stmtDiagnosticsRecorder StmtDiagnosticsRecorder
+	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
 }
 
 // ctxHolder contains a connection's context and, while session tracing is

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -341,7 +342,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 
 	var shouldCollectDiagnostics bool
-	var finishCollectionDiagnostics StmtDiagnosticsTraceFinishFunc
+	var diagRequestID stmtdiagnostics.RequestID
+	var finishCollectionDiagnostics func()
 
 	if explainBundle, ok := ast.(*tree.ExplainAnalyzeDebug); ok {
 		telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
@@ -364,10 +366,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		// bundle.
 		p.discardRows = true
 	} else {
-		shouldCollectDiagnostics, finishCollectionDiagnostics = ex.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, ast)
-		if shouldCollectDiagnostics {
-			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
-		}
+		shouldCollectDiagnostics, diagRequestID, finishCollectionDiagnostics =
+			ex.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.AnonymizedStr)
 	}
 
 	if shouldCollectDiagnostics {
@@ -378,7 +378,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		ctx, sp = tracing.StartSnowballTrace(ctx, tr, "traced statement")
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx
-		anonymizedStr := stmt.AnonymizedStr
+		fingerprint := stmt.AnonymizedStr
 		defer func() {
 			// Record the statement information that we've collected.
 			// Note that in case of implicit transactions, the trace contains the auto-commit too.
@@ -386,22 +386,22 @@ func (ex *connExecutor) execStmtInOpenState(
 			trace := sp.GetRecording()
 			ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 			placeholders := p.extendedEvalCtx.Placeholders
+			bundle := buildStatementBundle(
+				origCtx, ex.server.cfg.DB, ie, &p.curPlan, trace, placeholders,
+			)
+			bundle.insert(origCtx, fingerprint, ast, ex.server.cfg.StmtDiagnosticsRecorder, diagRequestID)
 			if finishCollectionDiagnostics != nil {
-				bundle, collectionErr := buildStatementBundle(
-					origCtx, ex.server.cfg.DB, ie, &p.curPlan, trace, placeholders,
-				)
-				finishCollectionDiagnostics(origCtx, bundle.trace, bundle.zip, collectionErr)
+				finishCollectionDiagnostics()
+				telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 			} else {
 				// Handle EXPLAIN ANALYZE (DEBUG).
-				// If there was a communication error, no point in setting any results.
+				// If there was a communication error already, no point in setting any results.
 				if retErr == nil {
-					retErr = setExplainBundleResult(
-						origCtx, res, ast, trace, &p.curPlan, placeholders, ie, ex.server.cfg,
-					)
+					retErr = setExplainBundleResult(origCtx, res, bundle, ex.server.cfg)
 				}
 			}
 
-			stmtStats, _ := ex.appStats.getStatsForStmt(anonymizedStr, ex.implicitTxn(), retErr, false)
+			stmtStats, _ := ex.appStats.getStatsForStmt(fingerprint, ex.implicitTxn(), retErr, false)
 			if stmtStats == nil {
 				return
 			}
@@ -443,7 +443,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		p.extendedEvalCtx.Context = ctx
 
 		defer func() {
-			ex.server.cfg.TestingKnobs.WithStatementTrace(sp, sql)
+			ex.server.cfg.TestingKnobs.WithStatementTrace(sp.GetRecording(), sql)
 		}()
 	}
 
