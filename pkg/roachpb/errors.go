@@ -407,12 +407,12 @@ func (e *NotLeaseHolderError) Type() ErrorDetailType {
 }
 
 func (e *NotLeaseHolderError) message(_ *Error) string {
-	const prefix = "[NotLeaseHolderError] "
-	if e.CustomMsg != "" {
-		return prefix + e.CustomMsg
-	}
 	var buf strings.Builder
-	buf.WriteString(prefix)
+	buf.WriteString("[NotLeaseHolderError] ")
+	if e.CustomMsg != "" {
+		buf.WriteString(e.CustomMsg)
+		buf.WriteString("; ")
+	}
 	fmt.Fprintf(&buf, "r%d: ", e.RangeID)
 	if e.Replica != (ReplicaDescriptor{}) {
 		fmt.Fprintf(&buf, "replica %s not lease holder; ", e.Replica)
