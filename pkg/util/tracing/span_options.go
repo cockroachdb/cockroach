@@ -20,13 +20,12 @@ import (
 // field comment below are invoked as arguments to `Tracer.StartSpan`.
 // See the SpanOption interface for a synopsis.
 type spanOptions struct {
-	Parent            *Span                         // see WithParent
-	RemoteParent      *SpanMeta                     // see WithRemoteParent
-	RefType           opentracing.SpanReferenceType // see WithFollowsFrom
-	LogTags           *logtags.Buffer               // see WithLogTags
-	Tags              map[string]interface{}        // see WithTags
-	SeparateRecording bool                          // see WithSeparateRecording
-	ForceRealSpan     bool                          // see WithForceRealSpan
+	Parent        *Span                         // see WithParent
+	RemoteParent  *SpanMeta                     // see WithRemoteParent
+	RefType       opentracing.SpanReferenceType // see WithFollowsFrom
+	LogTags       *logtags.Buffer               // see WithLogTags
+	Tags          map[string]interface{}        // see WithTags
+	ForceRealSpan bool                          // see WithForceRealSpan
 }
 
 func (opts *spanOptions) parentTraceID() uint64 {
@@ -76,7 +75,6 @@ func (opts *spanOptions) shadowTrTyp() (string, bool) {
 // - WithLogTags: populates the Span tags from a `logtags.Buffer`.
 // - WithCtxLogTags: like WithLogTags, but takes a `context.Context`.
 // - WithTags: adds tags to a Span on creation.
-// - WithSeparateRecording: prevents recording to be shared with local parent span.
 // - WithForceRealSpan: prevents optimizations that can avoid creating a real span.
 type SpanOption interface {
 	apply(spanOptions) spanOptions
@@ -115,8 +113,9 @@ type remoteParentOption SpanMeta
 // WithRemoteParent instructs StartSpan to create child span descending
 // from a parent described via SpanMeta. Since no local parent is
 // available (in contrast to WithParent), this Span will not share a
-// recording with any other Span. Typically RPC middleware ensures that the
-// child's recording is collected and propagated back to the parent Span.
+// recording with any other Span. The caller must collect the resulting
+// Span's recording and propagate it back towards the root of the trace
+// via ImportRemoteSpans.
 func WithRemoteParent(parent *SpanMeta) SpanOption {
 	return (*remoteParentOption)(parent)
 }
@@ -181,20 +180,5 @@ func WithForceRealSpan() SpanOption {
 
 func (forceRealSpanOption) apply(opts spanOptions) spanOptions {
 	opts.ForceRealSpan = true
-	return opts
-}
-
-type withSeparateRecordingOpt struct{}
-
-// WithSeparateRecording instructs StartSpan to configure any child span
-// started via WithParent to *not* share the recording with that parent.
-//
-// See WithParent and WithRemoteParent for details about recording inheritance.
-func WithSeparateRecording() SpanOption {
-	return withSeparateRecordingOpt{}
-}
-
-func (o withSeparateRecordingOpt) apply(opts spanOptions) spanOptions {
-	opts.SeparateRecording = true
 	return opts
 }
