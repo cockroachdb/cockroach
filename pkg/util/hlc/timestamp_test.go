@@ -24,6 +24,34 @@ func makeTS(walltime int64, logical int32) Timestamp {
 	}
 }
 
+func makeTSWithFlags(walltime int64, logical int32, flags TimestampFlag) Timestamp {
+	return Timestamp{
+		WallTime: walltime,
+		Logical:  logical,
+		Flags:    uint32(flags),
+	}
+}
+
+func TestEqOrdering(t *testing.T) {
+	a := Timestamp{}
+	b := Timestamp{}
+	if !a.EqOrdering(b) {
+		t.Errorf("expected %+v == %+v", a, b)
+	}
+	b = makeTS(1, 0)
+	if a.EqOrdering(b) {
+		t.Errorf("expected %+v != %+v", a, b)
+	}
+	a = makeTS(1, 1)
+	if a.EqOrdering(b) {
+		t.Errorf("expected %+v != %+v", b, a)
+	}
+	b = makeTSWithFlags(1, 1, 3)
+	if !a.EqOrdering(b) {
+		t.Errorf("expected %+v == %+v", b, a)
+	}
+}
+
 func TestLess(t *testing.T) {
 	a := Timestamp{}
 	b := Timestamp{}
@@ -37,6 +65,10 @@ func TestLess(t *testing.T) {
 	a = makeTS(1, 1)
 	if !b.Less(a) {
 		t.Errorf("expected %+v < %+v", b, a)
+	}
+	b = makeTSWithFlags(1, 1, 3)
+	if a.Less(b) || b.Less(a) {
+		t.Errorf("expected %+v == %+v", a, b)
 	}
 }
 
@@ -54,6 +86,30 @@ func TestLessEq(t *testing.T) {
 	if !b.LessEq(a) || a.LessEq(b) {
 		t.Errorf("expected %+v < %+v", b, a)
 	}
+	b = makeTSWithFlags(1, 1, 3)
+	if !a.LessEq(b) || !b.LessEq(a) {
+		t.Errorf("expected %+v == %+v", a, b)
+	}
+}
+
+func TestIsEmpty(t *testing.T) {
+	a := Timestamp{}
+	assert.True(t, a.IsEmpty())
+	a = makeTS(1, 0)
+	assert.False(t, a.IsEmpty())
+	a = makeTS(0, 1)
+	assert.False(t, a.IsEmpty())
+	a = makeTSWithFlags(0, 0, 3)
+	assert.False(t, a.IsEmpty())
+}
+
+func TestSetFlag(t *testing.T) {
+	a := Timestamp{}
+	assert.False(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
+	a = a.SetFlag(TimestampFlag_UNKNOWN)
+	assert.False(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
+	a = a.SetFlag(TimestampFlag_SYNTHETIC)
+	assert.True(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
 }
 
 func TestTimestampNext(t *testing.T) {
@@ -64,6 +120,10 @@ func TestTimestampNext(t *testing.T) {
 		{makeTS(1, math.MaxInt32-1), makeTS(1, math.MaxInt32)},
 		{makeTS(1, math.MaxInt32), makeTS(2, 0)},
 		{makeTS(math.MaxInt32, math.MaxInt32), makeTS(math.MaxInt32+1, 0)},
+		{makeTSWithFlags(1, 2, 3), makeTSWithFlags(1, 3, 3)},
+		{makeTSWithFlags(1, math.MaxInt32-1, 3), makeTSWithFlags(1, math.MaxInt32, 3)},
+		{makeTSWithFlags(1, math.MaxInt32, 3), makeTSWithFlags(2, 0, 3)},
+		{makeTSWithFlags(math.MaxInt32, math.MaxInt32, 3), makeTSWithFlags(math.MaxInt32+1, 0, 3)},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expNext, c.ts.Next())
@@ -77,6 +137,9 @@ func TestTimestampPrev(t *testing.T) {
 		{makeTS(1, 2), makeTS(1, 1)},
 		{makeTS(1, 1), makeTS(1, 0)},
 		{makeTS(1, 0), makeTS(0, math.MaxInt32)},
+		{makeTSWithFlags(1, 2, 3), makeTSWithFlags(1, 1, 3)},
+		{makeTSWithFlags(1, 1, 3), makeTSWithFlags(1, 0, 3)},
+		{makeTSWithFlags(1, 0, 3), makeTSWithFlags(0, math.MaxInt32, 3)},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expPrev, c.ts.Prev())
@@ -91,6 +154,10 @@ func TestTimestampFloorPrev(t *testing.T) {
 		{makeTS(1, 2), makeTS(1, 1)},
 		{makeTS(1, 1), makeTS(1, 0)},
 		{makeTS(1, 0), makeTS(0, 0)},
+		{makeTSWithFlags(2, 0, 3), makeTSWithFlags(1, 0, 3)},
+		{makeTSWithFlags(1, 2, 3), makeTSWithFlags(1, 1, 3)},
+		{makeTSWithFlags(1, 1, 3), makeTSWithFlags(1, 0, 3)},
+		{makeTSWithFlags(1, 0, 3), makeTSWithFlags(0, 0, 3)},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expPrev, c.ts.FloorPrev())
@@ -129,12 +196,20 @@ func TestTimestampString(t *testing.T) {
 		{makeTS(-1234567890, 0), "-1.234567890,0"},
 		{makeTS(6661234567890, 0), "6661.234567890,0"},
 		{makeTS(-6661234567890, 0), "-6661.234567890,0"},
+		{makeTSWithFlags(0, 0, TimestampFlag_SYNTHETIC), "0,0[syn]"},
+		{makeTSWithFlags(0, 123, TimestampFlag_SYNTHETIC), "0,123[syn]"},
+		{makeTSWithFlags(1, 0, TimestampFlag_SYNTHETIC), "0.000000001,0[syn]"},
+		{makeTSWithFlags(1, 123, TimestampFlag_SYNTHETIC), "0.000000001,123[syn]"},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.exp, c.ts.String())
-		parsed, err := ParseTimestamp(c.ts.String())
+
+		// Flags don't round-trip through parsing, so ignore them.
+		tsNoFlags := c.ts
+		tsNoFlags.Flags = 0
+		parsed, err := ParseTimestamp(tsNoFlags.String())
 		assert.NoError(t, err)
-		assert.Equal(t, c.ts, parsed)
+		assert.Equal(t, tsNoFlags, parsed)
 	}
 }
 

@@ -42,7 +42,7 @@ func TestFormatMVCCMetadata(t *testing.T) {
 	val3.SetString("baz")
 	meta := &enginepb.MVCCMetadata{
 		Txn:       tmeta,
-		Timestamp: hlc.LegacyTimestamp(ts),
+		Timestamp: ts.ToLegacyTimestamp(),
 		KeyBytes:  123,
 		ValBytes:  456,
 		RawBytes:  val1.RawBytes,

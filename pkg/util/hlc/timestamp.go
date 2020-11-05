@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 // Timestamp constant values.
@@ -30,6 +31,16 @@ var (
 	MinTimestamp = Timestamp{WallTime: 0, Logical: 1}
 )
 
+// EqOrdering returns whether the receiver sorts equally to the parameter.
+//
+// This method is split from tests of structural equality (Equal and the equals
+// operator) because it does not consider differences in flags and only
+// considers whether the walltime and logical time differ between the
+// timestamps.
+func (t Timestamp) EqOrdering(s Timestamp) bool {
+	return t.WallTime == s.WallTime && t.Logical == s.Logical
+}
+
 // Less returns whether the receiver is less than the parameter.
 func (t Timestamp) Less(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
@@ -37,7 +48,7 @@ func (t Timestamp) Less(s Timestamp) bool {
 
 // LessEq returns whether the receiver is less than or equal to the parameter.
 func (t Timestamp) LessEq(s Timestamp) bool {
-	return t.Less(s) || t == s
+	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical <= s.Logical)
 }
 
 // String implements the fmt.Formatter interface.
@@ -88,6 +99,15 @@ func (t Timestamp) String() string {
 		zeroBuf[0] = byte('0' + ns%10)
 	}
 	buf = strconv.AppendInt(buf, int64(t.Logical), 10)
+
+	if t.Flags != 0 {
+		buf = append(buf, '[')
+		if t.IsFlagSet(TimestampFlag_SYNTHETIC) {
+			buf = append(buf, []byte("syn")...)
+		}
+		// Add more flags here. Add ","s when necessary.
+		buf = append(buf, ']')
+	}
 
 	return *(*string)(unsafe.Pointer(&buf))
 }
@@ -146,13 +166,14 @@ func (t Timestamp) AsOfSystemTime() string {
 	return fmt.Sprintf("%d.%010d", t.WallTime, t.Logical)
 }
 
-func (t LegacyTimestamp) String() string {
-	return Timestamp(t).String()
-}
-
 // IsEmpty retruns true if t is an empty Timestamp.
 func (t Timestamp) IsEmpty() bool {
 	return t == Timestamp{}
+}
+
+// IsFlagSet returns whether the specified flag is set on the timestamp.
+func (t Timestamp) IsFlagSet(f TimestampFlag) bool {
+	return t.Flags&uint32(f) != 0
 }
 
 // Add returns a timestamp with the WallTime and Logical components increased.
@@ -161,7 +182,14 @@ func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	return Timestamp{
 		WallTime: t.WallTime + wallTime,
 		Logical:  t.Logical + logical,
+		Flags:    t.Flags,
 	}
+}
+
+// SetFlag returns a timestamp with the specified flag set.
+func (t Timestamp) SetFlag(f TimestampFlag) Timestamp {
+	t.Flags = t.Flags | uint32(f)
+	return t
 }
 
 // Clone return a new timestamp that has the same contents as the receiver.
@@ -177,11 +205,13 @@ func (t Timestamp) Next() Timestamp {
 		}
 		return Timestamp{
 			WallTime: t.WallTime + 1,
+			Flags:    t.Flags,
 		}
 	}
 	return Timestamp{
 		WallTime: t.WallTime,
 		Logical:  t.Logical + 1,
+		Flags:    t.Flags,
 	}
 }
 
@@ -191,11 +221,13 @@ func (t Timestamp) Prev() Timestamp {
 		return Timestamp{
 			WallTime: t.WallTime,
 			Logical:  t.Logical - 1,
+			Flags:    t.Flags,
 		}
 	} else if t.WallTime > 0 {
 		return Timestamp{
 			WallTime: t.WallTime - 1,
 			Logical:  math.MaxInt32,
+			Flags:    t.Flags,
 		}
 	}
 	panic("cannot take the previous value to a zero timestamp")
@@ -209,11 +241,13 @@ func (t Timestamp) FloorPrev() Timestamp {
 		return Timestamp{
 			WallTime: t.WallTime,
 			Logical:  t.Logical - 1,
+			Flags:    t.Flags,
 		}
 	} else if t.WallTime > 0 {
 		return Timestamp{
 			WallTime: t.WallTime - 1,
 			Logical:  0,
+			Flags:    t.Flags,
 		}
 	}
 	panic("cannot take the previous value to a zero timestamp")
@@ -222,6 +256,8 @@ func (t Timestamp) FloorPrev() Timestamp {
 // Forward updates the timestamp from the one given, if that moves it forwards
 // in time. Returns true if the timestamp was adjusted and false otherwise.
 func (t *Timestamp) Forward(s Timestamp) bool {
+	// TODO(nvanbenschoten): if either timestamp is non-synthetic, we can remove
+	// the synthetic bit.
 	if t.Less(s) {
 		*t = s
 		return true
@@ -232,6 +268,8 @@ func (t *Timestamp) Forward(s Timestamp) bool {
 // Backward updates the timestamp from the one given, if that moves it
 // backwards in time.
 func (t *Timestamp) Backward(s Timestamp) {
+	// TODO(nvanbenschoten): if either timestamp is non-synthetic, we can remove
+	// the synthetic bit.
 	if s.Less(*t) {
 		*t = s
 	}
@@ -240,4 +278,26 @@ func (t *Timestamp) Backward(s Timestamp) {
 // GoTime converts the timestamp to a time.Time.
 func (t Timestamp) GoTime() time.Time {
 	return timeutil.Unix(0, t.WallTime)
+}
+
+// ToLegacyTimestamp converts a Timestamp to a LegacyTimestamp.
+func (t Timestamp) ToLegacyTimestamp() LegacyTimestamp {
+	var flags *uint32
+	if t.Flags != 0 {
+		flags = proto.Uint32(t.Flags)
+	}
+	return LegacyTimestamp{WallTime: t.WallTime, Logical: t.Logical, Flags: flags}
+}
+
+// ToTimestamp converts a LegacyTimestamp to a Timestamp.
+func (t LegacyTimestamp) ToTimestamp() Timestamp {
+	var flags uint32
+	if t.Flags != nil {
+		flags = *t.Flags
+	}
+	return Timestamp{WallTime: t.WallTime, Logical: t.Logical, Flags: flags}
+}
+
+func (t LegacyTimestamp) String() string {
+	return t.ToTimestamp().String()
 }
