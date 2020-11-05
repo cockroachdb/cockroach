@@ -135,7 +135,7 @@ func generateScanSpans(
 ) (roachpb.Spans, error) {
 	sb := span.MakeBuilder(codec, tabDesc, indexDesc)
 	if params.InvertedConstraint != nil {
-		return GenerateInvertedSpans(params.InvertedConstraint, sb)
+		return sb.SpansFromInvertedSpans(params.InvertedConstraint)
 	}
 	return sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 }

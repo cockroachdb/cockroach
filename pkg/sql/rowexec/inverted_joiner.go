@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -138,11 +137,7 @@ type invertedJoiner struct {
 		seenMatch bool
 	}
 
-	spanBuilder *span.Builder
-	// A row with one element, corresponding to an encoded inverted column
-	// value. Used to construct the span of the index for that value.
-	invertedColRow rowenc.EncDatumRow
-
+	spanBuilder           *span.Builder
 	outputContinuationCol bool
 }
 
@@ -327,35 +322,6 @@ func (ij *invertedJoiner) SetBatchSize(batchSize int) {
 	ij.batchSize = batchSize
 }
 
-func (ij *invertedJoiner) generateSpan(enc []byte) (roachpb.Span, error) {
-	// Pretend that the encoded inverted val is an EncDatum. This isn't always
-	// true, since JSON inverted columns use a custom encoding. But since we
-	// are providing an already encoded Datum, the following will eventually
-	// fall through to EncDatum.Encode() which will reuse the encoded bytes.
-	encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
-	ij.invertedColRow = append(ij.invertedColRow[:0], encDatum)
-	span, _, err := ij.spanBuilder.SpanFromEncDatums(ij.invertedColRow, 1 /* prefixLen */)
-	return span, err
-}
-
-func (ij *invertedJoiner) generateSpans(invertedSpans []invertedSpan) ([]roachpb.Span, error) {
-	spans := make([]roachpb.Span, len(invertedSpans))
-	for i, span := range invertedSpans {
-		startSpan, err := ij.generateSpan(span.Start)
-		if err != nil {
-			return nil, err
-		}
-
-		endSpan, err := ij.generateSpan(span.End)
-		if err != nil {
-			return nil, err
-		}
-		startSpan.EndKey = endSpan.Key
-		spans[i] = startSpan
-	}
-	return spans, nil
-}
-
 // Next is part of the RowSource interface.
 func (ij *invertedJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// The join is implemented as follows:
@@ -460,7 +426,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 	}
 	// NB: spans is already sorted, and that sorting is preserved when
 	// generating indexSpans.
-	indexSpans, err := ij.generateSpans(spans)
+	indexSpans, err := ij.spanBuilder.SpansFromInvertedSpans(spans)
 	if err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, ij.DrainHelper()
