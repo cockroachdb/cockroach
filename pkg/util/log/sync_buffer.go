@@ -44,7 +44,7 @@ func (sb *syncBuffer) Sync() error {
 }
 
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
-	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&LogFileMaxSize) {
+	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&logFileMaxSize) {
 		if err := sb.rotateFileLocked(timeutil.Now()); err != nil {
 			sb.logger.exitLocked(err)
 		}
