@@ -357,7 +357,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	var needFinish bool
-	ctx, needFinish = ih.Setup(ctx, ex.server.cfg, p, ex.stmtDiagnosticsRecorder, stmt.AnonymizedStr, os.ImplicitTxn.Get())
+	ctx, needFinish = ih.Setup(
+		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
+		stmt.AnonymizedStr, os.ImplicitTxn.Get(),
+	)
 	if needFinish {
 		sql := stmt.SQL
 		defer func() {
@@ -863,13 +866,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // makeExecPlan creates an execution plan and populates planner.curPlan using
 // the cost-based optimizer.
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
-	savePlanString := planner.instrumentation.ShouldCollectBundle()
-	planner.curPlan.init(
-		&planner.stmt,
-		ex.appStats,
-		savePlanString,
-	)
-
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return err

@@ -12,8 +12,13 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -29,8 +34,9 @@ import (
 //
 //  - Setup() is called before query execution.
 //
-//  - SetDiscardRows(), ShouldDiscardRows(), ShouldCollectBundle() can be called
-//    at any point during execution.
+//  - SetDiscardRows(), ShouldDiscardRows(), ShouldCollectBundle(),
+//    ShouldBuildExplainPlan(), RecordExplainPlan(), RecordPlanInfo(),
+//    PlanForStats() can be called at any point during execution.
 //
 //  - Finish() is called after query execution.
 //
@@ -40,6 +46,7 @@ type instrumentationHelper struct {
 	// Query fingerprint (anonymized statement).
 	fingerprint string
 	implicitTxn bool
+	codec       keys.SQLCodec
 
 	// -- The following fields are initialized by Setup() --
 
@@ -59,6 +66,14 @@ type instrumentationHelper struct {
 
 	sp      *tracing.Span
 	origCtx context.Context
+
+	// If savePlanForStats is true, the explainPlan will be collected and returned
+	// via PlanForStats().
+	savePlanForStats bool
+
+	explainPlan  *explain.Plan
+	distribution physicalplan.PlanDistribution
+	vectorized   bool
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -83,6 +98,7 @@ func (ih *instrumentationHelper) SetOutputMode(outputMode outputMode) {
 func (ih *instrumentationHelper) Setup(
 	ctx context.Context,
 	cfg *ExecutorConfig,
+	appStats *appStats,
 	p *planner,
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	fingerprint string,
@@ -90,6 +106,7 @@ func (ih *instrumentationHelper) Setup(
 ) (newCtx context.Context, needFinish bool) {
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
+	ih.codec = cfg.Codec
 
 	if ih.outputMode == explainAnalyzeDebugOutput {
 		ih.collectBundle = true
@@ -105,7 +122,7 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
 
-	// TODO(radu): logic around saving plans for stats should be here.
+	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(fingerprint, implicitTxn)
 
 	if !ih.collectBundle && ih.withStatementTrace == nil {
 		return ctx, false
@@ -137,25 +154,24 @@ func (ih *instrumentationHelper) Finish(
 	trace := ih.sp.GetRecording()
 	ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 	placeholders := p.extendedEvalCtx.Placeholders
-	bundle := buildStatementBundle(
-		ih.origCtx, cfg.DB, ie, &p.curPlan, trace, placeholders,
-	)
-	bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
-	if ih.finishCollectionDiagnostics != nil {
-		ih.finishCollectionDiagnostics()
-		telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
+	if ih.collectBundle {
+		bundle := buildStatementBundle(
+			ih.origCtx, cfg.DB, ie, &p.curPlan, ih.planString(), trace, placeholders,
+		)
+		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
+		if ih.finishCollectionDiagnostics != nil {
+			ih.finishCollectionDiagnostics()
+			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
+		}
+
+		// Handle EXPLAIN ANALYZE (DEBUG). If there was a communication error
+		// already, no point in setting any results.
+		if ih.outputMode == explainAnalyzeDebugOutput && retErr == nil {
+			retErr = setExplainBundleResult(ctx, res, bundle, cfg)
+		}
 	}
 	if ih.withStatementTrace != nil {
 		ih.withStatementTrace(trace, stmtRawSQL)
-	}
-
-	// If there was a communication error already, no point in setting any results.
-	if retErr == nil {
-		switch ih.outputMode {
-		case explainAnalyzeDebugOutput:
-			// Handle EXPLAIN ANALYZE (DEBUG).
-			retErr = setExplainBundleResult(ctx, res, bundle, cfg)
-		}
 	}
 
 	// TODO(radu): this should be unified with other stmt stats accesses.
@@ -192,7 +208,7 @@ func (ih *instrumentationHelper) Finish(
 }
 
 // SetDiscardRows should be called when we want to discard rows for a
-// non-ANALYZE statement (via EXECUTE .. DISCARD ROWS.
+// non-ANALYZE statement (via EXECUTE .. DISCARD ROWS).
 func (ih *instrumentationHelper) SetDiscardRows() {
 	ih.discardRows = true
 }
@@ -206,4 +222,56 @@ func (ih *instrumentationHelper) ShouldDiscardRows() bool {
 // ShouldCollectBundle is true if we are collecting a support bundle.
 func (ih *instrumentationHelper) ShouldCollectBundle() bool {
 	return ih.collectBundle
+}
+
+// ShouldBuildExplainPlan returns true if we should build an explain plan and
+// call RecordExplainPlan.
+func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
+	return ih.collectBundle || ih.savePlanForStats
+}
+
+// RecordExplainPlan records the explain.Plan for this query.
+func (ih *instrumentationHelper) RecordExplainPlan(explainPlan *explain.Plan) {
+	ih.explainPlan = explainPlan
+}
+
+// RecordPlanInfo records top-level information about the plan.
+func (ih *instrumentationHelper) RecordPlanInfo(
+	distribution physicalplan.PlanDistribution, vectorized bool,
+) {
+	ih.distribution = distribution
+	ih.vectorized = vectorized
+}
+
+// PlanForStats returns the plan as an ExplainTreePlanNode tree, if it was
+// collected (nil otherwise). It should be called after RecordExplainPlan() and
+// RecordPlanInfo().
+func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.ExplainTreePlanNode {
+	if ih.explainPlan == nil {
+		return nil
+	}
+
+	ob := explain.NewOutputBuilder(explain.Flags{
+		HideValues: true,
+	})
+	if err := emitExplain(ob, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
+		log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
+		return nil
+	}
+	return ob.BuildProtoTree()
+}
+
+// planString generates the plan tree as a string; used internally for bundles.
+func (ih *instrumentationHelper) planString() string {
+	if ih.explainPlan == nil {
+		return ""
+	}
+	ob := explain.NewOutputBuilder(explain.Flags{
+		Verbose:   true,
+		ShowTypes: true,
+	})
+	if err := emitExplain(ob, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
+		return fmt.Sprintf("error emitting plan: %v", err)
+	}
+	return ob.BuildString()
 }
