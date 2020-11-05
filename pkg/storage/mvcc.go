@@ -3360,7 +3360,7 @@ func MVCCGarbageCollect(
 		}
 
 		// For GCBytesAge, this requires keeping track of the previous key's
-		// timestamp (prevNanos). See ComputeStatsForRange for a more easily digested
+		// timestamp (prevNanos). See ComputeStatsGo for a more easily digested
 		// and better commented version of this logic. The below block will set
 		// prevNanos to the appropriate value and position the iterator at the
 		// first garbage version.
@@ -3584,13 +3584,19 @@ func willOverflow(a, b int64) bool {
 	return math.MinInt64-b > a
 }
 
-// ComputeStatsForRange scans the underlying engine from start to end keys and
+// ComputeStatsGo scans the underlying engine from start to end keys and
 // computes stats counters based on the values. This method is used after a
 // range is split to recompute stats for each subrange. The start key is always
 // adjusted to avoid counting local keys in the event stats are being recomputed
 // for the first range (i.e. the one with start key == KeyMin). The nowNanos arg
 // specifies the wall time in nanoseconds since the epoch and is used to compute
 // the total age of all intents.
+//
+// Most codepaths will be computing stats on a RocksDB iterator, which is
+// implemented in c++, so iter.ComputeStats will save several cgo calls per kv
+// processed. (Plus, on equal footing, the c++ implementation is slightly
+// faster.) ComputeStatsGo is here for codepaths that have a pure-go
+// implementation of SimpleMVCCIterator.
 //
 // When optional callbacks are specified, they are invoked for each physical
 // key-value pair (i.e. not for implicit meta records), and iteration is aborted
@@ -3599,7 +3605,7 @@ func willOverflow(a, b int64) bool {
 // Callbacks must copy any data they intend to hold on to.
 //
 // This implementation must match engine/db.cc:MVCCComputeStatsInternal.
-func ComputeStatsForRange(
+func ComputeStatsGo(
 	iter SimpleMVCCIterator,
 	start, end roachpb.Key,
 	nowNanos int64,

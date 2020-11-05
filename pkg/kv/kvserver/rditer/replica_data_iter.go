@@ -17,55 +17,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
-// KeyRange is a helper struct for the ReplicaMVCCDataIterator and
-// ReplicaEngineDataIterator.
+// KeyRange is a helper struct for the ReplicaDataIterator.
 // TODO(sumeer): change these to roachpb.Key since the timestamp is
-// always empty and the code below assumes that fact.
+// always empty.
 type KeyRange struct {
 	Start, End storage.MVCCKey
 }
 
-// ReplicaMVCCDataIterator provides a complete iteration over MVCC or unversioned
-// (which can be made to look like an MVCCKey) key / value
-// rows in a range, including system-local metadata and user data.
+// ReplicaDataIterator provides a complete iteration over all key / value
+// rows in a range, including all system-local metadata and user data.
 // The ranges keyRange slice specifies the key ranges which comprise
-// the range's data. This cannot be used to iterate over keys that are not
-// representable as MVCCKeys, except when such non-MVCCKeys are limited to
-// intents, which can be made to look like interleaved MVCCKeys. Most callers
-// want the real keys, and should use ReplicaEngineDataIterator.
+// all of the range's data.
 //
-// A ReplicaMVCCDataIterator provides a subset of the engine.MVCCIterator interface.
+// A ReplicaDataIterator provides a subset of the engine.MVCCIterator interface.
 //
-// TODO(tschottdorf): the API is awkward. By default, ReplicaMVCCDataIterator uses
+// TODO(tschottdorf): the API is awkward. By default, ReplicaDataIterator uses
 // a byte allocator which needs to be reset manually using `ResetAllocator`.
 // This is problematic as it requires of every user careful tracking of when
 // to call that method; some just never call it and pull the whole replica
 // into memory. Use of an allocator should be opt-in.
 //
-// TODO(sumeer): merge with ReplicaEngineDataIterator. We can use an EngineIterator
-// for MVCC key ranges and convert from EngineKey to MVCCKey.
-type ReplicaMVCCDataIterator struct {
+// TODO(sumeer): Should return EngineKeys, to handle separated lock table.
+type ReplicaDataIterator struct {
 	curIndex int
 	ranges   []KeyRange
 	it       storage.MVCCIterator
-	a        bufalloc.ByteAllocator
-}
-
-// ReplicaEngineDataIterator is like ReplicaMVCCDataIterator, but iterates
-// using the general EngineKeys. It provides a subset of the engine.EngineIterator
-// interface.
-//
-// TODO(tschottdorf): the API is awkward. By default, ReplicaMVCCDataIterator uses
-// a byte allocator which needs to be reset manually using `ResetAllocator`.
-// This is problematic as it requires of every user careful tracking of when
-// to call that method; some just never call it and pull the whole replica
-// into memory. Use of an allocator should be opt-in.
-type ReplicaEngineDataIterator struct {
-	curIndex int
-	ranges   []KeyRange
-	it       storage.EngineIterator
-	valid    bool
-	err      error
 	a        bufalloc.ByteAllocator
 }
 
@@ -138,19 +114,18 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 	}
 }
 
-// NewReplicaMVCCDataIterator creates a ReplicaMVCCDataIterator for the given replica.
-// TODO(sumeer): narrow this interface since only gcIterator uses
-// ReplicaMVCCDataIterator.
-func NewReplicaMVCCDataIterator(
+// NewReplicaDataIterator creates a ReplicaDataIterator for the given replica.
+func NewReplicaDataIterator(
 	d *roachpb.RangeDescriptor, reader storage.Reader, replicatedOnly bool, seekEnd bool,
-) *ReplicaMVCCDataIterator {
+) *ReplicaDataIterator {
+	// TODO(sumeer): use an EngineIterator.
 	it := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 
 	rangeFunc := MakeAllKeyRanges
 	if replicatedOnly {
 		rangeFunc = MakeReplicatedKeyRanges
 	}
-	ri := &ReplicaMVCCDataIterator{
+	ri := &ReplicaDataIterator{
 		ranges: rangeFunc(d),
 		it:     it,
 	}
@@ -163,27 +138,27 @@ func NewReplicaMVCCDataIterator(
 }
 
 // seekStart seeks the iterator to the start of its data range.
-func (ri *ReplicaMVCCDataIterator) seekStart() {
+func (ri *ReplicaDataIterator) seekStart() {
 	ri.curIndex = 0
 	ri.it.SeekGE(ri.ranges[ri.curIndex].Start)
 	ri.advance()
 }
 
 // seekEnd seeks the iterator to the end of its data range.
-func (ri *ReplicaMVCCDataIterator) seekEnd() {
+func (ri *ReplicaDataIterator) seekEnd() {
 	ri.curIndex = len(ri.ranges) - 1
 	ri.it.SeekLT(ri.ranges[ri.curIndex].End)
 	ri.retreat()
 }
 
 // Close the underlying iterator.
-func (ri *ReplicaMVCCDataIterator) Close() {
+func (ri *ReplicaDataIterator) Close() {
 	ri.curIndex = len(ri.ranges)
 	ri.it.Close()
 }
 
 // Next advances to the next key in the iteration.
-func (ri *ReplicaMVCCDataIterator) Next() {
+func (ri *ReplicaDataIterator) Next() {
 	ri.it.Next()
 	ri.advance()
 }
@@ -191,7 +166,7 @@ func (ri *ReplicaMVCCDataIterator) Next() {
 // advance moves the iterator forward through the ranges until a valid
 // key is found or the iteration is done and the iterator becomes
 // invalid.
-func (ri *ReplicaMVCCDataIterator) advance() {
+func (ri *ReplicaDataIterator) advance() {
 	for {
 		if ok, _ := ri.Valid(); ok && ri.it.UnsafeKey().Less(ri.ranges[ri.curIndex].End) {
 			return
@@ -206,13 +181,13 @@ func (ri *ReplicaMVCCDataIterator) advance() {
 }
 
 // Prev advances the iterator one key backwards.
-func (ri *ReplicaMVCCDataIterator) Prev() {
+func (ri *ReplicaDataIterator) Prev() {
 	ri.it.Prev()
 	ri.retreat()
 }
 
 // retreat is the opposite of advance.
-func (ri *ReplicaMVCCDataIterator) retreat() {
+func (ri *ReplicaDataIterator) retreat() {
 	for {
 		if ok, _ := ri.Valid(); ok && ri.ranges[ri.curIndex].Start.Less(ri.it.UnsafeKey()) {
 			return
@@ -227,21 +202,21 @@ func (ri *ReplicaMVCCDataIterator) retreat() {
 }
 
 // Valid returns true if the iterator currently points to a valid value.
-func (ri *ReplicaMVCCDataIterator) Valid() (bool, error) {
+func (ri *ReplicaDataIterator) Valid() (bool, error) {
 	ok, err := ri.it.Valid()
 	ok = ok && ri.curIndex >= 0 && ri.curIndex < len(ri.ranges)
 	return ok, err
 }
 
 // Key returns the current key.
-func (ri *ReplicaMVCCDataIterator) Key() storage.MVCCKey {
+func (ri *ReplicaDataIterator) Key() storage.MVCCKey {
 	key := ri.it.UnsafeKey()
 	ri.a, key.Key = ri.a.Copy(key.Key, 0)
 	return key
 }
 
 // Value returns the current value.
-func (ri *ReplicaMVCCDataIterator) Value() []byte {
+func (ri *ReplicaDataIterator) Value() []byte {
 	value := ri.it.UnsafeValue()
 	ri.a, value = ri.a.Copy(value, 0)
 	return value
@@ -249,118 +224,17 @@ func (ri *ReplicaMVCCDataIterator) Value() []byte {
 
 // UnsafeKey returns the same value as Key, but the memory is invalidated on
 // the next call to {Next,Prev,Close}.
-func (ri *ReplicaMVCCDataIterator) UnsafeKey() storage.MVCCKey {
+func (ri *ReplicaDataIterator) UnsafeKey() storage.MVCCKey {
 	return ri.it.UnsafeKey()
 }
 
 // UnsafeValue returns the same value as Value, but the memory is invalidated on
 // the next call to {Next,Prev,Close}.
-func (ri *ReplicaMVCCDataIterator) UnsafeValue() []byte {
+func (ri *ReplicaDataIterator) UnsafeValue() []byte {
 	return ri.it.UnsafeValue()
 }
 
-// ResetAllocator resets the ReplicaMVCCDataIterator's internal byte allocator.
-func (ri *ReplicaMVCCDataIterator) ResetAllocator() {
+// ResetAllocator resets the ReplicaDataIterator's internal byte allocator.
+func (ri *ReplicaDataIterator) ResetAllocator() {
 	ri.a = nil
-}
-
-// NewReplicaEngineDataIterator creates a ReplicaEngineDataIterator for the given replica.
-func NewReplicaEngineDataIterator(
-	d *roachpb.RangeDescriptor, reader storage.Reader, replicatedOnly bool,
-) *ReplicaEngineDataIterator {
-	it := reader.NewEngineIterator(storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
-
-	rangeFunc := MakeAllKeyRanges
-	if replicatedOnly {
-		rangeFunc = MakeReplicatedKeyRanges
-	}
-	ri := &ReplicaEngineDataIterator{
-		ranges: rangeFunc(d),
-		it:     it,
-	}
-	ri.seekStart()
-	return ri
-}
-
-// seekStart seeks the iterator to the start of its data range.
-func (ri *ReplicaEngineDataIterator) seekStart() {
-	ri.curIndex = 0
-	ri.valid, ri.err = ri.it.SeekEngineKeyGE(storage.EngineKey{Key: ri.ranges[ri.curIndex].Start.Key})
-	ri.advance()
-}
-
-// Close the underlying iterator.
-func (ri *ReplicaEngineDataIterator) Close() {
-	ri.valid = false
-	ri.it.Close()
-}
-
-// Next advances to the next key in the iteration.
-func (ri *ReplicaEngineDataIterator) Next() {
-	ri.valid, ri.err = ri.it.NextEngineKey()
-	ri.advance()
-}
-
-// advance moves the iterator forward through the ranges until a valid
-// key is found or the iteration is done and the iterator becomes
-// invalid.
-func (ri *ReplicaEngineDataIterator) advance() {
-	for ri.valid {
-		var k storage.EngineKey
-		k, ri.err = ri.it.UnsafeEngineKey()
-		if ri.err != nil {
-			ri.valid = false
-			return
-		}
-		if k.Key.Compare(ri.ranges[ri.curIndex].End.Key) < 0 {
-			return
-		}
-		ri.curIndex++
-		if ri.curIndex < len(ri.ranges) {
-			ri.valid, ri.err = ri.it.SeekEngineKeyGE(
-				storage.EngineKey{Key: ri.ranges[ri.curIndex].Start.Key})
-		} else {
-			ri.valid = false
-			return
-		}
-	}
-}
-
-// Valid returns true if the iterator currently points to a valid value.
-func (ri *ReplicaEngineDataIterator) Valid() (bool, error) {
-	return ri.valid, ri.err
-}
-
-// Key returns the current key.
-// TODO(sumeer): only used in tests. Remove method and allocator.
-func (ri *ReplicaEngineDataIterator) Key() storage.EngineKey {
-	key := ri.UnsafeKey()
-	key, ri.a = key.CopyUsingAlloc(ri.a)
-	return key
-}
-
-// Value returns the current value.
-// TODO(sumeer): only used in tests. Remove method and allocator.
-func (ri *ReplicaEngineDataIterator) Value() []byte {
-	value := ri.it.UnsafeValue()
-	ri.a, value = ri.a.Copy(value, 0)
-	return value
-}
-
-// UnsafeKey returns the same value as Key, but the memory is invalidated on
-// the next call to {Next,Close}.
-func (ri *ReplicaEngineDataIterator) UnsafeKey() storage.EngineKey {
-	key, err := ri.it.UnsafeEngineKey()
-	if err != nil {
-		// If Valid(), we've already extracted an EngineKey earlier,
-		// when doing the key comparison, so this will not happen.
-		panic("method called on an invalid iter")
-	}
-	return key
-}
-
-// UnsafeValue returns the same value as Value, but the memory is invalidated on
-// the next call to {Next,Close}.
-func (ri *ReplicaEngineDataIterator) UnsafeValue() []byte {
-	return ri.it.UnsafeValue()
 }

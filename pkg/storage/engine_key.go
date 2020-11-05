@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -52,7 +51,7 @@ func (k EngineKey) Format(f fmt.State, c rune) {
 }
 
 // Encoding:
-// Key + \x00 (sentinel) [+ Version + <byte representing length of Version + 1>]
+// Key + \x00 (sentinel) [+ Version + <byte representing length of Version>]
 //
 // The motivation for the sentinel is that we configure the underlying storage
 // engine (Pebble) with a Split function that can be used for constructing
@@ -63,32 +62,6 @@ const (
 	sentinelLen            = 1
 	suffixEncodedLengthLen = 1
 )
-
-// Copy makes a copy of the key.
-func (k EngineKey) Copy() EngineKey {
-	buf := make([]byte, len(k.Key)+len(k.Version))
-	return k.copyUsingSizedBuf(buf)
-}
-
-// CopyUsingAlloc makes a copy of the key using the given allocator.
-func (k EngineKey) CopyUsingAlloc(
-	alloc bufalloc.ByteAllocator,
-) (EngineKey, bufalloc.ByteAllocator) {
-	var buf []byte
-	alloc, buf = alloc.Alloc(len(k.Key)+len(k.Version), 0)
-	return k.copyUsingSizedBuf(buf), alloc
-}
-
-func (k EngineKey) copyUsingSizedBuf(buf []byte) EngineKey {
-	copy(buf, k.Key)
-	k.Key = buf[:len(k.Key)]
-	if len(k.Version) > 0 {
-		versionCopy := buf[len(k.Key):]
-		copy(versionCopy, k.Version)
-		k.Version = versionCopy
-	}
-	return k
-}
 
 // EncodedLen returns the encoded length of k.
 func (k EngineKey) EncodedLen() int {
@@ -124,11 +97,7 @@ func (k EngineKey) EncodeToBuf(buf []byte) []byte {
 func (k EngineKey) encodeToSizedBuf(buf []byte) {
 	copy(buf, k.Key)
 	pos := len(k.Key)
-	// The length of the suffix is the full encoded length (len(buf)) minus the
-	// length of the key minus the length of the sentinel. Note that the
-	// suffixLen is 0 when Version is empty, and when Version is non-empty, it
-	// is len(Version)+1. That is, it includes the length byte at the end.
-	suffixLen := len(buf) - pos - 1
+	suffixLen := len(k.Version)
 	if suffixLen > 0 {
 		buf[pos] = 0
 		pos += sentinelLen
@@ -194,11 +163,13 @@ func DecodeEngineKey(b []byte) (key EngineKey, ok bool) {
 	if len(b) == 0 {
 		return EngineKey{}, false
 	}
-	// Last byte is the version length + 1 when there is a version,
-	// else it is 0.
+	// Last byte is the version length.
 	versionLen := int(b[len(b)-1])
 	// keyPartEnd points to the sentinel byte.
-	keyPartEnd := len(b) - 1 - versionLen
+	keyPartEnd := len(b) - 1
+	if versionLen > 0 {
+		keyPartEnd = len(b) - 1 - versionLen - 1
+	}
 	if keyPartEnd < 0 {
 		return EngineKey{}, false
 	}

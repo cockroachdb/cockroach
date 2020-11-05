@@ -464,7 +464,7 @@ type OutgoingSnapshot struct {
 	// The RocksDB snapshot that will be streamed from.
 	EngineSnap storage.Reader
 	// The complete range iterator for the snapshot to stream.
-	Iter *rditer.ReplicaEngineDataIterator
+	Iter *rditer.ReplicaDataIterator
 	// The replica state within the snapshot.
 	State kvserverpb.ReplicaState
 	// Allows access the the original Replica's sideloaded storage. Note that
@@ -570,7 +570,8 @@ func snapshot(
 
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
-	iter := rditer.NewReplicaEngineDataIterator(&desc, snap, true /* replicatedOnly */)
+	iter := rditer.NewReplicaDataIterator(&desc, snap,
+		true /* replicatedOnly */, false /* seekEnd */)
 
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,
@@ -725,6 +726,9 @@ func clearRangeData(
 			return writer.ClearRawRange(start, end)
 		}
 	} else {
+		// TODO(sumeer): ClearRangeWithHeuristic uses MVCCKeyAndIntentsIterKind. But it is
+		// also going to be passed the lock table ranges explicitly. It should be using
+		// EngineIterator.
 		clearRangeFn = storage.ClearRangeWithHeuristic
 	}
 
@@ -1100,6 +1104,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			subsumedReplSSTFile := &storage.MemFile{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
 			defer subsumedReplSST.Close()
+			// TODO(sumeer): ClearRangeWithHeuristic should use EngineIterator.
 			if err := storage.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
