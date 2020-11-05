@@ -110,7 +110,7 @@ const (
 
 	// virtualScanTableDescriptorFetchCost is the cost to retrieve the table
 	// descriptors when performing a virtual table scan.
-	virtualScanTableDescriptorFetchCost = 10 * randIOCostFactor
+	virtualScanTableDescriptorFetchCost = 25 * randIOCostFactor
 
 	// Input rows to a join are processed in batches of this size.
 	// See joinreader.go.
@@ -759,7 +759,7 @@ func (c *coster) computeLookupJoinCost(
 		// slower.
 		perLookupCost *= 5
 	}
-	if c.mem.Metadata().Table(table).IsVirtualTable() {
+	if c.mem.Metadata().Table(join.Table).IsVirtualTable() {
 		// It's expensive to perform a lookup join into a virtual table because
 		// we need to fetch the table descriptors on each lookup.
 		perLookupCost += virtualScanTableDescriptorFetchCost

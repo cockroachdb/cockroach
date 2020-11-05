@@ -365,30 +365,36 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 7   cross join (inner)                 ·                    ·
 7   ·                                  estimated row count  354 (missing stats)
 7   ·                                  pred                 attnum = conkey[generate_series]
-8   hash join (inner)                  ·                    ·
+8   merge join (inner)                 ·                    ·
 8   ·                                  estimated row count  107 (missing stats)
-8   ·                                  equality             (relnamespace) = (oid)
-9   virtual table lookup join (inner)  ·                    ·
-9   ·                                  estimated row count  105 (missing stats)
+8   ·                                  equality             (attrelid) = (oid)
+8   ·                                  merge ordering       +"(attrelid=oid)"
+9   virtual table                      ·                    ·
+9   ·                                  estimated row count  1000 (missing stats)
 9   ·                                  table                pg_attribute@pg_attribute_attrelid_idx
-9   ·                                  equality             (oid) = (attrelid)
-10  virtual table lookup join (inner)  ·                    ·
-10  ·                                  estimated row count  10 (missing stats)
-10  ·                                  table                pg_constraint@pg_constraint_conrelid_idx
-10  ·                                  equality             (oid) = (conrelid)
-10  ·                                  pred                 contype = 'f'
+9   sort                               ·                    ·
+9   ·                                  estimated row count  11 (missing stats)
+9   ·                                  order                +oid
+10  hash join (inner)                  ·                    ·
+10  ·                                  estimated row count  11 (missing stats)
+10  ·                                  equality             (relnamespace) = (oid)
+11  virtual table lookup join (inner)  ·                    ·
+11  ·                                  estimated row count  10 (missing stats)
+11  ·                                  table                pg_constraint@pg_constraint_conrelid_idx
+11  ·                                  equality             (oid) = (conrelid)
+11  ·                                  pred                 contype = 'f'
+12  filter                             ·                    ·
+12  ·                                  estimated row count  10 (missing stats)
+12  ·                                  filter               relname = 'orders'
+13  virtual table                      ·                    ·
+13  ·                                  estimated row count  1000 (missing stats)
+13  ·                                  table                pg_class@primary
 11  filter                             ·                    ·
 11  ·                                  estimated row count  10 (missing stats)
-11  ·                                  filter               relname = 'orders'
+11  ·                                  filter               nspname = 'public'
 12  virtual table                      ·                    ·
 12  ·                                  estimated row count  1000 (missing stats)
-12  ·                                  table                pg_class@primary
-9   filter                             ·                    ·
-9   ·                                  estimated row count  10 (missing stats)
-9   ·                                  filter               nspname = 'public'
-10  virtual table                      ·                    ·
-10  ·                                  estimated row count  1000 (missing stats)
-10  ·                                  table                pg_namespace@primary
+12  ·                                  table                pg_namespace@primary
 8   project set                        ·                    ·
 8   ·                                  estimated row count  10
 8   ·                                  render 0             generate_series(1, 32)

@@ -647,11 +647,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 				}
 			}
 			if !found {
-				elem := tree.IndexElem{
-					Column:    col.ColName(),
-					Direction: tree.Ascending,
-				}
-				idx.addColumn(tt, elem, nonKeyCol, false /* isLastIndexCol */)
+				idx.addColumn(tt, string(col.ColName()), tree.Ascending, nonKeyCol)
 			}
 		}
 	}
