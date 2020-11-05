@@ -138,10 +138,10 @@ func (l *loggerT) relinquishInternalStderr() error {
 //
 // Used by takeOverInternalStderr() to enforce its invariant.
 func anyLoggerHasInternalStderrOwnership() bool {
-	mainLog.mu.Lock()
-	mainLogHasOwnership := mainLog.mu.redirectInternalStderrWrites
-	mainLog.mu.Unlock()
-	if mainLogHasOwnership {
+	debugLog.mu.Lock()
+	debugLogHasOwnership := debugLog.mu.redirectInternalStderrWrites
+	debugLog.mu.Unlock()
+	if debugLogHasOwnership {
 		return true
 	}
 	secondaryLogRegistry.mu.Lock()
