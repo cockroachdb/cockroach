@@ -288,25 +288,25 @@ func ListLogFiles() ([]FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, logger := range secondaryLogRegistry.mu.loggers {
+
+	err = registry.iter(func(l *loggerT) error {
 		// For now, only gather logs from the main log directory.
 		// This is because the other APIs don't yet understand
 		// secondary log directories, and we don't want
 		// to list a file that cannot be retrieved.
-		thisLogDir, isSet := logger.logger.logDir.get()
+		thisLogDir, isSet := l.logDir.get()
 		if !isSet || thisLogDir != mainDir {
-			continue
+			return nil
 		}
 
-		thisLoggerFiles, err := logger.logger.listLogFiles()
+		thisLoggerFiles, err := l.listLogFiles()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		logFiles = append(logFiles, thisLoggerFiles...)
-	}
-	return logFiles, nil
+		return nil
+	})
+	return logFiles, err
 }
 
 func (l *loggerT) listLogFiles() ([]FileInfo, error) {
