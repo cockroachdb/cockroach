@@ -19,6 +19,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestStartSpanAlwaysTrace(t *testing.T) {
+	// Regression test: if tracing is on, don't erroneously return a noopSpan
+	// due to optimizations in StartSpan.
+	tr := NewTracer()
+	tr._useNetTrace = 1
+	require.True(t, tr.AlwaysTrace())
+	sp := tr.StartSpan("foo", WithRemoteParent(nil))
+	require.False(t, sp.IsBlackHole())
+	require.False(t, sp.isNoop())
+	sp = tr.StartSpan("foo", WithParent(tr.noopSpan))
+	require.False(t, sp.IsBlackHole())
+	require.False(t, sp.isNoop())
+}
+
 func TestTracerRecording(t *testing.T) {
 	tr := NewTracer()
 

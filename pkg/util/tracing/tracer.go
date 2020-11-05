@@ -162,20 +162,22 @@ func (t *Tracer) StartSpan(operationName string, os ...SpanOption) *Span {
 	// Fast paths to avoid the allocation of StartSpanOptions below when tracing
 	// is disabled: if we have no options or a single SpanReference (the common
 	// case) with a black hole span, return a noop Span now.
-	if len(os) == 1 {
-		switch o := os[0].(type) {
-		case *parentOption:
-			if (*Span)(o).IsBlackHole() {
-				return t.noopSpan
-			}
-		case *remoteParentOption:
-			if (*SpanMeta)(o).isNilOrNoop() {
-				return t.noopSpan
+	if !t.AlwaysTrace() {
+		if len(os) == 1 {
+			switch o := os[0].(type) {
+			case *parentOption:
+				if (*Span)(o).IsBlackHole() {
+					return t.noopSpan
+				}
+			case *remoteParentOption:
+				if (*SpanMeta)(o).isNilOrNoop() {
+					return t.noopSpan
+				}
 			}
 		}
-	}
-	if len(os) == 0 && !t.AlwaysTrace() {
-		return t.noopSpan
+		if len(os) == 0 {
+			return t.noopSpan
+		}
 	}
 
 	// NB: apply takes and returns a value to avoid forcing
