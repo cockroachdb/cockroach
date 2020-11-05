@@ -13,7 +13,7 @@
 package util
 
 // RaceEnabled is true if CockroachDB was built with the race build tag.
-const RaceEnabled = false
+const RaceEnabled = true
 
 // EnableRacePreemptionPoints enables goroutine preemption points declared with
 // RacePreempt for builds using the race build tag.
