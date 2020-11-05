@@ -108,6 +108,7 @@ type setExpression struct {
 }
 
 type invertedSpan = invertedexpr.SpanExpressionProto_Span
+type invertedSpans = invertedexpr.SpanExpressionProtoSpans
 type spanExpression = invertedexpr.SpanExpressionProto_Node
 
 // The spans in a SpanExpression.FactoredUnionSpans and the corresponding index
@@ -408,7 +409,7 @@ func (b *batchedInvertedExprEvaluator) pendingLenWithSameEnd(
 // init fragments the spans for later routing of rows and returns spans
 // representing a union of all the spans (for executing the scan). The
 // returned slice is only valid until the next call to reset.
-func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
+func (b *batchedInvertedExprEvaluator) init() invertedSpans {
 	if cap(b.exprEvals) < len(b.exprs) {
 		b.exprEvals = make([]*invertedExprEvaluator, len(b.exprs))
 	} else {
