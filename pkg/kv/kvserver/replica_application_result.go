@@ -214,6 +214,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 			r.mu.state.Lease,
 			r.store.StoreID(),
 			r.mu.state.Desc,
+			"request's timestamp below closed timestamp",
 		)
 		err.CustomMsg = "reproposal failed due to closed timestamp"
 		return roachpb.NewError(err)
