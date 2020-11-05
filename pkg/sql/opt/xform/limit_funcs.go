@@ -98,7 +98,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 	// Iterate over all non-inverted, non-partial indexes, looking for those
 	// that can be limited.
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, nil /* originalFilters */, rejectInvertedIndexes|rejectPartialIndexes)
+	iter.Init(c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectInvertedIndexes|rejectPartialIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()

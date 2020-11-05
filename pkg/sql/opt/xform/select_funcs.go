@@ -99,7 +99,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 ) {
 	// Iterate over all partial indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, filters, rejectNonPartialIndexes|rejectInvertedIndexes)
+	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonPartialIndexes|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, remainingFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		var sb indexScanBuilder
 		sb.init(c, scanPrivate.Table)
@@ -219,7 +219,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(scanPrivate.Table)
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, explicitFilters, rejectInvertedIndexes)
+	iter.Init(c.e.mem, &c.im, scanPrivate, explicitFilters, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
@@ -797,7 +797,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 	// Iterate over all inverted indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
+	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		var spanExpr *invertedexpr.SpanExpression
 		var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
@@ -1051,7 +1051,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	// TODO(mgartner): We should consider primary indexes when it has multiple
 	// columns and only the first is being constrained.
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, filters, rejectPrimaryIndex|rejectInvertedIndexes)
+	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectPrimaryIndex|rejectInvertedIndexes)
 	iter.ForEach(func(leftIndex cat.Index, outerFilters memo.FiltersExpr, leftCols opt.ColSet, _ bool) {
 		leftFixed := c.indexConstrainedCols(leftIndex, scanPrivate.Table, fixedCols)
 		// Short-circuit quickly if the first column in the index is not a fixed
@@ -1061,7 +1061,8 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		}
 
 		var iter2 scanIndexIter
-		iter2.init(c.e.mem, &c.im, scanPrivate, outerFilters, rejectPrimaryIndex|rejectInvertedIndexes)
+		iter2.Init(c.e.mem, &c.im, scanPrivate, outerFilters, rejectPrimaryIndex|rejectInvertedIndexes)
+		iter2.SetOriginalFilters(filters)
 		iter2.ForEachStartingAfter(leftIndex.Ordinal(), func(rightIndex cat.Index, innerFilters memo.FiltersExpr, rightCols opt.ColSet, _ bool) {
 			rightFixed := c.indexConstrainedCols(rightIndex, scanPrivate.Table, fixedCols)
 			// If neither side contributes a fixed column not contributed by the
@@ -1362,7 +1363,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 
 	// Iterate over all inverted indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
+	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool) {
 		// See if there are two or more constraints that can be satisfied
 		// by this inverted index. This is possible with inverted indexes as

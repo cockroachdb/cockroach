@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
+	"github.com/cockroachdb/errors"
 )
 
 // indexRejectFlags contains flags designating types of indexes to skip during
@@ -54,11 +55,15 @@ type scanIndexIter struct {
 	// scanPrivate is the private of the scan operator to enumerate indexes for.
 	scanPrivate *memo.ScanPrivate
 
-	// originalFilters is filters that are applied after the original scan. If
-	// there are no filters applied after the original scan, originalFilters
-	// should be set to nil. It is used to determine if a partial index can be
-	// enumerated and to generate the filters passed to the enumerateIndexFunc
-	// (the originalFilters are passed as-is for non-partial indexes).
+	// filters is the filters that are applied after the original scan. If there
+	// are no filters applied after the original scan, filters should be set to
+	// nil. It is used to determine if a partial index can be enumerated and to
+	// generate the filters passed to the enumerateIndexFunc (the filters are
+	// passed as-is for non-partial indexes).
+	filters memo.FiltersExpr
+
+	// originalFilters is optional, non-reduced filters used to determine if a
+	// partial index can be enumerated. See SetOriginalFilters for details.
 	originalFilters memo.FiltersExpr
 
 	// rejectFlags is a set of flags that designate which types of indexes to
@@ -66,20 +71,73 @@ type scanIndexIter struct {
 	rejectFlags indexRejectFlags
 }
 
-// init initializes a new scanIndexIter.
-func (it *scanIndexIter) init(
+// Init initializes a new scanIndexIter.
+func (it *scanIndexIter) Init(
 	mem *memo.Memo,
 	im *partialidx.Implicator,
 	scanPrivate *memo.ScanPrivate,
-	originalFilters memo.FiltersExpr,
+	filters memo.FiltersExpr,
 	rejectFlags indexRejectFlags,
 ) {
 	it.mem = mem
 	it.im = im
 	it.tabMeta = mem.Metadata().TableMeta(scanPrivate.Table)
 	it.scanPrivate = scanPrivate
-	it.originalFilters = originalFilters
+	it.filters = filters
 	it.rejectFlags = rejectFlags
+}
+
+// SetOriginalFilters specifies an optional, non-reduced, original set of
+// filters used to determine if a partial index can be enumerated. If the
+// filters passed in Init do not imply a partial index predicate, the
+// scanIndexIter will check if the original filters imply the predicate and
+// enumerate the partial index if successful.
+//
+// This is useful in nested iteration when two partial indexes have the same or
+// similar predicate.
+//
+// Consider the indexes and query:
+//
+//   CREATE INDEX idx1 ON t (a) WHERE c > 0
+//   CREATE INDEX idx2 ON t (b) WHERE c > 0
+//
+//   SELECT * FROM t WHERE a = 1 AND b = 2 AND c > 0
+//
+// The optimal query plan is a zigzag join over idx1 and idx2. Planning a zigzag
+// join requires a nested loop over the indexes of a table. The outer loop will
+// first enumerate idx1 with remaining filters of (a = 1 AND b = 2). Those
+// filters, which are passed to the inner loop Init, do not imply idx2's
+// predicate. With those filters alone, idx2 would not be enumerated in the
+// inner loop.
+//
+// But by specifying the original filters of (a = 1 AND b = 2 AND c > 0) for the
+// inner loop, implication of idx2's predicate can be proven when implication of
+// the filters passed in Init fail to prove implication. Thus, idx2 can be
+// enumerated, and a zigzag join can be planned.
+//
+// Note that simply passing the original filters to the inner loop's Init is
+// insufficient. It is necessary to maintain two sets of filters to both handle
+// the example above and to reduce the remaining filters as much as possible
+// when two partial indexes have different predicates.
+//
+// Consider the indexes and query:
+//
+//   CREATE INDEX idx1 ON t (a) WHERE b > 0
+//   CREATE INDEX idx2 ON t (c) WHERE d > 0
+//
+//   SELECT * FROM t WHERE a = 1 AND b > 0 AND c = 2 AND d > 0
+//
+// The optimal query plan is a zigzag join over idx1 and idx2 with no remaining
+// Select filters. If the original filters were passed to the inner loop's Init,
+// they would imply idx2's predicate, but the remaining filters would be (a = 1
+// AND b > 0 AND c = 2). Only (d > 0) can be removed during implication of
+// idx2's predicate. The (b > 0) expression would be needlessly applied in an
+// Select that wraps the zigzag join.
+func (it *scanIndexIter) SetOriginalFilters(filters memo.FiltersExpr) {
+	if it.filters == nil {
+		panic(errors.AssertionFailedf("cannot specify originalFilters with nil filters"))
+	}
+	it.originalFilters = filters
 }
 
 // enumerateIndexFunc defines the callback function for the ForEach and
@@ -89,8 +147,8 @@ func (it *scanIndexIter) init(
 // applied after a scan over the index, the index columns, and a boolean that is
 // true if the index covers the scanPrivate's columns. If the index is a partial
 // index, the filters are the remaining filters after proving partial index
-// implication (see partialidx.Implicator). Otherwise, the filters are the
-// originalFilters.
+// implication (see partialidx.Implicator). Otherwise, the filters are the same
+// filters that were passed to Init.
 type enumerateIndexFunc func(idx cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool)
 
 // ForEach calls the given callback function for every index of the Scan
@@ -98,17 +156,17 @@ type enumerateIndexFunc func(idx cat.Index, filters memo.FiltersExpr, indexCols 
 //
 // The rejectFlags determine types of indexes to skip, if any.
 //
-// Partial indexes are skipped if their predicate is not implied by the
-// originalFilters. If the originalFilters are nil, then only pseudo-partial
-// indexes (a partial index with an expression that always evaluates to true)
-// are enumerated. If the originalFilters are reduced during partial index
-// implication, the remaining filters are passed to the callback f.
+// Partial indexes are skipped if their predicate is not implied by the filters.
+// If the filters are nil, then only pseudo-partial indexes (a partial index
+// with an expression that always evaluates to true) are enumerated. If the
+// filters are reduced during partial index implication, the remaining filters
+// are passed to the callback f.
 //
 // If the ForceIndex flag is set on the scanPrivate, then all indexes except the
 // forced index are skipped. The index forced by the ForceIndex flag is not
 // guaranteed to be iterated on - it will be skipped if it is rejected by the
 // rejectFlags, or if it is a partial index with a predicate that is not implied
-// by the originalFilters.
+// by the filters.
 func (it *scanIndexIter) ForEach(f enumerateIndexFunc) {
 	it.ForEachStartingAfter(cat.PrimaryIndex-1, f)
 }
@@ -152,10 +210,10 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			continue
 		}
 
-		filters := it.originalFilters
+		filters := it.filters
 
-		// If the index is a partial index, check whether or not the
-		// originalFilters imply the predicate.
+		// If the index is a partial index, check whether or not the filters
+		// imply the predicate.
 		if isPartialIndex {
 			p, ok := it.tabMeta.PartialIndexPredicates[ord]
 			if !ok {
@@ -167,17 +225,17 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			}
 			pred := *p.(*memo.FiltersExpr)
 
-			// If there are no originalFilters, then skip over any partial
-			// indexes that are not pseudo-partial indexes.
+			// If there are no filters, then skip over any partial indexes that
+			// are not pseudo-partial indexes.
 			if filters == nil && !pred.IsTrue() {
 				continue
 			}
 
 			if filters != nil {
-				remainingFilters, ok := it.im.FiltersImplyPredicate(filters, pred)
+				remainingFilters, ok := it.filtersImplyPredicate(pred)
 				if !ok {
-					// The originalFilters do not imply the predicate, so skip
-					// over the partial index.
+					// The predicate is not implied by the filters, so skip over
+					// the partial index.
 					continue
 				}
 
@@ -192,6 +250,35 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 
 		f(index, filters, indexCols, isCovering)
 	}
+}
+
+// filtersImplyPredicate attempts to prove that the filters imply the given
+// partial index predicate expression. If the filters or originalFilters imply
+// the predicate, it returns the remaining filters that must be applied after a
+// scan over the partial index. If the predicate is not implied by the filters,
+// ok=false is returned.
+func (it *scanIndexIter) filtersImplyPredicate(
+	pred memo.FiltersExpr,
+) (remainingFilters memo.FiltersExpr, ok bool) {
+	// Return the remaining filters if the filters imply the predicate.
+	if remainingFilters, ok = it.im.FiltersImplyPredicate(it.filters, pred); ok {
+		return remainingFilters, true
+	}
+
+	// If the filters do not imply the predicate, but the originalFilters do,
+	// return the remaining filters from the implication. We prefer checking the
+	// filters before the originalFilters because we want to return the most
+	// minimal set of remaining filters possible. The filters are a subset of
+	// the originalFilters, therefore the remaining filters from
+	// filters-implication are a subset of the remaining filters from
+	// originalFilters-implication.
+	if it.originalFilters != nil {
+		if remainingFilters, ok = it.im.FiltersImplyPredicate(it.originalFilters, pred); ok {
+			return remainingFilters, true
+		}
+	}
+
+	return nil, false
 }
 
 // hasRejectFlag returns true if the given flag is set in the rejectFlags.
