@@ -35,7 +35,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
 
 	defer TestingSetRedactable(false)()
 
@@ -48,14 +48,15 @@ func TestRedactedLogOutput(t *testing.T) {
 	}
 	// Also verify that raw markers are preserved, when redactable
 	// markers are disabled.
-	mainLog.newBuffers()
+	resetCaptured()
+
 	Errorf(context.Background(), "test2 %v end", startRedactable+"hello"+endRedactable)
 	if !contains("test2 "+startRedactable+"hello"+endRedactable+" end", t) {
 		t.Errorf("expected unquoted markers, got %q", contents())
 	}
 
-	mainLog.newBuffers()
-	mainLog.redactableLogs.Set(true)
+	resetCaptured()
+	debugLog.redactableLogs.Set(true)
 	Errorf(context.Background(), "test3 %v end", "hello")
 	if !contains(redactableIndicator+" test3", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
@@ -65,7 +66,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	}
 
 	// Verify that safe parts of errors don't get enclosed in redaction markers
-	mainLog.newBuffers()
+	resetCaptured()
 	Errorf(context.Background(), "test3e %v end",
 		errors.AssertionFailedf("hello %v",
 			errors.Newf("error-in-error %s", "world")))
@@ -77,7 +78,8 @@ func TestRedactedLogOutput(t *testing.T) {
 	}
 
 	// When redactable logs are enabled, the markers are always quoted.
-	mainLog.newBuffers()
+	resetCaptured()
+
 	const specialString = "x" + startRedactable + "hello" + endRedactable + "y"
 	Errorf(context.Background(), "test4 %v end", specialString)
 	if contains(specialString, t) {
@@ -153,7 +155,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 			Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
 
 			// Retrieve the log writer and log location for this test.
-			info, ok := mainLog.mu.file.(*syncBuffer)
+			info, ok := debugLog.mu.file.(*syncBuffer)
 			if !ok {
 				t.Fatalf("buffer wasn't created")
 			}
