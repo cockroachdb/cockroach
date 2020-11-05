@@ -3597,8 +3597,6 @@ func willOverflow(a, b int64) bool {
 // on the first error returned from any of them.
 //
 // Callbacks must copy any data they intend to hold on to.
-//
-// This implementation must match engine/db.cc:MVCCComputeStatsInternal.
 func ComputeStatsForRange(
 	iter SimpleMVCCIterator,
 	start, end roachpb.Key,
