@@ -212,3 +212,121 @@ func TestTryJoinJsonOrArrayIndex(t *testing.T) {
 		}
 	}
 }
+
+func TestTryFilterJsonOrArrayIndex(t *testing.T) {
+	semaCtx := tree.MakeSemaContext()
+	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+
+	tc := testcat.New()
+	if _, err := tc.ExecuteDDL(
+		"CREATE TABLE t (j JSON, a INT[], INVERTED INDEX (j), INVERTED INDEX (a))",
+	); err != nil {
+		t.Fatal(err)
+	}
+	var f norm.Factory
+	f.Init(evalCtx, tc)
+	md := f.Metadata()
+	tn := tree.NewUnqualifiedTableName("t")
+	tab := md.AddTable(tc.Table(tn), tn)
+	jsonOrd, arrayOrd := 1, 2
+
+	testCases := []struct {
+		filters  string
+		indexOrd int
+		ok       bool
+		unique   bool
+	}{
+		// If we can create an inverted filter with the given filter expression and
+		// index, ok=true. If the spans in the resulting inverted index constraint
+		// do not have duplicate primary keys, unique=true.
+		{
+			filters:  "j @> '1'",
+			indexOrd: jsonOrd,
+			ok:       true,
+			unique:   true,
+		},
+		{
+			// Contained by is not yet supported.
+			filters:  "j <@ '1'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
+			filters:  "a @> '{1}'",
+			indexOrd: arrayOrd,
+			ok:       true,
+			unique:   true,
+		},
+		{
+			// Contained by is not yet supported.
+			filters:  "a <@ '{1}'",
+			indexOrd: arrayOrd,
+			ok:       false,
+		},
+		{
+			// Wrong index ordinal.
+			filters:  "a @> '{1}'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
+			// Wrong index ordinal.
+			filters:  "j @> '1'",
+			indexOrd: arrayOrd,
+			ok:       false,
+		},
+		{
+			// When operations affecting two different variables are OR-ed, we cannot
+			// constrain either index.
+			filters:  "j @> '1' OR a @> '{1}'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
+			// We can constrain either index when the functions are AND-ed.
+			filters:  "j @> '1' AND a @> '{1}'",
+			indexOrd: jsonOrd,
+			ok:       true,
+			unique:   true,
+		},
+		{
+			// We can constrain either index when the functions are AND-ed.
+			filters:  "j @> '1' AND a @> '{1}'",
+			indexOrd: arrayOrd,
+			ok:       true,
+			unique:   true,
+		},
+		{
+			// We cannot guarantee unique primary keys when there are multiple paths.
+			filters:  "j @> '[1, 2]'",
+			indexOrd: jsonOrd,
+			ok:       true,
+			unique:   false,
+		},
+		{
+			// We cannot guarantee unique primary keys when there are multiple paths.
+			filters:  "a @> '{1, 2}'",
+			indexOrd: arrayOrd,
+			ok:       true,
+			unique:   false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Logf("test case: %v", tc)
+		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, tc.filters)
+
+		// We're not testing that the correct SpanExpression is returned here;
+		// that is tested elsewhere. This is just testing that we are constraining
+		// the index when we expect to.
+		spanExpr, _, _, _, ok := invertedidx.TryFilterInvertedIndex(
+			evalCtx, &f, filters, nil /* optionalFilters */, tab, md.Table(tab).Index(tc.indexOrd),
+		)
+		if tc.ok != ok {
+			t.Fatalf("expected %v, got %v", tc.ok, ok)
+		}
+		if spanExpr != nil && tc.unique != spanExpr.Unique {
+			t.Fatalf("expected unique=%v, but got %v", tc.unique, spanExpr.Unique)
+		}
+	}
+}
