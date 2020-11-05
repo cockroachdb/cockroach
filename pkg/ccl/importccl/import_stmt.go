@@ -287,6 +287,9 @@ func importPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer span.Finish()
 
+		// The walltime at which table descriptors are parsed. This is different
+		// from details.Walltime which represents the time at which we write KVs
+		// during an import.
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if !p.ExtendedEvalContext().TxnImplicit {
@@ -1224,7 +1227,7 @@ func parseAndCreateBundleTableDescs(
 	switch format.Format {
 	case roachpb.IOFileFormat_Mysqldump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
-		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner)
+		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner, walltime)
 	case roachpb.IOFileFormat_PgDump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
 		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID, walltime, fks, int(format.PgDump.MaxRowSize), owner)
@@ -1350,6 +1353,8 @@ func (r *importResumer) Resume(
 	// In the case of importing into existing tables we must wait for all nodes
 	// to see the same version of the updated table descriptor, after which we
 	// shall chose a ts to import from.
+	// NB: details.Walltime is only set with the time at which we write KVs
+	// during an import. A 0 value means the tables are offline.
 	if details.Walltime == 0 {
 		// TODO(dt): update job status to mention waiting for tables to go offline.
 		for _, i := range details.Tables {

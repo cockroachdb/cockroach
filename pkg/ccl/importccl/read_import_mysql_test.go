@@ -117,8 +117,8 @@ func readMysqlCreateFrom(
 		t.Fatal(err)
 	}
 	defer f.Close()
-
-	tbl, err := readMysqlCreateTable(context.Background(), f, testEvalCtx, nil, id, expectedParent, name, fks, map[descpb.ID]int64{}, security.RootUserName())
+	walltime := testEvalCtx.StmtTimestamp.UnixNano()
+	tbl, err := readMysqlCreateTable(context.Background(), f, testEvalCtx, nil, id, expectedParent, name, fks, map[descpb.ID]int64{}, security.RootUserName(), walltime)
 	if err != nil {
 		t.Fatal(err)
 	}
