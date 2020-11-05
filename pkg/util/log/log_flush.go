@@ -115,37 +115,15 @@ func (l *loggerT) lockAndFlushAndSync(doSync bool) {
 	l.flushAndSyncLocked(doSync)
 }
 
-// SetSync configures whether logging synchronizes all writes.
-// This overrides the synchronization setting for both primary
-// and secondary loggers.
+// StartSync configures all loggers to start synchronizing writes.
 // This is used e.g. in `cockroach start` when an error occurs,
 // to ensure that all log writes from the point the error
 // occurs are flushed to logs (in case the error degenerates
 // into a panic / segfault on the way out).
-func SetSync(sync bool) {
-	mainLog.lockAndSetSync(sync)
-	func() {
-		secondaryLogRegistry.mu.Lock()
-		defer secondaryLogRegistry.mu.Unlock()
-		for _, l := range secondaryLogRegistry.mu.loggers {
-			if !sync && l.forceSyncWrites {
-				// We're not changing this.
-				continue
-			}
-			l.logger.lockAndSetSync(sync)
-		}
-	}()
-	if sync {
-		// There may be something in the buffers already; flush it.
-		Flush()
-	}
-}
-
-// lockAndSetSync configures syncWrites.
-func (l *loggerT) lockAndSetSync(sync bool) {
-	l.mu.Lock()
-	l.mu.syncWrites = sync
-	l.mu.Unlock()
+func StartSync() {
+	logging.syncWrites.Set(true)
+	// There may be something in the buffers already; flush it.
+	Flush()
 }
 
 // flushAndSync flushes the current log and, if doSync is set,
