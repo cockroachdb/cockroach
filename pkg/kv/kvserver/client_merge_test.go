@@ -3116,7 +3116,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// Construct SST #1 through #3 as numbered above, but only ultimately
 		// keep the 3rd one.
 		keyRanges := rditer.MakeReplicatedKeyRanges(inSnap.State.Desc)
-		it := rditer.NewReplicaDataIterator(inSnap.State.Desc, sendingEng, true /* replicatedOnly */, false /* seekEnd */)
+		it := rditer.NewReplicaEngineDataIterator(inSnap.State.Desc, sendingEng, true /* replicatedOnly */)
 		defer it.Close()
 		// Write a range deletion tombstone to each of the SSTs then put in the
 		// kv entries from the sender of the snapshot.
@@ -3142,7 +3142,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					expectedSSTs = append(expectedSSTs, sstFile.Data())
 					break
 				}
-				if err := sst.Put(it.Key(), it.Value()); err != nil {
+				if err := sst.PutEngineKey(it.Key(), it.Value()); err != nil {
 					return err
 				}
 			}

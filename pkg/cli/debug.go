@@ -316,7 +316,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	iter := rditer.NewReplicaDataIterator(&desc, db, debugCtx.replicated, false /* seekEnd */)
+	iter := rditer.NewReplicaEngineDataIterator(&desc, db, debugCtx.replicated)
 	defer iter.Close()
 	results := 0
 	for ; ; iter.Next() {
@@ -325,10 +325,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		} else if !ok {
 			break
 		}
-		kvserver.PrintKeyValue(storage.MVCCKeyValue{
-			Key:   iter.Key(),
-			Value: iter.Value(),
-		})
+		kvserver.PrintEngineKeyValue(iter.UnsafeKey(), iter.UnsafeValue())
 		results++
 		if results == debugCtx.maxResults {
 			break
@@ -461,9 +458,14 @@ Decode and print a hexadecimal-encoded key-value pair.
 		isTS := bytes.HasPrefix(bs[0], keys.TimeseriesPrefix)
 		k, err := storage.DecodeMVCCKey(bs[0])
 		if err != nil {
-			// Older versions of the consistency checker give you diffs with a raw_key that
-			// is already a roachpb.Key, so make a half-assed attempt to support both.
+			// - Could be an EngineKey.
+			// - Older versions of the consistency checker give you diffs with a raw_key that
+			//   is already a roachpb.Key, so make a half-assed attempt to support both.
 			if !isTS {
+				if k, ok := storage.DecodeEngineKey(bs[0]); ok {
+					kvserver.PrintEngineKeyValue(k, bs[1])
+					return nil
+				}
 				fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
 					"if the result below looks like garbage, then it likely is:\n\n", err)
 			}

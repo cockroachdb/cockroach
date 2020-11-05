@@ -1335,9 +1335,9 @@ var mvccStatsTests = []struct {
 		},
 	},
 	{
-		name: "ComputeStatsGo",
+		name: "ComputeStatsForRange",
 		fn: func(iter MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-			return ComputeStatsGo(iter, start, end, nowNanos)
+			return ComputeStatsForRange(iter, start, end, nowNanos)
 		},
 	},
 }

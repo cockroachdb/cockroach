@@ -17,10 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
-// gcIterator wraps an rditer.ReplicaDataIterator which it reverse iterates for
+// gcIterator wraps an rditer.ReplicaMVCCDataIterator which it reverse iterates for
 // the purpose of discovering gc-able replicated data.
 type gcIterator struct {
-	it   *rditer.ReplicaDataIterator
+	it   *rditer.ReplicaMVCCDataIterator
 	done bool
 	err  error
 	buf  gcIteratorRingBuf
@@ -28,7 +28,7 @@ type gcIterator struct {
 
 func makeGCIterator(desc *roachpb.RangeDescriptor, snap storage.Reader) gcIterator {
 	return gcIterator{
-		it: rditer.NewReplicaDataIterator(desc, snap,
+		it: rditer.NewReplicaMVCCDataIterator(desc, snap,
 			true /* replicatedOnly */, true /* seekEnd */),
 	}
 }
