@@ -14,7 +14,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -186,6 +185,8 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 // makeOptimizerPlan generates a plan using the cost-based optimizer.
 // On success, it populates p.curPlan.
 func (p *planner) makeOptimizerPlan(ctx context.Context) error {
+	p.curPlan.init(&p.stmt, &p.instrumentation)
+
 	opc := &p.optPlanningCtx
 	opc.reset()
 
@@ -209,7 +210,6 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			newDistSQLSpecExecFactory(p, planningMode),
 			execMemo,
 			p.EvalContext(),
-			p.ExecCfg().Codec,
 			p.autoCommit,
 		)
 		if err != nil {
@@ -244,7 +244,6 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 					newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning),
 					execMemo,
 					p.EvalContext(),
-					p.ExecCfg().Codec,
 					p.autoCommit,
 				)
 			}
@@ -265,7 +264,6 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		newExecFactory(p),
 		execMemo,
 		p.EvalContext(),
-		p.ExecCfg().Codec,
 		p.autoCommit,
 	)
 }
@@ -543,24 +541,13 @@ func (opc *optPlanningCtx) runExecBuilder(
 	f exec.Factory,
 	mem *memo.Memo,
 	evalCtx *tree.EvalContext,
-	codec keys.SQLCodec,
 	allowAutoCommit bool,
 ) error {
 	var result *planComponents
-	var explainPlan *explain.Plan
 	var isDDL bool
 	var containsFullTableScan bool
 	var containsFullIndexScan bool
-	if planTop.appStats != nil {
-		// We do not set this flag upfront when initializing planTop because the
-		// planning process could in principle modify the AST, resulting in a
-		// different statement signature.
-		planTop.savePlanForStats = planTop.appStats.shouldSaveLogicalPlanDescription(
-			planTop.stmt.AnonymizedStr,
-			allowAutoCommit,
-		)
-	}
-	if !planTop.savePlanString && !planTop.savePlanForStats {
+	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		// No instrumentation.
 		bld := execbuilder.New(f, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
@@ -579,11 +566,13 @@ func (opc *optPlanningCtx) runExecBuilder(
 		if err != nil {
 			return err
 		}
-		explainPlan = plan.(*explain.Plan)
+		explainPlan := plan.(*explain.Plan)
 		result = explainPlan.WrappedPlan.(*planComponents)
 		isDDL = bld.IsDDL
 		containsFullTableScan = bld.ContainsFullTableScan
 		containsFullIndexScan = bld.ContainsFullIndexScan
+
+		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
 
 	if stmt.ExpectedTypes != nil {
@@ -594,10 +583,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 
 	planTop.planComponents = *result
-	planTop.explainPlan = explainPlan
 	planTop.mem = mem
 	planTop.catalog = &opc.catalog
-	planTop.codec = codec
 	planTop.stmt = stmt
 	planTop.flags = opc.flags
 	if isDDL {
