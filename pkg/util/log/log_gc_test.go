@@ -115,12 +115,12 @@ func testLogGC(
 	// We want to create multiple log files below. For this we need to
 	// override the size/number limits first to the values suitable for
 	// the test.
-	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
-	LogFileMaxSize = 1 // ensure rotation on every log write
+	defer func(previous int64) { logFileMaxSize = previous }(logFileMaxSize)
+	logFileMaxSize = 1 // ensure rotation on every log write
 	defer func(previous int64) {
-		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
-	}(LogFilesCombinedMaxSize)
-	atomic.StoreInt64(&LogFilesCombinedMaxSize, maxTotalLogFileSize)
+		atomic.StoreInt64(&logFilesCombinedMaxSize, previous)
+	}(logFilesCombinedMaxSize)
+	atomic.StoreInt64(&logFilesCombinedMaxSize, maxTotalLogFileSize)
 
 	// Create the number of expected log files.
 	for i := 1; i < newLogFiles; i++ {
