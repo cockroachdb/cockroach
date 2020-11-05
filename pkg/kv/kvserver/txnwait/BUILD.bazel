@@ -23,6 +23,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -37,7 +38,12 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/protoutil",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
