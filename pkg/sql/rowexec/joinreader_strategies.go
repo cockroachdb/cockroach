@@ -390,6 +390,12 @@ type joinReaderOrderingStrategy struct {
 	}
 
 	groupingState *inputBatchGroupingState
+
+	// outputGroupContinuationForLeftRow is true when this join is the first
+	// join in paired-joins. Note that in this case the input batches will
+	// always be of size 1 (real input batching only happens when this join is
+	// the second join in paired-joins).
+	outputGroupContinuationForLeftRow bool
 }
 
 func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
@@ -445,7 +451,8 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 		// During a SemiJoin or AntiJoin, we only output if we've seen no match
 		// for this input row yet. Additionally, since we don't have to render
 		// anything to output a Semi or Anti join match, we can evaluate our
-		// on condition now.
+		// on condition now. NB: the first join in paired-joins is never a
+		// SemiJoin or AntiJoin.
 		if !s.groupingState.getMatched(inputRowIdx) {
 			renderedRow, err := s.render(s.inputRows[inputRowIdx], row)
 			if err != nil {
@@ -500,6 +507,10 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 				// An outer-join non-match means we emit the input row with NULLs for
 				// the right side.
 				if renderedRow := s.renderUnmatchedRow(inputRow, leftSide); renderedRow != nil {
+					if s.outputGroupContinuationForLeftRow {
+						// This must be the first row being output for this input row.
+						renderedRow = append(renderedRow, falseEncDatum)
+					}
 					return renderedRow, jrEmittingRows, nil
 				}
 			case descpb.LeftAntiJoin:
@@ -532,7 +543,16 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 		return nil, jrStateUnknown, err
 	}
 	if outputRow != nil {
-		s.groupingState.setMatched(s.emitCursor.inputRowIdx)
+		wasAlreadyMatched := s.groupingState.setMatched(s.emitCursor.inputRowIdx)
+		if s.outputGroupContinuationForLeftRow {
+			if wasAlreadyMatched {
+				// Not the first row output for this input row.
+				outputRow = append(outputRow, trueEncDatum)
+			} else {
+				// First row output for this input row.
+				outputRow = append(outputRow, falseEncDatum)
+			}
+		}
 	}
 	return outputRow, jrEmittingRows, nil
 }

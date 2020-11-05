@@ -39,7 +39,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 40
+const Version execinfrapb.DistSQLVersion = 41
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
@@ -50,6 +50,11 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 40
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 41 (MinAcceptedVersion: 40)
+  - A paired joiner approach for lookup joins was added, for left
+    outer/semi/anti joins involving a pair of joinReaders, where the
+    first join uses a non-covering index.
 
 - Version: 40 (MinAcceptedVersion: 40)
   - A new field was added execinfrapb.ProcessorSpec to propagate the result
@@ -62,7 +67,7 @@ Please add new entries at the top.
     protobuf struct for easier propagation to the remote nodes during the
     execution.
 
-- Version: 38 (MinAcceptedVersion: 38)
+- Version: 38 (MinAcceptedVersion: 37)
   - A paired joiner approach for inverted joins was added, for left
     outer/semi/anti joins involving the invertedJoiner and joinReader.
 
