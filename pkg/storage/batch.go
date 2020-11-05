@@ -82,8 +82,6 @@ const (
 // The <wall_time> and <logical> portions of the key are encoded as 64 and
 // 32-bit big-endian integers. A custom RocksDB comparator is used to maintain
 // the desired ordering as these keys do not sort lexicographically correctly.
-// Note that the encoding of these keys needs to match up with the encoding in
-// rocksdb/db.cc:EncodeKey().
 //
 // TODO(bilal): This struct exists mostly as a historic artifact. Transition
 // the remaining few test uses of this struct over to pebble.Batch, and remove
@@ -121,8 +119,7 @@ func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 	// deferredOp.Finish.
 }
 
-// EncodeKey encodes an engine.MVCC key into the RocksDB representation. This
-// encoding must match with the encoding in engine/db.cc:EncodeKey().
+// EncodeKey encodes an engine.MVCC key into the RocksDB representation.
 func EncodeKey(key MVCCKey) []byte {
 	keyLen := key.Len()
 	buf := make([]byte, keyLen)
@@ -131,7 +128,6 @@ func EncodeKey(key MVCCKey) []byte {
 }
 
 // EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
-// This encoding must match with the encoding in engine/db.cc:EncodeKey().
 func EncodeKeyToBuf(buf []byte, key MVCCKey) []byte {
 	keyLen := key.Len()
 	if cap(buf) < keyLen {
@@ -172,8 +168,7 @@ func encodeTimestamp(ts hlc.Timestamp) []byte {
 	return encodedTS
 }
 
-// DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation. This
-// decoding must match engine/db.cc:DecodeKey().
+// DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation.
 func DecodeMVCCKey(encodedKey []byte) (MVCCKey, error) {
 	k, ts, err := enginepb.DecodeKey(encodedKey)
 	return MVCCKey{k, ts}, err

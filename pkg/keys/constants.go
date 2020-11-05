@@ -64,9 +64,6 @@ var (
 	// metadata is identified by one of the suffixes listed below, along
 	// with potentially additional encoded key info, for instance in the
 	// case of AbortSpan entry.
-	//
-	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
-	// in storage/engine/rocksdb/db.cc.
 	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
 	// LocalRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
 	// replicated per-range data. By appending this after the Range ID, these
@@ -135,9 +132,6 @@ var (
 	// specific sort of per-range metadata is identified by one of the
 	// suffixes listed below, along with potentially additional encoded
 	// key info, such as the txn ID in the case of a transaction record.
-	//
-	// NOTE: LocalRangePrefix must be kept in sync with the value in
-	// storage/engine/rocksdb/db.cc.
 	LocalRangePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("k")))
 	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
 	// LocalQueueLastProcessedSuffix is the suffix for replica queue state keys.
@@ -152,8 +146,6 @@ var (
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
-	// NOTE: if this value changes, it must be updated in C++
-	// (storage/engine/rocksdb/db.cc).
 	LocalTransactionSuffix = roachpb.RKey("txn-")
 
 	// 4. Lock table keys

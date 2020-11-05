@@ -25,7 +25,6 @@ import (
 // code out from abstract interfaces -- See #30114 and #30001.
 
 // SplitMVCCKey returns the key and timestamp components of an encoded MVCC key.
-// This decoding must match engine/db.cc:SplitKey().
 func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 	if len(mvccKey) == 0 {
 		return nil, nil, false
