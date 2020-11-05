@@ -60,23 +60,32 @@ func (f *flushBuffer) Sync() error {
 	return nil
 }
 
-// swap sets the log writer and returns the old writer.
-func (l *loggerT) swap(writer flushSyncWriter) (old flushSyncWriter) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	old = l.mu.file
-	l.mu.file = writer
-	return old
+// capture changes the debugLog to output to a flushBuffer (see
+// above), so that the original output sink is restored upon calling
+// the returned fn.
+//
+// While the output is captured, a test can use contents() below
+// to retrieve the captured output so far.
+func capture() func() {
+	debugLog.mu.Lock()
+	oldFile := debugLog.mu.file
+	debugLog.mu.file = new(flushBuffer)
+	debugLog.mu.Unlock()
+	return func() {
+		debugLog.mu.Lock()
+		debugLog.mu.file = oldFile
+		debugLog.mu.Unlock()
+	}
 }
 
-// newBuffers sets the log writers to all new byte buffers and returns the old array.
-func (l *loggerT) newBuffers() flushSyncWriter {
-	return l.swap(new(flushBuffer))
+// resetCaptured erases the logging output captured so far.
+func resetCaptured() {
+	debugLog.mu.file.(*flushBuffer).Buffer.Reset()
 }
 
 // contents returns the specified log value as a string.
 func contents() string {
-	return mainLog.mu.file.(*flushBuffer).Buffer.String()
+	return debugLog.mu.file.(*flushBuffer).Buffer.String()
 }
 
 // contains reports whether the string is contained in the log.
@@ -98,7 +107,7 @@ func TestInfo(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
 	Info(context.Background(), "test")
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -124,7 +133,7 @@ func TestStandardLog(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
 	stdLog.Print("test")
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -278,7 +287,8 @@ func TestError(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
+
 	Error(context.Background(), "test")
 	if !contains("E", t) {
 		t.Errorf("Error has wrong character: %q", contents())
@@ -295,7 +305,8 @@ func TestWarning(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
+
 	Warning(context.Background(), "test")
 	if !contains("W", t) {
 		t.Errorf("Warning has wrong character: %q", contents())
@@ -310,7 +321,8 @@ func TestV(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
+
 	_ = logging.vmoduleConfig.verbosity.Set("2")
 	defer func() { _ = logging.vmoduleConfig.verbosity.Set("0") }()
 	if V(2) {
@@ -329,7 +341,8 @@ func TestVmoduleOn(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
+
 	_ = SetVModule("clog_test=2")
 	defer func() { _ = SetVModule("") }()
 	if !V(1) {
@@ -355,7 +368,8 @@ func TestVmoduleOn(t *testing.T) {
 // Test that a vmodule of another file does not enable a log in this file.
 func TestVmoduleOff(t *testing.T) {
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
+
 	_ = SetVModule("notthisfile=2")
 	defer func() { _ = SetVModule("") }()
 	for i := 1; i <= 3; i++ {
@@ -392,7 +406,8 @@ var vGlobs = map[string]bool{
 // Test that vmodule globbing works as advertised.
 func testVmoduleGlob(pat string, match bool, t *testing.T) {
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
+
 	defer func() { _ = SetVModule("") }()
 	_ = SetVModule(pat)
 	if V(2) != match {
@@ -414,7 +429,7 @@ func TestListLogFiles(t *testing.T) {
 
 	Info(context.Background(), "x")
 
-	sb, ok := mainLog.mu.file.(*syncBuffer)
+	sb, ok := debugLog.mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
@@ -442,7 +457,7 @@ func TestGetLogReader(t *testing.T) {
 	defer s.Close(t)
 	setFlags()
 	Info(context.Background(), "x")
-	info, ok := mainLog.mu.file.(*syncBuffer)
+	info, ok := debugLog.mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
@@ -457,7 +472,7 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, isSet := mainLog.logDir.get()
+	dir, isSet := debugLog.logDir.get()
 	if !isSet {
 		t.Fatal(errDirectoryNotSet)
 	}
@@ -535,11 +550,11 @@ func TestRollover(t *testing.T) {
 		err = e
 	})
 
-	defer func(previous int64) { mainLog.logFileMaxSize = previous }(mainLog.logFileMaxSize)
-	mainLog.logFileMaxSize = 2048
+	defer func(previous int64) { debugLog.logFileMaxSize = previous }(debugLog.logFileMaxSize)
+	debugLog.logFileMaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
-	info, ok := mainLog.mu.file.(*syncBuffer)
+	info, ok := debugLog.mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatal("info wasn't created")
 	}
@@ -547,7 +562,7 @@ func TestRollover(t *testing.T) {
 		t.Fatalf("info has initial error: %v", err)
 	}
 	fname0 := info.file.Name()
-	Infof(context.Background(), "%s", strings.Repeat("x", int(mainLog.logFileMaxSize))) // force a rollover
+	Infof(context.Background(), "%s", strings.Repeat("x", int(debugLog.logFileMaxSize))) // force a rollover
 	if err != nil {
 		t.Fatalf("info has error after big write: %v", err)
 	}
@@ -563,7 +578,7 @@ func TestRollover(t *testing.T) {
 	if fname0 == fname1 {
 		t.Errorf("info.f.Name did not change: %v", fname0)
 	}
-	if info.nbytes >= mainLog.logFileMaxSize {
+	if info.nbytes >= debugLog.logFileMaxSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
 	}
 }
@@ -583,7 +598,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	SetExitFunc(false /* hideStack */, func(int) {})
 
 	defer setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
 
 	for _, level := range []int{tracebackNone, tracebackSingle, tracebackAll} {
 		traceback = level
@@ -645,15 +660,15 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	defer func(save Severity) { mainLog.fileThreshold = save }(mainLog.fileThreshold)
-	mainLog.fileThreshold = Severity_ERROR
+	defer func(save Severity) { debugLog.fileThreshold = save }(debugLog.fileThreshold)
+	debugLog.fileThreshold = Severity_ERROR
 
 	Infof(context.Background(), "test1")
 	Errorf(context.Background(), "test2")
 
 	Flush()
 
-	contents, err := ioutil.ReadFile(mainLog.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(debugLog.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
