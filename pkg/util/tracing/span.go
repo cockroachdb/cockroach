@@ -365,7 +365,7 @@ func (s *Span) IsBlackHole() bool {
 // or corresponds to a "no-op" Span. If this is true, any Span
 // derived from this context will be a "black hole Span".
 func (sc *SpanMeta) isNilOrNoop() bool {
-	return sc.recordingType == NoRecording && sc.shadowTracerType == ""
+	return sc == nil || (sc.recordingType == NoRecording && sc.shadowTracerType == "")
 }
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
@@ -436,6 +436,14 @@ func (s *Span) Meta() *SpanMeta {
 		shadowCtx = s.ot.shadowSpan.Context()
 	}
 
+	if traceID == 0 &&
+		spanID == 0 &&
+		shadowTrTyp == "" &&
+		shadowCtx == nil &&
+		recordingType == 0 &&
+		baggage == nil {
+		return nil
+	}
 	return &SpanMeta{
 		traceID:          traceID,
 		spanID:           spanID,
