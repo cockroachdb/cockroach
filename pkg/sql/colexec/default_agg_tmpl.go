@@ -55,8 +55,6 @@ type default_AGGKINDAgg struct {
 
 var _ aggregateFunc = &default_AGGKINDAgg{}
 
-const sizeOfDefault_AGGKINDAgg = int64(unsafe.Sizeof(default_AGGKINDAgg{}))
-
 func (a *default_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -106,42 +104,6 @@ func (a *default_AGGKINDAgg) Compute(
 	})
 }
 
-// {{/*
-// _ADD_TUPLE aggregates the tuple that is at position 'tupleIdx' in the
-// original batch and has the converted tree.Datum values at the same position.
-func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupleIdx int) { // */}}
-	// {{define "addTuple" -}}
-
-	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[tupleIdx] {
-		res, err := a.fn.Result()
-		if err != nil {
-			colexecerror.ExpectedError(err)
-		}
-		if res == tree.DNull {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
-		}
-		a.curIdx++
-		a.fn.Reset(a.ctx)
-	}
-	// {{end}}
-	// Note that the only function that takes no arguments is COUNT_ROWS, and
-	// it has an optimized implementation, so we don't need to check whether
-	// len(inputIdxs) is at least 1.
-	firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[tupleIdx]
-	for j, colIdx := range inputIdxs[1:] {
-		a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
-	}
-	if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
-		colexecerror.ExpectedError(err)
-	}
-
-	// {{end}}
-	// {{/*
-} // */}}
-
 func (a *default_AGGKINDAgg) Flush(outputIdx int) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	// Go around "argument overwritten before first use" linter error.
@@ -149,17 +111,15 @@ func (a *default_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		res, err := a.fn.Result()
-		if err != nil {
-			colexecerror.ExpectedError(err)
-		}
-		if res == tree.DNull {
-			a.nulls.SetNull(outputIdx)
-		} else {
-			coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
-		}
-	})
+	res, err := a.fn.Result()
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+	if res == tree.DNull {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
+	}
 }
 
 func newDefault_AGGKINDAggAlloc(
@@ -225,9 +185,12 @@ type default_AGGKINDAggAlloc struct {
 var _ aggregateFuncAlloc = &default_AGGKINDAggAlloc{}
 var _ Closer = &default_AGGKINDAggAlloc{}
 
+const sizeOfDefault_AGGKINDAgg = int64(unsafe.Sizeof(default_AGGKINDAgg{}))
+const default_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]default_AGGKINDAggAlloc{}))
+
 func (a *default_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfDefault_AGGKINDAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(default_AGGKINDAggSliceOverhead + sizeOfDefault_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]default_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -252,3 +215,39 @@ func (a *default_AGGKINDAggAlloc) Close(ctx context.Context) error {
 	a.returnedFns = nil
 	return nil
 }
+
+// {{/*
+// _ADD_TUPLE aggregates the tuple that is at position 'tupleIdx' in the
+// original batch and has the converted tree.Datum values at the same position.
+func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupleIdx int) { // */}}
+	// {{define "addTuple" -}}
+
+	// {{if eq "_AGGKIND" "Ordered"}}
+	if a.groups[tupleIdx] {
+		res, err := a.fn.Result()
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		if res == tree.DNull {
+			a.nulls.SetNull(a.curIdx)
+		} else {
+			coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
+		}
+		a.curIdx++
+		a.fn.Reset(a.ctx)
+	}
+	// {{end}}
+	// Note that the only function that takes no arguments is COUNT_ROWS, and
+	// it has an optimized implementation, so we don't need to check whether
+	// len(inputIdxs) is at least 1.
+	firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[tupleIdx]
+	for j, colIdx := range inputIdxs[1:] {
+		a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
+	}
+	if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
+		colexecerror.ExpectedError(err)
+	}
+
+	// {{end}}
+	// {{/*
+} // */}}

@@ -123,73 +123,75 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	// Some operators can result in NULL with non-NULL inputs, like the JSON
-	// fetch value operator, ->. Therefore, _outNulls is defined to allow
-	// updating the output Nulls from within _ASSIGN functions when the result
-	// of a projection is Null.
-	_outNulls := projVec.Nulls()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.HasPrefix(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.HasPrefix(arg, p.constArg)
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = bytes.HasPrefix(arg, p.constArg)
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = bytes.HasPrefix(arg, p.constArg)
 				}
 			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
-					projCol[i] = bytes.HasPrefix(arg, p.constArg)
-				}
-			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-		projVec.SetNulls(_outNulls.Or(colNulls))
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = bytes.HasPrefix(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = bytes.HasPrefix(arg, p.constArg)
-			}
-		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -310,73 +312,75 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	// Some operators can result in NULL with non-NULL inputs, like the JSON
-	// fetch value operator, ->. Therefore, _outNulls is defined to allow
-	// updating the output Nulls from within _ASSIGN functions when the result
-	// of a projection is Null.
-	_outNulls := projVec.Nulls()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.HasSuffix(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.HasSuffix(arg, p.constArg)
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = bytes.HasSuffix(arg, p.constArg)
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = bytes.HasSuffix(arg, p.constArg)
 				}
 			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
-					projCol[i] = bytes.HasSuffix(arg, p.constArg)
-				}
-			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-		projVec.SetNulls(_outNulls.Or(colNulls))
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = bytes.HasSuffix(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = bytes.HasSuffix(arg, p.constArg)
-			}
-		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -497,73 +501,75 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	// Some operators can result in NULL with non-NULL inputs, like the JSON
-	// fetch value operator, ->. Therefore, _outNulls is defined to allow
-	// updating the output Nulls from within _ASSIGN functions when the result
-	// of a projection is Null.
-	_outNulls := projVec.Nulls()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.Contains(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.Contains(arg, p.constArg)
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = bytes.Contains(arg, p.constArg)
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = bytes.Contains(arg, p.constArg)
 				}
 			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
-					projCol[i] = bytes.Contains(arg, p.constArg)
-				}
-			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-		projVec.SetNulls(_outNulls.Or(colNulls))
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = bytes.Contains(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = bytes.Contains(arg, p.constArg)
-			}
-		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -684,73 +690,75 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	// Some operators can result in NULL with non-NULL inputs, like the JSON
-	// fetch value operator, ->. Therefore, _outNulls is defined to allow
-	// updating the output Nulls from within _ASSIGN functions when the result
-	// of a projection is Null.
-	_outNulls := projVec.Nulls()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = p.constArg.Match(arg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = p.constArg.Match(arg)
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = p.constArg.Match(arg)
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Match(arg)
 				}
 			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
-					projCol[i] = p.constArg.Match(arg)
-				}
-			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-		projVec.SetNulls(_outNulls.Or(colNulls))
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = p.constArg.Match(arg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = p.constArg.Match(arg)
-			}
-		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -871,73 +879,75 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	// Some operators can result in NULL with non-NULL inputs, like the JSON
-	// fetch value operator, ->. Therefore, _outNulls is defined to allow
-	// updating the output Nulls from within _ASSIGN functions when the result
-	// of a projection is Null.
-	_outNulls := projVec.Nulls()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.HasPrefix(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.HasPrefix(arg, p.constArg)
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
 				}
 			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
-					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
-				}
-			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-		projVec.SetNulls(_outNulls.Or(colNulls))
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = !bytes.HasPrefix(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = !bytes.HasPrefix(arg, p.constArg)
-			}
-		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -1058,73 +1068,75 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	// Some operators can result in NULL with non-NULL inputs, like the JSON
-	// fetch value operator, ->. Therefore, _outNulls is defined to allow
-	// updating the output Nulls from within _ASSIGN functions when the result
-	// of a projection is Null.
-	_outNulls := projVec.Nulls()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.HasSuffix(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.HasSuffix(arg, p.constArg)
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
 				}
 			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
-					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
-				}
-			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-		projVec.SetNulls(_outNulls.Or(colNulls))
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = !bytes.HasSuffix(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = !bytes.HasSuffix(arg, p.constArg)
-			}
-		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -1245,73 +1257,75 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	// Some operators can result in NULL with non-NULL inputs, like the JSON
-	// fetch value operator, ->. Therefore, _outNulls is defined to allow
-	// updating the output Nulls from within _ASSIGN functions when the result
-	// of a projection is Null.
-	_outNulls := projVec.Nulls()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.Contains(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.Contains(arg, p.constArg)
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = !bytes.Contains(arg, p.constArg)
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !bytes.Contains(arg, p.constArg)
 				}
 			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
-					projCol[i] = !bytes.Contains(arg, p.constArg)
-				}
-			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-		projVec.SetNulls(_outNulls.Or(colNulls))
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = !bytes.Contains(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = !bytes.Contains(arg, p.constArg)
-			}
-		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -1432,73 +1446,75 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	// Some operators can result in NULL with non-NULL inputs, like the JSON
-	// fetch value operator, ->. Therefore, _outNulls is defined to allow
-	// updating the output Nulls from within _ASSIGN functions when the result
-	// of a projection is Null.
-	_outNulls := projVec.Nulls()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !p.constArg.Match(arg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !p.constArg.Match(arg)
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = !p.constArg.Match(arg)
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !p.constArg.Match(arg)
 				}
 			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
-					projCol[i] = !p.constArg.Match(arg)
-				}
-			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
 		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-		projVec.SetNulls(_outNulls.Or(colNulls))
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = !p.constArg.Match(arg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = !p.constArg.Match(arg)
-			}
-		}
-		// _outNulls has been updated from within the _ASSIGN function to include
-		// any NULLs that resulted from the projection.
-		// If $hasNulls is true, union _outNulls with the set of input Nulls.
-		// If $hasNulls is false, then there are no input Nulls. _outNulls is
-		// projVec.Nulls() so there is no need to call projVec.SetNulls().
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 

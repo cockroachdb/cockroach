@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -132,8 +133,6 @@ type _AGG_TYPE_AGGKINDAgg struct {
 
 var _ aggregateFunc = &_AGG_TYPE_AGGKINDAgg{}
 
-const sizeOf_AGG_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(_AGG_TYPE_AGGKINDAgg{}))
-
 func (a *_AGG_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -157,6 +156,15 @@ func (a *_AGG_TYPE_AGGKINDAgg) Reset() {
 func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	// {{if eq .VecMethod "Bytes"}}
+	oldCurAggSize := len(a.curAgg)
+	// {{end}}
+	// {{if eq .VecMethod "Datum"}}
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	}
+	// {{end}}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec._TYPE(), vec.Nulls()
 	a.allocator.PerformOperation(
@@ -197,6 +205,18 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 			}
 		},
 	)
+	// {{if eq .VecMethod "Bytes"}}
+	newCurAggSize := len(a.curAgg)
+	// {{end}}
+	// {{if eq .VecMethod "Datum"}}
+	var newCurAggSize uintptr
+	if a.curAgg != nil {
+		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	}
+	// {{end}}
+	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	// {{end}}
 }
 
 func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
@@ -212,11 +232,19 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
+	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
+	// Release the reference to curAgg eagerly.
+	// {{if eq .VecMethod "Bytes"}}
+	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	// {{else}}
+	if d, ok := a.curAgg.(*coldataext.Datum); ok {
+		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
+	}
+	// {{end}}
+	a.curAgg = nil
+	// {{end}}
 }
 
 type _AGG_TYPE_AGGKINDAggAlloc struct {
@@ -226,9 +254,12 @@ type _AGG_TYPE_AGGKINDAggAlloc struct {
 
 var _ aggregateFuncAlloc = &_AGG_TYPE_AGGKINDAggAlloc{}
 
+const sizeOf_AGG_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(_AGG_TYPE_AGGKINDAgg{}))
+const _AGG_TYPE_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]_AGG_TYPE_AGGKINDAgg{}))
+
 func (a *_AGG_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOf_AGG_TYPE_AGGKINDAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(_AGG_TYPE_AGGKINDAggSliceOverhead + sizeOf_AGG_TYPE_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]_AGG_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -95,8 +96,6 @@ type anyNotNullBoolOrderedAgg struct {
 }
 
 var _ aggregateFunc = &anyNotNullBoolOrderedAgg{}
-
-const sizeOfAnyNotNullBoolOrderedAgg = int64(unsafe.Sizeof(anyNotNullBoolOrderedAgg{}))
 
 func (a *anyNotNullBoolOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -246,9 +245,6 @@ func (a *anyNotNullBoolOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -260,9 +256,12 @@ type anyNotNullBoolOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullBoolOrderedAggAlloc{}
 
+const sizeOfAnyNotNullBoolOrderedAgg = int64(unsafe.Sizeof(anyNotNullBoolOrderedAgg{}))
+const anyNotNullBoolOrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullBoolOrderedAgg{}))
+
 func (a *anyNotNullBoolOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullBoolOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullBoolOrderedAggSliceOverhead + sizeOfAnyNotNullBoolOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullBoolOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -284,8 +283,6 @@ type anyNotNullBytesOrderedAgg struct {
 
 var _ aggregateFunc = &anyNotNullBytesOrderedAgg{}
 
-const sizeOfAnyNotNullBytesOrderedAgg = int64(unsafe.Sizeof(anyNotNullBytesOrderedAgg{}))
-
 func (a *anyNotNullBytesOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -302,6 +299,7 @@ func (a *anyNotNullBytesOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
 
+	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 
@@ -422,6 +420,8 @@ func (a *anyNotNullBytesOrderedAgg) Compute(
 			}
 		},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *anyNotNullBytesOrderedAgg) Flush(outputIdx int) {
@@ -434,11 +434,11 @@ func (a *anyNotNullBytesOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	a.curAgg = nil
 }
 
 type anyNotNullBytesOrderedAggAlloc struct {
@@ -448,9 +448,12 @@ type anyNotNullBytesOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullBytesOrderedAggAlloc{}
 
+const sizeOfAnyNotNullBytesOrderedAgg = int64(unsafe.Sizeof(anyNotNullBytesOrderedAgg{}))
+const anyNotNullBytesOrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullBytesOrderedAgg{}))
+
 func (a *anyNotNullBytesOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullBytesOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullBytesOrderedAggSliceOverhead + sizeOfAnyNotNullBytesOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullBytesOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -471,8 +474,6 @@ type anyNotNullDecimalOrderedAgg struct {
 }
 
 var _ aggregateFunc = &anyNotNullDecimalOrderedAgg{}
-
-const sizeOfAnyNotNullDecimalOrderedAgg = int64(unsafe.Sizeof(anyNotNullDecimalOrderedAgg{}))
 
 func (a *anyNotNullDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -622,9 +623,6 @@ func (a *anyNotNullDecimalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx].Set(&a.curAgg)
 	}
 }
@@ -636,9 +634,12 @@ type anyNotNullDecimalOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullDecimalOrderedAggAlloc{}
 
+const sizeOfAnyNotNullDecimalOrderedAgg = int64(unsafe.Sizeof(anyNotNullDecimalOrderedAgg{}))
+const anyNotNullDecimalOrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullDecimalOrderedAgg{}))
+
 func (a *anyNotNullDecimalOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullDecimalOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullDecimalOrderedAggSliceOverhead + sizeOfAnyNotNullDecimalOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullDecimalOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -659,8 +660,6 @@ type anyNotNullInt16OrderedAgg struct {
 }
 
 var _ aggregateFunc = &anyNotNullInt16OrderedAgg{}
-
-const sizeOfAnyNotNullInt16OrderedAgg = int64(unsafe.Sizeof(anyNotNullInt16OrderedAgg{}))
 
 func (a *anyNotNullInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -810,9 +809,6 @@ func (a *anyNotNullInt16OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -824,9 +820,12 @@ type anyNotNullInt16OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullInt16OrderedAggAlloc{}
 
+const sizeOfAnyNotNullInt16OrderedAgg = int64(unsafe.Sizeof(anyNotNullInt16OrderedAgg{}))
+const anyNotNullInt16OrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullInt16OrderedAgg{}))
+
 func (a *anyNotNullInt16OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullInt16OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullInt16OrderedAggSliceOverhead + sizeOfAnyNotNullInt16OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullInt16OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -847,8 +846,6 @@ type anyNotNullInt32OrderedAgg struct {
 }
 
 var _ aggregateFunc = &anyNotNullInt32OrderedAgg{}
-
-const sizeOfAnyNotNullInt32OrderedAgg = int64(unsafe.Sizeof(anyNotNullInt32OrderedAgg{}))
 
 func (a *anyNotNullInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -998,9 +995,6 @@ func (a *anyNotNullInt32OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -1012,9 +1006,12 @@ type anyNotNullInt32OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullInt32OrderedAggAlloc{}
 
+const sizeOfAnyNotNullInt32OrderedAgg = int64(unsafe.Sizeof(anyNotNullInt32OrderedAgg{}))
+const anyNotNullInt32OrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullInt32OrderedAgg{}))
+
 func (a *anyNotNullInt32OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullInt32OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullInt32OrderedAggSliceOverhead + sizeOfAnyNotNullInt32OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullInt32OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1035,8 +1032,6 @@ type anyNotNullInt64OrderedAgg struct {
 }
 
 var _ aggregateFunc = &anyNotNullInt64OrderedAgg{}
-
-const sizeOfAnyNotNullInt64OrderedAgg = int64(unsafe.Sizeof(anyNotNullInt64OrderedAgg{}))
 
 func (a *anyNotNullInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -1186,9 +1181,6 @@ func (a *anyNotNullInt64OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -1200,9 +1192,12 @@ type anyNotNullInt64OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullInt64OrderedAggAlloc{}
 
+const sizeOfAnyNotNullInt64OrderedAgg = int64(unsafe.Sizeof(anyNotNullInt64OrderedAgg{}))
+const anyNotNullInt64OrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullInt64OrderedAgg{}))
+
 func (a *anyNotNullInt64OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullInt64OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullInt64OrderedAggSliceOverhead + sizeOfAnyNotNullInt64OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullInt64OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1223,8 +1218,6 @@ type anyNotNullFloat64OrderedAgg struct {
 }
 
 var _ aggregateFunc = &anyNotNullFloat64OrderedAgg{}
-
-const sizeOfAnyNotNullFloat64OrderedAgg = int64(unsafe.Sizeof(anyNotNullFloat64OrderedAgg{}))
 
 func (a *anyNotNullFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -1374,9 +1367,6 @@ func (a *anyNotNullFloat64OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -1388,9 +1378,12 @@ type anyNotNullFloat64OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullFloat64OrderedAggAlloc{}
 
+const sizeOfAnyNotNullFloat64OrderedAgg = int64(unsafe.Sizeof(anyNotNullFloat64OrderedAgg{}))
+const anyNotNullFloat64OrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullFloat64OrderedAgg{}))
+
 func (a *anyNotNullFloat64OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullFloat64OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullFloat64OrderedAggSliceOverhead + sizeOfAnyNotNullFloat64OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullFloat64OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1411,8 +1404,6 @@ type anyNotNullTimestampOrderedAgg struct {
 }
 
 var _ aggregateFunc = &anyNotNullTimestampOrderedAgg{}
-
-const sizeOfAnyNotNullTimestampOrderedAgg = int64(unsafe.Sizeof(anyNotNullTimestampOrderedAgg{}))
 
 func (a *anyNotNullTimestampOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -1562,9 +1553,6 @@ func (a *anyNotNullTimestampOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -1576,9 +1564,12 @@ type anyNotNullTimestampOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullTimestampOrderedAggAlloc{}
 
+const sizeOfAnyNotNullTimestampOrderedAgg = int64(unsafe.Sizeof(anyNotNullTimestampOrderedAgg{}))
+const anyNotNullTimestampOrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullTimestampOrderedAgg{}))
+
 func (a *anyNotNullTimestampOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullTimestampOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullTimestampOrderedAggSliceOverhead + sizeOfAnyNotNullTimestampOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullTimestampOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1599,8 +1590,6 @@ type anyNotNullIntervalOrderedAgg struct {
 }
 
 var _ aggregateFunc = &anyNotNullIntervalOrderedAgg{}
-
-const sizeOfAnyNotNullIntervalOrderedAgg = int64(unsafe.Sizeof(anyNotNullIntervalOrderedAgg{}))
 
 func (a *anyNotNullIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -1750,9 +1739,6 @@ func (a *anyNotNullIntervalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -1764,9 +1750,12 @@ type anyNotNullIntervalOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullIntervalOrderedAggAlloc{}
 
+const sizeOfAnyNotNullIntervalOrderedAgg = int64(unsafe.Sizeof(anyNotNullIntervalOrderedAgg{}))
+const anyNotNullIntervalOrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullIntervalOrderedAgg{}))
+
 func (a *anyNotNullIntervalOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullIntervalOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullIntervalOrderedAggSliceOverhead + sizeOfAnyNotNullIntervalOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullIntervalOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1788,8 +1777,6 @@ type anyNotNullDatumOrderedAgg struct {
 
 var _ aggregateFunc = &anyNotNullDatumOrderedAgg{}
 
-const sizeOfAnyNotNullDatumOrderedAgg = int64(unsafe.Sizeof(anyNotNullDatumOrderedAgg{}))
-
 func (a *anyNotNullDatumOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -1806,6 +1793,10 @@ func (a *anyNotNullDatumOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
 
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 
@@ -1926,6 +1917,11 @@ func (a *anyNotNullDatumOrderedAgg) Compute(
 			}
 		},
 	)
+	var newCurAggSize uintptr
+	if a.curAgg != nil {
+		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	}
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *anyNotNullDatumOrderedAgg) Flush(outputIdx int) {
@@ -1938,11 +1934,13 @@ func (a *anyNotNullDatumOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	// Release the reference to curAgg eagerly.
+	if d, ok := a.curAgg.(*coldataext.Datum); ok {
+		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
+	}
+	a.curAgg = nil
 }
 
 type anyNotNullDatumOrderedAggAlloc struct {
@@ -1952,9 +1950,12 @@ type anyNotNullDatumOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &anyNotNullDatumOrderedAggAlloc{}
 
+const sizeOfAnyNotNullDatumOrderedAgg = int64(unsafe.Sizeof(anyNotNullDatumOrderedAgg{}))
+const anyNotNullDatumOrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullDatumOrderedAgg{}))
+
 func (a *anyNotNullDatumOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNullDatumOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(anyNotNullDatumOrderedAggSliceOverhead + sizeOfAnyNotNullDatumOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullDatumOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
