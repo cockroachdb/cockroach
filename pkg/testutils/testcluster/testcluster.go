@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -82,7 +83,7 @@ func (tc *TestCluster) Stopper() *stop.Stopper {
 // stopServers stops the stoppers for each individual server in the cluster.
 // This method ensures that servers that were previously stopped explicitly are
 // not double-stopped.
-func (tc *TestCluster) stopServers() {
+func (tc *TestCluster) stopServers(ctx context.Context) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -90,15 +91,17 @@ func (tc *TestCluster) stopServers() {
 	// serially when we lose quorum (2 out of 3 servers have stopped) the last
 	// server may never finish due to waiting for a Raft command that can't
 	// commit due to the lack of quorum.
+	log.Infof(ctx, "TestCluster quiescing nodes")
 	var wg sync.WaitGroup
 	wg.Add(len(tc.mu.serverStoppers))
-	for _, s := range tc.mu.serverStoppers {
-		go func(s *stop.Stopper) {
+	for i, s := range tc.mu.serverStoppers {
+		go func(i int, s *stop.Stopper) {
 			defer wg.Done()
 			if s != nil {
-				s.Quiesce(context.TODO())
+				quiesceCtx := logtags.AddTag(ctx, "n", tc.Servers[i].NodeID())
+				s.Quiesce(quiesceCtx)
 			}
-		}(s)
+		}(i, s)
 	}
 	wg.Wait()
 
@@ -282,7 +285,7 @@ func (tc *TestCluster) Start(t testing.TB) {
 
 	// Create a closer that will stop the individual server stoppers when the
 	// cluster stopper is stopped.
-	tc.stopper.AddCloser(stop.CloserFn(tc.stopServers))
+	tc.stopper.AddCloser(stop.CloserFn(func() { tc.stopServers(context.TODO()) }))
 
 	if tc.clusterArgs.ReplicationMode == base.ReplicationAuto {
 		if err := tc.WaitForFullReplication(); err != nil {
