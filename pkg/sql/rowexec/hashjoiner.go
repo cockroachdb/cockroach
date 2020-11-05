@@ -158,6 +158,7 @@ func newHashJoiner(
 		spec.OnExpr,
 		spec.LeftEqColumns,
 		spec.RightEqColumns,
+		false, /* outputContinuationColumn */
 		post,
 		output,
 		execinfra.ProcStateOpts{
