@@ -164,20 +164,25 @@ vectorized: false
                     │
                     └── • render
                         │
-                        └── • virtual table lookup join
-                            │ table: pg_class@pg_class_oid_idx
-                            │ equality: (confrelid) = (oid)
+                        └── • merge join
+                            │ equality: (oid) = (confrelid)
+                            │
+                            ├── • virtual table
+                            │     table: pg_class@pg_class_oid_idx
                             │
                             └── • virtual table lookup join
                                 │ table: pg_class@pg_class_oid_idx
                                 │ equality: (conrelid) = (oid)
                                 │ pred: oid = 'b'::REGCLASS
                                 │
-                                └── • filter
-                                    │ filter: (conrelid = 'b'::REGCLASS) AND (contype = 'f')
+                                └── • sort
+                                    │ order: +confrelid
                                     │
-                                    └── • virtual table
-                                          table: pg_constraint@primary
+                                    └── • filter
+                                        │ filter: (conrelid = 'b'::REGCLASS) AND (contype = 'f')
+                                        │
+                                        └── • virtual table
+                                              table: pg_constraint@primary
 
 # Test that limits are respected.
 query T
