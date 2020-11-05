@@ -25,7 +25,9 @@ func TestStartSpanAlwaysTrace(t *testing.T) {
 	tr := NewTracer()
 	tr._useNetTrace = 1
 	require.True(t, tr.AlwaysTrace())
-	sp := tr.StartSpan("foo", WithRemoteParent(nil))
+	nilMeta := tr.noopSpan.Meta()
+	require.Nil(t, nilMeta)
+	sp := tr.StartSpan("foo", WithRemoteParent(nilMeta))
 	require.False(t, sp.IsBlackHole())
 	require.False(t, sp.isNoop())
 	sp = tr.StartSpan("foo", WithParent(tr.noopSpan))
