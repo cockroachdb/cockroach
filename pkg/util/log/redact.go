@@ -159,8 +159,8 @@ func redactTags(ctx context.Context, buf *strings.Builder) {
 // See the discussion on SetupRedactionAndStderrRedirects() for
 // details.
 func TestingSetRedactable(redactableLogs bool) (cleanup func()) {
-	prev := mainLog.redactableLogs.Swap(redactableLogs)
+	prev := debugLog.redactableLogs.Swap(redactableLogs)
 	return func() {
-		mainLog.redactableLogs.Set(prev)
+		debugLog.redactableLogs.Set(prev)
 	}
 }
