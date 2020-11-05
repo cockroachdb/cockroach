@@ -304,7 +304,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b STRING COLLATE de)`},
 		{`CREATE TABLE a (b STRING(3) COLLATE de)`},
 		{`CREATE TABLE a (b STRING[] COLLATE de)`},
-		{`CREATE TABLE a (b STRING(3)[] COLLATE de)`},
+		{`CREATE TABLE a (b STRING(3)[] COLLATE en_US)`},
 
 		{`CREATE TABLE a (LIKE b)`},
 		{`CREATE TABLE a (LIKE b, c INT8)`},
@@ -2607,8 +2607,29 @@ SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS,
 		{`SELECT 1::db.int4.typ array`, `SELECT 1::db.int4.typ[]`},
 		{`CREATE TABLE t (x int4.type array [1])`, `CREATE TABLE t (x int4.type[])`},
 
-		{`ALTER TYPE t OWNER TO CURRENT_USER`, "ALTER TYPE t OWNER TO \"current_user\""},
-		{`ALTER TYPE t OWNER TO SESSION_USER`, "ALTER TYPE t OWNER TO \"session_user\""},
+		{`ALTER TYPE t OWNER TO CURRENT_USER`, `ALTER TYPE t OWNER TO "current_user"`},
+		{`ALTER TYPE t OWNER TO SESSION_USER`, `ALTER TYPE t OWNER TO "session_user"`},
+
+		{`REASSIGN OWNED BY CURRENT_USER TO foo`, `REASSIGN OWNED BY "current_user" TO foo`},
+		{`REASSIGN OWNED BY SESSION_USER TO foo`, `REASSIGN OWNED BY "session_user" TO foo`},
+		{`DROP OWNED BY CURRENT_USER`, `DROP OWNED BY "current_user"`},
+		{`DROP OWNED BY SESSION_USER`, `DROP OWNED BY "session_user"`},
+
+		// Validate that GRANT and REVOKE can accept optional PRIVILEGES syntax
+		{`GRANT ALL PRIVILEGES ON DATABASE foo TO root`, `GRANT ALL ON DATABASE foo TO root`},
+		{`GRANT ALL PRIVILEGES ON TABLE foo TO root`, `GRANT ALL ON TABLE foo TO root`},
+		{`GRANT ALL PRIVILEGES ON SCHEMA foo TO root`, `GRANT ALL ON SCHEMA foo TO root`},
+		{`GRANT ALL PRIVILEGES ON SCHEMA foo.bar TO root`, `GRANT ALL ON SCHEMA foo.bar TO root`},
+		{`GRANT ALL PRIVILEGES ON SCHEMA a.b, c.d TO root`, `GRANT ALL ON SCHEMA a.b, c.d TO root`},
+		{`REVOKE ALL PRIVILEGES ON DATABASE foo FROM root`, `REVOKE ALL ON DATABASE foo FROM root`},
+		{`REVOKE ALL PRIVILEGES ON TABLE foo FROM root`, `REVOKE ALL ON TABLE foo FROM root`},
+		{`REVOKE ALL PRIVILEGES ON SCHEMA foo FROM root`, `REVOKE ALL ON SCHEMA foo FROM root`},
+		{`REVOKE ALL PRIVILEGES ON SCHEMA foo.bar FROM root`, `REVOKE ALL ON SCHEMA foo.bar FROM root`},
+		{`REVOKE ALL PRIVILEGES ON SCHEMA a.b, c.d FROM root`, `REVOKE ALL ON SCHEMA a.b, c.d FROM root`},
+
+		// Check rules for normalizing collation names.
+		{`CREATE TABLE a (b STRING COLLATE "en-us")`, `CREATE TABLE a (b STRING COLLATE en_US)`},
+		{`CREATE TABLE a (b STRING COLLATE en_us)`, `CREATE TABLE a (b STRING COLLATE en_US)`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
