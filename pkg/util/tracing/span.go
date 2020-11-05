@@ -213,14 +213,12 @@ func (s *Span) IsRecording() bool {
 // parent.
 // If separate recording is specified, the child is not registered with the
 // parent. Thus, the parent's recording will not include this child.
-func (s *crdbSpan) enableRecording(
-	parent *crdbSpan, recType RecordingType, separateRecording bool,
-) {
+func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	atomic.StoreInt32(&s.recording, 1)
 	s.mu.recording.recordingType = recType
-	if parent != nil && !separateRecording {
+	if parent != nil {
 		parent.addChild(s)
 	}
 	if recType == SnowballRecording {
@@ -257,7 +255,7 @@ func (s *Span) StartRecording(recType RecordingType) {
 	// If we're already recording (perhaps because the parent was recording when
 	// this Span was created), there's nothing to do.
 	if !s.crdb.isRecording() {
-		s.crdb.enableRecording(nil /* parent */, recType, false /* separateRecording */)
+		s.crdb.enableRecording(nil /* parent */, recType)
 	}
 }
 
