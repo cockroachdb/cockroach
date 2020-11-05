@@ -10,24 +10,13 @@
 
 package log
 
-import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-)
+import "context"
 
 // SecondaryLogger represents a secondary / auxiliary logging channel
 // whose logging events go to a different file than the main logging
 // facility.
 type SecondaryLogger struct {
 	logger loggerT
-}
-
-var secondaryLogRegistry struct {
-	mu struct {
-		syncutil.Mutex
-		loggers []*SecondaryLogger
-	}
 }
 
 // NewSecondaryLogger creates a secondary logger.
@@ -75,9 +64,7 @@ func NewSecondaryLogger(
 	l.logger.redactableLogs.Set(logging.redactableLogs)
 
 	// Ensure the registry knows about this logger.
-	secondaryLogRegistry.mu.Lock()
-	secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers, l)
-	secondaryLogRegistry.mu.Unlock()
+	registry.put(&l.logger)
 
 	if enableGc {
 		// Start the log file GC for the secondary logger.
@@ -88,20 +75,7 @@ func NewSecondaryLogger(
 }
 
 // Close implements the stopper.Closer interface.
-func (l *SecondaryLogger) Close() {
-	// Make the registry forget about this logger. This avoids
-	// stacking many secondary loggers together when there are
-	// subsequent tests starting servers in the same package.
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for i, thatLogger := range secondaryLogRegistry.mu.loggers {
-		if thatLogger != l {
-			continue
-		}
-		secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers[:i], secondaryLogRegistry.mu.loggers[i+1:]...)
-		return
-	}
-}
+func (l *SecondaryLogger) Close() { registry.del(&l.logger) }
 
 func (l *SecondaryLogger) output(
 	ctx context.Context, depth int, sev Severity, format string, args ...interface{},

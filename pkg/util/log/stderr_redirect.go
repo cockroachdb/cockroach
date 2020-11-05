@@ -144,17 +144,12 @@ func anyLoggerHasInternalStderrOwnership() bool {
 	if debugLogHasOwnership {
 		return true
 	}
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, secL := range secondaryLogRegistry.mu.loggers {
-		secL.logger.mu.Lock()
-		hasOwnership := secL.logger.mu.redirectInternalStderrWrites
-		secL.logger.mu.Unlock()
-		if hasOwnership {
-			return true
-		}
-	}
-	return false
+	hasOwnership := false
+	_ = registry.iterLocked(func(l *loggerT) error {
+		hasOwnership = hasOwnership || l.mu.redirectInternalStderrWrites
+		return nil
+	})
+	return hasOwnership
 }
 
 var takeOverStderrMu struct {
