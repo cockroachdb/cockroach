@@ -54,6 +54,105 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 	return newGeoBoundPreFilterer(typ, expr)
 }
 
+// TryFilterInvertedIndex tries to derive an inverted filter condition for
+// the given inverted index from the specified filters. If an inverted filter
+// condition is derived, it is returned with ok=true. If no condition can be
+// derived, then TryFilterInvertedIndex returns ok=false.
+//
+// In addition to the inverted filter condition (spanExpr), returns:
+// - a constraint of the prefix columns if there are any,
+// - remaining filters that must be applied if the span expression is not tight,
+//   and
+// - pre-filterer state that can be used by the invertedFilterer operator to
+//   reduce the number of false positives returned by the span expression.
+func TryFilterInvertedIndex(
+	evalCtx *tree.EvalContext,
+	factory *norm.Factory,
+	filters memo.FiltersExpr,
+	optionalFilters memo.FiltersExpr,
+	tabID opt.TableID,
+	index cat.Index,
+) (
+	spanExpr *invertedexpr.SpanExpression,
+	constraint *constraint.Constraint,
+	remainingFilters memo.FiltersExpr,
+	preFiltererState *invertedexpr.PreFiltererStateForInvertedFilterer,
+	ok bool,
+) {
+	// Attempt to constrain the prefix columns, if there are any. If they cannot
+	// be constrained to single values, the index cannot be used.
+	constraint, filters, ok = constrainPrefixColumns(
+		evalCtx, factory, filters, optionalFilters, tabID, index,
+	)
+	if !ok {
+		return nil, nil, nil, nil, false
+	}
+
+	config := index.GeoConfig()
+	var typ *types.T
+	var filterPlanner invertedFilterPlanner
+	if geoindex.IsGeographyConfig(config) {
+		filterPlanner = &geoFilterPlanner{
+			factory:     factory,
+			tabID:       tabID,
+			index:       index,
+			getSpanExpr: getSpanExprForGeographyIndex,
+		}
+		typ = types.Geography
+	} else if geoindex.IsGeometryConfig(config) {
+		filterPlanner = &geoFilterPlanner{
+			factory:     factory,
+			tabID:       tabID,
+			index:       index,
+			getSpanExpr: getSpanExprForGeometryIndex,
+		}
+		typ = types.Geometry
+	} else {
+		filterPlanner = &jsonOrArrayFilterPlanner{
+			tabID: tabID,
+			index: index,
+		}
+		col := index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()
+		typ = factory.Metadata().Table(tabID).Column(col).DatumType()
+	}
+
+	var invertedExpr invertedexpr.InvertedExpression
+	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
+	for i := range filters {
+		invertedExprLocal, remFiltersLocal, pfStateLocal := extractInvertedFilterCondition(
+			evalCtx, factory, filters[i].Condition, filterPlanner,
+		)
+		if invertedExpr == nil {
+			invertedExpr = invertedExprLocal
+			pfState = pfStateLocal
+		} else {
+			invertedExpr = invertedexpr.And(invertedExpr, invertedExprLocal)
+			// Do pre-filtering using the first of the conjuncts that provided
+			// non-nil pre-filtering state.
+			if pfState == nil {
+				pfState = pfStateLocal
+			}
+		}
+		if remFiltersLocal != nil {
+			remainingFilters = append(remainingFilters, factory.ConstructFiltersItem(remFiltersLocal))
+		}
+	}
+
+	if invertedExpr == nil {
+		return nil, nil, nil, nil, false
+	}
+
+	spanExpr, ok = invertedExpr.(*invertedexpr.SpanExpression)
+	if !ok {
+		return nil, nil, nil, nil, false
+	}
+	if pfState != nil {
+		pfState.Typ = typ
+	}
+
+	return spanExpr, constraint, remainingFilters, pfState, true
+}
+
 // TryJoinInvertedIndex tries to create an inverted join with the given input
 // and inverted index from the specified filters. If a join is created, the
 // inverted join condition is returned. If no join can be created, then
@@ -326,4 +425,75 @@ func constrainPrefixColumns(
 	copy := *constraint
 	remainingFilters = ic.RemainingFilters()
 	return &copy, remainingFilters, true
+}
+
+type invertedFilterPlanner interface {
+	// extractInvertedFilterConditionFromLeaf extracts an inverted filter
+	// condition from the given expression, which represents a leaf of an
+	// expression tree in which the internal nodes are And and/or Or expressions.
+	// Returns an empty InvertedExpression if no inverted filter condition could
+	// be extracted.
+	//
+	// Additionally, returns:
+	// - remaining filters that must be applied if the inverted expression is not
+	//   tight, and
+	// - pre-filterer state that can be used to reduce false positives.
+	extractInvertedFilterConditionFromLeaf(evalCtx *tree.EvalContext, expr opt.ScalarExpr) (
+		invertedExpr invertedexpr.InvertedExpression,
+		remainingFilters opt.ScalarExpr,
+		_ *invertedexpr.PreFiltererStateForInvertedFilterer,
+	)
+}
+
+// extractInvertedFilterCondition extracts an InvertedExpression from the given
+// filter condition, where the InvertedExpression represents an inverted filter
+// over the given inverted index. Returns an empty InvertedExpression if no
+// inverted filter condition could be extracted.
+//
+// The filter condition should be an expression tree of And, Or, and leaf
+// expressions. Extraction of the InvertedExpression from the leaves is
+// delegated to the given invertedFilterPlanner.
+//
+// In addition to the InvertedExpression, returns:
+// - remaining filters that must be applied if the inverted expression is not
+//   tight, and
+// - pre-filterer state that can be used to reduce false positives. This is
+//   only non-nil if filterCond is a leaf condition (i.e., has no ANDs or ORs).
+func extractInvertedFilterCondition(
+	evalCtx *tree.EvalContext,
+	factory *norm.Factory,
+	filterCond opt.ScalarExpr,
+	filterPlanner invertedFilterPlanner,
+) (
+	invertedExpr invertedexpr.InvertedExpression,
+	remainingFilters opt.ScalarExpr,
+	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
+) {
+	switch t := filterCond.(type) {
+	case *memo.AndExpr:
+		l, remLeft, _ := extractInvertedFilterCondition(evalCtx, factory, t.Left, filterPlanner)
+		r, remRight, _ := extractInvertedFilterCondition(evalCtx, factory, t.Right, filterPlanner)
+		if remLeft == nil {
+			remainingFilters = remRight
+		} else if remRight == nil {
+			remainingFilters = remLeft
+		} else {
+			remainingFilters = factory.ConstructAnd(remLeft, remRight)
+		}
+		return invertedexpr.And(l, r), remainingFilters, nil
+
+	case *memo.OrExpr:
+		l, remLeft, _ := extractInvertedFilterCondition(evalCtx, factory, t.Left, filterPlanner)
+		r, remRight, _ := extractInvertedFilterCondition(evalCtx, factory, t.Right, filterPlanner)
+		if remLeft != nil || remRight != nil {
+			// If either child has remaining filters, we must return the original
+			// condition as the remaining filter. It would be incorrect to return
+			// only part of the original condition.
+			remainingFilters = filterCond
+		}
+		return invertedexpr.Or(l, r), remainingFilters, nil
+
+	default:
+		return filterPlanner.extractInvertedFilterConditionFromLeaf(evalCtx, filterCond)
+	}
 }
