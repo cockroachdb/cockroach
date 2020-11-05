@@ -99,6 +99,8 @@ func PrepareTransactionForRetry(
 			now := clock.Now()
 			txn.WriteTimestamp.Forward(now)
 		}
+	case *AncestorAbortedError:
+
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
 		txn.WriteTimestamp.Forward(tErr.RetryTimestamp())

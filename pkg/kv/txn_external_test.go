@@ -13,6 +13,7 @@ package kv_test
 import (
 	"context"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -898,4 +899,109 @@ func TestChildTransactionMetadataPropagates(t *testing.T) {
 	state.Lock()
 	defer state.Unlock()
 	require.True(t, state.called)
+}
+
+// TestChildTransactionDeadlockDetection tests that deadlock cycles involving
+// child transactions and parents are properly detected and broken.
+func TestChildTransactionDeadlockDetection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Server(0).DB()
+	var wg sync.WaitGroup
+
+	// runTxn will run a transaction which first performs an initPut to
+	// (parentKey, parentVal), then closes afterWrite (if not closed), then
+	// waits on beforeChild, then, in a ChildTxn, performs an initPut to
+	// (childKey, childVal). It will drive the below deadlock scenario.
+	runTxn := func(
+		parentKey, childKey roachpb.Key,
+		parentVal, childVal string,
+		afterWrite, beforeChild chan struct{},
+		res *error,
+	) {
+		defer wg.Done()
+		*res = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			const failOnTombstones = false
+			if err := txn.InitPut(ctx, parentKey, parentVal, failOnTombstones); err != nil {
+				return err
+			}
+			select {
+			case <-afterWrite:
+			default:
+				close(afterWrite)
+			}
+			<-beforeChild
+			return txn.ChildTxn(ctx, func(ctx context.Context, child *kv.Txn) error {
+				return child.InitPut(ctx, childKey, childVal, failOnTombstones)
+			})
+		})
+	}
+
+	// We're going to create the below scenario:
+	//
+	//          .-------------------------------------------------------.
+	//          |                                                       |
+	//          v                                                       |
+	//    [txnA record]     [txnA2 record] --> [txnB record]     [txnB2 record]
+	//
+	// We'll ensure that this cycle is broken because the children query parents.
+	//
+	//          .-------------------------------------------------------.
+	//          | .......................................               |
+	//          | .  .................................  .               |
+	//          v .  v                               .  v               |
+	//    [txnA record]     [txnA2 record] --> [txnB record]     [txnB2 record]
+	//     deps:                                deps:
+	//     - txnB2                               - txnA2
+	scratch := tc.ScratchRange(t)
+	keyA := append(scratch[:len(scratch):len(scratch)], 'a')
+	keyB := append(scratch[:len(scratch):len(scratch)], 'b')
+	const (
+		aValA, aValB = "foo", "bar"
+		bValB, bValA = "baz", "bax"
+	)
+	var errA, errB error
+	aChan, bChan := make(chan struct{}), make(chan struct{})
+	wg.Add(2)
+	go runTxn(keyA, keyB, aValA, aValB, aChan, bChan, &errA)
+	go runTxn(keyB, keyA, bValB, bValA, bChan, aChan, &errB)
+	wg.Wait()
+	// The invariants are that:
+	//  * This always makes progress.
+	//  * Both transactions cannot commit fully.
+	//
+	// Without any transaction timeouts, the two possible outcomes should be
+	// either that A and its child succeed or that B and its child succeed.
+	//
+	// There are some extreme scenarios which can happen under transaction
+	// expiration due to failure to heartbeat transaction records whereby A ends
+	// up getting aborted because of an expiration and A1 does not notice.
+	// Similarly, that can happen for B1. Lastly, in theory, that could happen for
+	// both of them. We do not anticipate or allow these scenarios.
+	if (errA == nil) == (errB == nil) {
+		t.Errorf("expected one of %v and %v to be nil", errA, errB)
+	}
+	getKeyAsString := func(key roachpb.Key) string {
+		t.Helper()
+		got, err := db.Get(ctx, key)
+		require.NoError(t, err)
+		if !got.Exists() {
+			return ""
+		}
+		gotBytes, err := got.Value.GetBytes()
+		require.NoError(t, err)
+		return string(gotBytes)
+	}
+	strA := getKeyAsString(keyA)
+	strB := getKeyAsString(keyB)
+	switch {
+	case strA == aValA && strB == aValB:
+	case strA == bValA && strB == bValB:
+	default:
+		t.Fatalf("unexpected outcome: a=%s, b=%s", strA, strB)
+	}
 }

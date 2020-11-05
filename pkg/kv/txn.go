@@ -1652,12 +1652,11 @@ func (txn *Txn) ChildTxn(
 
 	if paErr := (*kvpb.AncestorAbortedError)(nil); errors.As(err, &paErr) &&
 		paErr.AncestorTxn.ID == txn.ID() {
-		err = kvpb.NewTransactionRetryWithProtoRefreshError(
-			"child detected",
-			txn.ID(),
-			paErr.AncestorTxn)
-		return txn.UpdateStateOnRemoteRetryableErr(ctx, kvpb.NewError(err))
-
+		pErr := kvpb.NewErrorWithTxn(
+			kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_ABORTED_RECORD_FOUND),
+			&paErr.AncestorTxn,
+		)
+		return txn.UpdateStateOnRemoteRetryableErr(ctx, pErr)
 	}
 	// TODO(ajwerner): Push the parent transaction to the commit timestamp of the
 	// child.
