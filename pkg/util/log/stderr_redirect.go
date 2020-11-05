@@ -138,12 +138,6 @@ func (l *loggerT) relinquishInternalStderr() error {
 //
 // Used by takeOverInternalStderr() to enforce its invariant.
 func anyLoggerHasInternalStderrOwnership() bool {
-	debugLog.mu.Lock()
-	debugLogHasOwnership := debugLog.mu.redirectInternalStderrWrites
-	debugLog.mu.Unlock()
-	if debugLogHasOwnership {
-		return true
-	}
 	hasOwnership := false
 	_ = registry.iterLocked(func(l *loggerT) error {
 		hasOwnership = hasOwnership || l.mu.redirectInternalStderrWrites

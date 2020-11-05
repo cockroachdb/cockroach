@@ -278,16 +278,11 @@ func createSymlink(fname, symlink string) {
 
 // ListLogFiles returns a slice of FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
-func ListLogFiles() ([]FileInfo, error) {
-	mainDir, isSet := debugLog.logDir.get()
+func ListLogFiles() (logFiles []FileInfo, err error) {
+	mainDir, isSet := logging.logDir.get()
 	if !isSet {
 		// Shortcut.
 		return nil, nil
-	}
-
-	logFiles, err := debugLog.listLogFiles()
-	if err != nil {
-		return nil, err
 	}
 
 	err = registry.iter(func(l *loggerT) error {

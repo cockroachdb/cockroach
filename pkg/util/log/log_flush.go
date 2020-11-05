@@ -31,7 +31,6 @@ type flushSyncWriter interface {
 // flushes, and signalFlusher() that manages flushes in reaction to a
 // user signal.
 func Flush() {
-	debugLog.lockAndFlushAndSync(true /*doSync*/)
 	_ = registry.iter(func(l *loggerT) error {
 		l.lockAndFlushAndSync(true /*doSync*/)
 		return nil
@@ -82,11 +81,8 @@ func flushDaemon() {
 		disableDaemons := logging.mu.disableDaemons
 		logging.mu.Unlock()
 
-		// Flush the main log.
 		if !disableDaemons {
-			debugLog.lockAndFlushAndSync(doSync)
-
-			// Flush the secondary logs.
+			// Flush the loggers.
 			_ = registry.iter(func(l *loggerT) error {
 				l.lockAndFlushAndSync(doSync)
 				return nil

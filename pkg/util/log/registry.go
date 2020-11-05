@@ -21,6 +21,24 @@ type loggerRegistry struct {
 
 var registry = loggerRegistry{}
 
+// debugLog is the logger instance for “general” logging messages,
+// that is, those not going to a specialized secondary logger.
+var debugLog loggerT
+
+func init() {
+	// Make debugLog known to the registry.
+	// this ensures that all iterations also traverse
+	// debugLog.
+	registry.put(&debugLog)
+}
+
+// stderrLog is the logger where writes performed directly
+// to the stderr file descriptor (such as that performed
+// by the go runtime) *may* be redirected.
+// NB: whether they are actually redirected is determined
+// by stderrLog.redirectInternalStderrWrites().
+var stderrLog = &debugLog
+
 // len returns the number of known loggers.
 func (r *loggerRegistry) len() int {
 	r.mu.Lock()
