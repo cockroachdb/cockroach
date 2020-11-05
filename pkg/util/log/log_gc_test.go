@@ -38,7 +38,7 @@ func TestSecondaryGC(t *testing.T) {
 
 	setFlags()
 
-	tmpDir, err := ioutil.TempDir(mainLog.logDir.String(), "gctest")
+	tmpDir, err := ioutil.TempDir(logging.logDir.String(), "gctest")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,15 +75,12 @@ func testLogGC(
 
 	const newLogFiles = 20
 
-	// Ensure the main log has at least one entry. This serves two
+	// Make an entry in the target logger. This ensures That there is at
+	// least one file in the target directory for the logger being
+	// tested. This serves two
 	// purposes. One is to serve as baseline for the file size. The
 	// other is to ensure that the TestLogScope does not erase the
 	// temporary directory, preventing further investigation.
-	Infof(context.Background(), "0")
-
-	// Make an entry in the target logger. This ensures That there is at
-	// least one file in the target directory for the logger being
-	// tested.
 	logFn(context.Background(), "0")
 
 	// Check that the file was created.
@@ -115,12 +112,12 @@ func testLogGC(
 	// We want to create multiple log files below. For this we need to
 	// override the size/number limits first to the values suitable for
 	// the test.
-	defer func(previous int64) { logFileMaxSize = previous }(logFileMaxSize)
-	logFileMaxSize = 1 // ensure rotation on every log write
+	defer func(previous int64) { logger.logFileMaxSize = previous }(logger.logFileMaxSize)
+	logger.logFileMaxSize = 1 // ensure rotation on every log write
 	defer func(previous int64) {
-		atomic.StoreInt64(&logFilesCombinedMaxSize, previous)
-	}(logFilesCombinedMaxSize)
-	atomic.StoreInt64(&logFilesCombinedMaxSize, maxTotalLogFileSize)
+		atomic.StoreInt64(&logger.logFilesCombinedMaxSize, previous)
+	}(logger.logFilesCombinedMaxSize)
+	atomic.StoreInt64(&logger.logFilesCombinedMaxSize, maxTotalLogFileSize)
 
 	// Create the number of expected log files.
 	for i := 1; i < newLogFiles; i++ {

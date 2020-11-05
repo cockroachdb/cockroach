@@ -699,15 +699,15 @@ If problems persist, please see %s.`
 	select {
 	case err := <-errChan:
 		// SetSync both flushes and ensures that subsequent log writes are flushed too.
-		log.SetSync(true)
+		log.StartSync()
 		return err
 
 	case <-stopper.ShouldStop():
 		// Server is being stopped externally and our job is finished
 		// here since we don't know if it's a graceful shutdown or not.
 		<-stopper.IsStopped()
-		// SetSync both flushes and ensures that subsequent log writes are flushed too.
-		log.SetSync(true)
+		// StartSync both flushes and ensures that subsequent log writes are flushed too.
+		log.StartSync()
 		return nil
 
 	case sig := <-signalCh:
@@ -715,7 +715,7 @@ If problems persist, please see %s.`
 		// signal was received there is a non-zero chance the sender of
 		// this signal will follow up with SIGKILL if the shutdown is not
 		// timely, and we don't want logs to be lost.
-		log.SetSync(true)
+		log.StartSync()
 
 		log.Infof(shutdownCtx, "received signal '%s'", sig)
 

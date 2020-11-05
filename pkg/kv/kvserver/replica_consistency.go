@@ -298,7 +298,7 @@ func (r *Replica) CheckConsistency(
 	//
 	// See:
 	// https://github.com/cockroachdb/cockroach/issues/36861
-	defer log.TemporarilyDisableFileGC()()
+	defer log.TemporarilyDisableFileGCForMainLogger()()
 
 	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
 		log.Errorf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
