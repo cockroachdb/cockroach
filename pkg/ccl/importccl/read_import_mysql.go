@@ -291,6 +291,7 @@ func readMysqlCreateTable(
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
 	owner security.SQLUsername,
+	walltime int64,
 ) ([]*tabledesc.Mutable, error) {
 	match = lexbase.NormalizeName(match)
 	r := bufio.NewReaderSize(input, 1024*64)
@@ -322,7 +323,7 @@ func readMysqlCreateTable(
 				continue
 			}
 			id := descpb.ID(int(startingID) + len(ret))
-			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentID, id, name, i.TableSpec, fks, seqVals, owner)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentID, id, name, i.TableSpec, fks, seqVals, owner, walltime)
 			if err != nil {
 				return nil, err
 			}
@@ -369,12 +370,13 @@ func mysqlTableToCockroach(
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
 	owner security.SQLUsername,
+	walltime int64,
 ) ([]*tabledesc.Mutable, []delayedFK, error) {
 	if in == nil {
 		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupported type?)", name)
 	}
 
-	time := hlc.Timestamp{WallTime: evalCtx.GetStmtTimestamp().UnixNano()}
+	time := hlc.Timestamp{WallTime: walltime}
 
 	const seqOpt = "auto_increment="
 	var seqName string

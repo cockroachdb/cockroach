@@ -816,6 +816,7 @@ func importPlanHook(
 			Oversample:        oversample,
 			SkipFKs:           skipFKs,
 			ParseBundleSchema: importStmt.Bundle,
+			Walltime:          walltime,
 		}
 
 		// Prepare the protected timestamp record.
@@ -1224,7 +1225,7 @@ func parseAndCreateBundleTableDescs(
 	switch format.Format {
 	case roachpb.IOFileFormat_Mysqldump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
-		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner)
+		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner, walltime)
 	case roachpb.IOFileFormat_PgDump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
 		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID, walltime, fks, int(format.PgDump.MaxRowSize), owner)
@@ -1263,7 +1264,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 
 		var tableDescs []*tabledesc.Mutable
 		var err error
-		walltime := p.ExecCfg().Clock.Now().WallTime
+		walltime := details.Walltime
 
 		if tableDescs, err = parseAndCreateBundleTableDescs(
 			ctx, p, details, seqVals, skipFKs, parentID, files, format, walltime, owner); err != nil {
@@ -1292,6 +1293,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		// Prevent job from redoing schema parsing and table desc creation
 		// on subsequent resumptions.
 		details.ParseBundleSchema = false
+		details.Walltime = 0
 		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
 			return err
 		}
