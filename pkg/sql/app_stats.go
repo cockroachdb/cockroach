@@ -126,7 +126,8 @@ var txnStatsEnable = settings.RegisterPublicBoolSetting(
 // consumed by a SQL statement before it is collected for statistics reporting.
 var sqlStatsCollectionLatencyThreshold = settings.RegisterPublicDurationSetting(
 	"sql.metrics.statement_details.threshold",
-	"minimum execution time to cause statistics to be collected",
+	"minimum execution time to cause statement statistics to be collected. "+
+		"If configured, no transaction stats are collected.",
 	0,
 )
 
@@ -415,10 +416,11 @@ func (a *appStats) recordTransaction(
 	if !txnStatsEnable.Get(&a.st.SV) {
 		return
 	}
-	// Only collect stats if the transaction service time is above the configured
-	// stats collection latency threshold.
+	// Do not collect transaction statistics if the stats collection latency
+	// threshold is set, since our transaction UI relies on having stats for every
+	// statement in the transaction.
 	t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV)
-	if t > 0 && t.Seconds() >= serviceLat.Seconds() {
+	if t > 0 {
 		return
 	}
 
