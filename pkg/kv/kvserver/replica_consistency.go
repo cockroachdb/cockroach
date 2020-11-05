@@ -612,7 +612,7 @@ func (r *Replica) sha512(
 		if _, err := hasher.Write(unsafeKey.Key); err != nil {
 			return err
 		}
-		legacyTimestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
+		legacyTimestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 		if size := legacyTimestamp.Size(); size > cap(timestampBuf) {
 			timestampBuf = make([]byte, size)
 		} else {

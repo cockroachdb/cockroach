@@ -250,7 +250,7 @@ func processReplicatedKeyRange(
 		if meta.Txn != nil {
 			// Keep track of intent to resolve if older than the intent
 			// expiration threshold.
-			if hlc.Timestamp(meta.Timestamp).Less(intentExp) {
+			if meta.Timestamp.ToTimestamp().Less(intentExp) {
 				txnID := meta.Txn.ID
 				if _, ok := txnMap[txnID]; !ok {
 					txnMap[txnID] = &roachpb.Transaction{
