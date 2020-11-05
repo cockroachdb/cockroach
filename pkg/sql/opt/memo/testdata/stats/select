@@ -860,7 +860,8 @@ index-join t_json_arr
  ├── fd: (1)-->(2-4)
  └── scan t_json_arr@b_idx
       ├── columns: a:1(int!null)
-      ├── constraint: /2/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       ├── stats: [rows=555.555556]
       └── key: (1)
 
