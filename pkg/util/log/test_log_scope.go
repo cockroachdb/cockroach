@@ -98,9 +98,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// Refuse to work "under" secondary loggers (saving+restoring
 	// state for secondary loggers is not implemented yet).
 	func() {
-		secondaryLogRegistry.mu.Lock()
-		defer secondaryLogRegistry.mu.Unlock()
-		if len(secondaryLogRegistry.mu.loggers) > 0 {
+		if registry.len() > 0 {
 			t.Fatal("can't use TestLogScope with secondary loggers active")
 		}
 	}()
@@ -167,16 +165,10 @@ func (l *TestLogScope) Rotate(t tShim) {
 		}
 	}()
 
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		func() {
-			l.logger.mu.Lock()
-			defer l.logger.mu.Unlock()
-			if err := l.logger.closeFileLocked(); err != nil {
-				t.Fatal(err)
-			}
-		}()
+	if err := registry.iterLocked(func(l *loggerT) error {
+		return l.closeFileLocked()
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -256,12 +248,10 @@ func dirTestOverride(expected, newDir string) error {
 		return err
 	}
 	// Same with secondary loggers.
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		if err := l.logger.dirTestOverride(expected, newDir); err != nil {
-			return err
-		}
+	if err := registry.iter(func(l *loggerT) error {
+		return l.dirTestOverride(expected, newDir)
+	}); err != nil {
+		return err
 	}
 	// Set the default also for any subsequently defined secondary
 	// logger.
