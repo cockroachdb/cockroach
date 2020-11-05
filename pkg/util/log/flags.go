@@ -81,8 +81,8 @@ func init() {
 	// Default combined size of a log file group.
 	logging.logFilesCombinedMaxSize = logging.logFileMaxSize * 10 // 100MiB
 
-	// Also copy the defaults to mainLog.
-	initMainLogFromDefaultConfig()
+	// Also copy the defaults to debugLog.
+	initDebugLogFromDefaultConfig()
 
 	logflags.InitFlags(
 		&logging.logDir,
@@ -101,20 +101,20 @@ func init() {
 		"minimum verbosity of messages written to the log file")
 }
 
-// initMainLogFromDefaultConfig initializes mainLog from the defaults
+// initDebugLogFromDefaultConfig initializes debugLog from the defaults
 // in logging.config. This is called upon package initialization
 // so that tests have a default config to work with; and also
 // during SetupRedactionAndStderrRedirects() after the custom
 // logging configuration has been selected.
-func initMainLogFromDefaultConfig() {
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
-	mainLog.prefix = program
-	_ = mainLog.logDir.Set(logging.logDir.String())
-	mainLog.logFileMaxSize = logging.logFileMaxSize
-	mainLog.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
-	mainLog.redactableLogs.Set(logging.redactableLogs)
-	mainLog.fileThreshold = logging.fileThreshold
+func initDebugLogFromDefaultConfig() {
+	debugLog.mu.Lock()
+	defer debugLog.mu.Unlock()
+	debugLog.prefix = program
+	_ = debugLog.logDir.Set(logging.logDir.String())
+	debugLog.logFileMaxSize = logging.logFileMaxSize
+	debugLog.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
+	debugLog.redactableLogs.Set(logging.redactableLogs)
+	debugLog.fileThreshold = logging.fileThreshold
 }
 
 // IsActive returns true iff the main logger already has some events
@@ -165,8 +165,8 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 	}
 
 	// Regardless of what happens below, we are going to set the
-	// mainLog parameters from the outcome.
-	defer initMainLogFromDefaultConfig()
+	// debugLog parameters from the outcome.
+	defer initDebugLogFromDefaultConfig()
 
 	if logging.logDir.IsSet() {
 		// We have a log directory. We can enable stderr redirection.
