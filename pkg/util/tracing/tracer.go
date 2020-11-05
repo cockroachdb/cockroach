@@ -321,7 +321,7 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 		if opts.Parent != nil {
 			p = opts.Parent.crdb
 		}
-		s.crdb.enableRecording(p, recordingType, opts.SeparateRecording)
+		s.crdb.enableRecording(p, recordingType)
 	}
 
 	// Set initial tags. These will propagate to the crdbSpan, ot, and netTr
@@ -538,35 +538,42 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 }
 
 // ChildSpan opens a Span as a child of the current Span in the context (if
-// there is one).
+// there is one), via the WithParent option.
 // The Span's tags are inherited from the ctx's log tags automatically.
 //
-// Returns the new context and the new Span (if any). The Span should be
-// closed via FinishSpan.
+// Returns the new context and the new Span (if any). If a non-nil Span is
+// returned, it is the caller's duty to eventually call Finish() on it.
 func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
-	return childSpan(ctx, opName, spanOptions{})
+	return childSpan(ctx, opName, false /* remote */)
 }
 
-// ChildSpanSeparateRecording is like ChildSpan but the new Span has separate
-// recording (see StartChildSpan).
-func ChildSpanSeparateRecording(ctx context.Context, opName string) (context.Context, *Span) {
-	return childSpan(ctx, opName, spanOptions{SeparateRecording: true})
+// ChildSpanRemote is like ChildSpan but the new Span is created using WithRemoteParent
+// instead of WithParent. When this is used, it's the caller's duty to collect this span's
+// recording and return it to the root span of the trace.
+func ChildSpanRemote(ctx context.Context, opName string) (context.Context, *Span) {
+	return childSpan(ctx, opName, true /* remote */)
 }
 
-func childSpan(ctx context.Context, opName string, opts spanOptions) (context.Context, *Span) {
+func childSpan(ctx context.Context, opName string, remote bool) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
-	if sp == nil || sp.isNoop() {
-		// Optimization: avoid ContextWithSpan call if tracing is disabled.
-		return ctx, sp
+	if sp == nil {
+		return ctx, nil
 	}
 	tr := sp.Tracer()
-	if sp.IsBlackHole() {
-		ns := tr.noopSpan
-		return ContextWithSpan(ctx, ns), ns
-	}
+	var opts spanOptions
 	opts.LogTags = logtags.FromContext(ctx)
-	opts.Parent = sp
+	// NB: this code is correct when sp == nil.
+	if !remote {
+		opts.Parent = sp
+	} else {
+		opts.RemoteParent = sp.Meta()
+	}
 	newSpan := tr.startSpanGeneric(opName, opts)
+	if newSpan.isNoop() {
+		// Optimization: if we end up with a noop, return the inputs
+		// to avoid ContextWithSpan call below.
+		return ctx, sp
+	}
 	return ContextWithSpan(ctx, newSpan), newSpan
 }
 
