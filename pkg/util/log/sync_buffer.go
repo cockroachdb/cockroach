@@ -44,7 +44,8 @@ func (sb *syncBuffer) Sync() error {
 }
 
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
-	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&logFileMaxSize) {
+	maxFileSize := atomic.LoadInt64(&sb.logger.logFileMaxSize)
+	if sb.nbytes+int64(len(p)) >= maxFileSize {
 		if err := sb.rotateFileLocked(timeutil.Now()); err != nil {
 			sb.logger.exitLocked(err)
 		}
@@ -63,7 +64,7 @@ func (l *loggerT) writeToFileLocked(data []byte) error {
 	if _, err := l.mu.file.Write(data); err != nil {
 		return err
 	}
-	if l.mu.syncWrites {
+	if l.syncWrites || logging.syncWrites.Get() {
 		_ = l.mu.file.Flush()
 		_ = l.mu.file.Sync()
 	}

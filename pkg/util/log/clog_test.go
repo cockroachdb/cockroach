@@ -88,11 +88,9 @@ func contains(str string, t *testing.T) bool {
 // setFlags resets the logging flags and exit function to what tests expect.
 func setFlags() {
 	ResetExitFunc()
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
 	// Make all logged errors go to the external stderr, in addition to
 	// the log file.
-	mainLog.stderrThreshold = Severity_ERROR
+	logging.stderrThreshold.set(Severity_ERROR)
 }
 
 // Test that Info works as advertised.
@@ -537,8 +535,8 @@ func TestRollover(t *testing.T) {
 		err = e
 	})
 
-	defer func(previous int64) { logFileMaxSize = previous }(logFileMaxSize)
-	logFileMaxSize = 2048
+	defer func(previous int64) { mainLog.logFileMaxSize = previous }(mainLog.logFileMaxSize)
+	mainLog.logFileMaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
 	info, ok := mainLog.mu.file.(*syncBuffer)
@@ -549,7 +547,7 @@ func TestRollover(t *testing.T) {
 		t.Fatalf("info has initial error: %v", err)
 	}
 	fname0 := info.file.Name()
-	Infof(context.Background(), "%s", strings.Repeat("x", int(logFileMaxSize))) // force a rollover
+	Infof(context.Background(), "%s", strings.Repeat("x", int(mainLog.logFileMaxSize))) // force a rollover
 	if err != nil {
 		t.Fatalf("info has error after big write: %v", err)
 	}
@@ -565,7 +563,7 @@ func TestRollover(t *testing.T) {
 	if fname0 == fname1 {
 		t.Errorf("info.f.Name did not change: %v", fname0)
 	}
-	if info.nbytes >= logFileMaxSize {
+	if info.nbytes >= mainLog.logFileMaxSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
 	}
 }
@@ -581,7 +579,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	mainLog.stderrThreshold = Severity_NONE
+	logging.stderrThreshold.set(Severity_NONE)
 	SetExitFunc(false /* hideStack */, func(int) {})
 
 	defer setFlags()
@@ -619,7 +617,7 @@ func TestRedirectStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	mainLog.stderrThreshold = Severity_NONE
+	logging.stderrThreshold.set(Severity_NONE)
 
 	Infof(context.Background(), "test")
 
