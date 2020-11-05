@@ -1098,7 +1098,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// Nothing to do.
 		}
 
-		if t.ReadTimestamp.Equal(o.ReadTimestamp) {
+		if t.ReadTimestamp == o.ReadTimestamp {
 			// If neither of the transactions has a bumped ReadTimestamp, then the
 			// WriteTooOld flag is cumulative.
 			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld

@@ -339,7 +339,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		p.err = errors.Errorf("intent without transaction")
 		return false
 	}
-	metaTS := hlc.Timestamp(p.meta.Timestamp)
+	metaTS := p.meta.Timestamp.ToTimestamp()
 
 	// metaTS is the timestamp of an intent value, which we may or may
 	// not end up ignoring, depending on factors codified below. If we do ignore

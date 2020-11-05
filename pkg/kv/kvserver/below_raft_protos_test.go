@@ -66,7 +66,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return m
 		},
 		emptySum:     7551962144604783939,
-		populatedSum: 12720006657210437557,
+		populatedSum: 5737658018003400959,
 	},
 	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
@@ -124,7 +124,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
 		},
 		emptySum:     14695981039346656037,
-		populatedSum: 7432412240713840291,
+		populatedSum: 834545685817460463,
 	},
 }
 

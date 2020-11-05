@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -196,7 +195,7 @@ func TestRedundantNodeLivenessHeartbeatsAvoided(t *testing.T) {
 			livenessAfter, found := nl.Self()
 			assert.True(t, found)
 			exp := livenessAfter.Expiration
-			minExp := hlc.LegacyTimestamp(before.Add(nlActive.Nanoseconds(), 0))
+			minExp := before.Add(nlActive.Nanoseconds(), 0).ToLegacyTimestamp()
 			if exp.Less(minExp) {
 				return errors.Errorf("expected min expiration %v, found %v", minExp, exp)
 			}
@@ -958,7 +957,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &livenesspb.Liveness{
 		NodeID:     goneNodeID,
 		Epoch:      1,
-		Expiration: hlc.LegacyTimestamp(mtc.clock().Now()),
+		Expiration: mtc.clock().Now().ToLegacyTimestamp(),
 		Membership: livenesspb.MembershipStatus_ACTIVE,
 	}, nil); err != nil {
 		t.Fatal(err)

@@ -180,14 +180,18 @@ func (k MVCCKey) Len() int {
 		timestampSentinelLen      = 1
 		walltimeEncodedLen        = 8
 		logicalEncodedLen         = 4
+		flagsEncodedLen           = 1
 		timestampEncodedLengthLen = 1
 	)
 
 	n := len(k.Key) + timestampEncodedLengthLen
 	if k.Timestamp != (hlc.Timestamp{}) {
 		n += timestampSentinelLen + walltimeEncodedLen
-		if k.Timestamp.Logical != 0 {
+		if k.Timestamp.Logical != 0 || k.Timestamp.Flags != 0 {
 			n += logicalEncodedLen
+		}
+		if k.Timestamp.Flags != 0 {
+			n += flagsEncodedLen
 		}
 	}
 	return n
@@ -959,7 +963,7 @@ func mvccGetMetadata(
 	meta.KeyBytes = MVCCVersionTimestampSize
 	meta.ValBytes = int64(len(iter.UnsafeValue()))
 	meta.Deleted = meta.ValBytes == 0
-	meta.Timestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
+	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
 }
 
@@ -1017,7 +1021,7 @@ func mvccGetInternal(
 		return value, nil, safeValue, nil
 	}
 	var ignoredIntent *roachpb.Intent
-	metaTimestamp := hlc.Timestamp(meta.Timestamp)
+	metaTimestamp := meta.Timestamp.ToTimestamp()
 	if !consistent && meta.Txn != nil && metaTimestamp.LessEq(timestamp) {
 		// If we're doing inconsistent reads and there's an intent, we
 		// ignore the intent by insisting that the timestamp we're reading
@@ -1197,7 +1201,7 @@ func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err erro
 func (b *putBuffer) putMeta(
 	writer Writer, key MVCCKey, meta *enginepb.MVCCMetadata, inlineMeta bool,
 ) (keyBytes, valBytes int64, err error) {
-	if meta.Txn != nil && !meta.Timestamp.Equal(hlc.LegacyTimestamp(meta.Txn.WriteTimestamp)) {
+	if meta.Txn != nil && !meta.Timestamp.Equal(meta.Txn.WriteTimestamp.ToLegacyTimestamp()) {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
 		// be clear for readers which one to use for what.
 		return 0, 0, errors.AssertionFailedf(
@@ -1623,7 +1627,7 @@ func mvccPutInternal(
 	if ok {
 		// There is existing metadata for this key; ensure our write is permitted.
 		meta = &buf.meta
-		metaTimestamp := hlc.Timestamp(meta.Timestamp)
+		metaTimestamp := meta.Timestamp.ToTimestamp()
 
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
@@ -1854,7 +1858,7 @@ func mvccPutInternal(
 			}
 		}
 		buf.newMeta.Txn = txnMeta
-		buf.newMeta.Timestamp = hlc.LegacyTimestamp(writeTimestamp)
+		buf.newMeta.Timestamp = writeTimestamp.ToLegacyTimestamp()
 	}
 	newMeta := &buf.newMeta
 
@@ -2180,7 +2184,7 @@ func MVCCMerge(
 	*meta = enginepb.MVCCMetadata{RawBytes: rawBytes}
 	// If non-zero, set the merge timestamp to provide some replay protection.
 	if timestamp != (hlc.Timestamp{}) {
-		buf.ts = hlc.LegacyTimestamp(timestamp)
+		buf.ts = timestamp.ToLegacyTimestamp()
 		meta.MergeTimestamp = &buf.ts
 	}
 	data, err := buf.marshalMeta(meta)
@@ -2320,7 +2324,7 @@ func MVCCClearTimeRange(
 				restoredMeta.KeyBytes = MVCCVersionTimestampSize
 				restoredMeta.Deleted = valueSize == 0
 				restoredMeta.ValBytes = valueSize
-				restoredMeta.Timestamp = hlc.LegacyTimestamp(k.Timestamp)
+				restoredMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 
 				ms.Add(updateStatsOnClear(
 					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime,
@@ -2345,7 +2349,7 @@ func MVCCClearTimeRange(
 			if err := it.ValueProto(&meta); err != nil {
 				return nil, err
 			}
-			ts := hlc.Timestamp(meta.Timestamp)
+			ts := meta.Timestamp.ToTimestamp()
 			if meta.Txn != nil && startTime.Less(ts) && ts.LessEq(endTime) {
 				err := &roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{
@@ -2366,7 +2370,7 @@ func MVCCClearTimeRange(
 				clearedMeta.KeyBytes = MVCCVersionTimestampSize
 				clearedMeta.ValBytes = int64(len(it.UnsafeValue()))
 				clearedMeta.Deleted = clearedMeta.ValBytes == 0
-				clearedMeta.Timestamp = hlc.LegacyTimestamp(k.Timestamp)
+				clearedMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 			}
 		} else {
 			// This key does not match, so we need to flush our run of matching keys.
@@ -2869,7 +2873,7 @@ func mvccResolveWriteIntent(
 	// replays of intent resolution make this configuration a possibility. We
 	// treat such intents as uncommitted.
 	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
-	timestampsValid := hlc.Timestamp(meta.Timestamp).LessEq(intent.Txn.WriteTimestamp)
+	timestampsValid := meta.Timestamp.ToTimestamp().LessEq(intent.Txn.WriteTimestamp)
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid
 
 	// Note the small difference to commit epoch handling here: We allow
@@ -2898,8 +2902,8 @@ func mvccResolveWriteIntent(
 	// TODO(tschottdorf): various epoch-related scenarios here deserve more
 	// testing.
 	inProgress := !intent.Status.IsFinalized() && meta.Txn.Epoch >= intent.Txn.Epoch
-	pushed := inProgress && hlc.Timestamp(meta.Timestamp).Less(intent.Txn.WriteTimestamp)
-	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+	pushed := inProgress && meta.Timestamp.ToTimestamp().Less(intent.Txn.WriteTimestamp)
+	latestKey := MVCCKey{Key: intent.Key, Timestamp: meta.Timestamp.ToTimestamp()}
 
 	// Handle partial txn rollbacks. If the current txn sequence
 	// is part of a rolled back (ignored) seqnum range, we're going
@@ -2950,7 +2954,7 @@ func mvccResolveWriteIntent(
 
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
-		buf.newMeta.Timestamp = hlc.LegacyTimestamp(newTimestamp)
+		buf.newMeta.Timestamp = newTimestamp.ToLegacyTimestamp()
 		buf.newMeta.Txn.WriteTimestamp = newTimestamp
 
 		// Update or remove the metadata key.
@@ -2974,7 +2978,7 @@ func mvccResolveWriteIntent(
 		// rewrite it.
 		var prevValSize int64
 		if buf.newMeta.Timestamp != meta.Timestamp {
-			oldKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+			oldKey := MVCCKey{Key: intent.Key, Timestamp: meta.Timestamp.ToTimestamp()}
 			newKey := MVCCKey{Key: intent.Key, Timestamp: newTimestamp}
 
 			// Rewrite the versioned value at the new timestamp.
@@ -3326,7 +3330,7 @@ func MVCCGarbageCollect(
 		// being removed. We had this faulty functionality at some point; it
 		// should no longer be necessary since the higher levels already make
 		// sure each individual GCRequest does bounded work.
-		if hlc.Timestamp(meta.Timestamp).LessEq(gcKey.Timestamp) {
+		if meta.Timestamp.ToTimestamp().LessEq(gcKey.Timestamp) {
 			// For version keys, don't allow GC'ing the meta key if it's
 			// not marked deleted. However, for inline values we allow it;
 			// they are internal and GCing them directly saves the extra
