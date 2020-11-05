@@ -1607,7 +1607,7 @@ alter_table_set_schema_stmt ::=
 
 alter_table_regional_affinity_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'SET' regional_affinity
-	| 'ALTER' 'TABLE' 'IF' 'NOT' 'EXISTS' relation_expr 'SET' regional_affinity
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' regional_affinity
 
 alter_oneindex_stmt ::=
 	'ALTER' 'INDEX' table_index_name alter_index_cmds
