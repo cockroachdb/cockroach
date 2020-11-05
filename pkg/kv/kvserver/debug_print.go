@@ -86,7 +86,6 @@ func tryRangeDescriptor(kv storage.MVCCKeyValue) (string, error) {
 	return descStr(desc), nil
 }
 
-// tryIntent does not look at the key.
 func tryIntent(kv storage.MVCCKeyValue) (string, error) {
 	if len(kv.Value) == 0 {
 		return "", errors.New("empty")
@@ -374,21 +373,4 @@ func (s *stringifyWriteBatch) String() string {
 		return wbStr
 	}
 	return fmt.Sprintf("failed to stringify write batch (%x): %s", s.Data, err)
-}
-
-// PrintEngineKeyValue attempts to print the given key-value pair.
-func PrintEngineKeyValue(k storage.EngineKey, v []byte) {
-	if k.IsMVCCKey() {
-		if key, err := k.ToMVCCKey(); err == nil {
-			PrintKeyValue(storage.MVCCKeyValue{Key: key, Value: v})
-			return
-		}
-	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "%s %x (%#x): ", k.Key, k.Version, k.Encode())
-	if out, err := tryIntent(storage.MVCCKeyValue{Value: v}); err == nil {
-		sb.WriteString(out)
-	} else {
-		fmt.Fprintf(&sb, "%x", v)
-	}
 }

@@ -633,13 +633,13 @@ func (r *Replica) sha512(
 	// all of the replicated key space.
 	if !statsOnly {
 		// TODO(sumeer): remember that this caller of MakeReplicatedKeyRanges does
-		// not want the lock table ranges since the iter has been constructed using
-		// MVCCKeyAndIntentsIterKind. By the time we have replicated locks
+		// not want the lock table ranges since it has already considered the
+		// intents earlier in this function. By the time we have replicated locks
 		// other than exclusive locks, we will probably not have any interleaved
-		// intents so we could stop using MVCCKeyAndIntentsIterKind and
+		// intents so we could stop using MVCCKeyAndIntentsIterKind above and
 		// consider all locks here.
 		for _, span := range rditer.MakeReplicatedKeyRanges(&desc) {
-			spanMS, err := storage.ComputeStatsForRange(
+			spanMS, err := storage.ComputeStatsGo(
 				iter, span.Start.Key, span.End.Key, 0 /* nowNanos */, visitor,
 			)
 			if err != nil {

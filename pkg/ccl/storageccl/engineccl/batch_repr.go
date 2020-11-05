@@ -84,5 +84,5 @@ func VerifyBatchRepr(
 	}
 	defer iter.Close()
 
-	return storage.ComputeStatsForRange(iter, start.Key, end.Key, nowNanos)
+	return storage.ComputeStatsGo(iter, start.Key, end.Key, nowNanos)
 }
