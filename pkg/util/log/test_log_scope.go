@@ -43,10 +43,6 @@ type tShim interface {
 	Logf(fmt string, args ...interface{})
 }
 
-// showLogs reflects the use of -show-logs on the command line and is
-// used for testing.
-var showLogs bool
-
 // Scope creates a TestLogScope which corresponds to the lifetime of a
 // temporary logging directory. If -show-logs was passed on the
 // command line, this is a no-op. Otherwise, it behaves
@@ -55,7 +51,7 @@ var showLogs bool
 // See the documentation of ScopeWithoutShowLogs() for API usage and
 // restrictions.
 func Scope(t tShim) *TestLogScope {
-	if showLogs {
+	if logging.showLogs {
 		return (*TestLogScope)(nil)
 	}
 
@@ -121,7 +117,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 
 	sc = &TestLogScope{
 		// Remember the stderr threshold. Close() will restore it.
-		stderrThreshold: mainLog.stderrThreshold.get(),
+		stderrThreshold: logging.stderrThreshold.get(),
 	}
 	defer func() {
 		// If any of the following initialization fails, we close the scope.
@@ -149,7 +145,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// Override the stderr threshold for the main logger.
 	// From this point log entries do not show up on stderr any more;
 	// they only go to files.
-	mainLog.stderrThreshold.set(Severity_NONE)
+	logging.stderrThreshold.set(Severity_NONE)
 
 	t.Logf("test logs captured to: %s", tempDir)
 	return sc
@@ -185,28 +181,8 @@ func (l *TestLogScope) Rotate(t tShim) {
 
 // restoreStderrThreshold restores the stderr output threshold at the end
 // of a scope.
-// The threshold is restored on mainLog and all the secondary loggers.
-// Why not just mainLog, given that the ScopeWithoutShowLog() API has
-// "no secondary loggers" as a prerequisite? Well it may be that
-// the test code "under" the scope started some secondary loggers, and
-// those have not stopped yet. This is legitimate. So now we want
-// to do something about their individual stderr threshold.
-//
-// The question is however which threshold to use for which secondary
-// logger. Since we know that all these secondary loggers were forked
-// off mainLog (since they didn't exist before), we also know they all
-// have the same threshold setting: the one that was present on
-// mainLog originally. Therefore, if we restore the mainLog setting,
-// it is reasonable to also restore the mainLog setting onto all the
-// secondary loggers.
 func (l *TestLogScope) restoreStderrThreshold() {
-	mainLog.stderrThreshold.set(l.stderrThreshold)
-
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, secL := range secondaryLogRegistry.mu.loggers {
-		secL.logger.stderrThreshold.set(l.stderrThreshold)
-	}
+	logging.stderrThreshold.set(l.stderrThreshold)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are
@@ -286,6 +262,9 @@ func dirTestOverride(expected, newDir string) error {
 			return err
 		}
 	}
+	// Set the default also for any subsequently defined secondary
+	// logger.
+	_ = logging.logDir.Set(newDir)
 	return nil
 }
 

@@ -16,24 +16,105 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
+type config struct {
+	// the --no-color flag. When set it disables escapes code on the
+	// stderr copy.
+	noColor bool
+
+	// showLogs reflects the use of -show-logs on the command line and is
+	// used for testing.
+	showLogs bool
+
+	// Level beyond which entries submitted to any logger are written
+	// to the process' external standard error stream (OrigStderr).
+	// This acts as a filter between the log entry producers and the
+	// stderr sink.
+	stderrThreshold Severity
+
+	// syncWrites can be set asynchronously to force all file output to
+	// synchronize to disk. This is set via SetSync() and used e.g. in
+	// start.go upon encountering errors.
+	syncWrites syncutil.AtomicBool
+
+	// the --log-dir flag. This is the directory used for file loggers when
+	// not overridden for a given logger.
+	logDir DirName
+
+	// Default value of logFileMaxSize for loggers.
+	logFileMaxSize int64
+
+	// Default value of logFilesCombinedMaxSize for loggers.
+	logFilesCombinedMaxSize int64
+
+	// Default value of fileThreshold for loggers.
+	fileThreshold Severity
+
+	// Default value of redactableLogs for loggers.
+	redactableLogs bool
+
+	// Whether redactable logs are requested.
+	//
+	// We use redactableLogsRequested instead of setting redactableLogs
+	// above directly when parsing command-line flags, to prevent the
+	// redactable flag from being set until
+	// SetupRedactionAndStderrRedirects() has been called.
+	//
+	// This ensures that we don't mistakenly start producing redaction
+	// markers until we have some confidence they won't be interleaved
+	// with arbitrary writes to the stderr file descriptor.
+	redactableLogsRequested bool
+}
+
 func init() {
+	// Default stderrThreshold and fileThreshold to log everything
+	// both to the output file and to the process' external stderr
+	// (OrigStderr).
+	logging.stderrThreshold = Severity_INFO
+	logging.fileThreshold = Severity_INFO
+
+	// Default maximum size of individual log files.
+	logging.logFileMaxSize = 10 << 20 // 10MiB
+	// Default combined size of a log file group.
+	logging.logFilesCombinedMaxSize = logging.logFileMaxSize * 10 // 100MiB
+
+	// Also copy the defaults to mainLog.
+	initMainLogFromDefaultConfig()
+
 	logflags.InitFlags(
-		&mainLog.logDir,
-		&showLogs,
+		&logging.logDir,
+		&logging.showLogs,
 		&logging.noColor,
-		&redactableLogsRequested, // NB: see doc on the variable definition.
+		&logging.redactableLogsRequested,
 		&logging.vmoduleConfig.mu.vmodule,
-		&logFileMaxSize, &logFilesCombinedMaxSize,
+		&logging.logFileMaxSize,
+		&logging.logFilesCombinedMaxSize,
 	)
 	// We define these flags here because they have the type Severity
 	// which we can't pass to logflags without creating an import cycle.
-	flag.Var(&mainLog.stderrThreshold,
-		logflags.LogToStderrName, "logs at or above this threshold go to stderr")
-	flag.Var(&mainLog.fileThreshold,
-		logflags.LogFileVerbosityThresholdName, "minimum verbosity of messages written to the log file")
+	flag.Var(&logging.stderrThreshold, logflags.LogToStderrName,
+		"logs at or above this threshold go to stderr")
+	flag.Var(&logging.fileThreshold, logflags.LogFileVerbosityThresholdName,
+		"minimum verbosity of messages written to the log file")
+}
+
+// initMainLogFromDefaultConfig initializes mainLog from the defaults
+// in logging.config. This is called upon package initialization
+// so that tests have a default config to work with; and also
+// during SetupRedactionAndStderrRedirects() after the custom
+// logging configuration has been selected.
+func initMainLogFromDefaultConfig() {
+	mainLog.mu.Lock()
+	defer mainLog.mu.Unlock()
+	mainLog.prefix = program
+	_ = mainLog.logDir.Set(logging.logDir.String())
+	mainLog.logFileMaxSize = logging.logFileMaxSize
+	mainLog.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
+	mainLog.redactableLogs.Set(logging.redactableLogs)
+	mainLog.fileThreshold = logging.fileThreshold
 }
 
 // IsActive returns true iff the main logger already has some events
@@ -83,7 +164,11 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
 	}
 
-	if mainLog.logDir.IsSet() {
+	// Regardless of what happens below, we are going to set the
+	// mainLog parameters from the outcome.
+	defer initMainLogFromDefaultConfig()
+
+	if logging.logDir.IsSet() {
 		// We have a log directory. We can enable stderr redirection.
 
 		// Our own cancellable context to stop the secondary logger.
@@ -93,7 +178,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		// logger when the remainder of the process stops. See the
 		// discussion on cancel at the top of the function.
 		ctx, cancel := context.WithCancel(context.Background())
-		secLogger := NewSecondaryLogger(ctx, &mainLog.logDir, "stderr",
+		secLogger := NewSecondaryLogger(ctx, &logging.logDir, "stderr",
 			true /* enableGC */, true /* forceSyncWrites */, false /* enableMsgCount */)
 
 		// Stderr capture produces unsafe strings. This logger
@@ -142,7 +227,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		// Now that stderr is properly redirected, we can enable log file
 		// redaction as requested. It is safe because no interleaving
 		// is possible any more.
-		mainLog.redactableLogs.Set(redactableLogsRequested)
+		logging.redactableLogs = logging.redactableLogsRequested
 
 		return cleanup, nil
 	}
@@ -152,7 +237,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 	// If redaction is requested and we have a chance to produce some
 	// log entries on stderr, that's a configuration we cannot support
 	// safely. Reject it.
-	if redactableLogsRequested && mainLog.stderrThreshold.get() != Severity_NONE {
+	if logging.redactableLogsRequested && logging.stderrThreshold.get() != Severity_NONE {
 		return nil, errors.WithHintf(
 			errors.New("cannot enable redactable logging without a logging directory"),
 			"You can pass --%s to set up a logging directory explicitly.", cliflags.LogDir.Name)
@@ -161,19 +246,9 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 	// Configuration valid. Assign it.
 	// (Note: This is a no-op, because either redactableLogsRequested is false,
 	// or it's true but stderrThreshold filters everything.)
-	mainLog.redactableLogs.Set(redactableLogsRequested)
+	logging.redactableLogs = logging.redactableLogsRequested
 	return nil, nil
 }
-
-// We use redactableLogsRequested instead of mainLog.redactableLogs
-// directly when parsing command-line flags, to prevent the redactable
-// flag from being set until SetupRedactionAndStderrRedirects() has
-// been called.
-//
-// This ensures that we don't mistakenly start producing redaction
-// markers until we have some confidence they won't be interleaved
-// with arbitrary writes to the stderr file descriptor.
-var redactableLogsRequested bool
 
 // TestingResetActive clears the active bit. This is for use in tests
 // that use stderr redirection alongside other tests that use
@@ -185,10 +260,9 @@ func TestingResetActive() {
 }
 
 // RedactableLogsEnabled reports whether redaction markers were
-// actually enabled for the main logger. This is used for flag
-// telemetry; a better API would be needed for more fine grained
-// information, as each different logger may have a different
-// redaction setting.
+// actually enabled. This is used for flag telemetry; a better API
+// would be needed for more fine grained information, as each
+// different logger may have a different redaction setting.
 func RedactableLogsEnabled() bool {
-	return mainLog.redactableLogs.Get()
+	return logging.redactableLogs
 }
