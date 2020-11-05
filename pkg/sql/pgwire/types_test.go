@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/lib/pq/oid"
 )
 
 // The assertions in this test should also be caught by the integration tests on
@@ -136,12 +135,12 @@ func TestIntArrayRoundTrip(t *testing.T) {
 
 	b := buf.wrapped.Bytes()
 
-	got, err := pgwirebase.DecodeOidDatum(context.Background(), nil, oid.T__int8, pgwirebase.FormatText, b[4:], nil)
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+	got, err := pgwirebase.DecodeDatum(evalCtx, types.IntArray, pgwirebase.FormatText, b[4:])
 	if err != nil {
 		t.Fatal(err)
 	}
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer evalCtx.Stop(context.Background())
 	if got.Compare(evalCtx, d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
 	}
@@ -217,15 +216,15 @@ func TestByteArrayRoundTrip(t *testing.T) {
 					b := buf.wrapped.Bytes()
 					t.Logf("encoded: %v (%q)", b, b)
 
-					got, err := pgwirebase.DecodeOidDatum(context.Background(), nil, oid.T_bytea, pgwirebase.FormatText, b[4:], nil)
+					evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+					defer evalCtx.Stop(context.Background())
+					got, err := pgwirebase.DecodeDatum(evalCtx, types.Bytes, pgwirebase.FormatText, b[4:])
 					if err != nil {
 						t.Fatal(err)
 					}
 					if _, ok := got.(*tree.DBytes); !ok {
 						t.Fatalf("parse does not return DBytes, got %T", got)
 					}
-					evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-					defer evalCtx.Stop(context.Background())
 					if got.Compare(evalCtx, d) != 0 {
 						t.Fatalf("expected %s, got %s", d, got)
 					}
@@ -487,11 +486,11 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		b.StartTimer()
-		got, err := pgwirebase.DecodeOidDatum(context.Background(), nil, oid.T_numeric, pgwirebase.FormatBinary, bytes, nil)
-		b.StopTimer()
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
+		b.StartTimer()
+		got, err := pgwirebase.DecodeDatum(evalCtx, types.Decimal, pgwirebase.FormatBinary, bytes)
+		b.StopTimer()
 		if err != nil {
 			b.Fatal(err)
 		} else if got.Compare(evalCtx, expected) != 0 {
