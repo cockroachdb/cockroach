@@ -776,7 +776,7 @@ func EncodeInvertedIndexKeys(b []byte, json JSON) ([][]byte, error) {
 // UNION over the returned spans, with no INTERSECTION. If unique is true, that
 // allows the optimizer to remove the UNION altogether (implemented
 // with the invertedFilterer), and simply return the results of the constrained
-// scan.
+// scan. unique is always false if the length of spans is greater than 1.
 //
 // The spans are not guaranteed to be sorted, so the caller must sort them if
 // needed.

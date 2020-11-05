@@ -3979,7 +3979,7 @@ project
       │    │    │    └── inverted-filter
       │    │    │         ├── columns: n.gid:13!null
       │    │    │         ├── inverted expression: /18
-      │    │    │         │    ├── tight: false
+      │    │    │         │    ├── tight: false, unique: false
       │    │    │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
       │    │    │         ├── pre-filterer expression
       │    │    │         │    └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16)

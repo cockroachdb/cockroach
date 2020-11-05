@@ -179,7 +179,7 @@ vectorized: true
 │
 └── • scan
       columns: (a)
-      estimated row count: 110 (missing stats)
+      estimated row count: 111 (missing stats)
       table: d@foo_inv
       spans: /"a"/"b"-/"a"/"b"/PrefixEnd
 
@@ -197,7 +197,7 @@ vectorized: true
 │
 └── • scan
       columns: (a)
-      estimated row count: 110 (missing stats)
+      estimated row count: 111 (missing stats)
       table: d@foo_inv
       spans: /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd
 
@@ -215,7 +215,7 @@ vectorized: true
 │
 └── • scan
       columns: (a)
-      estimated row count: 110 (missing stats)
+      estimated row count: 111 (missing stats)
       table: d@foo_inv
       spans: /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd
 
@@ -233,7 +233,7 @@ vectorized: true
 │
 └── • scan
       columns: (a)
-      estimated row count: 110 (missing stats)
+      estimated row count: 111 (missing stats)
       table: d@foo_inv
       spans: /"a"/"b"/True-/"a"/"b"/False
 
@@ -251,7 +251,7 @@ vectorized: true
 │
 └── • scan
       columns: (a)
-      estimated row count: 110 (missing stats)
+      estimated row count: 111 (missing stats)
       table: d@foo_inv
       spans: /Arr/1-/Arr/1/PrefixEnd
 
@@ -269,44 +269,68 @@ vectorized: true
 │
 └── • scan
       columns: (a)
-      estimated row count: 110 (missing stats)
+      estimated row count: 111 (missing stats)
       table: d@foo_inv
       spans: /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd
 
+# TODO(rytaft): Fix the stats so we don't choose an inverted index scan here
+# (see #56870).
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
-• filter
+• index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ filter: b @> '[]'
+│ table: d@primary
+│ key columns: a
 │
-└── • scan
-      columns: (a, b)
-      estimated row count: 1000 (missing stats)
-      table: d@primary
-      spans: FULL SCAN
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /[]-/{} /???-/???
 
 
+# TODO(rytaft): Fix the stats so we don't choose an inverted index scan here
+# (see #56870).
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
-• filter
+• index join
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ filter: b @> '{}'
+│ table: d@primary
+│ key columns: a
 │
-└── • scan
-      columns: (a, b)
-      estimated row count: 1000 (missing stats)
-      table: d@primary
-      spans: FULL SCAN
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /{}-/{}/PrefixEnd /???-/[]
 
 
 # TODO(mgartner): It should not be required to force the index scan. It is
@@ -401,29 +425,43 @@ query T
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
-• filter
-│ filter: b @> '{"a": []}'
+• sort
+│ order: +a
 │
-└── • scan
-      missing stats
-      table: d@primary
-      spans: FULL SCAN
+└── • index join
+    │ table: d@primary
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: d@foo_inv
+              spans: 2 spans
 
 query T
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
-• filter
-│ filter: b @> '{"a": {}}'
+• sort
+│ order: +a
 │
-└── • scan
-      missing stats
-      table: d@primary
-      spans: FULL SCAN
+└── • index join
+    │ table: d@primary
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: d@foo_inv
+              spans: 2 spans
 
 # Multi-path contains queries. Should create zigzag joins.
 
@@ -574,45 +612,136 @@ vectorized: true
       right columns: ()
       right fixed values: 1 column
 
+# TODO(rytaft): A better plan is probably to just scan the index with the span
+# from `b @> '{"b": 2}'` and apply `b @> '{"a": {}}'` as a remaining filter
+# (see #56868).
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
-• filter
+• index join
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ filter: b @> '{"a": {}, "b": 2}'
+│ table: d@primary
+│ key columns: a
 │
-└── • index join
-    │ columns: (a, b)
-    │ estimated row count: 110 (missing stats)
-    │ table: d@primary
-    │ key columns: a
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
     │
-    └── • scan
-          columns: (a)
-          estimated row count: 110 (missing stats)
-          table: d@foo_inv
-          spans: /"b"/2-/"b"/2/PrefixEnd
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 3
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"a"/{}-/"a"/{}/PrefixEnd /???-/??? /"b"/2-/"b"/2/PrefixEnd
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
-• filter
+• index join
 │ columns: (a, b)
 │ estimated row count: 12 (missing stats)
-│ filter: b @> '{"a": {}, "b": {}}'
+│ table: d@primary
+│ key columns: a
 │
-└── • scan
-      columns: (a, b)
-      estimated row count: 1000 (missing stats)
-      table: d@primary
-      spans: FULL SCAN
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 4
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"a"/{}-/"a"/{}/PrefixEnd /???-/??? /"b"/{}-/"b"/{}/PrefixEnd /???-/???
+
+# Filter with a fully-specified array. This should use a zigzag join.
+query T
+EXPLAIN SELECT a FROM d WHERE b @> '[1, 2]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: d@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> '[1, 2]'
+    │
+    └── • zigzag join
+          left table: d@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+
+# Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
+# This should use a zigzag join.
+query T
+EXPLAIN SELECT a FROM d WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: d@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b @> '[1]') AND (b @> '[2]')
+    │
+    └── • zigzag join
+          left table: d@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+
+# Filter with a nested array. This index expression is not tight.
+# This should use a zigzag join.
+query T
+EXPLAIN SELECT a FROM d WHERE b @> '[[1, 2]]' ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: d@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> '[[1, 2]]'
+    │
+    └── • zigzag join
+          left table: d@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: ()
+          right fixed values: 1 column
 
 subtest array
 
@@ -631,7 +760,7 @@ vectorized: true
 │
 └── • scan
       columns: (a)
-      estimated row count: 110 (missing stats)
+      estimated row count: 111 (missing stats)
       table: e@e_b_idx
       spans: /1-/2
 
@@ -653,20 +782,23 @@ vectorized: true
       spans: FULL SCAN
 
 # Test that searching for a NULL element using the inverted index.
+# TODO(rytaft): This filter should be normalized to false (see #56799).
 query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
 ----
 distribution: local
 vectorized: true
 ·
-• index join
+• filter
 │ columns: (a, b)
 │ estimated row count: 110 (missing stats)
-│ table: e@primary
-│ key columns: a
+│ filter: b @> ARRAY[NULL]
 │
-└── • norows
-      columns: (a)
+└── • scan
+      columns: (a, b)
+      estimated row count: 1000 (missing stats)
+      table: e@primary
+      spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> NULL
@@ -694,6 +826,7 @@ vectorized: true
       table: e@primary
       spans: FULL SCAN
 
+# This should use a zigzag join.
 query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
 ----

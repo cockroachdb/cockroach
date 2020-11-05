@@ -91,7 +91,8 @@ project
  ├── key: (1)
  └── scan a@j
       ├── columns: k:1!null
-      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /7/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
 # Eliminate the IndexJoin for an inverted index scan when only the primary key
@@ -104,7 +105,8 @@ project
  ├── immutable
  ├── scan a@j
  │    ├── columns: k:1!null
- │    ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+ │    ├── inverted constraint: /7/1
+ │    │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
  │    └── key: (1)
  └── projections
       └── k:1 + 1 [as="?column?":8, outer=(1), immutable]
@@ -120,5 +122,6 @@ index-join a
  ├── immutable
  └── scan a@j
       ├── columns: k:1!null
-      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /7/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)

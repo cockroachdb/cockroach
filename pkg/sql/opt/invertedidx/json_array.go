@@ -257,3 +257,73 @@ func (g *jsonOrArrayDatumsToInvertedExpr) PreFilter(
 ) (bool, error) {
 	return false, errors.AssertionFailedf("PreFilter called on jsonOrArrayDatumsToInvertedExpr")
 }
+
+type jsonOrArrayFilterPlanner struct {
+	tabID opt.TableID
+	index cat.Index
+}
+
+var _ invertedFilterPlanner = &jsonOrArrayFilterPlanner{}
+
+// extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
+// interface.
+func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
+	evalCtx *tree.EvalContext, expr opt.ScalarExpr,
+) (
+	invertedExpr invertedexpr.InvertedExpression,
+	remainingFilters opt.ScalarExpr,
+	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
+) {
+	switch t := expr.(type) {
+	// TODO(rytaft): Support JSON fetch val operator (->).
+	case *memo.ContainsExpr:
+		invertedExpr := j.extractJSONOrArrayFilterCondition(evalCtx, t.Left, t.Right)
+		if !invertedExpr.IsTight() {
+			remainingFilters = expr
+		}
+
+		// We do not currently support pre-filtering for JSON and Array indexes, so
+		// the returned pre-filter state is nil.
+		return invertedExpr, remainingFilters, nil
+
+	default:
+		return invertedexpr.NonInvertedColExpression{}, expr, nil
+	}
+}
+
+// extractJSONOrArrayFilterCondition extracts an InvertedExpression
+// representing an inverted filter over the given inverted index, based
+// on the given left and right expression arguments. Returns an empty
+// InvertedExpression if no inverted filter could be extracted.
+func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayFilterCondition(
+	evalCtx *tree.EvalContext, left, right opt.ScalarExpr,
+) invertedexpr.InvertedExpression {
+	// The first argument should be a variable corresponding to the index
+	// column.
+	variable, ok := left.(*memo.VariableExpr)
+	if !ok {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+	if variable.Col != j.tabID.ColumnID(
+		j.index.VirtualInvertedColumn().InvertedSourceColumnOrdinal(),
+	) {
+		// The column does not match the index column.
+		return invertedexpr.NonInvertedColExpression{}
+	}
+
+	// The second argument should be a constant.
+	if !memo.CanExtractConstDatum(right) {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+	d := memo.ExtractConstDatum(right)
+	if variable.Typ.Family() == types.ArrayFamily &&
+		j.index.Version() < descpb.EmptyArraysInInvertedIndexesVersion {
+		if arr, ok := d.(*tree.DArray); ok && arr.Len() == 0 {
+			// We cannot constrain array indexes that do not include
+			// keys for empty arrays.
+			return invertedexpr.NonInvertedColExpression{}
+		}
+	}
+
+	return getSpanExprForJSONOrArrayIndex(evalCtx, d)
+}
