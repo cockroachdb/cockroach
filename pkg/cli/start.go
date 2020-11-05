@@ -1071,11 +1071,18 @@ func setupAndInitializeLoggingAndProfiling(
 			}
 		}
 
-		// Start the log file GC daemon to remove files that make the log
-		// directory too large.
-		log.StartGCDaemon(ctx)
-
 		defer func() {
+			// Start the log file GC daemon to remove files that make the log
+			// directory too large.
+			//
+			// Note that as per the comment on this function, this must be
+			// called after command-line parsing has completed and the
+			// configuration was effected, so that no data is lost when the user
+			// configures larger max sizes than the defaults.
+			// This is why we defer this call here, to ensure it only occurs
+			// after SetupRedactionAndStderrRedirects() has been called.
+			log.StartGCDaemon(ctx)
+
 			if stopper != nil {
 				// When the function complete successfully, start the loggers
 				// for the storage engines. We need to do this at the end
