@@ -11,12 +11,15 @@
 package span
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -25,7 +28,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Builder is a single struct for generating key spans from Constraints, Datums and encDatums.
+// Builder is a single struct for generating key spans from Constraints, Datums,
+// encDatums, and InvertedSpans.
 type Builder struct {
 	codec         keys.SQLCodec
 	table         *tabledesc.Immutable
@@ -325,4 +329,58 @@ func (s *Builder) encodeConstraintKey(
 		}
 	}
 	return key, containsNull, nil
+}
+
+// KeyableInvertedSpans represent inverted index spans that can be encoded into
+// key spans.
+type KeyableInvertedSpans interface {
+	// Len returns the number of spans represented.
+	Len() int
+
+	// Start returns the start bytes of the ith span.
+	Start(i int) []byte
+
+	// End returns the end bytes of the ith span.
+	End(i int) []byte
+}
+
+var _ KeyableInvertedSpans = invertedexpr.InvertedSpans{}
+var _ KeyableInvertedSpans = invertedexpr.SpanExpressionProto_Spans{}
+
+// SpansFromInvertedSpans constructs spans to scan the inverted index.
+func (s *Builder) SpansFromInvertedSpans(
+	invertedSpans KeyableInvertedSpans,
+) (roachpb.Spans, error) {
+	if invertedSpans == nil {
+		return nil, errors.AssertionFailedf("invertedSpans cannot be nil")
+	}
+
+	scratchRow := make(rowenc.EncDatumRow, 1)
+	var spans roachpb.Spans
+	for i, n := 0, invertedSpans.Len(); i < n; i++ {
+		var indexSpan roachpb.Span
+		var err error
+		if indexSpan.Key, err = s.generateInvertedSpanKey(invertedSpans.Start(i), scratchRow); err != nil {
+			return nil, err
+		}
+		if indexSpan.EndKey, err = s.generateInvertedSpanKey(invertedSpans.End(i), scratchRow); err != nil {
+			return nil, err
+		}
+		spans = append(spans, indexSpan)
+	}
+	sort.Sort(spans)
+	return spans, nil
+}
+
+func (s *Builder) generateInvertedSpanKey(
+	enc []byte, scratchRow rowenc.EncDatumRow,
+) (roachpb.Key, error) {
+	// Pretend that the encoded inverted val is an EncDatum. This isn't always
+	// true, since JSON inverted columns use a custom encoding. But since we
+	// are providing an already encoded Datum, the following will eventually
+	// fall through to EncDatum.Encode() which will reuse the encoded bytes.
+	encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
+	scratchRow = append(scratchRow[:0], encDatum)
+	span, _, err := s.SpanFromEncDatums(scratchRow, 1 /* prefixLen */)
+	return span.Key, err
 }

@@ -204,7 +204,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 
 	var spans roachpb.Spans
 	if params.InvertedConstraint != nil {
-		spans, err = GenerateInvertedSpans(params.InvertedConstraint, sb)
+		spans, err = sb.SpansFromInvertedSpans(params.InvertedConstraint)
 	} else {
 		spans, err = sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 	}
