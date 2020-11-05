@@ -581,11 +581,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 		}
 		batch.Close()
 
-		sort.Slice(timestamps, func(i, j int) bool {
-			return (timestamps[i].WallTime < timestamps[j].WallTime) ||
-				(timestamps[i].WallTime == timestamps[j].WallTime &&
-					timestamps[i].Logical < timestamps[j].Logical)
-		})
+		sort.Slice(timestamps, func(i, j int) bool { return timestamps[i].Less(timestamps[j]) })
 		return keys, timestamps
 	}
 

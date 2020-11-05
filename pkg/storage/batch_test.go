@@ -1205,6 +1205,7 @@ func TestDecodeKey(t *testing.T) {
 		{Key: []byte("foo")},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1}},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}},
+		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1, Flags: 3}},
 	}
 	for _, test := range tests {
 		t.Run(test.String(), func(t *testing.T) {
