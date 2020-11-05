@@ -290,7 +290,7 @@ func (rsl StateLoader) SetRangeAppliedState(
 		RangeStats:        newMS.ToPersistentStats(),
 	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
-	// in C.MVCCComputeStats and ComputeStatsForRange.
+	// in C.MVCCComputeStats and ComputeStatsGo.
 	ms := (*enginepb.MVCCStats)(nil)
 	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, nil, &as)
 }
@@ -400,7 +400,7 @@ func (rsl StateLoader) writeLegacyMVCCStatsInternal(
 	// enlarges the size of the struct itself. This is mostly fine - we persist
 	// MVCCStats under the RangeAppliedState key and don't account for the size of
 	// the MVCCStats struct itself when doing so (we ignore the RangeAppliedState key
-	// in ComputeStatsForRange). This would not therefore not cause replica state divergence
+	// in ComputeStatsGo). This would not therefore not cause replica state divergence
 	// in mixed version clusters (the enlarged struct does not contribute to a
 	// persisted stats difference on disk because we're not accounting for the size of
 	// the struct itself).
