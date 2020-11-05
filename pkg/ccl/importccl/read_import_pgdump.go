@@ -93,13 +93,14 @@ func (p *postgreStream) Next() (interface{}, error) {
 
 	for p.s.Scan() {
 		t := p.s.Text()
+		// Regardless if we can parse the statement, check that it's not something
+		// we want to ignore.
+		if isIgnoredStatement(t) {
+			continue
+		}
+
 		stmts, err := parser.Parse(t)
 		if err != nil {
-			// Something non-parseable may be something we don't yet parse but still
-			// want to ignore.
-			if isIgnoredStatement(t) {
-				continue
-			}
 			return nil, err
 		}
 		switch len(stmts) {
