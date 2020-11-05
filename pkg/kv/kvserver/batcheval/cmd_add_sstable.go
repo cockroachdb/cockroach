@@ -32,8 +32,6 @@ func init() {
 }
 
 // EvalAddSSTable evaluates an AddSSTable command.
-// NB: These sstables do not contain intents/locks, so the code below only
-// needs to deal with MVCCKeys.
 func EvalAddSSTable(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
@@ -91,7 +89,7 @@ func EvalAddSSTable(
 	if args.MVCCStats == nil || verifyFastPath {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
-		computed, err := storage.ComputeStatsForRange(
+		computed, err := storage.ComputeStatsGo(
 			dataIter, mvccStartKey.Key, mvccEndKey.Key, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
@@ -181,6 +179,7 @@ func EvalAddSSTable(
 
 	ms.Add(stats)
 
+	// TODO(sumeer): use EngineIterator and replace the Put hack below.
 	if args.IngestAsWrites {
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
 		dataIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})

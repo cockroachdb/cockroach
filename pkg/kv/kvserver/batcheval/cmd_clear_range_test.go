@@ -33,14 +33,37 @@ type wrappedBatch struct {
 	clearRangeCount int
 }
 
-func (wb *wrappedBatch) ClearEngineKey(key storage.EngineKey) error {
+// TODO(sbhola): narrow the calls where we increment counters to
+// make this test stricter.
+
+func (wb *wrappedBatch) ClearMVCC(key storage.MVCCKey) error {
 	wb.clearCount++
-	return wb.Batch.ClearEngineKey(key)
+	return wb.Batch.ClearMVCC(key)
+}
+
+func (wb *wrappedBatch) ClearUnversioned(key roachpb.Key) error {
+	wb.clearCount++
+	return wb.Batch.ClearUnversioned(key)
+}
+
+func (wb *wrappedBatch) ClearIntent(key roachpb.Key) error {
+	wb.clearCount++
+	return wb.Batch.ClearIntent(key)
+}
+
+func (wb *wrappedBatch) ClearRawRange(start, end roachpb.Key) error {
+	wb.clearRangeCount++
+	return wb.Batch.ClearRawRange(start, end)
 }
 
 func (wb *wrappedBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
 	wb.clearRangeCount++
 	return wb.Batch.ClearMVCCRangeAndIntents(start, end)
+}
+
+func (wb *wrappedBatch) ClearMVCCRange(start, end storage.MVCCKey) error {
+	wb.clearRangeCount++
+	return wb.Batch.ClearMVCCRange(start, end)
 }
 
 // TestCmdClearRangeBytesThreshold verifies that clear range resorts to
