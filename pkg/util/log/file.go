@@ -45,10 +45,10 @@ import (
 // For background about why this function exists, see:
 // https://github.com/cockroachdb/cockroach/issues/36861#issuecomment-483589446
 func TemporarilyDisableFileGCForMainLogger() (cleanup func()) {
-	oldLogLimit := atomic.LoadInt64(&mainLog.logFilesCombinedMaxSize)
-	atomic.CompareAndSwapInt64(&mainLog.logFilesCombinedMaxSize, oldLogLimit, math.MaxInt64)
+	oldLogLimit := atomic.LoadInt64(&debugLog.logFilesCombinedMaxSize)
+	atomic.CompareAndSwapInt64(&debugLog.logFilesCombinedMaxSize, oldLogLimit, math.MaxInt64)
 	return func() {
-		atomic.CompareAndSwapInt64(&mainLog.logFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
+		atomic.CompareAndSwapInt64(&debugLog.logFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
 	}
 }
 
@@ -279,13 +279,13 @@ func createSymlink(fname, symlink string) {
 // ListLogFiles returns a slice of FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
-	mainDir, isSet := mainLog.logDir.get()
+	mainDir, isSet := debugLog.logDir.get()
 	if !isSet {
 		// Shortcut.
 		return nil, nil
 	}
 
-	logFiles, err := mainLog.listLogFiles()
+	logFiles, err := debugLog.listLogFiles()
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (l *loggerT) listLogFiles() ([]FileInfo, error) {
 //
 // TODO(knz): make this work for secondary loggers too.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
-	dir, isSet := mainLog.logDir.get()
+	dir, isSet := debugLog.logDir.get()
 	if !isSet {
 		return nil, errDirectoryNotSet
 	}

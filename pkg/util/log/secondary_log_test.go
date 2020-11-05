@@ -34,7 +34,7 @@ func TestSecondaryLog(t *testing.T) {
 	defer cancel()
 
 	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
+	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 	defer l.Close()
 
 	// Interleave some messages.
@@ -48,7 +48,7 @@ func TestSecondaryLog(t *testing.T) {
 
 	// Check that the messages indeed made it to different files.
 
-	contents, err := ioutil.ReadFile(mainLog.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(debugLog.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestSecondaryLog(t *testing.T) {
 		t.Errorf("log does not contain error text\n%s", contents)
 	}
 	if strings.Contains(string(contents), "world") {
-		t.Errorf("secondary log spilled into primary\n%s", contents)
+		t.Errorf("secondary log spilled into debug log\n%s", contents)
 	}
 
 	contents, err = ioutil.ReadFile(l.logger.mu.file.(*syncBuffer).file.Name())
@@ -92,7 +92,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	// Now create a secondary logger in the same directory.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
+	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 	defer l.Close()
 
 	// Log something on the secondary logger.
@@ -130,7 +130,7 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 	defer cancel()
 
 	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
+	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 	defer l.Close()
 
 	// Emit some logging and ensure the files gets created.

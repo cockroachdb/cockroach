@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	mainLog.gcNotify = make(chan struct{}, 1)
+	debugLog.gcNotify = make(chan struct{}, 1)
 }
 
 // StartGCDaemon starts the log file GC -- this must be called after
@@ -34,7 +34,7 @@ func init() {
 // secondary loggers are only allocated after command line parsing
 // has completed too.
 func StartGCDaemon(ctx context.Context) {
-	go mainLog.gcDaemon(ctx)
+	go debugLog.gcDaemon(ctx)
 }
 
 // gcDaemon runs the GC loop for the given logger.

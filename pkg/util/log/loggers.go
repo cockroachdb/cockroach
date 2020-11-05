@@ -10,12 +10,13 @@
 
 package log
 
-// mainLog is the primary logger instance.
-var mainLog loggerT
+// debugLog is the logger instance for “general” logging messages,
+// that is, those not going to a specialized secondary logger.
+var debugLog loggerT
 
 // stderrLog is the logger where writes performed directly
 // to the stderr file descriptor (such as that performed
 // by the go runtime) *may* be redirected.
 // NB: whether they are actually redirected is determined
 // by stderrLog.redirectInternalStderrWrites().
-var stderrLog = &mainLog
+var stderrLog = &debugLog

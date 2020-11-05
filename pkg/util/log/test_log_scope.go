@@ -86,7 +86,7 @@ func Scope(t tShim) *TestLogScope {
 // The reason for this restriction is ease of implementation: to
 // support TestLogScope "under" multiple loggers, we'd need to
 // extend the implementation to save/restore the state of all the loggers,
-// not just mainLog. This would be necessary because loggers don't
+// not just debugLog. This would be necessary because loggers don't
 // necessarily have the same config. Until that is implemented,
 // we prevent the use case altogether.
 //
@@ -160,9 +160,9 @@ func (l *TestLogScope) Rotate(t tShim) {
 	Flush()
 
 	func() {
-		mainLog.mu.Lock()
-		defer mainLog.mu.Unlock()
-		if err := mainLog.closeFileLocked(); err != nil {
+		debugLog.mu.Lock()
+		defer debugLog.mu.Unlock()
+		if err := debugLog.closeFileLocked(); err != nil {
 			t.Fatal(err)
 		}
 	}()
@@ -252,7 +252,7 @@ func calledDuringPanic() bool {
 // dirTestOverride sets the default value for the logging output directory
 // for use in tests.
 func dirTestOverride(expected, newDir string) error {
-	if err := mainLog.dirTestOverride(expected, newDir); err != nil {
+	if err := debugLog.dirTestOverride(expected, newDir); err != nil {
 		return err
 	}
 	// Same with secondary loggers.

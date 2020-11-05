@@ -29,7 +29,7 @@ func TestGC(t *testing.T) {
 
 	setFlags()
 
-	testLogGC(t, &mainLog, Infof)
+	testLogGC(t, &debugLog, Infof)
 }
 
 func TestSecondaryGC(t *testing.T) {
