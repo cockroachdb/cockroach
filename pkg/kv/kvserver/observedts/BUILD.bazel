@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "observedts",
+    srcs = [
+        "doc.go",
+        "limit.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+    ],
+)
