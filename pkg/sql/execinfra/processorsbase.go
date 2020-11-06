@@ -13,6 +13,7 @@ package execinfra
 import (
 	"context"
 	"math"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -58,12 +59,13 @@ type ProcOutputHelper struct {
 	// post-processed row directly.
 	output   RowReceiver
 	RowAlloc rowenc.EncDatumRowAlloc
-
-	filter *execinfrapb.ExprHelper
-	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
+	// Filter is an optional filter that determines whether a single row is
+	// output or not.
+	Filter *execinfrapb.ExprHelper
+	// RenderExprs has length > 0 if we have a rendering. Only one of RenderExprs
 	// and outputCols can be set.
-	renderExprs []execinfrapb.ExprHelper
-	// outputCols is non-nil if we have a projection. Only one of renderExprs and
+	RenderExprs []execinfrapb.ExprHelper
+	// outputCols is non-nil if we have a projection. Only one of RenderExprs and
 	// outputCols can be set. Note that 0-length projections are possible, in
 	// which case outputCols will be 0-length but non-nil.
 	outputCols []uint32
@@ -73,7 +75,7 @@ type ProcOutputHelper struct {
 	// OutputTypes is the schema of the rows produced by the processor after
 	// post-processing (i.e. the rows that are pushed through a router).
 	//
-	// If renderExprs is set, these types correspond to the types of those
+	// If RenderExprs is set, these types correspond to the types of those
 	// expressions.
 	// If outputCols is set, these types correspond to the types of
 	// those columns.
@@ -89,10 +91,30 @@ type ProcOutputHelper struct {
 	rowIdx uint64
 }
 
+var procOutputHelperPool = sync.Pool{
+	New: func() interface{} {
+		return &ProcOutputHelper{}
+	},
+}
+
+// NewProcOutputHelper returns a new ProcOutputHelper.
+func NewProcOutputHelper() *ProcOutputHelper {
+	return procOutputHelperPool.Get().(*ProcOutputHelper)
+}
+
+// Release is part of the Releasable interface.
+func (h *ProcOutputHelper) Release() {
+	*h = ProcOutputHelper{
+		RenderExprs: h.RenderExprs[:0],
+		OutputTypes: h.OutputTypes[:0],
+	}
+	procOutputHelperPool.Put(h)
+}
+
 // Reset resets this ProcOutputHelper, retaining allocated memory in its slices.
 func (h *ProcOutputHelper) Reset() {
 	*h = ProcOutputHelper{
-		renderExprs: h.renderExprs[:0],
+		RenderExprs: h.RenderExprs[:0],
 		OutputTypes: h.OutputTypes[:0],
 	}
 }
@@ -118,8 +140,8 @@ func (h *ProcOutputHelper) Init(
 	h.output = output
 	h.numInternalCols = len(coreOutputTypes)
 	if post.Filter != (execinfrapb.Expression{}) {
-		h.filter = &execinfrapb.ExprHelper{}
-		if err := h.filter.Init(post.Filter, coreOutputTypes, semaCtx, evalCtx); err != nil {
+		h.Filter = &execinfrapb.ExprHelper{}
+		if err := h.Filter.Init(post.Filter, coreOutputTypes, semaCtx, evalCtx); err != nil {
 			return err
 		}
 	}
@@ -144,10 +166,10 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes[i] = coreOutputTypes[c]
 		}
 	} else if nRenders := len(post.RenderExprs); nRenders > 0 {
-		if cap(h.renderExprs) >= nRenders {
-			h.renderExprs = h.renderExprs[:nRenders]
+		if cap(h.RenderExprs) >= nRenders {
+			h.RenderExprs = h.RenderExprs[:nRenders]
 		} else {
-			h.renderExprs = make([]execinfrapb.ExprHelper, nRenders)
+			h.RenderExprs = make([]execinfrapb.ExprHelper, nRenders)
 		}
 		if cap(h.OutputTypes) >= nRenders {
 			h.OutputTypes = h.OutputTypes[:nRenders]
@@ -155,11 +177,11 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes = make([]*types.T, nRenders)
 		}
 		for i, expr := range post.RenderExprs {
-			h.renderExprs[i] = execinfrapb.ExprHelper{}
-			if err := h.renderExprs[i].Init(expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
+			h.RenderExprs[i] = execinfrapb.ExprHelper{}
+			if err := h.RenderExprs[i].Init(expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
 				return err
 			}
-			h.OutputTypes[i] = h.renderExprs[i].Expr.ResolvedType()
+			h.OutputTypes[i] = h.RenderExprs[i].Expr.ResolvedType()
 		}
 	} else {
 		// No rendering or projection.
@@ -170,7 +192,7 @@ func (h *ProcOutputHelper) Init(
 		}
 		copy(h.OutputTypes, coreOutputTypes)
 	}
-	if h.outputCols != nil || len(h.renderExprs) > 0 {
+	if h.outputCols != nil || len(h.RenderExprs) > 0 {
 		// We're rendering or projecting, so allocate an output row.
 		h.outputRow = h.RowAlloc.AllocRow(len(h.OutputTypes))
 	}
@@ -188,7 +210,7 @@ func (h *ProcOutputHelper) Init(
 // NeededColumns calculates the set of internal processor columns that are
 // actually used by the post-processing stage.
 func (h *ProcOutputHelper) NeededColumns() (colIdxs util.FastIntSet) {
-	if h.outputCols == nil && len(h.renderExprs) == 0 {
+	if h.outputCols == nil && len(h.RenderExprs) == 0 {
 		// No projection or rendering; all columns are needed.
 		colIdxs.AddRange(0, h.numInternalCols-1)
 		return colIdxs
@@ -201,14 +223,14 @@ func (h *ProcOutputHelper) NeededColumns() (colIdxs util.FastIntSet) {
 
 	for i := 0; i < h.numInternalCols; i++ {
 		// See if filter requires this column.
-		if h.filter != nil && h.filter.Vars.IndexedVarUsed(i) {
+		if h.Filter != nil && h.Filter.Vars.IndexedVarUsed(i) {
 			colIdxs.Add(i)
 			continue
 		}
 
 		// See if render expressions require this column.
-		for j := range h.renderExprs {
-			if h.renderExprs[j].Vars.IndexedVarUsed(i) {
+		for j := range h.RenderExprs {
+			if h.RenderExprs[j].Vars.IndexedVarUsed(i) {
 				colIdxs.Add(i)
 				break
 			}
@@ -282,15 +304,15 @@ func (h *ProcOutputHelper) ProcessRow(
 		return nil, false, nil
 	}
 
-	if h.filter != nil {
+	if h.Filter != nil {
 		// Filtering.
-		passes, err := h.filter.EvalFilter(row)
+		passes, err := h.Filter.EvalFilter(row)
 		if err != nil {
 			return nil, false, err
 		}
 		if !passes {
 			if log.V(4) {
-				log.Infof(ctx, "filtered out row %s", row.String(h.filter.Types))
+				log.Infof(ctx, "filtered out row %s", row.String(h.Filter.Types))
 			}
 			return nil, true, nil
 		}
@@ -301,10 +323,10 @@ func (h *ProcOutputHelper) ProcessRow(
 		return nil, true, nil
 	}
 
-	if len(h.renderExprs) > 0 {
+	if len(h.RenderExprs) > 0 {
 		// Rendering.
-		for i := range h.renderExprs {
-			datum, err := h.renderExprs[i].Eval(row)
+		for i := range h.RenderExprs {
+			datum, err := h.RenderExprs[i].Eval(row)
 			if err != nil {
 				return nil, false, err
 			}

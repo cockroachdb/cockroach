@@ -649,6 +649,7 @@ func NewColOperator(
 
 	core := &spec.Core
 	post := &spec.Post
+	var procOutputHelper *execinfra.ProcOutputHelper
 
 	// resultPreSpecPlanningStateShallowCopy is a shallow copy of the result
 	// before any specs are planned. Used if there is a need to backtrack.
@@ -701,14 +702,16 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
-			scanOp, err := colfetcher.NewColBatchScan(ctx, streamingAllocator, flowCtx, evalCtx, core.TableReader, post)
+			scanOp, helper, err := colfetcher.NewColBatchScan(ctx, streamingAllocator, flowCtx, evalCtx, core.TableReader, post)
 			if err != nil {
 				return r, err
 			}
 			result.Op = scanOp
 			result.IOReader = scanOp
 			result.MetadataSources = append(result.MetadataSources, scanOp)
+			result.Releasables = append(result.Releasables, helper)
 			result.Releasables = append(result.Releasables, scanOp)
+			procOutputHelper = helper
 			// colBatchScan is wrapped with a cancel checker below, so we need to
 			// log its creation separately.
 			if log.V(1) {
@@ -758,7 +761,7 @@ func NewColOperator(
 			copy(inputTypes, spec.Input[0].ColumnTypes)
 			var constructors []execinfrapb.AggregateConstructor
 			var constArguments []tree.Datums
-			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 			constructors, constArguments, result.ColumnTypes, err = colexecagg.ProcessAggregations(
 				evalCtx, semaCtx, aggSpec.Aggregations, inputTypes,
 			)
@@ -1153,7 +1156,7 @@ func NewColOperator(
 		Op:          result.Op,
 		ColumnTypes: result.ColumnTypes,
 	}
-	err = ppr.planPostProcessSpec(ctx, flowCtx, evalCtx, args, post, factory)
+	err = ppr.planPostProcessSpec(ctx, flowCtx, evalCtx, args, post, factory, procOutputHelper)
 	if err != nil {
 		if log.V(2) {
 			log.Infof(
@@ -1251,7 +1254,7 @@ func (r opResult) planAndMaybeWrapOnExprAsFilter(
 		ColumnTypes: r.ColumnTypes,
 	}
 	if err := ppr.planFilterExpr(
-		ctx, flowCtx, evalCtx, onExpr, args.StreamingMemAccount, factory, args.ExprHelper,
+		ctx, flowCtx, evalCtx, onExpr, args.StreamingMemAccount, factory, args.ExprHelper, nil, /* procOutputHelper */
 	); err != nil {
 		// ON expression planning failed. Fall back to planning the filter
 		// using row execution.
@@ -1298,7 +1301,9 @@ func (r opResult) wrapPostProcessSpec(
 }
 
 // planPostProcessSpec plans the post processing stage specified in post on top
-// of r.Op.
+// of r.Op. It takes in an optional procOutputHelper which has already been
+// initialized with post meaning that it already contains well-typed expressions
+// which allows us to avoid redundant deserialization.
 func (r *postProcessResult) planPostProcessSpec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -1306,10 +1311,11 @@ func (r *postProcessResult) planPostProcessSpec(
 	args *colexec.NewColOperatorArgs,
 	post *execinfrapb.PostProcessSpec,
 	factory coldata.ColumnFactory,
+	procOutputHelper *execinfra.ProcOutputHelper,
 ) error {
 	if !post.Filter.Empty() {
 		if err := r.planFilterExpr(
-			ctx, flowCtx, evalCtx, post.Filter, args.StreamingMemAccount, factory, args.ExprHelper,
+			ctx, flowCtx, evalCtx, post.Filter, args.StreamingMemAccount, factory, args.ExprHelper, procOutputHelper,
 		); err != nil {
 			return err
 		}
@@ -1321,13 +1327,19 @@ func (r *postProcessResult) planPostProcessSpec(
 		if log.V(2) {
 			log.Infof(ctx, "planning render expressions %+v", post.RenderExprs)
 		}
-		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 		var renderedCols []uint32
-		for _, renderExpr := range post.RenderExprs {
+		for renderIdx, renderExpr := range post.RenderExprs {
 			var renderInternalMem int
-			expr, err := args.ExprHelper.ProcessExpr(renderExpr, semaCtx, flowCtx.EvalCtx, r.ColumnTypes)
-			if err != nil {
-				return err
+			var expr tree.TypedExpr
+			var err error
+			if procOutputHelper != nil {
+				expr = procOutputHelper.RenderExprs[renderIdx].Expr
+			} else {
+				expr, err = args.ExprHelper.ProcessExpr(renderExpr, semaCtx, evalCtx, r.ColumnTypes)
+				if err != nil {
+					return err
+				}
 			}
 			var outputIdx int
 			r.Op, outputIdx, r.ColumnTypes, renderInternalMem, err = planProjectionOperators(
@@ -1454,6 +1466,10 @@ func (r opResult) updateWithPostProcessResult(ppr postProcessResult) {
 	r.InternalMemUsage += ppr.InternalMemUsage
 }
 
+// planFilterExpr creates all operators to implement filter expression. It takes
+// in an optional procOutputHelper which has already been initialized with post
+// meaning that it already contains well-typed expressions which allows us to
+// avoid redundant deserialization.
 func (r *postProcessResult) planFilterExpr(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -1462,12 +1478,21 @@ func (r *postProcessResult) planFilterExpr(
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
 	helper *colexec.ExprHelper,
+	procOutputHelper *execinfra.ProcOutputHelper,
 ) error {
-	var selectionInternalMem int
-	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
-	expr, err := helper.ProcessExpr(filter, semaCtx, evalCtx, r.ColumnTypes)
-	if err != nil {
-		return err
+	var (
+		selectionInternalMem int
+		expr                 tree.TypedExpr
+		err                  error
+	)
+	if procOutputHelper != nil {
+		expr = procOutputHelper.Filter.Expr
+	} else {
+		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
+		expr, err = helper.ProcessExpr(filter, semaCtx, evalCtx, r.ColumnTypes)
+		if err != nil {
+			return err
+		}
 	}
 	if expr == tree.DNull {
 		// The filter expression is tree.DNull meaning that it is always false, so
