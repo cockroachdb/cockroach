@@ -11,11 +11,13 @@ package colconv
 
 import (
 	"math/big"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,14 +48,33 @@ type VecToDatumConverter struct {
 	da               rowenc.DatumAlloc
 }
 
+var _ execinfra.Releasable = &VecToDatumConverter{}
+
+var vecToDatumConverterPool = sync.Pool{
+	New: func() interface{} {
+		return &VecToDatumConverter{}
+	},
+}
+
 // NewVecToDatumConverter creates a new VecToDatumConverter.
 // - batchWidth determines the width of the batches that it will be converting.
 // - vecIdxsToConvert determines which vectors need to be converted.
 func NewVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *VecToDatumConverter {
-	return &VecToDatumConverter{
-		convertedVecs:    make([]tree.Datums, batchWidth),
-		vecIdxsToConvert: vecIdxsToConvert,
+	c := vecToDatumConverterPool.Get().(*VecToDatumConverter)
+	if cap(c.convertedVecs) < batchWidth {
+		c.convertedVecs = make([]tree.Datums, batchWidth)
+	} else {
+		c.convertedVecs = c.convertedVecs[:batchWidth]
 	}
+	c.vecIdxsToConvert = vecIdxsToConvert
+	return c
+}
+
+// Release is part of the execinfra.Releasable interface.
+func (c *VecToDatumConverter) Release() {
+	c.convertedVecs = c.convertedVecs[:0]
+	c.vecIdxsToConvert = nil
+	vecToDatumConverterPool.Put(c)
 }
 
 // ConvertBatchAndDeselect converts the selected vectors from the batch while
@@ -75,17 +96,17 @@ func (c *VecToDatumConverter) ConvertBatchAndDeselect(batch coldata.Batch) {
 		return
 	}
 	// Ensure that convertedVecs are of sufficient length.
-	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < batchLength {
-		for _, vecIdx := range c.vecIdxsToConvert {
+	for _, vecIdx := range c.vecIdxsToConvert {
+		if cap(c.convertedVecs[vecIdx]) < batchLength {
 			c.convertedVecs[vecIdx] = make([]tree.Datum, batchLength)
+		} else {
+			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:batchLength]
 		}
+	}
+	if c.da.AllocSize < batchLength {
 		// Adjust the datum alloc according to the length of the batch since
 		// this batch is the longest we've seen so far.
 		c.da.AllocSize = batchLength
-	} else {
-		for _, vecIdx := range c.vecIdxsToConvert {
-			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:batchLength]
-		}
 	}
 	sel := batch.Selection()
 	vecs := batch.ColVecs()
@@ -129,17 +150,17 @@ func (c *VecToDatumConverter) ConvertVecs(vecs []coldata.Vec, inputLen int, sel 
 		// rely on the fact that selection vectors are increasing sequences.
 		requiredLength = sel[inputLen-1] + 1
 	}
-	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < requiredLength {
-		for _, vecIdx := range c.vecIdxsToConvert {
+	for _, vecIdx := range c.vecIdxsToConvert {
+		if cap(c.convertedVecs[vecIdx]) < requiredLength {
 			c.convertedVecs[vecIdx] = make([]tree.Datum, requiredLength)
+		} else {
+			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:requiredLength]
 		}
+	}
+	if c.da.AllocSize < requiredLength {
 		// Adjust the datum alloc according to the length of the batch since
 		// this batch is the longest we've seen so far.
 		c.da.AllocSize = requiredLength
-	} else {
-		for _, vecIdx := range c.vecIdxsToConvert {
-			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:requiredLength]
-		}
 	}
 	for _, vecIdx := range c.vecIdxsToConvert {
 		ColVecToDatum(
