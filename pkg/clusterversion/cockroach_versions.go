@@ -451,14 +451,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error.
-	//
-	// We support everything after 19.1, including pre-release 19.2 versions.
-	// This is generally beneficial, but in particular it allows the
-	// version-upgrade roachtest to use a pre-release 19.2 binary before upgrading
-	// to HEAD; if we were to set binaryMinSupportedVersion to Version19_2,
-	// that wouldn't work since you'd have to go through the final 19.2 binary
-	// before going to HEAD.
-	binaryMinSupportedVersion = VersionByKey(Version20_1)
+	binaryMinSupportedVersion = VersionByKey(Version20_2)
 
 	// binaryVersion is the version of this binary.
 	//
