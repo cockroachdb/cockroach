@@ -4246,7 +4246,7 @@ show_stmt:
 | show_users_stmt           // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt
 | SHOW error                // SHOW HELP: SHOW
-| show_last_query_stats_stmt // EXTEND WITH HELP: SHOW LAST QUERY STATISTICS
+| show_last_query_stats_stmt
 
 // Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
 // since there will be no open cursors.
@@ -4830,9 +4830,6 @@ show_syntax_stmt:
   }
 | SHOW SYNTAX error // SHOW HELP: SHOW SYNTAX
 
-// %Help: SHOW LAST QUERY STATISTICS - display statistics for the last query issued
-// %Category: Misc
-// %Text: SHOW LAST QUERY STATISTICS
 show_last_query_stats_stmt:
   SHOW LAST QUERY STATISTICS
   {
