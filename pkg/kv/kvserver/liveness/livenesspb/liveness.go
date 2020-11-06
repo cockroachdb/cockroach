@@ -53,7 +53,7 @@ func (l *Liveness) Compare(o Liveness) int {
 		}
 		return +1
 	}
-	if l.Expiration != o.Expiration {
+	if !l.Expiration.EqOrdering(o.Expiration) {
 		if l.Expiration.Less(o.Expiration) {
 			return -1
 		}

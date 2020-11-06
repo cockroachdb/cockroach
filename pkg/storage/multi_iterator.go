@@ -155,7 +155,7 @@ func (f *multiIterator) advance() {
 			// The iterator at iterIdx has the same key as the current best, add
 			// it to itersWithCurrentKey and check how the timestamps compare.
 			f.itersWithCurrentKey = append(f.itersWithCurrentKey, iterIdx)
-			if proposedMVCCKey.Timestamp == iterMVCCKey.Timestamp {
+			if proposedMVCCKey.Timestamp.EqOrdering(iterMVCCKey.Timestamp) {
 				// We have two exactly equal mvcc keys (both key and timestamps
 				// match). The one in the later iterator takes precedence and
 				// the one in the earlier iterator should be omitted from
