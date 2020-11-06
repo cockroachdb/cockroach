@@ -62,9 +62,14 @@ func TestBootstrapCluster(t *testing.T) {
 	e := storage.NewDefaultInMem()
 	defer e.Close()
 	require.NoError(t, kvserver.WriteClusterVersion(ctx, e, clusterversion.TestingClusterVersion))
-	if _, err := bootstrapCluster(
-		ctx, []storage.Engine{e}, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-	); err != nil {
+
+	initCfg := initServerCfg{
+		binaryMinSupportedVersion: clusterversion.TestingBinaryMinSupportedVersion,
+		binaryVersion:             clusterversion.TestingBinaryVersion,
+		defaultSystemZoneConfig:   *zonepb.DefaultZoneConfigRef(),
+		defaultZoneConfig:         *zonepb.DefaultSystemZoneConfigRef(),
+	}
+	if _, err := bootstrapCluster(ctx, []storage.Engine{e}, initCfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -241,11 +246,15 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer e.Close()
 
 	cv := clusterversion.TestingClusterVersion
-
 	require.NoError(t, kvserver.WriteClusterVersion(ctx, e, cv))
-	if _, err := bootstrapCluster(
-		ctx, []storage.Engine{e}, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-	); err != nil {
+
+	initCfg := initServerCfg{
+		binaryMinSupportedVersion: clusterversion.TestingBinaryMinSupportedVersion,
+		binaryVersion:             clusterversion.TestingBinaryVersion,
+		defaultSystemZoneConfig:   *zonepb.DefaultZoneConfigRef(),
+		defaultZoneConfig:         *zonepb.DefaultSystemZoneConfigRef(),
+	}
+	if _, err := bootstrapCluster(ctx, []storage.Engine{e}, initCfg); err != nil {
 		t.Fatal(err)
 	}
 
