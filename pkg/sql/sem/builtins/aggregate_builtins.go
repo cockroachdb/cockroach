@@ -181,6 +181,18 @@ var aggregates = map[string]builtinDefinition{
 		"Calculates the sample covariance of the selected values.",
 	),
 
+	"regr_intercept": makeRegressionAggregateBuiltin(
+		newRegressionInterceptAggregate, "Calculates y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs.",
+	),
+
+	"regr_r2": makeRegressionAggregateBuiltin(
+		newRegressionR2Aggregate, "Calculates square of the correlation coefficient.",
+	),
+
+	"regr_slope": makeRegressionAggregateBuiltin(
+		newRegressionSlopeAggregate, "Calculates slope of the least-squares-fit linear equation determined by the (X, Y) pairs.",
+	),
+
 	"count": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements.", tree.VolatilityImmutable),
@@ -1960,6 +1972,76 @@ func (a *covarSampAggregate) Result() (tree.Datum, error) {
 	}
 
 	return tree.NewDFloat(tree.DFloat(a.sxy / (a.n - 1))), nil
+}
+
+// regressionInterceptAggregate represents y-intercept for Ints and Floats.
+type regressionInterceptAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionInterceptAggregate(
+	[]*types.T, *tree.EvalContext, tree.Datums,
+) tree.AggregateFunc {
+	return &regressionInterceptAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionInterceptAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+	if a.sxx == 0 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat((a.sy - a.sx*a.sxy/a.sxx) / a.n)), nil
+}
+
+// regressionR2Aggregate represents square of the correlation coefficient
+// for Ints and Floats.
+type regressionR2Aggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionR2Aggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionR2Aggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionR2Aggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+	if a.sxx == 0 {
+		return tree.DNull, nil
+	}
+	if a.syy == 0 {
+		return tree.NewDFloat(tree.DFloat(1.0)), nil
+	}
+
+	return tree.NewDFloat(tree.DFloat((a.sxy * a.sxy) / (a.sxx * a.syy))), nil
+}
+
+// regressionSlopeAggregate represents slope of the least-squares-fit linear
+// equation determined by the (X, Y) pairs for Ints and Floats.
+type regressionSlopeAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSlopeAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSlopeAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSlopeAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+	if a.sxx == 0 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sxy / a.sxx)), nil
 }
 
 type countAggregate struct {
