@@ -298,6 +298,11 @@ func (t LegacyTimestamp) ToTimestamp() Timestamp {
 	return Timestamp{WallTime: t.WallTime, Logical: t.Logical, Flags: flags}
 }
 
+// EqOrdering returns whether the receiver sorts equally to the parameter.
+func (t LegacyTimestamp) EqOrdering(s LegacyTimestamp) bool {
+	return t.ToTimestamp().EqOrdering(s.ToTimestamp())
+}
+
 // Less returns whether the receiver is less than the parameter.
 func (t LegacyTimestamp) Less(s LegacyTimestamp) bool {
 	return t.ToTimestamp().Less(s.ToTimestamp())
