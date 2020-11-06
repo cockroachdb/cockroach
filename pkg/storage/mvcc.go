@@ -1200,7 +1200,7 @@ func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err erro
 func (b *putBuffer) putMeta(
 	writer Writer, key MVCCKey, meta *enginepb.MVCCMetadata, inlineMeta bool,
 ) (keyBytes, valBytes int64, err error) {
-	if meta.Txn != nil && !meta.Timestamp.Equal(meta.Txn.WriteTimestamp.ToLegacyTimestamp()) {
+	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
 		// be clear for readers which one to use for what.
 		return 0, 0, errors.AssertionFailedf(
@@ -2850,6 +2850,7 @@ func mvccResolveWriteIntent(
 	if !ok || meta.Txn == nil || intent.Txn.ID != meta.Txn.ID {
 		return false, nil
 	}
+	metaTimestamp := meta.Timestamp.ToTimestamp()
 
 	// A commit with a newer epoch than the intent effectively means that we
 	// wrote this intent before an earlier retry, but didn't write it again
@@ -2872,7 +2873,8 @@ func mvccResolveWriteIntent(
 	// replays of intent resolution make this configuration a possibility. We
 	// treat such intents as uncommitted.
 	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
-	timestampsValid := meta.Timestamp.ToTimestamp().LessEq(intent.Txn.WriteTimestamp)
+	timestampsValid := metaTimestamp.LessEq(intent.Txn.WriteTimestamp)
+	timestampChanged := metaTimestamp.Less(intent.Txn.WriteTimestamp)
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid
 
 	// Note the small difference to commit epoch handling here: We allow
@@ -2901,8 +2903,8 @@ func mvccResolveWriteIntent(
 	// TODO(tschottdorf): various epoch-related scenarios here deserve more
 	// testing.
 	inProgress := !intent.Status.IsFinalized() && meta.Txn.Epoch >= intent.Txn.Epoch
-	pushed := inProgress && meta.Timestamp.ToTimestamp().Less(intent.Txn.WriteTimestamp)
-	latestKey := MVCCKey{Key: intent.Key, Timestamp: meta.Timestamp.ToTimestamp()}
+	pushed := inProgress && timestampChanged
+	latestKey := MVCCKey{Key: intent.Key, Timestamp: metaTimestamp}
 
 	// Handle partial txn rollbacks. If the current txn sequence
 	// is part of a rolled back (ignored) seqnum range, we're going
@@ -2976,8 +2978,8 @@ func mvccResolveWriteIntent(
 		// If we're moving the intent's timestamp, adjust stats and
 		// rewrite it.
 		var prevValSize int64
-		if buf.newMeta.Timestamp != meta.Timestamp {
-			oldKey := MVCCKey{Key: intent.Key, Timestamp: meta.Timestamp.ToTimestamp()}
+		if timestampChanged {
+			oldKey := MVCCKey{Key: intent.Key, Timestamp: metaTimestamp}
 			newKey := MVCCKey{Key: intent.Key, Timestamp: newTimestamp}
 
 			// Rewrite the versioned value at the new timestamp.
