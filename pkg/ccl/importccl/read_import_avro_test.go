@@ -253,7 +253,8 @@ func (th *testHelper) newRecordStream(
 	require.NoError(t, err)
 
 	conv, err := row.NewDatumRowConverter(
-		context.Background(), th.schemaTable, nil, th.evalCtx.Copy(), nil)
+		context.Background(), th.schemaTable, nil, th.evalCtx.Copy(), nil,
+		nil /* defaultExprSeqDetails */, 0 /* fileIdx */)
 	require.NoError(t, err)
 	return &testRecordStream{
 		producer: producer,

@@ -42,19 +42,22 @@ func newCSVInputReader(
 	tableDesc *tabledesc.Immutable,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
+	sequenceDetails *row.DefaultExprSequenceDetails,
 ) *csvInputReader {
 	numExpectedDataCols := len(targetCols)
 	if numExpectedDataCols == 0 {
 		numExpectedDataCols = len(tableDesc.VisibleColumns())
 	}
+
 	return &csvInputReader{
 		importCtx: &parallelImportContext{
-			walltime:   walltime,
-			numWorkers: parallelism,
-			evalCtx:    evalCtx,
-			tableDesc:  tableDesc,
-			targetCols: targetCols,
-			kvCh:       kvCh,
+			walltime:              walltime,
+			numWorkers:            parallelism,
+			evalCtx:               evalCtx,
+			tableDesc:             tableDesc,
+			targetCols:            targetCols,
+			kvCh:                  kvCh,
+			defaultExprSeqDetails: sequenceDetails,
 		},
 		numExpectedDataCols: numExpectedDataCols,
 		opts:                opts,

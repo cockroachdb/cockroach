@@ -132,7 +132,9 @@ message ReadImportDataSpec {
   // when using FileTable ExternalStorage.
   optional string user_proto = 15 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 
-  // NEXTID: 16
+  map<int32, jobs.jobspb.SequenceDetails> sequence_details = 16;
+
+  // NEXTID: 17
 }
 
 message BackupDataSpec {

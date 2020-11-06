@@ -13,7 +13,11 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -25,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -238,6 +243,74 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 	}
 }
 
+// DefaultExprSequenceDetails contains information required to process default
+// expressions which use sequences.
+type DefaultExprSequenceDetails struct {
+	// Import job which is updated if the processor reserves a new chunk of
+	// sequence values while importing a file.
+	Job *jobs.Job
+
+	// Metadata about the sequence chunks which may have already been reserved by
+	// a previous resumption of the above import job.
+	SequenceDetails map[int32]*jobspb.SequenceDetails
+
+	// Walltime is the import timestamp.
+	Walltime int64
+}
+
+// getSequenceAnnotation returns a mapping from sequence name to metadata
+// related to the sequence which will be used when evaluating the default
+// expression using the sequence.
+func (c *DatumRowConverter) getSequenceAnnotation(
+	evalCtx *tree.EvalContext,
+	cols []descpb.ColumnDescriptor,
+	defaultExprSequenceDetails *DefaultExprSequenceDetails,
+	fileIdx int32,
+) (map[string]*sequenceMetadata, error) {
+	// Identify the sequences used in all the columns.
+	sequenceIDs := make(map[descpb.ID]struct{})
+	for _, col := range cols {
+		for _, id := range col.UsesSequenceIds {
+			sequenceIDs[id] = struct{}{}
+		}
+	}
+
+	var seqNameToMetadata map[string]*sequenceMetadata
+	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+		seqNameToMetadata = make(map[string]*sequenceMetadata)
+		txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: defaultExprSequenceDetails.Walltime})
+		for seqID := range sequenceIDs {
+			seqDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, evalCtx.Codec, seqID)
+			if err != nil {
+				return err
+			}
+
+			// Check if we have any previously allocated value chunks for the
+			// sequence(s) in the file being processed. This would be non-nil if the
+			// import job has processed this file during a prior run.
+			var prevChunks *jobspb.SequenceChunks
+			if fileSeqDetails, ok := defaultExprSequenceDetails.SequenceDetails[fileIdx]; ok {
+				if seqChunks, ok := fileSeqDetails.SeqIdToChunks[int32(seqID)]; ok {
+					prevChunks = seqChunks
+				}
+			}
+
+			seqOpts := seqDesc.SequenceOpts
+			if seqOpts == nil {
+				return errors.Newf("descriptor %s is not a sequence", seqDesc.Name)
+			}
+			seqNameToMetadata[seqDesc.Name] = &sequenceMetadata{
+				id:        seqID,
+				seqDesc:   seqDesc,
+				allChunks: prevChunks,
+				increment: seqOpts.Increment,
+			}
+		}
+		return nil
+	})
+	return seqNameToMetadata, err
+}
+
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
 	ctx context.Context,
@@ -245,6 +318,8 @@ func NewDatumRowConverter(
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,
+	defaultExprSeqDetails *DefaultExprSequenceDetails,
+	fileIdx int32,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,
@@ -324,7 +399,18 @@ func NewDatumRowConverter(
 		return ok
 	}
 	annot := make(tree.Annotations, 1)
-	annot.Set(cellInfoAddr, &cellInfoAnnotation{uniqueRowIDInstance: 0})
+	var seqNameToMetadata map[string]*sequenceMetadata
+	var importJob *jobs.Job
+	if defaultExprSeqDetails != nil {
+		seqNameToMetadata, err = c.getSequenceAnnotation(evalCtx, c.cols, defaultExprSeqDetails,
+			fileIdx)
+		if err != nil {
+			return nil, err
+		}
+		importJob = defaultExprSeqDetails.Job
+	}
+	annot.Set(cellInfoAddr, &cellInfoAnnotation{uniqueRowIDInstance: 0,
+		seqNameToMetadata: seqNameToMetadata, job: importJob})
 	c.EvalCtx.Annotations = &annot
 	for i := range cols {
 		col := &cols[i]

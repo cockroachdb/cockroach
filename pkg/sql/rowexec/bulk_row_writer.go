@@ -103,7 +103,8 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	var g ctxgroup.Group
 
 	conv, err := row.NewDatumRowConverter(ctx,
-		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh)
+		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil, /* defaultExprSeqDetails */
+		0 /* fileIdx */)
 	if err != nil {
 		return err
 	}
