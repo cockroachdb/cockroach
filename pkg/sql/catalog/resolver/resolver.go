@@ -37,6 +37,9 @@ import (
 // the resolution methods able to work even when we evolve the code to
 // use a different plan builder.
 // TODO(rytaft,andyk): study and reuse this.
+//
+// TODO(ajwerner,lucy-zhang): Rework this interface to take flags that
+// control things like search path, database context, caching, etc.
 type SchemaResolver interface {
 	tree.ObjectNameExistingResolver
 	tree.ObjectNameTargetResolver
