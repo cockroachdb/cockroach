@@ -1742,6 +1742,8 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		post_id INT REFERENCES roachblog.posts,
 		body text
 	)`)
+	sqlDB.Exec(t, `CREATE SCHEMA roachblog."foo bar"`)
+	sqlDB.Exec(t, `CREATE TABLE roachblog."foo bar".other_stuff(id INT PRIMARY KEY, body TEXT)`)
 	// Test special characters in DB and table names.
 	sqlDB.Exec(t, `CREATE DATABASE "sp'ec\ch""ars"`)
 	sqlDB.Exec(t, `CREATE TABLE "sp'ec\ch""ars"."more\spec'chars" (id INT PRIMARY KEY)`)
@@ -1752,14 +1754,21 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	expectedDatabaseInfo := map[string]serverpb.DataDistributionResponse_DatabaseInfo{
 		"roachblog": {
 			TableInfo: map[string]serverpb.DataDistributionResponse_TableInfo{
-				"posts": {
+				"public.posts": {
 					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
 						1: 1,
 						2: 1,
 						3: 1,
 					},
 				},
-				"comments": {
+				"public.comments": {
+					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
+						1: 1,
+						2: 1,
+						3: 1,
+					},
+				},
+				`"foo bar".other_stuff`: {
 					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
 						1: 1,
 						2: 1,
@@ -1770,7 +1779,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		},
 		`sp'ec\ch"ars`: {
 			TableInfo: map[string]serverpb.DataDistributionResponse_TableInfo{
-				`more\spec'chars`: {
+				`public."more\spec'chars"`: {
 					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
 						1: 1,
 						2: 1,
@@ -1810,7 +1819,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if resp.DatabaseInfo["roachblog"].TableInfo["comments"].DroppedAt == nil {
+	if resp.DatabaseInfo["roachblog"].TableInfo["public.comments"].DroppedAt == nil {
 		t.Fatal("expected roachblog.comments to have dropped_at set but it's nil")
 	}
 
