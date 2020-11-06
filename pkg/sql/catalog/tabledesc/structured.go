@@ -1709,40 +1709,8 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
 	columnIDs := make(map[descpb.ColumnID]string, len(desc.Columns))
-	for _, column := range desc.AllNonDropColumns() {
-		if err := catalog.ValidateName(column.Name, "column"); err != nil {
-			return err
-		}
-		if column.ID == 0 {
-			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.ID))
-		}
-
-		if _, columnNameExists := columnNames[column.Name]; columnNameExists {
-			for i := range desc.Columns {
-				if desc.Columns[i].Name == column.Name {
-					return pgerror.Newf(pgcode.DuplicateColumn,
-						"duplicate column name: %q", column.Name)
-				}
-			}
-			return pgerror.Newf(pgcode.DuplicateColumn,
-				"duplicate: column %q in the middle of being added, not yet public", column.Name)
-		}
-		if colinfo.IsSystemColumnName(column.Name) {
-			return pgerror.Newf(pgcode.DuplicateColumn,
-				"column name %q conflicts with a system column name", column.Name)
-		}
-		columnNames[column.Name] = column.ID
-
-		if other, ok := columnIDs[column.ID]; ok {
-			return fmt.Errorf("column %q duplicate ID of column %q: %d",
-				column.Name, other, column.ID)
-		}
-		columnIDs[column.ID] = column.Name
-
-		if column.ID >= desc.NextColumnID {
-			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
-				column.Name, errors.Safe(column.ID), errors.Safe(desc.NextColumnID))
-		}
+	if err := desc.validateColumns(columnNames, columnIDs); err != nil {
+		return err
 	}
 
 	for _, m := range desc.Mutations {
@@ -1869,6 +1837,47 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID(), privilege.Table)
+}
+
+func (desc *Immutable) validateColumns(
+	columnNames map[string]descpb.ColumnID, columnIDs map[descpb.ColumnID]string,
+) error {
+	for _, column := range desc.AllNonDropColumns() {
+		if err := catalog.ValidateName(column.Name, "column"); err != nil {
+			return err
+		}
+		if column.ID == 0 {
+			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.ID))
+		}
+
+		if _, columnNameExists := columnNames[column.Name]; columnNameExists {
+			for i := range desc.Columns {
+				if desc.Columns[i].Name == column.Name {
+					return pgerror.Newf(pgcode.DuplicateColumn,
+						"duplicate column name: %q", column.Name)
+				}
+			}
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"duplicate: column %q in the middle of being added, not yet public", column.Name)
+		}
+		if colinfo.IsSystemColumnName(column.Name) {
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"column name %q conflicts with a system column name", column.Name)
+		}
+		columnNames[column.Name] = column.ID
+
+		if other, ok := columnIDs[column.ID]; ok {
+			return fmt.Errorf("column %q duplicate ID of column %q: %d",
+				column.Name, other, column.ID)
+		}
+		columnIDs[column.ID] = column.Name
+
+		if column.ID >= desc.NextColumnID {
+			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
+				column.Name, errors.Safe(column.ID), errors.Safe(desc.NextColumnID))
+		}
+	}
+	return nil
 }
 
 func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]string) error {
