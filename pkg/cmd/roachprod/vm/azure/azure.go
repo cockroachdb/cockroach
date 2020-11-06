@@ -688,20 +688,6 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 		return group, nil
 	}
 
-	// Check if the network security group already exists on Azure.
-	group, err = client.Get(ctx, *resourceGroup.Name, name, "" /* expand */)
-	if err == nil {
-		return cacheAndReturn(group)
-	}
-	var detail autorest.DetailedError
-	if errors.As(err, &detail) {
-		// It's okay if the network security group was not found, it will be created
-		// below.
-		if code, ok := detail.StatusCode.(int); ok && code != 404 {
-			return network.SecurityGroup{}, err
-		}
-	}
-
 	future, err := client.CreateOrUpdate(ctx, *resourceGroup.Name, name, network.SecurityGroup{
 		SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 			SecurityRules: &[]network.SecurityRule{
@@ -783,6 +769,32 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 						DestinationPortRange:     to.StringPtr("*"),
 					},
 				},
+				{
+					Name: to.StringPtr("CockroachPG_Inbound"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(342),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("26257"),
+					},
+				},
+				{
+					Name: to.StringPtr("CockroachAdmin_Inbound"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(343),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("26258"),
+					},
+				},
 			},
 		},
 		Location: resourceGroup.Location,
@@ -797,6 +809,7 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 	if err != nil {
 		return network.SecurityGroup{}, err
 	}
+
 	return cacheAndReturn(securityGroup)
 }
 
