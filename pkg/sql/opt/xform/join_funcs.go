@@ -514,8 +514,29 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			indexJoin.IsSecondJoinInPairedJoiner = true
 		}
 
-		// Create the LookupJoin for the index join in the same group.
-		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
+		// If this is not a semi- or anti-join, create the LookupJoin for the index
+		// join in the same group.
+		if joinType != opt.SemiJoinOp && joinType != opt.AntiJoinOp {
+			c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
+			return
+		}
+
+		// For semi and anti joins, we need to add a project on top to ensure that
+		// only the original left-side columns are output. Normally, the LookupJoin
+		// would be able to perform the necessary projection for semi and anti
+		// joins by intersecting Cols with the OutputCols of its input, but that
+		// doesn't work for paired joins since the input to the second join includes more
+		// columns than the original input. In particular, the input to the second join
+		// includes the primary key columns from the inverted index which are used as
+		// the key columns in the lookup join.
+		var project memo.ProjectExpr
+		project.Input = c.e.f.ConstructLookupJoin(
+			indexJoin.Input,
+			indexJoin.On,
+			&indexJoin.LookupJoinPrivate,
+		)
+		project.Passthrough = grp.Relational().OutputCols
+		c.e.mem.AddProjectToGroup(&project, grp)
 	})
 }
 
