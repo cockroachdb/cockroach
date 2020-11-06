@@ -15,13 +15,13 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -225,27 +225,25 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 func (u *versionUpgradeTest) uploadVersion(
 	ctx context.Context, t *test, nodes nodeListOption, newVersion string,
 ) option {
-	var binary string
 	if newVersion == "" {
-		binary = cockroach
-	} else {
-		var err error
-		binary, err = binfetcher.Download(ctx, binfetcher.Options{
-			Binary:  "cockroach",
-			Version: "v" + newVersion,
-			GOOS:    u.goOS,
-			GOARCH:  "amd64",
-		})
-		if err != nil {
+		binary := cockroach
+		target := "./cockroach"
+		u.c.Put(ctx, binary, target, nodes)
+		return startArgs("--binary=" + target)
+	}
+
+	newVersion = "v" + newVersion
+	dir := newVersion
+	target := filepath.Join(dir, "cockroach")
+	// Check if the cockroach binary already exists.
+	if err := u.c.RunE(ctx, nodes, "test", "-e", target); err != nil {
+		if err := u.c.RunE(ctx, nodes, "mkdir", "-p", dir); err != nil {
+			t.Fatal(err)
+		}
+		if err := u.c.Stage(ctx, u.c.l, "release", newVersion, dir, nodes); err != nil {
 			t.Fatal(err)
 		}
 	}
-
-	target := "./cockroach"
-	if newVersion != "" {
-		target += "-" + newVersion
-	}
-	u.c.Put(ctx, binary, target, nodes)
 	return startArgs("--binary=" + target)
 }
 

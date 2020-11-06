@@ -18,13 +18,11 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -97,17 +95,9 @@ func setupTPCC(
 			if v == "" {
 				regularNodes = append(regularNodes, c.Node(i+1))
 			} else {
-				// NB: binfetcher caches the downloaded files.
-				binary, err := binfetcher.Download(ctx, binfetcher.Options{
-					Binary:  "cockroach",
-					Version: v,
-					GOOS:    ifLocal(runtime.GOOS, "linux"),
-					GOARCH:  "amd64",
-				})
-				if err != nil {
-					t.Fatalf("while fetching %s: %s", v, err)
+				if err := c.Stage(ctx, c.l, "release", v, "", c.Node(i+1)); err != nil {
+					t.Fatal(err)
 				}
-				c.Put(ctx, binary, "./cockroach", c.Node(i+1))
 			}
 		}
 		c.Put(ctx, cockroach, "./cockroach", regularNodes...)

@@ -140,9 +140,12 @@ var httpClient = httputil.NewClientWithTimeout(300 * time.Second)
 // Download downloads the binary for the given version, and skips the download
 // if the archive is already present in `destDir`.
 //
+// Do not use this to download the cockroach binary. It won't work for v20.2+
+// releases, which include the geos libraries along with the binary. On
+// roachprod, use `roachprod stage` instead.
+//
 // `version` can be:
 //
-// - a release, e.g. v1.0.5 (makes sense only for downloading `cockroach`)
 // - a SHA from the master branch, e.g. bd828feaa309578142fe7ad2d89ee1b70adbd52d
 // - the string "LATEST" for the most recent SHA from the master branch. Note that
 //   caching is disabled in that case.
