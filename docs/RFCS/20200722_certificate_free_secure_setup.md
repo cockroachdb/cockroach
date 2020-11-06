@@ -137,7 +137,6 @@ Nodes will use the below flow to reach an mTLS-ready state:
 @startuml
 start
 :node start;
-
 if (Is `interNodeHostCertificate` (public, private) key present) then (yes)
 else (no)
   if (Is `interNodeCa` (public, private) key present) then (no)
@@ -172,15 +171,12 @@ Once nodes have successfully joined each other via mTLS and reached quorum, one 
 @startuml
 start
 repeat: for each `interface`;
-
 if (Is `interface` host certificate (public, private) key missing) then (yes)
   if (Is `interface` CA (public, private) key missing) then (yes)
     :generate `interface` CA (public, private) keys;
   endif
   :generate `interface` host certificate (public, private) keys;
-  
 endif
-
 repeat while (done with interfaces?) is (no)
 ->yes;
 stop
@@ -201,10 +197,7 @@ database Node_Orange
 control ClusterInitStatus
 database Node_Cherry
 database Node_Banana
-
 == mTLS established ==
-
-
 group Interface Initialization
 Node_Orange -> ClusterInitStatus : Set get (lock) and set status to `INIT`
 activate ClusterInitStatus
@@ -216,18 +209,14 @@ Node_Orange -> ClusterInitStatus : Set status to `READY`
 note over Node_Orange : Restart
 Node_Cherry -> ClusterInitStatus : Read `READY` status
 Node_Banana -> ClusterInitStatus : Read `READY` status
-
 end
-
 group Nodes begin polling neighbors to request certificate bundle
-
 Node_Banana --> Node_Cherry : request certBundle (fail)
 Node_Banana -> Node_Orange : request certBundle (success)
 note over Node_Banana : Restart
 Node_Cherry -> Node_Orange : request certBundle (success)
 note over Node_Cherry : Restart
 end
-
 == Certificates propagation conplete ==
 @enduml
 ](http://www.plantuml.com/plantuml/png/dPF1Yjj044JlynLrN1_s1mmEctL2C8HDi3U7dEBMg2GF6VSeCws5pTS72qC6Em9dhvAgkkgf-w6OP1kFqRLYqaWXdbBB7r-oQ4_darfE4Uiu5cFUQB2TYOtbulFrWJc_NZny51KLvrOh79y_xy1YqiHG3conMZdd-fp60HirvauySR8F4iDliP3KLK5m_-uw0vROqT3JS1UJ_xc0Q8j2GvdUmnBscwVDyzw9j_0YndyKgQBYVcRCrnGZkfInttvy_-7x_Zp0LTt_Mwl9YFJ2N0F74f-ep6AikAoPxGR1DYN3jy8y2H0wA3rBaVnw8yiAt3djxDGjfysf4SmPRodjDRcA-kqoHstFUpFbAMZO1yMGOWpQGndwGvFoL27pryXYyCmMkk35Y6RKDj9T_VMwnXAryd5IuAwJ41SNkMicCx8oUizI5XN8scCMv9kSAu_AcTfEHxZ-ow5Wo6cGVZeq-AH3fF5qbG_KTZp6Fm00)
@@ -267,10 +256,10 @@ The initialization token must provide all required information to perform this p
 Strawman JSON token:
 ```json
 {
-  "clusterName": "indominable"
+  "clusterName": "indominable",
   "numNodes": 3,
   "initSecret": "super secret string",
-  "initStartValidity": 2020-01-02T03:00:00.000Z,
+  "initStartValidity": "2020-01-02T03:00:00.000Z",
   "lifespanInSeconds": 3600
 }
 ```
