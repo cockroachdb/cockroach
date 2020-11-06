@@ -116,7 +116,8 @@ func TestConverterFlushesBatches(t *testing.T) {
 				}
 
 				kvCh := make(chan row.KVBatch, batchSize)
-				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh)
+				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh,
+					nil /* seqChunkProvider */)
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}
@@ -419,7 +420,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					}
 				}()
 
-				_, err := runImport(ctx, flowCtx, spec, progCh)
+				_, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
 
 				if err != nil {
 					t.Fatal(err)
@@ -496,7 +497,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 				}
 			}()
 
-			_, err := runImport(ctx, flowCtx, spec, progCh)
+			_, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
 			require.True(t, errors.HasType(err, &kvserverbase.DuplicateKeyError{}))
 		})
 	}

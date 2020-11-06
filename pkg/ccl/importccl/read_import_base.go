@@ -47,6 +47,7 @@ func runImport(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	seqChunkProvider *row.SeqChunkProvider,
 ) (*roachpb.BulkOpSummary, error) {
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
@@ -69,7 +70,11 @@ func runImport(
 		flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
 	}
 
-	conv, err := makeInputConverter(ctx, spec, flowCtx.NewEvalCtx(), kvCh)
+	evalCtx := flowCtx.NewEvalCtx()
+	// TODO(adityamaru): Should we just plumb the flowCtx instead of this
+	// assignment.
+	evalCtx.DB = flowCtx.Cfg.DB
+	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh, seqChunkProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -407,13 +412,14 @@ func newImportRowError(err error, row string, num int64) error {
 
 // parallelImportContext describes state associated with the import.
 type parallelImportContext struct {
-	walltime   int64                // Import time stamp.
-	numWorkers int                  // Parallelism
-	batchSize  int                  // Number of records to batch
-	evalCtx    *tree.EvalContext    // Evaluation context.
-	tableDesc  *tabledesc.Immutable // Table descriptor we're importing into.
-	targetCols tree.NameList        // List of columns to import.  nil if importing all columns.
-	kvCh       chan row.KVBatch     // Channel for sending KV batches.
+	walltime         int64                 // Import time stamp.
+	numWorkers       int                   // Parallelism.
+	batchSize        int                   // Number of records to batch.
+	evalCtx          *tree.EvalContext     // Evaluation context.
+	tableDesc        *tabledesc.Immutable  // Table descriptor we're importing into.
+	targetCols       tree.NameList         // List of columns to import.  nil if importing all columns.
+	kvCh             chan row.KVBatch      // Channel for sending KV batches.
+	seqChunkProvider *row.SeqChunkProvider // Used to reserve chunks of sequence values.
 }
 
 // importFileContext describes state specific to a file being imported.
@@ -441,7 +447,8 @@ func makeDatumConverter(
 	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext,
 ) (*row.DatumRowConverter, error) {
 	conv, err := row.NewDatumRowConverter(
-		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx, importCtx.kvCh)
+		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx, importCtx.kvCh,
+		importCtx.seqChunkProvider)
 	if err == nil {
 		conv.KvBatch.Source = fileCtx.source
 	}
