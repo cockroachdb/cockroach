@@ -13,11 +13,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,19 +31,10 @@ import (
 func registerAutoUpgrade(r *testRegistry) {
 	runAutoUpgrade := func(ctx context.Context, t *test, c *cluster, oldVersion string) {
 		nodes := c.spec.NodeCount
-		goos := ifLocal(runtime.GOOS, "linux")
 
-		b, err := binfetcher.Download(ctx, binfetcher.Options{
-			Binary:  "cockroach",
-			Version: "v" + oldVersion,
-			GOOS:    goos,
-			GOARCH:  "amd64",
-		})
-		if err != nil {
+		if err := c.Stage(ctx, c.l, "release", "v"+oldVersion, "", c.Range(1, nodes)); err != nil {
 			t.Fatal(err)
 		}
-
-		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
 
 		c.Start(ctx, t, c.Range(1, nodes))
 
@@ -99,7 +88,7 @@ func registerAutoUpgrade(r *testRegistry) {
 		// oldVersion was a patch-level version, such as v19.1.4, but cluster version upgrades only
 		// ever deal in <major>.<minor>, which we load from the current value of the cluster setting.
 		// Overwrite oldVersion to prevent confusion.
-		oldVersion, err = clusterVersion()
+		oldVersion, err := clusterVersion()
 		if err != nil {
 			t.Fatal(err)
 		}

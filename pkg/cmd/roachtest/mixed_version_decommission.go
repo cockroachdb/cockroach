@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -124,11 +125,10 @@ func runDecommissionMixedVersions(
 // cockroachBinaryPath is a shorthand to retrieve the path for a cockroach
 // binary of a given version.
 func cockroachBinaryPath(version string) string {
-	path := "./cockroach"
-	if version != "" {
-		path += "-" + version
+	if version == "" {
+		return "./cockroach"
 	}
-	return path
+	return fmt.Sprintf("./v%s/cockroach", version)
 }
 
 // partialDecommissionStep runs `cockroach node decommission --wait=none` from a
