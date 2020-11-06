@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -39,6 +40,7 @@ type NewColOperatorArgs struct {
 	DiskQueueCfg         colcontainer.DiskQueueCfg
 	FDSemaphore          semaphore.Semaphore
 	ExprHelper           *ExprHelper
+	Factory              coldata.ColumnFactory
 	TestingKnobs         struct {
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be

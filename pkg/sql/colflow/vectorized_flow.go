@@ -1077,6 +1077,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				DiskQueueCfg:         s.diskQueueCfg,
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,
+				Factory:              factory,
 			}
 			var result *colexec.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
@@ -1290,8 +1291,8 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 
 // IsSupported returns whether a flow specified by spec can be vectorized.
 func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpec) error {
-	for _, p := range spec.Processors {
-		if err := colbuilder.IsSupported(mode, &p); err != nil {
+	for pIdx := range spec.Processors {
+		if err := colbuilder.IsSupported(mode, &spec.Processors[pIdx]); err != nil {
 			return err
 		}
 	}

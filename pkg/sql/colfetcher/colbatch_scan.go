@@ -276,6 +276,7 @@ func initCRowFetcher(
 
 // Release implements the execinfra.Releasable interface.
 func (s *ColBatchScan) Release() {
+	s.rf.table.Release()
 	*s.rf = cFetcher{}
 	cFetcherPool.Put(s.rf)
 	*s = ColBatchScan{
