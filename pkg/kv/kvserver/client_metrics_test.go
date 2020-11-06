@@ -386,7 +386,7 @@ func TestStoreMaxBehindNanosOnlyTracksEpochBasedLeases(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		_, metaRepl := getFirstStoreReplica(t, tc.Server(1), keys.Meta2Prefix)
 		l, _ := metaRepl.GetLease()
-		if l.Start == (hlc.Timestamp{}) {
+		if l.Start.IsEmpty() {
 			return errors.Errorf("don't have a lease for meta1 yet: %v %v", l, meta2Repl1)
 		}
 		sinceExpBasedLeaseStart := timeutil.Since(timeutil.Unix(0, l.Start.WallTime))

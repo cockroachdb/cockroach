@@ -467,7 +467,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		// we fingerprint at `updated.Prev()` since we want to catch cases where one or
 		// more row updates are missed. For example: If k1 was written at t1, t2, t3 and
 		// the update for t2 was missed.
-		if v.previousRowUpdateTs != (hlc.Timestamp{}) && v.previousRowUpdateTs.Less(row.updated) {
+		if !v.previousRowUpdateTs.IsEmpty() && v.previousRowUpdateTs.Less(row.updated) {
 			if err := v.fingerprint(row.updated.Prev()); err != nil {
 				return err
 			}

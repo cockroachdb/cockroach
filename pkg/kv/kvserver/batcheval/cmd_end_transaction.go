@@ -634,7 +634,7 @@ func RunCommitTrigger(
 	}
 	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
 		newDesc := *rec.Desc()
-		if sbt.StickyBit != (hlc.Timestamp{}) {
+		if !sbt.StickyBit.IsEmpty() {
 			newDesc.StickyBit = &sbt.StickyBit
 		} else {
 			newDesc.StickyBit = nil
@@ -945,7 +945,7 @@ func splitTriggerHelper(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
-		if (*gcThreshold == hlc.Timestamp{}) {
+		if gcThreshold.IsEmpty() {
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
 

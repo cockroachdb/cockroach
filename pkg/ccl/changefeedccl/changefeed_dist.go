@@ -80,7 +80,7 @@ func distChangefeedFlow(
 	// based on whether we should perform an initial scan.
 	{
 		h := progress.GetHighWater()
-		noHighWater := (h == nil || *h == (hlc.Timestamp{}))
+		noHighWater := (h == nil || h.IsEmpty())
 		// We want to set the highWater and thus avoid an initial scan if either
 		// this is a cursor and there was no request for one, or we don't have a
 		// cursor but we have a request to not have an initial scan.
@@ -92,7 +92,7 @@ func distChangefeedFlow(
 
 	spansTS := details.StatementTime
 	var initialHighWater hlc.Timestamp
-	if h := progress.GetHighWater(); h != nil && *h != (hlc.Timestamp{}) {
+	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
 		initialHighWater = *h
 		// If we have a high-water set, use it to compute the spans, since the
 		// ones at the statement time may have been garbage collected by now.

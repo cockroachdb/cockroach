@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -370,7 +369,7 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 			if err := r.ValueProto(&desc); err != nil {
 				return err
 			}
-			if (desc.GetStickyBit() != hlc.Timestamp{}) {
+			if !desc.GetStickyBit().IsEmpty() {
 				// Swallow "key is not the start of a range" errors because it would mean
 				// that the sticky bit was removed and merged concurrently. DROP TABLE
 				// should not fail because of this.

@@ -70,7 +70,7 @@ func WriteInitialReplicaState(
 
 	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
-	} else if (*existingGCThreshold != hlc.Timestamp{}) {
+	} else if !existingGCThreshold.IsEmpty() {
 		log.Fatalf(ctx, "expected trivial GChreshold, but found %+v", existingGCThreshold)
 	}
 

@@ -284,7 +284,7 @@ func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
 // Emit a tuple and return true if we have reason to believe iteration can
 // continue.
 func (p *pebbleMVCCScanner) getAndAdvance() bool {
-	if p.curKey.Timestamp != (hlc.Timestamp{}) {
+	if !p.curKey.Timestamp.IsEmpty() {
 		if p.curKey.Timestamp.LessEq(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer than
 			// the most recent version's timestamp.
@@ -681,7 +681,7 @@ func (p *pebbleMVCCScanner) iterSeekReverse(key MVCCKey) bool {
 		return false
 	}
 
-	if p.curKey.Timestamp == (hlc.Timestamp{}) {
+	if p.curKey.Timestamp.IsEmpty() {
 		// We landed on an intent or inline value.
 		return true
 	}

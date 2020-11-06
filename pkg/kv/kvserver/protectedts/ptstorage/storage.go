@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -266,7 +265,7 @@ var (
 )
 
 func validateRecordForProtect(r *ptpb.Record) error {
-	if r.Timestamp == (hlc.Timestamp{}) {
+	if r.Timestamp.IsEmpty() {
 		return errZeroTimestamp
 	}
 	if r.ID == uuid.Nil {

@@ -20,7 +20,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
-        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/uuid",

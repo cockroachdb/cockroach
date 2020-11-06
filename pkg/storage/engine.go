@@ -80,7 +80,7 @@ type IteratorStats struct {
 // engine. It is used for iterating over the key space that can have multiple
 // versions, and if often also used (due to historical reasons) for iterating
 // over the key space that never has multiple versions (i.e.,
-// MVCCKey.Timestamp == hlc.Timestamp{}).
+// MVCCKey.Timestamp.IsEmpty()).
 //
 // MVCCIterator implementations are thread safe unless otherwise noted.
 type MVCCIterator interface {

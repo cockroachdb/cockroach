@@ -136,7 +136,7 @@ func TestMultiIterator(t *testing.T) {
 							break
 						}
 						output.Write(it.UnsafeKey().Key)
-						if it.UnsafeKey().Timestamp == (hlc.Timestamp{}) {
+						if it.UnsafeKey().Timestamp.IsEmpty() {
 							output.WriteRune('M')
 						} else {
 							output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))

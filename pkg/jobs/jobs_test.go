@@ -1499,7 +1499,7 @@ func TestShowJobs(t *testing.T) {
 			progress := &jobspb.Progress{
 				ModifiedMicros: in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
 			}
-			if in.highWater != (hlc.Timestamp{}) {
+			if !in.highWater.IsEmpty() {
 				progress.Progress = &jobspb.Progress_HighWater{
 					HighWater: &in.highWater,
 				}

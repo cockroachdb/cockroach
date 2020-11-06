@@ -324,7 +324,7 @@ func (tc *testContext) Sender() kv.Sender {
 		if ba.RangeID == 0 {
 			ba.RangeID = 1
 		}
-		if ba.Timestamp == (hlc.Timestamp{}) {
+		if ba.Timestamp.IsEmpty() {
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				tc.Fatal(err)
 			}

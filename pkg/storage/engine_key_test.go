@@ -77,7 +77,7 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
 			var encodedTS []byte
-			if !(test.key.Timestamp == hlc.Timestamp{}) {
+			if !test.key.Timestamp.IsEmpty() {
 				var size int
 				if test.key.Timestamp.Flags != 0 {
 					size = 13

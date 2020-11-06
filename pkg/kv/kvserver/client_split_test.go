@@ -1771,7 +1771,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	}
 
 	// Verify that the txn's safe timestamp was set.
-	if txnOld.TestingCloneTxn().ReadTimestamp == (hlc.Timestamp{}) {
+	if txnOld.TestingCloneTxn().ReadTimestamp.IsEmpty() {
 		t.Fatal("expected non-zero refreshed timestamp")
 	}
 

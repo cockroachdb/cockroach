@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -470,7 +469,7 @@ func (p *planner) dropIndexByName(
 					// We have to explicitly check that the range descriptor's start key
 					// lies within the span of the index since ScanMetaKVs returns all
 					// intersecting spans.
-					if (desc.GetStickyBit() != hlc.Timestamp{}) && span.Key.Compare(desc.StartKey.AsRawKey()) <= 0 {
+					if !desc.GetStickyBit().IsEmpty() && span.Key.Compare(desc.StartKey.AsRawKey()) <= 0 {
 						// Swallow "key is not the start of a range" errors because it would
 						// mean that the sticky bit was removed and merged concurrently. DROP
 						// INDEX should not fail because of this.

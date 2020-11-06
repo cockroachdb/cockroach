@@ -1247,7 +1247,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		panic("using a closed pebbleReadOnly")
 	}
 
-	if opts.MinTimestampHint != (hlc.Timestamp{}) {
+	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
 		return newPebbleIterator(p.parent.db, opts)
 	}
