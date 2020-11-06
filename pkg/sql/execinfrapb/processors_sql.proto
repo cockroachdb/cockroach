@@ -275,8 +275,8 @@ message JoinReaderSpec {
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
   // stream has M columns, in this expression variables @1 to @N refer to
-  // columns of the left stream and variables @N to @(N+M) refer to columns in
-  // the right stream.
+  // columns of the left stream and variables @(N+1) to @(N+M) refer to columns
+  // in the right stream.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   // This used to be used for an extra index filter expression. It was removed
@@ -430,14 +430,18 @@ message ZigzagJoinerSpec {
 // same ordering on columns C1, C2 and C5, C4 respectively. For example: C1+,C2-
 // and C5+,C4-.
 //
-// The "internal columns" of a MergeJoiner (see ProcessorSpec) are the
-// concatenation of left input columns and right input columns. If the left
-// input has N columns and the right input has M columns, the first N columns
-// contain values from the left side and the following M columns contain values
-// from the right side.
+// The "internal columns" of a MergeJoiner (see ProcessorSpec) are:
+// - for INNER, LEFT_OUTER, RIGHT_OUTER, FULL_OUTER - the concatenation of left
+//   input columns and right input columns.
+//   If the left input has N columns and the right input has M columns, the
+//   first N columns contain values from the left side and the following M
+//   columns contain values from the right side.
+// - for LEFT_SEMI, LEFT_ANTI, INTERSECT_ALL, EXCEPT_ALL - the left input
+//   columns.
+// - for RIGHT_SEMI, RIGHT_ANTI - the right input columns.
 //
-// In the case of semi-join and anti-join, the processor core outputs only the
-// left columns.
+// Note that, regardless of the join type, an optional ON expression can refer
+// to columns from both inputs.
 message MergeJoinerSpec {
   // The streams must be ordered according to the columns that have equality
   // constraints. The first column of the left ordering is constrained to be
@@ -483,15 +487,18 @@ message MergeJoinerSpec {
 // i.e. all results that stem from left row (i) precede results that stem from
 // left row (i+1).
 //
-// The "internal columns" of a HashJoiner (see ProcessorSpec) are the
-// concatenation of left input columns and right input columns.
+// The "internal columns" of a HashJoiner (see ProcessorSpec) are:
+// - for INNER, LEFT_OUTER, RIGHT_OUTER, FULL_OUTER - the concatenation of left
+//   input columns and right input columns.
+//   If the left input has N columns and the right input has M columns, the
+//   first N columns contain values from the left side and the following M
+//   columns contain values from the right side.
+// - for LEFT_SEMI, LEFT_ANTI, INTERSECT_ALL, EXCEPT_ALL - the left input
+//   columns.
+// - for RIGHT_SEMI, RIGHT_ANTI - the right input columns.
 //
-// If the left input has N columns and the right input has M columns, the
-// first N columns contain values from the left side and the following M columns
-// contain values from the right side.
-//
-// In the case of semi-join and anti-join, the processor core outputs only the
-// left columns.
+// Note that, regardless of the join type, an optional ON expression can refer
+// to columns from both inputs.
 message HashJoinerSpec {
   // The join constraints certain columns from the left stream to equal
   // corresponding columns on the right stream. These must have the same length.
@@ -501,8 +508,8 @@ message HashJoinerSpec {
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
   // stream has M columns, in this expression variables @1 to @N refer to
-  // columns of the left stream and variables @N to @(N+M) refer to columns in
-  // the right stream.
+  // columns of the left stream and variables @(N+1) to @(N+M) refer to columns
+  // in the right stream.
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];

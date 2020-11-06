@@ -227,8 +227,7 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.MergeJoiner != nil:
-		if !spec.Core.MergeJoiner.OnExpr.Empty() &&
-			spec.Core.MergeJoiner.Type != descpb.InnerJoin {
+		if !spec.Core.MergeJoiner.OnExpr.Empty() && spec.Core.MergeJoiner.Type != descpb.InnerJoin {
 			return errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
 		return nil
@@ -923,12 +922,12 @@ func NewColOperator(
 					args.TestingKnobs.SpillingCallbackFn,
 				)
 			}
-			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
-			copy(result.ColumnTypes, leftTypes)
-			if !core.HashJoiner.Type.ShouldIncludeRightColsInOutput() {
-				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
-			} else {
-				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
+			result.ColumnTypes = make([]*types.T, 0, len(leftTypes)+len(rightTypes))
+			if core.HashJoiner.Type.ShouldIncludeLeftColsInOutput() {
+				result.ColumnTypes = append(result.ColumnTypes, leftTypes...)
+			}
+			if core.HashJoiner.Type.ShouldIncludeRightColsInOutput() {
+				result.ColumnTypes = append(result.ColumnTypes, rightTypes...)
 			}
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
@@ -984,12 +983,12 @@ func NewColOperator(
 
 			result.Op = mj
 			result.ToClose = append(result.ToClose, mj.(colexecbase.Closer))
-			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
-			copy(result.ColumnTypes, leftTypes)
-			if !core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
-				result.ColumnTypes = result.ColumnTypes[:len(leftTypes):len(leftTypes)]
-			} else {
-				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
+			result.ColumnTypes = make([]*types.T, 0, len(leftTypes)+len(rightTypes))
+			if core.MergeJoiner.Type.ShouldIncludeLeftColsInOutput() {
+				result.ColumnTypes = append(result.ColumnTypes, leftTypes...)
+			}
+			if core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
+				result.ColumnTypes = append(result.ColumnTypes, rightTypes...)
 			}
 
 			if onExpr != nil {

@@ -830,8 +830,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	}
 
 	var outputCols opt.ColMap
-	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// For semi and anti join, only the left columns are output.
+	if !joinType.ShouldIncludeRightColsInOutput() {
 		outputCols = leftPlan.outputCols
 	} else {
 		outputCols = allCols
@@ -898,6 +897,23 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	leftExpr := join.Child(0).(memo.RelExpr)
 	rightExpr := join.Child(1).(memo.RelExpr)
 	filters := join.Child(2).(*memo.FiltersExpr)
+	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
+		// We have a partial join, and we want to make sure that the relation
+		// with smaller cardinality is on the right side. Note that we assumed
+		// it during the costing.
+		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
+		// choosing a side.
+		leftRowCount := leftExpr.Relational().Stats.RowCount
+		rightRowCount := rightExpr.Relational().Stats.RowCount
+		if leftRowCount < rightRowCount {
+			if joinType == descpb.LeftSemiJoin {
+				joinType = descpb.RightSemiJoin
+			} else {
+				joinType = descpb.RightAntiJoin
+			}
+			leftExpr, rightExpr = rightExpr, leftExpr
+		}
+	}
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
 		leftExpr.Relational().OutputCols,
@@ -1007,8 +1023,10 @@ func (b *Builder) initJoinBuild(
 		}
 	}
 
-	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// For semi and anti join, only the left columns are output.
+	if !joinType.ShouldIncludeLeftColsInOutput() {
+		return leftPlan, rightPlan, onExpr, rightPlan.outputCols, nil
+	}
+	if !joinType.ShouldIncludeRightColsInOutput() {
 		return leftPlan, rightPlan, onExpr, leftPlan.outputCols, nil
 	}
 	return leftPlan, rightPlan, onExpr, allCols, nil

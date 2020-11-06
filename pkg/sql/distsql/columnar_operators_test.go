@@ -588,6 +588,12 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		{
 			joinType: descpb.ExceptAllJoin,
 		},
+		{
+			joinType: descpb.RightSemiJoin,
+		},
+		{
+			joinType: descpb.RightAntiJoin,
+		},
 	}
 
 	rng, seed := randutil.NewPseudoRand()
@@ -641,10 +647,11 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								}
 
 								var outputTypes []*types.T
+								if testSpec.joinType.ShouldIncludeLeftColsInOutput() {
+									outputTypes = append(outputTypes, lInputTypes...)
+								}
 								if testSpec.joinType.ShouldIncludeRightColsInOutput() {
-									outputTypes = append(lInputTypes, rInputTypes...)
-								} else {
-									outputTypes = lInputTypes
+									outputTypes = append(outputTypes, rInputTypes...)
 								}
 								outputColumns := make([]uint32, len(outputTypes))
 								for i := range outputColumns {
@@ -653,16 +660,16 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 
 								var filter, onExpr execinfrapb.Expression
 								if addFilter {
-									colTypes := append(lInputTypes, rInputTypes...)
+									forceSingleSide := !testSpec.joinType.ShouldIncludeLeftColsInOutput() ||
+										!testSpec.joinType.ShouldIncludeRightColsInOutput()
 									filter = generateFilterExpr(
-										rng, nCols, nEqCols, colTypes, usingRandomTypes,
-										!testSpec.joinType.ShouldIncludeRightColsInOutput(),
+										rng, nCols, nEqCols, outputTypes, usingRandomTypes, forceSingleSide,
 									)
 								}
 								if triedWithoutOnExpr {
 									colTypes := append(lInputTypes, rInputTypes...)
 									onExpr = generateFilterExpr(
-										rng, nCols, nEqCols, colTypes, usingRandomTypes, false, /* forceLeftSide */
+										rng, nCols, nEqCols, colTypes, usingRandomTypes, false, /* forceSingleSide */
 									)
 								}
 								hjSpec := &execinfrapb.HashJoinerSpec{
@@ -788,6 +795,12 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		{
 			joinType: descpb.ExceptAllJoin,
 		},
+		{
+			joinType: descpb.RightSemiJoin,
+		},
+		{
+			joinType: descpb.RightAntiJoin,
+		},
 	}
 
 	rng, seed := randutil.NewPseudoRand()
@@ -860,10 +873,11 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								return cmp < 0
 							})
 							var outputTypes []*types.T
+							if testSpec.joinType.ShouldIncludeLeftColsInOutput() {
+								outputTypes = append(outputTypes, lInputTypes...)
+							}
 							if testSpec.joinType.ShouldIncludeRightColsInOutput() {
-								outputTypes = append(lInputTypes, rInputTypes...)
-							} else {
-								outputTypes = lInputTypes
+								outputTypes = append(outputTypes, rInputTypes...)
 							}
 							outputColumns := make([]uint32, len(outputTypes))
 							for i := range outputColumns {
@@ -872,16 +886,16 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 
 							var filter, onExpr execinfrapb.Expression
 							if addFilter {
-								colTypes := append(lInputTypes, rInputTypes...)
+								forceSingleSide := !testSpec.joinType.ShouldIncludeLeftColsInOutput() ||
+									!testSpec.joinType.ShouldIncludeRightColsInOutput()
 								filter = generateFilterExpr(
-									rng, nCols, nOrderingCols, colTypes, usingRandomTypes,
-									!testSpec.joinType.ShouldIncludeRightColsInOutput(),
+									rng, nCols, nOrderingCols, outputTypes, usingRandomTypes, forceSingleSide,
 								)
 							}
 							if triedWithoutOnExpr {
 								colTypes := append(lInputTypes, rInputTypes...)
 								onExpr = generateFilterExpr(
-									rng, nCols, nOrderingCols, colTypes, usingRandomTypes, false, /* forceLeftSide */
+									rng, nCols, nOrderingCols, colTypes, usingRandomTypes, false, /* forceSingleSide */
 								)
 							}
 							mjSpec := &execinfrapb.MergeJoinerSpec{
@@ -974,15 +988,16 @@ func getAddFilterOptions(joinType descpb.JoinType, nonEqualityColsPresent bool) 
 // against a constant.
 // If forceConstComparison is true, then the comparison against the constant
 // will be used.
-// If forceLeftSide is true, then the comparison of a column from the left
-// against a constant will be used.
+// If forceSingleSide is true, then the comparison of a column from the single
+// side against a constant will be used ("single" meaning that the join type
+// doesn't output columns from both sides).
 func generateFilterExpr(
 	rng *rand.Rand,
 	nCols int,
 	nEqCols int,
 	colTypes []*types.T,
 	forceConstComparison bool,
-	forceLeftSide bool,
+	forceSingleSide bool,
 ) execinfrapb.Expression {
 	var comparison string
 	r := rng.Float64()
@@ -999,9 +1014,9 @@ func generateFilterExpr(
 	// only one interesting case when a column from either side is compared
 	// against a constant. The second conditional is us choosing to compare
 	// against a constant.
-	if nCols == nEqCols || rng.Float64() < 0.33 || forceConstComparison || forceLeftSide {
+	if nCols == nEqCols || rng.Float64() < 0.33 || forceConstComparison || forceSingleSide {
 		colIdx := rng.Intn(nCols)
-		if !forceLeftSide && rng.Float64() >= 0.5 {
+		if !forceSingleSide && rng.Float64() >= 0.5 {
 			// Use right side.
 			colIdx += nCols
 		}

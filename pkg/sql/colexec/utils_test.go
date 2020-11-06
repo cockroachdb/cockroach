@@ -1465,6 +1465,46 @@ func (tc *joinTestCase) init() {
 	}
 }
 
+// mirror attempts to create a "mirror" test case of tc and returns nil if it
+// can't (a "mirror" test case is derived from the original one by swapping the
+// inputs and adjusting all of the corresponding fields accordingly). Currently
+// it works only for LEFT SEMI and LEFT ANTI join types.
+// TODO(yuzefovich): extend this to other join types when possible.
+func (tc *joinTestCase) mirror() *joinTestCase {
+	switch tc.joinType {
+	case descpb.LeftSemiJoin, descpb.LeftAntiJoin:
+	default:
+		return nil
+	}
+	mirroringCase := *tc
+	mirroringCase.description = strings.ReplaceAll(tc.description, "LEFT", "RIGHT")
+	if tc.joinType == descpb.LeftSemiJoin {
+		mirroringCase.joinType = descpb.RightSemiJoin
+	} else {
+		mirroringCase.joinType = descpb.RightAntiJoin
+	}
+	mirroringCase.leftTuples, mirroringCase.rightTuples = mirroringCase.rightTuples, mirroringCase.leftTuples
+	mirroringCase.leftTypes, mirroringCase.rightTypes = mirroringCase.rightTypes, mirroringCase.leftTypes
+	mirroringCase.leftOutCols, mirroringCase.rightOutCols = mirroringCase.rightOutCols, mirroringCase.leftOutCols
+	mirroringCase.leftEqCols, mirroringCase.rightEqCols = mirroringCase.rightEqCols, mirroringCase.leftEqCols
+	mirroringCase.leftDirections, mirroringCase.rightDirections = mirroringCase.rightDirections, mirroringCase.leftDirections
+	mirroringCase.leftEqColsAreKey, mirroringCase.rightEqColsAreKey = mirroringCase.rightEqColsAreKey, mirroringCase.leftEqColsAreKey
+	// TODO(yuzefovich): once we support ON expression in more join types, this
+	// method will need to update non-empty ON expressions as well.
+	return &mirroringCase
+}
+
+// withMirrors will add all "mirror" test cases.
+func withMirrors(testCases []*joinTestCase) []*joinTestCase {
+	numOrigTestCases := len(testCases)
+	for _, c := range testCases[:numOrigTestCases] {
+		if mirror := c.mirror(); mirror != nil {
+			testCases = append(testCases, mirror)
+		}
+	}
+	return testCases
+}
+
 // mutateTypes returns a slice of joinTestCases with varied types. Assumes
 // the input is made up of just int64s. Calling this
 func (tc *joinTestCase) mutateTypes() []*joinTestCase {

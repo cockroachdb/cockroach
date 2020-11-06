@@ -34,9 +34,8 @@ import (
 )
 
 var (
-	floats      = []float64{0.314, 3.14, 31.4, 314}
-	decs        []apd.Decimal
-	hjTestCases []*joinTestCase
+	floats = []float64{0.314, 3.14, 31.4, 314}
+	decs   []apd.Decimal
 )
 
 func init() {
@@ -48,8 +47,10 @@ func init() {
 			colexecerror.InternalError(errors.AssertionFailedf("%v", err))
 		}
 	}
+}
 
-	hjTestCases = []*joinTestCase{
+func getHJTestCases() []*joinTestCase {
+	hjTestCases := []*joinTestCase{
 		{
 			description: "0",
 			leftTypes:   []*types.T{types.Int},
@@ -923,6 +924,7 @@ func init() {
 			expected:    tuples{{1}, {2}, {2}},
 		},
 	}
+	return withMirrors(hjTestCases)
 }
 
 // createSpecForHashJoiner creates a hash join processor spec based on a test
@@ -939,6 +941,9 @@ func createSpecForHashJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 	projection := make([]uint32, 0, len(tc.leftOutCols)+len(tc.rightOutCols))
 	projection = append(projection, tc.leftOutCols...)
 	rColOffset := uint32(len(tc.leftTypes))
+	if !tc.joinType.ShouldIncludeLeftColsInOutput() {
+		rColOffset = 0
+	}
 	for _, outCol := range tc.rightOutCols {
 		projection = append(projection, rColOffset+outCol)
 	}
@@ -1002,7 +1007,7 @@ func TestHashJoiner(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
 
-	for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
+	for _, tcs := range [][]*joinTestCase{getHJTestCases(), getMJTestCases()} {
 		for _, tc := range tcs {
 			for _, tc := range tc.mutateTypes() {
 				runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {

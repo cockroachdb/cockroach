@@ -846,7 +846,9 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/mergejoiner_leftanti.eg.go \
   pkg/sql/colexec/mergejoiner_leftouter.eg.go \
   pkg/sql/colexec/mergejoiner_leftsemi.eg.go \
+  pkg/sql/colexec/mergejoiner_rightanti.eg.go \
   pkg/sql/colexec/mergejoiner_rightouter.eg.go \
+  pkg/sql/colexec/mergejoiner_rightsemi.eg.go \
   pkg/sql/colexec/ordered_synchronizer.eg.go \
   pkg/sql/colexec/proj_const_left_ops.eg.go \
   pkg/sql/colexec/proj_const_right_ops.eg.go \
