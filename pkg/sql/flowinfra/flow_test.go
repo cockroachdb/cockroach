@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -34,14 +35,17 @@ func BenchmarkFlowSetup(b *testing.B) {
 	defer logScope.Close(b)
 	ctx := context.Background()
 
-	s, conn, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	st := cluster.MakeTestingClusterSettings()
+	// Set the threshold to 0 so that we can control which engine is used for
+	// the query execution via the vectorize mode.
+	sql.VectorizeRowCountThresholdClusterValue.Override(&st.SV, 0 /* v */)
+	s, conn, _ := serverutils.StartServer(b, base.TestServerArgs{
+		Settings: st,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	r := sqlutils.MakeSQLRunner(conn)
 	r.Exec(b, "CREATE DATABASE b; CREATE TABLE b.test (k INT);")
-	// Set the threshold to 0 so that we can control which engine is used for
-	// the query execution via the vectorize mode.
-	r.Exec(b, `SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold=0`)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	dsp := execCfg.DistSQLPlanner
