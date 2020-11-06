@@ -834,7 +834,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	).WillDistribute()
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
 	subqueryPlanCtx.stmtType = tree.Rows
-	if planner.collectBundle {
+	if planner.instrumentation.ShouldCollectBundle() {
 		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
 	// Don't close the top-level plan from subqueries - someone else will handle
@@ -1125,7 +1125,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributePostquery)
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
-	if planner.collectBundle {
+	if planner.instrumentation.ShouldCollectBundle() {
 		postqueryPlanCtx.saveFlows = postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
 

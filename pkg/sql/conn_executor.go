@@ -2179,6 +2179,7 @@ func (ex *connExecutor) resetPlanner(
 ) {
 	p.txn = txn
 	p.stmt = Statement{}
+	p.instrumentation = instrumentationHelper{}
 
 	p.cancelChecker.Reset(ctx)
 
@@ -2193,8 +2194,6 @@ func (ex *connExecutor) resetPlanner(
 	p.autoCommit = false
 	p.isPreparing = false
 	p.avoidCachedDescriptors = false
-	p.discardRows = false
-	p.collectBundle = false
 }
 
 // txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the

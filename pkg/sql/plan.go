@@ -12,22 +12,17 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -294,9 +289,6 @@ type planTop struct {
 	mem     *memo.Memo
 	catalog *optCatalog
 
-	// codec is populated during planning.
-	codec keys.SQLCodec
-
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
@@ -315,18 +307,7 @@ type planTop struct {
 	// diagrams, are saved here.
 	distSQLFlowInfos []flowInfo
 
-	// If savePlanForStats is true, an ExplainTreePlanNode tree will be saved in
-	// planForStats when the plan is closed.
-	savePlanForStats bool
-	// appStats is used to populate savePlanForStats.
-	appStats     *appStats
-	planForStats *roachpb.ExplainTreePlanNode
-
-	// If savePlanString is set to true, an EXPLAIN (VERBOSE)-style plan string
-	// will be saved in planString when the plan is closed.
-	savePlanString bool
-	planString     string
-	explainPlan    *explain.Plan
+	instrumentation *instrumentationHelper
 }
 
 // physicalPlanTop is a utility wrapper around PhysicalPlan that allows for
@@ -459,17 +440,16 @@ func (p *planComponents) close(ctx context.Context) {
 
 // init resets planTop to point to a given statement; used at the start of the
 // planning process.
-func (p *planTop) init(stmt *Statement, appStats *appStats, savePlanString bool) {
+func (p *planTop) init(stmt *Statement, instrumentation *instrumentationHelper) {
 	*p = planTop{
-		stmt:           stmt,
-		appStats:       appStats,
-		savePlanString: savePlanString,
+		stmt:            stmt,
+		instrumentation: instrumentation,
 	}
 }
 
 // close ensures that the plan's resources have been deallocated.
 func (p *planTop) close(ctx context.Context) {
-	if p.explainPlan != nil && p.flags.IsSet(planFlagExecDone) {
+	if p.flags.IsSet(planFlagExecDone) {
 		p.savePlanInfo(ctx)
 	}
 	p.planComponents.close(ctx)
@@ -484,29 +464,7 @@ func (p *planTop) savePlanInfo(ctx context.Context) {
 	} else if p.flags.IsSet(planFlagPartiallyDistributed) {
 		distribution = physicalplan.PartiallyDistributedPlan
 	}
-
-	if p.savePlanForStats {
-		ob := explain.NewOutputBuilder(explain.Flags{
-			HideValues: true,
-		})
-		if err := emitExplain(ob, p.codec, p.explainPlan, distribution, vectorized); err != nil {
-			log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
-		} else {
-			p.planForStats = ob.BuildProtoTree()
-		}
-	}
-
-	if p.savePlanString {
-		ob := explain.NewOutputBuilder(explain.Flags{
-			Verbose:   true,
-			ShowTypes: true,
-		})
-		if err := emitExplain(ob, p.codec, p.explainPlan, distribution, vectorized); err != nil {
-			p.planString = fmt.Sprintf("error emitting plan: %v", err)
-		} else {
-			p.planString = ob.BuildString()
-		}
-	}
+	p.instrumentation.RecordPlanInfo(distribution, vectorized)
 }
 
 // formatOptPlan returns a visual representation of the optimizer plan that was
