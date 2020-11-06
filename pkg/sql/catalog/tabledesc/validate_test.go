@@ -83,9 +83,7 @@ var validationMap = []struct {
 			"FormatVersion": {status: thisFieldReferencesNoObjects},
 			"State":         {status: thisFieldReferencesNoObjects},
 			"OfflineReason": {status: thisFieldReferencesNoObjects},
-			"Checks": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
+			"Checks":        {status: iSolemnlySwearThisFieldIsValidated},
 			"ViewQuery": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},

@@ -1793,16 +1793,21 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	// TODO(dt): Validate each column only appears at-most-once in any FKs.
 
-	// Only validate column families and indexes if this is actually a table, not
-	// if it's just a view.
+	// Only validate column families, check constraints, and indexes if this is
+	// actually a table, not if it's just a view.
 	if desc.IsPhysicalTable() {
 		if err := desc.validateColumnFamilies(columnIDs); err != nil {
+			return err
+		}
+
+		if err := desc.validateCheckConstraints(columnIDs); err != nil {
 			return err
 		}
 
 		if err := desc.validateTableIndexes(columnNames); err != nil {
 			return err
 		}
+
 		if err := desc.validatePartitioning(); err != nil {
 			return err
 		}
@@ -1934,6 +1939,36 @@ func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]stri
 	for colID := range columnIDs {
 		if _, ok := colIDToFamilyID[colID]; !ok {
 			return fmt.Errorf("column %d is not in any column family", colID)
+		}
+	}
+	return nil
+}
+
+// validateCheckConstraints validates that check constraints are well formed.
+// Checks include validating the column IDs and verifying that check expressions
+// do not reference non-existent columns.
+func (desc *Immutable) validateCheckConstraints(columnIDs map[descpb.ColumnID]string) error {
+	for _, chk := range desc.AllActiveAndInactiveChecks() {
+		// Verify that the check's column IDs are valid.
+		for _, colID := range chk.ColumnIDs {
+			_, ok := columnIDs[colID]
+			if !ok {
+				return fmt.Errorf("check constraint %q contains unknown column \"%d\"", chk.Name, colID)
+			}
+		}
+
+		// Verify that the check's expression is valid.
+		expr, err := parser.ParseExpr(chk.Expr)
+		if err != nil {
+			return err
+		}
+		valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return fmt.Errorf("check constraint %q refers to unknown columns in expression: %s",
+				chk.Name, chk.Expr)
 		}
 	}
 	return nil

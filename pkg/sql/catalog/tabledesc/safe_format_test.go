@@ -167,6 +167,7 @@ func TestSafeMessage(t *testing.T) {
 								Name:           "check_not_null",
 								Check: descpb.TableDescriptor_CheckConstraint{
 									Name:                "check_not_null",
+									Expr:                "j IS NOT NULL",
 									Validity:            descpb.ConstraintValidity_Unvalidated,
 									ColumnIDs:           []descpb.ColumnID{2},
 									IsNonNullConstraint: true,
