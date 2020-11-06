@@ -296,7 +296,7 @@ func newInvertedJoiner(
 		ij.fetcher = &fetcher
 	}
 
-	ij.spanBuilder = span.MakeBuilder(flowCtx.Codec(), &ij.desc, ij.index)
+	ij.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), &ij.desc, ij.index)
 	ij.spanBuilder.SetNeededColumns(allIndexCols)
 
 	// Initialize memory monitors and row container for key rows.
@@ -426,7 +426,9 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 	}
 	// NB: spans is already sorted, and that sorting is preserved when
 	// generating indexSpans.
-	indexSpans, err := ij.spanBuilder.SpansFromInvertedSpans(spans)
+	// TODO(mgartner): Pass a constraint that constrains the prefix columns of
+	// multi-column inverted indexes.
+	indexSpans, err := ij.spanBuilder.SpansFromInvertedSpans(spans, nil /* constraint */)
 	if err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, ij.DrainHelper()

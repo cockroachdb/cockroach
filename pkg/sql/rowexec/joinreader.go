@@ -320,7 +320,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	neededRightCols util.FastIntSet,
 	readerType joinReaderType,
 ) {
-	spanBuilder := span.MakeBuilder(flowCtx.Codec(), &jr.desc, jr.index)
+	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), &jr.desc, jr.index)
 	spanBuilder.SetNeededColumns(neededRightCols)
 
 	var keyToInputRowIndices map[string][]int
