@@ -362,7 +362,7 @@ func copyFromSourceToSinkUntilTableEvent(
 					return false, false
 				}
 				frontier.Forward(resolved.Span, boundaryResolvedTimestamp)
-				return true, frontier.Frontier() == boundaryResolvedTimestamp
+				return true, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp)
 			default:
 				log.Fatal(ctx, "unknown event type")
 				return false, false
