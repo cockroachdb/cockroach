@@ -443,15 +443,21 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRangeSnapshotsNormalApplied = metric.Metadata{
-		Name:        "range.snapshots.normal-applied",
-		Help:        "Number of applied snapshots",
+	metaRangeSnapshotsAppliedByVoters = metric.Metadata{
+		Name:        "range.snapshots.applied-voter",
+		Help:        "Number of snapshots applied by voter replicas",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRangeSnapshotsLearnerApplied = metric.Metadata{
-		Name:        "range.snapshots.learner-applied",
-		Help:        "Number of applied learner snapshots",
+	metaRangeSnapshotsAppliedForInitialUpreplication = metric.Metadata{
+		Name:        "range.snapshots.applied-initial",
+		Help:        "Number of snapshots applied for initial upreplication",
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotsAppliedByNonVoter = metric.Metadata{
+		Name:        "range.snapshots.applied-non-voter",
+		Help:        "Number of snapshots applied by non-voter replicas",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1101,14 +1107,15 @@ type StoreMetrics struct {
 	// accordingly.
 
 	// Range event metrics.
-	RangeSplits                  *metric.Counter
-	RangeMerges                  *metric.Counter
-	RangeAdds                    *metric.Counter
-	RangeRemoves                 *metric.Counter
-	RangeSnapshotsGenerated      *metric.Counter
-	RangeSnapshotsNormalApplied  *metric.Counter
-	RangeSnapshotsLearnerApplied *metric.Counter
-	RangeRaftLeaderTransfers     *metric.Counter
+	RangeSplits                                  *metric.Counter
+	RangeMerges                                  *metric.Counter
+	RangeAdds                                    *metric.Counter
+	RangeRemoves                                 *metric.Counter
+	RangeSnapshotsGenerated                      *metric.Counter
+	RangeSnapshotsAppliedByVoters                *metric.Counter
+	RangeSnapshotsAppliedForInitialUpreplication *metric.Counter
+	RangeSnapshotsAppliedByNonVoters             *metric.Counter
+	RangeRaftLeaderTransfers                     *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1465,14 +1472,15 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DiskStalled: metric.NewGauge(metaDiskStalled),
 
 		// Range event metrics.
-		RangeSplits:                  metric.NewCounter(metaRangeSplits),
-		RangeMerges:                  metric.NewCounter(metaRangeMerges),
-		RangeAdds:                    metric.NewCounter(metaRangeAdds),
-		RangeRemoves:                 metric.NewCounter(metaRangeRemoves),
-		RangeSnapshotsGenerated:      metric.NewCounter(metaRangeSnapshotsGenerated),
-		RangeSnapshotsNormalApplied:  metric.NewCounter(metaRangeSnapshotsNormalApplied),
-		RangeSnapshotsLearnerApplied: metric.NewCounter(metaRangeSnapshotsLearnerApplied),
-		RangeRaftLeaderTransfers:     metric.NewCounter(metaRangeRaftLeaderTransfers),
+		RangeSplits:                   metric.NewCounter(metaRangeSplits),
+		RangeMerges:                   metric.NewCounter(metaRangeMerges),
+		RangeAdds:                     metric.NewCounter(metaRangeAdds),
+		RangeRemoves:                  metric.NewCounter(metaRangeRemoves),
+		RangeSnapshotsGenerated:       metric.NewCounter(metaRangeSnapshotsGenerated),
+		RangeSnapshotsAppliedByVoters: metric.NewCounter(metaRangeSnapshotsAppliedByVoters),
+		RangeSnapshotsAppliedForInitialUpreplication: metric.NewCounter(metaRangeSnapshotsAppliedForInitialUpreplication),
+		RangeSnapshotsAppliedByNonVoters:             metric.NewCounter(metaRangeSnapshotsAppliedByNonVoter),
+		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 
 		// Raft processing metrics.
 		RaftTicks:                 metric.NewCounter(metaRaftTicks),

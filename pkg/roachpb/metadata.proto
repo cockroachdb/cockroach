@@ -84,10 +84,28 @@ enum ReplicaType {
   // count towards the quorum(s). Candidates will not ask for (or take into
   // account) votes of (peers they consider) LEARNERs for leadership nor do
   // their acknowledged log entries get taken into account for determining the
-  // committed index. At the time of writing, learners in CockroachDB are a
-  // short-term transient state: a replica being added and on its way to being a
-  // VOTER_{FULL,INCOMING}, or a VOTER_DEMOTING being removed.
+  // committed index. Learners in CockroachDB are a short-term transient state:
+  // a replica being added and on its way to being a VOTER_{FULL,INCOMING}, or a
+  // VOTER_DEMOTING being removed.
+  //
+  // Note that once these replicas upreplicate after receiving their initial
+  // snapshot, they will count towards the raft leader's quota pool and throttle
+  // incoming proposals if they fall "too far behind".
   LEARNER = 1;
+  // NON_VOTER indicates a replica that applies committed entries, but does not
+  // count towards the quorum(s). Candidates will not ask for (or take into
+  // account) votes of (peers they consider) NON_VOTERs for leadership nor do
+  // their acknowledged log entries get taken into account for determining the
+  // committed index.
+  //
+  // Under the hood, it is based on an etcd/raft LearnerNode, like the LEARNER
+  // replica type defined above. They will also cause the quota pool on the
+  // leader to throttle incoming proposals if they fall behind.
+  //
+  // Unlike LEARNERs, these are a persistent state meant to serve user traffic
+  // via follower reads. See comment above ReplicaDescriptors.NonVoters() for
+  // differences in how LEARNERs and NON_VOTERs are handled internally.
+  NON_VOTER = 5;
 }
 
 // ReplicaDescriptor describes a replica location by node ID

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type indexKeyTest struct {
@@ -401,6 +402,112 @@ func TestInvertedIndexKey(t *testing.T) {
 			runTest(test.value, test.expectedKeys, descpb.EmptyArraysInInvertedIndexesVersion)
 			runTest(test.value, test.expectedKeysExcludingEmptyArray, descpb.SecondaryIndexFamilyFormatVersion)
 		})
+	}
+}
+
+func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		value    string
+		contains string
+		expected bool
+	}{
+		// This test uses EncodeInvertedIndexTableKeys and EncodeContainingInvertedIndexSpans
+		// to determine whether the first Array value contains the second. If the first
+		// value contains the second, expected is true. Otherwise it is false.
+		{`{}`, `{}`, true},
+		{`{}`, `{1}`, false},
+		{`{1}`, `{}`, true},
+		{`{1}`, `{1}`, true},
+		{`{1}`, `{1, 2}`, false},
+		{`{1, 2}`, `{1}`, true},
+		{`{1, 2}`, `{2}`, true},
+		{`{1, 2}`, `{1, 2}`, true},
+		{`{1, 2}`, `{1, 2, 1}`, true},
+		{`{1, 2, 3}`, `{1, 2, 4}`, false},
+		{`{1, 2, 3}`, `{}`, true},
+	}
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	parseArray := func(s string) tree.Datum {
+		arr, _, err := tree.ParseDArrayFromString(&evalCtx, s, types.Int)
+		if err != nil {
+			t.Fatalf("Failed to parse array %s: %v", s, err)
+		}
+		return arr
+	}
+
+	version := descpb.EmptyArraysInInvertedIndexesVersion
+	runTest := func(left, right tree.Datum, expected bool) {
+		keys, err := EncodeInvertedIndexTableKeys(left, nil, version)
+		require.NoError(t, err)
+
+		spansSlice, _, err := EncodeContainingInvertedIndexSpans(&evalCtx, right, nil, version)
+		require.NoError(t, err)
+
+		// The spans returned by EncodeContainingInvertedIndexSpans represent the
+		// intersection of unions. So the below logic is performing a union on the
+		// inner loop (any span in the slice can contain any of the keys), and an
+		// intersection on the outer loop (all of the span slices must contain at
+		// least one key).
+		actual := true
+		for _, spans := range spansSlice {
+			found := false
+			for _, span := range spans {
+				for _, key := range keys {
+					if span.ContainsKey(key) {
+						found = true
+						break
+					}
+				}
+				if found == true {
+					break
+				}
+			}
+			actual = actual && found
+		}
+
+		if actual != expected {
+			if expected {
+				t.Errorf("expected %s to contain %s but it did not", left, right)
+			} else {
+				t.Errorf("expected %s not to contain %s but it did", left, right)
+			}
+		}
+	}
+
+	// Run pre-defined test cases from above.
+	for _, c := range testCases {
+		value, contains := parseArray(c.value), parseArray(c.contains)
+
+		// First check that evaluating `value @> contains` matches the expected
+		// result.
+		res, err := tree.ArrayContains(&evalCtx, value.(*tree.DArray), contains.(*tree.DArray))
+		require.NoError(t, err)
+		if bool(*res) != c.expected {
+			t.Fatalf(
+				"expected value of %s @> %s did not match actual value. Expected: %v. Got: %s",
+				c.value, c.contains, c.expected, res.String(),
+			)
+		}
+
+		// Now check that we get the same result with the inverted index spans.
+		runTest(value, contains, c.expected)
+	}
+
+	// Run a set of randomly generated test cases.
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < 100; i++ {
+		typ := RandArrayType(rng)
+
+		// Generate two random arrays and evaluate the result of `left @> right`.
+		left := RandArray(rng, typ, 0 /* nullChance */)
+		right := RandArray(rng, typ, 0 /* nullChance */)
+
+		res, err := tree.ArrayContains(&evalCtx, left.(*tree.DArray), right.(*tree.DArray))
+		require.NoError(t, err)
+
+		// Now check that we get the same result with the inverted index spans.
+		runTest(left, right, bool(*res))
 	}
 }
 

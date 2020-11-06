@@ -288,7 +288,7 @@ func TestReplicateRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
@@ -375,7 +375,7 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
@@ -465,7 +465,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
@@ -551,7 +551,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	}
 
 	// Now add the second replica.
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
@@ -982,7 +982,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		return nil
 	})
 
-	snapsMetric := mtc.stores[partStore].Metrics().RangeSnapshotsNormalApplied
+	snapsMetric := mtc.stores[partStore].Metrics().RangeSnapshotsAppliedByVoters
 	snapsBefore := snapsMetric.Count()
 
 	// Remove the partition. Snapshot should follow.
@@ -1217,7 +1217,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
 			NodeID:  mtc.stores[2].Ident.NodeID,
 			StoreID: mtc.stores[2].Ident.StoreID,
 		})
@@ -1452,8 +1452,8 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	for _, s := range mtc.stores {
 		m := s.Metrics()
 		generated += m.RangeSnapshotsGenerated.Count()
-		learnerApplied += m.RangeSnapshotsLearnerApplied.Count()
-		raftApplied += m.RangeSnapshotsNormalApplied.Count()
+		learnerApplied += m.RangeSnapshotsAppliedForInitialUpreplication.Count()
+		raftApplied += m.RangeSnapshotsAppliedByVoters.Count()
 	}
 	if generated == 0 {
 		t.Fatalf("expected at least 1 snapshot, but found 0")
@@ -1514,7 +1514,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	}
 
 	addReplica := func(storeNum int, desc *roachpb.RangeDescriptor) error {
-		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
 			NodeID:  mtc.stores[storeNum].Ident.NodeID,
 			StoreID: mtc.stores[storeNum].Ident.StoreID,
 		})
@@ -1537,7 +1537,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		return nil
 	})
 
-	before := mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+	before := mtc.stores[2].Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 	// Attempt to add replica to the third store with the original descriptor.
 	// This should fail because the descriptor is stale.
 	expectedErr := `change replicas of r1 failed: descriptor changed: \[expected\]`
@@ -1545,7 +1545,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatalf("got unexpected error: %+v", err)
 	}
 
-	after := mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+	after := mtc.stores[2].Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 	// The failed ChangeReplicas call should NOT have applied a learner snapshot.
 	if after != before {
 		t.Fatalf(
@@ -1553,14 +1553,14 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 			before, after)
 	}
 
-	before = mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+	before = mtc.stores[2].Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 	// Add to third store with fresh descriptor.
 	if err := addReplica(2, repl.Desc()); err != nil {
 		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		after := mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+		after := mtc.stores[2].Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 		// The failed ChangeReplicas call should have applied a learner snapshot.
 		if after != before+1 {
 			return errors.Errorf(
@@ -2595,7 +2595,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 	ctx := repl.AnnotateCtx(context.Background())
 
 	for i := 0; i < 100; i++ {
-		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_REPLICA, roachpb.ADD_REPLICA} {
+		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_VOTER, roachpb.ADD_VOTER} {
 			for {
 				chgs := roachpb.MakeReplicationChanges(action, roachpb.ReplicationTarget{
 					NodeID:  mtc.stores[1].Ident.NodeID,
@@ -2695,7 +2695,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// Add the victim replica. Note that it will receive a snapshot and raft log
 	// replays, but will not process the configuration change containing the new
 	// range descriptor, preventing it from learning of the new NextReplicaID.
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
 		NodeID:  toStore.Ident.NodeID,
 		StoreID: toStore.Ident.StoreID,
 	})
@@ -2747,7 +2747,7 @@ func TestReplicaGCRace(t *testing.T) {
 	})
 
 	// Remove the victim replica and manually GC it.
-	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
+	chgs[0].ChangeType = roachpb.REMOVE_VOTER
 	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
@@ -4713,11 +4713,11 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		// Remove and re-add the RHS to create a new uninitialized replica at
 		// a higher replica ID. This will lead to a tombstone being written.
-		require.NoError(t, changeReplicas(t, db, roachpb.REMOVE_REPLICA, keyB, 0))
+		require.NoError(t, changeReplicas(t, db, roachpb.REMOVE_VOTER, keyB, 0))
 		// Unsuccessful because the RHS will not accept the learner snapshot
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
-		err = changeReplicas(t, db, roachpb.ADD_REPLICA, keyB, 0)
+		err = changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
 		require.True(t,
 			testutils.IsError(err, "snapshot failed.*cannot apply snapshot: snapshot intersects"), err)
 
@@ -4732,7 +4732,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		hs := getHardState(t, mtc.Store(0), rhsID)
 		require.Equal(t, uint64(0), hs.Commit)
 		testutils.SucceedsSoon(t, func() error {
-			return changeReplicas(t, db, roachpb.ADD_REPLICA, keyB, 0)
+			return changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
 		})
 		mtc.waitForValues(keyB, []int64{6, 6, 6})
 	})
@@ -4762,11 +4762,11 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		// Remove and re-add the RHS to create a new uninitialized replica at
 		// a higher replica ID. This will lead to a tombstone being written.
-		require.NoError(t, changeReplicas(t, db, roachpb.REMOVE_REPLICA, keyB, 0))
+		require.NoError(t, changeReplicas(t, db, roachpb.REMOVE_VOTER, keyB, 0))
 		// Unsuccessfuly because the RHS will not accept the learner snapshot
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
-		err = changeReplicas(t, db, roachpb.ADD_REPLICA, keyB, 0)
+		err = changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
 		require.True(t,
 			testutils.IsError(err, "snapshot failed.*cannot apply snapshot: snapshot intersects"), err)
 
@@ -4798,7 +4798,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		hs := getHardState(t, mtc.Store(0), rhsID)
 		require.Equal(t, uint64(0), hs.Commit)
 		testutils.SucceedsSoon(t, func() error {
-			return changeReplicas(t, db, roachpb.ADD_REPLICA, keyB, 0)
+			return changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
 		})
 		mtc.waitForValues(keyB, []int64{curB, curB, curB})
 	})
@@ -4832,11 +4832,11 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		// Remove and re-add the RHS to create a new uninitialized replica at
 		// a higher replica ID. This will lead to a tombstone being written.
-		require.NoError(t, changeReplicas(t, db, roachpb.REMOVE_REPLICA, keyB, 0))
+		require.NoError(t, changeReplicas(t, db, roachpb.REMOVE_VOTER, keyB, 0))
 		// Unsuccessful because the RHS will not accept the learner snapshot
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
-		err = changeReplicas(t, db, roachpb.ADD_REPLICA, keyB, 0)
+		err = changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
 		require.True(t,
 			testutils.IsError(err, "snapshot failed.*cannot apply snapshot: snapshot intersects"), err)
 		// Ensure that the replica exists with the higher replica ID.
@@ -4856,7 +4856,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// the learner snapshot can fail due to a race with a raft snapshot from
 		// a raft leader on a different node.
 		testutils.SucceedsSoon(t, func() error {
-			return changeReplicas(t, db, roachpb.ADD_REPLICA, keyB, 0)
+			return changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
 		})
 		mtc.waitForValues(keyB, []int64{6, 6, 6})
 	})
@@ -4889,11 +4889,11 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		// Remove and re-add the RHS to create a new uninitialized replica at
 		// a higher replica ID. This will lead to a tombstone being written.
-		require.NoError(t, changeReplicas(t, db, roachpb.REMOVE_REPLICA, keyB, 0))
+		require.NoError(t, changeReplicas(t, db, roachpb.REMOVE_VOTER, keyB, 0))
 		// Unsuccessfuly because the RHS will not accept the learner snapshot
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
-		err = changeReplicas(t, db, roachpb.ADD_REPLICA, keyB, 0)
+		err = changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
 		require.True(t,
 			testutils.IsError(err, "snapshot failed.*cannot apply snapshot: snapshot intersects"), err)
 		// Ensure that there's no tombstone.
@@ -4934,7 +4934,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		})
 		rhsPartition.deactivate()
 		testutils.SucceedsSoon(t, func() error {
-			return changeReplicas(t, db, roachpb.ADD_REPLICA, keyB, 0)
+			return changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
 		})
 		mtc.waitForValues(keyB, []int64{curB, curB, curB})
 	})
@@ -4995,7 +4995,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	desc, err := tc.LookupRange(key)
 	require.NoError(t, err)
 	atomic.StoreInt64(&rangeID, int64(desc.RangeID))
-	tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 	// Partition node 1 from receiving any requests or responses.
 	// This will prevent it from successfully replicating anything.
 	require.NoError(t, tc.WaitForSplitAndInitialization(key))

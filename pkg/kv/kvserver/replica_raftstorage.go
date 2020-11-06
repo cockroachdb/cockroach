@@ -767,14 +767,29 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
 	}
 
-	snapType := inSnap.snapType
+	isInitialSnap := !r.IsInitialized()
 	defer func() {
 		if err == nil {
-			switch snapType {
-			case SnapshotRequest_RAFT:
-				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
-			case SnapshotRequest_LEARNER:
-				r.store.metrics.RangeSnapshotsLearnerApplied.Inc(1)
+			desc, err := r.GetReplicaDescriptor()
+			if err != nil {
+				log.Fatalf(ctx, "could not fetch replica descriptor for range after applying snapshot")
+			}
+			if isInitialSnap {
+				r.store.metrics.RangeSnapshotsAppliedForInitialUpreplication.Inc(1)
+			} else {
+				switch typ := desc.GetType(); typ {
+				// NB: A replica of type LEARNER can receive a non-initial snapshot (via
+				// the snapshot queue) if we end up truncating the raft log before it
+				// gets promoted to a voter. We count such snapshot applications as
+				// "applied by voters" here.
+				case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING,
+					roachpb.VOTER_OUTGOING, roachpb.LEARNER:
+					r.store.metrics.RangeSnapshotsAppliedByVoters.Inc(1)
+				case roachpb.NON_VOTER:
+					r.store.metrics.RangeSnapshotsAppliedByNonVoters.Inc(1)
+				default:
+					log.Fatalf(ctx, "unexpected replica type %s while applying snapshot", typ)
+				}
 			}
 		}
 	}()
@@ -806,8 +821,8 @@ func (r *Replica) applySnapshot(
 		// Time to ingest SSTs.
 		ingestion time.Time
 	}
-	log.Infof(ctx, "applying %s snapshot [id=%s index=%d]",
-		snapType, inSnap.SnapUUID.Short(), snap.Metadata.Index)
+	log.Infof(ctx, "applying snapshot of type %s [id=%s index=%d]", inSnap.snapType,
+		inSnap.SnapUUID.Short(), snap.Metadata.Index)
 	defer func(start time.Time) {
 		now := timeutil.Now()
 		totalLog := fmt.Sprintf(
@@ -827,9 +842,10 @@ func (r *Replica) applySnapshot(
 			len(inSnap.SSTStorageScratch.SSTs()),
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000,
 		)
-		log.Infof(ctx, "applied %s snapshot [%s%s%sid=%s index=%d]",
-			snapType, totalLog, subsumedReplicasLog, ingestionLog,
-			inSnap.SnapUUID.Short(), snap.Metadata.Index)
+		log.Infof(
+			ctx, "applied snapshot of type %s [%s%s%sid=%s index=%d]", inSnap.snapType, totalLog,
+			subsumedReplicasLog, ingestionLog, inSnap.SnapUUID.Short(), snap.Metadata.Index,
+		)
 	}(timeutil.Now())
 
 	unreplicatedSSTFile := &storage.MemFile{}
@@ -934,7 +950,7 @@ func (r *Replica) applySnapshot(
 
 	// Ingest all SSTs atomically.
 	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
-		if err := fn(inSnap, snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		if err := fn(inSnap, inSnap.snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
 			return err
 		}
 	}

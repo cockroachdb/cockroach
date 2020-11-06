@@ -508,7 +508,7 @@ func TestSplitTriggerRaftSnapshotRace(t *testing.T) {
 			var c int // num Raft snapshots
 			if err := tc.ServerConn(i).QueryRow(`
 SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
-	name = 'range.snapshots.normal-applied'
+	name = 'range.snapshots.applied-voter'
 `).Scan(&n, &c); err != nil {
 				t.Fatal(err)
 			}
@@ -1679,7 +1679,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 			t.Fatal(errors.Wrapf(err, "split at %s", k))
 		}
 	}
-	if _, err := tc.AddReplicas(leftKey, tc.Target(1)); err != nil {
+	if _, err := tc.AddVoters(leftKey, tc.Target(1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1876,16 +1876,16 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 	// Move the range from node 0 to node 1. Then add node 2 to the range.
 	// node 0 will never hear about this range descriptor update.
 	var err error
-	if newDesc, err = tc.AddReplicas(leftKey, tc.Target(1)); err != nil {
+	if newDesc, err = tc.AddVoters(leftKey, tc.Target(1)); err != nil {
 		t.Fatal(err)
 	}
 	if err := tc.TransferRangeLease(newDesc, tc.Target(1)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tc.RemoveReplicas(leftKey, tc.Target(0)); err != nil {
+	if _, err := tc.RemoveVoters(leftKey, tc.Target(0)); err != nil {
 		t.Fatal(err)
 	}
-	if newDesc, err = tc.AddReplicas(leftKey, tc.Target(2)); err != nil {
+	if newDesc, err = tc.AddVoters(leftKey, tc.Target(2)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3135,7 +3135,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	desc := tc.LookupRangeOrFatal(t, k)
 
 	// Add a replica on n3 which we'll need to achieve quorum while we cut off n2 below.
-	tc.AddReplicasOrFatal(t, k, tc.Target(2))
+	tc.AddVotersOrFatal(t, k, tc.Target(2))
 
 	// First construct a range with a learner replica on the second node (index 1)
 	// and split it, ending up with an orphaned learner on each side of the split.
@@ -3144,7 +3144,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// second node).
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.AddReplicas(k, tc.Target(1))
+		_, err := tc.AddVoters(k, tc.Target(1))
 		return err
 	})
 
@@ -3156,16 +3156,16 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 
 	_, kRHS := k, k.Next()
 	// Remove the LHS on the isolated store, split the range, and re-add it.
-	tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
+	tc.RemoveVotersOrFatal(t, k, tc.Target(1))
 	descLHS, descRHS := tc.SplitRangeOrFatal(t, kRHS)
 	withoutLearnerSnap(func() {
-		// NB: can't use AddReplicas since that waits for the target to be up
+		// NB: can't use AddVoters since that waits for the target to be up
 		// to date, which it won't in this case.
 		//
 		// We avoid sending a snapshot because that snapshot would include the
 		// split trigger and we want that to be processed via the log.
 		d, err := tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, descLHS.StartKey.AsRawKey(), descLHS, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, tc.Target(1)),
+			ctx, descLHS.StartKey.AsRawKey(), descLHS, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		require.NoError(t, err)
 		descLHS = *d
@@ -3179,7 +3179,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// Now repeatedly re-add the learner on the rhs, so it has a
 	// different replicaID than the split trigger expects.
 	add := func() {
-		_, err := tc.AddReplicas(kRHS, tc.Target(1))
+		_, err := tc.AddVoters(kRHS, tc.Target(1))
 		// The "snapshot intersects existing range" error is expected if the store
 		// has not heard a raft message addressed to a later replica ID while the
 		// "was not found on" error is expected if the store has heard that it has
@@ -3190,11 +3190,11 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	}
 	for i := 0; i < 5; i++ {
 		add()
-		tc.RemoveReplicasOrFatal(t, kRHS, tc.Target(1))
+		tc.RemoveVotersOrFatal(t, kRHS, tc.Target(1))
 	}
 	add()
 
-	// Normally AddReplicas will return the latest version of the RangeDescriptor,
+	// Normally AddVoters will return the latest version of the RangeDescriptor,
 	// but because we're getting snapshot errors and using the
 	// ReplicaAddSkipLearnerRollback hook, we have to look it up again ourselves
 	// to find the current replicaID for the RHS learner.

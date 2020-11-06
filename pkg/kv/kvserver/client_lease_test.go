@@ -165,7 +165,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	key := keys.SystemConfigSpan.Key
-	tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 
 	initialStoreIdx := -1
 	for i := range tc.Servers {
@@ -205,7 +205,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	key := roachpb.RKey(keys.NodeLivenessSpan.Key)
-	tc.AddReplicasOrFatal(t, key.AsRawKey(), tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, key.AsRawKey(), tc.Target(1), tc.Target(2))
 	if pErr := tc.WaitForVoters(key.AsRawKey(), tc.Target(1), tc.Target(2)); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -303,7 +303,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	scratchStartKey := tc.ScratchRange(t)
-	desc := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
+	desc := tc.AddVotersOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
 	scratchRangeID.Store(desc.RangeID)
 	// Make sure n1 has the lease to start with.
 	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
@@ -327,8 +327,8 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 			defer wg.Done()
 			_, err = tc.Server(0).DB().AdminChangeReplicas(ctx,
 				scratchStartKey, desc, []roachpb.ReplicationChange{
-					{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(2)},
-					{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(3)},
+					{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(2)},
+					{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
 				})
 			require.NoError(t, err)
 		}()

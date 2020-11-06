@@ -73,9 +73,9 @@ func (s *Store) insertRangeLogEvent(
 		s.metrics.RangeSplits.Inc(1)
 	case kvserverpb.RangeLogEventType_merge:
 		s.metrics.RangeMerges.Inc(1)
-	case kvserverpb.RangeLogEventType_add:
+	case kvserverpb.RangeLogEventType_add_voter:
 		s.metrics.RangeAdds.Inc(1)
-	case kvserverpb.RangeLogEventType_remove:
+	case kvserverpb.RangeLogEventType_remove_voter:
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
@@ -160,16 +160,32 @@ func (s *Store) logChange(
 	var logType kvserverpb.RangeLogEventType
 	var info kvserverpb.RangeLogEvent_Info
 	switch changeType {
-	case roachpb.ADD_REPLICA:
-		logType = kvserverpb.RangeLogEventType_add
+	case roachpb.ADD_VOTER:
+		logType = kvserverpb.RangeLogEventType_add_voter
 		info = kvserverpb.RangeLogEvent_Info{
 			AddedReplica: &replica,
 			UpdatedDesc:  &desc,
 			Reason:       reason,
 			Details:      details,
 		}
-	case roachpb.REMOVE_REPLICA:
-		logType = kvserverpb.RangeLogEventType_remove
+	case roachpb.REMOVE_VOTER:
+		logType = kvserverpb.RangeLogEventType_remove_voter
+		info = kvserverpb.RangeLogEvent_Info{
+			RemovedReplica: &replica,
+			UpdatedDesc:    &desc,
+			Reason:         reason,
+			Details:        details,
+		}
+	case roachpb.ADD_NON_VOTER:
+		logType = kvserverpb.RangeLogEventType_add_non_voter
+		info = kvserverpb.RangeLogEvent_Info{
+			RemovedReplica: &replica,
+			UpdatedDesc:    &desc,
+			Reason:         reason,
+			Details:        details,
+		}
+	case roachpb.REMOVE_NON_VOTER:
+		logType = kvserverpb.RangeLogEventType_remove_non_voter
 		info = kvserverpb.RangeLogEvent_Info{
 			RemovedReplica: &replica,
 			UpdatedDesc:    &desc,

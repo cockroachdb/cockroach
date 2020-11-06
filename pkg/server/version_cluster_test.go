@@ -241,8 +241,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 		//
 		// This can be removed when VersionLearnerReplicas is always-on.
 		k := tc.ScratchRange(t)
-		tc.AddReplicasOrFatal(t, k, tc.Target(2))
-		_, err := tc.RemoveReplicas(k, tc.Target(2))
+		tc.AddVotersOrFatal(t, k, tc.Target(2))
+		_, err := tc.RemoveVoters(k, tc.Target(2))
 		require.NoError(t, err)
 	}
 

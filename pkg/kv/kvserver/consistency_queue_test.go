@@ -645,7 +645,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	for i := 1; i < numNodes; i++ {
 		targets = append(targets, tc.Target(i))
 	}
-	if _, err := tc.AddReplicas(key, targets...); err != nil {
+	if _, err := tc.AddVoters(key, targets...); err != nil {
 		t.Fatal(err)
 	}
 

@@ -157,8 +157,10 @@ message MergeTrigger {
 enum ReplicaChangeType {
   option (gogoproto.goproto_enum_prefix) = false;
 
-  ADD_REPLICA = 0;
-  REMOVE_REPLICA = 1;
+  ADD_VOTER = 0;
+  REMOVE_VOTER = 1;
+  ADD_NON_VOTER = 2;
+  REMOVE_NON_VOTER = 3;
 }
 
 // ChangeReplicasTrigger carries out a replication change. The Added() and

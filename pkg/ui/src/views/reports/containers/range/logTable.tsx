@@ -27,10 +27,14 @@ function printLogEventType(
   eventType: protos.cockroach.kv.kvserver.storagepb.RangeLogEventType,
 ) {
   switch (eventType) {
-    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.add:
-      return "Add";
-    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.remove:
-      return "Remove";
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.add_voter:
+      return "Add Voter";
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.remove_voter:
+      return "Remove Voter";
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.add_non_voter:
+      return "Add Non-Voter";
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.remove_non_voter:
+      return "Remove Non-Voter";
     case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.split:
       return "Split";
     case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.merge:

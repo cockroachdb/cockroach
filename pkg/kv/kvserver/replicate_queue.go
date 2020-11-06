@@ -60,6 +60,7 @@ var minLeaseTransferInterval = settings.RegisterNonNegativeDurationSetting(
 	1*time.Second,
 )
 
+// TODO(aayush): Expand this metric set to include metrics about non-voting replicas.
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
@@ -531,7 +532,7 @@ func (rq *replicateQueue) addOrReplace(
 		}
 	}
 	rq.metrics.AddReplicaCount.Inc(1)
-	ops := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, newReplica)
+	ops := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, newReplica)
 	if removeIdx < 0 {
 		log.VEventf(ctx, 1, "adding replica %+v: %s",
 			newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
@@ -541,7 +542,7 @@ func (rq *replicateQueue) addOrReplace(
 		log.VEventf(ctx, 1, "replacing replica %s with %+v: %s",
 			removeReplica, newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
 		ops = append(ops,
-			roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, roachpb.ReplicationTarget{
+			roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, roachpb.ReplicationTarget{
 				StoreID: removeReplica.StoreID,
 				NodeID:  removeReplica.NodeID,
 			})...)
@@ -710,7 +711,7 @@ func (rq *replicateQueue) remove(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonRangeOverReplicated,
@@ -752,7 +753,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonStoreDecommissioning, "", dryRun,
@@ -784,7 +785,7 @@ func (rq *replicateQueue) removeDead(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonStoreDead,
@@ -819,7 +820,7 @@ func (rq *replicateQueue) removeLearner(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
 		SnapshotRequest_UNKNOWN,
 		kvserverpb.ReasonAbandonedLearner,
@@ -863,8 +864,8 @@ func (rq *replicateQueue) considerRebalance(
 				// atomic replication changes being turned off, the changes
 				// will be executed individually in the order in which they
 				// appear.
-				{Target: addTarget, ChangeType: roachpb.ADD_REPLICA},
-				{Target: removeTarget, ChangeType: roachpb.REMOVE_REPLICA},
+				{Target: addTarget, ChangeType: roachpb.ADD_VOTER},
+				{Target: removeTarget, ChangeType: roachpb.REMOVE_VOTER},
 			}
 
 			if len(existingReplicas) == 1 {

@@ -22,8 +22,10 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
+	"github.com/stretchr/testify/require"
 )
 
 func eachPair(a, b JSON, f func(a, b JSON)) {
@@ -1340,6 +1342,162 @@ func TestEncodeJSONInvertedIndex(t *testing.T) {
 					c.value, c.expEnc[j], path)
 			}
 		}
+	}
+}
+
+func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		value    string
+		contains string
+		expected bool
+		tight    bool
+	}{
+		// This test uses EncodeInvertedIndexKeys and
+		// EncodeContainingInvertedIndexSpans to determine whether the first JSON
+		// value contains the second. If the first value contains the second,
+		// expected is true. Otherwise expected is false. If the spans produced for
+		// contains are tight, tight is true. Otherwise tight is false.
+		{`{}`, `{}`, true, true},
+		{`[]`, `[]`, true, true},
+		{`[]`, `{}`, false, true},
+		{`"a"`, `"a"`, true, true},
+		{`null`, `{}`, false, true},
+		{`{}`, `true`, false, true},
+		{`[[], {}]`, `[]`, true, true},
+		{`[[], {}]`, `{}`, false, true}, // Surprising, but matches Postgres' behavior.
+		{`[{"a": "a"}, {"a": "a"}]`, `[]`, true, true},
+		{`[[[["a"]]], [[["a"]]]]`, `[]`, true, true},
+		{`{}`, `{"a": {}}`, false, true},
+		{`{"a": 123.123}`, `{}`, true, true},
+		{`{"a": [{}]}`, `{"a": []}`, true, true},
+		{`{"a": [{}]}`, `{"a": {}}`, false, true},
+		{`{"a": [1]}`, `{"a": []}`, true, true},
+		{`{"a": {"b": "c"}}`, `{"a": {}}`, true, true},
+		{`{"a": {}}`, `{"a": {"b": true}}`, false, true},
+		{`[1, 2, 3, 4, "foo"]`, `[1, 2]`, true, true},
+		{`[1, 2, 3, 4, "foo"]`, `[1, "bar"]`, false, true},
+		{`{"a": {"b": [1]}}`, `{"a": {"b": [1]}}`, true, true},
+		{`{"a": {"b": [1, [2]]}}`, `{"a": {"b": [1]}}`, true, true},
+		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true, true},
+		{`{"a": {"b": false}}`, `{"a": {"b": true}}`, false, true},
+		{`[{"a": {"b": [1, [2]]}}, "d"]`, `[{"a": {"b": [[2]]}}, "d"]`, true, true},
+		{`["a", "a"]`, `"a"`, true, true},
+		{`[1, 2, 3, 1]`, `1`, true, true},
+		{`[true, false, null, 1.23, "a"]`, `"b"`, false, true},
+		{`{"a": {"b": "c", "d": "e"}, "f": "g"}`, `{"a": {"b": "c"}}`, true, true},
+		{`{"\u0000\u0001": "b"}`, `{}`, true, true},
+		{`{"\u0000\u0001": {"\u0000\u0001": "b"}}`, `{"\u0000\u0001": {}}`, true, true},
+		{`[[1], false, null]`, `[null, []]`, true, true},
+		{`[[[], {}], false, null]`, `[null, []]`, true, true},
+		{`[false, null]`, `[null, []]`, false, true},
+		{`[[], null]`, `[null, []]`, true, true},
+		{`[{"a": []}, null]`, `[null, []]`, false, true},
+		{`[{"a": [[]]}, null]`, `[null, []]`, false, true},
+		{`[{"foo": {"bar": "foobar"}}, true]`, `[true, {}]`, true, true},
+		{`[{"b": null}, {"bar": "c"}]`, `[{"b": {}}]`, false, true},
+		{`[[[[{}], [], false], false], [{}]]`, `[[[[]]]]`, true, true},
+		{`[[[[{}], [], false], false], [{}]]`, `[false]`, false, true},
+		{`[[{"a": {}, "c": "foo"}, {}], [false]]`, `[[false, {}]]`, false, false},
+		{`[[1], [2]]`, `[[1, 2]]`, false, false},
+		{`[[1, 2]]`, `[[1], [2]]`, true, true},
+		{`{"bar": [["c"]]}`, `{"bar": []}`, true, true},
+		{`{"c": [{"a": "b"}, []]}`, `{"c": [{}]}`, true, true},
+		{`[{"bar": {"foo": {}}}, {"a": []}]`, `[{}, {"a": [], "bar": {}}, {}]`, false, false},
+		{`[{"bar": [1]},{"bar": [2]}]`, `[{"bar": [1, 2]}]`, false, false},
+	}
+
+	// runTest checks that evaluating `left @> right` using keys from
+	// EncodeInvertedIndexKeys and spans from EncodeContainingInvertedIndexSpans
+	// produces the expected result.
+	// returns tight=true if the spans from EncodeContainingInvertedIndexSpans
+	// were tight, and tight=false otherwise.
+	runTest := func(left, right JSON, expected bool) (tight bool) {
+		keys, err := EncodeInvertedIndexKeys(nil, left)
+		require.NoError(t, err)
+
+		spansSlice, tight, err := EncodeContainingInvertedIndexSpans(nil, right)
+		require.NoError(t, err)
+
+		// The spans returned by EncodeContainingInvertedIndexSpans represent the intersection
+		// of unions. So the below logic is performing a union on the inner loop
+		// (any span in the slice can contain any of the keys), and an intersection
+		// on the outer loop (all of the span slices must contain at least one key).
+		actual := true
+		for _, spans := range spansSlice {
+			found := false
+			for _, span := range spans {
+				for _, key := range keys {
+					if span.ContainsKey(key) {
+						found = true
+						break
+					}
+				}
+				if found == true {
+					break
+				}
+			}
+			actual = actual && found
+		}
+
+		// There may be some false positives, so filter those out.
+		if actual && !tight {
+			actual, err = Contains(left, right)
+			require.NoError(t, err)
+		}
+
+		if actual != expected {
+			if expected {
+				t.Errorf("expected %s to contain %s but it did not", left.String(), right.String())
+			} else {
+				t.Errorf("expected %s not to contain %s but it did", left.String(), right.String())
+			}
+		}
+
+		return tight
+	}
+
+	// Run pre-defined test cases from above.
+	for _, c := range testCases {
+		value, contains := jsonTestShorthand(c.value), jsonTestShorthand(c.contains)
+
+		// First check that evaluating `value @> contains` matches the expected
+		// result.
+		res, err := Contains(value, contains)
+		require.NoError(t, err)
+		if res != c.expected {
+			t.Fatalf(
+				"expected value of %s @> %s did not match actual value. Expected: %v. Got: %v",
+				c.value, c.contains, c.expected, res,
+			)
+		}
+
+		// Now check that we get the same result with the inverted index spans.
+		tight := runTest(value, contains, c.expected)
+
+		// And check that the tightness matches the expected value.
+		if tight != c.tight {
+			if c.tight {
+				t.Errorf("expected spans for %s to be tight but they were not", c.contains)
+			} else {
+				t.Errorf("expected spans for %s not to be tight but they were", c.contains)
+			}
+		}
+	}
+
+	// Run a set of randomly generated test cases.
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < 100; i++ {
+		// Generate two random JSONs and evaluate the result of `left @> right`.
+		left, err := Random(20, rng)
+		require.NoError(t, err)
+		right, err := Random(20, rng)
+		require.NoError(t, err)
+
+		res, err := Contains(left, right)
+		require.NoError(t, err)
+
+		// Now check that we get the same result with the inverted index spans.
+		runTest(left, right, res)
 	}
 }
 
