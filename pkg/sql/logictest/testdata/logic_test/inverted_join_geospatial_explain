@@ -426,31 +426,35 @@ vectorized: true
 │ estimated row count: 997 (missing stats)
 │
 └── • project
-    │ columns: (lk, geom1, rk1)
+    │ columns: (lk, geom1)
     │ estimated row count: 997 (missing stats)
     │
-    └── • lookup join (anti)
-        │ columns: (lk, geom1, rk1, rk2, cont)
-        │ table: rtable@primary
-        │ equality: (rk1, rk2) = (rk1,rk2)
-        │ equality cols are key
-        │ pred: st_covers(geom1, geom)
+    └── • project
+        │ columns: (lk, geom1, rk1)
+        │ estimated row count: 1100 (missing stats)
         │
-        └── • project
+        └── • lookup join (anti)
             │ columns: (lk, geom1, rk1, rk2, cont)
-            │ estimated row count: 1111 (missing stats)
+            │ table: rtable@primary
+            │ equality: (rk1, rk2) = (rk1,rk2)
+            │ equality cols are key
+            │ pred: st_covers(geom1, geom)
             │
-            └── • inverted join (left outer)
-                │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
-                │ table: rtable@geom_index
-                │ inverted expr: st_covers(geom1, geom_inverted_key)
-                │ on: (lk > 5) AND (rk1 > 12)
+            └── • project
+                │ columns: (lk, geom1, rk1, rk2, cont)
+                │ estimated row count: 1111 (missing stats)
                 │
-                └── • scan
-                      columns: (lk, geom1)
-                      estimated row count: 1000 (missing stats)
-                      table: ltable@primary
-                      spans: FULL SCAN
+                └── • inverted join (left outer)
+                    │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
+                    │ table: rtable@geom_index
+                    │ inverted expr: st_covers(geom1, geom_inverted_key)
+                    │ on: (lk > 5) AND (rk1 > 12)
+                    │
+                    └── • scan
+                          columns: (lk, geom1)
+                          estimated row count: 1000 (missing stats)
+                          table: ltable@primary
+                          spans: FULL SCAN
 
 # Bounding box operations.
 statement ok
