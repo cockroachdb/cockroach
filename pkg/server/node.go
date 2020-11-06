@@ -210,10 +210,7 @@ func GetBootstrapSchema(
 // written, since epoch-based leases cannot be granted until then. All other
 // engines are initialized with their StoreIdent.
 func bootstrapCluster(
-	ctx context.Context,
-	engines []storage.Engine,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	ctx context.Context, engines []storage.Engine, initCfg initServerCfg,
 ) (*initState, error) {
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
@@ -251,7 +248,7 @@ func bootstrapCluster(
 		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
-			schema := GetBootstrapSchema(defaultZoneConfig, defaultSystemZoneConfig)
+			schema := GetBootstrapSchema(&initCfg.defaultZoneConfig, &initCfg.defaultSystemZoneConfig)
 			initialValues, tableSplits := schema.GetInitialValues()
 			splits := append(config.StaticSplits(), tableSplits...)
 			sort.Slice(splits, func(i, j int) bool {
@@ -268,16 +265,7 @@ func bootstrapCluster(
 		}
 	}
 
-	state := &initState{
-		initDiskState: initDiskState{
-			nodeID:               FirstNodeID,
-			clusterID:            clusterID,
-			clusterVersion:       bootstrapVersion,
-			initializedEngines:   engines,
-			uninitializedEngines: nil,
-		},
-	}
-	return state, nil
+	return inspectEngines(ctx, engines, initCfg.binaryVersion, initCfg.binaryMinSupportedVersion)
 }
 
 // NewNode returns a new instance of Node.

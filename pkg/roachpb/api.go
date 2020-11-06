@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1465,4 +1466,22 @@ func (rirr *ResolveIntentRangeRequest) AsLockUpdate() LockUpdate {
 		Status:         rirr.Status,
 		IgnoredSeqNums: rirr.IgnoredSeqNums,
 	}
+}
+
+// CreateStoreIdent creates a store identifier out of the details captured
+// within the join node response (the join node RPC is used to allocate a store
+// ID for the client's first store).
+func (r *JoinNodeResponse) CreateStoreIdent() (StoreIdent, error) {
+	nodeID, storeID := NodeID(r.NodeID), StoreID(r.StoreID)
+	clusterID, err := uuid.FromBytes(r.ClusterID)
+	if err != nil {
+		return StoreIdent{}, err
+	}
+
+	sIdent := StoreIdent{
+		ClusterID: clusterID,
+		NodeID:    nodeID,
+		StoreID:   storeID,
+	}
+	return sIdent, nil
 }
