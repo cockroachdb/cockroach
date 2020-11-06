@@ -1773,7 +1773,11 @@ func (s *adminServer) DataDistribution(
 	// This relies on crdb_internal.tables returning data even for newly added tables
 	// and deleted tables (as opposed to e.g. information_schema) because we are interested
 	// in the data for all ranges, not just ranges for visible tables.
-	tablesQuery := `SELECT name, table_id, database_name, drop_time FROM "".crdb_internal.tables WHERE schema_name = 'public'`
+	//
+	// Don't include tables with a NULL database_name, which in this case means
+	// excluding virtual tables (like crdb_internal.tables itself, for example).
+	tablesQuery := `SELECT name, schema_name, table_id, database_name, drop_time FROM
+									"".crdb_internal.tables WHERE database_name IS NOT NULL`
 	rows1, err := s.server.sqlServer.internalExecutor.QueryEx(
 		ctx, "admin-replica-matrix", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
@@ -1788,12 +1792,15 @@ func (s *adminServer) DataDistribution(
 
 	for _, row := range rows1 {
 		tableName := (*string)(row[0].(*tree.DString))
-		tableID := uint32(tree.MustBeDInt(row[1]))
-		dbName := (*string)(row[2].(*tree.DString))
+		schemaName := (*string)(row[1].(*tree.DString))
+		fqTableName := fmt.Sprintf("%s.%s",
+			tree.NameStringP(schemaName), tree.NameStringP(tableName))
+		tableID := uint32(tree.MustBeDInt(row[2]))
+		dbName := (*string)(row[3].(*tree.DString))
 
 		// Look at whether it was dropped.
 		var droppedAtTime *time.Time
-		droppedAtDatum, ok := row[3].(*tree.DTimestamp)
+		droppedAtDatum, ok := row[4].(*tree.DTimestamp)
 		if ok {
 			droppedAtTime = &droppedAtDatum.Time
 		}
@@ -1813,8 +1820,8 @@ func (s *adminServer) DataDistribution(
 		if droppedAtTime == nil {
 			// TODO(vilterp): figure out a way to get zone configs for tables that are dropped
 			zoneConfigQuery := fmt.Sprintf(
-				`SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
-				(*tree.Name)(dbName), (*tree.Name)(tableName),
+				`SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s.%s]`,
+				(*tree.Name)(dbName), (*tree.Name)(schemaName), (*tree.Name)(tableName),
 			)
 			rows, err := s.server.sqlServer.internalExecutor.QueryEx(
 				ctx, "admin-replica-matrix", nil, /* txn */
@@ -1840,7 +1847,7 @@ func (s *adminServer) DataDistribution(
 			ZoneConfigId:         zcID,
 			DroppedAt:            droppedAtTime,
 		}
-		dbInfo.TableInfo[*tableName] = tableInfo
+		dbInfo.TableInfo[fqTableName] = tableInfo
 		tableInfosByTableID[tableID] = tableInfo
 	}
 
