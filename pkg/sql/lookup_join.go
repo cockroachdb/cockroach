@@ -22,7 +22,7 @@ type lookupJoinNode struct {
 	input planNode
 	table *scanNode
 
-	// joinType is either INNER or LEFT_OUTER.
+	// joinType is either INNER, LEFT_OUTER, LEFT_SEMI, or LEFT_ANTI.
 	joinType descpb.JoinType
 
 	// eqCols identifies the columns from the input which are used for the

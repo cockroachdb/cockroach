@@ -185,11 +185,7 @@ func newWindower(
 
 	w.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "windower-disk")
 	w.allRowsPartitioned = rowcontainer.NewHashDiskBackedRowContainer(
-		nil, /* memRowContainer */
-		evalCtx,
-		w.MemMonitor,
-		w.diskMonitor,
-		flowCtx.Cfg.TempStorage,
+		evalCtx, w.MemMonitor, w.diskMonitor, flowCtx.Cfg.TempStorage,
 	)
 	if err := w.allRowsPartitioned.Init(
 		ctx,

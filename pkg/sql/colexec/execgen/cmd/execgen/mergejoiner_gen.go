@@ -34,7 +34,9 @@ type joinTypeInfo struct {
 	IsLeftOuter  bool
 	IsRightOuter bool
 	IsLeftSemi   bool
+	IsRightSemi  bool
 	IsLeftAnti   bool
+	IsRightAnti  bool
 	IsSetOp      bool
 
 	String string
@@ -174,8 +176,16 @@ func init() {
 			String:     "LeftSemi",
 		},
 		{
+			IsRightSemi: true,
+			String:      "RightSemi",
+		},
+		{
 			IsLeftAnti: true,
 			String:     "LeftAnti",
+		},
+		{
+			IsRightAnti: true,
+			String:      "RightAnti",
 		},
 		{
 			IsLeftSemi: true,

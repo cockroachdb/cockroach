@@ -86,6 +86,8 @@ func newApplyJoinNode(
 		return nil, errors.AssertionFailedf("unsupported right outer apply join: %d", log.Safe(joinType))
 	case descpb.ExceptAllJoin, descpb.IntersectAllJoin:
 		return nil, errors.AssertionFailedf("unsupported apply set op: %d", log.Safe(joinType))
+	case descpb.RightSemiJoin, descpb.RightAntiJoin:
+		return nil, errors.AssertionFailedf("unsupported right semi/anti apply join: %d", log.Safe(joinType))
 	}
 
 	return &applyJoinNode{

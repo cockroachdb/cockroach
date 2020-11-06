@@ -323,8 +323,3 @@ func (c *RowContainer) Replace(ctx context.Context, i int, newRow tree.Datums) e
 	copy(row, newRow)
 	return nil
 }
-
-// MemUsage returns the current accounted memory usage.
-func (c *RowContainer) MemUsage() int64 {
-	return c.memAcc.Used()
-}

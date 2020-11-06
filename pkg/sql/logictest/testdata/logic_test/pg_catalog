@@ -585,7 +585,7 @@ statement ok
 SET DATABASE = constraint_db
 
 # Select all columns with collations.
-query TTTOT colnames
+query TTTOT colnames,rowsort
 SELECT c.relname, attname, t.typname, attcollation, k.collname
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
@@ -2227,7 +2227,7 @@ SELECT oid::REGPROC FROM pg_proc WHERE proisagg = true EXCEPT SELECT aggfnoid FR
 oid
 
 # Check whether correct operator's oid is set for max and bool_or.
-query OTO colnames
+query OTO colnames,rowsort
 SELECT c.oid, c.oprname, a.aggsortop FROM pg_aggregate a
 JOIN pg_proc b ON a.aggfnoid = b.oid::REGPROC
 JOIN pg_operator c ON c.oprname = '>' AND b.proargtypes[0] = c.oprleft AND b.proargtypes[0] = c.oprright
@@ -2260,7 +2260,7 @@ oid         oprname  aggsortop
 1385359122  >        1385359122
 
 # Check whether correct operator's oid is set for min, bool_and and every.
-query OTO colnames
+query OTO colnames,rowsort
 SELECT c.oid, c.oprname, a.aggsortop FROM pg_aggregate a
 JOIN pg_proc b ON a.aggfnoid = b.oid::REGPROC
 JOIN pg_operator c ON c.oprname = '<' AND b.proargtypes[0] = c.oprleft AND b.proargtypes[0] = c.oprright

@@ -175,9 +175,9 @@ func collectProbeNoOuter_true(
 // This code snippet collects the "matches" for LEFT ANTI and EXCEPT ALL joins.
 // "Matches" are in quotes because we're actually interested in non-matches
 // from the left side.
-const _ = "template_collectAnti"
+const _ = "template_collectLeftAnti"
 
-func collectAnti_false(
+func collectLeftAnti_false(
 	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
@@ -201,7 +201,7 @@ func collectAnti_false(
 	return nResults
 }
 
-func collectAnti_true(
+func collectLeftAnti_true(
 	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
@@ -224,6 +224,22 @@ func collectAnti_true(
 		}
 	}
 	return nResults
+}
+
+// collectRightSemiAnti processes all matches for right semi/anti joins. Note
+// that during the probing phase we do not emit any output for these joins and
+// are simply tracking whether build rows had a match. The output will be
+// populated when in hjEmittingRight state.
+func collectRightSemiAnti(hj *hashJoiner, batchSize int) {
+	// Early bounds checks.
+	_ = hj.ht.probeScratch.headID[batchSize-1]
+	for i := int(0); i < batchSize; i++ {
+		currentID := hj.ht.probeScratch.headID[i]
+		for currentID != 0 {
+			hj.probeState.buildRowMatched[currentID-1] = true
+			currentID = hj.ht.same[currentID]
+		}
+	}
 }
 
 const _ = "template_distinctCollectProbeOuter"
@@ -340,6 +356,11 @@ func distinctCollectProbeNoOuter_true(
 func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := int(0)
 
+	if hj.spec.joinType == descpb.RightSemiJoin || hj.spec.joinType == descpb.RightAntiJoin {
+		collectRightSemiAnti(hj, batchSize)
+		return 0
+	}
+
 	if hj.spec.left.outer {
 		if sel != nil {
 			nResults = collectProbeOuter_true(hj, batchSize, nResults, batch, sel)
@@ -350,14 +371,14 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 		if sel != nil {
 			switch hj.spec.joinType {
 			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
-				nResults = collectAnti_true(hj, batchSize, nResults, batch, sel)
+				nResults = collectLeftAnti_true(hj, batchSize, nResults, batch, sel)
 			default:
 				nResults = collectProbeNoOuter_true(hj, batchSize, nResults, batch, sel)
 			}
 		} else {
 			switch hj.spec.joinType {
 			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
-				nResults = collectAnti_false(hj, batchSize, nResults, batch, sel)
+				nResults = collectLeftAnti_false(hj, batchSize, nResults, batch, sel)
 			default:
 				nResults = collectProbeNoOuter_false(hj, batchSize, nResults, batch, sel)
 			}
@@ -372,6 +393,11 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 // requires assumes a N-1 hash join.
 func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := int(0)
+
+	if hj.spec.joinType == descpb.RightSemiJoin || hj.spec.joinType == descpb.RightAntiJoin {
+		collectRightSemiAnti(hj, batchSize)
+		return 0
+	}
 
 	if hj.spec.left.outer {
 		nResults = batchSize
@@ -388,7 +414,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.
-				nResults = collectAnti_true(hj, batchSize, nResults, batch, sel)
+				nResults = collectLeftAnti_true(hj, batchSize, nResults, batch, sel)
 			default:
 				nResults = distinctCollectProbeNoOuter_true(hj, batchSize, nResults, sel)
 			}
@@ -398,7 +424,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.
-				nResults = collectAnti_false(hj, batchSize, nResults, batch, sel)
+				nResults = collectLeftAnti_false(hj, batchSize, nResults, batch, sel)
 			default:
 				nResults = distinctCollectProbeNoOuter_false(hj, batchSize, nResults, sel)
 			}

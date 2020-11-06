@@ -26,6 +26,8 @@ const (
 	LeftAntiJoin     = JoinType_LEFT_ANTI
 	IntersectAllJoin = JoinType_INTERSECT_ALL
 	ExceptAllJoin    = JoinType_EXCEPT_ALL
+	RightSemiJoin    = JoinType_RIGHT_SEMI
+	RightAntiJoin    = JoinType_RIGHT_ANTI
 )
 
 // JoinTypeFromAstString takes a join string as found in a SQL
@@ -54,6 +56,17 @@ func (j JoinType) IsSetOpJoin() bool {
 	return j == IntersectAllJoin || j == ExceptAllJoin
 }
 
+// ShouldIncludeLeftColsInOutput returns true if this join should include
+// the columns from the left side into the output.
+func (j JoinType) ShouldIncludeLeftColsInOutput() bool {
+	switch j {
+	case RightSemiJoin, RightAntiJoin:
+		return false
+	default:
+		return true
+	}
+}
+
 // ShouldIncludeRightColsInOutput returns true if this join should include
 // the columns from the right side into the output.
 func (j JoinType) ShouldIncludeRightColsInOutput() bool {
@@ -62,5 +75,17 @@ func (j JoinType) ShouldIncludeRightColsInOutput() bool {
 		return false
 	default:
 		return true
+	}
+}
+
+// IsEmptyOutputWhenRightIsEmpty returns whether this join type will always
+// produce an empty output when the right relation is empty.
+func (j JoinType) IsEmptyOutputWhenRightIsEmpty() bool {
+	switch j {
+	case InnerJoin, RightOuterJoin, LeftSemiJoin,
+		RightSemiJoin, IntersectAllJoin, RightAntiJoin:
+		return true
+	default:
+		return false
 	}
 }

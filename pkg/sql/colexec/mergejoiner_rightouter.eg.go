@@ -84,7 +84,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -103,7 +103,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -234,8 +234,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -260,7 +260,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -273,7 +273,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -310,7 +310,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -329,7 +329,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -437,8 +437,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -455,7 +455,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -468,7 +468,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -505,7 +505,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -524,7 +524,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -632,8 +632,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -650,7 +650,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -663,7 +663,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -699,7 +699,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -718,7 +718,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -858,8 +858,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -887,7 +887,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -900,7 +900,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -933,7 +933,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -952,7 +952,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -1092,8 +1092,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -1121,7 +1121,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -1134,7 +1134,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -1168,7 +1168,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -1187,7 +1187,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -1327,8 +1327,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -1356,7 +1356,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -1369,7 +1369,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -1406,7 +1406,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -1425,7 +1425,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -1589,8 +1589,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -1626,7 +1626,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -1639,7 +1639,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -1676,7 +1676,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -1695,7 +1695,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -1824,8 +1824,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -1849,7 +1849,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -1862,7 +1862,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -1899,7 +1899,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -1918,7 +1918,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -2026,8 +2026,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -2044,7 +2044,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -2057,7 +2057,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -2094,7 +2094,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -2113,7 +2113,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -2226,8 +2226,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -2246,7 +2246,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -2259,7 +2259,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -2302,7 +2302,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -2441,8 +2441,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -2464,7 +2464,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -2477,7 +2477,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -2514,7 +2514,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -2630,8 +2630,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -2645,7 +2645,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -2658,7 +2658,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -2695,7 +2695,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -2811,8 +2811,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -2826,7 +2826,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -2839,7 +2839,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -2875,7 +2875,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -3023,8 +3023,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -3049,7 +3049,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -3062,7 +3062,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -3095,7 +3095,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -3243,8 +3243,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -3269,7 +3269,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -3282,7 +3282,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -3316,7 +3316,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -3464,8 +3464,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -3490,7 +3490,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -3503,7 +3503,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -3540,7 +3540,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -3712,8 +3712,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -3746,7 +3746,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -3759,7 +3759,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -3796,7 +3796,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -3933,8 +3933,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -3955,7 +3955,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -3968,7 +3968,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -4005,7 +4005,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -4121,8 +4121,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -4136,7 +4136,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -4149,7 +4149,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -4186,7 +4186,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -4307,8 +4307,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -4324,7 +4324,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -4337,7 +4337,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -4382,7 +4382,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -4395,7 +4395,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -4522,8 +4522,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -4548,7 +4548,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -4561,7 +4561,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -4598,7 +4598,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -4611,7 +4611,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -4715,8 +4715,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -4733,7 +4733,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -4746,7 +4746,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -4783,7 +4783,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -4796,7 +4796,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -4900,8 +4900,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -4918,7 +4918,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -4931,7 +4931,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -4967,7 +4967,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -4980,7 +4980,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -5116,8 +5116,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -5145,7 +5145,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -5158,7 +5158,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -5191,7 +5191,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -5204,7 +5204,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -5340,8 +5340,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -5369,7 +5369,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -5382,7 +5382,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -5416,7 +5416,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -5429,7 +5429,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -5565,8 +5565,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -5594,7 +5594,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -5607,7 +5607,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -5644,7 +5644,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -5657,7 +5657,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -5817,8 +5817,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -5854,7 +5854,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -5867,7 +5867,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -5904,7 +5904,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -5917,7 +5917,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -6042,8 +6042,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -6067,7 +6067,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -6080,7 +6080,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -6117,7 +6117,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -6130,7 +6130,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -6234,8 +6234,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -6252,7 +6252,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -6265,7 +6265,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -6302,7 +6302,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -6315,7 +6315,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -6424,8 +6424,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -6444,7 +6444,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -6457,7 +6457,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -6500,7 +6500,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -6629,8 +6629,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -6652,7 +6652,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -6665,7 +6665,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -6702,7 +6702,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -6808,8 +6808,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -6823,7 +6823,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -6836,7 +6836,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -6873,7 +6873,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -6979,8 +6979,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -6994,7 +6994,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -7007,7 +7007,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -7043,7 +7043,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -7181,8 +7181,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -7207,7 +7207,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -7220,7 +7220,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -7253,7 +7253,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -7391,8 +7391,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -7417,7 +7417,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -7430,7 +7430,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -7464,7 +7464,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -7602,8 +7602,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -7628,7 +7628,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -7641,7 +7641,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -7678,7 +7678,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -7840,8 +7840,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -7874,7 +7874,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -7887,7 +7887,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -7924,7 +7924,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -8051,8 +8051,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -8073,7 +8073,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -8086,7 +8086,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -8123,7 +8123,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -8229,8 +8229,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -8244,7 +8244,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -8257,7 +8257,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -8294,7 +8294,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -8405,8 +8405,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -8422,7 +8422,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -8435,7 +8435,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -8497,7 +8497,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -8516,7 +8516,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -8647,8 +8647,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -8673,7 +8673,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -8686,7 +8686,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -8723,7 +8723,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -8742,7 +8742,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -8850,8 +8850,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -8868,7 +8868,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -8881,7 +8881,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -8918,7 +8918,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -8937,7 +8937,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -9045,8 +9045,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -9063,7 +9063,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -9076,7 +9076,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -9112,7 +9112,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -9131,7 +9131,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -9271,8 +9271,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -9300,7 +9300,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -9313,7 +9313,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -9346,7 +9346,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -9365,7 +9365,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -9505,8 +9505,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -9534,7 +9534,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -9547,7 +9547,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -9581,7 +9581,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -9600,7 +9600,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -9740,8 +9740,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -9769,7 +9769,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -9782,7 +9782,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -9819,7 +9819,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -9838,7 +9838,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -10002,8 +10002,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -10039,7 +10039,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -10052,7 +10052,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -10089,7 +10089,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -10108,7 +10108,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -10237,8 +10237,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -10262,7 +10262,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -10275,7 +10275,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -10312,7 +10312,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -10331,7 +10331,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -10439,8 +10439,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -10457,7 +10457,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -10470,7 +10470,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -10507,7 +10507,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -10526,7 +10526,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -10639,8 +10639,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -10659,7 +10659,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -10672,7 +10672,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -10715,7 +10715,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -10854,8 +10854,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -10877,7 +10877,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -10890,7 +10890,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -10927,7 +10927,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -11043,8 +11043,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -11058,7 +11058,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -11071,7 +11071,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -11108,7 +11108,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -11224,8 +11224,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -11239,7 +11239,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -11252,7 +11252,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -11288,7 +11288,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -11436,8 +11436,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -11462,7 +11462,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -11475,7 +11475,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -11508,7 +11508,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -11656,8 +11656,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -11682,7 +11682,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -11695,7 +11695,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -11729,7 +11729,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -11877,8 +11877,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -11903,7 +11903,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -11916,7 +11916,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -11953,7 +11953,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -12125,8 +12125,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -12159,7 +12159,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -12172,7 +12172,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -12209,7 +12209,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -12346,8 +12346,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -12368,7 +12368,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -12381,7 +12381,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -12418,7 +12418,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -12534,8 +12534,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -12549,7 +12549,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -12562,7 +12562,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -12599,7 +12599,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -12720,8 +12720,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -12737,7 +12737,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -12750,7 +12750,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -12795,7 +12795,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -12808,7 +12808,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -12935,8 +12935,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -12961,7 +12961,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -12974,7 +12974,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -13011,7 +13011,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -13024,7 +13024,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -13128,8 +13128,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -13146,7 +13146,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -13159,7 +13159,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -13196,7 +13196,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -13209,7 +13209,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -13313,8 +13313,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -13331,7 +13331,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -13344,7 +13344,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -13380,7 +13380,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -13393,7 +13393,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -13529,8 +13529,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -13558,7 +13558,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -13571,7 +13571,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -13604,7 +13604,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -13617,7 +13617,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -13753,8 +13753,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -13782,7 +13782,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -13795,7 +13795,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -13829,7 +13829,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -13842,7 +13842,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -13978,8 +13978,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -14007,7 +14007,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -14020,7 +14020,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -14057,7 +14057,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -14070,7 +14070,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -14230,8 +14230,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -14267,7 +14267,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -14280,7 +14280,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -14317,7 +14317,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -14330,7 +14330,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -14455,8 +14455,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -14480,7 +14480,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -14493,7 +14493,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -14530,7 +14530,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -14543,7 +14543,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -14647,8 +14647,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -14665,7 +14665,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -14678,7 +14678,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -14715,7 +14715,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -14728,7 +14728,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -14837,8 +14837,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -14857,7 +14857,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -14870,7 +14870,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -14913,7 +14913,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -15042,8 +15042,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -15065,7 +15065,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -15078,7 +15078,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -15115,7 +15115,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -15221,8 +15221,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -15236,7 +15236,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -15249,7 +15249,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -15286,7 +15286,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -15392,8 +15392,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -15407,7 +15407,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -15420,7 +15420,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -15456,7 +15456,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -15594,8 +15594,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -15620,7 +15620,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -15633,7 +15633,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -15666,7 +15666,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -15804,8 +15804,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -15830,7 +15830,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -15843,7 +15843,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -15877,7 +15877,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -16015,8 +16015,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -16041,7 +16041,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -16054,7 +16054,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -16091,7 +16091,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -16253,8 +16253,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -16287,7 +16287,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -16300,7 +16300,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -16337,7 +16337,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -16464,8 +16464,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -16486,7 +16486,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -16499,7 +16499,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -16536,7 +16536,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -16642,8 +16642,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -16657,7 +16657,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -16670,7 +16670,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -16707,7 +16707,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -16818,8 +16818,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -16835,7 +16835,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -16848,7 +16848,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -16910,7 +16910,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -16929,7 +16929,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -17060,8 +17060,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -17086,7 +17086,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -17099,7 +17099,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -17136,7 +17136,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -17155,7 +17155,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -17263,8 +17263,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -17281,7 +17281,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -17294,7 +17294,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -17331,7 +17331,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -17350,7 +17350,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -17458,8 +17458,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -17476,7 +17476,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -17489,7 +17489,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -17525,7 +17525,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -17544,7 +17544,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -17684,8 +17684,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -17713,7 +17713,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -17726,7 +17726,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -17759,7 +17759,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -17778,7 +17778,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -17918,8 +17918,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -17947,7 +17947,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -17960,7 +17960,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -17994,7 +17994,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -18013,7 +18013,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -18153,8 +18153,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -18182,7 +18182,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -18195,7 +18195,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -18232,7 +18232,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -18251,7 +18251,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -18415,8 +18415,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -18452,7 +18452,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -18465,7 +18465,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -18502,7 +18502,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -18521,7 +18521,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -18650,8 +18650,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -18675,7 +18675,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -18688,7 +18688,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -18725,7 +18725,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -18744,7 +18744,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -18852,8 +18852,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -18870,7 +18870,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -18883,7 +18883,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -18920,7 +18920,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -18939,7 +18939,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -19052,8 +19052,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -19072,7 +19072,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -19085,7 +19085,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -19128,7 +19128,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -19267,8 +19267,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -19290,7 +19290,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -19303,7 +19303,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -19340,7 +19340,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -19456,8 +19456,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -19471,7 +19471,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -19484,7 +19484,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -19521,7 +19521,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -19637,8 +19637,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -19652,7 +19652,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -19665,7 +19665,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -19701,7 +19701,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -19849,8 +19849,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -19875,7 +19875,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -19888,7 +19888,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -19921,7 +19921,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -20069,8 +20069,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -20095,7 +20095,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -20108,7 +20108,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -20142,7 +20142,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -20290,8 +20290,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -20316,7 +20316,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -20329,7 +20329,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -20366,7 +20366,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -20538,8 +20538,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -20572,7 +20572,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -20585,7 +20585,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -20622,7 +20622,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -20759,8 +20759,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -20781,7 +20781,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -20794,7 +20794,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -20831,7 +20831,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -20947,8 +20947,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -20962,7 +20962,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -20975,7 +20975,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -21012,7 +21012,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -21133,8 +21133,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -21150,7 +21150,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -21163,7 +21163,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -21208,7 +21208,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -21221,7 +21221,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -21348,8 +21348,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -21374,7 +21374,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -21387,7 +21387,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -21424,7 +21424,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -21437,7 +21437,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -21541,8 +21541,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -21559,7 +21559,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -21572,7 +21572,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -21609,7 +21609,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -21622,7 +21622,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -21726,8 +21726,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -21744,7 +21744,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -21757,7 +21757,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -21793,7 +21793,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -21806,7 +21806,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -21942,8 +21942,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -21971,7 +21971,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -21984,7 +21984,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -22017,7 +22017,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -22030,7 +22030,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -22166,8 +22166,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -22195,7 +22195,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -22208,7 +22208,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -22242,7 +22242,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -22255,7 +22255,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -22391,8 +22391,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -22420,7 +22420,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -22433,7 +22433,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -22470,7 +22470,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -22483,7 +22483,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -22643,8 +22643,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -22680,7 +22680,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -22693,7 +22693,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -22730,7 +22730,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -22743,7 +22743,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -22868,8 +22868,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -22893,7 +22893,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -22906,7 +22906,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -22943,7 +22943,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -22956,7 +22956,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -23060,8 +23060,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -23078,7 +23078,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -23091,7 +23091,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -23128,7 +23128,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -23141,7 +23141,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -23250,8 +23250,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(rSel[curRIdx]) {
 												break
@@ -23270,7 +23270,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -23283,7 +23283,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -23326,7 +23326,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -23455,8 +23455,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -23478,7 +23478,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -23491,7 +23491,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -23528,7 +23528,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -23634,8 +23634,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -23649,7 +23649,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -23662,7 +23662,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -23699,7 +23699,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -23805,8 +23805,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -23820,7 +23820,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -23833,7 +23833,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -23869,7 +23869,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -24007,8 +24007,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -24033,7 +24033,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -24046,7 +24046,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -24079,7 +24079,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -24217,8 +24217,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -24243,7 +24243,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -24256,7 +24256,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -24290,7 +24290,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -24428,8 +24428,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -24454,7 +24454,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -24467,7 +24467,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -24504,7 +24504,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -24666,8 +24666,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -24700,7 +24700,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -24713,7 +24713,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -24750,7 +24750,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -24877,8 +24877,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -24899,7 +24899,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -24912,7 +24912,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -24949,7 +24949,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -25055,8 +25055,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -25070,7 +25070,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -25083,7 +25083,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -25120,7 +25120,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -25231,8 +25231,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
 											newRVal := rKeys.Get(rSelIdx)
@@ -25248,7 +25248,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -25261,7 +25261,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -25323,7 +25323,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -25342,7 +25342,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -25473,8 +25473,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -25499,7 +25499,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -25512,7 +25512,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -25549,7 +25549,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -25568,7 +25568,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -25676,8 +25676,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -25694,7 +25694,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -25707,7 +25707,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -25744,7 +25744,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -25763,7 +25763,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -25871,8 +25871,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -25889,7 +25889,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -25902,7 +25902,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -25938,7 +25938,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -25957,7 +25957,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -26097,8 +26097,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -26126,7 +26126,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -26139,7 +26139,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -26172,7 +26172,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -26191,7 +26191,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -26331,8 +26331,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -26360,7 +26360,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -26373,7 +26373,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -26407,7 +26407,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -26426,7 +26426,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -26566,8 +26566,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -26595,7 +26595,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -26608,7 +26608,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -26645,7 +26645,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -26664,7 +26664,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -26828,8 +26828,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -26865,7 +26865,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -26878,7 +26878,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -26915,7 +26915,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -26934,7 +26934,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -27063,8 +27063,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -27088,7 +27088,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -27101,7 +27101,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -27138,7 +27138,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -27157,7 +27157,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -27265,8 +27265,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -27283,7 +27283,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -27296,7 +27296,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -27333,7 +27333,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -27352,7 +27352,7 @@ EqLoop:
 								}
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -27465,8 +27465,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -27485,7 +27485,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -27498,7 +27498,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -27541,7 +27541,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -27680,8 +27680,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -27703,7 +27703,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -27716,7 +27716,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -27753,7 +27753,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -27869,8 +27869,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -27884,7 +27884,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -27897,7 +27897,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -27934,7 +27934,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -28050,8 +28050,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -28065,7 +28065,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -28078,7 +28078,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -28114,7 +28114,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -28262,8 +28262,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -28288,7 +28288,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -28301,7 +28301,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -28334,7 +28334,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -28482,8 +28482,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -28508,7 +28508,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -28521,7 +28521,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -28555,7 +28555,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -28703,8 +28703,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -28729,7 +28729,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -28742,7 +28742,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -28779,7 +28779,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -28951,8 +28951,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -28985,7 +28985,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -28998,7 +28998,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -29035,7 +29035,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -29172,8 +29172,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -29194,7 +29194,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -29207,7 +29207,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -29244,7 +29244,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -29360,8 +29360,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -29375,7 +29375,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -29388,7 +29388,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -29425,7 +29425,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -29546,8 +29546,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -29563,7 +29563,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -29576,7 +29576,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -29621,7 +29621,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -29634,7 +29634,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -29761,8 +29761,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -29787,7 +29787,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -29800,7 +29800,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -29837,7 +29837,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -29850,7 +29850,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -29954,8 +29954,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -29972,7 +29972,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -29985,7 +29985,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -30022,7 +30022,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -30035,7 +30035,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -30139,8 +30139,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -30157,7 +30157,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -30170,7 +30170,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -30206,7 +30206,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -30219,7 +30219,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -30355,8 +30355,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -30384,7 +30384,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -30397,7 +30397,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -30430,7 +30430,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -30443,7 +30443,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -30579,8 +30579,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -30608,7 +30608,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -30621,7 +30621,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -30655,7 +30655,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -30668,7 +30668,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -30804,8 +30804,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -30833,7 +30833,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -30846,7 +30846,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -30883,7 +30883,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -30896,7 +30896,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -31056,8 +31056,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -31093,7 +31093,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -31106,7 +31106,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -31143,7 +31143,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -31156,7 +31156,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -31281,8 +31281,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -31306,7 +31306,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -31319,7 +31319,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -31356,7 +31356,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -31369,7 +31369,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -31473,8 +31473,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -31491,7 +31491,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -31504,7 +31504,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -31541,7 +31541,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -31554,7 +31554,7 @@ EqLoop:
 								// NULL.
 								if rNull {
 
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 									continue
 								}
@@ -31663,8 +31663,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											if rVec.Nulls().NullAt(curRIdx) {
 												break
@@ -31683,7 +31683,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -31696,7 +31696,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -31739,7 +31739,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -31868,8 +31868,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -31891,7 +31891,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -31904,7 +31904,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -31941,7 +31941,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -32047,8 +32047,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -32062,7 +32062,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -32075,7 +32075,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -32112,7 +32112,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -32218,8 +32218,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -32233,7 +32233,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -32246,7 +32246,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -32282,7 +32282,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -32420,8 +32420,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -32446,7 +32446,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -32459,7 +32459,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -32492,7 +32492,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -32630,8 +32630,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -32656,7 +32656,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -32669,7 +32669,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -32703,7 +32703,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -32841,8 +32841,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -32867,7 +32867,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -32880,7 +32880,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -32917,7 +32917,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -33079,8 +33079,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -33113,7 +33113,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -33126,7 +33126,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -33163,7 +33163,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -33290,8 +33290,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -33312,7 +33312,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -33325,7 +33325,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -33362,7 +33362,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -33468,8 +33468,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -33483,7 +33483,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -33496,7 +33496,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -33533,7 +33533,7 @@ EqLoop:
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
-								o.groups.addRightOuterGroup(curLIdx, curRIdx)
+								o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 								curRIdx++
 								areGroupsProcessed = true
 							}
@@ -33644,8 +33644,8 @@ EqLoop:
 										curRIdx++
 
 										// All the rows on the right within the current group will not get a match on
-										// the left, so we're adding each of them as a right outer group.
-										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+										// the left, so we're adding each of them as a right unmatched group.
+										o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
 											newRVal := rKeys.Get(rSelIdx)
@@ -33661,7 +33661,7 @@ EqLoop:
 											if !match {
 												break
 											}
-											o.groups.addRightOuterGroup(curLIdx, curRIdx)
+											o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 											curRIdx++
 										}
 									}
@@ -33674,7 +33674,7 @@ EqLoop:
 								// unprocessed row in the right group will not get a match, so each one of
 								// them becomes a new unmatched group with a corresponding null group.
 								for curRIdx < curREndIdx {
-									o.groups.addRightOuterGroup(curLIdx, curRIdx)
+									o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 									curRIdx++
 								}
 							}
@@ -39935,6 +39935,7 @@ func (o *mergeJoinRightOuterOp) probe(ctx context.Context) {
 func (o *mergeJoinRightOuterOp) setBuilderSourceToBufferedGroup(ctx context.Context) {
 	lGroupEndIdx := o.proberState.lBufferedGroup.numTuples
 	rGroupEndIdx := o.proberState.rBufferedGroup.numTuples
+	_, _ = lGroupEndIdx, rGroupEndIdx
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
@@ -40022,13 +40023,18 @@ func (o *mergeJoinRightOuterOp) build(ctx context.Context) {
 		// batch (meaning that we're not doing query like 'SELECT count(*) ...')
 		// and when builderState.outCount has increased (meaning that we have
 		// something to build).
+		colOffsetForRightGroups := 0
 		switch o.builderState.buildFrom {
 		case mjBuildFromBatch:
 			o.buildLeftGroupsFromBatch(o.builderState.lGroups, &o.left, o.proberState.lBatch, outStartIdx)
-			o.buildRightGroupsFromBatch(o.builderState.rGroups, len(o.left.sourceTypes), &o.right, o.proberState.rBatch, outStartIdx)
+			colOffsetForRightGroups = len(o.left.sourceTypes)
+			_ = colOffsetForRightGroups
+			o.buildRightGroupsFromBatch(o.builderState.rGroups, colOffsetForRightGroups, &o.right, o.proberState.rBatch, outStartIdx)
 		case mjBuildFromBufferedGroup:
 			o.buildLeftBufferedGroup(ctx, o.builderState.lGroups[0], &o.left, o.proberState.lBufferedGroup, outStartIdx)
-			o.buildRightBufferedGroup(ctx, o.builderState.rGroups[0], len(o.left.sourceTypes), &o.right, o.proberState.rBufferedGroup, outStartIdx)
+			colOffsetForRightGroups = len(o.left.sourceTypes)
+			_ = colOffsetForRightGroups
+			o.buildRightBufferedGroup(ctx, o.builderState.rGroups[0], colOffsetForRightGroups, &o.right, o.proberState.rBufferedGroup, outStartIdx)
 
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unsupported mjBuildFrom %d", o.builderState.buildFrom))

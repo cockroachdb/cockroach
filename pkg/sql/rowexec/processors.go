@@ -192,8 +192,7 @@ func NewProcessor(
 			return nil, err
 		}
 		return newHashJoiner(
-			flowCtx, processorID, core.HashJoiner, inputs[0], inputs[1], post,
-			outputs[0], false, /* disableTempStorage */
+			flowCtx, processorID, core.HashJoiner, inputs[0], inputs[1], post, outputs[0],
 		)
 	}
 	if core.InvertedJoiner != nil {

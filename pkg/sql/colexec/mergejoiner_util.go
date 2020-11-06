@@ -147,9 +147,10 @@ func (b *circularGroupsBuffer) addLeftUnmatchedGroup(curLIdx int, curRIdx int) {
 	}
 }
 
-// addRightOuterGroup adds a left and right group to the buffer that correspond
-// to an unmatched row from the right side in the case of RIGHT OUTER JOIN.
-func (b *circularGroupsBuffer) addRightOuterGroup(curLIdx int, curRIdx int) {
+// addRightUnmatchedGroup adds a left and right group to the buffer that
+// correspond to an unmatched row from the right side in the case of RIGHT
+// OUTER and RIGHT ANTI joins.
+func (b *circularGroupsBuffer) addRightUnmatchedGroup(curLIdx int, curRIdx int) {
 	b.leftGroups[b.endIdx] = group{
 		rowStartIdx: curLIdx,
 		rowEndIdx:   curLIdx + 1,
@@ -186,6 +187,26 @@ func (b *circularGroupsBuffer) addLeftSemiGroup(curLIdx int, lRunLength int) {
 		rowEndIdx:   curLIdx + lRunLength,
 		numRepeats:  1,
 		toBuild:     lRunLength,
+	}
+	b.endIdx++
+
+	// Modulus on every step is more expensive than this check.
+	if b.endIdx >= b.cap {
+		b.endIdx -= b.cap
+	}
+}
+
+// addRightSemiGroup adds a right group to the buffer that corresponds to a run
+// of tuples from the right side that all have a match on the left side. This
+// should only be called after processing the last equality column, and this
+// group will be used by the builder next. Note that we're not adding a left
+// group here since tuples from the left are not outputted in RIGHT SEMI joins.
+func (b *circularGroupsBuffer) addRightSemiGroup(curRIdx int, rRunLength int) {
+	b.rightGroups[b.endIdx] = group{
+		rowStartIdx: curRIdx,
+		rowEndIdx:   curRIdx + rRunLength,
+		numRepeats:  1,
+		toBuild:     rRunLength,
 	}
 	b.endIdx++
 

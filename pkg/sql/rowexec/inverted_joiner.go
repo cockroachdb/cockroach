@@ -165,6 +165,11 @@ func newInvertedJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
+	switch spec.Type {
+	case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.LeftSemiJoin, descpb.LeftAntiJoin:
+	default:
+		return nil, errors.AssertionFailedf("unexpected inverted join type %s", spec.Type)
+	}
 	ij := &invertedJoiner{
 		desc:                 tabledesc.MakeImmutable(spec.Table),
 		input:                input,
