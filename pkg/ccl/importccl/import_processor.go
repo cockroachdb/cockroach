@@ -56,6 +56,8 @@ type readImportDataProcessor struct {
 
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 
+	seqChunkProvider *row.SeqChunkProvider
+
 	importErr error
 	summary   *roachpb.BulkOpSummary
 }
@@ -83,6 +85,15 @@ func newReadImportDataProcessor(
 		}); err != nil {
 		return nil, err
 	}
+
+	// Load the import job running the import in case any of the columns have a
+	// default expression which uses sequences. In this case we need to update the
+	// job progress within the import processor.
+	if cp.flowCtx.Cfg.JobRegistry != nil {
+		cp.seqChunkProvider = &row.SeqChunkProvider{JobID: cp.spec.Progress.JobID,
+			Registry: cp.flowCtx.Cfg.JobRegistry}
+	}
+
 	return cp, nil
 }
 
@@ -92,7 +103,8 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) context.Context {
 	// which is closed only after the go routine returns.
 	go func() {
 		defer close(idp.progCh)
-		idp.summary, idp.importErr = runImport(ctx, idp.flowCtx, &idp.spec, idp.progCh)
+		idp.summary, idp.importErr = runImport(ctx, idp.flowCtx, &idp.spec, idp.progCh,
+			idp.seqChunkProvider)
 	}()
 	return idp.StartInternal(ctx, readImportDataProcessorName)
 }
@@ -158,6 +170,7 @@ func makeInputConverter(
 	spec *execinfrapb.ReadImportDataSpec,
 	evalCtx *tree.EvalContext,
 	kvCh chan row.KVBatch,
+	seqChunkProvider *row.SeqChunkProvider,
 ) (inputConverter, error) {
 	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
 	var singleTable *tabledesc.Immutable
@@ -215,7 +228,7 @@ func makeInputConverter(
 		}
 		return newCSVInputReader(
 			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
-			singleTable, singleTableTargetCols, evalCtx), nil
+			singleTable, singleTableTargetCols, evalCtx, seqChunkProvider), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,

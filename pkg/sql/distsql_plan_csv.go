@@ -227,6 +227,13 @@ func DistIngest(
 			prog := details.(*jobspb.Progress_Import).Import
 			prog.ReadProgress = make([]float32, len(from))
 			prog.ResumePos = make([]int64, len(from))
+			if prog.SequenceDetails == nil {
+				prog.SequenceDetails = make([]*jobspb.SequenceDetails, len(from))
+				for i := range prog.SequenceDetails {
+					prog.SequenceDetails[i] = &jobspb.SequenceDetails{}
+				}
+			}
+
 			return 0.0
 		},
 	); err != nil {
