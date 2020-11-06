@@ -150,3 +150,51 @@ func TestExtractColumnIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestValidColumnReferences(t *testing.T) {
+	// Trick to get the init() for the builtins package to run.
+	_ = builtins.AllBuiltinNames
+
+	table := tree.Name("foo")
+	desc := testTableDesc(
+		string(table),
+		[]testCol{{"a", types.Bool}, {"b", types.Int}},
+		[]testCol{{"c", types.String}},
+	)
+
+	testData := []struct {
+		expr     string
+		expected bool
+	}{
+		{"true", true},
+		{"now()", true},
+		{"a", true},
+		{"a AND b > 1", true},
+		{"a AND c = 'foo'", true},
+		{"a OR (b > 1 AND c = 'foo')", true},
+		{"a AND abs(b) > 5 AND lower(c) = 'foo'", true},
+		{"x", false},
+		{"a AND x > 1", false},
+		{"a AND x = 'foo'", false},
+		{"a OR (b > 1 AND x = 'foo')", false},
+		{"a AND abs(x) > 5 AND lower(y) = 'foo'", false},
+	}
+
+	for _, d := range testData {
+		t.Run(d.expr, func(t *testing.T) {
+			expr, err := parser.ParseExpr(d.expr)
+			if err != nil {
+				t.Fatalf("%s: unexpected error: %s", d.expr, err)
+			}
+
+			res, err := schemaexpr.HasValidColumnReferences(desc, expr)
+			if err != nil {
+				t.Fatalf("%s: unexpected error: %s", d.expr, err)
+			}
+
+			if res != d.expected {
+				t.Errorf("%s: expected %t, got %t", d.expr, d.expected, res)
+			}
+		})
+	}
+}

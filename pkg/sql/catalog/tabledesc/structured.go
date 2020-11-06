@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -2017,6 +2018,20 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 			if _, exists := columnNames[index.Sharded.Name]; !exists {
 				return fmt.Errorf("index %q refers to non-existent shard column %q",
 					index.Name, index.Sharded.Name)
+			}
+		}
+		if index.IsPartial() {
+			expr, err := parser.ParseExpr(index.Predicate)
+			if err != nil {
+				return err
+			}
+			valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return fmt.Errorf("partial index %q refers to unknown columns in predicate: %s",
+					index.Name, index.Predicate)
 			}
 		}
 	}
