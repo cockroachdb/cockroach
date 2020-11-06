@@ -139,10 +139,7 @@ func (jb *joinerBase) renderUnmatchedRow(row rowenc.EncDatumRow, side joinSide) 
 		rrow = row
 	}
 
-	jb.combinedRow = jb.combinedRow[:0]
-	jb.combinedRow = append(jb.combinedRow, lrow...)
-	jb.combinedRow = append(jb.combinedRow, rrow...)
-	return jb.combinedRow
+	return jb.combine(lrow, rrow)
 }
 
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
@@ -173,15 +170,31 @@ func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 // continuation column, the returned slice does not include the continuation
 // column, but has the capacity for it.
 func (jb *joinerBase) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
-	jb.combinedRow = jb.combinedRow[:len(lrow)+len(rrow)]
-	copy(jb.combinedRow, lrow)
-	copy(jb.combinedRow[len(lrow):], rrow)
+	combinedRow := jb.combine(lrow, rrow)
 
 	if jb.onCond.Expr != nil {
-		res, err := jb.onCond.EvalFilter(jb.combinedRow)
+		res, err := jb.onCond.EvalFilter(combinedRow)
 		if !res || err != nil {
 			return nil, err
 		}
 	}
-	return jb.combinedRow, nil
+	return combinedRow, nil
+}
+
+// combine combines lrow and rrow together.
+func (jb *joinerBase) combine(lrow, rrow rowenc.EncDatumRow) rowenc.EncDatumRow {
+	jb.combinedRow = jb.combinedRow[:len(lrow)+len(rrow)]
+	// If either of the rows is of length 1, it is faster to use direct
+	// assignment instead of copy.
+	if len(lrow) == 1 {
+		jb.combinedRow[0] = lrow[0]
+	} else {
+		copy(jb.combinedRow, lrow)
+	}
+	if len(rrow) == 1 {
+		jb.combinedRow[len(lrow)] = rrow[0]
+	} else {
+		copy(jb.combinedRow[len(lrow):], rrow)
+	}
+	return jb.combinedRow
 }
