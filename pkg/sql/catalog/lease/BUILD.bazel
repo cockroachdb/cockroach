@@ -52,10 +52,8 @@ go_test(
     embed = [":lease"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
