@@ -945,6 +945,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
 	savePlanString := planner.collectBundle
 	planner.curPlan.init(
+		planner.EvalContext(),
 		&planner.stmt,
 		ex.appStats,
 		savePlanString,

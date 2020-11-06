@@ -284,6 +284,8 @@ type flowInfo struct {
 // TODO(jordan): investigate whether/how per-plan state like
 // placeholder data can be concentrated in a single struct.
 type planTop struct {
+	evalCtx *tree.EvalContext
+
 	// stmt is a reference to the current statement (AST and other metadata).
 	stmt *Statement
 
@@ -459,8 +461,11 @@ func (p *planComponents) close(ctx context.Context) {
 
 // init resets planTop to point to a given statement; used at the start of the
 // planning process.
-func (p *planTop) init(stmt *Statement, appStats *appStats, savePlanString bool) {
+func (p *planTop) init(
+	evalCtx *tree.EvalContext, stmt *Statement, appStats *appStats, savePlanString bool,
+) {
 	*p = planTop{
+		evalCtx:        evalCtx,
 		stmt:           stmt,
 		appStats:       appStats,
 		savePlanString: savePlanString,
@@ -489,7 +494,7 @@ func (p *planTop) savePlanInfo(ctx context.Context) {
 		ob := explain.NewOutputBuilder(explain.Flags{
 			HideValues: true,
 		})
-		if err := emitExplain(ob, p.codec, p.explainPlan, distribution, vectorized); err != nil {
+		if err := emitExplain(ob, p.evalCtx, p.codec, p.explainPlan, distribution, vectorized); err != nil {
 			log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
 		} else {
 			p.planForStats = ob.BuildProtoTree()
@@ -501,7 +506,7 @@ func (p *planTop) savePlanInfo(ctx context.Context) {
 			Verbose:   true,
 			ShowTypes: true,
 		})
-		if err := emitExplain(ob, p.codec, p.explainPlan, distribution, vectorized); err != nil {
+		if err := emitExplain(ob, p.evalCtx, p.codec, p.explainPlan, distribution, vectorized); err != nil {
 			p.planString = fmt.Sprintf("error emitting plan: %v", err)
 		} else {
 			p.planString = ob.BuildString()

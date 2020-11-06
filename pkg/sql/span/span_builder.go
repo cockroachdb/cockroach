@@ -31,6 +31,7 @@ import (
 // Builder is a single struct for generating key spans from Constraints, Datums,
 // encDatums, and InvertedSpans.
 type Builder struct {
+	evalCtx       *tree.EvalContext
 	codec         keys.SQLCodec
 	table         *tabledesc.Immutable
 	index         *descpb.IndexDescriptor
@@ -56,9 +57,13 @@ var _ = (*Builder).UnsetNeededFamilies
 
 // MakeBuilder creates a Builder for a table and index.
 func MakeBuilder(
-	codec keys.SQLCodec, table *tabledesc.Immutable, index *descpb.IndexDescriptor,
+	evalCtx *tree.EvalContext,
+	codec keys.SQLCodec,
+	table *tabledesc.Immutable,
+	index *descpb.IndexDescriptor,
 ) *Builder {
 	s := &Builder{
+		evalCtx:        evalCtx,
 		codec:          codec,
 		table:          table,
 		index:          index,
@@ -331,9 +336,9 @@ func (s *Builder) encodeConstraintKey(
 	return key, containsNull, nil
 }
 
-// KeyableInvertedSpans represent inverted index spans that can be encoded into
+// InvertedSpans represent inverted index spans that can be encoded into
 // key spans.
-type KeyableInvertedSpans interface {
+type InvertedSpans interface {
 	// Len returns the number of spans represented.
 	Len() int
 
@@ -344,34 +349,75 @@ type KeyableInvertedSpans interface {
 	End(i int) []byte
 }
 
-var _ KeyableInvertedSpans = invertedexpr.InvertedSpans{}
-var _ KeyableInvertedSpans = invertedexpr.SpanExpressionProtoSpans{}
+var _ InvertedSpans = invertedexpr.InvertedSpans{}
+var _ InvertedSpans = invertedexpr.SpanExpressionProtoSpans{}
 
-// SpansFromInvertedSpans constructs spans to scan the inverted index.
+// SpansFromInvertedSpans constructs spans to scan an inverted index.
+//
+// If the index is a single-column inverted index, c should be nil.
+//
+// If the index is a multi-column inverted index, c should constrain the
+// non-inverted prefix columns of the index. Each span in c must have a single
+// key. The resulting roachpb.Spans are created by performing a cross product of
+// keys in c and the invertedSpan keys.
 func (s *Builder) SpansFromInvertedSpans(
-	invertedSpans KeyableInvertedSpans,
+	invertedSpans InvertedSpans, c *constraint.Constraint,
 ) (roachpb.Spans, error) {
 	if invertedSpans == nil {
 		return nil, errors.AssertionFailedf("invertedSpans cannot be nil")
 	}
 
-	scratchRow := make(rowenc.EncDatumRow, 1)
+	var scratchRows []rowenc.EncDatumRow
+	if c != nil {
+		// For each span in c, create a scratchRow that starts with the span's
+		// keys. The last slot in each scratchRow is reserved for the encoding
+		// the inverted span key.
+		scratchRows = make([]rowenc.EncDatumRow, c.Spans.Count())
+		for i, n := 0, c.Spans.Count(); i < n; i++ {
+			span := c.Spans.Get(i)
+
+			// The spans must have the same start and end key.
+			if !span.HasSingleKey(s.evalCtx) {
+				return nil, errors.AssertionFailedf("constraint span %s does not have a single key", span)
+			}
+
+			spanLength := span.StartKey().Length()
+			scratchRows[i] = make(rowenc.EncDatumRow, spanLength+1)
+			for j := 0; j < spanLength; j++ {
+				val := span.StartKey().Value(j)
+				scratchRows[i][j] = rowenc.DatumToEncDatum(val.ResolvedType(), val)
+			}
+		}
+	} else {
+		// If c is nil, then the spans must constrain a single-column inverted
+		// index. In this case, only 1 scratchRow of length 1 is needed to
+		// encode the inverted spans.
+		scratchRows = make([]rowenc.EncDatumRow, 1)
+		scratchRows[0] = make(rowenc.EncDatumRow, 1)
+	}
+
 	var spans roachpb.Spans
-	for i, n := 0, invertedSpans.Len(); i < n; i++ {
-		var indexSpan roachpb.Span
-		var err error
-		if indexSpan.Key, err = s.generateInvertedSpanKey(invertedSpans.Start(i), scratchRow); err != nil {
-			return nil, err
+	for i := range scratchRows {
+		for j, n := 0, invertedSpans.Len(); j < n; j++ {
+			var indexSpan roachpb.Span
+			var err error
+			if indexSpan.Key, err = s.generateInvertedSpanKey(invertedSpans.Start(j), scratchRows[i]); err != nil {
+				return nil, err
+			}
+			if indexSpan.EndKey, err = s.generateInvertedSpanKey(invertedSpans.End(j), scratchRows[i]); err != nil {
+				return nil, err
+			}
+			spans = append(spans, indexSpan)
 		}
-		if indexSpan.EndKey, err = s.generateInvertedSpanKey(invertedSpans.End(i), scratchRow); err != nil {
-			return nil, err
-		}
-		spans = append(spans, indexSpan)
 	}
 	sort.Sort(spans)
 	return spans, nil
 }
 
+// generateInvertedSpanKey returns a key that encodes enc and scratchRow. The
+// last slot in scratchRow is overwritten in order to encode enc. If the length
+// of scratchRow is greater than one, the EncDatumRows that precede the last
+// slot are encoded as prefix keys of enc.
 func (s *Builder) generateInvertedSpanKey(
 	enc []byte, scratchRow rowenc.EncDatumRow,
 ) (roachpb.Key, error) {
@@ -380,7 +426,7 @@ func (s *Builder) generateInvertedSpanKey(
 	// are providing an already encoded Datum, the following will eventually
 	// fall through to EncDatum.Encode() which will reuse the encoded bytes.
 	encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
-	scratchRow = append(scratchRow[:0], encDatum)
-	span, _, err := s.SpanFromEncDatums(scratchRow, 1 /* prefixLen */)
+	scratchRow[len(scratchRow)-1] = encDatum
+	span, _, err := s.SpanFromEncDatums(scratchRow, len(scratchRow))
 	return span.Key, err
 }
