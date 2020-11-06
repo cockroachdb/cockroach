@@ -1438,7 +1438,8 @@ func (r *importResumer) Resume(
 		}
 	}
 
-	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, details.Walltime, r.testingKnobs.alwaysFlushJobProgress)
+	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, details.Walltime,
+		r.testingKnobs.alwaysFlushJobProgress)
 	if err != nil {
 		return err
 	}

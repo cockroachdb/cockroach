@@ -14,9 +14,22 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -27,6 +40,12 @@ import (
 // Float64() needed upon every resume. Therefore it will be useful to
 // tune this parameter.
 const reseedRandEveryN = 1000
+
+// chunkSizeIncrementRate is the factor by which the size of the chunk of
+// sequence values we allocate during an import increases.
+const chunkSizeIncrementRate = 10
+const initialChunkSize = 10
+const maxChunkSize = 100000
 
 type importRand struct {
 	*rand.Rand
@@ -81,6 +100,17 @@ func makeBuiltinOverride(
 		"import."+builtin.Name, &props, overloads)
 }
 
+// SequenceMetadata contains information used when processing columns with
+// default expressions which use sequences.
+type SequenceMetadata struct {
+	id              descpb.ID
+	seqDesc         *tabledesc.Immutable
+	instancesPerRow int64
+	curChunk        *jobspb.SequenceValChunk
+	curVal          int64
+	increment       int64
+}
+
 type overrideVolatility bool
 
 const (
@@ -97,20 +127,30 @@ const (
 // in the Annotation field of evalCtx when evaluating expressions.
 const cellInfoAddr tree.AnnotationIdx = iota + 1
 
-type cellInfoAnnotation struct {
-	sourceID            int32
-	rowID               int64
+// CellInfoAnnotation encapsulates the AST annotation for the various supported
+// default expressions for import.
+type CellInfoAnnotation struct {
+	sourceID int32
+	rowID    int64
+
+	// Annotations for unique_rowid().
 	uniqueRowIDInstance int
 	uniqueRowIDTotal    int
-	randSource          *importRand
-	randInstancePerRow  int
+
+	// Annotations for rand() and gen_random_uuid().
+	randSource         *importRand
+	randInstancePerRow int
+
+	// Annotations for next_val().
+	seqNameToMetadata map[string]*SequenceMetadata
+	seqChunkProvider  SeqChunkProvider
 }
 
-func getCellInfoAnnotation(t *tree.Annotations) *cellInfoAnnotation {
-	return t.Get(cellInfoAddr).(*cellInfoAnnotation)
+func getCellInfoAnnotation(t *tree.Annotations) *CellInfoAnnotation {
+	return t.Get(cellInfoAddr).(*CellInfoAnnotation)
 }
 
-func (c *cellInfoAnnotation) Reset(sourceID int32, rowID int64) {
+func (c *CellInfoAnnotation) reset(sourceID int32, rowID int64) {
 	c.sourceID = sourceID
 	c.rowID = rowID
 	c.uniqueRowIDInstance = 0
@@ -182,6 +222,282 @@ func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 	return tree.NewDUuid(tree.DUuid{UUID: id}), nil
 }
 
+// SeqChunkProvider is an interface for implementations which find/create a
+// chunk of sequence values corresponding to the row being imported.
+type SeqChunkProvider interface {
+	RequestChunk(
+		evalCtx *tree.EvalContext,
+		c *CellInfoAnnotation,
+		curSeqChunk *jobspb.SequenceValChunk,
+		seqMetadata *SequenceMetadata,
+	) error
+}
+
+// JobBackedSeqChunkProvider implements the SeqChunkProvider interface. It uses
+// the import job progress to read and write its sequence value chunks.
+type JobBackedSeqChunkProvider struct {
+	JobID int64
+}
+
+var _ SeqChunkProvider = &JobBackedSeqChunkProvider{}
+
+// RequestChunk updates seqMetadata with information about the chunk of sequence
+// values pertaining to the row being processed during an import. The method
+// first checks if there is a previously allocated chunk associated with the
+// row, and if not goes on to allocate a new chunk.
+func (j *JobBackedSeqChunkProvider) RequestChunk(
+	evalCtx *tree.EvalContext,
+	c *CellInfoAnnotation,
+	curSeqChunk *jobspb.SequenceValChunk,
+	seqMetadata *SequenceMetadata,
+) error {
+	// Check if we have already reserved a chunk corresponding to this row in a
+	// previous run of the import job. If we have, we must reuse the value of
+	// the sequence which was designated on this particular invocation of
+	// nextval().
+	if found, err := j.checkForPreviouslyAllocatedChunks(evalCtx, seqMetadata, c); err != nil {
+		return err
+	} else if found {
+		return nil
+	}
+
+	// Reserve a new sequence value chunk at the KV level.
+	if err := reserveChunkOfSeqVals(evalCtx, c, curSeqChunk, seqMetadata); err != nil {
+		return err
+	}
+
+	// Update job progress with the newly reserved chunk before it can be used by the import.
+	// It is important that this information is persisted before it is used to
+	// ensure correct behavior on job resumption.
+	// We never want to end up in a situation where row x is assigned a different
+	// sequence value on subsequent import job resumptions.
+	return evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+		getJobProgressQuery := `SELECT progress FROM system.jobs J WHERE J.id = $1 FOR UPDATE`
+		ex := evalCtx.InternalExecutor.(sqlutil.InternalExecutor)
+		row, err := ex.QueryRow(ctx, "nextval-import-job-progress", txn,
+			getJobProgressQuery, j.JobID)
+		if err != nil {
+			return err
+		}
+
+		progress, err := jobs.UnmarshalProgress(row[0])
+		if err != nil {
+			return err
+		}
+
+		fileProgress := progress.GetImport().SequenceDetails[c.sourceID]
+		if fileProgress.SeqIdToChunks == nil {
+			fileProgress.SeqIdToChunks = make(map[int32]*jobspb.SequenceChunks)
+		}
+		seqID := seqMetadata.id
+		if _, ok := fileProgress.SeqIdToChunks[int32(seqID)]; !ok {
+			fileProgress.SeqIdToChunks[int32(seqID)] = &jobspb.SequenceChunks{
+				Chunks: make([]*jobspb.SequenceValChunk, 0),
+			}
+		} else {
+			// We can cleanup some of the older chunks which correspond to rows
+			// below the resume pos as we are never going to reprocess those
+			// check pointed rows on job resume.
+			resumePos := progress.GetImport().ResumePos[c.sourceID]
+			chunksCopy := fileProgress.SeqIdToChunks[int32(seqID)].Chunks[:0]
+			for _, chunk := range fileProgress.SeqIdToChunks[int32(seqID)].Chunks {
+				// If the resumePos is below the max bound of the current chunk we
+				// need to keep this chunk in case the job is re-resumed.
+				if chunk.NextChunkStartRow > resumePos {
+					chunksCopy = append(chunksCopy, chunk)
+				}
+			}
+			fileProgress.SeqIdToChunks[int32(seqID)].Chunks = chunksCopy
+		}
+		fileProgress.SeqIdToChunks[int32(seqID)].Chunks = append(
+			fileProgress.SeqIdToChunks[int32(seqID)].Chunks, seqMetadata.curChunk)
+
+		progressBytes, err := protoutil.Marshal(progress)
+		if err != nil {
+			return err
+		}
+
+		// Update the job progress.
+		updateJobProgressQuery := `UPDATE system.jobs SET progress = $1 WHERE id = $2`
+		_, err = ex.Exec(ctx, "nextval-import-job-progress-update", txn, updateJobProgressQuery,
+			progressBytes, j.JobID)
+		if err != nil {
+			return err
+		}
+
+		// Now that the job progress has been written to, we can use the newly
+		// allocated chunk.
+		seqMetadata.curVal = seqMetadata.curChunk.ChunkStartVal
+		return nil
+	})
+}
+
+func incrementSequenceByVal(
+	ctx context.Context,
+	descriptor *tabledesc.Immutable,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	incrementBy int64,
+) (int64, error) {
+	seqOpts := descriptor.SequenceOpts
+	var val int64
+	var err error
+	// TODO(adityamaru): Think about virtual sequences.
+	if seqOpts.Virtual {
+		return 0, errors.New("virtual sequences are not supported by IMPORT INTO")
+	}
+	seqValueKey := codec.SequenceKey(uint32(descriptor.ID))
+	val, err = kv.IncrementValRetryable(ctx, db, seqValueKey, incrementBy)
+	if err != nil {
+		if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
+			return 0, boundsExceededError(descriptor)
+		}
+		return 0, err
+	}
+	if val > seqOpts.MaxValue || val < seqOpts.MinValue {
+		return 0, boundsExceededError(descriptor)
+	}
+
+	return val, nil
+}
+
+func boundsExceededError(descriptor *tabledesc.Immutable) error {
+	seqOpts := descriptor.SequenceOpts
+	isAscending := seqOpts.Increment > 0
+
+	var word string
+	var value int64
+	if isAscending {
+		word = "maximum"
+		value = seqOpts.MaxValue
+	} else {
+		word = "minimum"
+		value = seqOpts.MinValue
+	}
+	return pgerror.Newf(
+		pgcode.SequenceGeneratorLimitExceeded,
+		`reached %s value of sequence %q (%d)`, word,
+		tree.ErrString((*tree.Name)(&descriptor.Name)), value)
+}
+
+// checkForPreviouslyAllocatedChunks checks if a sequence value has already been
+// generated for a the current row being imported. If such a value is found, the
+// seqMetadata is updated to reflect this.
+// This would be true if the IMPORT job has been re-resumed and there were some
+// rows which had not been marked as imported.
+func (j *JobBackedSeqChunkProvider) checkForPreviouslyAllocatedChunks(
+	evalCtx *tree.EvalContext, seqMetadata *SequenceMetadata, c *CellInfoAnnotation,
+) (bool, error) {
+	var found bool
+	getJobProgressQuery := `SELECT progress FROM system.jobs J WHERE J.id = $1`
+	ex := evalCtx.InternalExecutor.(sqlutil.InternalExecutor)
+	row, err := ex.QueryRow(evalCtx.Context, "nextval-import-job-progress", nil, /* txn */
+		getJobProgressQuery, j.JobID)
+	if err != nil {
+		return found, err
+	}
+
+	progress, err := jobs.UnmarshalProgress(row[0])
+	if err != nil {
+		return found, err
+	}
+	fileProgress := progress.GetImport().SequenceDetails[c.sourceID]
+	if fileProgress.SeqIdToChunks == nil {
+		return found, nil
+	}
+	var allocatedSeqChunks *jobspb.SequenceChunks
+	var ok bool
+	if allocatedSeqChunks, ok = fileProgress.SeqIdToChunks[int32(seqMetadata.id)]; !ok {
+		return found, nil
+	}
+
+	for _, chunk := range allocatedSeqChunks.Chunks {
+		// We have found the chunk of sequence values that was assigned to the
+		// swath of rows encompassing rowID.
+		if chunk.ChunkStartRow <= c.rowID && chunk.NextChunkStartRow > c.rowID {
+			relativeRowIndex := c.rowID - chunk.ChunkStartRow
+			seqMetadata.curVal = chunk.ChunkStartVal +
+				seqMetadata.increment*(seqMetadata.instancesPerRow*relativeRowIndex)
+			found = true
+			return found, nil
+		}
+	}
+	return found, nil
+}
+
+// reserveChunkOfSeqVals ascertains the size of the next chunk, and reserves it
+// at the KV level. The seqMetadata is updated to reflect this.
+func reserveChunkOfSeqVals(
+	evalCtx *tree.EvalContext,
+	c *CellInfoAnnotation,
+	curSeqChunk *jobspb.SequenceValChunk,
+	seqMetadata *SequenceMetadata,
+) error {
+	newChunkSize := int64(initialChunkSize)
+	// If we are allocating a subsequent chunk of sequence values, we attempt
+	// to reserve a factor of 10 more than reserved the last time so as to
+	// prevent clobbering the chunk reservation logic which involves writing
+	// to job progress.
+	if curSeqChunk != nil {
+		if curSeqChunk.ChunkSize >= maxChunkSize {
+			newChunkSize = curSeqChunk.ChunkSize
+		} else {
+			newChunkSize = chunkSizeIncrementRate * curSeqChunk.ChunkSize
+		}
+	}
+
+	// We want to encompass at least one complete row with our chunk
+	// allocation.
+	if newChunkSize < seqMetadata.instancesPerRow {
+		newChunkSize = seqMetadata.instancesPerRow
+	}
+
+	incrementValBy := newChunkSize * seqMetadata.increment
+	// incrementSequenceByVal keeps retrying until it is able to find a slot
+	// of incrementValBy.
+	seqVal, err := incrementSequenceByVal(evalCtx.Context, seqMetadata.seqDesc, evalCtx.DB,
+		evalCtx.Codec, incrementValBy)
+	if err != nil {
+		return err
+	}
+
+	// Update the sequence metadata to reflect the newly reserved chunk.
+	seqMetadata.curChunk = &jobspb.SequenceValChunk{
+		ChunkStartVal:     seqVal - incrementValBy + seqMetadata.increment,
+		ChunkSize:         newChunkSize,
+		ChunkStartRow:     c.rowID,
+		NextChunkStartRow: c.rowID + (newChunkSize / seqMetadata.instancesPerRow),
+	}
+	return nil
+}
+
+func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	c := getCellInfoAnnotation(evalCtx.Annotations)
+	seqName := tree.MustBeDString(args[0])
+	seqMetadata, ok := c.seqNameToMetadata[string(seqName)]
+	if !ok {
+		return nil, errors.Newf("sequence %s not found in annotation", seqName)
+	}
+	if c.seqChunkProvider == nil {
+		return nil, errors.New("no sequence chunk provider configured for the import job")
+	}
+
+	curSeqChunk := seqMetadata.curChunk
+	// If the current importWorker does not have an active chunk for the sequence
+	// seqName, or the row we are processing is outside the range of rows covered
+	// by the active chunk, we need to request a chunk.
+	if curSeqChunk == nil || c.rowID == curSeqChunk.NextChunkStartRow {
+		if err := c.seqChunkProvider.RequestChunk(evalCtx, c, curSeqChunk, seqMetadata); err != nil {
+			return nil, err
+		}
+	} else {
+		// The current chunk of sequence values can be used for the row being
+		// processed.
+		seqMetadata.curVal += seqMetadata.increment
+	}
+	return tree.NewDInt(tree.DInt(seqMetadata.curVal)), nil
+}
+
 // Besides overriding, there are also counters that we want to keep track
 // of as we walk through the expressions in a row (at datumRowConverter creation
 // time). This will be handled by the visitorSideEffect field: it will be
@@ -189,7 +505,7 @@ func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 // unique_rowid, for example, we want to keep track of the total number of
 // unique_rowid occurrences in a row.
 type customFunc struct {
-	visitorSideEffect func(annotations *tree.Annotations)
+	visitorSideEffect func(annotations *tree.Annotations, fn *tree.FuncExpr) error
 	override          *tree.FunctionDefinition
 }
 
@@ -211,8 +527,9 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 	"timeofday":             useDefaultBuiltin,
 	"transaction_timestamp": useDefaultBuiltin,
 	"unique_rowid": {
-		visitorSideEffect: func(annot *tree.Annotations) {
+		visitorSideEffect: func(annot *tree.Annotations, _ *tree.FuncExpr) error {
 			getCellInfoAnnotation(annot).uniqueRowIDTotal++
+			return nil
 		},
 		override: makeBuiltinOverride(
 			tree.FunDefs["unique_rowid"],
@@ -226,8 +543,9 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		),
 	},
 	"random": {
-		visitorSideEffect: func(annot *tree.Annotations) {
+		visitorSideEffect: func(annot *tree.Annotations, _ *tree.FuncExpr) error {
 			getCellInfoAnnotation(annot).randInstancePerRow++
+			return nil
 		},
 		override: makeBuiltinOverride(
 			tree.FunDefs["random"],
@@ -241,8 +559,9 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		),
 	},
 	"gen_random_uuid": {
-		visitorSideEffect: func(annot *tree.Annotations) {
+		visitorSideEffect: func(annot *tree.Annotations, _ *tree.FuncExpr) error {
 			getCellInfoAnnotation(annot).randInstancePerRow++
+			return nil
 		},
 		override: makeBuiltinOverride(
 			tree.FunDefs["gen_random_uuid"],
@@ -253,6 +572,32 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				Info: "Generates a random UUID based on row position and time, " +
 					"and returns it as a value of UUID type.",
 				Volatility: tree.VolatilityVolatile,
+			},
+		),
+	},
+	"nextval": {
+		visitorSideEffect: func(annot *tree.Annotations, fn *tree.FuncExpr) error {
+			// Get sequence name so that we can update the annotation with the number
+			// of nextval calls to this sequence in a row.
+			seqName, err := sequence.GetSequenceFromFunc(fn)
+			if err != nil {
+				return err
+			}
+			var sequenceMetadata *SequenceMetadata
+			var ok bool
+			if sequenceMetadata, ok = getCellInfoAnnotation(annot).seqNameToMetadata[*seqName]; !ok {
+				return errors.Newf("sequence %s not found in annotation", *seqName)
+			}
+			sequenceMetadata.instancesPerRow++
+			return nil
+		},
+		override: makeBuiltinOverride(
+			tree.FunDefs["nextval"],
+			tree.Overload{
+				Types:      tree.ArgTypes{{builtins.SequenceNameArg, types.String}},
+				ReturnType: tree.FixedReturnType(types.Int),
+				Info:       "Advances the value of the sequence and returns the final value.",
+				Fn:         importNextVal,
 			},
 		),
 	},
@@ -323,7 +668,11 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 	// unique_rowid function in an expression).
 	v.volatility = overrideVolatile
 	if custom.visitorSideEffect != nil {
-		custom.visitorSideEffect(v.annotations)
+		err := custom.visitorSideEffect(v.annotations, fn)
+		if err != nil {
+			v.err = errors.Wrapf(err, "function %s failed when invoking side effect", resolvedFnName)
+			return expr
+		}
 	}
 	funcExpr := &tree.FuncExpr{
 		Func:  tree.ResolvableFunctionReference{FunctionReference: custom.override},
