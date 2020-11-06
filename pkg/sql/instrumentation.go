@@ -66,6 +66,7 @@ type instrumentationHelper struct {
 
 	sp      *tracing.Span
 	origCtx context.Context
+	evalCtx *tree.EvalContext
 
 	// If savePlanForStats is true, the explainPlan will be collected and returned
 	// via PlanForStats().
@@ -129,6 +130,7 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	ih.origCtx = ctx
+	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.StartSnowballTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
 	return newCtx, true
 }
@@ -254,7 +256,7 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 	ob := explain.NewOutputBuilder(explain.Flags{
 		HideValues: true,
 	})
-	if err := emitExplain(ob, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
+	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
 		log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
 		return nil
 	}
@@ -270,7 +272,7 @@ func (ih *instrumentationHelper) planString() string {
 		Verbose:   true,
 		ShowTypes: true,
 	})
-	if err := emitExplain(ob, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
+	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
 		return fmt.Sprintf("error emitting plan: %v", err)
 	}
 	return ob.BuildString()
