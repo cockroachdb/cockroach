@@ -29,8 +29,18 @@ import (
 )
 
 type scheduledBackupExecutor struct {
-	metrics jobs.ExecutorMetrics
+	metrics backupMetrics
 }
+
+type backupMetrics struct {
+	jobs.ExecutorMetrics
+	rpoMetric *metric.Gauge
+}
+
+var _ metric.Struct = &backupMetrics{}
+
+// MetricStruct implements metric.Struct interface
+func (m *backupMetrics) MetricStruct() {}
 
 var _ jobs.ScheduledJobExecutor = &scheduledBackupExecutor{}
 
@@ -137,6 +147,7 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 	ctx context.Context,
 	jobID int64,
 	jobStatus jobs.Status,
+	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
 	ex sqlutil.InternalExecutor,
@@ -145,7 +156,7 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 	if jobStatus == jobs.StatusSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
 		log.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
-		return e.backupSucceeded(ctx, schedule, env, ex, txn)
+		return e.backupSucceeded(ctx, schedule, details, env, ex, txn)
 	}
 
 	e.metrics.NumFailed.Inc(1)
@@ -160,6 +171,7 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 func (e *scheduledBackupExecutor) backupSucceeded(
 	ctx context.Context,
 	schedule *jobs.ScheduledJob,
+	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	ex sqlutil.InternalExecutor,
 	txn *kv.Txn,
@@ -167,6 +179,12 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	args := &ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, args); err != nil {
 		return errors.Wrap(err, "un-marshaling args")
+	}
+
+	// If this schedule is designated as maintaining the "LastBackup" metric used
+	// for monitoring an RPO SLA, update that metric.
+	if args.UpdatesLastBackupMetric {
+		e.metrics.rpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 	}
 
 	if args.UnpauseOnSuccess == jobs.InvalidScheduleID {
@@ -236,7 +254,15 @@ func init() {
 		tree.ScheduledBackupExecutor.InternalName(),
 		func() (jobs.ScheduledJobExecutor, error) {
 			return &scheduledBackupExecutor{
-				metrics: jobs.MakeExecutorMetrics(tree.ScheduledBackupExecutor.UserName()),
+				metrics: backupMetrics{
+					ExecutorMetrics: jobs.MakeExecutorMetrics(tree.ScheduledBackupExecutor.UserName()),
+					rpoMetric: metric.NewGauge(metric.Metadata{
+						Name:        "schedules.BACKUP.last-completed-time",
+						Help:        "The unix timestamp of the most recently completed backup by a scehedule specified as maintaining this metric",
+						Measurement: "Jobs",
+						Unit:        metric.Unit_TIMESTAMP_SEC,
+					}),
+				},
 			}, nil
 		})
 }
