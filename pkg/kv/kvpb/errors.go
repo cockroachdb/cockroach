@@ -295,6 +295,7 @@ const (
 	MinTimestampBoundUnsatisfiableErrType   ErrorDetailType = 42
 	RefreshFailedErrType                    ErrorDetailType = 43
 	MVCCHistoryMutationErrType              ErrorDetailType = 44
+	AncestorAbortedErrType                  ErrorDetailType = 45
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -304,7 +305,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 45
+	NumErrors int = 46
 )
 
 // Register the migration of all errors that used to be in the roachpb package
@@ -1536,6 +1537,19 @@ func NewNotLeaseHolderErrorWithSpeculativeLease(
 	return NewNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)
 }
 
+func (e *AncestorAbortedError) Type() ErrorDetailType {
+	return AncestorAbortedErrType
+}
+
+func (e *AncestorAbortedError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *AncestorAbortedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("ancestor transaction %v aborted", e.AncestorTxn)
+	return nil
+}
+
 var _ errors.SafeFormatter = &NotLeaseHolderError{}
 var _ errors.SafeFormatter = &RangeNotFoundError{}
 var _ errors.SafeFormatter = &RangeKeyMismatchError{}
@@ -1570,3 +1584,4 @@ var _ errors.SafeFormatter = &MinTimestampBoundUnsatisfiableError{}
 var _ errors.SafeFormatter = &RefreshFailedError{}
 var _ errors.SafeFormatter = &MVCCHistoryMutationError{}
 var _ errors.SafeFormatter = &UnhandledRetryableError{}
+var _ errors.SafeFormatter = &AncestorAbortedError{}

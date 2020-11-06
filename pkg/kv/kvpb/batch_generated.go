@@ -78,6 +78,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.RefreshFailedError
 	case *ErrorDetail_MVCCHistoryMutation:
 		return t.MVCCHistoryMutation
+	case *ErrorDetail_AncestorAborted:
+		return t.AncestorAborted
 	default:
 		return nil
 	}
@@ -360,6 +362,8 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 		union = &ErrorDetail_RefreshFailedError{t}
 	case *MVCCHistoryMutationError:
 		union = &ErrorDetail_MVCCHistoryMutation{t}
+	case *AncestorAbortedError:
+		union = &ErrorDetail_AncestorAborted{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
