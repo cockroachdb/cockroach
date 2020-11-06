@@ -85,7 +85,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 			if len(p.semaCtx.Placeholders.Types) != 0 {
 				return 0, errors.Errorf("%s does not support placeholders", stmt.AST.StatementTag())
 			}
-			stmt.Prepared.Columns = colinfo.ExplainAnalyzeDebugColumns
+			stmt.Prepared.Columns = colinfo.ExplainPlanColumns
 			return opc.flags, nil
 		}
 	}

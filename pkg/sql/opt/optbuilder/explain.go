@@ -47,11 +47,11 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		} else {
 			telemetry.Inc(sqltelemetry.ExplainOptUseCounter)
 		}
-		cols = colinfo.ExplainOptColumns
+		cols = colinfo.ExplainPlanColumns
 
 	case tree.ExplainVec:
 		telemetry.Inc(sqltelemetry.ExplainVecUseCounter)
-		cols = colinfo.ExplainVecColumns
+		cols = colinfo.ExplainPlanColumns
 
 	default:
 		panic(errors.Errorf("EXPLAIN mode %s not supported", explain.Mode))
