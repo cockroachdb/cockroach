@@ -1876,6 +1876,22 @@ func (desc *Immutable) validateColumns(
 			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
 				column.Name, errors.Safe(column.ID), errors.Safe(desc.NextColumnID))
 		}
+
+		if column.IsComputed() {
+			// Verify that the computed column expression is valid.
+			expr, err := parser.ParseExpr(*column.ComputeExpr)
+			if err != nil {
+				return err
+			}
+			valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return fmt.Errorf("computed column %q refers to unknown columns in expression: %s",
+					column.Name, *column.ComputeExpr)
+			}
+		}
 	}
 	return nil
 }

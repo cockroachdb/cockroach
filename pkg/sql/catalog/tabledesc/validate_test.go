@@ -166,9 +166,7 @@ var validationMap = []struct {
 			"OwnsSequenceIds": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"ComputeExpr": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
+			"ComputeExpr": {status: iSolemnlySwearThisFieldIsValidated},
 			"PGAttributeNum": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
