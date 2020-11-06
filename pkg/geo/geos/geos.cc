@@ -159,6 +159,8 @@ typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometr
 typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                   CR_GEOS_Geometry);
 
+typedef CR_GEOS_Geometry (*CR_GEOS_Node_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
 }  // namespace
@@ -258,6 +260,8 @@ struct CR_GEOS {
 
   CR_GEOS_SharedPaths_r GEOSSharedPaths_r;
 
+  CR_GEOS_Node_r GEOSNode_r;
+
   CR_GEOS(dlhandle geoscHandle, dlhandle geosHandle)
       : geoscHandle(geoscHandle), geosHandle(geosHandle) {}
 
@@ -353,6 +357,7 @@ struct CR_GEOS {
     INIT(GEOSWKBWriter_setIncludeSRID_r);
     INIT(GEOSWKBWriter_write_r);
     INIT(GEOSClipByRect_r);
+    INIT(GEOSNode_r);
     return nullptr;
 
 #undef INIT
@@ -1331,6 +1336,26 @@ CR_GEOS_Status CR_GEOS_SharedPaths(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice 
   if (geomB != nullptr) {
     lib->GEOSGeom_destroy_r(handle, geomB);
   }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_Node(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* nodeEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  *nodeEWKB = {.data = NULL, .len = 0};
+
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  if (geom != nullptr) {
+    auto r = lib->GEOSNode_r(handle, geom);
+    if (r != NULL) {
+      auto srid = lib->GEOSGetSRID_r(handle, r);
+      CR_GEOS_writeGeomToEWKB(lib,handle,r,nodeEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, r);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
 }

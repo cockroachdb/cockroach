@@ -1966,6 +1966,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_ndims"></a><code>st_ndims(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of coordinate dimensions of a given Geometry.</p>
 </span></td></tr>
+<tr><td><a name="st_node"></a><code>st_node(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Adds a node on a geometry for each intersection. Resulting geometry is always a MultiLineString.</p>
+</span></td></tr>
 <tr><td><a name="st_normalize"></a><code>st_normalize(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the geometry in its normalized form.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
