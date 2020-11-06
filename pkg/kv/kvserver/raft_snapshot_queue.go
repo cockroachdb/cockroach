@@ -108,18 +108,15 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
-	snapType := SnapshotRequest_RAFT
+	snapType := SnapshotRequest_VIA_SNAPSHOT_QUEUE
 
-	// A learner replica is either getting a snapshot of type LEARNER by the node
-	// that's adding it or it's been orphaned and it's about to be cleaned up by
-	// the replicate queue. Either way, no point in also sending it a snapshot of
-	// type RAFT.
 	if repDesc.GetType() == roachpb.LEARNER {
 		if fn := repl.store.cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
 			return nil
 		}
-		snapType = SnapshotRequest_LEARNER
-		if index := repl.getAndGCSnapshotLogTruncationConstraints(timeutil.Now(), repDesc.StoreID); index > 0 {
+		if index := repl.getAndGCSnapshotLogTruncationConstraints(
+			timeutil.Now(), repDesc.StoreID,
+		); index > 0 {
 			// There is a snapshot being transferred. It's probably a LEARNER snap, so
 			// bail for now and try again later.
 			err := errors.Errorf(

@@ -539,14 +539,13 @@ func (tc *TestCluster) changeReplicas(
 	return *desc, nil
 }
 
-// AddReplicas is part of TestClusterInterface.
-func (tc *TestCluster) AddReplicas(
-	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+func (tc *TestCluster) addReplica(
+	startKey roachpb.Key, typ roachpb.ReplicaChangeType, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
 
 	rangeDesc, err := tc.changeReplicas(
-		roachpb.ADD_REPLICA, rKey, targets...,
+		typ, rKey, targets...,
 	)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, err
@@ -559,8 +558,22 @@ func (tc *TestCluster) AddReplicas(
 	return rangeDesc, nil
 }
 
-// AddReplicasMulti is part of TestClusterInterface.
-func (tc *TestCluster) AddReplicasMulti(
+// AddVoters is part of TestClusterInterface.
+func (tc *TestCluster) AddVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.addReplica(startKey, roachpb.ADD_VOTER, targets...)
+}
+
+// AddNonVoters is part of TestClusterInterface.
+func (tc *TestCluster) AddNonVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.addReplica(startKey, roachpb.ADD_NON_VOTER, targets...)
+}
+
+// AddVotersMulti is part of TestClusterInterface.
+func (tc *TestCluster) AddVotersMulti(
 	kts ...serverutils.KeyAndTargets,
 ) ([]roachpb.RangeDescriptor, []error) {
 	var descs []roachpb.RangeDescriptor
@@ -569,7 +582,7 @@ func (tc *TestCluster) AddReplicasMulti(
 		rKey := keys.MustAddr(kt.StartKey)
 
 		rangeDesc, err := tc.changeReplicas(
-			roachpb.ADD_REPLICA, rKey, kt.Targets...,
+			roachpb.ADD_VOTER, rKey, kt.Targets...,
 		)
 		if err != nil {
 			errs = append(errs, err)
@@ -641,12 +654,12 @@ func (tc *TestCluster) waitForNewReplicas(
 	return nil
 }
 
-// AddReplicasOrFatal is part of TestClusterInterface.
-func (tc *TestCluster) AddReplicasOrFatal(
+// AddVotersOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) AddVotersOrFatal(
 	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	t.Helper()
-	desc, err := tc.AddReplicas(startKey, targets...)
+	desc, err := tc.AddVoters(startKey, targets...)
 	if err != nil {
 		t.Fatalf(`could not add %v replicas to range containing %s: %+v`,
 			targets, startKey, err)
@@ -654,24 +667,31 @@ func (tc *TestCluster) AddReplicasOrFatal(
 	return desc
 }
 
-// RemoveReplicas is part of the TestServerInterface.
-func (tc *TestCluster) RemoveReplicas(
+// RemoveVoters is part of the TestServerInterface.
+func (tc *TestCluster) RemoveVoters(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
-	return tc.changeReplicas(roachpb.REMOVE_REPLICA, keys.MustAddr(startKey), targets...)
+	return tc.changeReplicas(roachpb.REMOVE_VOTER, keys.MustAddr(startKey), targets...)
 }
 
-// RemoveReplicasOrFatal is part of TestClusterInterface.
-func (tc *TestCluster) RemoveReplicasOrFatal(
+// RemoveVotersOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) RemoveVotersOrFatal(
 	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	t.Helper()
-	desc, err := tc.RemoveReplicas(startKey, targets...)
+	desc, err := tc.RemoveVoters(startKey, targets...)
 	if err != nil {
 		t.Fatalf(`could not remove %v replicas from range containing %s: %+v`,
 			targets, startKey, err)
 	}
 	return desc
+}
+
+// RemoveNonVoters is part of TestClusterInterface.
+func (tc *TestCluster) RemoveNonVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.changeReplicas(roachpb.REMOVE_NON_VOTER, keys.MustAddr(startKey), targets...)
 }
 
 // TransferRangeLease is part of the TestServerInterface.

@@ -806,6 +806,54 @@ func EncodeInvertedIndexTableKeys(
 	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
 }
 
+// EncodeContainingInvertedIndexSpans takes in a key prefix and returns the
+// spans that must be scanned in the inverted index to evaluate a contains (@>)
+// predicate with the given datum, which should be a container (either JSON
+// or Array). These spans should be used to find the objects in the index that
+// contain the given json or array. In other words, if we have a predicate
+// x @> y, this function should use the value of y to find the spans to scan
+// in an inverted index on x.
+//
+// The spans returned by EncodeContainingInvertedIndexSpans represent the
+// intersection of unions. For example, if the returned results are:
+//
+//   { {["a", "b"), ["c", "d")}, {["e", "f")} }
+//
+// the expression should be evaluated as:
+//
+//             INTERSECTION
+//              /        \
+//           UNION    ["e", "f")
+//          /     \
+//   ["a", "b") ["c", "d")
+//
+// The input inKey is prefixed to the keys in all returned spans.
+//
+// Returns tight=true if the returned spans are tight and cannot produce false
+// positives. Otherwise, returns tight=false.
+func EncodeContainingInvertedIndexSpans(
+	evalCtx *tree.EvalContext, val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
+) (spans []roachpb.Spans, tight bool, err error) {
+	if val == tree.DNull {
+		return nil, false, nil
+	}
+	datum := tree.UnwrapDatum(evalCtx, val)
+	switch val.ResolvedType().Family() {
+	case types.JsonFamily:
+		return json.EncodeContainingInvertedIndexSpans(inKey, val.(*tree.DJSON).JSON)
+	case types.ArrayFamily:
+		spans, err := encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), inKey, version)
+		if err != nil {
+			return nil, false, err
+		}
+		// Spans for array inverted indexes are always tight.
+		return spans, true, err
+	}
+	return nil, false, errors.AssertionFailedf(
+		"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+	)
+}
+
 // encodeArrayInvertedIndexTableKeys returns a list of inverted index keys for
 // the given input array, one per entry in the array. The input inKey is
 // prefixed to all returned keys.
@@ -840,6 +888,31 @@ func encodeArrayInvertedIndexTableKeys(
 	}
 	outKeys = unique.UniquifyByteSlices(outKeys)
 	return outKeys, nil
+}
+
+// encodeContainingArrayInvertedIndexSpans returns the spans that must be
+// scanned in the inverted index to evaluate a contains (@>) predicate with
+// the given array, one slice of spans per entry in the array. The input
+// inKey is prefixed to all returned keys.
+func encodeContainingArrayInvertedIndexSpans(
+	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
+) (spans []roachpb.Spans, err error) {
+	if val.Array.Len() == 0 {
+		// All arrays contain the empty array.
+		endKey := roachpb.Key(inKey).PrefixEnd()
+		return []roachpb.Spans{{roachpb.Span{Key: inKey, EndKey: endKey}}}, nil
+	}
+
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, version)
+	if err != nil {
+		return nil, err
+	}
+	spans = make([]roachpb.Spans, len(keys))
+	for i, key := range keys {
+		endKey := roachpb.Key(key).PrefixEnd()
+		spans[i] = roachpb.Spans{{Key: key, EndKey: endKey}}
+	}
+	return spans, nil
 }
 
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys

@@ -49,36 +49,48 @@ type TestClusterInterface interface {
 	// defer the Stop() method on this stopper after starting a test cluster.
 	Stopper() *stop.Stopper
 
-	// AddReplicas adds replicas for a range on a set of stores.
+	// AddVoters adds voter replicas for a range on a set of stores.
 	// It's illegal to have multiple replicas of the same range on stores of a single
 	// node.
 	// The method blocks until a snapshot of the range has been copied to all the
 	// new replicas and the new replicas become part of the Raft group.
-	AddReplicas(
+	AddVoters(
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
-	// AddReplicasMulti is the same as AddReplicas but will execute multiple jobs.
-	AddReplicasMulti(
+	// AddVotersMulti is the same as AddVoters but will execute multiple jobs.
+	AddVotersMulti(
 		kts ...KeyAndTargets,
 	) ([]roachpb.RangeDescriptor, []error)
 
-	// AddReplicasOrFatal is the same as AddReplicas but will Fatal the test on
+	// AddVotersOrFatal is the same as AddVoters but will Fatal the test on
 	// error.
-	AddReplicasOrFatal(
+	AddVotersOrFatal(
 		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
-	// RemoveReplicas removes one or more replicas from a range.
-	RemoveReplicas(
+	// RemoveVoters removes one or more voter replicas from a range.
+	RemoveVoters(
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
-	// RemoveReplicasOrFatal is the same as RemoveReplicas but will Fatal the test on
+	// RemoveVotersOrFatal is the same as RemoveVoters but will Fatal the test on
 	// error.
-	RemoveReplicasOrFatal(
+	RemoveVotersOrFatal(
 		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
+
+	// AddNonVoters adds non-voting replicas for a range on a set of stores.
+	//
+	//This method blocks until the new replicas become a part of the Raft group.
+	AddNonVoters(
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) (roachpb.RangeDescriptor, error)
+
+	// RemoveNonVoters removes one or more learners from a range.
+	RemoveNonVoters(
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) (roachpb.RangeDescriptor, error)
 
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
 	// In particular, it returns one particular node's (the hint, if specified) view

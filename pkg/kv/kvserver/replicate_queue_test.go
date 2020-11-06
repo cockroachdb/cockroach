@@ -225,7 +225,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 	})
 
 	infos, err := filterRangeLog(
-		tc.Conns[0], kvserverpb.RangeLogEventType_add, kvserverpb.ReasonRangeUnderReplicated,
+		tc.Conns[0], kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -286,7 +286,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	})
 
 	infos, err := filterRangeLog(
-		tc.Conns[0], kvserverpb.RangeLogEventType_remove, kvserverpb.ReasonRangeOverReplicated,
+		tc.Conns[0], kvserverpb.RangeLogEventType_remove_voter, kvserverpb.ReasonRangeOverReplicated,
 	)
 	if err != nil {
 		t.Fatal(err)

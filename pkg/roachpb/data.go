@@ -1585,6 +1585,12 @@ func confChangeImpl(
 			if err := checkNotExists(rDesc); err != nil {
 				return nil, err
 			}
+		case NON_VOTER:
+			// Like the case above, we must be removing a non-voter, so the target
+			// should be gone from the descriptor.
+			if err := checkNotExists(rDesc); err != nil {
+				return nil, err
+			}
 		case VOTER_FULL:
 			// A voter can't be in the descriptor if it's being removed.
 			if err := checkNotExists(rDesc); err != nil {
@@ -1618,6 +1624,11 @@ func confChangeImpl(
 			// ChangeReplicas txn that this learner is not currently a voter.
 			// Demotions (i.e. transitioning from voter to learner) are not
 			// represented in `added`; they're handled in `removed` above.
+			changeType = raftpb.ConfChangeAddLearnerNode
+		case NON_VOTER:
+			// We're adding a non-voter. Like the case above, we're guaranteed that
+			// this learner is not a voter. Promotions of non-voters to voters and
+			// demotions vice-versa are not currently supported.
 			changeType = raftpb.ConfChangeAddLearnerNode
 		default:
 			// A voter that is demoting was just removed and re-added in the
@@ -1727,13 +1738,13 @@ func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 		}
 	}
 	if len(added) > 0 {
-		w.Printf("%s%s", ADD_REPLICA, added)
+		w.Printf("%s%s", ADD_VOTER, added)
 	}
 	if len(removed) > 0 {
 		if len(added) > 0 {
 			w.SafeString(", ")
 		}
-		w.Printf("%s%s", REMOVE_REPLICA, removed)
+		w.Printf("%s%s", REMOVE_VOTER, removed)
 	}
 	w.Printf(": after=%s next=%d", afterReplicas, nextReplicaID)
 }
@@ -1772,7 +1783,7 @@ func (crt ChangeReplicasTrigger) legacy() (ReplicaDescriptor, bool) {
 
 // Added returns the replicas added by this change (if there are any).
 func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
-	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == ADD_REPLICA {
+	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == ADD_VOTER {
 		return []ReplicaDescriptor{rDesc}
 	}
 	return crt.InternalAddedReplicas
@@ -1783,7 +1794,7 @@ func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
 // transitioning to VOTER_{OUTGOING,DEMOTING} (from VOTER_FULL). The subsequent trigger
 // leaving the joint configuration has an empty Removed().
 func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
-	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == REMOVE_REPLICA {
+	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == REMOVE_VOTER {
 		return []ReplicaDescriptor{rDesc}
 	}
 	return crt.InternalRemovedReplicas
@@ -2027,6 +2038,17 @@ func (u *LockUpdate) SetTxn(txn *Transaction) {
 // EqualValue compares for equality.
 func (s Span) EqualValue(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
+}
+
+// Compare returns an integer comparing two Spans lexicographically.
+// The result will be 0 if s==o, -1 if s starts before o or if the starts
+// are equal and s ends before o, and +1 otherwise.
+func (s Span) Compare(o Span) int {
+	cmp := bytes.Compare(s.Key, o.Key)
+	if cmp == 0 {
+		return bytes.Compare(s.EndKey, o.EndKey)
+	}
+	return cmp
 }
 
 // Overlaps returns true WLOG for span A and B iff:

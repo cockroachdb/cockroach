@@ -1611,7 +1611,7 @@ func TestAdminAPIRangeLogByRangeID(t *testing.T) {
           )`,
 			rangeID, otherRangeID,
 			1, // storeID
-			kvserverpb.RangeLogEventType_add.String(),
+			kvserverpb.RangeLogEventType_add_voter.String(),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1684,7 +1684,7 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
              timestamp, "rangeID", "storeID", "eventType"
            ) VALUES (now(), $1, 1, $2)`,
 			rangeID,
-			kvserverpb.RangeLogEventType_add.String(),
+			kvserverpb.RangeLogEventType_add_voter.String(),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1862,7 +1862,7 @@ func TestEnqueueRange(t *testing.T) {
 	// Up-replicate r1 to all 3 nodes. We use manual replication to avoid lease
 	// transfers causing temporary conditions in which no store is the
 	// leaseholder, which can break the the tests below.
-	_, err := testCluster.AddReplicas(roachpb.KeyMin, testCluster.Target(1), testCluster.Target(2))
+	_, err := testCluster.AddVoters(roachpb.KeyMin, testCluster.Target(1), testCluster.Target(2))
 	if err != nil {
 		t.Fatal(err)
 	}

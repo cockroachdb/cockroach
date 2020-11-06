@@ -375,11 +375,11 @@ func (sp *StorePool) updateLocalStoreAfterRebalance(
 		return
 	}
 	switch changeType {
-	case roachpb.ADD_REPLICA:
+	case roachpb.ADD_VOTER:
 		detail.desc.Capacity.RangeCount++
 		detail.desc.Capacity.LogicalBytes += rangeUsageInfo.LogicalBytes
 		detail.desc.Capacity.WritesPerSecond += rangeUsageInfo.WritesPerSecond
-	case roachpb.REMOVE_REPLICA:
+	case roachpb.REMOVE_VOTER:
 		detail.desc.Capacity.RangeCount--
 		if detail.desc.Capacity.LogicalBytes <= rangeUsageInfo.LogicalBytes {
 			detail.desc.Capacity.LogicalBytes = 0
