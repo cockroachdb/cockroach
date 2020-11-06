@@ -4997,6 +4997,23 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_node": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				res, err := geomfn.Node(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(res), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Adds a node on a geometry for each intersection. Resulting geometry is always a MultiLineString.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// BoundingBox
@@ -5656,7 +5673,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_lengthspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
 	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
 	"st_linesubstring":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
-	"st_node":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
 	"st_orientedenvelope":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
 	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
 	"st_quantizecoordinates":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),

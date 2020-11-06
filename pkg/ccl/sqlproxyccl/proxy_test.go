@@ -17,6 +17,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -36,10 +38,6 @@ openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt -days 365
 	opts.IncomingTLSConfig = &tls.Config{
 		Certificates: []tls.Certificate{cer},
 		ServerName:   "localhost",
-	}
-	opts.OutgoingTLSConfig = &tls.Config{
-		// NB: this would be false in production.
-		InsecureSkipVerify: true,
 	}
 
 	const listenAddress = "127.0.0.1:0"
@@ -67,25 +65,29 @@ openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt -days 365
 
 func testingTenantIDFromDatabaseForAddr(
 	addr string, validTenant string,
-) func(map[string]string) (string, error) {
-	return func(p map[string]string) (_ string, clientErr error) {
+) func(map[string]string) (string, *tls.Config, error) {
+	return func(p map[string]string) (_ string, config *tls.Config, clientErr error) {
 		const dbKey = "database"
 		db, ok := p[dbKey]
 		if !ok {
-			return "", errors.Newf("need to specify database")
+			return "", nil, errors.Newf("need to specify database")
 		}
 		sl := strings.SplitN(db, "_", 2)
 		if len(sl) != 2 {
-			return "", errors.Newf("malformed database name")
+			return "", nil, errors.Newf("malformed database name")
 		}
 		db, tenantID := sl[0], sl[1]
 
 		if tenantID != validTenant {
-			return "", errors.Newf("invalid tenantID")
+			return "", nil, errors.Newf("invalid tenantID")
 		}
 
 		p[dbKey] = db
-		return addr, nil
+		config = &tls.Config{
+			// NB: this would be false in production.
+			InsecureSkipVerify: true,
+		}
+		return addr, config, nil
 	}
 }
 
@@ -129,9 +131,9 @@ func TestLongDBName(t *testing.T) {
 
 	var m map[string]string
 	opts := Options{
-		OutgoingAddrFromParams: func(mm map[string]string) (string, error) {
+		BackendFromParams: func(mm map[string]string) (string, *tls.Config, error) {
 			m = mm
-			return "", errors.New("boom")
+			return "", nil, errors.New("boom")
 		},
 		OnSendErrToClient: ac.onSendErrToClient,
 	}
@@ -151,8 +153,8 @@ func TestFailedConnection(t *testing.T) {
 
 	ac := makeAssertCtx()
 	opts := Options{
-		OutgoingAddrFromParams: testingTenantIDFromDatabaseForAddr("undialable%$!@$", "29"),
-		OnSendErrToClient:      ac.onSendErrToClient,
+		BackendFromParams: testingTenantIDFromDatabaseForAddr("undialable%$!@$", "29"),
+		OnSendErrToClient: ac.onSendErrToClient,
 	}
 	addr, done := setupTestProxyWithCerts(t, &opts)
 	defer done()
@@ -213,7 +215,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	// the read/write ops to avoid this failure mode.
 
 	opts := Options{
-		OutgoingAddrFromParams: testingTenantIDFromDatabaseForAddr(crdbSQL, "29"),
+		BackendFromParams: testingTenantIDFromDatabaseForAddr(crdbSQL, "29"),
 	}
 	addr, done := setupTestProxyWithCerts(t, &opts)
 	defer done()
@@ -227,6 +229,49 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 
 	var n int
 	err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+}
+
+func TestProxyModifyRequestParams(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	outgoingTLSConfig, err := tc.Server(0).RPCContext().GetClientTLSConfig()
+	outgoingTLSConfig.InsecureSkipVerify = true
+	require.NoError(t, err)
+
+	opts := Options{
+		BackendFromParams: func(params map[string]string) (string, *tls.Config, error) {
+			return tc.Server(0).ServingSQLAddr(), outgoingTLSConfig, nil
+		},
+		ModifyRequestParams: func(params map[string]string) {
+			require.EqualValues(t, map[string]string{
+				"authToken": "abc123",
+				"user":      "bogususer",
+			}, params)
+
+			// NB: This test will fail unless the user used between the proxy
+			// and the backend is changed to a user that actually exists.
+			delete(params, "authToken")
+			params["user"] = "root"
+		},
+	}
+	proxyAddr, done := setupTestProxyWithCerts(t, &opts)
+	defer done()
+
+	u := fmt.Sprintf("postgres://bogususer@%s/?sslmode=require&authToken=abc123", proxyAddr)
+	conn, err := pgx.Connect(ctx, u)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, conn.Close(ctx))
+	}()
+
+	var n int
+	err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 }

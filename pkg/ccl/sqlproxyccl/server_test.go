@@ -14,10 +14,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHandleHealth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	proxyServer := NewServer(Options{})
 
 	rw := httptest.NewRecorder()
@@ -33,6 +35,7 @@ func TestHandleHealth(t *testing.T) {
 }
 
 func TestHandleVars(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	proxyServer := NewServer(Options{})
 
 	rw := httptest.NewRecorder()
