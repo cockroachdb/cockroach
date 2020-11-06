@@ -74,7 +74,7 @@ func newMysqldumpReader(
 			continue
 		}
 		conv, err := row.NewDatumRowConverter(ctx, tabledesc.NewImmutable(*table.Desc),
-			nil /* targetColNames */, evalCtx, kvCh)
+			nil /* targetColNames */, evalCtx, kvCh, nil /* seqChunkProvider */)
 		if err != nil {
 			return nil, err
 		}
