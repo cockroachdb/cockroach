@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -103,7 +102,7 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 		p.options.UpperBound = p.upperBoundBuf[0]
 	}
 
-	if opts.MaxTimestampHint != (hlc.Timestamp{}) {
+	if !opts.MaxTimestampHint.IsEmpty() {
 		encodedMinTS := string(encodeTimestamp(opts.MinTimestampHint))
 		encodedMaxTS := string(encodeTimestamp(opts.MaxTimestampHint))
 		p.options.TableFilter = func(userProps map[string]string) bool {
@@ -127,7 +126,7 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 			}
 			return used
 		}
-	} else if opts.MinTimestampHint != (hlc.Timestamp{}) {
+	} else if !opts.MinTimestampHint.IsEmpty() {
 		panic("min timestamp hint set without max timestamp hint")
 	}
 
@@ -143,7 +142,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions) {
 	// Overwrite any stale options from last time.
 	p.options = pebble.IterOptions{}
 
-	if opts.MinTimestampHint != (hlc.Timestamp{}) || opts.MaxTimestampHint != (hlc.Timestamp{}) {
+	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
 		panic("iterator with timestamp hints cannot be reused")
 	}
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {

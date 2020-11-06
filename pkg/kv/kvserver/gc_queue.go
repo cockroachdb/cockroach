@@ -281,7 +281,7 @@ func makeGCQueueScoreImpl(
 ) gcQueueScore {
 	ms.Forward(now.WallTime)
 	var r gcQueueScore
-	if (gcThreshold != hlc.Timestamp{}) {
+	if !gcThreshold.IsEmpty() {
 		r.LikelyLastGC = time.Duration(now.WallTime - gcThreshold.Add(r.TTL.Nanoseconds(), 0).WallTime)
 	}
 

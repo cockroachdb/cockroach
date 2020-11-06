@@ -471,7 +471,7 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) bool {
 	if p == nil {
 		return true
 	}
-	if closedTS == (hlc.Timestamp{}) {
+	if closedTS.IsEmpty() {
 		return true
 	}
 	return p.sendEvent(event{ct: closedTS}, p.EventChanTimeout)
@@ -538,7 +538,7 @@ func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case len(e.ops) > 0:
 		p.consumeLogicalOps(ctx, e.ops)
-	case e.ct != hlc.Timestamp{}:
+	case !e.ct.IsEmpty():
 		p.forwardClosedTS(ctx, e.ct)
 	case e.initRTS:
 		p.initResolvedTS(ctx)

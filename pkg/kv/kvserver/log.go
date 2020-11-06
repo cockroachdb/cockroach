@@ -214,7 +214,7 @@ func (s *Store) logChange(
 // *are* the first action in a transaction, and we must elect to use the store's
 // physical time instead.
 func selectEventTimestamp(s *Store, input hlc.Timestamp) time.Time {
-	if input == (hlc.Timestamp{}) {
+	if input.IsEmpty() {
 		return s.Clock().PhysicalTime()
 	}
 	return input.GoTime()

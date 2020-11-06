@@ -292,7 +292,7 @@ func newInternalPlanner(
 	var ts time.Time
 	if txn != nil {
 		readTimestamp := txn.ReadTimestamp()
-		if readTimestamp == (hlc.Timestamp{}) {
+		if readTimestamp.IsEmpty() {
 			panic("makeInternalPlanner called with a transaction without timestamps")
 		}
 		ts = readTimestamp.GoTime()
