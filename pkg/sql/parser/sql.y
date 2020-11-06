@@ -7047,11 +7047,11 @@ alter_table_regional_affinity_stmt:
       IfExists: false,
     }
   }
-| ALTER TABLE IF NOT EXISTS relation_expr SET regional_affinity
+| ALTER TABLE IF EXISTS relation_expr SET regional_affinity
   {
     $$.val = &tree.AlterTableRegionalAffinity{
-      Name: $6.unresolvedObjectName(),
-      RegionalAffinity: $8.regionAffinity(),
+      Name: $5.unresolvedObjectName(),
+      RegionalAffinity: $7.regionAffinity(),
       IfExists: true,
     }
   }
