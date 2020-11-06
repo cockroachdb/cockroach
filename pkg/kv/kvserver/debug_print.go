@@ -235,7 +235,7 @@ func tryTxn(kv storage.MVCCKeyValue) (string, error) {
 }
 
 func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
-	if kv.Key.Timestamp != (hlc.Timestamp{}) {
+	if !kv.Key.Timestamp.IsEmpty() {
 		return "", fmt.Errorf("range ID keys shouldn't have timestamps: %s", kv.Key)
 	}
 	_, _, suffix, _, err := keys.DecodeRangeIDKey(kv.Key.Key)

@@ -3406,7 +3406,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	ts := ctx.Txn.CommitTimestamp()
-	if ts == (hlc.Timestamp{}) {
+	if ts.IsEmpty() {
 		panic(errors.AssertionFailedf("zero cluster timestamp in txn"))
 	}
 	return TimestampToDecimalDatum(ts)

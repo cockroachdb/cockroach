@@ -110,7 +110,7 @@ func MakeMVCCMetadataKey(key roachpb.Key) MVCCKey {
 // Next returns the next key.
 func (k MVCCKey) Next() MVCCKey {
 	ts := k.Timestamp.Prev()
-	if ts == (hlc.Timestamp{}) {
+	if ts.IsEmpty() {
 		return MVCCKey{
 			Key: k.Key.Next(),
 		}
@@ -141,7 +141,7 @@ func (k MVCCKey) Equal(l MVCCKey) bool {
 
 // IsValue returns true iff the timestamp is non-zero.
 func (k MVCCKey) IsValue() bool {
-	return k.Timestamp != (hlc.Timestamp{})
+	return !k.Timestamp.IsEmpty()
 }
 
 // EncodedSize returns the size of the MVCCKey when encoded.
@@ -184,7 +184,7 @@ func (k MVCCKey) Len() int {
 	)
 
 	n := len(k.Key) + timestampEncodedLengthLen
-	if k.Timestamp != (hlc.Timestamp{}) {
+	if !k.Timestamp.IsEmpty() {
 		n += timestampSentinelLen + walltimeEncodedLen
 		if k.Timestamp.Logical != 0 || k.Timestamp.Flags != 0 {
 			n += logicalEncodedLen
@@ -1107,7 +1107,7 @@ func mvccGetInternal(
 		// would apply to.
 		seekKey.Timestamp = timestamp
 	}
-	if seekKey.Timestamp == (hlc.Timestamp{}) {
+	if seekKey.Timestamp.IsEmpty() {
 		return nil, ignoredIntent, safeValue, nil
 	}
 
@@ -1250,7 +1250,7 @@ func MVCCPut(
 	// If we're not tracking stats for the key and we're writing a non-versioned
 	// key we can utilize a blind put to avoid reading any existing value.
 	var iter MVCCIterator
-	blind := ms == nil && timestamp == (hlc.Timestamp{})
+	blind := ms == nil && timestamp.IsEmpty()
 	if !blind {
 		iter = rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
 		defer iter.Close()
@@ -1319,7 +1319,7 @@ func mvccPutUsingIter(
 ) error {
 	var rawBytes []byte
 	if valueFn == nil {
-		if value.Timestamp != (hlc.Timestamp{}) {
+		if !value.Timestamp.IsEmpty() {
 			return errors.Errorf("cannot have timestamp set in value on Put")
 		}
 		rawBytes = value.RawBytes
@@ -1556,7 +1556,7 @@ func mvccPutInternal(
 	}
 
 	// Verify we're not mixing inline and non-inline values.
-	putIsInline := timestamp == (hlc.Timestamp{})
+	putIsInline := timestamp.IsEmpty()
 	if ok && putIsInline != buf.meta.IsInline() {
 		return errors.Errorf("%q: put is inline=%t, but existing value is inline=%t",
 			metaKey, putIsInline, buf.meta.IsInline())
@@ -2182,7 +2182,7 @@ func MVCCMerge(
 	meta := &buf.meta
 	*meta = enginepb.MVCCMetadata{RawBytes: rawBytes}
 	// If non-zero, set the merge timestamp to provide some replay protection.
-	if timestamp != (hlc.Timestamp{}) {
+	if !timestamp.IsEmpty() {
 		buf.ts = timestamp.ToLegacyTimestamp()
 		meta.MergeTimestamp = &buf.ts
 	}

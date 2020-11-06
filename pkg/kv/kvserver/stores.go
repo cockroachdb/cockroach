@@ -106,7 +106,7 @@ func (ls *Stores) AddStore(s *Store) {
 	// all stores have the most recent values.
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	if ls.mu.biLatestTS != (hlc.Timestamp{}) {
+	if !ls.mu.biLatestTS.IsEmpty() {
 		if err := ls.updateBootstrapInfoLocked(ls.mu.latestBI); err != nil {
 			ctx := ls.AnnotateCtx(context.TODO())
 			log.Errorf(ctx, "failed to update bootstrap info on newly added store: %+v", err)

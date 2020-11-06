@@ -57,10 +57,10 @@ func (ds dataDistribution) setupTest(
 		} else {
 			// TODO(ajwerner): Decide if using MVCCPut is worth it.
 			ts := kv.Key.Timestamp
-			if txn.ReadTimestamp == (hlc.Timestamp{}) {
+			if txn.ReadTimestamp.IsEmpty() {
 				txn.ReadTimestamp = ts
 			}
-			if txn.WriteTimestamp == (hlc.Timestamp{}) {
+			if txn.WriteTimestamp.IsEmpty() {
 				txn.WriteTimestamp = ts
 			}
 			err := storage.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts,

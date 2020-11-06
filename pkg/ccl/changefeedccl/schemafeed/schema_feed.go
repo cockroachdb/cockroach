@@ -369,7 +369,7 @@ func (tf *SchemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	tf.mu.Lock()
 	highWater := tf.mu.highWater
 	var err error
-	if tf.mu.errTS != (hlc.Timestamp{}) && tf.mu.errTS.LessEq(ts) {
+	if !tf.mu.errTS.IsEmpty() && tf.mu.errTS.LessEq(ts) {
 		err = tf.mu.err
 	}
 	fastPath := err != nil || ts.LessEq(highWater)
@@ -437,7 +437,7 @@ func (tf *SchemaFeed) adjustTimestamps(startTS, endTS hlc.Timestamp, validateErr
 
 	if validateErr != nil {
 		// don't care about startTS in the invalid case
-		if tf.mu.errTS == (hlc.Timestamp{}) || endTS.Less(tf.mu.errTS) {
+		if tf.mu.errTS.IsEmpty() || endTS.Less(tf.mu.errTS) {
 			tf.mu.errTS = endTS
 			tf.mu.err = validateErr
 			newWaiters := make([]tableHistoryWaiter, 0, len(tf.mu.waiters))
