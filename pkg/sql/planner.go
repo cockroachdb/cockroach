@@ -140,6 +140,8 @@ type planner struct {
 	// Corresponding Statement for this query.
 	stmt Statement
 
+	instrumentation instrumentationHelper
+
 	// Contexts for different stages of planning and execution.
 	semaCtx         tree.SemaContext
 	extendedEvalCtx extendedEvalContext
@@ -175,19 +177,9 @@ type planner struct {
 	// auto-commit. This is dependent on information from the optimizer.
 	autoCommit bool
 
-	// discardRows is set if we want to discard any results rather than sending
-	// them back to the client. Used for testing/benchmarking. Note that the
-	// resulting schema or the plan are not affected.
-	// See EXECUTE .. DISCARD ROWS.
-	discardRows bool
-
 	// cancelChecker is used by planNodes to check for cancellation of the associated
 	// query.
 	cancelChecker *cancelchecker.CancelChecker
-
-	// collectBundle is set when we are collecting a diagnostics bundle for a
-	// statement; it triggers saving of extra information like the plan string.
-	collectBundle bool
 
 	// isPreparing is true if this planner is currently preparing.
 	isPreparing bool

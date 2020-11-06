@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -340,15 +339,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutator.paramStatusUpdater = res
 	p.noticeSender = res
-
-	var shouldCollectDiagnostics bool
-	var diagRequestID stmtdiagnostics.RequestID
-	var finishCollectionDiagnostics func()
+	ih := &p.instrumentation
 
 	if explainBundle, ok := ast.(*tree.ExplainAnalyzeDebug); ok {
 		telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
-		// Always collect diagnostics for EXPLAIN ANALYZE (DEBUG).
-		shouldCollectDiagnostics = true
+		ih.SetOutputMode(explainAnalyzeDebugOutput)
 		// Strip off the explain node to execute the inner statement.
 		stmt.AST = explainBundle.Statement
 		ast = stmt.AST
@@ -359,92 +354,20 @@ func (ex *connExecutor) execStmtInOpenState(
 		// reflect the column types of the EXPLAIN itself and not those of the inner
 		// statement).
 		stmt.ExpectedTypes = nil
-
-		// EXPLAIN ANALYZE (DEBUG) does not return the rows for the given query;
-		// instead it returns some text which includes a URL.
-		// TODO(radu): maybe capture some of the rows and include them in the
-		// bundle.
-		p.discardRows = true
-	} else {
-		shouldCollectDiagnostics, diagRequestID, finishCollectionDiagnostics =
-			ex.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.AnonymizedStr)
 	}
 
-	if shouldCollectDiagnostics {
-		p.collectBundle = true
-		tr := ex.server.cfg.AmbientCtx.Tracer
-		origCtx := ctx
-		var sp *tracing.Span
-		ctx, sp = tracing.StartSnowballTrace(ctx, tr, "traced statement")
-		// TODO(radu): consider removing this if/when #46164 is addressed.
-		p.extendedEvalCtx.Context = ctx
-		fingerprint := stmt.AnonymizedStr
-		defer func() {
-			// Record the statement information that we've collected.
-			// Note that in case of implicit transactions, the trace contains the auto-commit too.
-			sp.Finish()
-			trace := sp.GetRecording()
-			ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
-			placeholders := p.extendedEvalCtx.Placeholders
-			bundle := buildStatementBundle(
-				origCtx, ex.server.cfg.DB, ie, &p.curPlan, trace, placeholders,
-			)
-			bundle.insert(origCtx, fingerprint, ast, ex.server.cfg.StmtDiagnosticsRecorder, diagRequestID)
-			if finishCollectionDiagnostics != nil {
-				finishCollectionDiagnostics()
-				telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
-			} else {
-				// Handle EXPLAIN ANALYZE (DEBUG).
-				// If there was a communication error already, no point in setting any results.
-				if retErr == nil {
-					retErr = setExplainBundleResult(origCtx, res, bundle, ex.server.cfg)
-				}
-			}
-
-			stmtStats, _ := ex.appStats.getStatsForStmt(fingerprint, ex.implicitTxn(), retErr, false)
-			if stmtStats == nil {
-				return
-			}
-
-			networkBytesSent := int64(0)
-			for _, flowInfo := range p.curPlan.distSQLFlowInfos {
-				analyzer := flowInfo.analyzer
-				if err := analyzer.AddTrace(trace); err != nil {
-					log.VInfof(ctx, 1, "error analyzing trace statistics for stmt %s: %v", ast, err)
-					continue
-				}
-
-				networkBytesSentGroupedByNode, err := analyzer.GetNetworkBytesSent()
-				if err != nil {
-					log.VInfof(ctx, 1, "error calculating network bytes sent for stmt %s: %v", ast, err)
-					continue
-				}
-				for _, bytesSentByNode := range networkBytesSentGroupedByNode {
-					networkBytesSent += bytesSentByNode
-				}
-			}
-
-			stmtStats.mu.Lock()
-			// Record trace-related statistics. A count of 1 is passed given that this
-			// statistic is only recorded when statement diagnostics are enabled.
-			// TODO(asubiotto): NumericStat properties will be properly calculated
-			//  once this statistic is always collected.
-			stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(networkBytesSent))
-			stmtStats.mu.Unlock()
-		}()
-	}
-
-	if ex.server.cfg.TestingKnobs.WithStatementTrace != nil {
-		tr := ex.server.cfg.AmbientCtx.Tracer
-		var sp *tracing.Span
+	var needFinish bool
+	ctx, needFinish = ih.Setup(
+		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
+		stmt.AnonymizedStr, os.ImplicitTxn.Get(),
+	)
+	if needFinish {
 		sql := stmt.SQL
-		ctx, sp = tracing.StartSnowballTrace(ctx, tr, sql)
+		defer func() {
+			retErr = ih.Finish(ex.server.cfg, ex.appStats, p, ast, sql, res, retErr)
+		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx
-
-		defer func() {
-			ex.server.cfg.TestingKnobs.WithStatementTrace(sp.GetRecording(), sql)
-		}()
 	}
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
@@ -588,7 +511,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		res.ResetStmtType(ps.AST)
 
 		if s.DiscardRows {
-			p.discardRows = true
+			ih.SetDiscardRows()
 		}
 	}
 
@@ -943,13 +866,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // makeExecPlan creates an execution plan and populates planner.curPlan using
 // the cost-based optimizer.
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
-	savePlanString := planner.collectBundle
-	planner.curPlan.init(
-		&planner.stmt,
-		ex.appStats,
-		savePlanString,
-	)
-
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return err
@@ -1016,7 +932,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.stmtType = recv.stmtType
 	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
 		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
-	} else if planner.collectBundle {
+	} else if planner.instrumentation.ShouldCollectBundle() {
 		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
 
@@ -1047,7 +963,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			return recv.stats, recv.commErr
 		}
 	}
-	recv.discardRows = planner.discardRows
+	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
 	cleanup := ex.server.cfg.DistSQLPlanner.PlanAndRun(

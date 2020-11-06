@@ -148,6 +148,7 @@ func buildStatementBundle(
 	db *kv.DB,
 	ie *InternalExecutor,
 	plan *planTop,
+	planString string,
 	trace tracing.Recording,
 	placeholders *tree.PlaceholderInfo,
 ) diagnosticsBundle {
@@ -158,7 +159,7 @@ func buildStatementBundle(
 
 	b.addStatement()
 	b.addOptPlans()
-	b.addExecPlan()
+	b.addExecPlan(planString)
 	// TODO(yuzefovich): consider adding some variant of EXPLAIN (VEC) output
 	// of the query to the bundle.
 	b.addDistSQLDiagrams()
@@ -266,8 +267,8 @@ func (b *stmtBundleBuilder) addOptPlans() {
 }
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
-func (b *stmtBundleBuilder) addExecPlan() {
-	if plan := b.plan.planString; plan != "" {
+func (b *stmtBundleBuilder) addExecPlan(plan string) {
+	if plan != "" {
 		b.z.AddFile("plan.txt", plan)
 	}
 }

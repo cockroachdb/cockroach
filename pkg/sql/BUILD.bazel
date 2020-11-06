@@ -102,6 +102,7 @@ go_library(
         "information_schema.go",
         "insert.go",
         "insert_fast_path.go",
+        "instrumentation.go",
         "internal.go",
         "inverted_filter.go",
         "inverted_join.go",
