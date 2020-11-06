@@ -349,7 +349,7 @@ func loadRangeDescriptor(
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
 	handleKV := func(kv storage.MVCCKeyValue) error {
-		if kv.Key.Timestamp == (hlc.Timestamp{}) {
+		if kv.Key.Timestamp.IsEmpty() {
 			// We only want values, not MVCCMetadata.
 			return nil
 		}

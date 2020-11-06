@@ -126,7 +126,7 @@ func (b *Event) Timestamp() hlc.Timestamp {
 	case ResolvedEvent:
 		return b.resolved.Timestamp
 	case KVEvent:
-		if b.backfillTimestamp != (hlc.Timestamp{}) {
+		if !b.backfillTimestamp.IsEmpty() {
 			return b.backfillTimestamp
 		}
 		return b.kv.Value.Timestamp

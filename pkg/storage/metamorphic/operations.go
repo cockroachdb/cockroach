@@ -1207,7 +1207,7 @@ var opGenerators = []opGenerator{
 				key := m.keyGenerator.parse(arg)
 				// Don't put anything at the 0 timestamp; the MVCC code expects
 				// MVCCMetadata at those values.
-				if key.Timestamp == (hlc.Timestamp{}) {
+				if key.Timestamp.IsEmpty() {
 					key.Timestamp = key.Timestamp.Next()
 				}
 				keys = append(keys, key)

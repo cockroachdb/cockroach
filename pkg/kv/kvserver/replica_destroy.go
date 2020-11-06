@@ -243,7 +243,7 @@ func writeTombstoneKey(
 	tombstone := &roachpb.RangeTombstone{
 		NextReplicaID: nextReplicaID,
 	}
-	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
+	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
 		hlc.Timestamp{}, tombstone, nil)
 }

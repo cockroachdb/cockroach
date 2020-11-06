@@ -209,7 +209,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		panic("distinct batch open")
 	}
 
-	if opts.MinTimestampHint != (hlc.Timestamp{}) {
+	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
 		return newPebbleIterator(p.batch, opts)
 	}
