@@ -33,14 +33,9 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
-	Version19_2
 	VersionContainsEstimatesCounter
 	VersionNamespaceTableWithSchemas
-	VersionProtectedTimestamps
 	VersionAuthLocalAndTrustRejectMethods
-	VersionCreateRolePrivilege
-	VersionStatementDiagnosticsSystemTables
-	VersionSchemaChangeJob
 	VersionStart20_2
 	VersionGeospatialType
 	VersionEnums
@@ -93,11 +88,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 1},
 	},
 	{
-		// Version19_2 is CockroachDB v19.2. It's used for all v19.2.x patch releases.
-		Key:     Version19_2,
-		Version: roachpb.Version{Major: 19, Minor: 2},
-	},
-	{
 		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
 		//
 		// MVCCStats.ContainsEstimates has been migrated from boolean to a
@@ -126,16 +116,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 5},
 	},
 	{
-		// VersionProtectedTimestamps introduces the system tables for the protected
-		// timestamps subsystem.
-		//
-		// In this version and later the system.protected_ts_meta and
-		// system.protected_ts_records tables are part of the system bootstap
-		// schema.
-		Key:     VersionProtectedTimestamps,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 6},
-	},
-	{
 		// VersionAuthLocalAndTrustRejectMethods introduces the HBA rule
 		// prefix 'local' and auth methods 'trust' and 'reject', for use
 		// in server.host_based_authentication.configuration.
@@ -145,31 +125,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// this would block any new SQL client.
 		Key:     VersionAuthLocalAndTrustRejectMethods,
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 8},
-	},
-	{
-		// VersionCreateRolePrivilege is https://github.com/cockroachdb/cockroach/pull/44232.
-		//
-		// It represents adding role management via CREATEROLE privilege.
-		// Added new column in system.users table to track hasCreateRole.
-		Key:     VersionCreateRolePrivilege,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 13},
-	},
-	{
-		// VersionStatementDiagnosticsSystemTables introduces the system tables for
-		// storing statement information (like traces, bundles).
-		// In this version and later the system.statement_diagnostics_requests,
-		// system.statement_diagnostics and system.statement_bundle_chunks tables
-		// are part of the system bootstap schema.
-		Key:     VersionStatementDiagnosticsSystemTables,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 14},
-	},
-	{
-		// VersionSchemaChangeJob is https://github.com/cockroachdb/cockroach/pull/45870.
-		//
-		// From this version on, schema changes are run as jobs instead of being
-		// scheduled by the SchemaChangeManager.
-		Key:     VersionSchemaChangeJob,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 15},
 	},
 	{
 		// VersionStart20_2 demarcates work towards CockroachDB v20.2.
