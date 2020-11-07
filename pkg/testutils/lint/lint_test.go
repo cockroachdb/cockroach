@@ -1765,6 +1765,7 @@ func TestLint(t *testing.T) {
 			"sql/col*",
 			":!sql/colexec/operator.go",
 			":!sql/colmem/allocator.go",
+			":!sql/colmem/allocator_test.go",
 		)
 		if err != nil {
 			t.Fatal(err)
