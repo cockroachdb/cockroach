@@ -14,6 +14,7 @@ var psycopgBlocklists = blocklistsForVersion{
 	{"v19.2", "psycopgBlockList19_2", psycopgBlockList19_2, "psycopgIgnoreList19_2", psycopgIgnoreList19_2},
 	{"v20.1", "psycopgBlockList20_1", psycopgBlockList20_1, "psycopgIgnoreList20_1", psycopgIgnoreList20_1},
 	{"v20.2", "psycopgBlockList20_2", psycopgBlockList20_2, "psycopgIgnoreList20_2", psycopgIgnoreList20_2},
+	{"v21.1", "psycopgBlockList21_1", psycopgBlockList21_1, "psycopgIgnoreList21_1", psycopgIgnoreList21_1},
 }
 
 // These are lists of known psycopg test errors and failures.
@@ -27,6 +28,10 @@ var psycopgBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var psycopgBlockList21_1 = blocklist{
+	"tests.test_async_keyword.CancelTests.test_async_cancel": "41335",
+}
+
 var psycopgBlockList20_2 = blocklist{
 	"tests.test_async_keyword.CancelTests.test_async_cancel": "41335",
 }
@@ -139,6 +144,8 @@ var psycopgBlockList19_2 = blocklist{
 	"tests.test_extras_dictcursor.NamedTupleCursorTest.test_record_updated":                                  "5807",
 	"tests.test_types_basic.TypesBasicTests.testEmptyArray":                                                  "23299",
 }
+
+var psycopgIgnoreList21_1 = psycopgIgnoreList20_2
 
 var psycopgIgnoreList20_2 = psycopgIgnoreList20_1
 
