@@ -15,7 +15,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -181,11 +180,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	// Create "Ingestion" SSTs in the newer RocksDBv2 format only if  all nodes
 	// in the cluster can support it. Until then, for backward compatibility,
 	// create SSTs in the leveldb format ("backup" ones).
-	if b.settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
-		b.sstWriter = storage.MakeIngestionSSTWriter(b.sstFile)
-	} else {
-		b.sstWriter = storage.MakeBackupSSTWriter(b.sstFile)
-	}
+	b.sstWriter = storage.MakeIngestionSSTWriter(b.sstFile)
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -480,12 +475,7 @@ func createSplitSSTable(
 	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &storage.MemFile{}
-	var w storage.SSTWriter
-	if settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
-		w = storage.MakeIngestionSSTWriter(sstFile)
-	} else {
-		w = storage.MakeBackupSSTWriter(sstFile)
-	}
+	w := storage.MakeIngestionSSTWriter(sstFile)
 	defer w.Close()
 
 	split := false
@@ -515,11 +505,7 @@ func createSplitSSTable(
 				disallowShadowing: disallowShadowing,
 			}
 			*sstFile = storage.MemFile{}
-			if settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
-				w = storage.MakeIngestionSSTWriter(sstFile)
-			} else {
-				w = storage.MakeBackupSSTWriter(sstFile)
-			}
+			w = storage.MakeIngestionSSTWriter(sstFile)
 			split = true
 			first = nil
 			last = nil
