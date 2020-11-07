@@ -13,6 +13,7 @@ package main
 var activeRecordBlocklists = blocklistsForVersion{
 	{"v20.1", "activeRecordBlockList20_1", activeRecordBlockList20_1, "activeRecordIgnoreList20_1", activeRecordIgnoreList20_1},
 	{"v20.2", "activeRecordBlockList20_2", activeRecordBlockList20_2, "activeRecordIgnoreList20_2", activeRecordIgnoreList20_2},
+	{"v21.1", "activeRecordBlockList21_1", activeRecordBlockList21_1, "activeRecordIgnoreList21_1", activeRecordIgnoreList21_1},
 }
 
 // These are lists of known activerecord test errors and failures.
@@ -26,9 +27,15 @@ var activeRecordBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var activeRecordBlockList21_1 = blocklist{}
+
 var activeRecordBlockList20_2 = blocklist{}
 
 var activeRecordBlockList20_1 = blocklist{}
+
+var activeRecordIgnoreList21_1 = blocklist{
+	"FixturesTest#test_create_fixtures": "flaky - FK constraint violated sometimes when loading all fixture data",
+}
 
 var activeRecordIgnoreList20_2 = blocklist{
 	"FixturesTest#test_create_fixtures": "flaky - FK constraint violated sometimes when loading all fixture data",

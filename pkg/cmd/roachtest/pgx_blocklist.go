@@ -14,11 +14,14 @@ var pgxBlocklists = blocklistsForVersion{
 	{"v19.2", "pgxBlocklist19_2", pgxBlocklist19_2, "pgxIgnorelist19_2", pgxIgnorelist19_2},
 	{"v20.1", "pgxBlocklist20_1", pgxBlocklist20_1, "pgxIgnorelist20_1", pgxIgnorelist20_1},
 	{"v20.2", "pgxBlocklist20_2", pgxBlocklist20_2, "pgxIgnorelist20_2", pgxIgnorelist20_2},
+	{"v21.1", "pgxBlocklist21_1", pgxBlocklist21_1, "pgxIgnorelist21_1", pgxIgnorelist21_1},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var pgxBlocklist21_1 = pgxBlocklist20_2
+
 var pgxBlocklist20_2 = blocklist{
 	"v4.Example_CustomType":                                        "27796",
 	"v4.TestConnBeginBatchDeferredError":                           "31632",
@@ -156,6 +159,8 @@ var pgxBlocklist19_2 = blocklist{
 	"v4.TestTxSendBatchRollback":                                              "5807",
 	"v4.TestUnregisteredTypeUsableAsStringArgumentAndBaseResult":              "27796",
 }
+
+var pgxIgnorelist21_1 = pgxIgnorelist20_2
 
 var pgxIgnorelist20_2 = pgxIgnorelist20_1
 
