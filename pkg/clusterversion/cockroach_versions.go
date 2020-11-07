@@ -35,14 +35,9 @@ const (
 	Version19_1
 	Version19_2
 	VersionContainsEstimatesCounter
-	VersionSecondaryIndexColumnFamilies
 	VersionNamespaceTableWithSchemas
 	VersionProtectedTimestamps
-	VersionPrimaryKeyChanges
 	VersionAuthLocalAndTrustRejectMethods
-	VersionPrimaryKeyColumnsOutOfFamilyZero
-	VersionNoExplicitForeignKeyIndexIDs
-	VersionHashShardedIndexes
 	VersionCreateRolePrivilege
 	VersionStatementDiagnosticsSystemTables
 	VersionSchemaChangeJob
@@ -124,13 +119,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 2},
 	},
 	{
-		// VersionSecondaryIndexColumnFamilies is https://github.com/cockroachdb/cockroach/pull/42073.
-		//
-		// It allows secondary indexes to respect table level column family definitions.
-		Key:     VersionSecondaryIndexColumnFamilies,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 4},
-	},
-	{
 		// VersionNamespaceTableWithSchemas is https://github.com/cockroachdb/cockroach/pull/41977
 		//
 		// It represents the migration to a new system.namespace table that has an
@@ -150,13 +138,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 6},
 	},
 	{
-		// VersionPrimaryKeyChanges is https://github.com/cockroachdb/cockroach/pull/42462
-		//
-		// It allows online primary key changes of tables.
-		Key:     VersionPrimaryKeyChanges,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 7},
-	},
-	{
 		// VersionAuthLocalAndTrustRejectMethods introduces the HBA rule
 		// prefix 'local' and auth methods 'trust' and 'reject', for use
 		// in server.host_based_authentication.configuration.
@@ -166,31 +147,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// this would block any new SQL client.
 		Key:     VersionAuthLocalAndTrustRejectMethods,
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 8},
-	},
-	{
-		// VersionPrimaryKeyColumnsOutOfFamilyZero allows for primary key columns
-		// to exist in column families other than 0, in order to prepare for
-		// primary key changes that move primary key columns to different families.
-		Key:     VersionPrimaryKeyColumnsOutOfFamilyZero,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 9},
-	},
-	{
-		// VersionNoExplicitForeignKeyIndexIDs is https://github.com/cockroachdb/cockroach/pull/43332.
-		//
-		// It represents the migration away from using explicit index IDs in foreign
-		// key constraints, and instead allows all places that need these IDs to select
-		// an appropriate index to uphold the foreign key relationship.
-		Key:     VersionNoExplicitForeignKeyIndexIDs,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 11},
-	},
-	{
-		// VersionHashShardedIndexes is https://github.com/cockroachdb/cockroach/pull/42922
-		//
-		// It allows the creation of "hash sharded indexes", which construct a hidden
-		// shard column, computed from the set of index columns, and prefix the index's
-		// ranges with said shard column.
-		Key:     VersionHashShardedIndexes,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 12},
 	},
 	{
 		// VersionCreateRolePrivilege is https://github.com/cockroachdb/cockroach/pull/44232.

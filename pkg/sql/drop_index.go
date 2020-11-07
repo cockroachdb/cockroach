@@ -326,14 +326,6 @@ func (p *planner) dropIndexByName(
 		}
 		return foundReplacement
 	}
-	// If we aren't at the cluster version where we have removed explicit foreign key IDs
-	// from the foreign key descriptors, fall back to the existing drop index logic.
-	// That means we pretend that we can never find replacements for any indexes.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionNoExplicitForeignKeyIndexIDs) {
-		indexHasReplacementCandidate = func(func(*descpb.IndexDescriptor) bool) bool {
-			return false
-		}
-	}
 
 	// Check for foreign key mutations referencing this index.
 	for _, m := range tableDesc.Mutations {
