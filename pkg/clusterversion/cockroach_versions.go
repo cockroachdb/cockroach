@@ -41,7 +41,6 @@ const (
 	VersionCreateRolePrivilege
 	VersionStatementDiagnosticsSystemTables
 	VersionSchemaChangeJob
-	VersionSavepoints
 	Version20_1
 	VersionStart20_2
 	VersionGeospatialType
@@ -172,13 +171,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// scheduled by the SchemaChangeManager.
 		Key:     VersionSchemaChangeJob,
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 15},
-	},
-	{
-		// VersionSavepoints enables the use of SQL savepoints, whereby
-		// the ignored seqnum list can become populated in transaction
-		// records.
-		Key:     VersionSavepoints,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 16},
 	},
 	{
 		// Version20_1 is CockroachDB v20.1. It's used for all v20.1.x patch releases.
