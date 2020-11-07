@@ -45,7 +45,7 @@ func TestNumBatches(t *testing.T) {
 			break
 		}
 	}
-	require.Equal(t, nBatches, int(vsc.NumBatches))
+	require.Equal(t, nBatches, int(vsc.stats.NumBatches.Value()))
 }
 
 // TestNumTuples is a unit test for NumTuples field of VectorizedStats.
@@ -67,7 +67,7 @@ func TestNumTuples(t *testing.T) {
 				break
 			}
 		}
-		require.Equal(t, nBatches*batchSize, int(vsc.NumTuples))
+		require.Equal(t, nBatches*batchSize, int(vsc.stats.NumTuples.Value()))
 	}
 }
 
@@ -137,12 +137,12 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		}
 		mjStatsCollector.finalizeStats()
 
-		require.Equal(t, nBatches*coldata.BatchSize(), int(mjStatsCollector.NumTuples))
+		require.Equal(t, nBatches*coldata.BatchSize(), int(mjStatsCollector.stats.NumTuples.Value()))
 		// Two inputs are advancing the time source for a total of 2 * nBatches
 		// advances, but these do not count towards merge joiner execution time.
 		// Merge joiner advances the time on its every non-empty batch totaling
 		// batchCount advances that should be accounted for in stats.
-		require.Equal(t, time.Duration(batchCount), mjStatsCollector.Time)
+		require.Equal(t, time.Duration(batchCount), mjStatsCollector.stats.ExecTime)
 	}
 }
 

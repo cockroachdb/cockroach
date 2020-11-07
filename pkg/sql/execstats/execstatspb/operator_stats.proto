@@ -1,0 +1,54 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.execstats.execstatspb;
+option go_package = "execstatspb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+// OperatorStats contains statistics for an execution operator. Depending on the
+// operator, not all statistics apply. For all fields, the zero value Indicates
+// that the particular stat is not available.
+message OperatorStats {
+  int32 operator_id = 1 [(gogoproto.customname) = "OperatorID"];
+
+  // num_batches is the number of batches that this stats collector observed its
+  // operator to output.
+  uint64 num_batches = 2 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+
+  // num_tuples is the number of tuples that this stats collector
+  // received from its input.
+  uint64 num_tuples = 3 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+
+  google.protobuf.Duration io_time = 4 [(gogoproto.customname) = "IOTime",
+                                        (gogoproto.nullable) = false,
+                                        (gogoproto.stdduration) = true];
+
+  google.protobuf.Duration exec_time = 5 [(gogoproto.nullable) = false,
+                                          (gogoproto.stdduration) = true];
+
+  uint64 max_allocated_mem = 6 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+  uint64 max_allocated_disk = 7 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+
+  // bytes_read is the number of bytes read.
+  // TODO(radu): this should be split into bytes read from disk, received over
+  // the network, etc.
+  uint64 bytes_read = 8 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+
+  // rows_read is the number of rows read.
+  // TODO(radu): read from where? KV? other processors?
+  uint64 rows_read = 9 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+ 
+  // network_latency is the latency time in nanoseconds between outbox and inbox.
+  google.protobuf.Duration network_latency = 10 [(gogoproto.nullable) = false,
+                                                 (gogoproto.stdduration) = true];
+}

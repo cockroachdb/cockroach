@@ -1,17 +1,15 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "execpb",
+    name = "execstatspb",
     srcs = [
-        "stats.go",
-        "stats.pb.go",
+        "operator_stats.go",
+        "operator_stats.pb.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/execinfrapb",
-        "//pkg/util/humanizeutil",
-        "//pkg/util/tracing",
+        "//vendor/github.com/dustin/go-humanize",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/gogo/protobuf/types",
     ],

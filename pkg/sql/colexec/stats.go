@@ -16,11 +16,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -44,8 +44,12 @@ type ChildStatsCollector interface {
 type VectorizedStatsCollectorBase struct {
 	colexecbase.Operator
 	NonExplainable
-	execpb.VectorizedStats
 	idTagKey string
+
+	stats execstatspb.OperatorStats
+	// If ioTime is true, time stats are recorded in stats.IOTime, and in
+	// stats.ExecTime otherwise.
+	ioTime bool
 
 	ioReader execinfra.IOReader
 
@@ -66,7 +70,6 @@ type VectorizedStatsCollectorBase struct {
 // NetworkVectorizedStatsCollector collects VectorizedInboxStats on Inbox.
 type NetworkVectorizedStatsCollector struct {
 	*VectorizedStatsCollectorBase
-	execpb.VectorizedInboxStats
 }
 
 var _ colexecbase.Operator = &VectorizedStatsCollectorBase{}
@@ -100,11 +103,14 @@ func initVectorizedStatsCollectorBase(
 	}
 
 	return &VectorizedStatsCollectorBase{
-		Operator:        op,
-		VectorizedStats: execpb.VectorizedStats{ID: id, IO: ioTime},
-		idTagKey:        idTagKey,
-		ioReader:        ioReader,
-		stopwatch:       inputWatch,
+		Operator: op,
+		ioTime:   ioTime,
+		stats: execstatspb.OperatorStats{
+			OperatorID: id,
+		},
+		idTagKey:  idTagKey,
+		ioReader:  ioReader,
+		stopwatch: inputWatch,
 	}
 }
 
@@ -147,10 +153,6 @@ func NewNetworkVectorizedStatsCollector(
 	vscBase := initVectorizedStatsCollectorBase(op, ioReader, id, idTagKey, inputWatch)
 	return &NetworkVectorizedStatsCollector{
 		VectorizedStatsCollectorBase: vscBase,
-		VectorizedInboxStats: execpb.VectorizedInboxStats{
-			BaseVectorizedStats: &vscBase.VectorizedStats,
-			NetworkLatency:      latency,
-		},
 	}
 }
 
@@ -160,8 +162,8 @@ func (vsc *VectorizedStatsCollectorBase) Next(ctx context.Context) coldata.Batch
 	vsc.stopwatch.Start()
 	batch = vsc.Operator.Next(ctx)
 	if batch.Length() > 0 {
-		vsc.NumBatches++
-		vsc.NumTuples += int64(batch.Length())
+		vsc.stats.NumBatches.Add(1)
+		vsc.stats.NumTuples.Add(int64(batch.Length()))
 	}
 	vsc.stopwatch.Stop()
 	return batch
@@ -170,28 +172,31 @@ func (vsc *VectorizedStatsCollectorBase) Next(ctx context.Context) coldata.Batch
 // finalizeStats records the time measured by the stop watch into the stats as
 // well as the memory and disk usage.
 func (vsc *VectorizedStatsCollectorBase) finalizeStats() {
-	vsc.Time = vsc.stopwatch.Elapsed()
+	tm := vsc.stopwatch.Elapsed()
 	// Subtract the time spent in each of the child stats collectors, to produce
 	// the amount of time that the wrapped operator spent doing work itself, not
 	// including time spent waiting on its inputs.
 	for _, statsCollectors := range vsc.childStatsCollectors {
-		vsc.Time -= statsCollectors.getElapsedTime()
+		tm -= statsCollectors.getElapsedTime()
 	}
-	for _, memMon := range vsc.memMonitors {
-		vsc.MaxAllocatedMem += memMon.MaximumBytes()
-	}
-	for _, diskMon := range vsc.diskMonitors {
-		vsc.MaxAllocatedDisk += diskMon.MaximumBytes()
-	}
-	if vsc.ioReader != nil {
-		vsc.BytesRead = vsc.ioReader.GetBytesRead()
-	}
-	if vsc.IO {
-		// Note that vsc.IO is true only for ColBatchScans, and this is the
+	if vsc.ioTime {
+		vsc.stats.IOTime = tm
+		// Note that ioTime is true only for ColBatchScans, and this is the
 		// only case when we want to add the number of rows read (because the
 		// wrapped joinReaders and tableReaders will add that statistic
 		// themselves).
-		vsc.RowsRead = vsc.ioReader.GetRowsRead()
+		vsc.stats.RowsRead.Set(uint64(vsc.ioReader.GetRowsRead()))
+	} else {
+		vsc.stats.ExecTime = tm
+	}
+	for _, memMon := range vsc.memMonitors {
+		vsc.stats.MaxAllocatedMem.Add(memMon.MaximumBytes())
+	}
+	for _, diskMon := range vsc.diskMonitors {
+		vsc.stats.MaxAllocatedDisk.Add(diskMon.MaximumBytes())
+	}
+	if vsc.ioReader != nil {
+		vsc.stats.BytesRead.Set(uint64(vsc.ioReader.GetBytesRead()))
 	}
 }
 
@@ -204,33 +209,28 @@ func (vsc *VectorizedStatsCollectorBase) createSpan(
 	// is not the way they are supposed to be used, so this should be fixed.
 	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("%T", vsc.Operator))
 	span.SetTag(execinfrapb.FlowIDTagKey, flowID)
-	span.SetTag(vsc.idTagKey, vsc.ID)
+	span.SetTag(vsc.idTagKey, vsc.stats.OperatorID)
 	return span
 }
 
-// setNonDeterministicStats sets non-deterministic stats collected by vsc to reduce
-// non-determinism in tests.
-func (vsc *VectorizedStatsCollectorBase) setNonDeterministicStats() {
-	vsc.Time = 0
-	vsc.MaxAllocatedMem = 0
-	vsc.MaxAllocatedDisk = 0
-	vsc.NumBatches = 0
+// clearNonDeterministicStats clears non-deterministic stats collected by vsc to
+// make tests deterministic.
+func (vsc *VectorizedStatsCollectorBase) clearNonDeterministicStats() {
+	vsc.stats.IOTime = 0
+	vsc.stats.ExecTime = 0
+	vsc.stats.MaxAllocatedMem.Clear()
+	vsc.stats.MaxAllocatedDisk.Clear()
+	vsc.stats.NumBatches.Clear()
 	// BytesRead is overridden to a useful value for tests.
-	vsc.BytesRead = 8 * vsc.NumTuples
-}
-
-// setNonDeterministicStats sets non-deterministic stats collected by nvsc to reduce
-// non-determinism in tests.
-func (nvsc *NetworkVectorizedStatsCollector) setNonDeterministicStats() {
-	nvsc.VectorizedStatsCollectorBase.setNonDeterministicStats()
-	nvsc.NetworkLatency = 0
+	vsc.stats.BytesRead.Set(8 * vsc.stats.NumTuples.Value())
+	vsc.stats.NetworkLatency = 0
 }
 
 // OutputStats outputs the vectorized stats collected by vsc into ctx.
 func (vsc *VectorizedStatsCollectorBase) OutputStats(
 	ctx context.Context, flowID string, deterministicStats bool,
 ) {
-	if vsc.ID < 0 {
+	if vsc.stats.OperatorID < 0 {
 		// Ignore this stats collector since it is not associated with any
 		// component.
 		return
@@ -238,9 +238,9 @@ func (vsc *VectorizedStatsCollectorBase) OutputStats(
 	span := vsc.createSpan(ctx, flowID)
 	vsc.finalizeStats()
 	if deterministicStats {
-		vsc.setNonDeterministicStats()
+		vsc.clearNonDeterministicStats()
 	}
-	span.SetSpanStats(&vsc.VectorizedStats)
+	span.SetSpanStats(&vsc.stats)
 	span.Finish()
 }
 
@@ -248,7 +248,7 @@ func (vsc *VectorizedStatsCollectorBase) OutputStats(
 func (nvsc *NetworkVectorizedStatsCollector) OutputStats(
 	ctx context.Context, flowID string, deterministicStats bool,
 ) {
-	if nvsc.ID < 0 {
+	if nvsc.stats.OperatorID < 0 {
 		// Ignore this stats collector since it is not associated with any
 		// component.
 		return
@@ -256,9 +256,9 @@ func (nvsc *NetworkVectorizedStatsCollector) OutputStats(
 	span := nvsc.createSpan(ctx, flowID)
 	nvsc.finalizeStats()
 	if deterministicStats {
-		nvsc.setNonDeterministicStats()
+		nvsc.clearNonDeterministicStats()
 	}
-	span.SetSpanStats(&nvsc.VectorizedInboxStats)
+	span.SetSpanStats(&nvsc.stats)
 	span.Finish()
 }
 
