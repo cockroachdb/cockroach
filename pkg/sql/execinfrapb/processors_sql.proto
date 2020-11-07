@@ -714,6 +714,9 @@ message AggregatorSpec {
     ST_COLLECT = 34;
     COVAR_POP = 35;
     COVAR_SAMP = 36;
+    REGR_INTERCEPT = 37;
+    REGR_R2 = 38;
+    REGR_SLOPE = 39;
   }
 
   enum Type {
