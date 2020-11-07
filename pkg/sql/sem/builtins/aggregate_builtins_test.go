@@ -331,6 +331,21 @@ func TestCovarSamp(t *testing.T) {
 	testRegressionAggregateFunctionResultDeepCopy(t, newCovarSampAggregate)
 }
 
+func TestRegressionIntercept(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionInterceptAggregate)
+}
+
+func TestRegressionR2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionR2Aggregate)
+}
+
+func TestRegressionSlope(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionSlopeAggregate)
+}
+
 // testRegressionAggregateFunctionResultDeepCopy is a helper function
 // for testing regression aggregate functions.
 func testRegressionAggregateFunctionResultDeepCopy(
@@ -759,6 +774,18 @@ func BenchmarkCovarPopAggregate(b *testing.B) {
 
 func BenchmarkCovarSampAggregate(b *testing.B) {
 	runRegressionAggregateBenchmarks(b, newCovarSampAggregate)
+}
+
+func BenchmarkRegressionInterceptAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionInterceptAggregate)
+}
+
+func BenchmarkRegressionR2Aggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionR2Aggregate)
+}
+
+func BenchmarkRegressionSlopeAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionSlopeAggregate)
 }
 
 // runRegressionAggregateBenchmarks is a helper function for running

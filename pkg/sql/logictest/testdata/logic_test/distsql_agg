@@ -577,6 +577,12 @@ SELECT corr(y, x)::decimal, covar_pop(y, x)::decimal, covar_samp(y, x)::decimal 
 ----
 0.045228963191363145 3.75 3.787878787878788
 
+query FFF
+SELECT regr_intercept(y, x), regr_r2(y, x), regr_slope(y, x) FROM statistics_agg_test
+----
+48.4545454545455 0.00204565911136568 0.454545454545455
+
+
 # Regression test for #37211 (incorrect ordering between aggregator stages).
 statement ok
 CREATE TABLE uv (u INT PRIMARY KEY, v INT);
