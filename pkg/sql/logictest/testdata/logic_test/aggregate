@@ -10,13 +10,13 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRRRRRBBTIIRRRR
+query IIIIRRRRRRRRBBTIIRRRRRRR
 SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1),
 var_samp(1), variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1),
-corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1)
+corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1), regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1)
 FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Regression test for #29695
 query T
@@ -45,12 +45,13 @@ SELECT min(i), avg(i), max(i), sum(i) FROM kv
 ----
 NULL NULL NULL NULL
 
-query IIIIRRRRRRRBBTRRRR
+query IIIIRRRRRRRBBTRRRRRRR
 SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), stddev_pop(v), variance(v), var_pop(v), var_samp(v),
-bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes), corr(v,k), sqrdiff(v), covar_pop(v, k), covar_samp(v, k)
+bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes), corr(v,k), sqrdiff(v), covar_pop(v, k), covar_samp(v, k),
+regr_intercept(v, k), regr_r2(v, k), regr_slope(v, k)
 FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
 SELECT array_agg(v) FROM kv
@@ -68,12 +69,12 @@ SELECT jsonb_agg(v) FROM kv
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIIRRRRRRRBBTRRRR
+query IIIIRRRRRRRBBTRRRRRRR
 SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), stddev_pop(1), variance(1),
 var_pop(1), var_samp(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 2), sqrdiff(1),
-covar_pop(1, 2), covar_samp(1, 2)
+covar_pop(1, 2), covar_samp(1, 2), regr_intercept(1, 2), regr_r2(1, 2), regr_slope(1, 2)
 ----
-1  1  1  1  1  1  NULL  0  NULL  0  NULL true  true  01  NULL 0 0 NULL
+1  1  1  1  1  1  NULL  0  NULL  0  NULL true  true  01  NULL 0 0 NULL NULL NULL NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
@@ -1370,17 +1371,17 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (4.0,  100.0,    4,  100, 4.0,  100.0),
   (NULL,  NULL, NULL, NULL, NULL, NULL)
 
-query FFFFR
-SELECT corr(y, x), corr(int_y, int_x), corr(y, int_x), corr(int_y, x), corr(dy, dx)::DECIMAL(24, 24)
+query FFFFF
+SELECT corr(y, x), corr(int_y, int_x), corr(y, int_x), corr(int_y, x), corr(dy, dx)
 FROM statistics_agg_test
 ----
-0.9330078226479681  0.9330078226479681  0.9330078226479681  0.9330078226479681 0.933007822647968026281734
+0.9330078226479681 0.9330078226479681 0.9330078226479681 0.9330078226479681 0.9330078226479681
 
-query RRRR
-SELECT corr(y, dx)::DECIMAL(24, 24), corr(int_y, dx)::DECIMAL(24, 24), corr(dy, int_x)::DECIMAL(24, 24), corr(dy, x)::DECIMAL(24, 24)
+query FFFF
+SELECT corr(y, dx), corr(int_y, dx), corr(dy, int_x), corr(dy, x)
 FROM statistics_agg_test
 ----
-0.933007822647968026281734  0.933007822647968026281734  0.933007822647968026281734  0.933007822647968026281734
+0.9330078226479681 0.9330078226479681 0.9330078226479681 0.9330078226479681
 
 query F
 SELECT corr(DISTINCT y, x)
@@ -1403,12 +1404,6 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
 
 query error float out of range
 SELECT corr(y, x), corr(int_y, int_x) FROM statistics_agg_test
-
-query R
-SELECT corr(dy, dx)::DECIMAL(24, 23)
-FROM statistics_agg_test
-----
--0.44321321754250466175683
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1471,19 +1466,19 @@ VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (100.0,  99.097,    4,  100, 100.0,  99.097),
        (NULL,     NULL, NULL, NULL,  NULL,    NULL);
 
-query FFFFRFFFFR
-SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(y, int_x), covar_pop(int_y, x), covar_pop(dy, dx)::DECIMAL(10, 7),
-       covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(y, int_x), covar_samp(int_y, x), covar_samp(dy, dx)::DECIMAL(9, 6)
+query FFFFFFFFFF
+SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(y, int_x), covar_pop(int_y, x), round(covar_pop(dy, dx), 7),
+       covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(y, int_x), covar_samp(int_y, x), round(covar_samp(dy, dx), 6)
 FROM statistics_agg_test
 ----
 -149.7003372 33 1100.4 -25.336322 -149.7003372 -166.333708 36.6666666666667 1222.66666666667 -28.1514688888889 -166.333708
 
-query RRRRRRRR
-SELECT covar_pop(y, dx)::DECIMAL(10, 7), covar_pop(int_y, dx)::DECIMAL(8, 6), covar_pop(dy, int_x)::DECIMAL(5, 1), covar_pop(dy, x)::DECIMAL(10, 7),
-       covar_samp(y, dx)::DECIMAL(9, 6), covar_samp(int_y, dx)::DECIMAL(24, 22), covar_samp(dy, int_x)::DECIMAL(24, 20), covar_samp(dy, x)::DECIMAL(9, 6)
+query FFFFFFFF
+SELECT covar_pop(y, dx), covar_pop(int_y, dx), covar_pop(dy, int_x), covar_pop(dy, x),
+       covar_samp(y, dx), covar_samp(int_y, dx), covar_samp(dy, int_x), covar_samp(dy, x)
 FROM statistics_agg_test
 ----
--149.7003372  -25.336322  1100.4  -149.7003372  -166.333708  -28.1514688888888888888889  1222.66666666666666666667  -166.333708
+-149.7003372 -25.336322 1100.4 -149.7003372 -166.333708 -28.1514688888889 1222.66666666667 -166.333708
 
 query FF
 SELECT covar_pop(DISTINCT y, x), covar_samp(DISTINCT y, x)
@@ -1496,7 +1491,7 @@ SELECT CAST(covar_pop(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal
        CAST(covar_samp(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal)
 FROM statistics_agg_test
 ----
--1109.4299999999998  -2218.8599999999997
+-1109.4299999999998 -2218.8599999999997
 
 query error pq: unknown signature: covar_pop\(string, string\)
 SELECT covar_pop(y::string, x::string) FROM statistics_agg_test
@@ -1513,12 +1508,6 @@ SELECT covar_pop(y, x), covar_pop(int_y, int_x) FROM statistics_agg_test
 
 query error float out of range
 SELECT covar_samp(y, x), covar_samp(int_y, int_x) FROM statistics_agg_test
-
-query RR
-SELECT covar_pop(dy, dx)::DECIMAL(10, 7), covar_samp(dy, dx)::DECIMAL(9, 6)
-FROM statistics_agg_test
-----
--149.7003372  -166.333708
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1564,6 +1553,291 @@ SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(dy, dx),
 FROM statistics_agg_test
 ----
 0 0 0 0 0 0
+
+statement OK
+TRUNCATE statistics_agg_test
+
+subtest regr_intercept
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
+VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (NULL,     NULL, NULL, NULL,  NULL,    NULL);
+
+query FFFFF
+SELECT regr_intercept(y, x), regr_intercept(int_y, int_x), regr_intercept(y, int_x), regr_intercept(int_y, x), regr_intercept(dy, dx)
+FROM statistics_agg_test
+----
+66.3766879252252 1.47002398081535 14.1822541966427 3.19915081505252 66.3766879252252
+
+query FFFF
+SELECT regr_intercept(y, dx), regr_intercept(int_y, dx), regr_intercept(dy, int_x), regr_intercept(dy, x)
+FROM statistics_agg_test
+----
+66.3766879252252 3.19915081505252 14.1822541966427 66.3766879252252
+
+query F
+SELECT regr_intercept(DISTINCT y, x)
+FROM statistics_agg_test
+----
+45.395366359744
+
+query F
+SELECT CAST(regr_intercept(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal)
+FROM statistics_agg_test
+----
+56.34450123036154
+
+query error pq: unknown signature: regr_intercept\(string, string\)
+SELECT regr_intercept(y::string, x::string) FROM statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+
+query error float out of range
+SELECT regr_intercept(y, x), regr_intercept(int_y, int_x) FROM statistics_agg_test
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, 10.0, 1, 10, 1.0, 10.0),
+  (2.0, 20.0, 2, 20, 2.0, 20.0)
+
+query RRR
+SELECT regr_intercept(y, x), regr_intercept(int_y, int_x), regr_intercept(dy, dx)
+FROM statistics_agg_test
+----
+0 0 0
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0,  10.0, 1,  10, 1.0,  10.0),
+  (2.0, -20.0, 2, -20, 2.0, -20.0)
+
+query RRR
+SELECT regr_intercept(y, x), regr_intercept(int_y, int_x), regr_intercept(dy, dx)
+FROM statistics_agg_test
+----
+1.33333333333333 1.33333333333333 1.33333333333333
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, -1.0, 1, -1, 1.0, -1.0),
+  (1.0,  1.0, 1,  1, 1.0,  1.0)
+
+query RRR
+SELECT regr_intercept(y, x), regr_intercept(int_y, int_x), regr_intercept(dy, dx)
+FROM statistics_agg_test
+----
+1 1 1
+
+statement OK
+TRUNCATE statistics_agg_test
+
+subtest regr_r2
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
+VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (NULL,     NULL, NULL, NULL,  NULL,    NULL);
+
+query FFFFF
+SELECT regr_r2(y, x), regr_r2(int_y, int_x), regr_r2(y, int_x), round(regr_r2(int_y, x), 15), regr_r2(dy, dx)
+FROM statistics_agg_test
+----
+0.00157988373240915 0.870503597122302 0.928416382915767 0.047181068076447 0.00157988373240915
+
+query FFFF
+SELECT regr_r2(y, dx), round(regr_r2(int_y, x), 15), regr_r2(dy, int_x), regr_r2(dy, x)
+FROM statistics_agg_test
+----
+0.00157988373240915 0.047181068076447 0.928416382915767 0.00157988373240915
+
+query F
+SELECT regr_r2(DISTINCT y, x)
+FROM statistics_agg_test
+----
+0.0194977977947556
+
+query F
+SELECT CAST(regr_r2(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal)
+FROM statistics_agg_test
+----
+1
+
+query error pq: unknown signature: regr_r2\(string, string\)
+SELECT regr_r2(y::string, x::string) FROM statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+
+query error float out of range
+SELECT regr_r2(y, x), regr_r2(int_y, int_x) FROM statistics_agg_test
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, 10.0, 1, 10, 1.0, 10.0),
+  (2.0, 20.0, 2, 20, 2.0, 20.0)
+
+query RRR
+SELECT regr_r2(y, x), regr_r2(int_y, int_x), regr_r2(dy, dx)
+FROM statistics_agg_test
+----
+1 1 1
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0,  10.0, 1,  10, 1.0,  10.0),
+  (2.0, -20.0, 2, -20, 2.0, -20.0)
+
+query RRR
+SELECT regr_r2(y, x), regr_r2(int_y, int_x), regr_r2(dy, dx)
+FROM statistics_agg_test
+----
+1 1 1
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, -1.0, 1, -1, 1.0, -1.0),
+  (1.0,  1.0, 1,  1, 1.0,  1.0)
+
+query RRR
+SELECT regr_r2(y, x), regr_r2(int_y, int_x), regr_r2(dy, dx)
+FROM statistics_agg_test
+----
+1 1 1
+
+statement OK
+TRUNCATE statistics_agg_test
+
+subtest regr_slope
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
+VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (NULL,     NULL, NULL, NULL,  NULL,    NULL);
+
+query FFFFF
+SELECT regr_slope(y, x), regr_slope(int_y, int_x), regr_slope(y, int_x), regr_slope(int_y, x), regr_slope(dy, dx)
+FROM statistics_agg_test
+----
+-0.0110028047689694 0.026378896882494 0.879616306954436 -0.00186219089244472 -0.0110028047689694
+
+query FFFF
+SELECT regr_slope(y, dx), regr_slope(int_y, dx), regr_slope(dy, int_x), regr_slope(dy, x)
+FROM statistics_agg_test
+----
+-0.0110028047689694 -0.00186219089244472 0.879616306954436 -0.0110028047689694
+
+query F
+SELECT regr_slope(DISTINCT y, x)
+FROM statistics_agg_test
+----
+0.0380258825612487
+
+query F
+SELECT CAST(regr_slope(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal)
+FROM statistics_agg_test
+----
+-0.04416682440532526
+
+query error pq: unknown signature: regr_slope\(string, string\)
+SELECT regr_slope(y::string, x::string) FROM statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+
+query error float out of range
+SELECT regr_slope(y, x), regr_slope(int_y, int_x) FROM statistics_agg_test
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, 10.0, 1, 10, 1.0, 10.0),
+  (2.0, 20.0, 2, 20, 2.0, 20.0)
+
+query RRR
+SELECT regr_slope(y, x), regr_slope(int_y, int_x), regr_slope(dy, dx)
+FROM statistics_agg_test
+----
+0.1 0.1 0.1
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0,  10.0, 1,  10, 1.0,  10.0),
+  (2.0, -20.0, 2, -20, 2.0, -20.0)
+
+query RRR
+SELECT regr_slope(y, x), regr_slope(int_y, int_x), regr_slope(dy, dx)
+FROM statistics_agg_test
+----
+-0.0333333333333333  -0.0333333333333333  -0.0333333333333333
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, -1.0, 1, -1, 1.0, -1.0),
+  (1.0,  1.0, 1,  1, 1.0,  1.0)
+
+query RRR
+SELECT regr_slope(y, x), regr_slope(int_y, int_x), regr_slope(dy, dx)
+FROM statistics_agg_test
+----
+0 0 0
 
 statement OK
 TRUNCATE statistics_agg_test

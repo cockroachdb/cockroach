@@ -318,25 +318,38 @@ func TestStdDevPopDecimalResultDeepCopy(t *testing.T) {
 
 func TestCorr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testRegressionAggregateFunctionResultDeepCopy(t, newCorrAggregate, newCorrAggregateDecimal)
+	testRegressionAggregateFunctionResultDeepCopy(t, newCorrAggregate)
 }
 
 func TestCovarPop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testRegressionAggregateFunctionResultDeepCopy(t, newCovarPopAggregate, newCovarPopAggregateDecimal)
+	testRegressionAggregateFunctionResultDeepCopy(t, newCovarPopAggregate)
 }
 
 func TestCovarSamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testRegressionAggregateFunctionResultDeepCopy(t, newCovarSampAggregate, newCovarSampAggregateDecimal)
+	testRegressionAggregateFunctionResultDeepCopy(t, newCovarSampAggregate)
+}
+
+func TestRegressionIntercept(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionInterceptAggregate)
+}
+
+func TestRegressionR2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionR2Aggregate)
+}
+
+func TestRegressionSlope(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionSlopeAggregate)
 }
 
 // testRegressionAggregateFunctionResultDeepCopy is a helper function
 // for testing regression aggregate functions.
 func testRegressionAggregateFunctionResultDeepCopy(
-	t *testing.T,
-	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	aggFuncDecimal func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	t *testing.T, aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 ) {
 	defer leaktest.AfterTest(t)()
 	t.Run("float float", func(t *testing.T) {
@@ -346,25 +359,25 @@ func testRegressionAggregateFunctionResultDeepCopy(
 		testAggregateResultDeepCopy(t, aggFunc, makeIntTestDatum(10), makeIntTestDatum(10))
 	})
 	t.Run("decimal decimal", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, aggFuncDecimal, makeDecimalTestDatum(10), makeDecimalTestDatum(10))
+		testAggregateResultDeepCopy(t, aggFunc, makeDecimalTestDatum(10), makeDecimalTestDatum(10))
 	})
 	t.Run("float int", func(t *testing.T) {
 		testAggregateResultDeepCopy(t, aggFunc, makeFloatTestDatum(10), makeIntTestDatum(10))
 	})
 	t.Run("float decimal", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, aggFuncDecimal, makeFloatTestDatum(10), makeDecimalTestDatum(10))
+		testAggregateResultDeepCopy(t, aggFunc, makeFloatTestDatum(10), makeDecimalTestDatum(10))
 	})
 	t.Run("int float", func(t *testing.T) {
 		testAggregateResultDeepCopy(t, aggFunc, makeIntTestDatum(10), makeFloatTestDatum(10))
 	})
 	t.Run("int decimal", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, aggFuncDecimal, makeIntTestDatum(10), makeDecimalTestDatum(10))
+		testAggregateResultDeepCopy(t, aggFunc, makeIntTestDatum(10), makeDecimalTestDatum(10))
 	})
 	t.Run("decimal float", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, aggFuncDecimal, makeDecimalTestDatum(10), makeFloatTestDatum(10))
+		testAggregateResultDeepCopy(t, aggFunc, makeDecimalTestDatum(10), makeFloatTestDatum(10))
 	})
 	t.Run("decimal int", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, aggFuncDecimal, makeDecimalTestDatum(10), makeIntTestDatum(10))
+		testAggregateResultDeepCopy(t, aggFunc, makeDecimalTestDatum(10), makeIntTestDatum(10))
 	})
 	t.Run("all null", func(t *testing.T) {
 		testAggregateResultDeepCopy(t, aggFunc, makeNullTestDatum(10), makeNullTestDatum(10))
@@ -752,23 +765,33 @@ func BenchmarkStdDevPopAggregateDecimal(b *testing.B) {
 }
 
 func BenchmarkCorrAggregate(b *testing.B) {
-	runRegressionAggregateBenchmarks(b, newCorrAggregate, newCorrAggregateDecimal)
+	runRegressionAggregateBenchmarks(b, newCorrAggregate)
 }
 
 func BenchmarkCovarPopAggregate(b *testing.B) {
-	runRegressionAggregateBenchmarks(b, newCovarPopAggregate, newCovarPopAggregateDecimal)
+	runRegressionAggregateBenchmarks(b, newCovarPopAggregate)
 }
 
 func BenchmarkCovarSampAggregate(b *testing.B) {
-	runRegressionAggregateBenchmarks(b, newCovarSampAggregate, newCovarSampAggregateDecimal)
+	runRegressionAggregateBenchmarks(b, newCovarSampAggregate)
+}
+
+func BenchmarkRegressionInterceptAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionInterceptAggregate)
+}
+
+func BenchmarkRegressionR2Aggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionR2Aggregate)
+}
+
+func BenchmarkRegressionSlopeAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionSlopeAggregate)
 }
 
 // runRegressionAggregateBenchmarks is a helper function for running
 // benchmarks for regression aggregate functions.
 func runRegressionAggregateBenchmarks(
-	b *testing.B,
-	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	aggDecimalFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	b *testing.B, aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 ) {
 	b.Run(fmt.Sprintf("Ints count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
 		runBenchmarkAggregate(
@@ -800,7 +823,7 @@ func runRegressionAggregateBenchmarks(
 	b.Run(fmt.Sprintf("Decimals count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
 		runBenchmarkAggregate(
 			b,
-			aggDecimalFunc,
+			aggFunc,
 			makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount),
 			makeDecimalTestDatum(aggregateBuiltinsBenchmarkCount),
 		)
