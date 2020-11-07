@@ -966,9 +966,7 @@ func (r *Replica) ChangeReplicas(
 	// We execute the change serially if we're not allowed to run atomic
 	// replication changes or if that was explicitly disabled.
 	st := r.ClusterSettings()
-	unroll := !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicas) ||
-		!UseAtomicReplicationChanges.Get(&st.SV)
-
+	unroll := !UseAtomicReplicationChanges.Get(&st.SV)
 	if unroll {
 		// Legacy behavior.
 		for i := range chgs {
@@ -1601,34 +1599,10 @@ func prepareChangeReplicasTrigger(
 		return nil, errors.Wrapf(err, "validating updated descriptor %s", &updatedDesc)
 	}
 
-	var crt *roachpb.ChangeReplicasTrigger
-	if !store.ClusterSettings().Version.IsActive(
-		ctx, clusterversion.VersionAtomicChangeReplicasTrigger,
-	) {
-		var deprecatedChangeType roachpb.ReplicaChangeType
-		var deprecatedRepDesc roachpb.ReplicaDescriptor
-		if len(added) > 0 {
-			deprecatedChangeType = roachpb.ADD_VOTER
-			deprecatedRepDesc = added[0]
-		} else {
-			deprecatedChangeType = roachpb.REMOVE_VOTER
-			deprecatedRepDesc = removed[0]
-		}
-		crt = &roachpb.ChangeReplicasTrigger{
-			// NB: populate Desc as well because locally we rely on it being
-			// set.
-			Desc:                      &updatedDesc,
-			DeprecatedChangeType:      deprecatedChangeType,
-			DeprecatedReplica:         deprecatedRepDesc,
-			DeprecatedUpdatedReplicas: updatedDesc.Replicas().All(),
-			DeprecatedNextReplicaID:   updatedDesc.NextReplicaID,
-		}
-	} else {
-		crt = &roachpb.ChangeReplicasTrigger{
-			Desc:                    &updatedDesc,
-			InternalAddedReplicas:   added,
-			InternalRemovedReplicas: removed,
-		}
+	crt := &roachpb.ChangeReplicasTrigger{
+		Desc:                    &updatedDesc,
+		InternalAddedReplicas:   added,
+		InternalRemovedReplicas: removed,
 	}
 
 	if _, err := crt.ConfChange(nil); err != nil {
