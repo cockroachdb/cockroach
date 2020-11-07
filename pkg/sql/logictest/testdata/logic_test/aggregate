@@ -1370,17 +1370,17 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (4.0,  100.0,    4,  100, 4.0,  100.0),
   (NULL,  NULL, NULL, NULL, NULL, NULL)
 
-query FFFFR
-SELECT corr(y, x), corr(int_y, int_x), corr(y, int_x), corr(int_y, x), corr(dy, dx)::DECIMAL(24, 24)
+query FFFFF
+SELECT corr(y, x), corr(int_y, int_x), corr(y, int_x), corr(int_y, x), corr(dy, dx)
 FROM statistics_agg_test
 ----
-0.9330078226479681  0.9330078226479681  0.9330078226479681  0.9330078226479681 0.933007822647968026281734
+0.9330078226479681 0.9330078226479681 0.9330078226479681 0.9330078226479681 0.9330078226479681
 
-query RRRR
-SELECT corr(y, dx)::DECIMAL(24, 24), corr(int_y, dx)::DECIMAL(24, 24), corr(dy, int_x)::DECIMAL(24, 24), corr(dy, x)::DECIMAL(24, 24)
+query FFFF
+SELECT corr(y, dx), corr(int_y, dx), corr(dy, int_x), corr(dy, x)
 FROM statistics_agg_test
 ----
-0.933007822647968026281734  0.933007822647968026281734  0.933007822647968026281734  0.933007822647968026281734
+0.9330078226479681 0.9330078226479681 0.9330078226479681 0.9330078226479681
 
 query F
 SELECT corr(DISTINCT y, x)
@@ -1403,12 +1403,6 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
 
 query error float out of range
 SELECT corr(y, x), corr(int_y, int_x) FROM statistics_agg_test
-
-query R
-SELECT corr(dy, dx)::DECIMAL(24, 23)
-FROM statistics_agg_test
-----
--0.44321321754250466175683
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1471,19 +1465,19 @@ VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (100.0,  99.097,    4,  100, 100.0,  99.097),
        (NULL,     NULL, NULL, NULL,  NULL,    NULL);
 
-query FFFFRFFFFR
-SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(y, int_x), covar_pop(int_y, x), covar_pop(dy, dx)::DECIMAL(10, 7),
-       covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(y, int_x), covar_samp(int_y, x), covar_samp(dy, dx)::DECIMAL(9, 6)
+query FFFFFFFFFF
+SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(y, int_x), covar_pop(int_y, x), round(covar_pop(dy, dx), 7),
+       covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(y, int_x), covar_samp(int_y, x), round(covar_samp(dy, dx), 6)
 FROM statistics_agg_test
 ----
 -149.7003372 33 1100.4 -25.336322 -149.7003372 -166.333708 36.6666666666667 1222.66666666667 -28.1514688888889 -166.333708
 
-query RRRRRRRR
-SELECT covar_pop(y, dx)::DECIMAL(10, 7), covar_pop(int_y, dx)::DECIMAL(8, 6), covar_pop(dy, int_x)::DECIMAL(5, 1), covar_pop(dy, x)::DECIMAL(10, 7),
-       covar_samp(y, dx)::DECIMAL(9, 6), covar_samp(int_y, dx)::DECIMAL(24, 22), covar_samp(dy, int_x)::DECIMAL(24, 20), covar_samp(dy, x)::DECIMAL(9, 6)
+query FFFFFFFF
+SELECT covar_pop(y, dx), covar_pop(int_y, dx), covar_pop(dy, int_x), covar_pop(dy, x),
+       covar_samp(y, dx), covar_samp(int_y, dx), covar_samp(dy, int_x), covar_samp(dy, x)
 FROM statistics_agg_test
 ----
--149.7003372  -25.336322  1100.4  -149.7003372  -166.333708  -28.1514688888888888888889  1222.66666666666666666667  -166.333708
+-149.7003372 -25.336322 1100.4 -149.7003372 -166.333708 -28.1514688888889 1222.66666666667 -166.333708
 
 query FF
 SELECT covar_pop(DISTINCT y, x), covar_samp(DISTINCT y, x)
@@ -1496,7 +1490,7 @@ SELECT CAST(covar_pop(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal
        CAST(covar_samp(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal)
 FROM statistics_agg_test
 ----
--1109.4299999999998  -2218.8599999999997
+-1109.4299999999998 -2218.8599999999997
 
 query error pq: unknown signature: covar_pop\(string, string\)
 SELECT covar_pop(y::string, x::string) FROM statistics_agg_test
@@ -1513,12 +1507,6 @@ SELECT covar_pop(y, x), covar_pop(int_y, int_x) FROM statistics_agg_test
 
 query error float out of range
 SELECT covar_samp(y, x), covar_samp(int_y, int_x) FROM statistics_agg_test
-
-query RR
-SELECT covar_pop(dy, dx)::DECIMAL(10, 7), covar_samp(dy, dx)::DECIMAL(9, 6)
-FROM statistics_agg_test
-----
--149.7003372  -166.333708
 
 statement OK
 TRUNCATE statistics_agg_test
