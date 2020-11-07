@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -443,11 +442,6 @@ func (rq *replicateQueue) addOrReplace(
 		// If only one replica remains, that replica is the leaseholder and
 		// we won't be able to swap it out. Ignore the removal and simply add
 		// a replica.
-		removeIdx = -1
-	}
-	st := rq.store.cfg.Settings
-	if !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicas) {
-		// If we can't swap yet, don't.
 		removeIdx = -1
 	}
 
