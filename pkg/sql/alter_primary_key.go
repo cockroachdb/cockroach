@@ -14,7 +14,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -31,16 +30,7 @@ import (
 func (p *planner) AlterPrimaryKey(
 	ctx context.Context, tableDesc *tabledesc.Mutable, alterPKNode *tree.AlterTableAlterPrimaryKey,
 ) error {
-	// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionPrimaryKeyChanges) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"all nodes are not the correct version for primary key changes")
-	}
-
 	if alterPKNode.Sharded != nil {
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionHashShardedIndexes) {
-			return invalidClusterForShardedIndexError
-		}
 		if !p.EvalContext().SessionData.HashShardedIndexesEnabled {
 			return hashShardedIndexesDisabledError
 		}
