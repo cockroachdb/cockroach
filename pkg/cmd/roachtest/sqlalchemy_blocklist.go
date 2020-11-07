@@ -16,7 +16,10 @@ var sqlAlchemyBlocklists = blocklistsForVersion{
 	{"v19.2", "sqlAlchemyBlocklist", sqlAlchemyBlocklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
 	{"v20.1", "sqlAlchemyBlocklist20_1", sqlAlchemyBlocklist20_1, "sqlAlchemyIgnoreList20_1", sqlAlchemyIgnoreList20_1},
 	{"v20.2", "sqlAlchemyBlocklist20_2", sqlAlchemyBlocklist20_2, "sqlAlchemyIgnoreList20_2", sqlAlchemyIgnoreList20_2},
+	{"v21.1", "sqlAlchemyBlocklist21_1", sqlAlchemyBlocklist21_1, "sqlAlchemyIgnoreList21_1", sqlAlchemyIgnoreList21_1},
 }
+
+var sqlAlchemyBlocklist21_1 = blocklist{}
 
 var sqlAlchemyBlocklist20_2 = blocklist{}
 
@@ -27,6 +30,8 @@ var sqlAlchemyBlocklist20_1 = blocklist{
 var sqlAlchemyBlocklist = blocklist{
 	"test/dialect/test_suite.py::ExpandingBoundInTest_cockroachdb+psycopg2_9_5_0::test_null_in_empty_set_is_false": "41596",
 }
+
+var sqlAlchemyIgnoreList21_1 = sqlAlchemyIgnoreList
 
 var sqlAlchemyIgnoreList20_2 = sqlAlchemyIgnoreList
 
