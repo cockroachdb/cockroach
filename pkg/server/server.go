@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -2083,6 +2084,15 @@ func (s *Server) Decommission(
 				)
 			}); err != nil {
 				log.Errorf(ctx, "unable to record %s event for node %d: %s", eventType, nodeID, err)
+			}
+
+			// Similarly to the log event above, we may not be able to clean up
+			// the status entries if we crash or fail. Note that the status
+			// entry is an inline value, thus this cannot be transactional.
+			if targetStatus.Decommissioned() {
+				if err := s.db.PutInline(ctx, keys.NodeStatusKey(nodeID), nil); err != nil {
+					log.Errorf(ctx, "unable to clean up node status data for node %d: %s", nodeID, err)
+				}
 			}
 		}
 	}

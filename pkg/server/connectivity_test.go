@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -352,6 +353,18 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
 	defer tc.Stopper().Stop(ctx)
 
+	testutils.SucceedsSoon(t, func() error {
+		for _, srv := range tc.Servers {
+			entry, err := srv.DB().Get(ctx, keys.NodeStatusKey(srv.NodeID()))
+			if err != nil {
+				return err
+			} else if entry.Value == nil {
+				return errors.Errorf("expected to find node status entry for %d", srv.NodeID())
+			}
+		}
+		return nil
+	})
+
 	for _, status := range []livenesspb.MembershipStatus{
 		livenesspb.MembershipStatus_DECOMMISSIONING, livenesspb.MembershipStatus_DECOMMISSIONED,
 	} {
@@ -389,4 +402,10 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 		}
 		return nil
 	})
+
+	// At this point, the node status entries should have been cleaned up.
+	decomNodeID := tc.Server(2).NodeID()
+	entry, err := tc.Server(0).DB().Get(ctx, keys.NodeStatusKey(decomNodeID))
+	require.NoError(t, err)
+	require.Empty(t, entry.Value)
 }
