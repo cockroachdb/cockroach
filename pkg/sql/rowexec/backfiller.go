@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -138,22 +137,6 @@ func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	}
 	finishedSpans, err := b.mainLoop(ctx, mutations)
 	if err != nil {
-		return &execinfrapb.ProducerMetadata{Err: err}
-	}
-	st := b.flowCtx.Cfg.Settings
-	if !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicasTrigger) {
-		// There is a node of older version which could be the coordinator.
-		// So we communicate the finished work by writing to the jobs row.
-		err = WriteResumeSpan(
-			ctx,
-			b.flowCtx.Cfg.DB,
-			b.flowCtx.Codec(),
-			b.spec.Table.ID,
-			b.spec.Table.Mutations[0].MutationID,
-			b.filter,
-			finishedSpans,
-			b.flowCtx.Cfg.JobRegistry,
-		)
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
