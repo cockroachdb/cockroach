@@ -34,7 +34,6 @@ const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
 	Version19_2
-	VersionStart20_1
 	VersionContainsEstimatesCounter
 	VersionChangeReplicasDemotion
 	VersionSecondaryIndexColumnFamilies
@@ -105,11 +104,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// Version19_2 is CockroachDB v19.2. It's used for all v19.2.x patch releases.
 		Key:     Version19_2,
 		Version: roachpb.Version{Major: 19, Minor: 2},
-	},
-	{
-		// VersionStart20_1 demarcates work towards CockroachDB v20.1.
-		Key:     VersionStart20_1,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 1},
 	},
 	{
 		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
