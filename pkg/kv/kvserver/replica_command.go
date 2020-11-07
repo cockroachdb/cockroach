@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -1382,10 +1381,9 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	canUseDemotion := r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionChangeReplicasDemotion)
 	for _, target := range chgs.VoterRemovals() {
 		typ := internalChangeTypeRemove
-		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL && canUseDemotion {
+		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL {
 			typ = internalChangeTypeDemoteVoter
 		}
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: typ})
