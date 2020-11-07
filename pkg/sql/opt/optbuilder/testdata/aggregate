@@ -2720,14 +2720,312 @@ SELECT corr(k, NULL) FROM kv
 error (42725): ambiguous call: corr(int, unknown), candidates are:
 corr(int, int) -> float
 corr(int, float) -> float
-corr(int, decimal) -> decimal
+corr(int, decimal) -> float
 
 build
 SELECT corr('foo', v) FROM kv
 ----
 error (22P02): corr(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
 
-# Tests for string_agg.
+# Tests for covar_pop.
+
+build
+SELECT covar_pop(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: covar_pop:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── covar-pop [as=covar_pop:6]
+           ├── k:1
+           └── v:2
+
+
+build
+SELECT covar_pop(k) FROM kv
+----
+error (42883): unknown signature: covar_pop(int)
+
+build
+SELECT covar_pop(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: covar_pop(int, string, string)
+
+build
+SELECT covar_pop(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: covar_pop:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=covar_pop:6]
+           └── covar-pop
+                ├── k:1
+                └── v:2
+
+
+build
+SELECT max(s), covar_pop(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 covar_pop:7 min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── covar-pop [as=covar_pop:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+
+build
+SELECT covar_pop(k, NULL) FROM kv
+----
+error (42725): ambiguous call: covar_pop(int, unknown), candidates are:
+covar_pop(int, int) -> float
+covar_pop(int, float) -> float
+covar_pop(int, decimal) -> float
+
+build
+SELECT covar_pop('foo', v) FROM kv
+----
+error (22P02): covar_pop(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+# Tests for regr_intercept.
+
+build
+SELECT regr_intercept(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_intercept:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── regression-intercept [as=regr_intercept:6]
+           ├── k:1
+           └── v:2
+
+
+build
+SELECT regr_intercept(k) FROM kv
+----
+error (42883): unknown signature: regr_intercept(int)
+
+build
+SELECT regr_intercept(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: regr_intercept(int, string, string)
+
+build
+SELECT regr_intercept(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_intercept:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=regr_intercept:6]
+           └── regression-intercept
+                ├── k:1
+                └── v:2
+
+
+build
+SELECT max(s), regr_intercept(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 regr_intercept:7 min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── regression-intercept [as=regr_intercept:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+
+build
+SELECT regr_intercept(k, NULL) FROM kv
+----
+error (42725): ambiguous call: regr_intercept(int, unknown), candidates are:
+regr_intercept(int, int) -> float
+regr_intercept(int, float) -> float
+regr_intercept(int, decimal) -> float
+
+build
+SELECT regr_intercept('foo', v) FROM kv
+----
+error (22P02): regr_intercept(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+# Tests for regr_r2.
+
+build
+SELECT regr_r2(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_r2:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── regression-r2 [as=regr_r2:6]
+           ├── k:1
+           └── v:2
+
+
+build
+SELECT regr_r2(k) FROM kv
+----
+error (42883): unknown signature: regr_r2(int)
+
+build
+SELECT regr_r2(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: regr_r2(int, string, string)
+
+build
+SELECT regr_r2(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_r2:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=regr_r2:6]
+           └── regression-r2
+                ├── k:1
+                └── v:2
+
+
+build
+SELECT max(s), regr_r2(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 regr_r2:7 min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── regression-r2 [as=regr_r2:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+
+build
+SELECT regr_r2(k, NULL) FROM kv
+----
+error (42725): ambiguous call: regr_r2(int, unknown), candidates are:
+regr_r2(int, int) -> float
+regr_r2(int, float) -> float
+regr_r2(int, decimal) -> float
+
+build
+SELECT regr_r2('foo', v) FROM kv
+----
+error (22P02): regr_r2(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+# Tests for regr_slope.
+
+build
+SELECT regr_slope(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_slope:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── regression-slope [as=regr_slope:6]
+           ├── k:1
+           └── v:2
+
+
+build
+SELECT regr_slope(k) FROM kv
+----
+error (42883): unknown signature: regr_slope(int)
+
+build
+SELECT regr_slope(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: regr_slope(int, string, string)
+
+build
+SELECT regr_slope(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_slope:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=regr_slope:6]
+           └── regression-slope
+                ├── k:1
+                └── v:2
+
+
+build
+SELECT max(s), regr_slope(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 regr_slope:7 min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── regression-slope [as=regr_slope:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+
+build
+SELECT regr_slope(k, NULL) FROM kv
+----
+error (42725): ambiguous call: regr_slope(int, unknown), candidates are:
+regr_slope(int, int) -> float
+regr_slope(int, float) -> float
+regr_slope(int, decimal) -> float
+
+build
+SELECT regr_slope('foo', v) FROM kv
+----
+error (22P02): regr_slope(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
 
 build
 SELECT string_agg(s, 'separator') FROM kv

@@ -831,6 +831,24 @@ define CovarSamp {
 }
 
 [Scalar, Aggregate]
+define RegressionIntercept {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
+define RegressionR2 {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
+define RegressionSlope {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
 define Max {
     Input ScalarExpr
 }

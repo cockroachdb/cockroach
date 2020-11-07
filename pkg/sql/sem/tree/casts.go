@@ -564,7 +564,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DDate:
 			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
 			if !v.IsFinite() {
-				return nil, ErrDecOutOfRange
+				return nil, errDecOutOfRange
 			}
 			dd.SetInt64(v.UnixEpochDays())
 		case *DFloat:
@@ -997,7 +997,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			}
 			dv, ok := duration.FromBigInt(&d.Coeff)
 			if !ok {
-				return nil, ErrDecOutOfRange
+				return nil, errDecOutOfRange
 			}
 			return NewDInterval(dv, itm), nil
 		case *DInterval:
