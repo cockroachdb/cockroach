@@ -36,16 +36,20 @@ const (
 	tpchVecVersion19_2 crdbVersion = iota
 	tpchVecVersion20_1
 	tpchVecVersion20_2
+	tpchVecVersion21_1
 )
 
 func toCRDBVersion(v string) (crdbVersion, error) {
-	if strings.HasPrefix(v, "v19.2") {
+	switch {
+	case strings.HasPrefix(v, "v19.2"):
 		return tpchVecVersion19_2, nil
-	} else if strings.HasPrefix(v, "v20.1") {
+	case strings.HasPrefix(v, "v20.1"):
 		return tpchVecVersion20_1, nil
-	} else if strings.HasPrefix(v, "v20.2") {
+	case strings.HasPrefix(v, "v20.2"):
 		return tpchVecVersion20_2, nil
-	} else {
+	case strings.HasPrefix(v, "v21.1"):
+		return tpchVecVersion21_1, nil
+	default:
 		return 0, errors.Errorf("unrecognized version: %s", v)
 	}
 }

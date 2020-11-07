@@ -18,11 +18,14 @@ var hibernateBlocklists = blocklistsForVersion{
 	{"v19.2", "hibernateBlockList19_2", hibernateBlockList19_2, "", nil},
 	{"v20.1", "hibernateBlockList20_1", hibernateBlockList20_1, "", nil},
 	{"v20.2", "hibernateBlockList20_2", hibernateBlockList20_2, "", nil},
+	{"v21.1", "hibernateBlockList21_1", hibernateBlockList21_1, "", nil},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var hibernateBlockList21_1 = blocklist{}
+
 var hibernateBlockList20_2 = blocklist{}
 
 var hibernateBlockList20_1 = blocklist{
