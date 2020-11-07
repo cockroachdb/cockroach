@@ -41,7 +41,6 @@ const (
 	VersionCreateRolePrivilege
 	VersionStatementDiagnosticsSystemTables
 	VersionSchemaChangeJob
-	Version20_1
 	VersionStart20_2
 	VersionGeospatialType
 	VersionEnums
@@ -171,11 +170,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// scheduled by the SchemaChangeManager.
 		Key:     VersionSchemaChangeJob,
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 15},
-	},
-	{
-		// Version20_1 is CockroachDB v20.1. It's used for all v20.1.x patch releases.
-		Key:     Version20_1,
-		Version: roachpb.Version{Major: 20, Minor: 1},
 	},
 	{
 		// VersionStart20_2 demarcates work towards CockroachDB v20.2.
