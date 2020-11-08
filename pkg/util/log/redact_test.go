@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -175,7 +176,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 
 			// Now verify we have what we want in the file.
 			foundMessage := false
-			var entry Entry
+			var entry logpb.Entry
 			for {
 				if err := decoder.Decode(&entry); err != nil {
 					if err == io.EOF {

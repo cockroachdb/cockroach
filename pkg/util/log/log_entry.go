@@ -22,15 +22,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/petermattis/goid"
 )
 
-// formatLogEntry formats an Entry into a newly allocated *buffer.
+// formatLogEntry formats an logpb.Entry into a newly allocated *buffer.
 // The caller is responsible for calling putBuffer() afterwards.
-func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
+func (l *loggingT) formatLogEntry(entry logpb.Entry, stacks []byte, cp ttycolor.Profile) *buffer {
 	buf := l.formatLogEntryInternal(entry, cp)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		_ = buf.WriteByte('\n')
@@ -60,7 +62,7 @@ func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profil
 // 	tags             The context tags
 // 	counter          The log entry counter, if non-zero
 // 	msg              The user-supplied message
-func (l *loggingT) formatLogEntryInternal(entry Entry, cp ttycolor.Profile) *buffer {
+func (l *loggingT) formatLogEntryInternal(entry logpb.Entry, cp ttycolor.Profile) *buffer {
 	if l.noColor {
 		cp = nil
 	}
@@ -69,19 +71,19 @@ func (l *loggingT) formatLogEntryInternal(entry Entry, cp ttycolor.Profile) *buf
 	if entry.Line < 0 {
 		entry.Line = 0 // not a real line number, but acceptable to someDigits
 	}
-	if entry.Severity > Severity_FATAL || entry.Severity <= Severity_UNKNOWN {
-		entry.Severity = Severity_INFO // for safety.
+	if entry.Severity > severity.FATAL || entry.Severity <= severity.UNKNOWN {
+		entry.Severity = severity.INFO // for safety.
 	}
 
 	tmp := buf.tmp[:len(buf.tmp)]
 	var n int
 	var prefix []byte
 	switch entry.Severity {
-	case Severity_INFO:
+	case severity.INFO:
 		prefix = cp[ttycolor.Cyan]
-	case Severity_WARNING:
+	case severity.WARNING:
 		prefix = cp[ttycolor.Yellow]
-	case Severity_ERROR, Severity_FATAL:
+	case severity.ERROR, severity.FATAL:
 		prefix = cp[ttycolor.Red]
 	}
 	n += copy(tmp, prefix)
@@ -169,17 +171,19 @@ func (l *loggingT) formatLogEntryInternal(entry Entry, cp ttycolor.Profile) *buf
 	return buf
 }
 
+const severityChar = "IWEF"
+
 // processForStderr formats a log entry for output to standard error.
-func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
+func (l *loggingT) processForStderr(entry logpb.Entry, stacks []byte) *buffer {
 	return l.formatLogEntry(entry, stacks, ttycolor.StderrProfile)
 }
 
 // processForFile formats a log entry for output to a file.
-func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
+func (l *loggingT) processForFile(entry logpb.Entry, stacks []byte) *buffer {
 	return l.formatLogEntry(entry, stacks, nil)
 }
 
-// MakeEntry creates an Entry.
+// MakeEntry creates an logpb.Entry.
 func MakeEntry(
 	ctx context.Context,
 	s Severity,
@@ -188,8 +192,8 @@ func MakeEntry(
 	redactable bool,
 	format string,
 	args ...interface{},
-) (res Entry) {
-	res = Entry{
+) (res logpb.Entry) {
+	res = logpb.Entry{
 		Severity:   s,
 		Time:       timeutil.Now().UnixNano(),
 		Goroutine:  goid.Get(),
@@ -242,8 +246,8 @@ func renderArgs(redactable bool, buf *strings.Builder, format string, args ...in
 	}
 }
 
-// Format writes the log entry to the specified writer.
-func (e Entry) Format(w io.Writer) error {
+// FormatEntry writes the log entry to the specified writer.
+func FormatEntry(e logpb.Entry, w io.Writer) error {
 	buf := logging.formatLogEntry(e, nil, nil)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
@@ -289,7 +293,7 @@ func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) *EntryDecoder {
 const MessageTimeFormat = "060102 15:04:05.999999"
 
 // Decode decodes the next log entry into the provided protobuf message.
-func (d *EntryDecoder) Decode(entry *Entry) error {
+func (d *EntryDecoder) Decode(entry *logpb.Entry) error {
 	for {
 		if !d.scanner.Scan() {
 			if err := d.scanner.Err(); err != nil {

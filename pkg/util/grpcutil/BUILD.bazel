@@ -10,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/log",
+        "//pkg/util/log/severity",
         "//pkg/util/netutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -33,7 +34,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
-        "//pkg/util/log",
+        "//pkg/util/log/severity",
         "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/stretchr/testify/require",

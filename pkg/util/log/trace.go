@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -109,7 +111,7 @@ func getSpanOrEventLog(ctx context.Context) (*tracing.Span, *ctxEventLog, bool) 
 // message as input after introduction of redaction markers.  This
 // means the message may or may not contain markers already depending
 // of the configuration of --redactable-logs.
-func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry Entry) {
+func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry logpb.Entry) {
 	var msg string
 	if len(entry.Tags) == 0 && len(entry.File) == 0 && !entry.Redactable {
 		// Shortcut.
@@ -196,7 +198,7 @@ func Event(ctx context.Context, msg string) {
 
 	// Format the tracing event and add it to the trace.
 	entry := MakeEntry(ctx,
-		Severity_INFO, /* unused for trace events */
+		severity.INFO, /* unused for trace events */
 		nil,           /* logCounter, unused for trace events */
 		1,             /* depth */
 		// redactable is false because we want to flatten the data in traces
@@ -219,7 +221,7 @@ func Eventf(ctx context.Context, format string, args ...interface{}) {
 
 	// Format the tracing event and add it to the trace.
 	entry := MakeEntry(ctx,
-		Severity_INFO, /* unused for trace events */
+		severity.INFO, /* unused for trace events */
 		nil,           /* logCounter, unused for trace events */
 		1,             /* depth */
 		// redactable is false because we want to flatten the data in traces
@@ -234,11 +236,11 @@ func vEventf(
 ) {
 	if VDepth(level, 1+depth) {
 		// Log the message (which also logs an event).
-		sev := Severity_INFO
+		sev := severity.INFO
 		if isErr {
-			sev = Severity_ERROR
+			sev = severity.ERROR
 		}
-		logDepth(ctx, 1+depth, sev, format, args)
+		logDepth(ctx, 1+depth, sev, format, args...)
 	} else {
 		sp, el, ok := getSpanOrEventLog(ctx)
 		if !ok {
@@ -246,7 +248,7 @@ func vEventf(
 			return
 		}
 		entry := MakeEntry(ctx,
-			Severity_INFO, /* unused for trace events */
+			severity.INFO, /* unused for trace events */
 			nil,           /* logCounter, unused for trace events */
 			depth+1,
 			// redactable is false because we want to flatten the data in traces
