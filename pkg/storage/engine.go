@@ -60,7 +60,8 @@ type SimpleMVCCIterator interface {
 	// NextKey advances the iterator to the next MVCC key. This operation is
 	// distinct from Next which advances to the next version of the current key
 	// or the next key if the iterator is currently located at the last version
-	// for a key.
+	// for a key. NextKey must not be used to switch iteration direction from
+	// reverse iteration to forward iteration.
 	NextKey()
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
@@ -125,7 +126,8 @@ type MVCCIterator interface {
 	// and the encoded SST data specified, within the provided key range. Returns
 	// stats on skipped KVs, or an error if a collision is found.
 	CheckForKeyCollisions(sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error)
-	// SetUpperBound installs a new upper bound for this iterator.
+	// SetUpperBound installs a new upper bound for this iterator. The caller can modify
+	// the parameter after this function returns.
 	SetUpperBound(roachpb.Key)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
@@ -294,7 +296,8 @@ type Reader interface {
 	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
-	// with the iterator to free resources.
+	// with the iterator to free resources. The caller can change IterOptions
+	// after this function returns.
 	NewEngineIterator(opts IterOptions) EngineIterator
 }
 

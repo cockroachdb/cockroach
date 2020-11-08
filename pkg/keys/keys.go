@@ -393,22 +393,28 @@ func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 }
 
 // LockTableSingleKey creates a key under which all single-key locks for the
-// given key can be found. Note that there can be multiple locks for the given
-// key, but those are distinguished using the "version" which is not in scope
-// of the keys package.
+// given key can be found. buf is used as scratch-space to avoid allocations
+// -- its contents will be overwritten and not appended to.
+// Note that there can be multiple locks for the given key, but those are
+// distinguished using the "version" which is not in scope of the keys
+// package.
 // For a scan [start, end) the corresponding lock table scan is
 // [LTSK(start), LTSK(end)).
-func LockTableSingleKey(key roachpb.Key) roachpb.Key {
+func LockTableSingleKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
+	// The +3 accounts for the bytesMarker and terminator.
+	keyLen := len(LocalRangeLockTablePrefix) + len(LockTableSingleKeyInfix) + len(key) + 3
+	if cap(buf) < keyLen {
+		buf = make([]byte, 0, keyLen)
+	} else {
+		buf = buf[:0]
+	}
 	// Don't unwrap any local prefix on key using Addr(key). This allow for
 	// doubly-local lock table keys. For example, local range descriptor keys can
 	// be locked during split and merge transactions.
-	// The +3 account for the bytesMarker and terminator.
-	buf := make(roachpb.Key, 0,
-		len(LocalRangeLockTablePrefix)+len(LockTableSingleKeyInfix)+len(key)+3)
 	buf = append(buf, LocalRangeLockTablePrefix...)
 	buf = append(buf, LockTableSingleKeyInfix...)
 	buf = encoding.EncodeBytesAscending(buf, key)
-	return buf
+	return buf, buf
 }
 
 // DecodeLockTableSingleKey decodes the single-key lock table key to return the key
@@ -446,6 +452,12 @@ func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error
 // claimed by a related (but not identical) concept.
 func IsLocal(k roachpb.Key) bool {
 	return bytes.HasPrefix(k, localPrefix)
+}
+
+// IsLocalStoreKey performs a cheap check that returns true iff the parameter
+// is a local store key.
+func IsLocalStoreKey(k roachpb.Key) bool {
+	return bytes.HasPrefix(k, localStorePrefix)
 }
 
 // Addr returns the address for the key, used to lookup the range containing the
