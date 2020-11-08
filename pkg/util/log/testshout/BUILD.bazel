@@ -6,5 +6,6 @@ go_test(
     deps = [
         "//pkg/util/log",
         "//pkg/util/log/logflags",
+        "//pkg/util/log/severity",
     ],
 )

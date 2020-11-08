@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -54,7 +55,7 @@ func ListenAndServeGRPC(
 	return ln, nil
 }
 
-var httpLogger = log.NewStdLogger(log.Severity_ERROR, "net/http")
+var httpLogger = log.NewStdLogger(severity.ERROR, "net/http")
 
 // Server is a thin wrapper around http.Server. See MakeServer for more detail.
 type Server struct {

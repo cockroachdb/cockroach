@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -515,7 +516,7 @@ func TestCorruptData(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
 		for _, e := range entries {
-			require.Equal(t, log.Severity_ERROR, e.Severity)
+			require.Equal(t, severity.ERROR, e.Severity)
 		}
 	})
 	t.Run("corrupt hlc timestamp", func(t *testing.T) {
@@ -567,7 +568,7 @@ func TestCorruptData(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
 		for _, e := range entries {
-			require.Equal(t, log.Severity_ERROR, e.Severity)
+			require.Equal(t, severity.ERROR, e.Severity)
 		}
 	})
 }

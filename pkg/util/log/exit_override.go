@@ -14,6 +14,8 @@ import (
 	"context"
 	"io"
 	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
 
 // SetExitFunc allows setting a function that will be called to exit
@@ -77,7 +79,7 @@ func (l *loggerT) exitLocked(err error) {
 func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// Make a valid log entry for this error.
 	entry := MakeEntry(
-		ctx, Severity_ERROR, &l.logCounter, 1 /* depth */, l.redactableLogs.Get(),
+		ctx, severity.ERROR, &l.logCounter, 1 /* depth */, l.redactableLogs.Get(),
 		"logging error: %v", err)
 
 	// Format the entry for output below. Note how this formatting is

@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
 )
@@ -198,7 +200,7 @@ func SetClusterID(clusterID string) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	addStructured(ctx, Severity_INFO, 1, "clusterID: %s", []interface{}{clusterID})
+	addStructured(ctx, severity.INFO, 1, "clusterID: %s", []interface{}{clusterID})
 
 	// Perform the change proper.
 	logging.mu.Lock()
@@ -214,7 +216,7 @@ func SetClusterID(clusterID string) {
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggerT) outputLogEntry(entry Entry) {
+func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
 		f(entry)
 		return
@@ -228,7 +230,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 	setActive()
 	var stacks []byte
 	var fatalTrigger chan struct{}
-	if entry.Severity == Severity_FATAL {
+	if entry.Severity == severity.FATAL {
 		logging.signalFatalCh()
 
 		switch traceback {
@@ -288,7 +290,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 		}()
 	}
 
-	if entry.Severity >= logging.stderrThreshold.get() {
+	if entry.Severity >= logging.stderrThreshold.Get() {
 		if err := l.outputToStderr(entry, stacks); err != nil {
 			// The external stderr log is unavailable.  However, stderr was
 			// chosen by the stderrThreshold configuration, so abandoning
@@ -303,7 +305,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 			return        // unreachable except in tests
 		}
 	}
-	if l.logDir.IsSet() && entry.Severity >= l.fileThreshold.get() {
+	if l.logDir.IsSet() && entry.Severity >= l.fileThreshold {
 		if err := l.ensureFileLocked(); err != nil {
 			// We definitely do not like to lose log entries, so we stop
 			// here. Note that exitLocked() shouts the error to both stderr
@@ -327,11 +329,11 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 		putBuffer(buf)
 	}
 	// Flush and exit on fatal logging.
-	if entry.Severity == Severity_FATAL {
+	if entry.Severity == severity.FATAL {
 		l.flushAndSyncLocked(true /*doSync*/)
 		close(fatalTrigger)
 		// Note: although it seems like the function is allowed to return
-		// below when s == Severity_FATAL, this is not so, because the
+		// below when s == severity.FATAL, this is not so, because the
 		// anonymous function func() { <-exitCalled } is deferred
 		// above. That function ensures that outputLogEntry() will wait
 		// until the exit function has been called. If the exit function
@@ -361,7 +363,7 @@ func setActive() {
 
 // outputToStderr writes the provided entry and potential stack
 // trace(s) to the process' external stderr stream.
-func (l *loggerT) outputToStderr(entry Entry, stacks []byte) error {
+func (l *loggerT) outputToStderr(entry logpb.Entry, stacks []byte) error {
 	buf := logging.processForStderr(entry, stacks)
 	_, err := OrigStderr.Write(buf.Bytes())
 	putBuffer(buf)

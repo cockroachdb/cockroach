@@ -1,0 +1,223 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log;
+option go_package = "logpb";
+
+import "gogoproto/gogo.proto";
+
+// Severity is the severity level of individual log events.
+//
+// Note: do not forget to run gen.sh (go generate) when
+// changing this list or the explanatory comments.
+enum Severity {
+  // UNKNOWN is populated into decoded log entries when the
+  // severity could not be determined.
+  UNKNOWN = 0;
+  // INFO is used for informational messages, when no action
+  // is required as a result.
+  INFO = 1;
+  // WARNING is used for situations which may require special handling,
+  // while normal operation is expected to resume automatically.
+  WARNING = 2;
+  // ERROR is used for situations that require special handling,
+  // when normal operation could not proceed as expected.
+  // Other operations can continue mostly unaffected.
+  ERROR = 3;
+  // FATAL is used for situations that require an immedate, hard
+  // server shutdown. A report is also sent to telemetry if telemetry
+  // is enabled.
+  FATAL = 4;
+  // NONE can be used in filters to specify that no messages
+  // should be emitted.
+  NONE = 5;
+  // DEFAULT is the end sentinel. It is used during command-line
+  // handling to indicate that another value should be replaced instead
+  // (depending on which command is being run); see cli/flags.go for
+  // details.
+  DEFAULT = 6;
+}
+
+// Channel is the logical logging channel on which a message is sent.
+// Different channels can be redirected to different sinks. All
+// messages from the same channel are sent to the same sink(s).
+//
+//
+// Note: do not forget to run gen.sh (go generate) when
+// changing this list or the explanatory comments.
+enum Channel {
+  // DEV is the channel used during development, to collect log
+  // details useful for troubleshooting when it is unclear which other
+  // channel to use. It is also the default logging channel in
+  // CockroachDB, when the caller does not indicate a channel.
+  //
+  // This channel is special in that there are no constraints as to
+  // what may or may not be logged on it. Conversely, users in
+  // production deployments are invited to not collect DEV logs in
+  // centralized logging facilities, because they likely contain
+  // sensitive operational data.
+  DEV = 0;
+
+  // FD2_CAPTURE is the channel used internally by the logging
+  // package to capture direct writes to file descriptor 2 inside
+  // the process, such as those performed by the Go runtime.
+  //
+  // It exists so that these writes are guaranteed to go to
+  // the configured logging output files, and so that the stderr
+  // data becomes visible to the log file navigation API.
+  FD2_CAPTURE = 1;
+
+  // OPS is the channel used to report "point" operational events,
+  // initiated by user operators or automation:
+  //
+  // - operator or system actions on server processes: process starts,
+  //   stops, shutdowns, crashes (if they can be logged),
+  //   including each time: command-line parameters, current version being run.
+  // - actions that impact the topology of a cluster: node additions,
+  //   removals, decommissions, etc.
+  // - job-related initiation or termination.
+  // - cluster setting changes.
+  // - zone configuration changes.
+  OPS = 2;
+
+  // HEALTH is the channel used to report "background" operational
+  // events, initiated by CockroachDB or reporting on automatic processes:
+  //
+  // - current resource usage, including critical resource usage.
+  // - node-node connection events, including connection errors and
+  //   gossip details.
+  // - range and table leasing events.
+  // - up-, down-replication; range unavailability.
+  HEALTH = 3;
+
+  // STORAGE is the channel used to report low-level storage
+  // layer events (RocksDB/Pebble).
+  STORAGE = 4;
+
+  // SESSIONS is the channel used to report client network activity:
+  //
+  // - connections opened/closed.
+  // - authentication events: logins, failed attempts.
+  // - session and query cancellation.
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  SESSIONS = 5;
+
+  // USER_ADMIN is the channel used to report changes
+  // in users and roles, including:
+  //
+  // - users added/dropped.
+  // - changes to authentication credentials, incl passwords, validity etc.
+  // - role grants/revocations.
+  // - role option grants/revocations.
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  USER_ADMIN = 6;
+
+  // PRIVILEGES is the channel used to report data
+  // authorization changes, including:
+  //
+  // - privilege grants/revocations on database, objects etc.
+  // - object ownership changes.
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  PRIVILEGES = 7;
+
+  // SENSITIVE_ACCESS is the channel used to report SQL
+  // data access to sensitive data (when enabled):
+  //
+  // - data access audit events (when table audit is enabled).
+  // - SQL statements executed by users with the ADMIN bit.
+  // - operations that write to `system` tables.
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  SENSITIVE_ACCESS = 8;
+
+  // SQL_EXEC is the channel used to report SQL execution on
+  // behalf of client connections:
+  //
+  // - logical SQL statement executions (if enabled)
+  // - pgwire events (if enabled)
+  SQL_EXEC = 9;
+
+  // SQL_PERF is the channel used to report SQL executions
+  // that are marked to be highlighted as "out of the ordinary"
+  // to facilitate performance investigations.
+  // This includes the "SQL slow query log".
+  //
+  // Arguably, this channel overlaps with SQL_EXEC defined above.
+  // However, we keep them separate for backward-compatibility
+  // with previous versions, where the corresponding events
+  // were redirected to separate files.
+  SQL_PERF = 10;
+
+  // SQL_INTERNAL_PERF is like the SQL perf channel above but aimed at
+  // helping developers of CockroachDB itself. It exists as a separate
+  // channel so as to not pollute the SQL perf logging output with
+  // internal troubleshooting details.
+  SQL_INTERNAL_PERF = 11;
+}
+
+// Entry represents a cockroach structured log entry.
+message Entry {
+  Severity severity = 1;
+  // Nanoseconds since the epoch.
+  int64 time = 2;
+  int64 goroutine = 6;
+  string file = 3;
+  int64 line = 4;
+  string message = 5;
+
+  // tags contains the context tags available in the context where the
+  // entry was created.
+  string tags = 7;
+
+  // counter is an entry counter, meant for use in audit logs as an
+  // instrument against log repudiation.
+  // See: https://en.wikipedia.org/wiki/Non-repudiation
+  //
+  // It is incremented for every use of the logger where the entry was
+  // produced.
+  uint64 counter = 8;
+
+  // redactable is true if the message and tags fields include markers
+  // to delineate sensitive information. In that case, confidentiality
+  // can be obtained by only stripping away the data within this
+  // marker. If redactable is false or unknown, the message should be
+  // considered to only contain sensitive information, and should be
+  // stripped away completely for confidentiality.
+  bool redactable = 9;
+
+  // channel is the channel on which the message was sent.
+  Channel channel = 10;
+}
+
+// A FileDetails holds all of the particulars that can be parsed by the name of
+// a log file.
+message FileDetails {
+  string program = 1;
+  string host = 2;
+  string user_name = 3;
+  reserved 4;
+  int64 time = 5;
+  int64 pid = 6 [(gogoproto.customname) = "PID"];
+}
+
+message FileInfo {
+  string name = 1;
+  int64 size_bytes = 2;
+  int64 mod_time_nanos = 3;
+  FileDetails details = 4 [(gogoproto.nullable) = false];
+}

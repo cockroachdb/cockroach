@@ -675,7 +675,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 							// We're also going to print a warning at the end.
 							warnRedactLeak = true
 						}
-						if err := e.Format(logOut); err != nil {
+						if err := log.FormatEntry(e, logOut); err != nil {
 							return err
 						}
 					}
