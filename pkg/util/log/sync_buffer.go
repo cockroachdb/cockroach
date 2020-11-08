@@ -19,6 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -246,7 +248,7 @@ func (l *loggerT) initializeNewOutputFile(
 
 	newWriter = bufio.NewWriterSize(file, bufferSize)
 
-	messages := make([]Entry, 0, 6)
+	messages := make([]logpb.Entry, 0, 6)
 	messages = append(messages,
 		l.makeStartLine("file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
 		l.makeStartLine("running on machine: %s", host),
@@ -279,10 +281,10 @@ func (l *loggerT) initializeNewOutputFile(
 	return newWriter, nbytes, nil
 }
 
-func (l *loggerT) makeStartLine(format string, args ...interface{}) Entry {
+func (l *loggerT) makeStartLine(format string, args ...interface{}) logpb.Entry {
 	entry := MakeEntry(
 		context.Background(),
-		Severity_INFO,
+		severity.INFO,
 		nil, /* logCounter */
 		2,   /* depth */
 		l.redactableLogs.Get(),

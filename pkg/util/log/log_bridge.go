@@ -18,6 +18,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
 // NewStdLogger creates a *stdLog.Logger that forwards messages to the
@@ -45,7 +47,7 @@ type logBridge Severity
 // Valid names are "INFO", "WARNING", "ERROR", and "FATAL".  If the name is not
 // recognized, copyStandardLogTo panics.
 func copyStandardLogTo(severityName string) {
-	sev, ok := SeverityByName(severityName)
+	sev, ok := logpb.SeverityByName(severityName)
 	if !ok {
 		panic(fmt.Sprintf("copyStandardLogTo(%q): unrecognized Severity name", severityName))
 	}

@@ -10,7 +10,11 @@
 
 package log
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+)
 
 // SecondaryLogger represents a secondary / auxiliary logging channel
 // whose logging events go to a different file than the main logging
@@ -53,7 +57,7 @@ func NewSecondaryLogger(
 		logger: loggerT{
 			logDir:                  DirName{name: dir},
 			prefix:                  program + "-" + fileNamePrefix,
-			fileThreshold:           Severity_INFO,
+			fileThreshold:           severity.INFO,
 			logFileMaxSize:          logging.logFileMaxSize,
 			logFilesCombinedMaxSize: logging.logFilesCombinedMaxSize,
 			logCounter:              EntryCounter{EnableMsgCount: enableMsgCount},
@@ -87,7 +91,7 @@ func (l *SecondaryLogger) output(
 
 // Logf logs an event on a secondary logger.
 func (l *SecondaryLogger) Logf(ctx context.Context, format string, args ...interface{}) {
-	l.output(ctx, 1, Severity_INFO, format, args...)
+	l.output(ctx, 1, severity.INFO, format, args...)
 }
 
 // LogfDepth logs an event on a secondary logger, offsetting the caller's stack
@@ -95,5 +99,5 @@ func (l *SecondaryLogger) Logf(ctx context.Context, format string, args ...inter
 func (l *SecondaryLogger) LogfDepth(
 	ctx context.Context, depth int, format string, args ...interface{},
 ) {
-	l.output(ctx, depth+1, Severity_INFO, format, args...)
+	l.output(ctx, depth+1, severity.INFO, format, args...)
 }

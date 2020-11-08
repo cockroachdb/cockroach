@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -2332,10 +2333,10 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 	ctx := context.Background()
 	var seen struct {
 		syncutil.Mutex
-		entries []log.Entry
+		entries []logpb.Entry
 	}
 	restartingRE := regexp.MustCompile("restarting rangefeed.*after.*")
-	log.Intercept(ctx, func(entry log.Entry) {
+	log.Intercept(ctx, func(entry logpb.Entry) {
 		if !restartingRE.MatchString(entry.Message) {
 			return
 		}

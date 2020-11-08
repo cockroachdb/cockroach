@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -74,7 +75,7 @@ func checkClusterName(clusterName string, peerName string) error {
 			err = errors.Errorf(
 				"local cluster name %q does not match peer cluster name %q", clusterName, peerName)
 		}
-		log.Shoutf(context.Background(), log.Severity_ERROR, "%v", err)
+		log.Shoutf(context.Background(), severity.ERROR, "%v", err)
 		return err
 	}
 	return nil

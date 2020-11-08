@@ -32,6 +32,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -133,8 +134,8 @@ const FilePattern = "^(?:.*/)?" + FileNamePattern + "$"
 var fileRE = regexp.MustCompile(FilePattern)
 
 // MakeFileInfo constructs a FileInfo from FileDetails and os.FileInfo.
-func MakeFileInfo(details FileDetails, info os.FileInfo) FileInfo {
-	return FileInfo{
+func MakeFileInfo(details logpb.FileDetails, info os.FileInfo) logpb.FileInfo {
+	return logpb.FileInfo{
 		Name:         info.Name(),
 		SizeBytes:    info.Size(),
 		ModTimeNanos: info.ModTime().UnixNano(),
@@ -202,23 +203,23 @@ var errMalformedName = errors.New("malformed log filename")
 // ParseLogFilename parses a filename into FileDetails if it matches the pattern
 // for log files. If the filename does not match the log file pattern, an error
 // is returned.
-func ParseLogFilename(filename string) (FileDetails, error) {
+func ParseLogFilename(filename string) (logpb.FileDetails, error) {
 	matches := fileRE.FindStringSubmatch(filename)
 	if matches == nil || len(matches) != 6 {
-		return FileDetails{}, errMalformedName
+		return logpb.FileDetails{}, errMalformedName
 	}
 
 	time, err := time.Parse(FileTimeFormat, matches[4])
 	if err != nil {
-		return FileDetails{}, err
+		return logpb.FileDetails{}, err
 	}
 
 	pid, err := strconv.ParseInt(matches[5], 10, 0)
 	if err != nil {
-		return FileDetails{}, err
+		return logpb.FileDetails{}, err
 	}
 
-	return FileDetails{
+	return logpb.FileDetails{
 		Program:  matches[1],
 		Host:     matches[2],
 		UserName: matches[3],
@@ -276,9 +277,9 @@ func createSymlink(fname, symlink string) {
 	}
 }
 
-// ListLogFiles returns a slice of FileInfo structs for each log file
+// ListLogFiles returns a slice of logpb.FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
-func ListLogFiles() (logFiles []FileInfo, err error) {
+func ListLogFiles() (logFiles []logpb.FileInfo, err error) {
 	mainDir, isSet := logging.logDir.get()
 	if !isSet {
 		// Shortcut.
@@ -305,8 +306,8 @@ func ListLogFiles() (logFiles []FileInfo, err error) {
 	return logFiles, err
 }
 
-func (l *loggerT) listLogFiles() ([]FileInfo, error) {
-	var results []FileInfo
+func (l *loggerT) listLogFiles() ([]logpb.FileInfo, error) {
+	var results []logpb.FileInfo
 	dir, isSet := l.logDir.get()
 	if !isSet {
 		// No log directory configured: simply indicate that there are no
@@ -420,8 +421,8 @@ func osStat(path string) (os.FileInfo, error) {
 	return os.Lstat(path)
 }
 
-// sortableFileInfoSlice is required so we can sort FileInfos.
-type sortableFileInfoSlice []FileInfo
+// sortablelogpb.FileInfoSlice is required so we can sort logpb.FileInfos.
+type sortableFileInfoSlice []logpb.FileInfo
 
 func (a sortableFileInfoSlice) Len() int      { return len(a) }
 func (a sortableFileInfoSlice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
@@ -432,7 +433,7 @@ func (a sortableFileInfoSlice) Less(i, j int) bool {
 // selectFiles selects all log files that have an timestamp before the
 // endTime. It then sorts them in decreasing order, with the most
 // recent as the first one.
-func selectFiles(logFiles []FileInfo, endTimestamp int64) []FileInfo {
+func selectFiles(logFiles []logpb.FileInfo, endTimestamp int64) []logpb.FileInfo {
 	files := sortableFileInfoSlice{}
 	for _, logFile := range logFiles {
 		if logFile.Details.Time <= endTimestamp {
@@ -456,7 +457,7 @@ func FetchEntriesFromFiles(
 	maxEntries int,
 	pattern *regexp.Regexp,
 	editMode EditSensitiveData,
-) ([]Entry, error) {
+) ([]logpb.Entry, error) {
 	logFiles, err := ListLogFiles()
 	if err != nil {
 		return nil, err
@@ -464,7 +465,7 @@ func FetchEntriesFromFiles(
 
 	selectedFiles := selectFiles(logFiles, endTimestamp)
 
-	entries := []Entry{}
+	entries := []logpb.Entry{}
 	for _, file := range selectedFiles {
 		newEntries, entryBeforeStart, err := readAllEntriesFromFile(
 			file,
@@ -497,22 +498,22 @@ func FetchEntriesFromFiles(
 // processed. If the number of entries returned exceeds 'maxEntries' then
 // processing of new entries is stopped immediately.
 func readAllEntriesFromFile(
-	file FileInfo,
+	file logpb.FileInfo,
 	startTimestamp, endTimestamp int64,
 	maxEntries int,
 	pattern *regexp.Regexp,
 	editMode EditSensitiveData,
-) ([]Entry, bool, error) {
+) ([]logpb.Entry, bool, error) {
 	reader, err := GetLogReader(file.Name, true /* restricted */)
 	if reader == nil || err != nil {
 		return nil, false, err
 	}
 	defer reader.Close()
-	entries := []Entry{}
+	entries := []logpb.Entry{}
 	decoder := NewEntryDecoder(reader, editMode)
 	entryBeforeStart := false
 	for {
-		entry := Entry{}
+		entry := logpb.Entry{}
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {
 				break
@@ -527,7 +528,7 @@ func readAllEntriesFromFile(
 				pattern.MatchString(entry.File)
 		}
 		if match && entry.Time >= startTimestamp && entry.Time <= endTimestamp {
-			entries = append([]Entry{entry}, entries...)
+			entries = append([]logpb.Entry{entry}, entries...)
 			if len(entries) >= maxEntries {
 				break
 			}

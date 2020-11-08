@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -47,7 +48,7 @@ func (n *Node) startAssertEngineHealth(
 
 func guaranteedExitFatal(ctx context.Context, msg string, args ...interface{}) {
 	// NB: log.Shout sets up a timer that guarantees process termination.
-	log.Shoutf(ctx, log.Severity_FATAL, msg, args...)
+	log.Shoutf(ctx, severity.FATAL, msg, args...)
 }
 
 func (n *Node) assertEngineHealth(
