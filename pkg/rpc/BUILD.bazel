@@ -34,6 +34,7 @@ go_library(
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/log/severity",
         "//pkg/util/metric",
         "//pkg/util/netutil",
         "//pkg/util/stop",

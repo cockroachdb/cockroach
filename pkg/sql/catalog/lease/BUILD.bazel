@@ -77,6 +77,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/logpb",
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/syncutil",

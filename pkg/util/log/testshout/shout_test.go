@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
 
 // Example_shout_before_log verifies that Shout output emitted after
@@ -35,7 +36,7 @@ func Example_shout_before_log() {
 		panic(err)
 	}
 
-	log.Shout(context.Background(), log.Severity_INFO, "hello world")
+	log.Shout(context.Background(), severity.INFO, "hello world")
 
 	// output:
 	// *
