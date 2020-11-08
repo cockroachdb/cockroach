@@ -399,6 +399,12 @@ func IsValidSplitKey(key roachpb.Key) bool {
 func (p *pebbleIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
+	return findSplitKeyUsingIterator(p, start, end, minSplitKey, targetSize)
+}
+
+func findSplitKeyUsingIterator(
+	iter MVCCIterator, start, end, minSplitKey roachpb.Key, targetSize int64,
+) (MVCCKey, error) {
 	const timestampLen = 12
 
 	sizeSoFar := int64(0)
@@ -424,12 +430,16 @@ func (p *pebbleIterator) FindSplitKey(
 	// terminate iteration because the iterator's upper bound has already been
 	// set to end.
 	mvccMinSplitKey := MakeMVCCMetadataKey(minSplitKey)
-	p.SeekGE(MakeMVCCMetadataKey(start))
-	for ; p.iter.Valid(); p.iter.Next() {
-		mvccKey, err := DecodeMVCCKey(p.iter.Key())
+	iter.SeekGE(MakeMVCCMetadataKey(start))
+	for ; ; iter.Next() {
+		valid, err := iter.Valid()
 		if err != nil {
 			return MVCCKey{}, err
 		}
+		if !valid {
+			break
+		}
+		mvccKey := iter.UnsafeKey()
 
 		diff := targetSize - sizeSoFar
 		if diff < 0 {
@@ -470,7 +480,7 @@ func (p *pebbleIterator) FindSplitKey(
 			bestSplitKey.Key = append(bestSplitKey.Key[:0], prevKey.Key...)
 		}
 
-		sizeSoFar += int64(len(p.iter.Value()))
+		sizeSoFar += int64(len(iter.Value()))
 		if mvccKey.IsValue() && bytes.Equal(prevKey.Key, mvccKey.Key) {
 			// We only advanced timestamps, but not new mvcc keys.
 			sizeSoFar += timestampLen
