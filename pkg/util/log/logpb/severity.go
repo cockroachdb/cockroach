@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package log
+package logpb
 
 import (
 	"strconv"
@@ -16,15 +16,13 @@ import (
 	"sync/atomic"
 )
 
-const severityChar = "IWEF"
-
-// get returns the value of the Severity.
-func (s *Severity) get() Severity {
+// Get returns the value of the Severity.
+func (s *Severity) Get() Severity {
 	return Severity(atomic.LoadInt32((*int32)(s)))
 }
 
-// set sets the value of the Severity.
-func (s *Severity) set(val Severity) {
+// SetValue sets the value of the Severity.
+func (s *Severity) SetValue(val Severity) {
 	atomic.StoreInt32((*int32)(s), int32(val))
 }
 
@@ -41,7 +39,7 @@ func (s *Severity) Set(value string) error {
 		}
 		threshold = Severity(v)
 	}
-	s.set(threshold)
+	s.SetValue(threshold)
 	return nil
 }
 

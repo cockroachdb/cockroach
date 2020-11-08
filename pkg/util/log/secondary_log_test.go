@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -79,7 +80,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold.set(Severity_NONE)
+	logging.stderrThreshold = severity.NONE
 
 	// Take over stderr.
 	TestingResetActive()

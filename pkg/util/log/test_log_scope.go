@@ -18,6 +18,7 @@ import (
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 )
 
@@ -115,7 +116,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 
 	sc = &TestLogScope{
 		// Remember the stderr threshold. Close() will restore it.
-		stderrThreshold: logging.stderrThreshold.get(),
+		stderrThreshold: logging.stderrThreshold.Get(),
 	}
 	defer func() {
 		// If any of the following initialization fails, we close the scope.
@@ -143,7 +144,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// Override the stderr threshold for the main logger.
 	// From this point log entries do not show up on stderr any more;
 	// they only go to files.
-	logging.stderrThreshold.set(Severity_NONE)
+	logging.stderrThreshold.SetValue(severity.NONE)
 
 	t.Logf("test logs captured to: %s", tempDir)
 	return sc
@@ -166,7 +167,7 @@ func (l *TestLogScope) Rotate(t tShim) {
 // restoreStderrThreshold restores the stderr output threshold at the end
 // of a scope.
 func (l *TestLogScope) restoreStderrThreshold() {
-	logging.stderrThreshold.set(l.stderrThreshold)
+	logging.stderrThreshold.SetValue(l.stderrThreshold)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are

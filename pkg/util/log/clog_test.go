@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
@@ -99,7 +101,7 @@ func setFlags() {
 	ResetExitFunc()
 	// Make all logged errors go to the external stderr, in addition to
 	// the log file.
-	logging.stderrThreshold.set(Severity_ERROR)
+	logging.stderrThreshold = severity.ERROR
 }
 
 // Test that Info works as advertised.
@@ -146,7 +148,7 @@ func TestStandardLog(t *testing.T) {
 // Verify that a log can be fetched in JSON format.
 func TestEntryDecoder(t *testing.T) {
 	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, msg string) string {
-		entry := Entry{
+		entry := logpb.Entry{
 			Severity:  s,
 			Time:      now.UnixNano(),
 			Goroutine: int64(gid),
@@ -170,24 +172,24 @@ func TestEntryDecoder(t *testing.T) {
 
 	// Verify the truncation logic for reading logs that are longer than the
 	// default scanner can handle.
-	preambleLength := len(formatEntry(Severity_INFO, t1, 0, "clog_test.go", 136, ""))
+	preambleLength := len(formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, ""))
 	maxMessageLength := bufio.MaxScanTokenSize - preambleLength - 1
 	reallyLongEntry := string(bytes.Repeat([]byte("a"), maxMessageLength))
 	tooLongEntry := reallyLongEntry + "a"
 
-	contents := formatEntry(Severity_INFO, t1, 0, "clog_test.go", 136, "info")
-	contents += formatEntry(Severity_INFO, t2, 1, "clog_test.go", 137, "multi-\nline")
-	contents += formatEntry(Severity_INFO, t3, 2, "clog_test.go", 138, reallyLongEntry)
-	contents += formatEntry(Severity_INFO, t4, 3, "clog_test.go", 139, tooLongEntry)
-	contents += formatEntry(Severity_WARNING, t5, 4, "clog_test.go", 140, "warning")
-	contents += formatEntry(Severity_ERROR, t6, 5, "clog_test.go", 141, "error")
-	contents += formatEntry(Severity_FATAL, t7, 6, "clog_test.go", 142, "fatal\nstack\ntrace")
-	contents += formatEntry(Severity_INFO, t8, 7, "clog_test.go", 143, tooLongEntry)
+	contents := formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, "info")
+	contents += formatEntry(severity.INFO, t2, 1, "clog_test.go", 137, "multi-\nline")
+	contents += formatEntry(severity.INFO, t3, 2, "clog_test.go", 138, reallyLongEntry)
+	contents += formatEntry(severity.INFO, t4, 3, "clog_test.go", 139, tooLongEntry)
+	contents += formatEntry(severity.WARNING, t5, 4, "clog_test.go", 140, "warning")
+	contents += formatEntry(severity.ERROR, t6, 5, "clog_test.go", 141, "error")
+	contents += formatEntry(severity.FATAL, t7, 6, "clog_test.go", 142, "fatal\nstack\ntrace")
+	contents += formatEntry(severity.INFO, t8, 7, "clog_test.go", 143, tooLongEntry)
 
-	readAllEntries := func(contents string) []Entry {
+	readAllEntries := func(contents string) []logpb.Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
-		var entries []Entry
-		var entry Entry
+		var entries []logpb.Entry
+		var entry logpb.Entry
 		for {
 			if err := decoder.Decode(&entry); err != nil {
 				if err == io.EOF {
@@ -201,9 +203,9 @@ func TestEntryDecoder(t *testing.T) {
 	}
 
 	entries := readAllEntries(contents)
-	expected := []Entry{
+	expected := []logpb.Entry{
 		{
-			Severity:  Severity_INFO,
+			Severity:  severity.INFO,
 			Time:      t1.UnixNano(),
 			Goroutine: 0,
 			File:      `clog_test.go`,
@@ -211,7 +213,7 @@ func TestEntryDecoder(t *testing.T) {
 			Message:   `info`,
 		},
 		{
-			Severity:  Severity_INFO,
+			Severity:  severity.INFO,
 			Time:      t2.UnixNano(),
 			Goroutine: 1,
 			File:      `clog_test.go`,
@@ -220,7 +222,7 @@ func TestEntryDecoder(t *testing.T) {
 line`,
 		},
 		{
-			Severity:  Severity_INFO,
+			Severity:  severity.INFO,
 			Time:      t3.UnixNano(),
 			Goroutine: 2,
 			File:      `clog_test.go`,
@@ -228,7 +230,7 @@ line`,
 			Message:   reallyLongEntry,
 		},
 		{
-			Severity:  Severity_INFO,
+			Severity:  severity.INFO,
 			Time:      t4.UnixNano(),
 			Goroutine: 3,
 			File:      `clog_test.go`,
@@ -236,7 +238,7 @@ line`,
 			Message:   tooLongEntry[:maxMessageLength],
 		},
 		{
-			Severity:  Severity_WARNING,
+			Severity:  severity.WARNING,
 			Time:      t5.UnixNano(),
 			Goroutine: 4,
 			File:      `clog_test.go`,
@@ -244,7 +246,7 @@ line`,
 			Message:   `warning`,
 		},
 		{
-			Severity:  Severity_ERROR,
+			Severity:  severity.ERROR,
 			Time:      t6.UnixNano(),
 			Goroutine: 5,
 			File:      `clog_test.go`,
@@ -252,7 +254,7 @@ line`,
 			Message:   `error`,
 		},
 		{
-			Severity:  Severity_FATAL,
+			Severity:  severity.FATAL,
 			Time:      t7.UnixNano(),
 			Goroutine: 6,
 			File:      `clog_test.go`,
@@ -262,7 +264,7 @@ stack
 trace`,
 		},
 		{
-			Severity:  Severity_INFO,
+			Severity:  severity.INFO,
 			Time:      t8.UnixNano(),
 			Goroutine: 7,
 			File:      `clog_test.go`,
@@ -326,7 +328,7 @@ func TestV(t *testing.T) {
 	_ = logging.vmoduleConfig.verbosity.Set("2")
 	defer func() { _ = logging.vmoduleConfig.verbosity.Set("0") }()
 	if V(2) {
-		addStructured(context.Background(), Severity_INFO, 1, "", []interface{}{"test"})
+		addStructured(context.Background(), severity.INFO, 1, "", []interface{}{"test"})
 	}
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -355,7 +357,7 @@ func TestVmoduleOn(t *testing.T) {
 		t.Error("V enabled for 3")
 	}
 	if V(2) {
-		addStructured(context.Background(), Severity_INFO, 1, "", []interface{}{"test"})
+		addStructured(context.Background(), severity.INFO, 1, "", []interface{}{"test"})
 	}
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -378,7 +380,7 @@ func TestVmoduleOff(t *testing.T) {
 		}
 	}
 	if V(2) {
-		addStructured(context.Background(), Severity_INFO, 1, "", []interface{}{"test"})
+		addStructured(context.Background(), severity.INFO, 1, "", []interface{}{"test"})
 	}
 	if contents() != "" {
 		t.Error("V logged incorrectly")
@@ -594,7 +596,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold.set(Severity_NONE)
+	logging.stderrThreshold = severity.NONE
 	SetExitFunc(false /* hideStack */, func(int) {})
 
 	defer setFlags()
@@ -632,7 +634,7 @@ func TestRedirectStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold.set(Severity_NONE)
+	logging.stderrThreshold = severity.NONE
 
 	Infof(context.Background(), "test")
 
@@ -661,7 +663,7 @@ func TestFileSeverityFilter(t *testing.T) {
 
 	setFlags()
 	defer func(save Severity) { debugLog.fileThreshold = save }(debugLog.fileThreshold)
-	debugLog.fileThreshold = Severity_ERROR
+	debugLog.fileThreshold = severity.ERROR
 
 	Infof(context.Background(), "test1")
 	Errorf(context.Background(), "test2")
@@ -710,8 +712,8 @@ func TestExitOnFullDisk(t *testing.T) {
 }
 
 func BenchmarkHeader(b *testing.B) {
-	entry := Entry{
-		Severity:  Severity_INFO,
+	entry := logpb.Entry{
+		Severity:  severity.INFO,
 		Time:      timeutil.Now().UnixNano(),
 		Goroutine: 200,
 		File:      "file.go",

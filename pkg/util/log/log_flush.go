@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 )
 
@@ -132,7 +133,7 @@ func (l *loggerT) flushAndSyncLocked(doSync bool) {
 	// If we can't sync within this duration, exit the process.
 	t := time.AfterFunc(maxSyncDuration, func() {
 		// NB: the disk-stall-detected roachtest matches on this message.
-		Shoutf(context.Background(), Severity_FATAL,
+		Shoutf(context.Background(), severity.FATAL,
 			"disk stall detected: unable to sync log files within %s", maxSyncDuration,
 		)
 	})
@@ -140,7 +141,7 @@ func (l *loggerT) flushAndSyncLocked(doSync bool) {
 	// If we can't sync within this duration, print a warning to the log and to
 	// stderr.
 	t2 := time.AfterFunc(syncWarnDuration, func() {
-		Shoutf(context.Background(), Severity_WARNING,
+		Shoutf(context.Background(), severity.WARNING,
 			"disk slowness detected: unable to sync log files within %s", syncWarnDuration,
 		)
 	})

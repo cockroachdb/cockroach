@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -73,8 +74,8 @@ func init() {
 	// Default stderrThreshold and fileThreshold to log everything
 	// both to the output file and to the process' external stderr
 	// (OrigStderr).
-	logging.stderrThreshold = Severity_INFO
-	logging.fileThreshold = Severity_INFO
+	logging.stderrThreshold = severity.INFO
+	logging.fileThreshold = severity.INFO
 
 	// Default maximum size of individual log files.
 	logging.logFileMaxSize = 10 << 20 // 10MiB
@@ -237,7 +238,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 	// If redaction is requested and we have a chance to produce some
 	// log entries on stderr, that's a configuration we cannot support
 	// safely. Reject it.
-	if logging.redactableLogsRequested && logging.stderrThreshold.get() != Severity_NONE {
+	if logging.redactableLogsRequested && logging.stderrThreshold != severity.NONE {
 		return nil, errors.WithHintf(
 			errors.New("cannot enable redactable logging without a logging directory"),
 			"You can pass --%s to set up a logging directory explicitly.", cliflags.LogDir.Name)

@@ -17,13 +17,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"google.golang.org/grpc/grpclog"
 )
 
 func init() {
-	SetSeverity(log.Severity_ERROR)
+	SetSeverity(severity.ERROR)
 }
 
 // SetSeverity sets the severity level below which GRPC log messages are
@@ -46,29 +47,29 @@ var _ grpclog.LoggerV2 = (*logger)(nil)
 
 type logger log.Severity
 
-func (severity *logger) Info(args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_INFO {
+func (sev *logger) Info(args ...interface{}) {
+	if log.Severity(*sev) > severity.INFO {
 		return
 	}
 	log.InfofDepth(context.TODO(), 2, "", args...)
 }
 
-func (severity *logger) Infoln(args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_INFO {
+func (sev *logger) Infoln(args ...interface{}) {
+	if log.Severity(*sev) > severity.INFO {
 		return
 	}
 	log.InfofDepth(context.TODO(), 2, "", args...)
 }
 
-func (severity *logger) Infof(format string, args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_INFO {
+func (sev *logger) Infof(format string, args ...interface{}) {
+	if log.Severity(*sev) > severity.INFO {
 		return
 	}
 	log.InfofDepth(context.TODO(), 2, format, args...)
 }
 
-func (severity *logger) Warning(args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_WARNING {
+func (sev *logger) Warning(args ...interface{}) {
+	if log.Severity(*sev) > severity.WARNING {
 		return
 	}
 	if shouldPrintWarning(args...) {
@@ -76,63 +77,63 @@ func (severity *logger) Warning(args ...interface{}) {
 	}
 }
 
-func (severity *logger) Warningln(args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_WARNING {
+func (sev *logger) Warningln(args ...interface{}) {
+	if log.Severity(*sev) > severity.WARNING {
 		return
 	}
 	log.WarningfDepth(context.TODO(), 2, "", args...)
 }
 
-func (severity *logger) Warningf(format string, args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_WARNING {
+func (sev *logger) Warningf(format string, args ...interface{}) {
+	if log.Severity(*sev) > severity.WARNING {
 		return
 	}
 	log.WarningfDepth(context.TODO(), 2, format, args...)
 }
 
-func (severity *logger) Error(args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_ERROR {
+func (sev *logger) Error(args ...interface{}) {
+	if log.Severity(*sev) > severity.ERROR {
 		return
 	}
 	log.ErrorfDepth(context.TODO(), 2, "", args...)
 }
 
-func (severity *logger) Errorln(args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_ERROR {
+func (sev *logger) Errorln(args ...interface{}) {
+	if log.Severity(*sev) > severity.ERROR {
 		return
 	}
 	log.ErrorfDepth(context.TODO(), 2, "", args...)
 }
 
-func (severity *logger) Errorf(format string, args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_ERROR {
+func (sev *logger) Errorf(format string, args ...interface{}) {
+	if log.Severity(*sev) > severity.ERROR {
 		return
 	}
 	log.ErrorfDepth(context.TODO(), 2, format, args...)
 }
 
-func (severity *logger) Fatal(args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_NONE {
+func (sev *logger) Fatal(args ...interface{}) {
+	if log.Severity(*sev) > severity.NONE {
 		return
 	}
 	log.FatalfDepth(context.TODO(), 2, "", args...)
 }
 
-func (severity *logger) Fatalln(args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_NONE {
+func (sev *logger) Fatalln(args ...interface{}) {
+	if log.Severity(*sev) > severity.NONE {
 		return
 	}
 	log.FatalfDepth(context.TODO(), 2, "", args...)
 }
 
-func (severity *logger) Fatalf(format string, args ...interface{}) {
-	if log.Severity(*severity) > log.Severity_NONE {
+func (sev *logger) Fatalf(format string, args ...interface{}) {
+	if log.Severity(*sev) > severity.NONE {
 		return
 	}
 	log.FatalfDepth(context.TODO(), 2, format, args...)
 }
 
-func (severity *logger) V(i int) bool {
+func (sev *logger) V(i int) bool {
 	if i < 0 {
 		i = 0
 	}
