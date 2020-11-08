@@ -60,7 +60,8 @@ type SimpleMVCCIterator interface {
 	// NextKey advances the iterator to the next MVCC key. This operation is
 	// distinct from Next which advances to the next version of the current key
 	// or the next key if the iterator is currently located at the last version
-	// for a key.
+	// for a key. NextKey must not be used to switch iteration direction from
+	// reverse iteration to forward iteration.
 	NextKey()
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
