@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -556,8 +557,7 @@ func maybeWarnMemSize(ctx context.Context) {
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
 			log.Shoutf(
-				ctx,
-				log.Severity_WARNING,
+				ctx, severity.WARNING,
 				`HIGH MEMORY USAGE
 The sum of --max-sql-memory (%s) and --cache (%s) multiplied by the
 number of nodes (%d) results in potentially high memory usage on your

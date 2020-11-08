@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "logpb",
+    srcs = [
+        "log.pb.go",
+        "severity.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logpb",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/gogo/protobuf/proto"],
+)
