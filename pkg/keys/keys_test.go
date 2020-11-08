@@ -718,7 +718,7 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			ltKey := LockTableSingleKey(test.key)
+			ltKey, _ := LockTableSingleKey(test.key, nil)
 			require.True(t, bytes.HasPrefix(ltKey, expectedPrefix))
 			k, err := DecodeLockTableSingleKey(ltKey)
 			require.NoError(t, err)

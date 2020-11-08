@@ -1,0 +1,318 @@
+# Both separated and interleaved intents, and one inline meta.
+define
+locks
+meta k=a ts=20 txn=1
+mvcc
+value k=a ts=20 v=a20
+value k=a ts=10 v=a10
+meta k=b ts=30 txn=2
+value k=b ts=30 v=b30
+meta k=c
+value k=d ts=25 v=d25
+----
+
+# Exercise basic forward and reverse iteration.
+iter lower=a upper=f
+seek-ge k=a
+next
+next
+next
+next
+next
+next
+next
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+set-upper k=c
+seek-ge k=b
+next
+next
+prev
+prev
+prev
+seek-lt k=b
+next
+prev
+prev
+prev
+prev
+next
+----
+cmd: seek-ge meta k=a ts=20 txn=1
+cmd: next value k=a ts=20 v=a20
+cmd: next value k=a ts=10 v=a10
+cmd: next meta k=b ts=30 txn=2
+cmd: next value k=b ts=30 v=b30
+cmd: next meta k=c
+cmd: next value k=d ts=25 v=d25
+cmd: next .
+cmd: prev value k=d ts=25 v=d25
+cmd: prev meta k=c
+cmd: prev value k=b ts=30 v=b30
+cmd: prev meta k=b ts=30 txn=2
+cmd: prev value k=a ts=10 v=a10
+cmd: prev value k=a ts=20 v=a20
+cmd: prev meta k=a ts=20 txn=1
+cmd: prev .
+cmd: set-upper c
+cmd: seek-ge meta k=b ts=30 txn=2
+cmd: next value k=b ts=30 v=b30
+cmd: next .
+cmd: prev value k=b ts=30 v=b30
+cmd: prev meta k=b ts=30 txn=2
+cmd: prev value k=a ts=10 v=a10
+cmd: seek-lt value k=a ts=10 v=a10
+cmd: next meta k=b ts=30 txn=2
+cmd: prev value k=a ts=10 v=a10
+cmd: prev value k=a ts=20 v=a20
+cmd: prev meta k=a ts=20 txn=1
+cmd: prev .
+cmd: next meta k=a ts=20 txn=1
+
+
+# More forward and reverse iteration.
+iter upper=b
+seek-ge k=a
+next
+next
+next
+prev
+prev
+prev
+----
+cmd: seek-ge meta k=a ts=20 txn=1
+cmd: next value k=a ts=20 v=a20
+cmd: next value k=a ts=10 v=a10
+cmd: next .
+cmd: prev value k=a ts=10 v=a10
+cmd: prev value k=a ts=20 v=a20
+cmd: prev meta k=a ts=20 txn=1
+
+# Prefix iteration.
+iter prefix=true
+seek-ge k=b
+next
+next
+seek-ge k=a
+next
+next
+next
+prev
+seek-ge k=f
+seek-ge k=c
+next
+----
+cmd: seek-ge meta k=b ts=30 txn=2
+cmd: next value k=b ts=30 v=b30
+cmd: next .
+cmd: seek-ge meta k=a ts=20 txn=1
+cmd: next value k=a ts=20 v=a20
+cmd: next value k=a ts=10 v=a10
+cmd: next .
+cmd: prev err: pebble: unsupported reverse prefix iteration
+cmd: seek-ge .
+cmd: seek-ge meta k=c
+cmd: next .
+
+# Prefix iteration and NextKey. There is no guarantee on what we will
+# see after the prefix is exhausted.
+iter prefix=true
+seek-ge k=d
+next-key
+seek-ge k=a
+next-key
+seek-ge k=a
+next
+next-key
+----
+cmd: seek-ge value k=d ts=25 v=d25
+cmd: next-key .
+cmd: seek-ge meta k=a ts=20 txn=1
+cmd: next-key meta k=b ts=30 txn=2
+cmd: seek-ge meta k=a ts=20 txn=1
+cmd: next value k=a ts=20 v=a20
+cmd: next-key meta k=b ts=30 txn=2
+
+# Seek to particular timestamp.
+iter lower=a upper=f
+seek-ge k=a ts=10
+next
+next
+seek-ge k=a ts=25
+next
+next
+seek-lt k=a ts=1
+prev
+prev
+prev
+next
+next
+prev
+next
+seek-lt k=a ts=15
+prev
+prev
+next
+seek-lt k=a ts=25
+prev
+next
+----
+cmd: seek-ge value k=a ts=10 v=a10
+cmd: next meta k=b ts=30 txn=2
+cmd: next value k=b ts=30 v=b30
+cmd: seek-ge value k=a ts=20 v=a20
+cmd: next value k=a ts=10 v=a10
+cmd: next meta k=b ts=30 txn=2
+cmd: seek-lt value k=a ts=10 v=a10
+cmd: prev value k=a ts=20 v=a20
+cmd: prev meta k=a ts=20 txn=1
+cmd: prev .
+cmd: next meta k=a ts=20 txn=1
+cmd: next value k=a ts=20 v=a20
+cmd: prev meta k=a ts=20 txn=1
+cmd: next value k=a ts=20 v=a20
+cmd: seek-lt value k=a ts=20 v=a20
+cmd: prev meta k=a ts=20 txn=1
+cmd: prev .
+cmd: next meta k=a ts=20 txn=1
+cmd: seek-lt meta k=a ts=20 txn=1
+cmd: prev .
+cmd: next meta k=a ts=20 txn=1
+
+# Seek to particular timestamp and prefix iteration. There is no
+# guarantee on what we will see after the prefix is exhausted.
+iter prefix=true
+seek-ge k=a ts=25
+next
+next
+seek-ge k=a ts=15
+next
+seek-ge k=a ts=5
+seek-lt k=a ts=1
+----
+cmd: seek-ge value k=a ts=20 v=a20
+cmd: next value k=a ts=10 v=a10
+cmd: next .
+cmd: seek-ge value k=a ts=10 v=a10
+cmd: next .
+cmd: seek-ge .
+cmd: seek-lt err: prefix iteration is not permitted with SeekLT
+
+# Exercise NextKey
+iter lower=a upper=f
+seek-ge k=a
+next-key
+prev
+next-key
+next
+seek-ge k=b
+next-key
+prev
+prev
+prev
+next
+next-key
+next-key
+next-key
+----
+cmd: seek-ge meta k=a ts=20 txn=1
+cmd: next-key meta k=b ts=30 txn=2
+cmd: prev value k=a ts=10 v=a10
+cmd: next-key err: NextKey cannot be used to switch iteration direction
+cmd: next err: NextKey cannot be used to switch iteration direction
+cmd: seek-ge meta k=b ts=30 txn=2
+cmd: next-key meta k=c
+cmd: prev value k=b ts=30 v=b30
+cmd: prev meta k=b ts=30 txn=2
+cmd: prev value k=a ts=10 v=a10
+cmd: next meta k=b ts=30 txn=2
+cmd: next-key meta k=c
+cmd: next-key value k=d ts=25 v=d25
+cmd: next-key .
+
+
+# Multiple separated intents and multiple interleaved intents.
+define
+locks
+meta k=b ts=20 txn=2
+meta k=d ts=40 txn=4
+meta k=e ts=50 txn=5
+mvcc
+meta k=a ts=10 txn=1
+value k=a ts=10 v=a10
+value k=b ts=20 v=b20
+meta k=c ts=30 txn=3
+value k=c ts=30 v=c30
+value k=d ts=40 v=d40
+value k=e ts=50 v=e50
+----
+
+# Exercise basic forward and reverse iteration.
+iter lower=a upper=f
+seek-ge k=a
+next
+next
+prev
+prev
+prev
+next
+next
+next
+next
+next
+next
+next
+next
+next
+next-key
+prev
+----
+cmd: seek-ge meta k=a ts=10 txn=1
+cmd: next value k=a ts=10 v=a10
+cmd: next meta k=b ts=20 txn=2
+cmd: prev value k=a ts=10 v=a10
+cmd: prev meta k=a ts=10 txn=1
+cmd: prev .
+cmd: next meta k=a ts=10 txn=1
+cmd: next value k=a ts=10 v=a10
+cmd: next meta k=b ts=20 txn=2
+cmd: next value k=b ts=20 v=b20
+cmd: next meta k=c ts=30 txn=3
+cmd: next value k=c ts=30 v=c30
+cmd: next meta k=d ts=40 txn=4
+cmd: next value k=d ts=40 v=d40
+cmd: next meta k=e ts=50 txn=5
+cmd: next-key .
+cmd: prev value k=e ts=50 v=e50
+
+# Multiple separated intents with no provisional values
+define
+locks
+meta k=b ts=20 txn=2
+meta k=d ts=40 txn=4
+----
+
+iter lower=a upper=f
+seek-ge k=a
+next
+seek-lt k=e
+next
+seek-ge k=d
+next-key
+seek-ge k=d
+prev
+----
+cmd: seek-ge meta k=b ts=20 txn=2
+cmd: next err: intentIter at intent, but iter not at provisional value
+cmd: seek-lt meta k=d ts=40 txn=4
+cmd: next err: intent has no provisional value
+cmd: seek-ge meta k=d ts=40 txn=4
+cmd: next-key err: intentIter at intent, but iter not at provisional value
+cmd: seek-ge meta k=d ts=40 txn=4
+cmd: prev err: iter not at provisional value, cmp: -1
