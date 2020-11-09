@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -167,6 +168,14 @@ func TestEquiDepthHistogram(t *testing.T) {
 				},
 			},
 		},
+		{
+			// Test where all values in the table are null.
+			samples:       []int64{},
+			numRows:       3000,
+			distinctCount: 1,
+			maxBuckets:    2,
+			buckets:       []expBucket{},
+		},
 	}
 
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -182,7 +191,9 @@ func TestEquiDepthHistogram(t *testing.T) {
 				samples[i] = tree.NewDInt(tree.DInt(val))
 			}
 
-			h, err := EquiDepthHistogram(evalCtx, samples, tc.numRows, tc.distinctCount, tc.maxBuckets)
+			h, err := EquiDepthHistogram(
+				evalCtx, types.Int, samples, tc.numRows, tc.distinctCount, tc.maxBuckets,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -216,7 +227,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 	t.Run("invalid-numRows", func(t *testing.T) {
 		samples := tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(3)}
 		_, err := EquiDepthHistogram(
-			evalCtx, samples, 2 /* numRows */, 2 /* distinctCount */, 10, /* maxBuckets */
+			evalCtx, types.Int, samples, 2 /* numRows */, 2 /* distinctCount */, 10, /* maxBuckets */
 		)
 		if err == nil {
 			t.Fatal("expected error")
@@ -226,7 +237,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 	t.Run("nulls", func(t *testing.T) {
 		samples := tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.DNull}
 		_, err := EquiDepthHistogram(
-			evalCtx, samples, 100 /* numRows */, 3 /* distinctCount */, 10, /* maxBuckets */
+			evalCtx, types.Int, samples, 100 /* numRows */, 3 /* distinctCount */, 10, /* maxBuckets */
 		)
 		if err == nil {
 			t.Fatal("expected error")
