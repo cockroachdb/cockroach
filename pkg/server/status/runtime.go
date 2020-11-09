@@ -519,14 +519,18 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	// TODO(knz): make utility wrapper around humanize.IBytes that
 	// returns a safe value and collapse the entire log.Infof -> Safe ->
 	// Sprintf sequence as a flat Infof call.
-	log.Infof(ctx, "%s", redact.Safe(fmt.Sprintf("runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total%s, "+
-		"%s/%s CGO alloc/total, %.1f CGO/sec, %.1f/%.1f %%(u/s)time, %.1f %%gc (%dx), "+
-		"%s/%s (r/w)net",
-		humanize.IBytes(mem.Resident), numGoroutine,
-		humanize.IBytes(ms.HeapAlloc), humanize.IBytes(ms.HeapIdle), humanize.IBytes(goTotal),
-		staleMsg,
-		humanize.IBytes(uint64(cs.CGoAllocatedBytes)), humanize.IBytes(uint64(cs.CGoTotalBytes)),
-		cgoRate, 100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount,
+	log.Infof(ctx, "%s", redact.Safe(fmt.Sprintf(
+		"runtime stats: %s RSS, %d goroutines (stacks: %s), "+
+			"%s/%s GO alloc/total%s "+
+			"(heap fragmentation: %s heap reserved: %s HeapReleased: %s), "+
+			"%s/%s CGO alloc/total, %.1f CGO/sec, "+
+			"%.1f/%.1f %%(u/s)time, %.1f %%gc (%dx), "+
+			"%s/%s (r/w)net",
+		humanize.IBytes(mem.Resident), numGoroutine, humanize.IBytes(ms.StackSys),
+		humanize.IBytes(ms.HeapAlloc), humanize.IBytes(goTotal), staleMsg,
+		humanize.IBytes(ms.HeapInuse-ms.HeapAlloc), humanize.IBytes(ms.HeapIdle-ms.HeapReleased), humanize.IBytes(ms.HeapReleased),
+		humanize.IBytes(uint64(cs.CGoAllocatedBytes)), humanize.IBytes(uint64(cs.CGoTotalBytes)), cgoRate,
+		100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount,
 		humanize.IBytes(deltaNet.BytesRecv), humanize.IBytes(deltaNet.BytesSent),
 	)))
 	rsr.last.cgoCall = numCgoCall
