@@ -272,6 +272,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kvserver"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
