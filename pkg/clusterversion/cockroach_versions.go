@@ -202,6 +202,8 @@ const (
 	// UniqueWithoutIndexConstraints is when adding UNIQUE WITHOUT INDEX
 	// constraints is supported.
 	UniqueWithoutIndexConstraints
+	// VirtualComputedColumns is when virtual computed columns are supported.
+	VirtualComputedColumns
 
 	// Step (1): Add new versions here.
 )
@@ -327,6 +329,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     UniqueWithoutIndexConstraints,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 6},
+	},
+	{
+		Key:     VirtualComputedColumns,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 8},
 	},
 
 	// Step (2): Add new versions here.
