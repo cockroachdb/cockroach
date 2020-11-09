@@ -447,6 +447,8 @@ function makeStats() {
     overhead_lat: makeStat(),
     service_lat: makeStat(),
     sensitive_info: makeEmptySensitiveInfo(),
+    rows_read: makeStat(),
+    bytes_read: makeStat(),
   };
 }
 
