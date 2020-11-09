@@ -138,6 +138,9 @@ func (s *sorterBase) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(s.diskMonitor.MaximumBytes())),
 		},
 		Output: s.Out.Stats(),
+		FlowStats: execinfrapb.FlowStats{
+			MaxMemUsage: execinfrapb.MakeIntValue(uint64(s.EvalCtx.Mon.MaximumBytes())),
+		},
 	}
 }
 

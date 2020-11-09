@@ -37,7 +37,7 @@ type NetworkReader interface {
 // VectorizedStatsCollector is the common interface implemented by collectors.
 type VectorizedStatsCollector interface {
 	colexecbase.Operator
-	OutputStats(ctx context.Context, flowID string, deterministicStats bool)
+	OutputStats(ctx context.Context, flowID string, deterministicStats bool, maxMemUsage int64)
 }
 
 // ChildStatsCollector gives access to the stopwatches of a
@@ -213,9 +213,10 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 
 // OutputStats is part of the VectorizedStatsCollector interface.
 func (vsc *vectorizedStatsCollectorImpl) OutputStats(
-	ctx context.Context, flowID string, deterministicStats bool,
+	ctx context.Context, flowID string, deterministicStats bool, maxMemUsage int64,
 ) {
 	s := vsc.finish()
+	s.FlowStats.MaxMemUsage.Set(uint64(maxMemUsage))
 	if deterministicStats {
 		s.MakeDeterministic()
 	}
@@ -268,9 +269,10 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 
 // OutputStats is part of the VectorizedStatsCollector interface.
 func (nvsc *networkVectorizedStatsCollectorImpl) OutputStats(
-	ctx context.Context, flowID string, deterministicStats bool,
+	ctx context.Context, flowID string, deterministicStats bool, maxMemUsage int64,
 ) {
 	s := nvsc.finish()
+	s.FlowStats.MaxMemUsage.Set(uint64(maxMemUsage))
 	if deterministicStats {
 		s.MakeDeterministic()
 	}

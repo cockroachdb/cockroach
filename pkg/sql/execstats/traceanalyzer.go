@@ -11,10 +11,12 @@
 package execstats
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -159,4 +161,48 @@ func (a *TraceAnalyzer) GetNetworkBytesSent() (map[roachpb.NodeID]int64, error) 
 		result[stats.originNodeID] += bytes
 	}
 	return result, nil
+}
+
+// GetTotalMemoryUsage returns the total memory used by the trace.
+func (a *TraceAnalyzer) GetTotalMemoryUsage() int64 {
+	var totalMemUsage int64
+
+	for _, stats := range a.processorStats {
+		if stats.stats == nil {
+			continue
+		}
+		v, ok := stats.stats.(*execinfrapb.ComponentStats)
+		if !ok {
+			return 0
+		}
+		totalMemUsage += int64(v.Exec.MaxAllocatedMem.Value())
+	}
+	return totalMemUsage
+}
+
+// GetMaxMemoryUsage returns the maximum memory used by the trace.
+func (a *TraceAnalyzer) GetMaxMemoryUsage() int64 {
+	var maxMemUsage int64
+
+	for _, stats := range a.processorStats {
+		if stats.stats == nil {
+			continue
+		}
+		v, ok := stats.stats.(*execinfrapb.ComponentStats)
+		if !ok {
+			return 0
+		}
+		maxMemUsage = int64(v.FlowStats.MaxMemUsage.Value())
+	}
+	return maxMemUsage
+}
+
+type QueryLevelStats struct {
+	NetworkBytesSent int64
+	MaxMemUsage      int64
+	TotalMemUsage    int64
+}
+
+type QueryLevelStatsGetter interface {
+	GetQueryStats(ctx context.Context, trace []tracingpb.RecordedSpan, ast tree.Statement) *QueryLevelStats
 }

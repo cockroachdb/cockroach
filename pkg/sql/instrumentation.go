@@ -196,30 +196,16 @@ func (ih *instrumentationHelper) Finish(
 	// TODO(radu): this should be unified with other stmt stats accesses.
 	stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
 	if stmtStats != nil {
-		networkBytesSent := int64(0)
-		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
-			analyzer := flowInfo.analyzer
-			if err := analyzer.AddTrace(trace); err != nil {
-				log.VInfof(ctx, 1, "error analyzing trace statistics for stmt %s: %v", ast, err)
-				continue
-			}
-
-			networkBytesSentGroupedByNode, err := analyzer.GetNetworkBytesSent()
-			if err != nil {
-				log.VInfof(ctx, 1, "error calculating network bytes sent for stmt %s: %v", ast, err)
-				continue
-			}
-			for _, bytesSentByNode := range networkBytesSentGroupedByNode {
-				networkBytesSent += bytesSentByNode
-			}
-		}
+		queryLevelStats := p.curPlan.GetQueryStats(ctx, trace, ast)
+		fmt.Println("1 max memory usage: ", queryLevelStats.MaxMemUsage)
+		fmt.Println("1 total memory usage: ", queryLevelStats.TotalMemUsage)
 
 		stmtStats.mu.Lock()
 		// Record trace-related statistics. A count of 1 is passed given that this
 		// statistic is only recorded when statement diagnostics are enabled.
 		// TODO(asubiotto): NumericStat properties will be properly calculated
 		//  once this statistic is always collected.
-		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(networkBytesSent))
+		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(queryLevelStats.NetworkBytesSent))
 		stmtStats.mu.Unlock()
 	}
 

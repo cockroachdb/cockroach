@@ -33,6 +33,8 @@ message ComponentStats {
 
   // Stats for the inputs of an operator (only in the row execution engine).
   repeated InputStats inputs = 7 [(gogoproto.nullable) = false];
+
+  optional FlowStats flow_stats = 8 [(gogoproto.nullable) = false];
 }
 
 // InputStats contains statistics about the rows received as an input to a
@@ -89,7 +91,7 @@ message KVStats {
                                                  (gogoproto.stdduration) = true];
 }
 
-// ExecStats contains statistics about the execution of an components.
+// ExecStats contains statistics about the execution of a component.
 message ExecStats {
   // Time spent executing the component.
   optional google.protobuf.Duration exec_time = 1 [(gogoproto.nullable) = false,
@@ -103,7 +105,7 @@ message ExecStats {
                                           (gogoproto.nullable) = false];
 }
 
-// OutputStats contains statistics about the output (results) of an component.
+// OutputStats contains statistics about the output (results) of a component.
 message OutputStats {
   // Number of batches produced by the component.
   optional uint64 num_batches = 1 [(gogoproto.customtype) = "IntValue",
@@ -112,4 +114,8 @@ message OutputStats {
   // Number of tuples produced by the component.
   optional uint64 num_tuples = 2 [(gogoproto.customtype) = "IntValue",
                                   (gogoproto.nullable) = false];
+}
+
+message FlowStats {
+  optional uint64 max_mem_usage = 1 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
 }

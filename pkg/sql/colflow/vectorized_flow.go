@@ -395,10 +395,11 @@ func finishVectorizedStatsCollectors(
 	flowID execinfrapb.FlowID,
 	deterministicStats bool,
 	vectorizedStatsCollectors []colexec.VectorizedStatsCollector,
+	maxMemUsage int64,
 ) {
 	flowIDString := flowID.String()
 	for _, vsc := range vectorizedStatsCollectors {
-		vsc.OutputStats(ctx, flowIDString, deterministicStats)
+		vsc.OutputStats(ctx, flowIDString, deterministicStats, maxMemUsage)
 	}
 }
 
@@ -977,7 +978,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
 						finishVectorizedStatsCollectors(
-							ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs,
+							ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs, flowCtx.EvalCtx.Mon.MaximumBytes(),
 						)
 						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
 					},
@@ -1005,7 +1006,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				// aren't actually returning any stats, but we are creating and closing
 				// child spans with stats.
 				finishVectorizedStatsCollectors(
-					ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq,
+					ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq, flowCtx.EvalCtx.Mon.MaximumBytes(),
 				)
 				return nil
 			}

@@ -571,6 +571,9 @@ func (h *hashJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(h.diskMonitor.MaximumBytes())),
 		},
 		Output: h.Out.Stats(),
+		FlowStats: execinfrapb.FlowStats{
+			MaxMemUsage: execinfrapb.MakeIntValue(uint64(h.EvalCtx.Mon.MaximumBytes())),
+		},
 	}
 }
 

@@ -228,6 +228,8 @@ type routerBase struct {
 	semaphoreCount int32
 
 	statsCollectionEnabled bool
+
+	parent *mon.BytesMonitor
 }
 
 func (rb *routerBase) aggStatus() execinfra.ConsumerStatus {
@@ -264,6 +266,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 		rb.statsCollectionEnabled = true
 	}
 
+	rb.parent = flowCtx.EvalCtx.Mon
 	rb.types = types
 	for i := range rb.outputs {
 		// This method must be called before we Start() so we don't need
@@ -372,6 +375,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					if rb.statsCollectionEnabled {
 						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes()))
 						ro.stats.Exec.MaxAllocatedDisk.Set(uint64(ro.diskMonitor.MaximumBytes()))
+						ro.stats.FlowStats.MaxMemUsage.Set(uint64(rb.parent.MaximumBytes()))
 						span.SetSpanStats(&ro.stats)
 						span.Finish()
 						if trace := execinfra.GetTraceData(ctx); trace != nil {

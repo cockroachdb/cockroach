@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -23,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -266,10 +269,7 @@ var _ planNodeSpooled = &spoolNode{}
 type flowInfo struct {
 	typ     planComponentType
 	diagram execinfrapb.FlowDiagram
-	// analyzer is a TraceAnalyzer that has been initialized with the
-	// corresponding flow. Users of this field will want to add a corresponding
-	// trace in order to calculate statistics.
-	analyzer *execstats.TraceAnalyzer
+	flows   map[roachpb.NodeID]*execinfrapb.FlowSpec
 }
 
 // planTop is the struct that collects the properties
@@ -308,6 +308,42 @@ type planTop struct {
 	distSQLFlowInfos []flowInfo
 
 	instrumentation *instrumentationHelper
+}
+
+var _ execstats.QueryLevelStatsGetter = &planTop{}
+
+// GetQueryStats is part of the QueryLevelStatsGetter interface.
+func (pt *planTop) GetQueryStats(
+	ctx context.Context, trace []tracingpb.RecordedSpan, ast tree.Statement,
+) *execstats.QueryLevelStats {
+	networkBytesSent := int64(0)
+	queryMaxMemUsage := int64(0)
+	queryTotalMemUsage := int64(0)
+	for _, flowInfo := range pt.distSQLFlowInfos {
+		analyzer := execstats.NewTraceAnalyzer(flowInfo.flows)
+		if err := analyzer.AddTrace(trace); err != nil {
+			log.VInfof(ctx, 1, "error analyzing trace statistics for stmt %s: %v", ast, err)
+			continue
+		}
+
+		networkBytesSentGroupedByNode, err := analyzer.GetNetworkBytesSent()
+		if err != nil {
+			log.VInfof(ctx, 1, "error calculating network bytes sent for stmt %s: %v", ast, err)
+			continue
+		}
+		for _, bytesSentByNode := range networkBytesSentGroupedByNode {
+			networkBytesSent += bytesSentByNode
+		}
+		if flowMaxMemUsage := analyzer.GetMaxMemoryUsage(); flowMaxMemUsage > queryMaxMemUsage {
+			queryMaxMemUsage = flowMaxMemUsage
+		}
+		queryTotalMemUsage += analyzer.GetTotalMemoryUsage()
+	}
+	return &execstats.QueryLevelStats{
+		NetworkBytesSent: networkBytesSent,
+		MaxMemUsage:      queryMaxMemUsage,
+		TotalMemUsage:    queryTotalMemUsage,
+	}
 }
 
 // physicalPlanTop is a utility wrapper around PhysicalPlan that allows for

@@ -355,6 +355,9 @@ func (d *distinct) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedMem: execinfrapb.MakeIntValue(uint64(d.MemMonitor.MaximumBytes())),
 		},
 		Output: d.Out.Stats(),
+		FlowStats: execinfrapb.FlowStats{
+			MaxMemUsage: execinfrapb.MakeIntValue(uint64(d.EvalCtx.Mon.MaximumBytes())),
+		},
 	}
 }
 

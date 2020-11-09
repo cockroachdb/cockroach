@@ -299,6 +299,9 @@ func (ifr *invertedFilterer) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(ifr.diskMonitor.MaximumBytes())),
 		},
 		Output: ifr.Out.Stats(),
+		FlowStats: execinfrapb.FlowStats{
+			MaxMemUsage: execinfrapb.MakeIntValue(uint64(ifr.EvalCtx.Mon.MaximumBytes())),
+		},
 	}
 }
 
