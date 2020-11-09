@@ -946,3 +946,51 @@ upper_bound                                                                     
 '\x42fd4500000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd4700000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd5ad4000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+
+# Regression test for #56356. Histograms on all-null columns should not cause
+# an error.
+statement ok
+CREATE TABLE all_null (k INT PRIMARY KEY, c INT);
+INSERT INTO all_null VALUES (1, NULL);
+CREATE STATISTICS s FROM all_null
+
+query T
+SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+  FROM (
+SELECT json_array_elements(statistics) - 'created_at' AS stat
+FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
+)
+----
+[
+    {
+        "columns": [
+            "k"
+        ],
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "s",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c"
+        ],
+        "distinct_count": 1,
+        "histo_col_type": "INT8",
+        "name": "s",
+        "null_count": 1,
+        "row_count": 1
+    }
+]
+
+statement ok
+SELECT * FROM all_null WHERE c IS NOT NULL
