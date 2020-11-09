@@ -97,6 +97,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropColumnDefault: true,
 	dropColumnNotNull: true,
 	dropConstraint:    true,
+	dropIndex:         true,
 	dropSequence:      true,
 	dropTable:         true,
 	dropView:          true,
@@ -986,12 +987,29 @@ func (og *operationGenerator) dropIndex(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`DROP INDEX %s@"IrrelevantIndexName"`, tableName), nil
+	}
 
 	indexName, err := og.randIndex(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP INDEX %s@"%s"`, tableName, indexName), nil
+
+	indexExists, err := indexExists(tx, tableName, indexName)
+	if err != nil {
+		return "", err
+	}
+	if !indexExists {
+		og.expectedExecErrors.add(pgcode.UndefinedObject)
+	}
+
+	return fmt.Sprintf(`DROP INDEX %s@"%s" CASCADE`, tableName, indexName), nil
 }
 
 func (og *operationGenerator) dropSequence(tx *pgx.Tx) (string, error) {
