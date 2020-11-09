@@ -47,7 +47,7 @@ export function addNumericStats(a: NumericStat, b: NumericStat, countA: number, 
   };
 }
 
-export function addStatementStats(a: StatementStatistics, b: StatementStatistics) {
+export function addStatementStats(a: StatementStatistics, b: StatementStatistics): Required<StatementStatistics> {
   const countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
   return {
@@ -60,7 +60,12 @@ export function addStatementStats(a: StatementStatistics, b: StatementStatistics
     run_lat: addNumericStats(a.run_lat, b.run_lat, countA, countB),
     service_lat: addNumericStats(a.service_lat, b.service_lat, countA, countB),
     overhead_lat: addNumericStats(a.overhead_lat, b.overhead_lat, countA, countB),
+    bytes_sent_over_network: a.bytes_sent_over_network && b.bytes_sent_over_network ? addNumericStats(a.bytes_sent_over_network, b.bytes_sent_over_network, countA, countB) : null,
+    bytes_read: addNumericStats(a.bytes_read, b.bytes_read, countA, countB),
+    rows_read: addNumericStats(a.rows_read, b.rows_read, countA, countB),
     sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
+    legacy_last_err: "",
+    legacy_last_err_redacted: "",
   };
 }
 
