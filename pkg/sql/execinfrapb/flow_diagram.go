@@ -303,6 +303,29 @@ func (bf *BackfillerSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (m *BackupDataSpec) summary() (string, []string) {
+	var spanStr strings.Builder
+	if len(m.Spans) > 0 {
+		spanStr.WriteString(fmt.Sprintf("Spans [%d]: ", len(m.Spans)))
+		const limit = 3
+		for i := 0; i < len(m.Spans) && i < limit; i++ {
+			if i > 0 {
+				spanStr.WriteString(", ")
+			}
+			spanStr.WriteString(m.Spans[i].String())
+		}
+		if len(m.Spans) > limit {
+			spanStr.WriteString("...")
+		}
+	}
+
+	details := []string{
+		spanStr.String(),
+	}
+	return "BACKUP", details
+}
+
+// summary implements the diagramCellType interface.
 func (d *DistinctSpec) summary() (string, []string) {
 	details := []string{
 		colListStr(d.DistinctColumns),
