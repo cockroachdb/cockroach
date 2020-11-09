@@ -62,6 +62,7 @@ var fullClusterSystemTables = []string{
 	// Rest of system tables.
 	sqlbase.LocationsTable.Name,
 	sqlbase.RoleMembersTable.Name,
+	sqlbase.RoleOptionsTable.Name,
 	sqlbase.UITable.Name,
 	sqlbase.CommentsTable.Name,
 	sqlbase.JobsTable.Name,
