@@ -1189,14 +1189,15 @@ func (drr *DeleteRangeRequest) flags() int {
 	// This workaround does not preclude us from creating a separate
 	// "DeleteInlineRange" command at a later date.
 	if drr.Inline {
-		return isWrite | isRange | isAlone
+		return isRead | isWrite | isRange | isAlone
 	}
 	// DeleteRange updates the timestamp cache as it doesn't leave intents or
-	// tombstones for keys which don't yet exist, but still wants to prevent
-	// anybody from writing under it. Note that, even if we didn't update the ts
-	// cache, deletes of keys that exist would not be lost (since the DeleteRange
-	// leaves intents on those keys), but deletes of "empty space" would.
-	return isWrite | isTxn | isLocking | isIntentWrite | isRange | consultsTSCache | updatesTSCache | needsRefresh | canBackpressure
+	// tombstones for keys which don't yet exist or keys that already have
+	// tombstones on them, but still wants to prevent anybody from writing under
+	// it. Note that, even if we didn't update the ts cache, deletes of keys
+	// that exist would not be lost (since the DeleteRange leaves intents on
+	// those keys), but deletes of "empty space" would.
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | isRange | consultsTSCache | updatesTSCache | needsRefresh | canBackpressure
 }
 
 // Note that ClearRange commands cannot be part of a transaction as

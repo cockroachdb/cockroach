@@ -786,3 +786,54 @@ func TestTxnWaitPolicies(t *testing.T) {
 		}
 	})
 }
+
+// TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange tests that if two
+// transactions issue delete range operations over the same keys, the later
+// transaction eagerly returns a WriteTooOld error instead of deferring the
+// error and temporarily leaking a non-serializable state through its ReturnKeys
+// field.
+func TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	// Write a value at key "a".
+	require.NoError(t, s.DB.Put(ctx, "a", "val"))
+
+	// Create two transactions.
+	txn1 := s.DB.NewTxn(ctx, "test txn 1")
+	txn2 := s.DB.NewTxn(ctx, "test txn 2")
+
+	// Both txns read the value.
+	kvs, err := txn1.Scan(ctx, "a", "b", 0)
+	require.NoError(t, err)
+	require.Len(t, kvs, 1)
+	require.Equal(t, roachpb.Key("a"), kvs[0].Key)
+
+	kvs, err = txn2.Scan(ctx, "a", "b", 0)
+	require.NoError(t, err)
+	require.Len(t, kvs, 1)
+	require.Equal(t, roachpb.Key("a"), kvs[0].Key)
+
+	// The first transaction deletes the value using a delete range operation.
+	b := txn1.NewBatch()
+	b.DelRange("a", "b", true /* returnKeys */)
+	require.NoError(t, txn1.Run(ctx, b))
+	require.Len(t, b.Results[0].Keys, 1)
+	require.Equal(t, roachpb.Key("a"), b.Results[0].Keys[0])
+
+	// The first transaction commits.
+	require.NoError(t, txn1.Commit(ctx))
+
+	// The second transaction attempts to delete the value using a delete range
+	// operation. This should immediately fail with a WriteTooOld error. It
+	// would be incorrect for this to be delayed and for 0 keys to be returned.
+	b = txn2.NewBatch()
+	b.DelRange("a", "b", true /* returnKeys */)
+	err = txn2.Run(ctx, b)
+	require.NotNil(t, err)
+	require.Regexp(t, "TransactionRetryWithProtoRefreshError: WriteTooOldError", err)
+	require.Len(t, b.Results[0].Keys, 0)
+}

@@ -2150,7 +2150,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				fmt.Println("TXN IS", txn.TestingCloneTxn())
 				return txn.Put(ctx, "a", "put")
 			},
 		},
@@ -2487,6 +2486,38 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Run(ctx, b)
 			},
 			txnCoordRetry: true,
+		},
+		{
+			name: "write too old with delete range after prior read on other key",
+			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.DelRange(ctx, "a", "b")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				if _, err := txn.Get(ctx, "c"); err != nil {
+					return err
+				}
+				return txn.DelRange(ctx, "a", "b")
+			},
+			txnCoordRetry: true, // can refresh
+		},
+		{
+			name: "write too old with delete range after prior read on same key",
+			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.DelRange(ctx, "a", "b")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				if _, err := txn.Get(ctx, "a"); err != nil {
+					return err
+				}
+				return txn.DelRange(ctx, "a", "b")
+			},
+			clientRetry: true, // can't refresh
 		},
 		{
 			// This test sends a 1PC batch with Put+EndTxn.

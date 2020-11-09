@@ -1945,7 +1945,7 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 2})
+			txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 2, Logical: 2})
 			if _, _, _, err := MVCCDeleteRange(
 				ctx, engine, nil, testKey1, testKey4, math.MaxInt64, txn.ReadTimestamp, txn, false,
 			); err != nil {
@@ -1958,6 +1958,69 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 			if e := 2; len(res.KVs) != e {
 				t.Fatalf("e = %d, got %d", e, len(res.KVs))
 			}
+		})
+	}
+}
+
+// TestMVCCDeleteRangeOldTimestamp tests a case where a delete range with an
+// older timestamp happens after a delete with a newer timestamp.
+func TestMVCCDeleteRangeOldTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+			err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = MVCCPut(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: 3}, value2, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = MVCCDelete(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: 5}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Delete at a time before the tombstone. Should return a WriteTooOld error.
+			b := engine.NewBatch()
+			defer b.Close()
+			keys, resume, keyCount, err := MVCCDeleteRange(
+				ctx, b, nil, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 4}, nil, true,
+			)
+			require.Nil(t, keys)
+			require.Nil(t, resume)
+			require.Equal(t, int64(0), keyCount)
+			require.NotNil(t, err)
+			require.IsType(t, (*roachpb.WriteTooOldError)(nil), err)
+
+			// Delete at the same time as the tombstone. Should return a WriteTooOld error.
+			b = engine.NewBatch()
+			defer b.Close()
+			keys, resume, keyCount, err = MVCCDeleteRange(
+				ctx, b, nil, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 5}, nil, true,
+			)
+			require.Nil(t, keys)
+			require.Nil(t, resume)
+			require.Equal(t, int64(0), keyCount)
+			require.NotNil(t, err)
+			require.IsType(t, (*roachpb.WriteTooOldError)(nil), err)
+
+			// Delete at a time after the tombstone. Should succeed and should not
+			// include the tombstone in the returned keys.
+			b = engine.NewBatch()
+			defer b.Close()
+			keys, resume, keyCount, err = MVCCDeleteRange(
+				ctx, b, nil, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 6}, nil, true,
+			)
+			require.Equal(t, []roachpb.Key{testKey1}, keys)
+			require.Nil(t, resume)
+			require.Equal(t, int64(1), keyCount)
+			require.NoError(t, err)
 		})
 	}
 }
@@ -2010,9 +2073,8 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 				t.Fatalf("got resume span = %s, expected = %s", resumeSpan, expected)
 			}
 
-			const inlineMismatchErrString = "put is inline"
-
 			// Attempt to delete inline keys at a timestamp; should fail.
+			const inlineMismatchErrString = "put is inline"
 			if _, _, _, err := MVCCDeleteRange(
 				ctx, engine, nil, testKey1, testKey6, 1, hlc.Timestamp{WallTime: 2}, nil, true,
 			); !testutils.IsError(err, inlineMismatchErrString) {
@@ -2020,10 +2082,11 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 			}
 
 			// Attempt to delete non-inline key at zero timestamp; should fail.
+			const writeTooOldErrString = "WriteTooOldError"
 			if _, _, _, err := MVCCDeleteRange(
 				ctx, engine, nil, testKey6, keyMax, 1, hlc.Timestamp{Logical: 0}, nil, true,
-			); !testutils.IsError(err, inlineMismatchErrString) {
-				t.Fatalf("got error %v, expected error with text '%s'", err, inlineMismatchErrString)
+			); !testutils.IsError(err, writeTooOldErrString) {
+				t.Fatalf("got error %v, expected error with text '%s'", err, writeTooOldErrString)
 			}
 
 			// Attempt to delete inline keys in a transaction; should fail.
