@@ -16,6 +16,7 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -67,7 +68,7 @@ type verifyColOperatorArgs struct {
 
 // verifyColOperator passes inputs through both the processor defined by pspec
 // and the corresponding columnar operator and verifies that the results match.
-func verifyColOperator(args verifyColOperatorArgs) error {
+func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	const floatPrecision = 0.0000001
 	rng := args.rng
 	if rng == nil {
@@ -137,8 +138,11 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		Spec:                args.pspec,
 		Inputs:              columnarizers,
 		StreamingMemAccount: &acc,
-		DiskQueueCfg:        colcontainer.DiskQueueCfg{FS: tempFS},
-		FDSemaphore:         colexecbase.NewTestingSemaphore(256),
+		DiskQueueCfg: colcontainer.DiskQueueCfg{
+			FS:      tempFS,
+			GetPath: func(context.Context) string { return "" },
+		},
+		FDSemaphore: colexecbase.NewTestingSemaphore(256),
 
 		// TODO(yuzefovich): adjust expression generator to not produce
 		// mixed-type timestamp-related expressions and then disallow the

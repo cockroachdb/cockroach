@@ -11,6 +11,7 @@
 package colcontainerutils
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -55,7 +56,9 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 		}
 	}
 	cfg.FS = testingFS
-	cfg.Path = path
+	cfg.GetPath = func(context.Context) string {
+		return path
+	}
 
 	if err := cfg.EnsureDefaults(); err != nil {
 		t.Fatal(err)

@@ -293,7 +293,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 						inputs:     []rowenc.EncDatumRows{rows},
 						pspec:      pspec,
 					}
-					if err := verifyColOperator(args); err != nil {
+					if err := verifyColOperator(t, args); err != nil {
 						if strings.Contains(err.Error(), "different errors returned") {
 							// Columnar and row-based aggregators are likely to hit
 							// different errors, and we will swallow those and move
@@ -395,7 +395,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 						inputs:     []rowenc.EncDatumRows{rows},
 						pspec:      pspec,
 					}
-					if err := verifyColOperator(args); err != nil {
+					if err := verifyColOperator(t, args); err != nil {
 						fmt.Printf("--- seed = %d run = %d nCols = %d distinct cols = %v ordered cols = %v ---\n",
 							seed, run, nCols, distinctCols, orderedCols)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
@@ -468,7 +468,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					if spillForced {
 						args.numForcedRepartitions = 2 + rng.Intn(3)
 					}
-					if err := verifyColOperator(args); err != nil {
+					if err := verifyColOperator(t, args); err != nil {
 						fmt.Printf("--- seed = %d spillForced = %t nCols = %d K = %d ---\n",
 							seed, spillForced, nCols, topK)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
@@ -543,7 +543,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 						pspec:          pspec,
 						forceDiskSpill: spillForced,
 					}
-					if err := verifyColOperator(args); err != nil {
+					if err := verifyColOperator(t, args); err != nil {
 						fmt.Printf("--- seed = %d spillForced = %t orderingCols = %v matchLen = %d run = %d ---\n",
 							seed, spillForced, orderingCols, matchLen, run)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
@@ -719,7 +719,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									}
 								}
 
-								if err := verifyColOperator(args); err != nil {
+								if err := verifyColOperator(t, args); err != nil {
 									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+
 										" filter = %q seed = %d run = %d ---\n",
 										spillForced, testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
@@ -932,7 +932,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 									args.colIdxsToCheckForEquality[i] = int(lOrderingCols[i].ColIdx)
 								}
 							}
-							if err := verifyColOperator(args); err != nil {
+							if err := verifyColOperator(t, args); err != nil {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
 									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
 								fmt.Printf("--- left ordering = %v right ordering = %v ---\n", lOrderingCols, rOrderingCols)
@@ -1106,7 +1106,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						inputs:     []rowenc.EncDatumRows{rows},
 						pspec:      pspec,
 					}
-					if err := verifyColOperator(args); err != nil {
+					if err := verifyColOperator(t, args); err != nil {
 						fmt.Printf("seed = %d\n", seed)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
 						prettyPrintInput(rows, inputTypes, "t" /* tableName */)

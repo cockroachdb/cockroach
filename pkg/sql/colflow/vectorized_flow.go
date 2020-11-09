@@ -101,14 +101,11 @@ type vectorizedFlow struct {
 	countingSemaphore *countingSemaphore
 
 	tempStorage struct {
-		// path is the path to this flow's temporary storage directory.
-		path           string
-		createdStateMu struct {
-			syncutil.Mutex
-			// created is a protected boolean that is true when the flow's temporary
-			// storage directory has been created.
-			created bool
-		}
+		syncutil.Mutex
+		// path is the path to this flow's temporary storage directory. If
+		// it is an empty string, then it hasn't been computed yet nor the
+		// directory has been created.
+		path string
 	}
 
 	testingInfo struct {
@@ -189,35 +186,9 @@ func (f *vectorizedFlow) Setup(
 		coldata.ResetBatchSizeForTests()
 	}
 
-	// Create a name for this flow's temporary directory. Note that this directory
-	// is lazily created when necessary and cleaned up in Cleanup(). The directory
-	// name is the flow's ID in most cases apart from when the flow's ID is unset
-	// (in the case of local flows). In this case the directory will be prefixed
-	// with "local-flow" and a uuid is generated on the spot to provide a unique
-	// name.
-	var tempDirName string
-	if id := f.GetID(); id.Equal(uuid.Nil) {
-		tempDirName = "local-flow" + uuid.FastMakeV4().String()
-	} else {
-		tempDirName = id.String()
-	}
-	f.tempStorage.path = filepath.Join(f.Cfg.TempStoragePath, tempDirName)
 	diskQueueCfg := colcontainer.DiskQueueCfg{
-		FS:   f.Cfg.TempFS,
-		Path: f.tempStorage.path,
-		OnNewDiskQueueCb: func() {
-			f.tempStorage.createdStateMu.Lock()
-			defer f.tempStorage.createdStateMu.Unlock()
-			if f.tempStorage.createdStateMu.created {
-				// The temporary storage directory has already been created.
-				return
-			}
-			log.VEventf(ctx, 1, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
-			if err := f.Cfg.TempFS.MkdirAll(f.tempStorage.path); err != nil {
-				colexecerror.InternalError(errors.Errorf("unable to create temporary storage directory: %v", err))
-			}
-			f.tempStorage.createdStateMu.created = true
-		},
+		FS:      f.Cfg.TempFS,
+		GetPath: f.getTempStoragePath,
 	}
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
 		return ctx, err
@@ -259,6 +230,35 @@ func (f *vectorizedFlow) Setup(
 	return ctx, err
 }
 
+// getTempStoragePath returns the path of the temporary directory for
+// disk-spilling components of the flow. The directory is created on the first
+// call to this method.
+func (f *vectorizedFlow) getTempStoragePath(ctx context.Context) string {
+	f.tempStorage.Lock()
+	defer f.tempStorage.Unlock()
+	if f.tempStorage.path != "" {
+		// The temporary directory has already been created.
+		return f.tempStorage.path
+	}
+	// We haven't created this flow's temporary directory yet, so we do so now.
+	// The directory name is the flow's ID in most cases apart from when the
+	// flow's ID is unset (in the case of local flows). In this case the
+	// directory will be prefixed with "local-flow" and a uuid is generated on
+	// the spot to provide a unique name.
+	var tempDirName string
+	if id := f.GetID(); id.Equal(uuid.Nil) {
+		tempDirName = "local-flow" + uuid.FastMakeV4().String()
+	} else {
+		tempDirName = id.String()
+	}
+	f.tempStorage.path = filepath.Join(f.Cfg.TempStoragePath, tempDirName)
+	log.VEventf(ctx, 1, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
+	if err := f.Cfg.TempFS.MkdirAll(f.tempStorage.path); err != nil {
+		colexecerror.InternalError(errors.Errorf("unable to create temporary storage directory: %v", err))
+	}
+	return f.tempStorage.path
+}
+
 // IsVectorized is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) IsVectorized() bool {
 	return true
@@ -292,18 +292,18 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 		}
 	}
 
-	f.tempStorage.createdStateMu.Lock()
-	created := f.tempStorage.createdStateMu.created
-	f.tempStorage.createdStateMu.Unlock()
+	f.tempStorage.Lock()
+	created := f.tempStorage.path != ""
+	f.tempStorage.Unlock()
 	if created {
-		if err := f.Cfg.TempFS.RemoveAll(f.tempStorage.path); err != nil {
+		if err := f.Cfg.TempFS.RemoveAll(f.getTempStoragePath(ctx)); err != nil {
 			// Log error as a Warning but keep on going to close the memory
 			// infrastructure.
 			log.Warningf(
 				ctx,
 				"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
 				f.GetID().Short(),
-				f.tempStorage.path,
+				f.getTempStoragePath(ctx),
 				err,
 			)
 		}
