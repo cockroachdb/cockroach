@@ -50,6 +50,7 @@ import (
 //
 // cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
+// del_range [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
 // get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent]
 // increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
@@ -384,6 +385,7 @@ var commands = map[string]cmd{
 	"clear_range": {typDataUpdate, cmdClearRange},
 	"cput":        {typDataUpdate, cmdCPut},
 	"del":         {typDataUpdate, cmdDelete},
+	"del_range":   {typDataUpdate, cmdDeleteRange},
 	"get":         {typReadOnly, cmdGet},
 	"increment":   {typDataUpdate, cmdIncrement},
 	"merge":       {typDataUpdate, cmdMerge},
@@ -578,6 +580,37 @@ func cmdDelete(e *evalCtx) error {
 		if err := MVCCDelete(e.ctx, rw, nil, key, ts, txn); err != nil {
 			return err
 		}
+		if resolve {
+			return e.resolveIntent(rw, key, txn, resolveStatus)
+		}
+		return nil
+	})
+}
+
+func cmdDeleteRange(e *evalCtx) error {
+	txn := e.getTxn(optional)
+	key, endKey := e.getKeyRange()
+	ts := e.getTs(txn)
+	returnKeys := e.hasArg("returnKeys")
+	max := 0
+	if e.hasArg("max") {
+		e.scanArg("max", &max)
+	}
+
+	resolve, resolveStatus := e.getResolve()
+	return e.withWriter("del_range", func(rw ReadWriter) error {
+		deleted, resumeSpan, num, err := MVCCDeleteRange(e.ctx, rw, nil, key, endKey, int64(max), ts, txn, returnKeys)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(e.results.buf, "del_range: %v-%v -> deleted %d key(s)\n", key, endKey, num)
+		for _, key := range deleted {
+			fmt.Fprintf(e.results.buf, "del_range: returned %v\n", key)
+		}
+		if resumeSpan != nil {
+			fmt.Fprintf(e.results.buf, "del_range: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
+		}
+
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus)
 		}
