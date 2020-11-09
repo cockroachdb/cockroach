@@ -131,7 +131,7 @@ func TestLongDBName(t *testing.T) {
 
 	var m map[string]string
 	opts := Options{
-		BackendFromParams: func(mm map[string]string) (string, *tls.Config, error) {
+		BackendConfigFromParams: func(mm map[string]string) (string, *tls.Config, error) {
 			m = mm
 			return "", nil, errors.New("boom")
 		},
@@ -153,8 +153,8 @@ func TestFailedConnection(t *testing.T) {
 
 	ac := makeAssertCtx()
 	opts := Options{
-		BackendFromParams: testingTenantIDFromDatabaseForAddr("undialable%$!@$", "29"),
-		OnSendErrToClient: ac.onSendErrToClient,
+		BackendConfigFromParams: testingTenantIDFromDatabaseForAddr("undialable%$!@$", "29"),
+		OnSendErrToClient:       ac.onSendErrToClient,
 	}
 	addr, done := setupTestProxyWithCerts(t, &opts)
 	defer done()
@@ -215,7 +215,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	// the read/write ops to avoid this failure mode.
 
 	opts := Options{
-		BackendFromParams: testingTenantIDFromDatabaseForAddr(crdbSQL, "29"),
+		BackendConfigFromParams: testingTenantIDFromDatabaseForAddr(crdbSQL, "29"),
 	}
 	addr, done := setupTestProxyWithCerts(t, &opts)
 	defer done()
@@ -245,7 +245,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	require.NoError(t, err)
 
 	opts := Options{
-		BackendFromParams: func(params map[string]string) (string, *tls.Config, error) {
+		BackendConfigFromParams: func(params map[string]string) (string, *tls.Config, error) {
 			return tc.Server(0).ServingSQLAddr(), outgoingTLSConfig, nil
 		},
 		ModifyRequestParams: func(params map[string]string) {

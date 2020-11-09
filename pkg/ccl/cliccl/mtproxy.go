@@ -148,7 +148,7 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 		IncomingTLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{cer},
 		},
-		BackendFromParams: func(params map[string]string) (addr string, conf *tls.Config, clientErr error) {
+		BackendConfigFromParams: func(params map[string]string) (addr string, conf *tls.Config, clientErr error) {
 			const magic = "prancing-pony"
 			if strings.HasPrefix(params["database"], magic+".") {
 				params["database"] = params["database"][len(magic)+1:]

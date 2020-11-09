@@ -58,6 +58,10 @@ const (
 	// CodeClientDisconnected indicates that the client disconnected unexpectedly
 	// (with a connection error) while in a session with backend SQL server.
 	CodeClientDisconnected
+
+	// CodeProxyRefusedConnection indicates that the proxy refused the connection
+	// request due to high load or too many connection attempts.
+	CodeProxyRefusedConnection
 )
 
 type codeError struct {

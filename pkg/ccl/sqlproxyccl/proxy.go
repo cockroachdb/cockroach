@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgproto3/v2"
 )
 
@@ -28,10 +29,10 @@ type Options struct {
 
 	// TODO(tbg): this is unimplemented and exists only to check which clients
 	// allow use of SNI. Should always return ("", nil).
-	BackendFromSNI func(serverName string) (addr string, conf *tls.Config, clientErr error)
-	// BackendFromParams returns the address and TLS config to use for
+	BackendConfigFromSNI func(serverName string) (config *BackendConfig, clientErr error)
+	// BackendConfigFromParams returns the address and TLS config to use for
 	// the proxy -> backend connection.
-	BackendFromParams func(map[string]string) (addr string, conf *tls.Config, clientErr error)
+	BackendConfigFromParams func(map[string]string) (config *BackendConfig, clientErr error)
 
 	// If set, consulted to modify the parameters set by the frontend before
 	// forwarding them to the backend during startup.
@@ -85,15 +86,15 @@ func (s *Server) Proxy(conn net.Conn) error {
 			sniServerName = h.ServerName
 			return nil, nil
 		}
-		if s.opts.BackendFromSNI != nil {
-			addr, _, clientErr := s.opts.BackendFromSNI(sniServerName)
+		if s.opts.BackendConfigFromSNI != nil {
+			cfg, clientErr := s.opts.BackendConfigFromSNI(sniServerName)
 			if clientErr != nil {
 				code := CodeSNIRoutingFailed
 				sendErrToClient(conn, code, clientErr.Error()) // won't actually be shown by most clients
 				return newErrorf(code, "rejected by OutgoingAddrFromSNI")
 			}
-			if addr != "" {
-				return newErrorf(CodeSNIRoutingFailed, "BackendFromSNI is unimplemented")
+			if cfg.Address != "" {
+				return newErrorf(CodeSNIRoutingFailed, "BackendConfigFromSNI is unimplemented")
 			}
 		}
 		conn = tls.Server(conn, cfg)
@@ -108,7 +109,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 		return newErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
 	}
 
-	outgoingAddr, outgoingTLS, clientErr := s.opts.BackendFromParams(msg.Parameters)
+	backendConfig, clientErr := s.opts.BackendConfigFromParams(msg.Parameters)
 	if clientErr != nil {
 		s.metrics.RoutingErrCount.Inc(1)
 		code := CodeParamsRoutingFailed
@@ -116,7 +117,24 @@ func (s *Server) Proxy(conn net.Conn) error {
 		return newErrorf(code, "rejected by OutgoingAddrFromParams: %v", clientErr)
 	}
 
-	crdbConn, err := net.Dial("tcp", outgoingAddr)
+	if backendConfig.Admitter != nil {
+		// If a previous successful connection from this IP to the given client was
+		// made then admit immediately.
+		if true { // TODO check for backendConfig.ID in the cache
+			ip, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+			if err == nil {
+				code := CodeParamsRoutingFailed
+				sendErrToClient(conn, code, clientErr.Error())
+				return newErrorf(code, err.Error())
+			}
+			if err := backendConfig.Admitter.LoginCheck(ip, timeutil.Now()); err != nil {
+				s.metrics.RefusedConnCount.Inc(1)
+				return newErrorf(CodeProxyRefusedConnection, "too many connection attempts")
+			}
+		}
+	}
+
+	crdbConn, err := net.Dial("tcp", backendConfig.Address)
 	if err != nil {
 		s.metrics.BackendDownCount.Inc(1)
 		code := CodeBackendDown
@@ -141,8 +159,8 @@ func (s *Server) Proxy(conn net.Conn) error {
 		return newErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
 	}
 
-	outCfg := outgoingTLS.Clone()
-	outCfg.ServerName = outgoingAddr
+	outCfg := backendConfig.TLSConf.Clone()
+	outCfg.ServerName = backendConfig.Address
 	crdbConn = tls.Client(crdbConn, outCfg)
 
 	if s.opts.ModifyRequestParams != nil {
@@ -151,7 +169,12 @@ func (s *Server) Proxy(conn net.Conn) error {
 
 	if _, err := crdbConn.Write(msg.Encode(nil)); err != nil {
 		s.metrics.BackendDownCount.Inc(1)
-		return newErrorf(CodeBackendDown, "relaying StartupMessage to target server %v: %v", outgoingAddr, err)
+		return newErrorf(CodeBackendDown, "relaying StartupMessage to target server %v: %v",
+			backendConfig.Address, err)
+	}
+
+	if backendConfig.Admitter != nil {
+		// TODO save backendConfig.ID in the cache of known clients.
 	}
 
 	// These channels are buffered because we'll only consume one of them.
