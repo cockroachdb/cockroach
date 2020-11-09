@@ -1461,9 +1461,12 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 	return descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
 		execCfg.DB, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			for _, tenant := range details.Tenants {
-				// TODO(dt): this is a noop since the tenant is already active=false but
-				// that should be fixed in DestroyTenant.
-				if err := sql.DestroyTenant(ctx, execCfg, txn, tenant.ID); err != nil {
+				if err := sql.DestroyTenant(ctx, execCfg, txn, &tenant); err != nil {
+					return err
+				}
+			}
+			for _, tenant := range details.Tenants {
+				if err := sql.GCTenant(ctx, execCfg, &tenant); err != nil {
 					return err
 				}
 			}

@@ -303,7 +303,11 @@ func StartTenant(t testing.TB, ts TestServerInterface, params base.TestTenantArg
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts.Stopper().AddCloser(stop.CloserFn(func() {
+	stopper := params.Stopper
+	if stopper == nil {
+		stopper = ts.Stopper()
+	}
+	stopper.AddCloser(stop.CloserFn(func() {
 		cleanupGoDB()
 	}))
 	return db

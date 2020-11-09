@@ -591,9 +591,13 @@ func (ts *TestServer) StartTenant(
 			ClusterSettingsUpdater: st.MakeUpdater(),
 		}
 	}
+	stopper := params.Stopper
+	if stopper == nil {
+		stopper = ts.Stopper()
+	}
 	return StartTenant(
 		ctx,
-		ts.Stopper(),
+		stopper,
 		ts.Cfg.ClusterName,
 		baseCfg,
 		sqlCfg,
