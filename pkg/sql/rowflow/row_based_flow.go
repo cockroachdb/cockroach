@@ -13,6 +13,7 @@ package rowflow
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -28,6 +29,11 @@ type rowBasedFlow struct {
 	*flowinfra.FlowBase
 
 	localStreams map[execinfrapb.StreamID]execinfra.RowReceiver
+
+	// currOutboxes is an atomic that counts how many outboxes have been created.
+	// This atomic is then used by the last outbox to know when to report the flow's
+	// max memory usage.
+	currOutboxes int32
 }
 
 var _ flowinfra.Flow = &rowBasedFlow{}
@@ -373,7 +379,8 @@ func (f *rowBasedFlow) setupOutboundStream(
 		return f.GetSyncFlowConsumer(), nil
 
 	case execinfrapb.StreamEndpointSpec_REMOTE:
-		outbox := flowinfra.NewOutbox(&f.FlowCtx, spec.TargetNodeID, f.ID, sid)
+		atomic.AddInt32(&f.currOutboxes, 1)
+		outbox := flowinfra.NewOutbox(&f.FlowCtx, spec.TargetNodeID, f.ID, sid, f.currOutboxes)
 		f.AddStartable(outbox)
 		return outbox, nil
 

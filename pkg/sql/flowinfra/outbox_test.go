@@ -73,7 +73,7 @@ func TestOutbox(t *testing.T) {
 	}
 	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	streamID := execinfrapb.StreamID(42)
-	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
+	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, 0 /* numOutboxes */)
 	outbox.Init(rowenc.OneIntCol)
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
@@ -229,7 +229,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	}
 	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	streamID := execinfrapb.StreamID(42)
-	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
+	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, 0 /* numOutboxes */)
 
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
@@ -310,7 +310,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			if tc.outboxIsClient {
-				outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
+				outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, 0 /* numOutboxes */)
 				outbox.Init(rowenc.OneIntCol)
 				outbox.Start(ctx, &wg, cancel)
 
@@ -451,7 +451,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		ctxCanceled = true
 	}
 
-	outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
+	outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, 0 /* numOutboxes */)
 	outbox.Init(rowenc.OneIntCol)
 	outbox.Start(ctx, &wg, mockCancel)
 
@@ -497,7 +497,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
+	outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, 0 /* numOutboxes */)
 	outbox.Init(rowenc.OneIntCol)
 
 	// Fill up the outbox.
@@ -561,7 +561,7 @@ func BenchmarkOutbox(b *testing.B) {
 					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 				},
 			}
-			outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID)
+			outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, 0 /* numOutboxes */)
 			outbox.Init(rowenc.MakeIntCols(numCols))
 			var outboxWG sync.WaitGroup
 			ctx, cancel := context.WithCancel(context.Background())

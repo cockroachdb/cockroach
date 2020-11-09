@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -513,6 +514,11 @@ type vectorizedFlowCreator struct {
 	numClosed  int32
 
 	inputsScratch []colexecbase.Operator
+
+	// currOutboxes is an atomic that keeps track of how many outboxes are left.
+	// When there is one outbox, the flow max memory usage is added to a flow
+	// level span.
+	currOutboxes int32
 }
 
 var _ execinfra.Releasable = &vectorizedFlowCreator{}
@@ -963,6 +969,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		}
 	case execinfrapb.StreamEndpointSpec_REMOTE:
 		// Set up an Outbox.
+		atomic.AddInt32(&s.currOutboxes, 1)
 		if s.recordingStats {
 			// If recording stats, we add a metadata source that will generate all
 			// stats data as metadata for the stats collectors created so far.
@@ -975,7 +982,13 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanRemote(ctx, "")
-						finishVectorizedStatsCollectors(ctx, flowCtx.ID, vscs)
+						if atomic.AddInt32(&s.currOutboxes, -1) == 0 {
+							span.SetTag(execinfrapb.FlowIDTagKey, flowCtx.ID)
+							span.SetSpanStats(&execinfrapb.ComponentStats{FlowStats: execinfrapb.FlowStats{MaxMemUsage: optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes()))}})
+						}
+						finishVectorizedStatsCollectors(
+							ctx, flowCtx.ID, vscs,
+						)
 						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
 					},
 				},
