@@ -9,12 +9,16 @@
 package backupccl_test
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -44,15 +48,30 @@ func TestRestoreOldVersions(t *testing.T) {
 	const (
 		testdataBase = "testdata/restore_old_versions"
 		exportDirs   = testdataBase + "/exports"
+		clusterDirs  = testdataBase + "/cluster"
 	)
-	dirs, err := ioutil.ReadDir(exportDirs)
-	require.NoError(t, err)
-	for _, dir := range dirs {
-		require.True(t, dir.IsDir())
-		exportDir, err := filepath.Abs(filepath.Join(exportDirs, dir.Name()))
+
+	t.Run("table-restore", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(exportDirs)
 		require.NoError(t, err)
-		t.Run(dir.Name(), restoreOldVersionTest(exportDir))
-	}
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(exportDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreOldVersionTest(exportDir))
+		}
+	})
+
+	t.Run("cluster-restore", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(clusterDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(clusterDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir))
+		}
+	})
 }
 
 func restoreOldVersionTest(exportDir string) func(t *testing.T) {
@@ -82,5 +101,38 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY k`, results)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t2 ORDER BY k`, results)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t4 ORDER BY k`, results)
+	}
+}
+
+func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		externalDir, dirCleanup := testutils.TempDir(t)
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				ExternalIODir: externalDir,
+			},
+		})
+		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		defer func() {
+			tc.Stopper().Stop(ctx)
+			dirCleanup()
+		}()
+		err := os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
+		require.NoError(t, err)
+
+		// Ensure that the restore succeeds.
+		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
+
+		sqlDB.CheckQueryResults(t, "SHOW USERS", [][]string{
+			{"admin", "CREATEROLE", "{}"},
+			{"craig", "", "{}"},
+			{"root", "CREATEROLE", "{admin}"},
+		})
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.comments", [][]string{
+			{"0", "52", "0", "database comment string"},
+			{"1", "53", "0", "table comment string"},
+		})
+		sqlDB.CheckQueryResults(t, "SELECT * FROM data.bank", [][]string{{"1"}})
 	}
 }

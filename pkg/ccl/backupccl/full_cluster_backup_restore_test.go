@@ -171,6 +171,10 @@ func TestFullClusterBackup(t *testing.T) {
 				// createdAt and statisticsID are re-generated on RESTORE.
 				query := fmt.Sprintf("SELECT \"tableID\", name, \"columnIDs\", \"rowCount\" FROM system.table_statistics")
 				verificationQueries[i] = query
+			case sqlbase.SettingsTable.Name:
+				// We don't include the cluster version.
+				query := fmt.Sprintf("SELECT * FROM system.%s WHERE name <> 'version'", table)
+				verificationQueries[i] = query
 			default:
 				query := fmt.Sprintf("SELECT * FROM system.%s", table)
 				verificationQueries[i] = query

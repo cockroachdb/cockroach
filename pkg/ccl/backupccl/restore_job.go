@@ -865,6 +865,17 @@ func isDatabaseEmpty(
 	return true, nil
 }
 
+func getTempSystemDBID(details jobspb.RestoreDetails) sqlbase.ID {
+	tempSystemDBID := keys.MinNonPredefinedUserDescID
+	for id := range details.TableRewrites {
+		if int(id) > tempSystemDBID {
+			tempSystemDBID = int(id)
+		}
+	}
+
+	return sqlbase.ID(tempSystemDBID)
+}
+
 // createImportingTables create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingTables(
@@ -893,15 +904,11 @@ func createImportingTables(
 			}
 		}
 	}
-	tempSystemDBID := keys.MinNonPredefinedUserDescID
-	for id := range details.TableRewrites {
-		if int(id) > tempSystemDBID {
-			tempSystemDBID = int(id)
-		}
-	}
+
 	if details.DescriptorCoverage == tree.AllDescriptors {
+		tempSystemDBID := getTempSystemDBID(details)
 		databases = append(databases, &sqlbase.DatabaseDescriptor{
-			ID:         sqlbase.ID(tempSystemDBID),
+			ID:         tempSystemDBID,
 			Name:       restoreTempSystemDB,
 			Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
 		})
@@ -1019,8 +1026,8 @@ func (r *restoreResumer) Resume(
 	// TODO(pbardea): This was part of the original design where full cluster
 	// restores were a special case, but really we should be making only the
 	// temporary system tables public before we restore all the system table data.
-	if r.descriptorCoverage == tree.AllDescriptors {
-		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB); err != nil {
+	if details.DescriptorCoverage == tree.AllDescriptors {
+		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, tables); err != nil {
 			return err
 		}
 	}
@@ -1269,26 +1276,55 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 
 // restoreSystemTables atomically replaces the contents of the system tables
 // with the data from the restored system tables.
-func (r *restoreResumer) restoreSystemTables(ctx context.Context, db *kv.DB) error {
+func (r *restoreResumer) restoreSystemTables(
+	ctx context.Context,
+	db *kv.DB,
+	restoreDetails jobspb.RestoreDetails,
+	tables []*sqlbase.TableDescriptor,
+) error {
+	tempSystemDBID := getTempSystemDBID(restoreDetails)
+
 	executor := r.execCfg.InternalExecutor
 	var err error
-	for _, systemTable := range fullClusterSystemTables {
+
+	// Iterate through all the tables that we're restoring, and if it was restored
+	// to the temporary system DB then copy it's data over to the real system
+	// table.
+	for _, table := range tables {
+		if table.GetParentID() != tempSystemDBID {
+			continue
+		}
+		systemTableName := table.GetName()
+
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
-			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTable)
-			// Don't clear the jobs table as to not delete the jobs that are performing
-			// the restore.
-			if systemTable != sqlbase.JobsTable.Name {
-				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTable)
+			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTableName)
+			if systemTableName == sqlbase.SettingsTable.Name {
+				// Don't delete the cluster version.
+				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE name <> 'version';", systemTableName)
 				_, err = executor.Exec(ctx, stmtDebugName+"-data-deletion", txn, deleteQuery)
 				if err != nil {
-					return errors.Wrapf(err, "deleting data from system.%s", systemTable)
+					return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+				}
+			} else if systemTableName != sqlbase.JobsTable.Name {
+				// Don't clear the jobs table as to not delete the jobs that are
+				// performing the restore.
+				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTableName)
+				_, err = executor.Exec(ctx, stmtDebugName+"-data-deletion", txn, deleteQuery)
+				if err != nil {
+					return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 				}
 			}
-			restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s);", systemTable, restoreTempSystemDB, systemTable)
-			_, err = executor.Exec(ctx, stmtDebugName+"-data-insert", txn, restoreQuery)
-			if err != nil {
-				return errors.Wrapf(err, "inserting data to system.%s", systemTable)
+
+			restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s);", systemTableName,
+				restoreTempSystemDB, systemTableName)
+			if systemTableName == sqlbase.SettingsTable.Name {
+				// Don't overwrite the cluster version.
+				restoreQuery = fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s WHERE name <> 'version');",
+					systemTableName, restoreTempSystemDB, systemTableName)
+			}
+			if _, err := executor.Exec(ctx, stmtDebugName+"-data-insert", txn, restoreQuery); err != nil {
+				return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 			}
 			return nil
 		}); err != nil {
