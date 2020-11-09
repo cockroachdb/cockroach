@@ -338,48 +338,10 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
-	// stores, the NodeID is persisted in each of them. If not, then we'll need to
-	// use the KV store to get a NodeID assigned.
 	n.initialStart = initialStart
-	nodeID := state.nodeID
-	if nodeID == 0 {
-		// TODO(irfansharif): This codepath exists to maintain the legacy
-		// behavior of node ID allocation that was triggered on gossip
-		// connectivity. This was replaced by the Join RPC in 20.2, and can be
-		// removed in 21.1.
-		if !initialStart {
-			log.Fatalf(ctx, "node has no NodeID, but claims to not be joining cluster")
-		}
-		// Allocate NodeID. Note that Gossip is already connected because if there's
-		// no NodeID yet, this means that we had to connect Gossip to learn the ClusterID.
-		select {
-		case <-n.storeCfg.Gossip.Connected:
-		default:
-			log.Fatalf(ctx, "gossip is not connected yet")
-		}
-		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
-		newID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
-		if err != nil {
-			return err
-		}
-		log.Infof(ctxWithSpan, "new node allocated ID %d", newID)
-		span.Finish()
-		nodeID = newID
-
-		// We're joining via gossip, so we don't have a liveness record for
-		// ourselves yet. Let's create one while here.
-		if err := n.storeCfg.NodeLiveness.CreateLivenessRecord(ctx, nodeID); err != nil {
-			return err
-		}
-	}
-
-	// Inform the RPC context of the node ID.
-	n.storeCfg.RPCContext.NodeID.Set(ctx, nodeID)
-
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 	n.Descriptor = roachpb.NodeDescriptor{
-		NodeID:          nodeID,
+		NodeID:          state.nodeID,
 		Address:         util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		SQLAddress:      util.MakeUnresolvedAddr(sqlAddr.Network(), sqlAddr.String()),
 		Attrs:           attrs,
