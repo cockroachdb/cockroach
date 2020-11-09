@@ -11,12 +11,21 @@
 package cli
 
 import (
+	"context"
+	"fmt"
+	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInitInsecure(t *testing.T) {
@@ -141,5 +150,50 @@ func TestAddrWithDefaultHost(t *testing.T) {
 		} else if addr != test.outAddr {
 			t.Errorf("expected %q, got %q", test.outAddr, addr)
 		}
+	}
+}
+
+func TestSetUIFromEnv(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	cc, err := tc.Server(0).RPCContext().GRPCDialNode(
+		tc.Server(0).RPCAddr(),
+		1,
+		rpc.DefaultClass,
+	).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminClient := serverpb.NewAdminClient(cc)
+
+	const name = "COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED"
+	const key = "release_notes_signup_dismissed"
+
+	for v, expected := range map[string]string{"true": "true", "false": "false", "": "false"} {
+		t.Run(fmt.Sprintf("%s=%s", name, v), func(t *testing.T) {
+			if v == "" {
+				os.Unsetenv(name)
+			} else {
+				os.Setenv(name, v)
+			}
+			defer envutil.ClearEnvCache()
+
+			err := setUIDataFromEnv(ctx, adminClient)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			resp, err := adminClient.GetUIData(ctx, &serverpb.GetUIDataRequest{Keys: []string{key}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual := string(resp.KeyValues[key].Value)
+			require.Equal(t, expected, actual)
+		})
 	}
 }
