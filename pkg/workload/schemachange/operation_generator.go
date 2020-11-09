@@ -105,6 +105,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropSchema:        true,
 
 	renameColumn:   true,
+	renameIndex:    true,
 	renameSequence: true,
 	renameTable:    true,
 	renameView:     true,
@@ -1177,6 +1178,16 @@ func (og *operationGenerator) renameIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	srcTableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !srcTableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER INDEX %s@"IrrelevantConstraintName" RENAME TO "OtherConstraintName"`,
+			tableName), nil
+	}
+
 	srcIndexName, err := og.randIndex(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
@@ -1187,7 +1198,21 @@ func (og *operationGenerator) renameIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER TABLE %s RENAME CONSTRAINT "%s" TO "%s"`,
+	srcIndexExists, err := indexExists(tx, tableName, srcIndexName)
+	if err != nil {
+		return "", err
+	}
+	destIndexExists, err := indexExists(tx, tableName, destIndexName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{code: pgcode.UndefinedObject, condition: !srcIndexExists},
+		{code: pgcode.DuplicateRelation, condition: destIndexExists && srcIndexName != destIndexName},
+	}.add(og.expectedExecErrors)
+
+	return fmt.Sprintf(`ALTER INDEX %s@"%s" RENAME TO "%s"`,
 		tableName, srcIndexName, destIndexName), nil
 }
 
@@ -1726,6 +1751,7 @@ func (og *operationGenerator) randIndex(
 	q := fmt.Sprintf(`
   SELECT index_name
     FROM [SHOW INDEXES FROM %s]
+	WHERE index_name LIKE 'index%%'
 ORDER BY random()
    LIMIT 1;
 `, tableName.String())
