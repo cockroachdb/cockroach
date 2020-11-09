@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1708,40 +1709,8 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
 	columnIDs := make(map[descpb.ColumnID]string, len(desc.Columns))
-	for _, column := range desc.AllNonDropColumns() {
-		if err := catalog.ValidateName(column.Name, "column"); err != nil {
-			return err
-		}
-		if column.ID == 0 {
-			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.ID))
-		}
-
-		if _, columnNameExists := columnNames[column.Name]; columnNameExists {
-			for i := range desc.Columns {
-				if desc.Columns[i].Name == column.Name {
-					return pgerror.Newf(pgcode.DuplicateColumn,
-						"duplicate column name: %q", column.Name)
-				}
-			}
-			return pgerror.Newf(pgcode.DuplicateColumn,
-				"duplicate: column %q in the middle of being added, not yet public", column.Name)
-		}
-		if colinfo.IsSystemColumnName(column.Name) {
-			return pgerror.Newf(pgcode.DuplicateColumn,
-				"column name %q conflicts with a system column name", column.Name)
-		}
-		columnNames[column.Name] = column.ID
-
-		if other, ok := columnIDs[column.ID]; ok {
-			return fmt.Errorf("column %q duplicate ID of column %q: %d",
-				column.Name, other, column.ID)
-		}
-		columnIDs[column.ID] = column.Name
-
-		if column.ID >= desc.NextColumnID {
-			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
-				column.Name, errors.Safe(column.ID), errors.Safe(desc.NextColumnID))
-		}
+	if err := desc.validateColumns(columnNames, columnIDs); err != nil {
+		return err
 	}
 
 	for _, m := range desc.Mutations {
@@ -1792,16 +1761,21 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	// TODO(dt): Validate each column only appears at-most-once in any FKs.
 
-	// Only validate column families and indexes if this is actually a table, not
-	// if it's just a view.
+	// Only validate column families, check constraints, and indexes if this is
+	// actually a table, not if it's just a view.
 	if desc.IsPhysicalTable() {
 		if err := desc.validateColumnFamilies(columnIDs); err != nil {
+			return err
+		}
+
+		if err := desc.validateCheckConstraints(columnIDs); err != nil {
 			return err
 		}
 
 		if err := desc.validateTableIndexes(columnNames); err != nil {
 			return err
 		}
+
 		if err := desc.validatePartitioning(); err != nil {
 			return err
 		}
@@ -1863,6 +1837,63 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID(), privilege.Table)
+}
+
+func (desc *Immutable) validateColumns(
+	columnNames map[string]descpb.ColumnID, columnIDs map[descpb.ColumnID]string,
+) error {
+	for _, column := range desc.AllNonDropColumns() {
+		if err := catalog.ValidateName(column.Name, "column"); err != nil {
+			return err
+		}
+		if column.ID == 0 {
+			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.ID))
+		}
+
+		if _, columnNameExists := columnNames[column.Name]; columnNameExists {
+			for i := range desc.Columns {
+				if desc.Columns[i].Name == column.Name {
+					return pgerror.Newf(pgcode.DuplicateColumn,
+						"duplicate column name: %q", column.Name)
+				}
+			}
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"duplicate: column %q in the middle of being added, not yet public", column.Name)
+		}
+		if colinfo.IsSystemColumnName(column.Name) {
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"column name %q conflicts with a system column name", column.Name)
+		}
+		columnNames[column.Name] = column.ID
+
+		if other, ok := columnIDs[column.ID]; ok {
+			return fmt.Errorf("column %q duplicate ID of column %q: %d",
+				column.Name, other, column.ID)
+		}
+		columnIDs[column.ID] = column.Name
+
+		if column.ID >= desc.NextColumnID {
+			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
+				column.Name, errors.Safe(column.ID), errors.Safe(desc.NextColumnID))
+		}
+
+		if column.IsComputed() {
+			// Verify that the computed column expression is valid.
+			expr, err := parser.ParseExpr(*column.ComputeExpr)
+			if err != nil {
+				return err
+			}
+			valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return fmt.Errorf("computed column %q refers to unknown columns in expression: %s",
+					column.Name, *column.ComputeExpr)
+			}
+		}
+	}
+	return nil
 }
 
 func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]string) error {
@@ -1933,6 +1964,36 @@ func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]stri
 	for colID := range columnIDs {
 		if _, ok := colIDToFamilyID[colID]; !ok {
 			return fmt.Errorf("column %d is not in any column family", colID)
+		}
+	}
+	return nil
+}
+
+// validateCheckConstraints validates that check constraints are well formed.
+// Checks include validating the column IDs and verifying that check expressions
+// do not reference non-existent columns.
+func (desc *Immutable) validateCheckConstraints(columnIDs map[descpb.ColumnID]string) error {
+	for _, chk := range desc.AllActiveAndInactiveChecks() {
+		// Verify that the check's column IDs are valid.
+		for _, colID := range chk.ColumnIDs {
+			_, ok := columnIDs[colID]
+			if !ok {
+				return fmt.Errorf("check constraint %q contains unknown column \"%d\"", chk.Name, colID)
+			}
+		}
+
+		// Verify that the check's expression is valid.
+		expr, err := parser.ParseExpr(chk.Expr)
+		if err != nil {
+			return err
+		}
+		valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return fmt.Errorf("check constraint %q refers to unknown columns in expression: %s",
+				chk.Name, chk.Expr)
 		}
 	}
 	return nil
@@ -2017,6 +2078,20 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 			if _, exists := columnNames[index.Sharded.Name]; !exists {
 				return fmt.Errorf("index %q refers to non-existent shard column %q",
 					index.Name, index.Sharded.Name)
+			}
+		}
+		if index.IsPartial() {
+			expr, err := parser.ParseExpr(index.Predicate)
+			if err != nil {
+				return err
+			}
+			valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return fmt.Errorf("partial index %q refers to unknown columns in predicate: %s",
+					index.Name, index.Predicate)
 			}
 		}
 	}

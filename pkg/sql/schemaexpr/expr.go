@@ -111,6 +111,47 @@ func ExtractColumnIDs(desc catalog.TableDescriptor, rootExpr tree.Expr) (TableCo
 	return colIDs, err
 }
 
+type returnFalse struct{}
+
+func (returnFalse) Error() string { panic("unimplemented") }
+
+var returnFalsePseudoError error = returnFalse{}
+
+// HasValidColumnReferences returns true if all columns referenced in rootExpr
+// exist in desc.
+func HasValidColumnReferences(desc catalog.TableDescriptor, rootExpr tree.Expr) (bool, error) {
+	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			return true, expr, nil
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return false, nil, err
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return true, expr, nil
+		}
+
+		_, _, err = desc.FindColumnByName(c.ColumnName)
+		if err != nil {
+			return false, expr, returnFalsePseudoError
+		}
+
+		return false, expr, nil
+	})
+	if errors.Is(err, returnFalsePseudoError) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // FormatExprForDisplay formats a schema expression string for display. It
 // accepts formatting flags to control things like showing type annotations or
 // type casts.
