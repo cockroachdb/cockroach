@@ -540,3 +540,51 @@ ORDER BY statistics_name, column_names::STRING
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
 arr_stats        {rowid}       4          4               0           true
 arr_stats_x      {x}           4          3               1           false
+
+# Regression test for #56356. Histograms on all-null columns should not cause
+# an error.
+statement ok
+CREATE TABLE all_null (k INT PRIMARY KEY, c INT);
+INSERT INTO all_null VALUES (1, NULL);
+CREATE STATISTICS s FROM all_null
+
+query T
+SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+  FROM (
+SELECT json_array_elements(statistics) - 'created_at' AS stat
+FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
+)
+----
+[
+    {
+        "columns": [
+            "k"
+        ],
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "s",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c"
+        ],
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "s",
+        "null_count": 1,
+        "row_count": 1
+    }
+]
+
+statement ok
+SELECT * FROM all_null WHERE c IS NOT NULL

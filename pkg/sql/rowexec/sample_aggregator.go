@@ -435,5 +435,5 @@ func (s *sampleAggregator) generateHistogram(
 			values = append(values, ed.Datum)
 		}
 	}
-	return stats.EquiDepthHistogram(evalCtx, values, numRows, distinctCount, maxBuckets)
+	return stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)
 }

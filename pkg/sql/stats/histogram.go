@@ -42,11 +42,15 @@ var HistogramClusterMode = settings.RegisterPublicBoolSetting(
 // known number of distinct values (distinctCount) among the buckets, in
 // proportion with the number of rows in each bucket.
 func EquiDepthHistogram(
-	evalCtx *tree.EvalContext, samples tree.Datums, numRows, distinctCount int64, maxBuckets int,
+	evalCtx *tree.EvalContext,
+	colType *types.T,
+	samples tree.Datums,
+	numRows, distinctCount int64,
+	maxBuckets int,
 ) (HistogramData, error) {
 	numSamples := len(samples)
 	if numSamples == 0 {
-		return HistogramData{}, nil
+		return HistogramData{ColumnType: *colType}, nil
 	}
 	if maxBuckets < 2 {
 		return HistogramData{}, errors.Errorf("histogram requires at least two buckets")
