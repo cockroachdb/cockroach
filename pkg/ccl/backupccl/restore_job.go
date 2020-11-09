@@ -1344,14 +1344,19 @@ func (r *restoreResumer) publishDescriptors(
 		}
 		allMutDescs = append(allMutDescs, mutTable)
 		newTables = append(newTables, mutTable.TableDesc())
-		// Convert any mutations that were in progress on the table descriptor
-		// when the backup was taken, and convert them to schema change jobs.
-		newJobs, err := createSchemaChangeJobsFromMutations(ctx,
-			r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, mutTable)
-		if err != nil {
-			return newDescriptorChangeJobs, err
+		// For cluster restores, all the jobs are restored directly from the jobs
+		// table, so there is no need to re-create ongoing schema change jobs,
+		// otherwise we'll create duplicate jobs.
+		if details.DescriptorCoverage != tree.AllDescriptors {
+			// Convert any mutations that were in progress on the table descriptor
+			// when the backup was taken, and convert them to schema change jobs.
+			newJobs, err := createSchemaChangeJobsFromMutations(ctx,
+				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, mutTable)
+			if err != nil {
+				return newDescriptorChangeJobs, err
+			}
+			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
 		}
-		newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
 	}
 	// For all of the newly created types, make type schema change jobs for any
 	// type descriptors that were backed up in the middle of a type schema change.
@@ -1365,7 +1370,7 @@ func (r *restoreResumer) publishDescriptors(
 		}
 		allMutDescs = append(allMutDescs, typ)
 		newTypes = append(newTypes, typ.TypeDesc())
-		if typ.HasPendingSchemaChanges() {
+		if typ.HasPendingSchemaChanges() && details.DescriptorCoverage != tree.AllDescriptors {
 			typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, typ)
 			if err != nil {
 				return newDescriptorChangeJobs, err
