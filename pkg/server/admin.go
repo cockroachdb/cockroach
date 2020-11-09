@@ -1194,13 +1194,13 @@ func splitUIKey(combined string) (string, string) {
 	return pair[0], pair[1]
 }
 
-// SetUIData is an endpoint that stores the given key/value pairs in the
+// SetUIData stores the given key/value pairs in the
 // system.ui table. See GetUIData for more details on semantics.
-func (s *adminServer) SetUIData(
-	ctx context.Context, req *serverpb.SetUIDataRequest,
+// This function writes to system.ui using the internal SQL executor of the provided server.
+func SetUIData(
+	ctx context.Context, s *Server, req *serverpb.SetUIDataRequest,
 ) (*serverpb.SetUIDataResponse, error) {
-	ctx = s.server.AnnotateCtx(ctx)
-
+	ctx = s.AnnotateCtx(ctx)
 	userName, err := userFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1214,20 +1214,32 @@ func (s *adminServer) SetUIData(
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
-		rowsAffected, err := s.server.sqlServer.internalExecutor.ExecEx(
+		rowsAffected, err := s.sqlServer.internalExecutor.ExecEx(
 			ctx, "admin-set-ui-data", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
 				User: security.RootUserName(),
 			},
 			query, makeUIKey(userName, key), val)
 		if err != nil {
-			return nil, s.serverError(err)
+			return nil, err
 		}
 		if rowsAffected != 1 {
-			return nil, s.serverErrorf("rows affected %d != expected %d", rowsAffected, 1)
+			return nil, errors.Newf("rows affected %d != expected %d", rowsAffected, 1)
 		}
 	}
 
+	return &serverpb.SetUIDataResponse{}, nil
+}
+
+// SetUIData is an endpoint that stores the given key/value pairs in the
+// system.ui table. See GetUIData for more details on semantics.
+func (s *adminServer) SetUIData(
+	ctx context.Context, req *serverpb.SetUIDataRequest,
+) (*serverpb.SetUIDataResponse, error) {
+	_, err := SetUIData(ctx, s.server, req)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
 	return &serverpb.SetUIDataResponse{}, nil
 }
 
