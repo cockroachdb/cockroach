@@ -145,12 +145,13 @@ func NewColBatchScan(
 	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
+	evalCtx *tree.EvalContext,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
-) (*ColBatchScan, error) {
+) (*ColBatchScan, *execinfra.ProcOutputHelper, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
-		return nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
+		return nil, nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
 
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
@@ -158,7 +159,7 @@ func NewColBatchScan(
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	// TODO(ajwerner): The need to construct an Immutable here
 	// indicates that we're probably doing this wrong. Instead we should be
-	// just seting the ID and Version in the spec or something like that and
+	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated Immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
 	typs := table.ColumnTypesWithMutations(returnMutations)
@@ -175,17 +176,16 @@ func NewColBatchScan(
 	}
 
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := flowCtx.NewEvalCtx()
 	// Before we can safely use types from the table descriptor, we need to
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
 	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
 	semaCtx.TypeResolver = resolver
-	if err := resolver.HydrateTypeSlice(evalCtx.Context, typs); err != nil {
-		return nil, err
+	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
+		return nil, nil, err
 	}
-	helper := execinfra.ProcOutputHelper{}
+	helper := execinfra.NewProcOutputHelper()
 	if err := helper.Init(
 		post,
 		typs,
@@ -193,7 +193,7 @@ func NewColBatchScan(
 		evalCtx,
 		nil, /* output */
 	); err != nil {
-		return nil, err
+		return nil, helper, err
 	}
 
 	neededColumns := helper.NeededColumns()
@@ -201,14 +201,14 @@ func NewColBatchScan(
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	if spec.IsCheck {
 		// cFetchers don't support these checks.
-		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
+		return nil, helper, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 	if _, _, err := initCRowFetcher(
 		flowCtx.Codec(), allocator, fetcher, table, int(spec.IndexIdx), columnIdxMap,
 		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
 		sysColDescs,
 	); err != nil {
-		return nil, err
+		return nil, helper, err
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
@@ -227,7 +227,7 @@ func NewColBatchScan(
 		parallelize: spec.Parallelize && limitHint == 0,
 		ResultTypes: typs,
 	}
-	return s, nil
+	return s, helper, nil
 }
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
@@ -276,6 +276,7 @@ func initCRowFetcher(
 
 // Release implements the execinfra.Releasable interface.
 func (s *ColBatchScan) Release() {
+	s.rf.table.Release()
 	*s.rf = cFetcher{}
 	cFetcherPool.Put(s.rf)
 	*s = ColBatchScan{

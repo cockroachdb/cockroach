@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -114,6 +116,33 @@ type cTableInfo struct {
 	extraTypes  []*types.T
 
 	da rowenc.DatumAlloc
+}
+
+var _ execinfra.Releasable = &cTableInfo{}
+
+var cTableInfoPool = sync.Pool{
+	New: func() interface{} {
+		return &cTableInfo{}
+	},
+}
+
+func newCTableInfo() *cTableInfo {
+	return cTableInfoPool.Get().(*cTableInfo)
+}
+
+// Release implements the execinfra.Releasable interface.
+func (c *cTableInfo) Release() {
+	*c = cTableInfo{
+		colIdxMap: colIdxMap{
+			vals: c.colIdxMap.vals[:0],
+			ords: c.colIdxMap.ords[:0],
+		},
+		indexColOrdinals:       c.indexColOrdinals[:0],
+		allIndexColOrdinals:    c.allIndexColOrdinals[:0],
+		extraValColOrdinals:    c.extraValColOrdinals[:0],
+		allExtraValColOrdinals: c.allExtraValColOrdinals[:0],
+	}
+	cTableInfoPool.Put(c)
 }
 
 // colIdxMap is a "map" that contains the ordinal in cols for each ColumnID
@@ -315,26 +344,31 @@ func (rf *cFetcher) Init(
 	}
 
 	tableArgs := tables[0]
-
-	m := colIdxMap{
-		vals: make(descpb.ColumnIDs, 0, len(tableArgs.ColIdxMap)),
-		ords: make([]int, 0, len(tableArgs.ColIdxMap)),
+	table := newCTableInfo()
+	if cap(table.colIdxMap.vals) < len(tableArgs.ColIdxMap) {
+		table.colIdxMap.vals = make(descpb.ColumnIDs, 0, len(tableArgs.ColIdxMap))
+		table.colIdxMap.ords = make([]int, 0, len(tableArgs.ColIdxMap))
 	}
 	for k, v := range tableArgs.ColIdxMap {
-		m.vals = append(m.vals, k)
-		m.ords = append(m.ords, v)
+		table.colIdxMap.vals = append(table.colIdxMap.vals, k)
+		table.colIdxMap.ords = append(table.colIdxMap.ords, v)
 	}
-	sort.Sort(m)
+	sort.Sort(table.colIdxMap)
 	colDescriptors := tableArgs.Cols
-	table := &cTableInfo{
-		spans:              tableArgs.Spans,
-		desc:               tableArgs.Desc,
-		colIdxMap:          m,
-		index:              tableArgs.Index,
-		isSecondaryIndex:   tableArgs.IsSecondaryIndex,
-		cols:               colDescriptors,
-		timestampOutputIdx: noOutputColumn,
-		oidOutputIdx:       noOutputColumn,
+	*table = cTableInfo{
+		spans:                  tableArgs.Spans,
+		desc:                   tableArgs.Desc,
+		colIdxMap:              table.colIdxMap,
+		index:                  tableArgs.Index,
+		isSecondaryIndex:       tableArgs.IsSecondaryIndex,
+		cols:                   colDescriptors,
+		neededColsList:         table.neededColsList[:0],
+		indexColOrdinals:       table.indexColOrdinals[:0],
+		allIndexColOrdinals:    table.allIndexColOrdinals[:0],
+		extraValColOrdinals:    table.extraValColOrdinals[:0],
+		allExtraValColOrdinals: table.allExtraValColOrdinals[:0],
+		timestampOutputIdx:     noOutputColumn,
+		oidOutputIdx:           noOutputColumn,
 	}
 
 	rf.typs = make([]*types.T, len(colDescriptors))
@@ -347,7 +381,9 @@ func (rf *cFetcher) Init(
 	var neededCols util.FastIntSet
 	// Scan through the entire columns map to see which columns are
 	// required.
-	table.neededColsList = make([]int, 0, tableArgs.ValNeededForCol.Len())
+	if numNeededCols := tableArgs.ValNeededForCol.Len(); cap(table.neededColsList) < numNeededCols {
+		table.neededColsList = make([]int, 0, numNeededCols)
+	}
 	for col, idx := range tableArgs.ColIdxMap {
 		if tableArgs.ValNeededForCol.Contains(idx) {
 			// The idx-th column is required.

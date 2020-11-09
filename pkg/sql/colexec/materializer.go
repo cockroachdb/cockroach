@@ -141,6 +141,13 @@ var materializerPool = sync.Pool{
 	},
 }
 
+// materializerEmptyPostProcessSpec is the spec used to initialize the
+// materializer. Currently, we assume that the input to the materializer fully
+// handles any post-processing, so we always use the empty spec.
+// Note that this variable is never modified once initialized (neither is the
+// post-processing spec object itself), so it is thread-safe.
+var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
+
 // NewMaterializer creates a new Materializer processor which processes the
 // columnar data coming from input to return it as rows.
 // Arguments:
@@ -180,13 +187,16 @@ func NewMaterializer(
 		closers:       toClose,
 	}
 
-	if err := m.ProcessorBase.Init(
+	if err := m.ProcessorBase.InitWithEvalCtx(
 		m,
 		// input must have handled any post-processing itself, so we pass in
 		// an empty post-processing spec.
-		&execinfrapb.PostProcessSpec{},
+		materializerEmptyPostProcessSpec,
 		typs,
 		flowCtx,
+		// Materializer doesn't modify the eval context, so it is safe to reuse
+		// the one from the flow context.
+		flowCtx.EvalCtx,
 		processorID,
 		output,
 		nil, /* memMonitor */
@@ -309,6 +319,7 @@ func (m *Materializer) ConsumerClosed() {
 func (m *Materializer) Release() {
 	m.drainHelper.Release()
 	m.ProcessorBase.Reset()
+	m.converter.Release()
 	*m = Materializer{
 		// We're keeping the reference to the same ProcessorBase since it
 		// allows us to reuse some of the slices as well as ProcOutputHelper
