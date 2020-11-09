@@ -2769,3 +2769,14 @@ FROM
 WHERE
   n.nspname != 'pg_toast'
   AND (t.typrelid = 0 OR (SELECT c.relkind = 'c' FROM pg_catalog.pg_class AS c WHERE c.oid = t.typrelid))
+
+# Regression test for range constraints on virtual index scans. (#56440)
+query O
+SELECT oid FROM pg_type WHERE oid IN (19,20,24) ORDER BY oid
+----
+19
+20
+24
+
+statement ok
+SELECT * FROM pg_class WHERE oid = 10 OR oid BETWEEN 20 AND 30 OR oid = 40
