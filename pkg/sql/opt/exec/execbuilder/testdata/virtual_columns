@@ -1,0 +1,46 @@
+statement ok
+SET experimental_enable_virtual_columns = true
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, v INT AS (a+b) VIRTUAL)
+
+# Verify that the primary index doesn't contain the virtual column.
+query T
+EXPLAIN (OPT, CATALOG) SELECT * from t
+----
+TABLE t
+ ├── a int not null
+ ├── b int
+ ├── v int as (a + b) virtual [virtual-computed]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_b (b)
+ ├── FAMILY fam_1_a_v (a, v)
+ └── INDEX primary
+      └── a int not null
+project
+ ├── scan t
+ │    └── computed column expressions
+ │         └── v
+ │              └── a + b
+ └── projections
+      └── a + b
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a, b, v)
+│ estimated row count: 1,000 (missing stats)
+│ render 0: a + b
+│ render 1: a
+│ render 2: b
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: t@primary
+      spans: FULL SCAN

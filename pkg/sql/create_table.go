@@ -1405,7 +1405,14 @@ func NewTableDesc(
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
 			if d.IsVirtual() {
-				return nil, unimplemented.NewWithIssue(57608, "virtual computed columns")
+				if !sessionData.VirtualColumnsEnabled {
+					return nil, unimplemented.NewWithIssue(57608, "virtual computed columns")
+				}
+				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.VirtualComputedColumns) {
+					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+						"version %v must be finalized to use virtual columns",
+						clusterversion.VirtualComputedColumns)
+				}
 			}
 
 			col, idx, expr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
@@ -2285,7 +2292,11 @@ func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescr
 		telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(desc.Type.TelemetryName()))
 	}
 	if desc.IsComputed() {
-		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("computed"))
+		if desc.Virtual {
+			telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("virtual"))
+		} else {
+			telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("computed"))
+		}
 	}
 	if desc.HasDefault() {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("default_expr"))

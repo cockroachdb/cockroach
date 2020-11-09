@@ -119,7 +119,8 @@ message ColumnDescriptor {
   option (gogoproto.equal) = true;
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ColumnID"];
+                          (gogoproto.customname) = "ID",
+                          (gogoproto.casttype) = "ColumnID"];
   optional sql.sem.types.T type = 3;
   optional bool nullable = 4 [(gogoproto.nullable) = false];
   reserved 8;
@@ -142,6 +143,11 @@ message ColumnDescriptor {
   // have been serialized in a internal format. Instead, use one of the
   // schemaexpr.FormatExpr* functions.
   optional string compute_expr = 11;
+
+  // A computed column can be stored or virtual.
+  // Virtual can only be true if there is a compute expression.
+  optional bool virtual = 16 [(gogoproto.nullable) = false];
+
   // PGAttributeNum must be accessed through the accessor, since it is set
   // lazily, it is incorrect to access it directly.
   // PGAttributeNum represents a column's number in catalog tables.

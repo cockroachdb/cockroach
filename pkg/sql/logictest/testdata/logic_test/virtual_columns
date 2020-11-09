@@ -1,0 +1,21 @@
+statement ok
+SET experimental_enable_virtual_columns = true
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, v INT AS (a+b) VIRTUAL)
+
+statement ok
+INSERT INTO t VALUES (1, 1)
+
+statement ok
+INSERT INTO t(a,b) VALUES (2, 2)
+
+statement error cannot write directly to computed column
+INSERT INTO t(a,b,v) VALUES (2, 2, 0)
+
+query III colnames,rowsort
+SELECT * FROM t
+----
+a  b  v
+1  1  2
+2  2  4
