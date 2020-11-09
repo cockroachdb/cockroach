@@ -21,8 +21,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -63,15 +61,10 @@ func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
 	}
 }
 
-func (c *noOIDCConfigured) ValidateOIDCState(state *serverpb.OIDCState) error {
-	return errors.New("OIDC is not enabled")
-}
-
 // OIDC is an interface that an OIDC-based authentication module should implement to integrate with
 // the rest of the node's functionality
 type OIDC interface {
 	ui.OIDCUI
-	ValidateOIDCState(state *serverpb.OIDCState) error
 }
 
 // ConfigureOIDC is a hook for the `oidcccl` library to add OIDC login support. It's called during
@@ -83,8 +76,6 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
-	nodeDialer *nodedialer.Dialer,
-	nodeID roachpb.NodeID,
 ) (OIDC, error) {
 	return &noOIDCConfigured{}, nil
 }
@@ -179,17 +170,6 @@ var errWebAuthenticationFailure = status.Errorf(
 	codes.Unauthenticated,
 	"the provided credentials did not match any account on the server",
 )
-
-func (s *authenticationServer) ValidateOIDCState(
-	ctx context.Context, req *serverpb.ValidateOIDCStateRequest,
-) (*serverpb.ValidateOIDCStateResponse, error) {
-	err := s.server.oidc.ValidateOIDCState(req.State)
-	if err != nil {
-		return nil, err
-	}
-
-	return &serverpb.ValidateOIDCStateResponse{}, nil
-}
 
 // UserLoginFromSSO checks for the existence of a given username and if it exists,
 // creates a session for the username in the `web_sessions` table.
