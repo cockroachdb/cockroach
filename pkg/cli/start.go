@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -601,6 +603,17 @@ If problems persist, please see %s.`
 				return err
 			}
 
+			// Configure UI settings.
+			cc, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+			if err != nil {
+				return err
+			}
+			defer finish()
+			admin := serverpb.NewAdminClient(cc)
+			if err := setUIDataFromEnv(ctx, admin); err != nil {
+				return err
+			}
+
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			var buf redact.StringBuilder
@@ -875,6 +888,18 @@ If problems persist, please see %s.`
 	}
 
 	return returnErr
+}
+
+// setUIDataFromEnv toggles presence of release notes signup banner
+// based on an environment variable.
+func setUIDataFromEnv(ctx context.Context, admin serverpb.AdminClient) error {
+	b := envutil.EnvOrDefaultBool("COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED", false)
+	_, err := admin.SetUIData(ctx, &serverpb.SetUIDataRequest{
+		KeyValues: map[string][]byte{"release_notes_signup_dismissed": []byte(strconv.FormatBool(b))}})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // expandTabsInRedactableBytes expands tabs in the redactable byte
