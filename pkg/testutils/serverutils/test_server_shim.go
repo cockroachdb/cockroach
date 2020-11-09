@@ -100,6 +100,9 @@ type TestServerInterface interface {
 	// The real return type is *kv.DistSender.
 	DistSenderI() interface{}
 
+	// MigrationServer returns the internal *migrationServer as in interface{}
+	MigrationServer() interface{}
+
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}
 
