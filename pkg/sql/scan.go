@@ -15,7 +15,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -63,9 +62,6 @@ type scanNode struct {
 	cols []*descpb.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns colinfo.ResultColumns
-
-	// Map used to get the index for columns in cols.
-	colIdxMap catalog.TableColMap
 
 	spans   []roachpb.Span
 	reverse bool
@@ -329,8 +325,5 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 
 	// Set up the rest of the scanNode.
 	n.resultColumns = colinfo.ResultColumnsFromColDescPtrs(n.desc.GetID(), n.cols)
-	for i, c := range n.cols {
-		n.colIdxMap.Set(c.ID, i)
-	}
 	return nil
 }
