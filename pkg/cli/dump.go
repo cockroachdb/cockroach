@@ -1085,6 +1085,11 @@ func dumpTableData(
 						if err != nil {
 							return err
 						}
+					case types.BitFamily:
+						d, err = tree.ParseDBitArray(string(t))
+						if err != nil {
+							return err
+						}
 					default:
 						return errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
 					}
