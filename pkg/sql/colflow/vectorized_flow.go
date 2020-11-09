@@ -55,10 +55,25 @@ import (
 
 // countingSemaphore is a semaphore that keeps track of the semaphore count from
 // its perspective.
+// Note that it effectively implements the execinfra.Releasable interface but
+// due to the method name conflict doesn't.
 type countingSemaphore struct {
 	semaphore.Semaphore
 	globalCount *metric.Gauge
 	count       int64
+}
+
+var countingSemaphorePool = sync.Pool{
+	New: func() interface{} {
+		return &countingSemaphore{}
+	},
+}
+
+func newCountingSemaphore(sem semaphore.Semaphore, globalCount *metric.Gauge) *countingSemaphore {
+	s := countingSemaphorePool.Get().(*countingSemaphore)
+	s.Semaphore = sem
+	s.globalCount = globalCount
+	return s
 }
 
 func (s *countingSemaphore) Acquire(ctx context.Context, n int) error {
@@ -84,6 +99,14 @@ func (s *countingSemaphore) Release(n int) int {
 	atomic.AddInt64(&s.count, int64(-n))
 	s.globalCount.Dec(int64(n))
 	return s.Semaphore.Release(n)
+}
+
+// ReleaseToPool should be named Release and should implement the
+// execinfra.Releasable interface, but that would lead to conflict with
+// semaphore.Semaphore.Release method.
+func (s *countingSemaphore) ReleaseToPool() {
+	*s = countingSemaphore{}
+	countingSemaphorePool.Put(s)
 }
 
 type vectorizedFlow struct {
@@ -179,7 +202,7 @@ func (f *vectorizedFlow) Setup(
 	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		recordingStats = true
 	}
-	helper := &vectorizedFlowCreatorHelper{f: f.FlowBase}
+	helper := newVectorizedFlowCreatorHelper(f.FlowBase)
 
 	testingBatchSize := int64(0)
 	if f.FlowCtx.Cfg.Settings != nil {
@@ -213,7 +236,7 @@ func (f *vectorizedFlow) Setup(
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
 		return ctx, err
 	}
-	f.countingSemaphore = &countingSemaphore{Semaphore: f.Cfg.VecFDSemaphore, globalCount: f.Cfg.Metrics.VecOpenFDs}
+	f.countingSemaphore = newCountingSemaphore(f.Cfg.VecFDSemaphore, f.Cfg.Metrics.VecOpenFDs)
 	flowCtx := f.GetFlowCtx()
 	f.creator = newVectorizedFlowCreator(
 		helper,
@@ -293,6 +316,7 @@ func (f *vectorizedFlow) ConcurrentTxnUse() bool {
 // Release implements the execinfra.Releasable interface.
 func (f *vectorizedFlow) Release() {
 	f.creator.Release()
+	f.countingSemaphore.ReleaseToPool()
 	*f = vectorizedFlow{}
 	vectorizedFlowPool.Put(f)
 }
@@ -402,6 +426,7 @@ type runFn func(context.Context, context.CancelFunc)
 // infrastructure to be run asynchronously as well as to perform some sanity
 // checks.
 type flowCreatorHelper interface {
+	execinfra.Releasable
 	// addStreamEndpoint stores information about an inbound stream.
 	addStreamEndpoint(execinfrapb.StreamID, *colrpc.Inbox, *sync.WaitGroup)
 	// checkInboundStreamID checks that the provided stream ID has not been seen
@@ -465,6 +490,7 @@ type vectorizedFlowCreator struct {
 	remoteComponentCreator
 
 	streamIDToInputOp              map[execinfrapb.StreamID]opDAGWithMetaSources
+	streamIDToSpecIdx              map[execinfrapb.StreamID]int
 	recordingStats                 bool
 	vectorizedStatsCollectorsQueue []colexec.VectorizedStatsCollector
 	waitGroup                      *sync.WaitGroup
@@ -479,6 +505,9 @@ type vectorizedFlowCreator struct {
 	numOutboxes       int32
 	materializerAdded bool
 
+	// procIdxQueue is a queue of indices into processorSpecs (the argument to
+	// setupFlow), for topologically ordered processing.
+	procIdxQueue []int
 	// leaves accumulates all operators that have no further outputs on the
 	// current node, for the purposes of EXPLAIN output.
 	leaves []execinfra.OpNode
@@ -501,6 +530,12 @@ type vectorizedFlowCreator struct {
 	// expected number of components are closed.
 	numClosers int32
 	numClosed  int32
+
+	scratch struct {
+		inputs               []colexecbase.Operator
+		metadataSourcesQueue []execinfrapb.MetadataSource
+		toClose              []colexecbase.Closer
+	}
 }
 
 var _ execinfra.Releasable = &vectorizedFlowCreator{}
@@ -509,6 +544,7 @@ var vectorizedFlowCreatorPool = sync.Pool{
 	New: func() interface{} {
 		return &vectorizedFlowCreator{
 			streamIDToInputOp: make(map[execinfrapb.StreamID]opDAGWithMetaSources),
+			streamIDToSpecIdx: make(map[execinfrapb.StreamID]int),
 			exprHelper:        colexec.NewExprHelper(),
 		}
 	},
@@ -531,6 +567,7 @@ func newVectorizedFlowCreator(
 		flowCreatorHelper:              helper,
 		remoteComponentCreator:         componentCreator,
 		streamIDToInputOp:              creator.streamIDToInputOp,
+		streamIDToSpecIdx:              creator.streamIDToSpecIdx,
 		recordingStats:                 recordingStats,
 		vectorizedStatsCollectorsQueue: creator.vectorizedStatsCollectorsQueue,
 		waitGroup:                      waitGroup,
@@ -545,6 +582,7 @@ func newVectorizedFlowCreator(
 		releasables:                    creator.releasables,
 		diskQueueCfg:                   diskQueueCfg,
 		fdSemaphore:                    fdSemaphore,
+		scratch:                        creator.scratch,
 	}
 	return creator
 }
@@ -563,17 +601,32 @@ func (s *vectorizedFlowCreator) Release() {
 	for k := range s.streamIDToInputOp {
 		delete(s.streamIDToInputOp, k)
 	}
+	for k := range s.streamIDToSpecIdx {
+		delete(s.streamIDToSpecIdx, k)
+	}
+	s.flowCreatorHelper.Release()
 	for _, r := range s.releasables {
 		r.Release()
 	}
 	*s = vectorizedFlowCreator{
 		streamIDToInputOp:              s.streamIDToInputOp,
+		streamIDToSpecIdx:              s.streamIDToSpecIdx,
 		vectorizedStatsCollectorsQueue: s.vectorizedStatsCollectorsQueue[:0],
 		exprHelper:                     s.exprHelper,
+		procIdxQueue:                   s.procIdxQueue[:0],
 		leaves:                         s.leaves[:0],
 		monitors:                       s.monitors[:0],
 		accounts:                       s.accounts[:0],
 		releasables:                    s.releasables[:0],
+		scratch: struct {
+			inputs               []colexecbase.Operator
+			metadataSourcesQueue []execinfrapb.MetadataSource
+			toClose              []colexecbase.Closer
+		}{
+			inputs:               s.scratch.inputs[:0],
+			metadataSourcesQueue: s.scratch.metadataSourcesQueue[:0],
+			toClose:              s.scratch.toClose[:0],
+		},
 	}
 	vectorizedFlowCreatorPool.Put(s)
 }
@@ -1014,20 +1067,16 @@ func (s *vectorizedFlowCreator) setupFlow(
 	opt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
-		streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
 		// The column factory will not change the eval context, so we can use
 		// the one we have in the flow context, without making a copy.
 		factory := coldataext.NewExtendedColumnFactory(flowCtx.EvalCtx)
-		// queue is a queue of indices into processorSpecs, for topologically
-		// ordered processing.
-		queue := make([]int, 0, len(processorSpecs))
 		for i := range processorSpecs {
 			hasLocalInput := false
 			for j := range processorSpecs[i].Input {
 				input := &processorSpecs[i].Input[j]
 				for k := range input.Streams {
 					stream := &input.Streams[k]
-					streamIDToSpecIdx[stream.StreamID] = i
+					s.streamIDToSpecIdx[stream.StreamID] = i
 					if stream.Type != execinfrapb.StreamEndpointSpec_REMOTE {
 						hasLocalInput = true
 					}
@@ -1037,13 +1086,11 @@ func (s *vectorizedFlowCreator) setupFlow(
 				continue
 			}
 			// Queue all processors with either no inputs or remote inputs.
-			queue = append(queue, i)
+			s.procIdxQueue = append(s.procIdxQueue, i)
 		}
 
-		inputs := make([]colexecbase.Operator, 0, 2)
-		for len(queue) > 0 {
-			pspec := &processorSpecs[queue[0]]
-			queue = queue[1:]
+		for procIdxQueuePos := 0; procIdxQueuePos < len(processorSpecs); procIdxQueuePos++ {
+			pspec := &processorSpecs[s.procIdxQueue[procIdxQueuePos]]
 			if len(pspec.Output) > 1 {
 				err = errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
 				return
@@ -1054,12 +1101,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 			// metadata from these sources is found, the metadataSourcesQueue should be
 			// added as part of one of the last unconnected inputDAGs in
 			// streamIDToInputOp. This is to avoid cycles.
-			metadataSourcesQueue := make([]execinfrapb.MetadataSource, 0, 1)
+			metadataSourcesQueue := s.scratch.metadataSourcesQueue[:0]
 			// toClose is similar to metadataSourcesQueue with the difference that these
 			// components do not produce metadata and should be Closed even during
 			// non-graceful termination.
-			toClose := make([]colexecbase.Closer, 0, 1)
-			inputs = inputs[:0]
+			toClose := s.scratch.toClose[:0]
+			inputs := s.scratch.inputs[:0]
 			for i := range pspec.Input {
 				input, metadataSources, closers, localErr := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
 				if localErr != nil {
@@ -1152,7 +1199,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 					if outputStream.Type != execinfrapb.StreamEndpointSpec_LOCAL {
 						continue
 					}
-					procIdx, ok := streamIDToSpecIdx[outputStream.StreamID]
+					procIdx, ok := s.streamIDToSpecIdx[outputStream.StreamID]
 					if !ok {
 						err = errors.Errorf("couldn't find stream %d", outputStream.StreamID)
 						return
@@ -1175,7 +1222,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 					}
 					// We found an input op for every single stream in this output. Queue
 					// it for processing.
-					queue = append(queue, procIdx)
+					s.procIdxQueue = append(s.procIdxQueue, procIdx)
 				}
 			}
 		}
@@ -1212,10 +1259,25 @@ func (s vectorizedInboundStreamHandler) Timeout(err error) {
 // vectorizedFlowCreatorHelper is a flowCreatorHelper that sets up all the
 // vectorized infrastructure to be actually run.
 type vectorizedFlowCreatorHelper struct {
-	f *flowinfra.FlowBase
+	f          *flowinfra.FlowBase
+	processors []execinfra.Processor
 }
 
 var _ flowCreatorHelper = &vectorizedFlowCreatorHelper{}
+
+var vectorizedFlowCreatorHelperPool = sync.Pool{
+	New: func() interface{} {
+		return &vectorizedFlowCreatorHelper{
+			processors: make([]execinfra.Processor, 0, 1),
+		}
+	},
+}
+
+func newVectorizedFlowCreatorHelper(f *flowinfra.FlowBase) *vectorizedFlowCreatorHelper {
+	helper := vectorizedFlowCreatorHelperPool.Get().(*vectorizedFlowCreatorHelper)
+	helper.f = f
+	return helper
+}
 
 func (r *vectorizedFlowCreatorHelper) addStreamEndpoint(
 	streamID execinfrapb.StreamID, inbox *colrpc.Inbox, wg *sync.WaitGroup,
@@ -1246,13 +1308,19 @@ func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 }
 
 func (r *vectorizedFlowCreatorHelper) addMaterializer(m *colexec.Materializer) {
-	processors := make([]execinfra.Processor, 1)
-	processors[0] = m
-	r.f.SetProcessors(processors)
+	r.processors = append(r.processors, m)
+	r.f.SetProcessors(r.processors)
 }
 
 func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return r.f.GetCancelFlowFn()
+}
+
+func (r *vectorizedFlowCreatorHelper) Release() {
+	*r = vectorizedFlowCreatorHelper{
+		processors: r.processors[:0],
+	}
+	vectorizedFlowCreatorHelperPool.Put(r)
 }
 
 // noopFlowCreatorHelper is a flowCreatorHelper that only performs sanity
@@ -1263,10 +1331,16 @@ type noopFlowCreatorHelper struct {
 
 var _ flowCreatorHelper = &noopFlowCreatorHelper{}
 
+var noopFlowCreatorHelperPool = sync.Pool{
+	New: func() interface{} {
+		return &noopFlowCreatorHelper{
+			inboundStreams: make(map[execinfrapb.StreamID]struct{}),
+		}
+	},
+}
+
 func newNoopFlowCreatorHelper() *noopFlowCreatorHelper {
-	return &noopFlowCreatorHelper{
-		inboundStreams: make(map[execinfrapb.StreamID]struct{}),
-	}
+	return noopFlowCreatorHelperPool.Get().(*noopFlowCreatorHelper)
 }
 
 func (r *noopFlowCreatorHelper) addStreamEndpoint(
@@ -1288,6 +1362,13 @@ func (r *noopFlowCreatorHelper) addMaterializer(*colexec.Materializer) {}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
+}
+
+func (r *noopFlowCreatorHelper) Release() {
+	for k := range r.inboundStreams {
+		delete(r.inboundStreams, k)
+	}
+	noopFlowCreatorHelperPool.Put(r)
 }
 
 // IsSupported returns whether a flow specified by spec can be vectorized.
