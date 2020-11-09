@@ -89,6 +89,9 @@ message StatementStatistics {
   // BytesSentOverNetwork collects the number of bytes sent over the network.
   optional NumericStat bytes_sent_over_network = 17 [(gogoproto.nullable) = false];
 
+  // QueryMaxMemoryUsage is the maximum memory usage of a query.
+  optional NumericStat query_max_memory_usage = 18 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 

@@ -178,6 +178,7 @@ func (ih *instrumentationHelper) Finish(
 	stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
 	if stmtStats != nil {
 		networkBytesSent := int64(0)
+		queryMaxMem := int64(0)
 		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
 			analyzer := flowInfo.analyzer
 			if err := analyzer.AddTrace(trace); err != nil {
@@ -193,6 +194,9 @@ func (ih *instrumentationHelper) Finish(
 			for _, bytesSentByNode := range networkBytesSentGroupedByNode {
 				networkBytesSent += bytesSentByNode
 			}
+			if flowMaxMem := analyzer.GetMaxMemoryUsage(); flowMaxMem > queryMaxMem {
+				queryMaxMem = flowMaxMem
+			}
 		}
 
 		stmtStats.mu.Lock()
@@ -201,6 +205,7 @@ func (ih *instrumentationHelper) Finish(
 		// TODO(asubiotto): NumericStat properties will be properly calculated
 		//  once this statistic is always collected.
 		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(networkBytesSent))
+		stmtStats.mu.data.QueryMaxMemoryUsage.Record(1 /* count */, float64(queryMaxMem))
 		stmtStats.mu.Unlock()
 	}
 

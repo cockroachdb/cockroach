@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -155,4 +157,42 @@ func (a *TraceAnalyzer) GetNetworkBytesSent() (map[roachpb.NodeID]int64, error) 
 		result[stats.originNodeID] += bytes
 	}
 	return result, nil
+}
+
+// GetMaxMemoryUsage returns the maximum memory used by the trace.
+func (a *TraceAnalyzer) GetMaxMemoryUsage() int64 {
+	var traceMaxMem int64
+	var processorMaxMem int64
+	for _, stats := range a.processorStats {
+		if stats.stats == nil {
+			continue
+		}
+		switch v := stats.stats.(type) {
+		case *execpb.VectorizedStats:
+			processorMaxMem = v.MaxAllocatedMem
+		case *rowexec.SorterStats:
+			processorMaxMem = v.MaxAllocatedMem
+		case *rowexec.HashJoinerStats:
+			processorMaxMem = v.MaxAllocatedMem
+		case *rowflow.RouterOutputStats:
+			processorMaxMem = v.MaxAllocatedMem
+		case *rowexec.InvertedFiltererStats:
+			processorMaxMem = v.MaxAllocatedMem
+		case *rowexec.AggregatorStats:
+			processorMaxMem = v.MaxAllocatedMem
+		case *rowexec.MergeJoinerStats:
+			processorMaxMem = v.MaxAllocatedMem
+		case *rowexec.WindowerStats:
+			processorMaxMem = v.MaxAllocatedMem
+		case *rowexec.InvertedJoinerStats:
+			processorMaxMem = v.MaxAllocatedMem
+		case *rowexec.DistinctStats:
+			processorMaxMem = v.MaxAllocatedMem
+		}
+
+		if processorMaxMem > traceMaxMem {
+			traceMaxMem = processorMaxMem
+		}
+	}
+	return traceMaxMem
 }
