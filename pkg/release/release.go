@@ -64,6 +64,9 @@ type SupportedTarget struct {
 // SupportedTargets contains the supported targets that we build.
 var SupportedTargets = []SupportedTarget{
 	{BuildType: "linux-gnu", Suffix: ".linux-2.6.32-gnu-amd64"},
+	// TODO(#release): The architecture is at least 10.10 until v20.2 and 10.15 for v21.1 and after.
+	// However, this seems to be hardcoded all over the place (in particular, roachprod stage),
+	// so keeping the 10.9 standard for now.
 	{BuildType: "darwin", Suffix: ".darwin-10.9-amd64"},
 	{BuildType: "windows", Suffix: ".windows-6.2-amd64.exe"},
 }
