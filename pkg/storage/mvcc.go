@@ -2643,12 +2643,11 @@ type MVCCScanResult struct {
 // non-transactional scans may be inconsistent.
 //
 // When scanning in "fail on more recent" mode, a WriteTooOldError will be
-// returned if the scan observes a version with a timestamp above the read
-// timestamp. If the scan observes multiple versions with timestamp above
+// returned if the scan observes a version with a timestamp at or above the read
+// timestamp. If the scan observes multiple versions with timestamp at or above
 // the read timestamp, the maximum will be returned in the WriteTooOldError.
-// Similarly, a WriteIntentError will be returned if the scan observes
-// another transaction's intent, even if it has a timestamp above the read
-// timestamp.
+// Similarly, a WriteIntentError will be returned if the scan observes another
+// transaction's intent, even if it has a timestamp above the read timestamp.
 func MVCCScan(
 	ctx context.Context,
 	reader Reader,

@@ -259,7 +259,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// unreplicated lock should be acquired on each key that is scanned.
 			name: "scans with key locking",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := scanArgsString("a", "d")
 				scanAD.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAD)
@@ -281,7 +281,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// Ditto in reverse.
 			name: "reverse scans with key locking",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := revScanArgsString("a", "d")
 				scanAD.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAD)
@@ -304,7 +304,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// transaction set, so no locks should be acquired.
 			name: "scans with key locking without txn",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := scanArgsString("a", "d")
 				scanAD.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAD)
@@ -325,7 +325,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// Ditto in reverse.
 			name: "reverse scans with key locking without txn",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := revScanArgsString("a", "d")
 				scanAD.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAD)
@@ -349,7 +349,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// keys past the limit.
 			name: "scan with key locking and MaxSpanRequestKeys=3",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
 				scanAE.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAE)
@@ -367,7 +367,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// Ditto in reverse.
 			name: "reverse scan with key locking and MaxSpanRequestKeys=3",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
 				scanAE.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAE)
@@ -389,7 +389,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// rows are scanner nor locks acquired.
 			name: "scans with key locking and MaxSpanRequestKeys=3",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
 				scanAE.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAE)
@@ -410,7 +410,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// Ditto in reverse.
 			name: "reverse scans with key locking and MaxSpanRequestKeys=3",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
 				scanAE.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAE)
@@ -433,7 +433,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// past the limit.
 			name: "scan with key locking and TargetBytes=1",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
 				scanAE.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAE)
@@ -451,7 +451,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// Ditto in reverse.
 			name: "reverse scan with key locking and TargetBytes=1",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
 				scanAE.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAE)
@@ -472,7 +472,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// are scanner nor locks acquired.
 			name: "scans with key locking and TargetBytes=1",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
 				scanAE.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAE)
@@ -493,7 +493,7 @@ func TestEvaluateBatch(t *testing.T) {
 			// Ditto in reverse.
 			name: "reverse scans with key locking and TargetBytes=1",
 			setup: func(t *testing.T, d *data) {
-				writeABCDEF(t, d)
+				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
 				scanAE.KeyLocking = lock.Exclusive
 				d.ba.Add(scanAE)
@@ -616,18 +616,27 @@ type testCase struct {
 }
 
 func writeABCDEF(t *testing.T, d *data) {
-	writeABCDEFIntents(t, d, nil /* txn */)
+	writeABCDEFAt(t, d, d.ba.Timestamp)
+}
+
+func writeABCDEFAt(t *testing.T, d *data, ts hlc.Timestamp) {
+	writeABCDEFWith(t, d.eng, ts, nil /* txn */)
 }
 
 func writeABCDEFIntents(t *testing.T, d *data, txn *roachpb.Transaction) {
+	writeABCDEFWith(t, d.eng, txn.WriteTimestamp, txn)
+}
+
+func writeABCDEFWith(t *testing.T, eng storage.Engine, ts hlc.Timestamp, txn *roachpb.Transaction) {
 	for _, k := range []string{"a", "b", "c", "d", "e", "f"} {
 		require.NoError(t, storage.MVCCPut(
-			context.Background(), d.eng, nil /* ms */, roachpb.Key(k), d.ba.Timestamp,
+			context.Background(), eng, nil /* ms */, roachpb.Key(k), ts,
 			roachpb.MakeValueFromString("value-"+k), txn))
 	}
 }
 
 func verifyScanResult(t *testing.T, r resp, keysPerResp ...[]string) {
+	t.Helper()
 	require.Nil(t, r.pErr)
 	require.NotNil(t, r.br)
 	require.Len(t, r.br.Responses, len(keysPerResp))
@@ -663,6 +672,7 @@ func verifyScanResult(t *testing.T, r resp, keysPerResp ...[]string) {
 }
 
 func verifyNumKeys(t *testing.T, r resp, keysPerResp ...int) {
+	t.Helper()
 	require.Nil(t, r.pErr)
 	require.NotNil(t, r.br)
 	require.Len(t, r.br.Responses, len(keysPerResp))
@@ -673,6 +683,7 @@ func verifyNumKeys(t *testing.T, r resp, keysPerResp ...int) {
 }
 
 func verifyResumeSpans(t *testing.T, r resp, resumeSpans ...string) {
+	t.Helper()
 	for i, span := range resumeSpans {
 		rs := r.br.Responses[i].GetInner().Header().ResumeSpan
 		if span == "" {
@@ -686,6 +697,7 @@ func verifyResumeSpans(t *testing.T, r resp, resumeSpans ...string) {
 }
 
 func verifyAcquiredLocks(t *testing.T, r resp, dur lock.Durability, lockedKeys ...string) {
+	t.Helper()
 	var foundLocked []string
 	for _, l := range r.res.Local.AcquiredLocks {
 		if l.Durability == dur {
