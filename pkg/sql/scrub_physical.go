@@ -124,8 +124,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	// that scrubNode needs to perform, we need to make sure that scrubNode
 	// is not closed when this physical check operation is being cleaned up.
 	planCtx.ignoreClose = true
-	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(
-		planCtx, scan, *o.tableDesc.TableDesc(), *o.indexDesc, params.p.ExecCfg().Clock.Now())
+	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(planCtx, scan)
 	if err != nil {
 		return err
 	}
