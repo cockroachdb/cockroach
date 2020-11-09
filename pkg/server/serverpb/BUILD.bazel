@@ -9,6 +9,7 @@ go_library(
         "authentication.pb.go",
         "authentication.pb.gw.go",
         "init.pb.go",
+        "migration.pb.go",
         "status.go",
         "status.pb.go",
         "status.pb.gw.go",

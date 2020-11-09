@@ -1,0 +1,64 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
+
+import "roachpb/metadata.proto";
+
+// ValidateTargetClusterVersion is used to verify that the target node is
+// running a binary that's able to support the specified cluster version.
+message ValidateTargetClusterVersionRequest {
+   roachpb.Version version = 1;
+}
+
+// ValidateTargetClusterVersionResponse is the response to a
+// ValidateTargetClusterVersionRequest.
+message ValidateTargetClusterVersionResponse {
+}
+
+// BumpClusterVersionRequest is used to inform a given node of a cluster version
+// bump.
+message BumpClusterVersionRequest {
+   roachpb.Version version = 1;
+}
+
+// BumpClusterVersionResponse is the response to an BumpClusterVersionRequest.
+message BumpClusterVersionResponse { }
+
+service Migration {
+   // ValidateTargetClusterVersion is used to verify that the target node is
+   // running a binary that's able to support the specified cluster version.
+   // Specifically:
+   //
+   //   node's minimum supported version <= version <= node's binary version
+   rpc ValidateTargetClusterVersion(ValidateTargetClusterVersionRequest) returns (ValidateTargetClusterVersionResponse) { }
+
+   // BumpClusterVersion is used to inform a given node of a cluster version
+   // bump. The node is responsible for durably persisting the message and
+   // enabling the corresponding version gates.
+   //
+   // This rpc is typically used together with ValidateTargetClusterVersion,
+   // which checks to see that all nodes in the cluster are running binaries
+   // that would be able to support the intended version bump.
+   //
+   // NB: We should note that this validation is a best-effort one. Albeit
+   // unlikely, it's possible for the following scenario to occur:
+   //   - N nodes running v21.1
+   //   - N nodes rolled into v21.2 binaries, but with active cluster version
+   //     still as v21.1
+   //   - Validation for setting active cluster version to v21.2 checks to see
+   //     that all nodes are running v21.2 binaries
+   //   - A new node is added to the cluster, but running binary v21.1
+   //   - We start bumping the cluster gates to v21.2, despite there now being
+   //     a v21.1 node in the cluster.
+   rpc BumpClusterVersion(BumpClusterVersionRequest) returns (BumpClusterVersionResponse) { }
+}
