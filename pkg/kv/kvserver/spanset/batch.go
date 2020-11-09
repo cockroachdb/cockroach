@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// MVCCIterator wraps an engine.MVCCIterator and ensures that it can
+// MVCCIterator wraps an storage.MVCCIterator and ensures that it can
 // only be used to access spans in a SpanSet.
 type MVCCIterator struct {
 	i     storage.MVCCIterator
@@ -55,17 +55,17 @@ func NewIteratorAt(iter storage.MVCCIterator, spans *SpanSet, ts hlc.Timestamp) 
 	return &MVCCIterator{i: iter, spans: spans, ts: ts}
 }
 
-// Close is part of the engine.MVCCIterator interface.
+// Close is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Close() {
 	i.i.Close()
 }
 
-// Iterator returns the underlying engine.MVCCIterator.
+// Iterator returns the underlying storage.MVCCIterator.
 func (i *MVCCIterator) Iterator() storage.MVCCIterator {
 	return i.i
 }
 
-// Valid is part of the engine.MVCCIterator interface.
+// Valid is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Valid() (bool, error) {
 	if i.err != nil {
 		return false, i.err
@@ -77,13 +77,13 @@ func (i *MVCCIterator) Valid() (bool, error) {
 	return ok && !i.invalid, nil
 }
 
-// SeekGE is part of the engine.MVCCIterator interface.
+// SeekGE is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) SeekGE(key storage.MVCCKey) {
 	i.i.SeekGE(key)
 	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
 }
 
-// SeekLT is part of the engine.MVCCIterator interface.
+// SeekLT is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) SeekLT(key storage.MVCCKey) {
 	i.i.SeekLT(key)
 	// CheckAllowed{At} supports the span representation of [,key), which
@@ -91,19 +91,19 @@ func (i *MVCCIterator) SeekLT(key storage.MVCCKey) {
 	i.checkAllowed(roachpb.Span{EndKey: key.Key}, true)
 }
 
-// Next is part of the engine.MVCCIterator interface.
+// Next is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Next() {
 	i.i.Next()
 	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
 }
 
-// Prev is part of the engine.MVCCIterator interface.
+// Prev is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Prev() {
 	i.i.Prev()
 	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
 }
 
-// NextKey is part of the engine.MVCCIterator interface.
+// NextKey is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) NextKey() {
 	i.i.NextKey()
 	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
@@ -131,37 +131,37 @@ func (i *MVCCIterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
 	}
 }
 
-// Key is part of the engine.MVCCIterator interface.
+// Key is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Key() storage.MVCCKey {
 	return i.i.Key()
 }
 
-// Value is part of the engine.MVCCIterator interface.
+// Value is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Value() []byte {
 	return i.i.Value()
 }
 
-// ValueProto is part of the engine.MVCCIterator interface.
+// ValueProto is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) ValueProto(msg protoutil.Message) error {
 	return i.i.ValueProto(msg)
 }
 
-// UnsafeKey is part of the engine.MVCCIterator interface.
+// UnsafeKey is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) UnsafeKey() storage.MVCCKey {
 	return i.i.UnsafeKey()
 }
 
-// UnsafeRawKey is part of the engine.MVCCIterator interface.
+// UnsafeRawKey is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) UnsafeRawKey() []byte {
 	return i.i.UnsafeRawKey()
 }
 
-// UnsafeValue is part of the engine.MVCCIterator interface.
+// UnsafeValue is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) UnsafeValue() []byte {
 	return i.i.UnsafeValue()
 }
 
-// ComputeStats is part of the engine.MVCCIterator interface.
+// ComputeStats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
@@ -177,7 +177,7 @@ func (i *MVCCIterator) ComputeStats(
 	return i.i.ComputeStats(start, end, nowNanos)
 }
 
-// FindSplitKey is part of the engine.MVCCIterator interface.
+// FindSplitKey is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (storage.MVCCKey, error) {
@@ -193,26 +193,117 @@ func (i *MVCCIterator) FindSplitKey(
 	return i.i.FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
-// CheckForKeyCollisions is part of the engine.MVCCIterator interface.
+// CheckForKeyCollisions is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) CheckForKeyCollisions(
 	sstData []byte, start, end roachpb.Key,
 ) (enginepb.MVCCStats, error) {
 	return i.i.CheckForKeyCollisions(sstData, start, end)
 }
 
-// SetUpperBound is part of the engine.MVCCIterator interface.
+// SetUpperBound is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) SetUpperBound(key roachpb.Key) {
 	i.i.SetUpperBound(key)
 }
 
-// Stats is part of the engine.MVCCIterator interface.
+// Stats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Stats() storage.IteratorStats {
 	return i.i.Stats()
 }
 
-// SupportsPrev is part of the engine.MVCCIterator interface.
+// SupportsPrev is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) SupportsPrev() bool {
 	return i.i.SupportsPrev()
+}
+
+// EngineIterator wraps a storage.EngineIterator and ensures that it can
+// only be used to access spans in a SpanSet.
+type EngineIterator struct {
+	i     storage.EngineIterator
+	spans *SpanSet
+}
+
+// Close is part of the storage.EngineIterator interface.
+func (i *EngineIterator) Close() {
+	i.i.Close()
+}
+
+// SeekEngineKeyGE is part of the storage.EngineIterator interface.
+func (i *EngineIterator) SeekEngineKeyGE(key storage.EngineKey) (valid bool, err error) {
+	valid, err = i.i.SeekEngineKeyGE(key)
+	if !valid {
+		return valid, err
+	}
+	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+		return false, err
+	}
+	return valid, err
+}
+
+// SeekEngineKeyLT is part of the storage.EngineIterator interface.
+func (i *EngineIterator) SeekEngineKeyLT(key storage.EngineKey) (valid bool, err error) {
+	valid, err = i.i.SeekEngineKeyLT(key)
+	if !valid {
+		return valid, err
+	}
+	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
+		return false, err
+	}
+	return valid, err
+}
+
+// NextEngineKey is part of the storage.EngineIterator interface.
+func (i *EngineIterator) NextEngineKey() (valid bool, err error) {
+	valid, err = i.i.NextEngineKey()
+	if !valid {
+		return valid, err
+	}
+	return i.checkKeyAllowed()
+}
+
+// PrevEngineKey is part of the storage.EngineIterator interface.
+func (i *EngineIterator) PrevEngineKey() (valid bool, err error) {
+	valid, err = i.i.PrevEngineKey()
+	if !valid {
+		return valid, err
+	}
+	return i.checkKeyAllowed()
+}
+
+func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
+	key, err := i.i.UnsafeEngineKey()
+	if err != nil {
+		return false, err
+	}
+	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+		// Invalid, but no error.
+		return false, nil // nolint:returnerrcheck
+	}
+	return true, nil
+}
+
+// UnsafeEngineKey is part of the storage.EngineIterator interface.
+func (i *EngineIterator) UnsafeEngineKey() (storage.EngineKey, error) {
+	return i.i.UnsafeEngineKey()
+}
+
+// UnsafeValue is part of the storage.EngineIterator interface.
+func (i *EngineIterator) UnsafeValue() []byte {
+	return i.i.UnsafeValue()
+}
+
+// EngineKey is part of the storage.EngineIterator interface.
+func (i *EngineIterator) EngineKey() (storage.EngineKey, error) {
+	return i.i.EngineKey()
+}
+
+// Value is part of the storage.EngineIterator interface.
+func (i *EngineIterator) Value() []byte {
+	return i.i.Value()
+}
+
+// SetUpperBound is part of the storage.EngineIterator interface.
+func (i *EngineIterator) SetUpperBound(key roachpb.Key) {
+	i.i.SetUpperBound(key)
 }
 
 type spanSetReader struct {
@@ -298,6 +389,16 @@ func (s spanSetReader) NewMVCCIterator(
 	return NewIteratorAt(s.r.NewMVCCIterator(iterKind, opts), s.spans, s.ts)
 }
 
+func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) storage.EngineIterator {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for EngineIterator")
+	}
+	return &EngineIterator{
+		i:     s.r.NewEngineIterator(opts),
+		spans: s.spans,
+	}
+}
+
 // GetDBEngine recursively searches for the underlying rocksDB engine.
 func GetDBEngine(reader storage.Reader, span roachpb.Span) storage.Reader {
 	switch v := reader.(type) {
@@ -367,6 +468,16 @@ func (s spanSetWriter) ClearIntent(key roachpb.Key) error {
 		return err
 	}
 	return s.w.ClearIntent(key)
+}
+
+func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for clearing EngineKey")
+	}
+	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+		return err
+	}
+	return s.w.ClearEngineKey(key)
 }
 
 func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
@@ -444,6 +555,16 @@ func (s spanSetWriter) PutIntent(key roachpb.Key, value []byte) error {
 	return s.w.PutIntent(key, value)
 }
 
+func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for putting EngineKey")
+	}
+	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+		return err
+	}
+	return s.w.PutEngineKey(key, value)
+}
+
 func (s spanSetWriter) LogData(data []byte) error {
 	return s.w.LogData(data)
 }
@@ -500,8 +621,8 @@ type spanSetBatch struct {
 
 var _ storage.Batch = spanSetBatch{}
 
-func (s spanSetBatch) SingleClearEngine(key storage.EngineKey) error {
-	return s.b.SingleClearEngine(key)
+func (s spanSetBatch) SingleClearEngineKey(key storage.EngineKey) error {
+	return s.b.SingleClearEngineKey(key)
 }
 
 func (s spanSetBatch) Commit(sync bool) error {

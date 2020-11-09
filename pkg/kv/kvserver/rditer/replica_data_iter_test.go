@@ -138,7 +138,7 @@ func verifyRDIter(
 			}, hlc.Timestamp{WallTime: 42})
 			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
 		}
-		iter := NewReplicaDataIterator(desc, readWriter, replicatedOnly, reverse /* seekEnd */)
+		iter := NewReplicaMVCCDataIterator(desc, readWriter, replicatedOnly, reverse /* seekEnd */)
 		defer iter.Close()
 		i := 0
 		if reverse {
@@ -237,7 +237,7 @@ func TestReplicaDataIterator(t *testing.T) {
 
 	// Verify that the replicated-only iterator ignores unreplicated keys.
 	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(desc.RangeID)
-	iter := NewReplicaDataIterator(&desc, eng,
+	iter := NewReplicaMVCCDataIterator(&desc, eng,
 		true /* replicatedOnly */, false /* seekEnd */)
 	defer iter.Close()
 	for ; ; iter.Next() {
