@@ -16,12 +16,12 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -67,7 +68,7 @@ type verifyColOperatorArgs struct {
 
 // verifyColOperator passes inputs through both the processor defined by pspec
 // and the corresponding columnar operator and verifies that the results match.
-func verifyColOperator(args verifyColOperatorArgs) error {
+func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	const floatPrecision = 0.0000001
 	rng := args.rng
 	if rng == nil {
@@ -87,6 +88,9 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		return err
 	}
 	defer tempEngine.Close()
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+	queueCfg.FS = tempFS
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
@@ -137,7 +141,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		Spec:                args.pspec,
 		Inputs:              columnarizers,
 		StreamingMemAccount: &acc,
-		DiskQueueCfg:        colcontainer.DiskQueueCfg{FS: tempFS},
+		DiskQueueCfg:        queueCfg,
 		FDSemaphore:         colexecbase.NewTestingSemaphore(256),
 
 		// TODO(yuzefovich): adjust expression generator to not produce
