@@ -921,7 +921,7 @@ func applyColumnMutation(
 				params.ctx, t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, tree.VolatilityVolatile,
 			)
 			if err != nil {
-				return err
+				return pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
 			}
 			s := tree.Serialize(expr)
 			col.DefaultExpr = &s
