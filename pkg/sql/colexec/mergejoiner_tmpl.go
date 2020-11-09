@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -97,7 +98,7 @@ type mergeJoin_JOIN_TYPE_STRINGOp struct {
 	*mergeJoinBase
 }
 
-var _ InternalMemoryOperator = &mergeJoin_JOIN_TYPE_STRINGOp{}
+var _ colexecbase.Operator = &mergeJoin_JOIN_TYPE_STRINGOp{}
 
 // {{/*
 // This code snippet is the "meat" of the probing phase.

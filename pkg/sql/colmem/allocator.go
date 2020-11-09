@@ -26,6 +26,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// TODO(yuzefovich): audit all Operators to make sure that all static
+// (internal) memory is accounted for.
+
 // Allocator is a memory management tool for vectorized components. It provides
 // new batches (and appends to existing ones) within a fixed memory budget. If
 // the budget is exceeded, it will panic with an error.

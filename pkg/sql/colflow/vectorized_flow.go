@@ -468,14 +468,11 @@ type vectorizedFlowCreator struct {
 	leaves []execinfra.OpNode
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
-	// streamingMemAccounts contains all memory accounts of the non-buffering
-	// components in the vectorized flow.
-	streamingMemAccounts []*mon.BoundAccount
 	// monitors contains all monitors (for both memory and disk usage) of the
-	// buffering components in the vectorized flow.
+	// components in the vectorized flow.
 	monitors []*mon.BytesMonitor
 	// accounts contains all monitors (for both memory and disk usage) of the
-	// buffering components in the vectorized flow.
+	// components in the vectorized flow.
 	accounts []*mon.BoundAccount
 	// releasables contains all components that should be released back to their
 	// pools during the flow cleanup.
@@ -527,7 +524,6 @@ func newVectorizedFlowCreator(
 		exprHelper:                     creator.exprHelper,
 		typeResolver:                   typeResolver,
 		leaves:                         creator.leaves,
-		streamingMemAccounts:           creator.streamingMemAccounts,
 		monitors:                       creator.monitors,
 		accounts:                       creator.accounts,
 		releasables:                    creator.releasables,
@@ -538,9 +534,6 @@ func newVectorizedFlowCreator(
 }
 
 func (s *vectorizedFlowCreator) cleanup(ctx context.Context) {
-	for _, acc := range s.streamingMemAccounts {
-		acc.Close(ctx)
-	}
 	for _, acc := range s.accounts {
 		acc.Close(ctx)
 	}
@@ -562,7 +555,6 @@ func (s *vectorizedFlowCreator) Release() {
 		vectorizedStatsCollectorsQueue: s.vectorizedStatsCollectorsQueue[:0],
 		exprHelper:                     s.exprHelper,
 		leaves:                         s.leaves[:0],
-		streamingMemAccounts:           s.streamingMemAccounts[:0],
 		monitors:                       s.monitors[:0],
 		accounts:                       s.accounts[:0],
 		releasables:                    s.releasables[:0],
@@ -611,7 +603,7 @@ func (s *vectorizedFlowCreator) newStreamingMemAccount(
 	flowCtx *execinfra.FlowCtx,
 ) *mon.BoundAccount {
 	streamingMemAccount := flowCtx.EvalCtx.Mon.MakeBoundAccount()
-	s.streamingMemAccounts = append(s.streamingMemAccounts, &streamingMemAccount)
+	s.accounts = append(s.accounts, &streamingMemAccount)
 	return &streamingMemAccount
 }
 
@@ -1007,7 +999,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 ) (leaves []execinfra.OpNode, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
 		streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
-		factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
+		// The column factory will not change the eval context, so we can use
+		// the one we have in the flow context, without making a copy.
+		factory := coldataext.NewExtendedColumnFactory(flowCtx.EvalCtx)
 		// queue is a queue of indices into processorSpecs, for topologically
 		// ordered processing.
 		queue := make([]int, 0, len(processorSpecs))
@@ -1075,6 +1069,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				DiskQueueCfg:         s.diskQueueCfg,
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,
+				Factory:              factory,
 			}
 			var result *colexec.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
@@ -1095,13 +1090,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
 				result.Op = colexec.NewPanicInjector(result.Op)
-			}
-			// We created a streaming memory account when calling NewColOperator above,
-			// so there is definitely at least one memory account, and it doesn't
-			// matter which one we grow.
-			if err = s.streamingMemAccounts[0].Grow(ctx, int64(result.InternalMemUsage)); err != nil {
-				err = errors.Wrapf(err, "not enough memory to setup vectorized plan")
-				return
 			}
 			metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
@@ -1288,8 +1276,8 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 
 // IsSupported returns whether a flow specified by spec can be vectorized.
 func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpec) error {
-	for _, p := range spec.Processors {
-		if err := colbuilder.IsSupported(mode, &p); err != nil {
+	for pIdx := range spec.Processors {
+		if err := colbuilder.IsSupported(mode, &spec.Processors[pIdx]); err != nil {
 			return err
 		}
 	}
