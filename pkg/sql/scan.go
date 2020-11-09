@@ -63,9 +63,6 @@ type scanNode struct {
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns colinfo.ResultColumns
 
-	// Map used to get the index for columns in cols.
-	colIdxMap map[descpb.ColumnID]int
-
 	spans   []roachpb.Span
 	reverse bool
 
@@ -324,9 +321,5 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 
 	// Set up the rest of the scanNode.
 	n.resultColumns = colinfo.ResultColumnsFromColDescPtrs(n.desc.GetID(), n.cols)
-	n.colIdxMap = make(map[descpb.ColumnID]int, len(n.cols))
-	for i, c := range n.cols {
-		n.colIdxMap[c.ID] = i
-	}
 	return nil
 }

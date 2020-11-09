@@ -169,10 +169,10 @@ func NewColBatchScan(
 	var sysColDescs []descpb.ColumnDescriptor
 	if spec.HasSystemColumns {
 		sysColDescs = colinfo.AllSystemColumnDescs
-	}
-	for i := range sysColDescs {
-		typs = append(typs, sysColDescs[i].Type)
-		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+		for i := range sysColDescs {
+			typs = append(typs, sysColDescs[i].Type)
+			columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+		}
 	}
 
 	semaCtx := tree.MakeSemaContext()
@@ -204,9 +204,7 @@ func NewColBatchScan(
 		return nil, helper, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, fetcher, table, int(spec.IndexIdx), columnIdxMap,
-		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
-		sysColDescs,
+		flowCtx.Codec(), allocator, fetcher, table, columnIdxMap, neededColumns, spec, sysColDescs,
 	); err != nil {
 		return nil, helper, err
 	}
@@ -236,22 +234,18 @@ func initCRowFetcher(
 	allocator *colmem.Allocator,
 	fetcher *cFetcher,
 	desc *tabledesc.Immutable,
-	indexIdx int,
 	colIdxMap map[descpb.ColumnID]int,
-	reverseScan bool,
 	valNeededForCol util.FastIntSet,
-	scanVisibility execinfrapb.ScanVisibility,
-	lockStrength descpb.ScanLockingStrength,
-	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	spec *execinfrapb.TableReaderSpec,
 	systemColumnDescs []descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
-	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
+	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(int(spec.IndexIdx))
 	if err != nil {
 		return nil, false, err
 	}
 
 	cols := desc.Columns
-	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
+	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = desc.ReadableColumns
 	}
 	// Add on any requested system columns. We slice cols to avoid modifying
@@ -266,7 +260,7 @@ func initCRowFetcher(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
-		codec, allocator, reverseScan, lockStrength, lockWaitPolicy, tableArgs,
+		codec, allocator, spec.Reverse, spec.LockingStrength, spec.LockingWaitPolicy, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}
