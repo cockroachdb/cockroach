@@ -1015,6 +1015,11 @@ func (ts *TestServer) DistSender() *kvcoord.DistSender {
 	return ts.DistSenderI().(*kvcoord.DistSender)
 }
 
+// MigrationServer is part of TestServerInterface.
+func (ts *TestServer) MigrationServer() interface{} {
+	return ts.migrationServer
+}
+
 // SQLServer is part of TestServerInterface.
 func (ts *TestServer) SQLServer() interface{} {
 	return ts.PGServer().SQLServer

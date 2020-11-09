@@ -139,14 +139,15 @@ type Server struct {
 	recorder     *status.MetricsRecorder
 	runtime      *status.RuntimeStatSampler
 
-	admin          *adminServer
-	status         *statusServer
-	authentication *authenticationServer
-	oidc           OIDC
-	tsDB           *ts.DB
-	tsServer       *ts.Server
-	raftTransport  *kvserver.RaftTransport
-	stopper        *stop.Stopper
+	admin           *adminServer
+	status          *statusServer
+	authentication  *authenticationServer
+	migrationServer *migrationServer
+	oidc            OIDC
+	tsDB            *ts.DB
+	tsServer        *ts.Server
+	raftTransport   *kvserver.RaftTransport
+	stopper         *stop.Stopper
 
 	debug *debug.Server
 
@@ -1217,6 +1218,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
+
+	// Register the Migration service, to power internal crdb migrations.
+	migrationServer := &migrationServer{server: s}
+	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
+	s.migrationServer = migrationServer // only for testing via TestServer
 
 	// Pebble does its own engine health checks, that call back into an event
 	// handler registered in storage/pebble.go when a slow disk event is
