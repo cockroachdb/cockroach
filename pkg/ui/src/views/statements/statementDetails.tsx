@@ -505,9 +505,12 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                   format: Bytes,
                 },
               ].filter(function (r) {
-                if (r.name === "Network Bytes Sent" && r.value.mean === 0) {
-                  // Omit if empty.
-                  return false;
+                if (r.name === "Network Bytes Sent" && r.value) {
+                  // Only pass the filter for this stat if it has been
+                  // populated. This is a special case given that this stat is
+                  // currently not always collected and displaying a zero value
+                  // could lead to user confusion.
+                  return r.value.mean !== 0;
                 }
                 return r.value;
               })}
