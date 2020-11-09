@@ -61,7 +61,6 @@ go_library(
         "many_splits.go",
         "mixed_version_decommission.go",
         "mixed_version_jobs.go",
-        "mixed_version_join_init.go",
         "mixed_version_schemachange.go",
         "multitenant.go",
         "namespace_upgrade.go",
