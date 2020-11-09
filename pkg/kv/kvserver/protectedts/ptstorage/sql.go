@@ -50,8 +50,8 @@ SELECT
     new_num_spans, 
     new_total_bytes,
     (
-       new_num_spans > $1
-       OR new_total_bytes > $2
+       ($1 > 0 AND new_num_spans > $1)
+       OR ($2 > 0 AND new_total_bytes > $2)
        OR EXISTS(SELECT * FROM system.protected_ts_records WHERE id = $4)
     ) AS failed
 FROM (
