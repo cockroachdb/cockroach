@@ -169,6 +169,7 @@ var validationMap = []struct {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
 			"ComputeExpr": {status: iSolemnlySwearThisFieldIsValidated},
+			"Virtual":     {status: iSolemnlySwearThisFieldIsValidated},
 			"PGAttributeNum": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},

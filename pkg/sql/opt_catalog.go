@@ -639,30 +639,44 @@ func newOptTable(
 	ot.columns = make([]cat.Column, len(colDescs), numCols)
 	numOrdinary := len(ot.desc.Columns)
 	numWritable := len(ot.desc.WritableColumns())
-	for i := range colDescs {
-		desc := colDescs[i]
+	for ordinal := range colDescs {
+		desc := colDescs[ordinal]
 
 		var kind cat.ColumnKind
 		switch {
-		case i < numOrdinary:
+		case ordinal < numOrdinary:
 			kind = cat.Ordinary
-		case i < numWritable:
+		case ordinal < numWritable:
 			kind = cat.WriteOnly
 		default:
 			kind = cat.DeleteOnly
 		}
-
-		ot.columns[i].InitNonVirtual(
-			i,
-			cat.StableID(desc.ID),
-			tree.Name(desc.Name),
-			kind,
-			desc.Type,
-			desc.Nullable,
-			desc.Hidden,
-			desc.DefaultExpr,
-			desc.ComputeExpr,
-		)
+		if !desc.Virtual {
+			ot.columns[ordinal].InitNonVirtual(
+				ordinal,
+				cat.StableID(desc.ID),
+				tree.Name(desc.Name),
+				kind,
+				desc.Type,
+				desc.Nullable,
+				desc.Hidden,
+				desc.DefaultExpr,
+				desc.ComputeExpr,
+			)
+		} else {
+			if kind != cat.Ordinary {
+				return nil, errors.AssertionFailedf("virtual mutation column")
+			}
+			ot.columns[ordinal].InitVirtualComputed(
+				ordinal,
+				cat.StableID(desc.ID),
+				tree.Name(desc.Name),
+				desc.Type,
+				desc.Nullable,
+				desc.Hidden,
+				*desc.ComputeExpr,
+			)
+		}
 	}
 
 	newColumn := func() (col *cat.Column, ordinal int) {
@@ -1123,12 +1137,13 @@ func (oi *optIndex) init(
 			pkCols.Add(int(desc.ColumnIDs[i]))
 		}
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			id := tab.Column(i).ColID()
-			if !pkCols.Contains(int(id)) {
-				oi.storedCols = append(oi.storedCols, descpb.ColumnID(id))
+			if col := tab.Column(i); !col.Kind().IsVirtual() {
+				if id := col.ColID(); !pkCols.Contains(int(id)) {
+					oi.storedCols = append(oi.storedCols, descpb.ColumnID(id))
+				}
 			}
 		}
-		oi.numCols = tab.ColumnCount()
+		oi.numCols = len(desc.ColumnIDs) + len(oi.storedCols)
 	} else {
 		oi.storedCols = desc.StoreColumnIDs
 		oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)

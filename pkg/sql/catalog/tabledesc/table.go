@@ -68,6 +68,7 @@ func MakeColumnDefDescs(
 	col := &descpb.ColumnDescriptor{
 		Name:     string(d.Name),
 		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey.IsPrimaryKey,
+		Virtual:  d.IsVirtual(),
 	}
 
 	// Validate and assign column type.

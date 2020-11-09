@@ -1,0 +1,45 @@
+statement ok
+SET experimental_enable_virtual_columns = true
+
+# Test that we don't allow FAMILY constraints with virtual columns.
+statement error virtual computed column "v" cannot be part of a family
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  FAMILY (a, b, v)
+)
+
+statement error virtual computed column "v" cannot be part of a family
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (v)
+)
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  FAMILY (a,b)
+)
+
+statement ok
+INSERT INTO t VALUES (1, 1)
+
+statement ok
+INSERT INTO t(a,b) VALUES (2, 2)
+
+statement error cannot write directly to computed column
+INSERT INTO t(a,b,v) VALUES (2, 2, 0)
+
+query III colnames,rowsort
+SELECT * FROM t
+----
+a  b  v
+1  1  2
+2  2  4
