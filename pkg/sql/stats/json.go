@@ -87,6 +87,10 @@ func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
 	if datum.ResolvedType().Family() != types.BytesFamily {
 		return fmt.Errorf("histogram datum type should be Bytes")
 	}
+	if len(*datum.(*tree.DBytes)) == 0 {
+		// This can happen if every value in the column is null.
+		return nil
+	}
 	h := &HistogramData{}
 	if err := protoutil.Unmarshal([]byte(*datum.(*tree.DBytes)), h); err != nil {
 		return err
