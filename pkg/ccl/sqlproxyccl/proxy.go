@@ -30,7 +30,8 @@ type Options struct {
 	// allow use of SNI. Should always return ("", nil).
 	BackendFromSNI func(serverName string) (addr string, conf *tls.Config, clientErr error)
 	// BackendFromParams returns the address and TLS config to use for
-	// the proxy -> backend connection.
+	// the proxy -> backend connection. The returned config must have
+	// an appropriate ServerName for the remote backend.
 	BackendFromParams func(map[string]string) (addr string, conf *tls.Config, clientErr error)
 
 	// If set, consulted to modify the parameters set by the frontend before
@@ -142,7 +143,6 @@ func (s *Server) Proxy(conn net.Conn) error {
 	}
 
 	outCfg := outgoingTLS.Clone()
-	outCfg.ServerName = outgoingAddr
 	crdbConn = tls.Client(crdbConn, outCfg)
 
 	if s.opts.ModifyRequestParams != nil {
