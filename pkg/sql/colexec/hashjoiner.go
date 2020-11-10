@@ -680,19 +680,19 @@ func MakeHashJoinerSpec(
 		rightDistinct = true
 	case descpb.LeftAntiJoin,
 		descpb.RightAntiJoin,
+		descpb.RightSemiJoin,
 		descpb.IntersectAllJoin,
 		descpb.ExceptAllJoin:
-		// LEFT/RIGHT ANTI, INTERSECT ALL, and EXCEPT ALL joins currently rely
-		// on the fact that ht.probeScratch.headID is populated in order to
-		// perform the matching. However, headID is only populated when the
-		// right side is considered to be non-distinct, so we override that
-		// information here. Note that it forces these joins to be slower
+		// LEFT/RIGHT ANTI, RIGHT SEMI, INTERSECT ALL, and EXCEPT ALL joins
+		// currently rely on the fact that ht.probeScratch.headID is populated
+		// in order to perform the matching. However, headID is only populated
+		// when the right side is considered to be non-distinct, so we override
+		// that information here. Note that it forces these joins to be slower
 		// than they could have been if they utilized the actual
 		// distinctness information.
 		// TODO(yuzefovich): refactor these joins to take advantage of the
 		// actual distinctness information.
 		rightDistinct = false
-	case descpb.RightSemiJoin:
 	default:
 		return spec, errors.AssertionFailedf("hash join of type %s not supported", joinType)
 	}

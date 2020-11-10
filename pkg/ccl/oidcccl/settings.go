@@ -30,6 +30,7 @@ const (
 	OIDCClaimJSONKeySettingName   = baseOIDCSettingName + "claim_json_key"
 	OIDCPrincipalRegexSettingName = baseOIDCSettingName + "principal_regex"
 	OIDCButtonTextSettingName     = baseOIDCSettingName + "button_text"
+	OIDCAutoLoginSettingName      = baseOIDCSettingName + "autologin"
 )
 
 // OIDCEnabled enables or disabled OIDC login for the Admin UI
@@ -158,9 +159,21 @@ var OIDCPrincipalRegex = func() *settings.StringSetting {
 var OIDCButtonText = func() *settings.StringSetting {
 	s := settings.RegisterPublicStringSetting(
 		OIDCButtonTextSettingName,
-		"text to show on button on admin ui login page to login with your OIDC provider "+
+		"text to show on button on Admin UI login page to login with your OIDC provider "+
 			"(only shown if OIDC is enabled) (this feature is experimental)",
 		"Login with your OIDC provider",
+	)
+	return s
+}()
+
+// OIDCAutoLogin is a boolean that enables automatic redirection to OIDC auth in the Admin
+// UI.
+var OIDCAutoLogin = func() *settings.BoolSetting {
+	s := settings.RegisterPublicBoolSetting(
+		OIDCAutoLoginSettingName,
+		"if true, logged-out visitors to the Admin UI will be "+
+			"automatically redirected to the OIDC login endpoint (this feature is experimental)",
+		false,
 	)
 	return s
 }()
