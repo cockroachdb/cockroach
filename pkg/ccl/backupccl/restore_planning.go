@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -67,6 +68,12 @@ const (
 	// cluster backups.
 	restoreTempSystemDB = "crdb_temp_system"
 )
+
+// featureRestoreEnabled is used to enable and disable the RESTORE feature.
+var featureRestoreEnabled = settings.RegisterPublicBoolSetting(
+	"feature.bulkio.restore.enabled",
+	"set to true to enable restore, false to disable; default is true",
+	true /* enabled by default */)
 
 // rewriteViewQueryDBNames rewrites the passed table's ViewQuery replacing all
 // non-empty db qualifiers with `newDB`.
@@ -1174,6 +1181,19 @@ func restorePlanHook(
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
 		return nil, nil, nil, false, nil
+	}
+
+	// Check whether all bulk IO features are enabled or not.
+	if !featureBulkIOEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, nil, nil, false,
+			pgerror.Newf(pgcode.OperatorIntervention, "features in the Bulk IO category were " +
+				"disabled by the database administrator")
+	}
+
+	// Check whether feature restore is enabled or not.
+	if !featureRestoreEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, nil, nil, false,
+			pgerror.Newf(pgcode.OperatorIntervention, "RESTORE feature was disabled by the database administrator")
 	}
 
 	fromFns := make([]func() ([]string, error), len(restoreStmt.From))

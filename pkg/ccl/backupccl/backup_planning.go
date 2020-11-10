@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -78,6 +79,22 @@ type backupKMSEnv struct {
 }
 
 var _ cloud.KMSEnv = &backupKMSEnv{}
+
+// TODO(angelaw): technically this does not encompass ALL bulk IO features at the moment--
+// We will need documentation somewhere (where is best?) to indicate which features are covered
+// under which categories, and which features can already be enabled/disabled.
+
+// featureBulkIOEnabled is used to enable and disable relevant features under the bulk IO category.
+var featureBulkIOEnabled = settings.RegisterPublicBoolSetting(
+	"feature.bulkio.enabled",
+	"set to true to enable bulk IO features, false to disable; default is true",
+	true /* enabled by default */)
+
+// featureBackupEnabled is used to enable and disable the BACKUP feature.
+var featureBackupEnabled = settings.RegisterPublicBoolSetting(
+	"feature.bulkio.backup.enabled",
+	"set to true to enable backups, false to disable; default is true",
+	true /* enabled by default */)
 
 func (p *backupKMSEnv) ClusterSettings() *cluster.Settings {
 	return p.settings
@@ -499,6 +516,19 @@ func backupPlanHook(
 	backupStmt := getBackupStatement(stmt)
 	if backupStmt == nil {
 		return nil, nil, nil, false, nil
+	}
+
+	// Check whether all bulk IO features are enabled or not.
+	if !featureBulkIOEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, nil, nil, false,
+			pgerror.Newf(pgcode.OperatorIntervention, "features in the Bulk IO category were " +
+				"disabled by the database administrator")
+	}
+
+	// Check whether feature backup is enabled or not.
+	if !featureBackupEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, nil, nil, false,
+			pgerror.Newf(pgcode.OperatorIntervention, "BACKUP feature was disabled by the database administrator")
 	}
 
 	var err error
