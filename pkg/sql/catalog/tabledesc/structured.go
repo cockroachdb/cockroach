@@ -2725,7 +2725,7 @@ func (desc *Immutable) FindIndexByName(
 			}
 		}
 	}
-	return nil, false, fmt.Errorf("index %q does not exist", name)
+	return nil, false, pgerror.Newf(pgcode.UndefinedObject, "index %q does not exist", name)
 }
 
 // NamesForColumnIDs returns the names for the given column ids, or an error
