@@ -52,7 +52,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 			return newZeroNode(nil /* columns */), nil
 		}
 		// Index does not exist, but we want it to: error out.
-		return nil, err
+		return nil, pgerror.WithCandidateCode(err, pgcode.UndefinedObject)
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
