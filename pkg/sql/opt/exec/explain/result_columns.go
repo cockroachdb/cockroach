@@ -169,7 +169,7 @@ func getResultColumns(
 		case tree.ExplainDistSQL:
 			return colinfo.ExplainDistSQLColumns, nil
 		case tree.ExplainVec:
-			return colinfo.ExplainVecColumns, nil
+			return colinfo.ExplainPlanColumns, nil
 		default:
 			return nil, errors.AssertionFailedf("unknown explain mode %v", o.Mode)
 		}
@@ -178,7 +178,7 @@ func getResultColumns(
 		return colinfo.ExplainPlanColumns, nil
 
 	case explainOptOp:
-		return colinfo.ExplainOptColumns, nil
+		return colinfo.ExplainPlanColumns, nil
 
 	case showTraceOp:
 		if args.(*showTraceArgs).Compact {

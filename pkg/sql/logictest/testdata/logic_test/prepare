@@ -1156,11 +1156,11 @@ PREPARE e AS OPT PLAN '
     )
     [
       (Options "opt,verbose")
-      (ColList [ (NewColumn "text" "string") ])
+      (ColList [ (NewColumn "info" "string") ])
       (Props (MinPhysProps))
     ]
   )
-  (Presentation "text")
+  (Presentation "info")
   (NoOrdering)
 )'
 
