@@ -2089,44 +2089,6 @@ func (node *Export) doc(p *PrettyCfg) pretty.Doc {
 	return p.rlTable(items...)
 }
 
-func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
-	d := pretty.Keyword("EXPLAIN")
-	showMode := node.Mode != ExplainPlan
-	// ANALYZE is a special case because it is a statement implemented as an
-	// option to EXPLAIN.
-	if node.Flags[ExplainFlagAnalyze] {
-		d = pretty.ConcatSpace(d, pretty.Keyword("ANALYZE"))
-		showMode = true
-	}
-	var opts []pretty.Doc
-	if showMode {
-		opts = append(opts, pretty.Keyword(node.Mode.String()))
-	}
-	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
-		if f != ExplainFlagAnalyze && node.Flags[f] {
-			opts = append(opts, pretty.Keyword(f.String()))
-		}
-	}
-	if len(opts) > 0 {
-		d = pretty.ConcatSpace(
-			d,
-			p.bracket("(", p.commaSeparated(opts...), ")"),
-		)
-	}
-	return p.nestUnder(d, p.Doc(node.Statement))
-}
-
-func (node *ExplainAnalyzeDebug) doc(p *PrettyCfg) pretty.Doc {
-	d := pretty.ConcatSpace(
-		pretty.ConcatSpace(
-			pretty.Keyword("EXPLAIN"),
-			pretty.Keyword("ANALYZE"),
-		),
-		p.bracket("(", pretty.Keyword("DEBUG"), ")"),
-	)
-	return p.nestUnder(d, p.Doc(node.Statement))
-}
-
 func (node *NotExpr) doc(p *PrettyCfg) pretty.Doc {
 	return p.nestUnder(
 		pretty.Keyword("NOT"),

@@ -325,6 +325,7 @@ define ExplainOpt {
 # Explain implements EXPLAIN, showing information about the given plan.
 define Explain {
     Options *tree.ExplainOptions
+    Analyze bool
     StmtType tree.StatementType
     Plan exec.Plan
 }
