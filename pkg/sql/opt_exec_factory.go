@@ -1085,7 +1085,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 		return nil, err
 	}
 	return &valuesNode{
-		columns:          colinfo.ExplainOptColumns,
+		columns:          append(colinfo.ResultColumns(nil), colinfo.ExplainPlanColumns...),
 		tuples:           [][]tree.TypedExpr{{tree.NewDString(url.String())}},
 		specifiedInQuery: true,
 	}, nil
@@ -1108,7 +1108,7 @@ func (ef *execFactory) ConstructExplainOpt(
 	}
 
 	return &valuesNode{
-		columns:          colinfo.ExplainOptColumns,
+		columns:          append(colinfo.ResultColumns(nil), colinfo.ExplainPlanColumns...),
 		tuples:           rows,
 		specifiedInQuery: true,
 	}, nil
@@ -1116,9 +1116,9 @@ func (ef *execFactory) ConstructExplainOpt(
 
 // ConstructExplain is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExplain(
-	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
+	options *tree.ExplainOptions, analyze bool, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
-	return constructExplainDistSQLOrVecNode(options, stmtType, plan.(*planComponents), ef.planner)
+	return constructExplainDistSQLOrVecNode(options, analyze, stmtType, plan.(*planComponents), ef.planner)
 }
 
 // ConstructShowTrace is part of the exec.Factory interface.
@@ -1824,7 +1824,6 @@ func (ef *execFactory) ConstructExplainPlan(
 		flags: flags,
 		plan:  plan.(*explain.Plan),
 	}
-	n.columns = colinfo.ExplainPlanColumns
 	return n, nil
 }
 

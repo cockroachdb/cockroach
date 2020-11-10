@@ -61,8 +61,6 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.columns
 	case *virtualTableNode:
 		return n.columns
-	case *explainPlanNode:
-		return n.columns
 	case *windowNode:
 		return n.columns
 	case *showTraceNode:
@@ -101,8 +99,10 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.getColumns(mut, colinfo.ScrubColumns)
 	case *explainDistSQLNode:
 		return n.getColumns(mut, colinfo.ExplainDistSQLColumns)
+	case *explainPlanNode:
+		return n.getColumns(mut, colinfo.ExplainPlanColumns)
 	case *explainVecNode:
-		return n.getColumns(mut, colinfo.ExplainVecColumns)
+		return n.getColumns(mut, colinfo.ExplainPlanColumns)
 	case *relocateNode:
 		return n.getColumns(mut, colinfo.AlterTableRelocateColumns)
 	case *scatterNode:

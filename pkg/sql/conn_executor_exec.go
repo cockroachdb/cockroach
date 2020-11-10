@@ -341,11 +341,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 	ih := &p.instrumentation
 
-	if explainBundle, ok := ast.(*tree.ExplainAnalyzeDebug); ok {
+	if explain, ok := ast.(*tree.ExplainAnalyze); ok && explain.Mode == tree.ExplainDebug {
 		telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
 		ih.SetOutputMode(explainAnalyzeDebugOutput)
 		// Strip off the explain node to execute the inner statement.
-		stmt.AST = explainBundle.Statement
+		stmt.AST = explain.Statement
 		ast = stmt.AST
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?

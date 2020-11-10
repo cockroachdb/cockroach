@@ -31,11 +31,11 @@ import (
 // explainPlanNode implements EXPLAIN (PLAN); it produces the output of
 // EXPLAIN given an explain.Plan.
 type explainPlanNode struct {
+	optColumnsSlot
+
 	flags explain.Flags
 	plan  *explain.Plan
 	run   explainPlanNodeRun
-
-	columns colinfo.ResultColumns
 }
 
 type explainPlanNodeRun struct {
@@ -50,7 +50,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 	if err := emitExplain(ob, params.p.ExecCfg().Codec, e.plan, distribution, willVectorize); err != nil {
 		return err
 	}
-	v := params.p.newContainerValuesNode(e.columns, 0)
+	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, 0)
 	rows := ob.BuildStringRows()
 	datums := make([]tree.DString, len(rows))
 	for i, row := range rows {

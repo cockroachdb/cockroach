@@ -16,11 +16,20 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
 
 // Explain represents an EXPLAIN statement.
 type Explain struct {
+	ExplainOptions
+
+	// Statement is the statement being EXPLAINed.
+	Statement Statement
+}
+
+// ExplainAnalyze represents an EXPLAIN ANALYZE statement.
+type ExplainAnalyze struct {
 	ExplainOptions
 
 	// Statement is the statement being EXPLAINed.
@@ -56,6 +65,10 @@ const (
 	// query would be run in "auto" vectorized mode.
 	ExplainVec
 
+	// ExplainDebug generates a statement diagnostics bundle; only used with
+	// EXPLAIN ANALYZE.
+	ExplainDebug
+
 	numExplainModes = iota
 )
 
@@ -64,6 +77,7 @@ var explainModeStrings = [...]string{
 	ExplainDistSQL: "DISTSQL",
 	ExplainOpt:     "OPT",
 	ExplainVec:     "VEC",
+	ExplainDebug:   "DEBUG",
 }
 
 var explainModeStringMap = func() map[string]ExplainMode {
@@ -88,20 +102,16 @@ type ExplainFlag uint8
 const (
 	ExplainFlagVerbose ExplainFlag = 1 + iota
 	ExplainFlagTypes
-	ExplainFlagAnalyze
 	ExplainFlagEnv
 	ExplainFlagCatalog
-	ExplainFlagDebug
 	numExplainFlags = iota
 )
 
 var explainFlagStrings = [...]string{
 	ExplainFlagVerbose: "VERBOSE",
 	ExplainFlagTypes:   "TYPES",
-	ExplainFlagAnalyze: "ANALYZE",
 	ExplainFlagEnv:     "ENV",
 	ExplainFlagCatalog: "CATALOG",
-	ExplainFlagDebug:   "DEBUG",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
@@ -122,21 +132,14 @@ func (f ExplainFlag) String() string {
 // Format implements the NodeFormatter interface.
 func (node *Explain) Format(ctx *FmtCtx) {
 	ctx.WriteString("EXPLAIN ")
-	showMode := node.Mode != ExplainPlan
-	// ANALYZE is a special case because it is a statement implemented as an
-	// option to EXPLAIN.
-	if node.Flags[ExplainFlagAnalyze] {
-		ctx.WriteString("ANALYZE ")
-		showMode = true
-	}
 	wroteFlag := false
-	if showMode {
+	if node.Mode != ExplainPlan {
 		fmt.Fprintf(ctx, "(%s", node.Mode)
 		wroteFlag = true
 	}
 
 	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
-		if f != ExplainFlagAnalyze && node.Flags[f] {
+		if node.Flags[f] {
 			if !wroteFlag {
 				ctx.WriteString("(")
 				wroteFlag = true
@@ -152,26 +155,67 @@ func (node *Explain) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Statement)
 }
 
-// ExplainAnalyzeDebug represents an EXPLAIN ANALYZE (DEBUG) statement. It is a
-// different node type than Explain to allow easier special treatment in the SQL
-// layer.
-type ExplainAnalyzeDebug struct {
-	Statement Statement
+// doc is part of the docer interface.
+func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Keyword("EXPLAIN")
+	var opts []pretty.Doc
+	if node.Mode != ExplainPlan {
+		opts = append(opts, pretty.Keyword(node.Mode.String()))
+	}
+	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
+		if node.Flags[f] {
+			opts = append(opts, pretty.Keyword(f.String()))
+		}
+	}
+	if len(opts) > 0 {
+		d = pretty.ConcatSpace(
+			d,
+			p.bracket("(", p.commaSeparated(opts...), ")"),
+		)
+	}
+	return p.nestUnder(d, p.Doc(node.Statement))
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ExplainAnalyzeDebug) Format(ctx *FmtCtx) {
-	ctx.WriteString("EXPLAIN ANALYZE (DEBUG) ")
+func (node *ExplainAnalyze) Format(ctx *FmtCtx) {
+	fmt.Fprintf(ctx, "EXPLAIN ANALYZE (%s", node.Mode)
+
+	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
+		if node.Flags[f] {
+			fmt.Fprintf(ctx, ", %s", f.String())
+		}
+	}
+	ctx.WriteString(") ")
 	ctx.FormatNode(node.Statement)
 }
 
-// MakeExplain parses the EXPLAIN option strings and generates an explain
-// statement.
+// doc is part of the docer interface.
+func (node *ExplainAnalyze) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Keyword("EXPLAIN ANALYZE")
+	var opts []pretty.Doc
+	opts = append(opts, pretty.Keyword(node.Mode.String()))
+	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
+		if node.Flags[f] {
+			opts = append(opts, pretty.Keyword(f.String()))
+		}
+	}
+	if len(opts) > 0 {
+		d = pretty.ConcatSpace(
+			d,
+			p.bracket("(", p.commaSeparated(opts...), ")"),
+		)
+	}
+	return p.nestUnder(d, p.Doc(node.Statement))
+}
+
+// MakeExplain parses the EXPLAIN option strings and generates an Explain
+// or ExplainAnalyze statement.
 func MakeExplain(options []string, stmt Statement) (Statement, error) {
 	for i := range options {
 		options[i] = strings.ToUpper(options[i])
 	}
 	var opts ExplainOptions
+	var analyze bool
 	for _, opt := range options {
 		opt = strings.ToUpper(opt)
 		if m, ok := explainModeStringMap[opt]; ok {
@@ -181,13 +225,16 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 			opts.Mode = m
 			continue
 		}
+		if opt == "ANALYZE" {
+			analyze = true
+			continue
+		}
 		flag, ok := explainFlagStringMap[opt]
 		if !ok {
 			return nil, pgerror.Newf(pgcode.Syntax, "unsupported EXPLAIN option: %s", opt)
 		}
 		opts.Flags[flag] = true
 	}
-	analyze := opts.Flags[ExplainFlagAnalyze]
 	if opts.Mode == 0 {
 		if analyze {
 			// ANALYZE implies DISTSQL.
@@ -196,22 +243,21 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 			// Default mode is ExplainPlan.
 			opts.Mode = ExplainPlan
 		}
-	} else if analyze && opts.Mode != ExplainDistSQL {
-		return nil, pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE cannot be used with %s", opts.Mode)
 	}
 
-	if opts.Flags[ExplainFlagDebug] {
-		if !analyze {
-			return nil, pgerror.Newf(pgcode.Syntax, "DEBUG flag can only be used with EXPLAIN ANALYZE")
+	if analyze {
+		if opts.Mode != ExplainDistSQL && opts.Mode != ExplainDebug {
+			return nil, pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE cannot be used with %s", opts.Mode)
 		}
-		if len(options) != 2 {
-			return nil, pgerror.Newf(pgcode.Syntax,
-				"EXPLAIN ANALYZE (DEBUG) cannot be used in conjunction with other flags",
-			)
-		}
-		return &ExplainAnalyzeDebug{Statement: stmt}, nil
+		return &ExplainAnalyze{
+			ExplainOptions: opts,
+			Statement:      stmt,
+		}, nil
 	}
 
+	if opts.Mode == ExplainDebug {
+		return nil, pgerror.Newf(pgcode.Syntax, "DEBUG flag can only be used with EXPLAIN ANALYZE")
+	}
 	return &Explain{
 		ExplainOptions: opts,
 		Statement:      stmt,

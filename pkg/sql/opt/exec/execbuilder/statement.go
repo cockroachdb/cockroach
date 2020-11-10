@@ -140,7 +140,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	node, err := b.factory.ConstructExplain(&explain.Options, explain.StmtType, plan)
+	node, err := b.factory.ConstructExplain(&explain.Options, explain.Analyze, explain.StmtType, plan)
 	if err != nil {
 		return execPlan{}, err
 	}
