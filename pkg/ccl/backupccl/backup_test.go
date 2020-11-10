@@ -4230,3 +4230,48 @@ func TestClientDisconnect(t *testing.T) {
 		})
 	}
 }
+
+func TestBackupRestoreTempTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	tc := testcluster.StartTestCluster(t, 1, params)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	sqlDB.Exec(t, `
+	SET experimental_enable_temp_tables=true;
+	CREATE DATABASE d1;
+  USE d1;
+	CREATE TEMP TABLE temp_table (id int primary key);
+	CREATE TABLE perm_table (id int primary key);
+	`)
+	// Expect these 2 tables to now exist.
+	sqlDB.Exec(t, `USE d1; SELECT * FROM temp_table;`)
+	sqlDB.Exec(t, `USE d1; SELECT * FROM d1.perm_table;`)
+
+	sqlDB.ExpectErr(t, `pq: table "temp_table" does not exist`,
+		`BACKUP TABLE temp_table TO 'nodelocal://0/temp_table_backup'`)
+	sqlDB.Exec(t, `BACKUP DATABASE d1 TO 'nodelocal://0/d1_backup/'`)
+	sqlDB.Exec(t, `BACKUP d1.* TO 'nodelocal://0/d1_star_backup/'`)
+	sqlDB.Exec(t, `
+USE defaultdb;
+DROP DATABASE d1;
+RESTORE DATABASE d1 FROM 'nodelocal://0/d1_backup/';
+	`)
+	sqlDB.Exec(t, `USE d1; SELECT * FROM perm_table`)
+	sqlDB.ExpectErr(t, `pq: relation "temp_table" does not exist`, `USE d1; SELECT * FROM temp_table`)
+
+	sqlDB.Exec(t, `
+USE defaultdb;
+DROP DATABASE d1;
+RESTORE DATABASE d1 FROM 'nodelocal://0/d1_star_backup/';
+	`)
+	sqlDB.Exec(t, `USE d1; SELECT * FROM perm_table`)
+	sqlDB.ExpectErr(t, `pq: relation "temp_table" does not exist`, `USE d1; SELECT * FROM temp_table`)
+}
