@@ -595,6 +595,7 @@ func (s *vectorizedFlowCreator) Release() {
 	for _, r := range s.releasables {
 		r.Release()
 	}
+	scratch := s.scratch
 	*s = vectorizedFlowCreator{
 		streamIDToInputOp:              s.streamIDToInputOp,
 		streamIDToSpecIdx:              s.streamIDToSpecIdx,
@@ -605,16 +606,10 @@ func (s *vectorizedFlowCreator) Release() {
 		monitors:                       s.monitors[:0],
 		accounts:                       s.accounts[:0],
 		releasables:                    s.releasables[:0],
-		scratch: struct {
-			inputs               []colexecbase.Operator
-			metadataSourcesQueue []execinfrapb.MetadataSource
-			toClose              []colexecbase.Closer
-		}{
-			inputs:               s.scratch.inputs[:0],
-			metadataSourcesQueue: s.scratch.metadataSourcesQueue[:0],
-			toClose:              s.scratch.toClose[:0],
-		},
 	}
+	s.scratch.inputs = scratch.inputs[:0]
+	s.scratch.metadataSourcesQueue = scratch.metadataSourcesQueue[:0]
+	s.scratch.toClose = scratch.toClose[:0]
 	vectorizedFlowCreatorPool.Put(s)
 }
 
