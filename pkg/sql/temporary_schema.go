@@ -53,7 +53,7 @@ var TempObjectCleanupInterval = settings.RegisterPublicDurationSetting(
 var (
 	temporaryObjectCleanerActiveCleanersMetric = metric.Metadata{
 		Name:        "sql.temp_object_cleaner.active_cleaners",
-		Help:        "number of cleaner t®asks currently running on this node",
+		Help:        "number of cleaner tasks currently running on this node",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
