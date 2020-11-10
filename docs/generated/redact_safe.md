@@ -47,3 +47,4 @@ pkg/util/log/redact.go | `reflect.TypeOf(complex128(0))`
 pkg/util/log/redact.go | `reflect.TypeOf(os.Interrupt)`
 pkg/util/log/redact.go | `reflect.TypeOf(time.Time{})`
 pkg/util/log/redact.go | `reflect.TypeOf(time.Duration(0))`
+pkg/util/log/redact.go | `reflect.TypeOf(encoding.Type(0))`

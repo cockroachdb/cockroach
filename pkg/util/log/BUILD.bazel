@@ -42,6 +42,7 @@ go_library(
         "//pkg/settings",
         "//pkg/util",
         "//pkg/util/caller",
+        "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/fileutil",
         "//pkg/util/log/logflags",
