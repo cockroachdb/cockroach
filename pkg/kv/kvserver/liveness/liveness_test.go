@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func TestShouldReplaceLiveness(t *testing.T) {
@@ -39,12 +40,20 @@ func TestShouldReplaceLiveness(t *testing.T) {
 		}
 	}
 
-	l := func(epo int64, expiration hlc.Timestamp, draining bool, membership string) livenesspb.Liveness {
-		return livenesspb.Liveness{
+	l := func(epo int64, expiration hlc.Timestamp, draining bool, membership string) Record {
+		liveness := livenesspb.Liveness{
 			Epoch:      epo,
 			Expiration: hlc.LegacyTimestamp(expiration),
 			Draining:   draining,
 			Membership: toMembershipStatus(membership),
+		}
+		raw, err := protoutil.Marshal(&liveness)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return Record{
+			Liveness: liveness,
+			raw:      raw,
 		}
 	}
 	const (
@@ -54,7 +63,7 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	now := hlc.Timestamp{WallTime: 12345}
 
 	for _, test := range []struct {
-		old, new livenesspb.Liveness
+		old, new Record
 		exp      bool
 	}{
 		{
@@ -100,10 +109,20 @@ func TestShouldReplaceLiveness(t *testing.T) {
 			no,
 		},
 		{
-			// Draining changes, but Expiration moves backwards..
+			// Draining changes, but Expiration moves backwards.
 			l(10, now, false, "active"),
 			l(10, now.Add(-1, 0), true, "active"),
 			no,
+		},
+		{
+			// Only raw encoding changes.
+			l(1, now, false, "active"),
+			func() Record {
+				r := l(1, now, false, "active")
+				r.raw = append(r.raw, []byte("different")...)
+				return r
+			}(),
+			yes,
 		},
 	} {
 		t.Run("", func(t *testing.T) {
