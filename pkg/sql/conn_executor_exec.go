@@ -348,6 +348,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
 			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
 		} else {
+			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
 			flags := explain.MakeFlags(&e.ExplainOptions)
 			ih.SetOutputMode(explainAnalyzePlanOutput, flags)
 		}
@@ -371,7 +372,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	if needFinish {
 		sql := stmt.SQL
 		defer func() {
-			retErr = ih.Finish(ex.server.cfg, ex.appStats, p, ast, sql, res, retErr)
+			retErr = ih.Finish(ex.server.cfg, ex.appStats, ex.statsCollector, p, ast, sql, res, retErr)
 		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx

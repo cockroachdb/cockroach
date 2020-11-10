@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -148,6 +149,7 @@ func (ih *instrumentationHelper) Setup(
 func (ih *instrumentationHelper) Finish(
 	cfg *ExecutorConfig,
 	appStats *appStats,
+	statsCollector *sqlStatsCollector,
 	p *planner,
 	ast tree.Statement,
 	stmtRawSQL string,
@@ -188,7 +190,11 @@ func (ih *instrumentationHelper) Finish(
 	}
 
 	if ih.outputMode == explainAnalyzePlanOutput && retErr == nil {
-		retErr = ih.setExplainAnalyzePlanResult(ctx, res)
+		phaseTimes := &statsCollector.phaseTimes
+		if cfg.TestingKnobs.DeterministicExplainAnalyze {
+			phaseTimes = &deterministicPhaseTimes
+		}
+		retErr = ih.setExplainAnalyzePlanResult(ctx, res, phaseTimes)
 	}
 
 	// TODO(radu): this should be unified with other stmt stats accesses.
@@ -293,31 +299,37 @@ func (ih *instrumentationHelper) planStringForBundle() string {
 	return ob.BuildString()
 }
 
-// planRows generates the plan tree as a list of strings (one for each line).
+// planRowsForExplainAnalyze generates the plan tree as a list of strings (one
+// for each line).
 // Used in explainAnalyzePlanOutput mode.
-func (ih *instrumentationHelper) planRows() []string {
+func (ih *instrumentationHelper) planRowsForExplainAnalyze(phaseTimes *phaseTimes) []string {
 	if ih.explainPlan == nil {
 		return nil
 	}
 	ob := explain.NewOutputBuilder(ih.explainFlags)
+	ob.AddField("planning time", phaseTimes.getPlanningLatency().Round(time.Microsecond).String())
+	ob.AddField("execution time", phaseTimes.getRunLatency().Round(time.Microsecond).String())
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
 		return []string{fmt.Sprintf("error emitting plan: %v", err)}
 	}
 	return ob.BuildStringRows()
 }
 
+// setExplainAnalyzePlanResult sets the result for an EXPLAIN ANALYZE (PLAN)
+// statement. It returns an error only if there was an error adding rows to the
+// result.
 func (ih *instrumentationHelper) setExplainAnalyzePlanResult(
-	ctx context.Context, res RestrictedCommandResult,
-) error {
+	ctx context.Context, res RestrictedCommandResult, phaseTimes *phaseTimes,
+) (commErr error) {
 	res.ResetStmtType(&tree.ExplainAnalyze{})
 	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
 
-	if err := res.Err(); err != nil {
+	if res.Err() != nil {
 		// Can't add rows if there was an error.
-		return nil
+		return nil //nolint:returnerrcheck
 	}
 
-	rows := ih.planRows()
+	rows := ih.planRowsForExplainAnalyze(phaseTimes)
 	rows = append(rows, "")
 	rows = append(rows, "WARNING: this statement is experimental!")
 	for _, row := range rows {
@@ -326,4 +338,14 @@ func (ih *instrumentationHelper) setExplainAnalyzePlanResult(
 		}
 	}
 	return nil
+}
+
+var deterministicPhaseTimes = phaseTimes{
+	sessionQueryReceived:    time.Time{},
+	sessionStartParse:       time.Time{},
+	sessionEndParse:         time.Time{}.Add(1 * time.Microsecond),
+	plannerStartLogicalPlan: time.Time{}.Add(1 * time.Microsecond),
+	plannerEndLogicalPlan:   time.Time{}.Add(11 * time.Microsecond),
+	plannerStartExecStmt:    time.Time{}.Add(11 * time.Microsecond),
+	plannerEndExecStmt:      time.Time{}.Add(111 * time.Microsecond),
 }

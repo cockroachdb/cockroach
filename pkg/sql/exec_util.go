@@ -832,6 +832,13 @@ type ExecutorTestingKnobs struct {
 	// lifetime of this function. Note that returning a nil function is
 	// unsupported and will lead to a panic.
 	TestingSaveFlows func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
+
+	// DeterministicExplainAnalyze, if set, will result in overriding fields in
+	// EXPLAIN ANALYZE (PLAN) that can vary between runs (like elapsed times).
+	//
+	// Should be set together with execinfra.TestingKnobs.DeterministicStats.
+	// TODO(radu): figure out how to unify these two.
+	DeterministicExplainAnalyze bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
