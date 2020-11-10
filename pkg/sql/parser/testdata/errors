@@ -525,14 +525,6 @@ EXPLAIN EXECUTE a
 HINT: try \h EXPLAIN
 
 error
-EXPLAIN ANALYZE (PLAN) SELECT 1
-----
-at or near "EOF": syntax error: EXPLAIN ANALYZE cannot be used with PLAN
-DETAIL: source SQL:
-EXPLAIN ANALYZE (PLAN) SELECT 1
-                               ^
-
-error
 EXPLAIN (ANALYZE, PLAN) SELECT 1
 ----
 at or near "analyze": syntax error
