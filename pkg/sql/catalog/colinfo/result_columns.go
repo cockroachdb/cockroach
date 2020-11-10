@@ -146,8 +146,7 @@ func (r ResultColumns) String(printTypes bool, showHidden bool) string {
 	return f.CloseAndGetString()
 }
 
-// ExplainPlanColumns are the result columns of an EXPLAIN (PLAN) ...
-// statement.
+// ExplainPlanColumns are the result columns of various EXPLAIN variants.
 var ExplainPlanColumns = ResultColumns{
 	{Name: "info", Typ: types.String},
 }
@@ -158,24 +157,6 @@ var ExplainDistSQLColumns = ResultColumns{
 	{Name: "automatic", Typ: types.Bool},
 	{Name: "url", Typ: types.String},
 	{Name: "json", Typ: types.String, Hidden: true},
-}
-
-// ExplainOptColumns are the result columns of an
-// EXPLAIN (OPT) statement.
-var ExplainOptColumns = ResultColumns{
-	{Name: "text", Typ: types.String},
-}
-
-// ExplainVecColumns are the result columns of an
-// EXPLAIN (VEC) statement.
-var ExplainVecColumns = ResultColumns{
-	{Name: "text", Typ: types.String},
-}
-
-// ExplainAnalyzeDebugColumns are the result columns of an
-// EXPLAIN ANALYZE (DEBUG) statement.
-var ExplainAnalyzeDebugColumns = ResultColumns{
-	{Name: "text", Typ: types.String},
 }
 
 // ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.

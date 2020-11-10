@@ -47,7 +47,7 @@ func setExplainBundleResult(
 	execCfg *ExecutorConfig,
 ) error {
 	res.ResetStmtType(&tree.ExplainAnalyze{})
-	res.SetColumns(ctx, colinfo.ExplainAnalyzeDebugColumns)
+	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
 
 	var text []string
 	if bundle.collectionErr != nil {

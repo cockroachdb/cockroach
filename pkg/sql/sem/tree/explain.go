@@ -32,6 +32,7 @@ type Explain struct {
 type ExplainAnalyze struct {
 	ExplainOptions
 
+	// Statement is the statement being EXPLAINed.
 	Statement Statement
 }
 
