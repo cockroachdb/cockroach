@@ -133,8 +133,7 @@ func EncodePartialIndexKey(
 	// Add twice the key prefix as an initial guess.
 	// Add 3 bytes for every ancestor: table,index id + interleave sentinel.
 	// Add 2 bytes for every column value. An underestimate for all but low integers.
-	key = make([]byte, len(keyPrefix), 2*len(keyPrefix)+3*len(index.Interleave.Ancestors)+2*len(values))
-	copy(key, keyPrefix)
+	key = growKey(keyPrefix, 2*len(keyPrefix)+3*len(index.Interleave.Ancestors)+2*len(values))
 
 	dirs := directions(index.ColumnDirections)
 
@@ -759,12 +758,28 @@ func EncodeInvertedIndexKeys(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key [][]byte, err error) {
-	if len(index.ColumnIDs) > 1 {
-		return nil, errors.AssertionFailedf("trying to apply inverted index to more than one column")
+	numColumns := len(index.ColumnIDs)
+
+	// If the index is a multi-column inverted index, we encode the non-inverted
+	// columns in the key prefix.
+	if numColumns > 1 {
+		// Do not encode the last column, which is the inverted column, here. It
+		// is encoded below this block.
+		colIDs := index.ColumnIDs[:numColumns-1]
+		dirs := directions(index.ColumnDirections)
+
+		// Double the size of the key to make the imminent appends more
+		// efficient.
+		keyPrefix = growKey(keyPrefix, 2*len(keyPrefix))
+
+		keyPrefix, _, err = EncodeColumns(colIDs, dirs, colMap, values, keyPrefix)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var val tree.Datum
-	if i, ok := colMap[index.ColumnIDs[0]]; ok {
+	if i, ok := colMap[index.ColumnIDs[numColumns-1]]; ok {
 		val = values[i]
 	} else {
 		val = tree.DNull
@@ -1782,4 +1797,12 @@ func EncodeColumns(
 		}
 	}
 	return key, containsNull, nil
+}
+
+// growKey returns a new key with the given capacity and the same contents as
+// the given key.
+func growKey(key []byte, capacity int) []byte {
+	newKey := make([]byte, len(key), capacity)
+	copy(newKey, key)
+	return newKey
 }
