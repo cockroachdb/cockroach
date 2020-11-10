@@ -46,7 +46,7 @@ func setExplainBundleResult(
 	bundle diagnosticsBundle,
 	execCfg *ExecutorConfig,
 ) error {
-	res.ResetStmtType(&tree.ExplainAnalyzeDebug{})
+	res.ResetStmtType(&tree.ExplainAnalyze{})
 	res.SetColumns(ctx, colinfo.ExplainAnalyzeDebugColumns)
 
 	var text []string

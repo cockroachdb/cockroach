@@ -568,7 +568,7 @@ EXPLAIN (DEBUG) SELECT 1
 error
 EXPLAIN (PLAN, DEBUG) SELECT 1
 ----
-at or near "EOF": syntax error: DEBUG flag can only be used with EXPLAIN ANALYZE
+at or near "EOF": syntax error: cannot set EXPLAIN mode more than once: DEBUG
 DETAIL: source SQL:
 EXPLAIN (PLAN, DEBUG) SELECT 1
                               ^
