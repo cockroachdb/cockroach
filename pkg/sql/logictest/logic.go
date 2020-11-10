@@ -706,6 +706,9 @@ var (
 	}
 	defaultConfig         = parseTestConfig(defaultConfigNames)
 	fiveNodeDefaultConfig = parseTestConfig(fiveNodeDefaultConfigNames)
+	skipConfigName        = "skip-all-configs"
+	skipConfigNames       = make([]string, 0)
+	skipConfig            = parseTestConfig(skipConfigNames)
 )
 
 func findLogicTestConfig(name string) (logicTestConfigIdx, bool) {
@@ -1633,6 +1636,8 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 				configs = append(configs, applyBlocklistToConfigs(defaults, blocklist)...)
 			case fiveNodeDefaultConfigName:
 				configs = append(configs, applyBlocklistToConfigs(fiveNodeDefaultConfig, blocklist)...)
+			case skipConfigName:
+				configs = append(configs, applyBlocklistToConfigs(skipConfig, blocklist)...)
 			default:
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}
