@@ -1,4 +1,4 @@
-# LogicTest: 5node 5node-spec-planning
+# LogicTest: 5node
 
 # These tests are different from explain_analyze because they require manual
 # data placement.
@@ -103,6 +103,8 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkE9r4zAQxe_7KYbZyy6oWL
 query T
 EXPLAIN ANALYZE (PLAN) SELECT k FROM kv WHERE k = 0
 ----
+planning time: 10µs
+execution time: 100µs
 distribution: full
 vectorized: true
 ·
