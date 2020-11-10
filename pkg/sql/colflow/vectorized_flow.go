@@ -361,7 +361,8 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 	inputWatch := timeutil.NewStopWatch()
 	op := colexecbase.Operator(inbox)
 	ioReader := execinfra.IOReader(inbox)
-	nvsc := colexec.NewNetworkVectorizedStatsCollector(op, ioReader, id, idTagKey, inputWatch, latency)
+	networkReader := colexec.NetworkReader(inbox)
+	nvsc := colexec.NewNetworkVectorizedStatsCollector(op, ioReader, id, idTagKey, inputWatch, latency, networkReader)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, nvsc)
 	return nvsc, nil
 }

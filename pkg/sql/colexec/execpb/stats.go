@@ -25,15 +25,16 @@ var _ tracing.SpanStats = &VectorizedInboxStats{}
 var _ execinfrapb.DistSQLSpanStats = &VectorizedInboxStats{}
 
 const (
-	batchesOutputTagSuffix     = "output.batches"
-	tuplesOutputTagSuffix      = "output.tuples"
-	ioTimeTagSuffix            = "time.io"
-	executionTimeTagSuffix     = "time.execution"
-	maxVecMemoryBytesTagSuffix = "mem.vectorized.max"
-	maxVecDiskBytesTagSuffix   = "disk.vectorized.max"
-	bytesReadTagSuffix         = "bytes.read"
-	rowsReadTagSuffix          = "rows.read"
-	networkLatencyTagSuffix    = "network.latency"
+	batchesOutputTagSuffix       = "output.batches"
+	tuplesOutputTagSuffix        = "output.tuples"
+	ioTimeTagSuffix              = "time.io"
+	executionTimeTagSuffix       = "time.execution"
+	deserializationTimeTagSuffix = "time.deserialization"
+	maxVecMemoryBytesTagSuffix   = "mem.vectorized.max"
+	maxVecDiskBytesTagSuffix     = "disk.vectorized.max"
+	bytesReadTagSuffix           = "bytes.read"
+	rowsReadTagSuffix            = "rows.read"
+	networkLatencyTagSuffix      = "network.latency"
 )
 
 // Stats is part of SpanStats interface.
@@ -63,10 +64,8 @@ func (vs *VectorizedStats) Stats() map[string]string {
 // Stats is part of SpanStats interface.
 func (vs *VectorizedInboxStats) Stats() map[string]string {
 	stats := map[string]string{
-		batchesOutputTagSuffix: fmt.Sprintf("%d", vs.BaseVectorizedStats.NumBatches),
-		// TODO(cathymw): Have inbox collect its own deserialization time with a
-		// timer and display deserialization time instead of ioTime.
-		ioTimeTagSuffix: fmt.Sprintf("%v", vs.BaseVectorizedStats.Time.Round(time.Microsecond)),
+		batchesOutputTagSuffix:       fmt.Sprintf("%d", vs.BaseVectorizedStats.NumBatches),
+		deserializationTimeTagSuffix: fmt.Sprintf("%v", vs.BaseVectorizedStats.Time.Round(time.Microsecond)),
 	}
 	if vs.BaseVectorizedStats.BytesRead != 0 {
 		stats[bytesReadTagSuffix] = humanizeutil.IBytes(vs.BaseVectorizedStats.BytesRead)
@@ -81,15 +80,16 @@ func (vs *VectorizedInboxStats) Stats() map[string]string {
 }
 
 const (
-	batchesOutputQueryPlanSuffix     = "batches output"
-	tuplesOutputQueryPlanSuffix      = "tuples output"
-	ioTimeQueryPlanSuffix            = "IO time"
-	executionTimeQueryPlanSuffix     = "execution time"
-	maxVecMemoryBytesQueryPlanSuffix = "max vectorized memory allocated"
-	maxVecDiskBytesQueryPlanSuffix   = "max vectorized disk allocated"
-	bytesReadQueryPlanSuffix         = "bytes read"
-	rowsReadQueryPlanSuffix          = "rows read"
-	networkLatencyQueryPlanSuffix    = "network latency"
+	batchesOutputQueryPlanSuffix       = "batches output"
+	tuplesOutputQueryPlanSuffix        = "tuples output"
+	ioTimeQueryPlanSuffix              = "IO time"
+	executionTimeQueryPlanSuffix       = "execution time"
+	deserializationTimeQueryPlanSuffix = "deserialization time"
+	maxVecMemoryBytesQueryPlanSuffix   = "max vectorized memory allocated"
+	maxVecDiskBytesQueryPlanSuffix     = "max vectorized disk allocated"
+	bytesReadQueryPlanSuffix           = "bytes read"
+	rowsReadQueryPlanSuffix            = "rows read"
+	networkLatencyQueryPlanSuffix      = "network latency"
 )
 
 // StatsForQueryPlan is part of DistSQLSpanStats interface.
@@ -127,7 +127,7 @@ func (vs *VectorizedStats) StatsForQueryPlan() []string {
 func (vs *VectorizedInboxStats) StatsForQueryPlan() []string {
 	stats := []string{
 		fmt.Sprintf("%s: %d", batchesOutputQueryPlanSuffix, vs.BaseVectorizedStats.NumBatches),
-		fmt.Sprintf("%s: %v", ioTimeQueryPlanSuffix, vs.BaseVectorizedStats.Time.Round(time.Microsecond)),
+		fmt.Sprintf("%s: %v", deserializationTimeQueryPlanSuffix, vs.BaseVectorizedStats.Time.Round(time.Microsecond)),
 	}
 	if vs.BaseVectorizedStats.BytesRead != 0 {
 		stats = append(stats,
