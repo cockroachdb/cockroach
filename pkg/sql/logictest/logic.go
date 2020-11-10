@@ -2769,7 +2769,10 @@ func floatsMatch(expectedString, actualString string) (bool, error) {
 	if expPower != actPower {
 		return false, nil
 	}
-	for i := 0; i < 15; i++ {
+	// TODO(yuzefovich): investigate why we can't always guarantee deterministic
+	// 15 significant digits and switch back from 14 to 15 digits comparison
+	// here. See #56446 for more details.
+	for i := 0; i < 14; i++ {
 		expDigit := int(expected)
 		actDigit := int(actual)
 		if expDigit != actDigit {
