@@ -371,7 +371,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	if needFinish {
 		sql := stmt.SQL
 		defer func() {
-			retErr = ih.Finish(ex.server.cfg, ex.appStats, p, ast, sql, res, retErr)
+			retErr = ih.Finish(ex.server.cfg, ex.appStats, ex.statsCollector, p, ast, sql, res, retErr)
 		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx
