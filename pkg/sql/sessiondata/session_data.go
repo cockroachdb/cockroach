@@ -161,6 +161,8 @@ type LocalOnlySessionData struct {
 	// PreferLookupJoinsForFKs causes foreign key operations to prefer lookup
 	// joins.
 	PreferLookupJoinsForFKs bool
+	// FeatureBackupEnabled enables or disables the ability to run a backup.
+	FeatureBackupEnabled bool
 	// RemoteAddr is used to generate logging events.
 	RemoteAddr net.Addr
 	// ZigzagJoinEnabled indicates whether the optimizer should try and plan a

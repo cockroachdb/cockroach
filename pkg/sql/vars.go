@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
@@ -807,6 +808,26 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return formatBoolAsPostgresSetting(preferLookupJoinsForFKs.Get(sv))
+		},
+	},
+
+	// Cockroach DB extension.
+	// TODO(angelaw): Is this considered a CRDB extension?
+	`feature_backup_enabled`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.FeatureBackupEnabled)
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("feature_backup_enabled"),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("feature_backup_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetFeatureBackupEnabled(b)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(featureflag.FeatureBackupEnabled.Get(sv))
 		},
 	},
 

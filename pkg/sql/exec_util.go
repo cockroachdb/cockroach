@@ -2094,6 +2094,10 @@ func (m *sessionDataMutator) SetPreferLookupJoinsForFKs(val bool) {
 	m.data.PreferLookupJoinsForFKs = val
 }
 
+func (m *sessionDataMutator) SetFeatureBackupEnabled(val bool) {
+	m.data.FeatureBackupEnabled = val
+}
+
 func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 	m.data.SearchPath = m.data.SearchPath.UpdatePaths(paths)
 }

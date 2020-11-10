@@ -501,6 +501,12 @@ func backupPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
+	// Check whether feature backup is enabled or not.
+	if !p.ExtendedEvalContext().SessionData.FeatureBackupEnabled {
+		return nil, nil, nil, false,
+			pgerror.Newf(pgcode.OperatorIntervention, "BACKUP feature was disabled via cluster settings.")
+	}
+
 	var err error
 	subdirFn := func() (string, error) { return "", nil }
 	if backupStmt.Subdir != nil {

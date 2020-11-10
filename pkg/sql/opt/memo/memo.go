@@ -131,6 +131,8 @@ type Memo struct {
 
 	// The following are selected fields from SessionData which can affect
 	// planning. We need to cross-check these before reusing a cached memo.
+	// TODO(angelaw): Is it necesssary to include feature flags here?
+	featureBackupEnabled    bool
 	reorderJoinsLimit       int
 	zigzagJoinEnabled       bool
 	useHistograms           bool
@@ -164,6 +166,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.rootProps = nil
 	m.memEstimate = 0
 
+	m.featureBackupEnabled = evalCtx.SessionData.FeatureBackupEnabled
 	m.reorderJoinsLimit = evalCtx.SessionData.ReorderJoinsLimit
 	m.zigzagJoinEnabled = evalCtx.SessionData.ZigzagJoinEnabled
 	m.useHistograms = evalCtx.SessionData.OptimizerUseHistograms
