@@ -112,8 +112,8 @@ type TestServerInterface interface {
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
 
-	// MigrationManager returns the *jobs.Registry as an interface{}.
-	MigrationManager() interface{}
+	// SQLMigrationsManager returns the *sqlmigrations.Manager as an interface{}.
+	SQLMigrationsManager() interface{}
 
 	// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
 	// interface{}.
