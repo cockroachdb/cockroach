@@ -538,24 +538,26 @@ func (e virtualDefEntry) makeConstrainedRowsGenerator(
 	def := e.virtualDef.(virtualSchemaTable)
 	return func(pusher rowPusher) error {
 		var span constraint.Span
-		addRowIfPassesFilter := func(datums ...tree.Datum) error {
-			for i, id := range index.ColumnIDs {
-				indexKeyDatums[i] = datums[columnIdxMap[id]]
-			}
-			// Construct a single key span out of the current row, so that
-			// we can test it for containment within the constraint span of the
-			// filter that we're applying. The results of this containment check
-			// will tell us whether or not to let the current row pass the filter.
-			key := constraint.MakeCompositeKey(indexKeyDatums...)
-			span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
-			var err error
-			if idxConstraint.ContainsSpan(p.EvalContext(), &span) {
-				if err := e.validateRow(datums, columns); err != nil {
-					return err
+		addRowIfPassesFilter := func(idxConstraint *constraint.Constraint) func(datums ...tree.Datum) error {
+			return func(datums ...tree.Datum) error {
+				for i, id := range index.ColumnIDs {
+					indexKeyDatums[i] = datums[columnIdxMap[id]]
 				}
-				return pusher.pushRow(datums...)
+				// Construct a single key span out of the current row, so that
+				// we can test it for containment within the constraint span of the
+				// filter that we're applying. The results of this containment check
+				// will tell us whether or not to let the current row pass the filter.
+				key := constraint.MakeCompositeKey(indexKeyDatums...)
+				span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+				var err error
+				if idxConstraint.ContainsSpan(p.EvalContext(), &span) {
+					if err := e.validateRow(datums, columns); err != nil {
+						return err
+					}
+					return pusher.pushRow(datums...)
+				}
+				return err
 			}
-			return err
 		}
 
 		// We have a virtual index with a constraint. Run the constrained
@@ -563,13 +565,9 @@ func (e virtualDefEntry) makeConstrainedRowsGenerator(
 		// index for a given span, we exit the loop early and run a "full scan"
 		// over the virtual table, filtering the output using the remaining
 		// spans.
-		// N.B. we count down in this loop so that, if we have to give up half
-		// way through, we can easily truncate the spans we already processed
-		// from the end and use them as a filter for the remaining rows of the
-		// table.
-		currentConstraint := idxConstraint.Spans.Count() - 1
-		for ; currentConstraint >= 0; currentConstraint-- {
-			span := idxConstraint.Spans.Get(currentConstraint)
+		var currentSpan int
+		for ; currentSpan < idxConstraint.Spans.Count(); currentSpan++ {
+			span := idxConstraint.Spans.Get(currentSpan)
 			if span.StartKey().Length() > 1 {
 				return errors.AssertionFailedf(
 					"programming error: can't push down composite constraints into vtables")
@@ -584,7 +582,7 @@ func (e virtualDefEntry) makeConstrainedRowsGenerator(
 			// For each span, run the index's populate method, constrained to the
 			// constraint span's value.
 			found, err := virtualIndex.populate(ctx, constraintDatum, p, dbDesc,
-				addRowIfPassesFilter)
+				addRowIfPassesFilter(idxConstraint))
 			if err != nil {
 				return err
 			}
@@ -594,15 +592,21 @@ func (e virtualDefEntry) makeConstrainedRowsGenerator(
 				break
 			}
 		}
-		if currentConstraint < 0 {
+		if currentSpan == idxConstraint.Spans.Count() {
 			// We successfully processed all constraints, so we can leave now.
 			return nil
 		}
 
 		// Fall back to a full scan of the table, using the remaining filters
 		// that weren't able to be used as constraints.
-		idxConstraint.Spans.Truncate(currentConstraint + 1)
-		return def.populate(ctx, p, dbDesc, addRowIfPassesFilter)
+		newConstraint := *idxConstraint
+		newConstraint.Spans = constraint.Spans{}
+		nSpans := idxConstraint.Spans.Count() - currentSpan
+		newConstraint.Spans.Alloc(nSpans)
+		for ; currentSpan < idxConstraint.Spans.Count(); currentSpan++ {
+			newConstraint.Spans.Append(idxConstraint.Spans.Get(currentSpan))
+		}
+		return def.populate(ctx, p, dbDesc, addRowIfPassesFilter(&newConstraint))
 	}
 }
 
