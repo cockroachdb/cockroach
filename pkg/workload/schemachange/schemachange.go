@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -376,7 +377,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 		pgErr := pgx.PgError{}
 		if !errors.As(err, &pgErr) {
 			w.recordInHist(timeutil.Since(start), txnCommitError)
-			logs = logs + fmt.Sprintf("***FAIL; Non pg error %v\n", err)
+			logs = logs + fmt.Sprintf("COMMIT; ***FAIL; Non pg error %v\n", err)
 			return errors.Mark(
 				errors.Wrap(err, "***UNEXPECTED ERROR"),
 				errRunInTxnFatalSentinel,
@@ -390,6 +391,45 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 			logs = logs + fmt.Sprintf("COMMIT; %v\n", err)
 			return nil
 		}
+
+		// If the error is an instance of pgcode.TransactionCommittedWithSchemaChangeFailure, then
+		// the underlying pgcode needs to be parsed from it.
+		if pgErr.Code == pgcode.TransactionCommittedWithSchemaChangeFailure.String() {
+			re := regexp.MustCompile(`\([A-Z0-9]{5}\)`)
+			underLyingErrorCode := re.FindString(pgErr.Error())
+			if underLyingErrorCode != "" {
+				pgErr.Code = underLyingErrorCode[1 : len(underLyingErrorCode)-1]
+			}
+		}
+
+		// Check for any expected errors.
+		if !w.opGen.expectedCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) {
+			var logMsg string
+			if w.opGen.expectedCommitErrors.empty() {
+				logMsg = fmt.Sprintf("COMMIT; ***FAIL; Expected no errors, but got %v\n", err)
+			} else {
+				logMsg = fmt.Sprintf("COMMIT; ***FAIL; Expected one of SQLSTATES %s, but got %v\n", w.opGen.expectedCommitErrors.string(), err)
+			}
+
+			logs = logs + logMsg
+			return errors.Mark(
+				errors.Wrap(err, "***UNEXPECTED ERROR"),
+				errRunInTxnFatalSentinel,
+			)
+		}
+
+		// Error was anticipated, so it is acceptable.
+		w.recordInHist(timeutil.Since(start), txnCommitError)
+		logs = logs + fmt.Sprintf("COMMIT; expected SQLSTATE(S) %s, and got %v\n", w.opGen.expectedCommitErrors.string(), err)
+		return nil
+	}
+
+	if !w.opGen.expectedCommitErrors.empty() {
+		logs = logs + fmt.Sprintf("COMMIT; Expected SQLSTATE(S) %s, but got no errors\n", w.opGen.expectedCommitErrors.string())
+		return errors.Mark(
+			errors.Errorf("***UNEXPECTED SUCCESS"),
+			errRunInTxnFatalSentinel,
+		)
 	}
 
 	// If there were no errors while committing the txn.
