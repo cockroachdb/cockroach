@@ -329,7 +329,7 @@ ALTER TABLE c INJECT STATISTICS '[
 # vectorize=experimental_always, but we check that the vectorized plan contains
 # a wrapped joinReader processor.
 query B
-SELECT count(*) > 0 FROM [EXPLAIN (VEC) SELECT c.a FROM c JOIN d ON d.b = c.b] WHERE text LIKE '%rowexec.joinReader%'
+SELECT count(*) > 0 FROM [EXPLAIN (VEC) SELECT c.a FROM c JOIN d ON d.b = c.b] WHERE info LIKE '%rowexec.joinReader%'
 ----
 true
 

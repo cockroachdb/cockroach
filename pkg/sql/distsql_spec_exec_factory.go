@@ -734,14 +734,14 @@ func (e *distSQLSpecExecFactory) ConstructExplainOpt(
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplain(
-	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
+	options *tree.ExplainOptions, analyze bool, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
 	// TODO(yuzefovich): make sure to return the same nice error in some
 	// variants of EXPLAIN when subqueries are present as we do in the old path.
 	// TODO(yuzefovich): make sure that local plan nodes that create
 	// distributed jobs are shown as "distributed". See distSQLExplainable.
 	p := plan.(*planComponents)
-	explain, err := constructExplainDistSQLOrVecNode(options, stmtType, p, e.planner)
+	explain, err := constructExplainDistSQLOrVecNode(options, analyze, stmtType, p, e.planner)
 	if err != nil {
 		return nil, err
 	}
