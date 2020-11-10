@@ -9788,7 +9788,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
-			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+			Expiration: hlc.Timestamp{WallTime: 8},
 		}
 		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,
@@ -9802,7 +9802,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
-			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+			Expiration: hlc.Timestamp{WallTime: 8},
 		}
 		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,
@@ -9817,7 +9817,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
-			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+			Expiration: hlc.Timestamp{WallTime: 8},
 		}
 		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,
@@ -9833,7 +9833,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
-			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+			Expiration: hlc.Timestamp{WallTime: 8},
 		}
 		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,
@@ -9848,7 +9848,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
-			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+			Expiration: hlc.Timestamp{WallTime: 8},
 		}
 		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,

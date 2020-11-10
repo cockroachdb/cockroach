@@ -42,7 +42,7 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	l := func(epo int64, expiration hlc.Timestamp, draining bool, membership string) livenesspb.Liveness {
 		return livenesspb.Liveness{
 			Epoch:      epo,
-			Expiration: hlc.LegacyTimestamp(expiration),
+			Expiration: expiration,
 			Draining:   draining,
 			Membership: toMembershipStatus(membership),
 		}
