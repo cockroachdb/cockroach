@@ -27,13 +27,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNumBatches is a unit test for NumBatches field of VectorizedStats.
+// TestNumBatches is a unit test for the NumBatches field.
 func TestNumBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	nBatches := 10
 	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
-	vsc := NewVectorizedStatsCollectorBase(
+	vsc := NewVectorizedStatsCollector(
 		noop, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 		timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
 		nil, /* inputStatsCollectors */
@@ -45,17 +45,18 @@ func TestNumBatches(t *testing.T) {
 			break
 		}
 	}
-	require.Equal(t, nBatches, int(vsc.NumBatches))
+	s := vsc.(*vectorizedStatsCollectorImpl).finish()
+	require.Equal(t, nBatches, int(s.Output.NumBatches.Value()))
 }
 
-// TestNumTuples is a unit test for NumTuples field of VectorizedStats.
+// TestNumTuples is a unit test for NumTuples field.
 func TestNumTuples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	nBatches := 10
 	for _, batchSize := range []int{1, 16, 1024} {
 		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
-		vsc := NewVectorizedStatsCollectorBase(
+		vsc := NewVectorizedStatsCollector(
 			noop, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
@@ -67,7 +68,8 @@ func TestNumTuples(t *testing.T) {
 				break
 			}
 		}
-		require.Equal(t, nBatches*batchSize, int(vsc.NumTuples))
+		s := vsc.(*vectorizedStatsCollectorImpl).finish()
+		require.Equal(t, nBatches*batchSize, int(s.Output.NumTuples.Value()))
 	}
 }
 
@@ -87,7 +89,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
-		leftInput := NewVectorizedStatsCollectorBase(
+		leftInput := NewVectorizedStatsCollector(
 			leftSource, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
@@ -96,7 +98,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
-		rightInput := NewVectorizedStatsCollectorBase(
+		rightInput := NewVectorizedStatsCollector(
 			rightSource, nil /* ioReader */, 1 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
@@ -117,10 +119,10 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeSource:   timeSource,
 		}
 
-		mjStatsCollector := NewVectorizedStatsCollectorBase(
+		mjStatsCollector := NewVectorizedStatsCollector(
 			timeAdvancingMergeJoiner, nil /* ioReader */, 2 /* id */, execinfrapb.ProcessorIDTagKey,
 			mjInputWatch, nil /* memMonitors */, nil, /* diskMonitors */
-			[]ChildStatsCollector{leftInput, rightInput},
+			[]ChildStatsCollector{leftInput.(ChildStatsCollector), rightInput.(ChildStatsCollector)},
 		)
 
 		// The inputs are identical, so the merge joiner should output
@@ -135,14 +137,14 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			batchCount++
 			tupleCount += b.Length()
 		}
-		mjStatsCollector.finalizeStats()
+		s := mjStatsCollector.(*vectorizedStatsCollectorImpl).finish()
 
-		require.Equal(t, nBatches*coldata.BatchSize(), int(mjStatsCollector.NumTuples))
+		require.Equal(t, nBatches*coldata.BatchSize(), int(s.Output.NumTuples.Value()))
 		// Two inputs are advancing the time source for a total of 2 * nBatches
 		// advances, but these do not count towards merge joiner execution time.
 		// Merge joiner advances the time on its every non-empty batch totaling
 		// batchCount advances that should be accounted for in stats.
-		require.Equal(t, time.Duration(batchCount), mjStatsCollector.Time)
+		require.Equal(t, time.Duration(batchCount), s.Exec.ExecTime)
 	}
 }
 
