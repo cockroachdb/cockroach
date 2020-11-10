@@ -333,12 +333,12 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-// GetBytesRead is part of the execinfra.IOReader interface.
+// GetBytesRead is part of the colexec.NetworkReader interface.
 func (i *Inbox) GetBytesRead() int64 {
 	return i.bytesRead
 }
 
-// GetRowsRead is part of the execinfra.IOReader interface.
+// GetRowsRead is part of the colexec.NetworkReader interface.
 func (i *Inbox) GetRowsRead() int64 {
 	return i.rowsRead
 }
