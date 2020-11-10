@@ -86,7 +86,7 @@ type sqlServer struct {
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
 	jobRegistry            *jobs.Registry
-	migMgr                 *sqlmigrations.Manager
+	sqlmigrationsMgr       *sqlmigrations.Manager
 	statsRefresher         *stats.Refresher
 	temporaryObjectCleaner *sql.TemporaryObjectCleaner
 	internalMemMetrics     sql.MemoryMetrics
@@ -744,7 +744,7 @@ func (s *sqlServer) preStart(
 				DistSQLMode: sessiondata.DistSQLOff,
 			},
 		})
-	migMgr := sqlmigrations.NewManager(
+	sqlmigrationsMgr := sqlmigrations.NewManager(
 		stopper,
 		s.execCfg.DB,
 		s.execCfg.Codec,
@@ -755,7 +755,7 @@ func (s *sqlServer) preStart(
 		s.execCfg.Settings,
 		s.jobRegistry,
 	)
-	s.migMgr = migMgr // only for testing via TestServer
+	s.sqlmigrationsMgr = sqlmigrationsMgr // only for testing via TestServer
 
 	if err := s.jobRegistry.Start(
 		ctx, stopper, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
@@ -790,7 +790,7 @@ func (s *sqlServer) preStart(
 	}
 
 	// Run startup migrations (note: these depend on jobs subsystem running).
-	if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
+	if err := sqlmigrationsMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
 		return errors.Wrap(err, "ensuring SQL migrations")
 	}
 
@@ -812,7 +812,7 @@ func (s *sqlServer) preStart(
 	}
 	// Start the async migration to upgrade namespace entries from the old
 	// namespace table (id 2) to the new one (id 30).
-	if err := migMgr.StartSystemNamespaceMigration(ctx, bootstrapVersion); err != nil {
+	if err := sqlmigrationsMgr.StartSystemNamespaceMigration(ctx, bootstrapVersion); err != nil {
 		return err
 	}
 
