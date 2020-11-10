@@ -420,10 +420,7 @@ type pebbleMVCCScanner struct {
 	resumeKey       roachpb.Key // if unset, falls back to p.advanceKey()
 	resumeNextBytes int64       // set when targetBytes is exceeded
 	// Transaction epoch and sequence number.
-	txn               *roachpb.Transaction
-	txnEpoch          enginepb.TxnEpoch
-	txnSequence       enginepb.TxnSeq
-	txnIgnoredSeqNums []enginepb.IgnoredSeqNumRange
+	txn *roachpb.Transaction
 	// Uncertainty related fields.
 	uncertainty      uncertainty.Interval
 	checkUncertainty bool
@@ -541,9 +538,6 @@ func (p *pebbleMVCCScanner) init(
 
 	if txn != nil {
 		p.txn = txn
-		p.txnEpoch = txn.Epoch
-		p.txnSequence = txn.Sequence
-		p.txnIgnoredSeqNums = txn.IgnoredSeqNums
 	}
 
 	p.uncertainty = ui
@@ -734,14 +728,16 @@ func (p *pebbleMVCCScanner) decrementItersBeforeSeek() {
 
 // Try to read from the current value's intent history. Assumes p.meta has been
 // unmarshalled already. Returns found = true if a value was found and returned.
-func (p *pebbleMVCCScanner) getFromIntentHistory() (value []byte, found bool) {
+func (p *pebbleMVCCScanner) getFromIntentHistory(
+	seqNum enginepb.TxnSeq, ignoredSeqNums []enginepb.IgnoredSeqNumRange,
+) (value []byte, found bool) {
 	intentHistory := p.meta.IntentHistory
 	// upIdx is the index of the first intent in intentHistory with a sequence
 	// number greater than our transaction's sequence number. Subtract 1 from it
 	// to get the index of the intent with the highest sequence number that is
 	// still less than or equal to p.txnSeq.
 	upIdx := sort.Search(len(intentHistory), func(i int) bool {
-		return intentHistory[i].Sequence > p.txnSequence
+		return intentHistory[i].Sequence > seqNum
 	})
 	// If the candidate intent has a sequence number that is ignored by this txn,
 	// iterate backward along the sorted intent history until we come across an
@@ -749,7 +745,7 @@ func (p *pebbleMVCCScanner) getFromIntentHistory() (value []byte, found bool) {
 	//
 	// TODO(itsbilal): Explore if this iteration can be improved through binary
 	// search.
-	for upIdx > 0 && enginepb.TxnSeqIsIgnored(p.meta.IntentHistory[upIdx-1].Sequence, p.txnIgnoredSeqNums) {
+	for upIdx > 0 && enginepb.TxnSeqIsIgnored(p.meta.IntentHistory[upIdx-1].Sequence, ignoredSeqNums) {
 		upIdx--
 	}
 	if upIdx == 0 {
@@ -938,7 +934,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		prevTS = metaTS.Prev()
 	}
 
-	ownIntent := p.txn != nil && p.meta.Txn.ID.Equal(p.txn.ID)
+	ownIntent, epoch, seqNum, ignoredSeqNums := p.ownsIntent()
 	if !ownIntent {
 		conflictingIntent := metaTS.LessEq(p.ts) || p.failOnMoreRecent
 		if !conflictingIntent {
@@ -1012,8 +1008,9 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		return true /* ok */, false
 	}
 
-	if p.txnEpoch == p.meta.Txn.Epoch {
-		if p.txnSequence >= p.meta.Txn.Sequence && !enginepb.TxnSeqIsIgnored(p.meta.Txn.Sequence, p.txnIgnoredSeqNums) {
+	if epoch == p.meta.Txn.Epoch {
+		if seqNum >= p.meta.Txn.Sequence &&
+			!enginepb.TxnSeqIsIgnored(p.meta.Txn.Sequence, ignoredSeqNums) {
 			// 12. We're reading our own txn's intent at an equal or higher sequence.
 			// Note that we read at the intent timestamp, not at our read timestamp
 			// as the intent timestamp may have been pushed forward by another
@@ -1028,7 +1025,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		// numbers) that we should read. If there exists a value in the intent
 		// history that has a sequence number equal to or less than the read
 		// sequence, read that value.
-		if intentValueRaw, found := p.getFromIntentHistory(); found {
+		if intentValueRaw, found := p.getFromIntentHistory(seqNum, ignoredSeqNums); found {
 			// If we're adding a value due to a previous intent, we want to populate
 			// the timestamp as of current metaTimestamp. Note that this may be
 			// controversial as this maybe be neither the write timestamp when this
@@ -1054,13 +1051,13 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		return p.seekVersion(ctx, prevTS, false)
 	}
 
-	if p.txnEpoch < p.meta.Txn.Epoch {
+	if epoch < p.meta.Txn.Epoch {
 		// 15. We're reading our own txn's intent but the current txn has
 		// an earlier epoch than the intent. Return an error so that the
 		// earlier incarnation of our transaction aborts (presumably
 		// this is some operation that was retried).
 		p.err = errors.Errorf("failed to read with epoch %d due to a write intent with epoch %d",
-			p.txnEpoch, p.meta.Txn.Epoch)
+			epoch, p.meta.Txn.Epoch)
 		return false, false
 	}
 
@@ -1070,6 +1067,26 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 	// reading. In this case, we ignore the intent and read the
 	// previous value as if the transaction were starting fresh.
 	return p.seekVersion(ctx, prevTS, false)
+}
+
+// ownsIntent return true if the current intent is owned by the reading
+// transaction or one of its parents. If the intent is owned by the reading
+// transactions or any of its ancestors, the relevant epoch, sequence number,
+// and ignored sequence range for the intent owner are additionally returned.
+// Note that these values may correspond to an ancestor transaction rather than
+// the transaction performing the read.
+func (p *pebbleMVCCScanner) ownsIntent() (
+	bool,
+	enginepb.TxnEpoch,
+	enginepb.TxnSeq,
+	[]enginepb.IgnoredSeqNumRange,
+) {
+	for cur := p.txn; cur != nil; cur = cur.Parent {
+		if p.meta.Txn.ID.Equal(cur.ID) {
+			return true, cur.Epoch, cur.Sequence, cur.IgnoredSeqNums
+		}
+	}
+	return false, 0, 0, nil
 }
 
 // nextKey advances to the next user key.

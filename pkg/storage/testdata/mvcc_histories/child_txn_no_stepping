@@ -1,0 +1,44 @@
+# Test child transactions without stepping to exercise reading of parent
+# intents.
+
+run ok
+with t=A k=k
+  txn_begin ts=0,1
+  txn_step
+  put v=v
+----
+>> at end:
+txn: "A" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=1} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=1} ts=0,1 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/0,1 -> /BYTES/v
+
+run ok
+with p=A t=A1
+  txn_begin_child ts=0,2 k=k2
+  get k=k ts=0,1
+  put k=k2 ts=0,2 v=v2
+  get k=k2 ts=0,2
+----
+get: "k" -> /BYTES/v @0,1
+get: "k2" -> /BYTES/v2 @0,2
+>> at end:
+txn: "A1" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} lock=true stat=PENDING rts=0,2 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=1} ts=0,1 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/0,1 -> /BYTES/v
+meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} ts=0,2 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k2"/0,2 -> /BYTES/v2
+
+run ok
+txn_begin_child ts=0,2 k=k3 p=A1 t=A2
+get t=A2 k=k ts=0,2
+get t=A2 k=k2 ts=0,2
+txn_begin_child ts=0,2 k=k3 p=A2 t=A3
+get t=A3 k=k ts=0,2
+get t=A3 k=k2 ts=0,2
+----
+get: "k" -> /BYTES/v @0,1
+get: "k2" -> /BYTES/v2 @0,2
+get: "k" -> /BYTES/v @0,1
+get: "k2" -> /BYTES/v2 @0,2
+>> at end:
+txn: "A3" meta={id=00000000 key="k3" pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} lock=true stat=PENDING rts=0,2 wto=false gul=0,0
