@@ -479,6 +479,9 @@ INSERT INTO add_default (a) VALUES (2)
 statement ok
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 10
 
+statement error pgcode 42804 expected DEFAULT expression to have type int, but ''i'::STRING' has type string
+ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 'i'::string
+
 statement ok
 INSERT INTO add_default (a) VALUES (3)
 

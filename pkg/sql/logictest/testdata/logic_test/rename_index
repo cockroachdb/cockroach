@@ -48,7 +48,7 @@ ALTER INDEX users@foo RENAME TO bar
 statement error pgcode 42601 empty index name
 ALTER INDEX users@foo RENAME TO ""
 
-statement error index "ffo" does not exist
+statement error pgcode 42704 index "ffo" does not exist
 ALTER INDEX users@ffo RENAME TO ufo
 
 statement error index "ffo" does not exist
