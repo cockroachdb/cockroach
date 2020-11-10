@@ -11,6 +11,7 @@
 package liveness
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync/atomic"
@@ -1317,7 +1318,7 @@ func (nl *NodeLiveness) maybeUpdate(ctx context.Context, newLivenessRec Record) 
 	if !ok {
 		shouldReplace = true
 	} else {
-		shouldReplace = shouldReplaceLiveness(ctx, oldLivenessRec.Liveness, newLivenessRec.Liveness)
+		shouldReplace = shouldReplaceLiveness(ctx, oldLivenessRec, newLivenessRec)
 	}
 
 	var onIsLive []IsLiveCallback
@@ -1344,26 +1345,33 @@ func (nl *NodeLiveness) maybeUpdate(ctx context.Context, newLivenessRec Record) 
 
 // shouldReplaceLiveness checks to see if the new liveness is in fact newer
 // than the old liveness.
-func shouldReplaceLiveness(ctx context.Context, old, new livenesspb.Liveness) bool {
-	if (old == livenesspb.Liveness{}) {
+func shouldReplaceLiveness(ctx context.Context, old, new Record) bool {
+	oldL, newL := old.Liveness, new.Liveness
+	if (oldL == livenesspb.Liveness{}) {
 		log.Fatal(ctx, "invalid old liveness record; found to be empty")
 	}
 
-	// Compare liveness information. If old < new, replace.
-	if cmp := old.Compare(new); cmp != 0 {
+	// Compare liveness information. If oldL < newL, replace.
+	if cmp := oldL.Compare(newL); cmp != 0 {
 		return cmp < 0
 	}
 
 	// If Epoch and Expiration are unchanged, assume that the update is newer
 	// when its draining or decommissioning field changed.
 	//
+	// Similarly, assume that the update is newer if the raw encoding is changed
+	// when all of the fields are the same. This ensures that the CPut performed
+	// by updateLivenessAttempt will eventually succeed even if the proto
+	// encoding changes.
+	//
 	// This has false positives (in which case we're clobbering the liveness). A
 	// better way to handle liveness updates in general is to add a sequence
 	// number.
 	//
 	// See #18219.
-	return old.Draining != new.Draining ||
-		old.Membership != new.Membership
+	return oldL.Draining != newL.Draining ||
+		oldL.Membership != newL.Membership ||
+		(oldL.Equal(newL) && !bytes.Equal(old.raw, new.raw))
 }
 
 // livenessGossipUpdate is the gossip callback used to keep the
