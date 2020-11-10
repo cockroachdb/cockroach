@@ -17,6 +17,7 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
+        "//pkg/util/encoding/encodingtype",
         "//pkg/util/ipaddr",
         "//pkg/util/protoutil",
         "//pkg/util/timeofday",
