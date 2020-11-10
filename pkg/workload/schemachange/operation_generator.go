@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -84,6 +85,7 @@ type opType int
 var opsWithExecErrorScreening = map[opType]bool{
 	addColumn: true,
 
+	createIndex:    true,
 	createSequence: true,
 	createTable:    true,
 	createTableAs:  true,
@@ -323,12 +325,33 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnNames, err := og.tableColumnsShuffled(tx, tableName.String())
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		def := &tree.CreateIndex{
+			Name:  tree.Name("IrrelevantName"),
+			Table: *tableName,
+			Columns: tree.IndexElemList{
+				{Column: "IrrelevantColumn", Direction: tree.Ascending},
+			},
+		}
+		return tree.Serialize(def), nil
+	}
+
+	columnNames, err := og.getTableColumns(tx, tableName.String(), true)
 	if err != nil {
 		return "", err
 	}
 
 	indexName, err := og.randIndex(tx, *tableName, og.pctExisting(false))
+	if err != nil {
+		return "", err
+	}
+
+	indexExists, err := indexExists(tx, tableName, indexName)
 	if err != nil {
 		return "", err
 	}
@@ -339,20 +362,79 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 		Unique:      og.randIntn(4) == 0,  // 25% UNIQUE
 		Inverted:    og.randIntn(10) == 0, // 10% INVERTED
 		IfNotExists: og.randIntn(2) == 0,  // 50% IF NOT EXISTS
-		Columns:     make(tree.IndexElemList, 1+og.randIntn(len(columnNames))),
 	}
 
+	// Define columns on which to create an index. Check for types which cannot be indexed.
+	nonIndexableType := false
+	def.Columns = make(tree.IndexElemList, 1+og.randIntn(len(columnNames)))
 	for i := range def.Columns {
-		def.Columns[i].Column = tree.Name(columnNames[i])
+		def.Columns[i].Column = tree.Name(columnNames[i].name)
 		def.Columns[i].Direction = tree.Direction(og.randIntn(1 + int(tree.Descending)))
-	}
-	columnNames = columnNames[len(def.Columns):]
 
+		if def.Inverted {
+			if !colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ) {
+				nonIndexableType = true
+			}
+		} else {
+			if !colinfo.ColumnTypeIsIndexable(columnNames[i].typ) {
+				nonIndexableType = true
+			}
+		}
+	}
+
+	// If there are extra columns not used in the index, randomly use them
+	// as stored columns.
+	duplicateStore := false
+	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
 		def.Storing = make(tree.NameList, og.randIntn(1+n))
 		for i := range def.Storing {
-			def.Storing[i] = tree.Name(columnNames[i])
+			def.Storing[i] = tree.Name(columnNames[i].name)
 		}
+
+		// If the column is already used in the primary key, then attempting to store
+		// it using an index will produce a pgcode.DuplicateColumn error.
+		colUsedInPrimaryIdx, err := columnsStoredInPrimaryIdx(tx, tableName, def.Storing)
+		if err != nil {
+			return "", err
+		}
+		if colUsedInPrimaryIdx {
+			duplicateStore = true
+		}
+	}
+
+	// Verify that a unique constraint can be added given the existing rows which may exist in the table.
+	uniqueViolationWillNotOccur := true
+	if def.Unique {
+		columns := []string{}
+		for _, col := range def.Columns {
+			columns = append(columns, string(col.Column))
+		}
+		uniqueViolationWillNotOccur, err = canApplyUniqueConstraint(tx, tableName, columns)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	// When an index exists, but `IF NOT EXISTS` is used, then
+	// the index will not be created and the op will complete without errors.
+	if !(indexExists && def.IfNotExists) {
+		codesWithConditions{
+			{code: pgcode.DuplicateRelation, condition: indexExists},
+			// Inverted indexes do not support stored columns.
+			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Inverted},
+			// Inverted indexes do not support indexing more than one column.
+			{code: pgcode.InvalidSQLStatementName, condition: len(def.Columns) > 1 && def.Inverted},
+			// Inverted indexes cannot be unique.
+			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Inverted},
+			// If there is data in the table such that a unique index cannot be created,
+			// a pgcode.UniqueViolation will occur and will be wrapped in a
+			// pgcode.TransactionCommittedWithSchemaChangeFailure. The schemachange worker
+			// is expected to parse for the underlying error.
+			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
+			{code: pgcode.DuplicateColumn, condition: duplicateStore},
+			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
+		}.add(og.expectedExecErrors)
 	}
 
 	return tree.Serialize(def), nil
@@ -1218,7 +1300,7 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 			tableName,
 		), nil
 	}
-	cols, err := og.getTableColumns(tx, tableName.String())
+	cols, err := og.getTableColumns(tx, tableName.String(), false)
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting table columns for insert row")
 	}
@@ -1298,7 +1380,9 @@ type column struct {
 	nullable bool
 }
 
-func (og *operationGenerator) getTableColumns(tx *pgx.Tx, tableName string) ([]column, error) {
+func (og *operationGenerator) getTableColumns(
+	tx *pgx.Tx, tableName string, shuffle bool,
+) ([]column, error) {
 	q := fmt.Sprintf(`
   SELECT column_name, data_type, is_nullable
     FROM [SHOW COLUMNS FROM %s]
@@ -1339,6 +1423,12 @@ func (og *operationGenerator) getTableColumns(tx *pgx.Tx, tableName string) ([]c
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if shuffle {
+		og.params.rng.Shuffle(len(ret), func(i, j int) {
+			ret[i], ret[j] = ret[j], ret[i]
+		})
 	}
 
 	return ret, nil
