@@ -1,0 +1,91 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.execstats.execstatspb;
+option go_package = "execstatspb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+// ComponentStats contains statistics for an execution component. A component is
+// an arbitrary unit in the execution infrastructure; it can correspond to an
+// operator or a stream.
+//
+// Depending on the component, not all statistics apply. For all fields, the zero
+// value indicates that the particular stat is not available.
+message ComponentStats {
+  int32 component_id = 1 [(gogoproto.customname) = "ComponentID"];
+
+  NetworkRxStats net_rx = 2 [(gogoproto.nullable) = false];
+  NetworkTxStats net_tx = 3 [(gogoproto.nullable) = false];
+  KVStats kv = 4 [(gogoproto.customname) = "KV", (gogoproto.nullable) = false];
+  ExecStats exec = 5 [(gogoproto.nullable) = false];
+  OutputStats output = 6 [(gogoproto.nullable) = false];
+}
+
+// NetworkRxStats contains statistics for components that receive row data
+// over the network. Note: Rx is shorthand for Receive.
+message NetworkRxStats {
+  // Observed network latency (round-trip time between the two nodes).
+  google.protobuf.Duration latency = 1 [(gogoproto.nullable) = false,
+                                        (gogoproto.stdduration) = true];
+
+  // Cumulated time spent waiting to receive or transmit tuple data.
+  google.protobuf.Duration wait_time = 2 [(gogoproto.nullable) = false,
+                                        (gogoproto.stdduration) = true];
+
+  // Time spent deserializing network data.
+  google.protobuf.Duration deserialization_time = 3 [(gogoproto.nullable) = false,
+                                                     (gogoproto.stdduration) = true];
+
+  uint64 tuples_received = 4 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+  uint64 bytes_received = 5 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+}
+
+// NetworkTxStats contains statistics for components that send row data over the
+// network. Note: Tx is shorthand for Transmit.
+message NetworkTxStats {
+  uint64 tuples_sent = 1 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+  uint64 bytes_sent = 2 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+}
+
+// KVStats contains statistics for components that perform KV operations.
+message KVStats {
+  uint64 bytes_read = 1 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+  uint64 tuples_read = 2 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+
+  // Cumulated time spent waiting for a KV request. This includes disk IO time
+  // and potentially network time (if any of the keys are not local).
+  google.protobuf.Duration kv_time = 3 [(gogoproto.customname) = "KVTime",
+                                        (gogoproto.nullable) = false,
+                                        (gogoproto.stdduration) = true];
+}
+
+// ExecStats contains statistics about the execution of an components.
+message ExecStats {
+  // Time spent executing the component.
+  google.protobuf.Duration exec_time = 1 [(gogoproto.nullable) = false,
+                                          (gogoproto.stdduration) = true];
+  // Maximum memory allocated by the component.
+  uint64 max_allocated_mem = 2 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+
+  // Maximum scratch disk allocated by the component.
+  uint64 max_allocated_disk = 3 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+}
+
+// OutputStats contains statistics about the output (results) of an component.
+message OutputStats {
+  // Number of batches produced by the component.
+  uint64 num_batches = 1 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+
+  // Number of tuples produced by the component.
+  uint64 num_tuples = 2 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+}
