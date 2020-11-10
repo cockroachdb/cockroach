@@ -37,13 +37,15 @@ import (
 //
 // The input files use the following DSL:
 //
-// txn_begin      t=<name> [ts=<int>[,<int>]] [maxTs=<int>[,<int>]]
-// txn_remove     t=<name>
-// txn_restart    t=<name>
-// txn_update     t=<name> t2=<name>
-// txn_step       t=<name> [n=<int>]
-// txn_advance    t=<name> ts=<int>[,<int>]
-// txn_status     t=<name> status=<txnstatus>
+// txn_begin       t=<name> [ts=<int>[,<int>]] [maxTs=<int>[,<int>]]
+// txn_begin_child t=<name> p=<name> [ts=<int>[,<int>]]
+// txn_remove      t=<name>
+// txn_restart     t=<name>
+// txn_update      t=<name> t2=<name>
+// txn_step        t=<name> [n=<int>]
+// txn_ignore_seqs t=<name> seqs=<int>-<int> seqs=...
+// txn_advance     t=<name> ts=<int>[,<int>]
+// txn_status      t=<name> status=<txnstatus>
 //
 // resolve_intent t=<name> k=<key> [status=<txnstatus>]
 // check_intent   k=<key> [none]
@@ -378,6 +380,7 @@ var commands = map[string]cmd{
 	"txn_status":      {typTxnUpdate, cmdTxnSetStatus},
 	"txn_step":        {typTxnUpdate, cmdTxnStep},
 	"txn_update":      {typTxnUpdate, cmdTxnUpdate},
+	"txn_begin_child": {typTxnUpdate, cmdTxnBeginChild},
 
 	"resolve_intent": {typDataUpdate, cmdResolveIntent},
 	// TODO(nvanbenschoten): test "resolve_intent_range".
@@ -395,7 +398,7 @@ var commands = map[string]cmd{
 }
 
 func cmdTxnAdvance(e *evalCtx) error {
-	txn := e.getTxn(mandatory)
+	txn := e.getTxn(mandatory, "t")
 	ts := e.getTs(txn)
 	if ts.Less(txn.ReadTimestamp) {
 		e.Fatalf("cannot advance txn to earlier (%s) than its ReadTimestamp (%s)",
@@ -404,6 +407,20 @@ func cmdTxnAdvance(e *evalCtx) error {
 	txn.WriteTimestamp = ts
 	e.results.txn = txn
 	return nil
+}
+
+func cmdTxnBeginChild(e *evalCtx) error {
+	var txnName string
+	e.scanArg("t", &txnName)
+	parent := e.getTxn(mandatory, "p")
+	ts := e.getTs(nil)
+	key := roachpb.KeyMin
+	if e.hasArg("k") {
+		key = e.getKey()
+	}
+	txn, err := e.newChildTxn(txnName, ts, key, parent)
+	e.results.txn = txn
+	return err
 }
 
 func cmdTxnBegin(e *evalCtx) error {
@@ -421,7 +438,7 @@ func cmdTxnBegin(e *evalCtx) error {
 }
 
 func cmdTxnIgnoreSeqs(e *evalCtx) error {
-	txn := e.getTxn(mandatory)
+	txn := e.getTxn(mandatory, "t")
 	seql := e.getList("seqs")
 	is := []enginepb.IgnoredSeqNumRange{}
 	for _, s := range seql {
@@ -445,14 +462,14 @@ func cmdTxnIgnoreSeqs(e *evalCtx) error {
 }
 
 func cmdTxnRemove(e *evalCtx) error {
-	txn := e.getTxn(mandatory)
+	txn := e.getTxn(mandatory, "t")
 	delete(e.txns, txn.Name)
 	e.results.txn = nil
 	return nil
 }
 
 func cmdTxnRestart(e *evalCtx) error {
-	txn := e.getTxn(mandatory)
+	txn := e.getTxn(mandatory, "t")
 	ts := e.getTs(txn)
 	up := roachpb.NormalUserPriority
 	tp := enginepb.MinTxnPriority
@@ -462,7 +479,7 @@ func cmdTxnRestart(e *evalCtx) error {
 }
 
 func cmdTxnSetStatus(e *evalCtx) error {
-	txn := e.getTxn(mandatory)
+	txn := e.getTxn(mandatory, "t")
 	status := e.getTxnStatus()
 	txn.Status = status
 	e.results.txn = txn
@@ -470,7 +487,7 @@ func cmdTxnSetStatus(e *evalCtx) error {
 }
 
 func cmdTxnStep(e *evalCtx) error {
-	txn := e.getTxn(mandatory)
+	txn := e.getTxn(mandatory, "t")
 	n := 1
 	if e.hasArg("seq") {
 		e.scanArg("seq", &n)
@@ -486,7 +503,7 @@ func cmdTxnStep(e *evalCtx) error {
 }
 
 func cmdTxnUpdate(e *evalCtx) error {
-	txn := e.getTxn(mandatory)
+	txn := e.getTxn(mandatory, "t")
 	var txnName2 string
 	e.scanArg("t2", &txnName2)
 	txn2, err := e.lookupTxn(txnName2)
@@ -531,7 +548,7 @@ func (e *evalCtx) tryWrapForIntentPrinting(rw ReadWriter) ReadWriter {
 }
 
 func cmdResolveIntent(e *evalCtx) error {
-	txn := e.getTxn(mandatory)
+	txn := e.getTxn(mandatory, "t")
 	key := e.getKey()
 	status := e.getTxnStatus()
 	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status)
@@ -576,7 +593,7 @@ func cmdClearRange(e *evalCtx) error {
 }
 
 func cmdCPut(e *evalCtx) error {
-	txn := e.getTxn(optional)
+	txn := e.getTxn(optional, "t")
 	ts := e.getTs(txn)
 
 	key := e.getKey()
@@ -605,7 +622,7 @@ func cmdCPut(e *evalCtx) error {
 }
 
 func cmdDelete(e *evalCtx) error {
-	txn := e.getTxn(optional)
+	txn := e.getTxn(optional, "t")
 	key := e.getKey()
 	ts := e.getTs(txn)
 	resolve, resolveStatus := e.getResolve()
@@ -621,7 +638,7 @@ func cmdDelete(e *evalCtx) error {
 }
 
 func cmdDeleteRange(e *evalCtx) error {
-	txn := e.getTxn(optional)
+	txn := e.getTxn(optional, "t")
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(txn)
 	returnKeys := e.hasArg("returnKeys")
@@ -652,7 +669,7 @@ func cmdDeleteRange(e *evalCtx) error {
 }
 
 func cmdGet(e *evalCtx) error {
-	txn := e.getTxn(optional)
+	txn := e.getTxn(optional, "t")
 	key := e.getKey()
 	ts := e.getTs(txn)
 	opts := MVCCGetOptions{Txn: txn}
@@ -682,7 +699,7 @@ func cmdGet(e *evalCtx) error {
 }
 
 func cmdIncrement(e *evalCtx) error {
-	txn := e.getTxn(optional)
+	txn := e.getTxn(optional, "t")
 	ts := e.getTs(txn)
 
 	key := e.getKey()
@@ -725,7 +742,7 @@ func cmdMerge(e *evalCtx) error {
 }
 
 func cmdPut(e *evalCtx) error {
-	txn := e.getTxn(optional)
+	txn := e.getTxn(optional, "t")
 	ts := e.getTs(txn)
 
 	key := e.getKey()
@@ -745,7 +762,7 @@ func cmdPut(e *evalCtx) error {
 }
 
 func cmdScan(e *evalCtx) error {
-	txn := e.getTxn(optional)
+	txn := e.getTxn(optional, "t")
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(txn)
 	opts := MVCCScanOptions{Txn: txn}
@@ -912,13 +929,13 @@ func (e *evalCtx) getList(argName string) []string {
 	return nil
 }
 
-func (e *evalCtx) getTxn(opt optArg) *roachpb.Transaction {
+func (e *evalCtx) getTxn(opt optArg, key string) *roachpb.Transaction {
 	e.t.Helper()
-	if opt == optional && (e.hasArg("notxn") || !e.hasArg("t")) {
+	if opt == optional && (e.hasArg("notxn") || !e.hasArg(key)) {
 		return nil
 	}
 	var txnName string
-	e.scanArg("t", &txnName)
+	e.scanArg(key, &txnName)
 	txn, err := e.lookupTxn(txnName)
 	if err != nil {
 		e.Fatalf("%v", err)
@@ -985,6 +1002,29 @@ func (e *evalCtx) getKeyRange() (sk, ek roachpb.Key) {
 		ek = toKey(endKeyS)
 	}
 	return sk, ek
+}
+
+func (e *evalCtx) newChildTxn(
+	txnName string, ts hlc.Timestamp, key roachpb.Key, parent *roachpb.Transaction,
+) (*roachpb.Transaction, error) {
+	if _, ok := e.txns[txnName]; ok {
+		e.Fatalf("txn %s already open", txnName)
+	}
+	txn := &roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{
+			ID:             uuid.FromUint128(e.txnCounter),
+			Key:            []byte(key),
+			WriteTimestamp: ts,
+			Sequence:       0,
+		},
+		Name:          txnName,
+		ReadTimestamp: ts,
+		Status:        roachpb.PENDING,
+		Parent:        parent.Clone(),
+	}
+	e.txnCounter = e.txnCounter.Add(1)
+	e.txns[txnName] = txn
+	return txn, nil
 }
 
 func (e *evalCtx) newTxn(
