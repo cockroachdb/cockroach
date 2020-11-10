@@ -19,13 +19,16 @@ import { Button } from "src/components/button";
 export interface Item {
   value: string;
   name: React.ReactNode | string;
+  disabled?: boolean;
 }
 
 export interface DropdownProps {
   items: Array<Item>;
   onChange: (item: Item["value"]) => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   dropdownToggleButton?: () => React.ReactNode;
+  className?: string;
+  menuPlacement?: "right" | "left";
 }
 
 interface DropdownState {
@@ -96,7 +99,7 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
   }
 
   render() {
-    const { items } = this.props;
+    const { items, className, menuPlacement = "left" } = this.props;
     const { isOpen } = this.state;
 
     const menuStyles = cn(
@@ -104,6 +107,7 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
       {
         "crl-dropdown__menu--open": isOpen,
       },
+      `crl-dropdown__menu--placement-${menuPlacement}`,
     );
 
     const menuItems = items.map((menuItem, idx) => (
@@ -111,13 +115,14 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
         value={menuItem.value}
         onClick={this.handleItemSelection}
         key={idx}
+        disabled={menuItem.disabled}
       >
         { menuItem.name }
       </DropdownItem>
     ));
 
     return (
-      <div className="crl-dropdown">
+      <div className={`crl-dropdown ${className}`}>
         <OutsideEventHandler
           onOutsideClick={() => this.changeMenuState(false)}
         >
@@ -143,14 +148,16 @@ export interface DropdownItemProps {
   children: React.ReactNode;
   value: string;
   onClick: (value: string) => void;
+  disabled?: boolean;
 }
 
 export function DropdownItem(props: DropdownItemProps) {
-  const { children, value, onClick } = props;
+  const { children, value, onClick, disabled = false } = props;
+  const onClickHandler = React.useCallback(() => !disabled && onClick(value), [disabled, onClick]);
   return (
     <div
-      onClick={() => onClick(value)}
-      className="crl-dropdown__item"
+      onClick={onClickHandler}
+      className={cn("crl-dropdown__item", {"crl-dropdown__item--disabled": disabled} )}
     >
       { children }
     </div>
