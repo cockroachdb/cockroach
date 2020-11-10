@@ -5,8 +5,8 @@ def go_deps():
         name = "co_honnef_go_tools",
         build_file_proto_mode = "disable_global",
         importpath = "honnef.co/go/tools",
-        sum = "h1:RFEMAhc9/Ej5KcaFZooS1PGYAhVl+CUxVj2gyKYGxKQ=",
-        version = "v0.0.0-20190530104931-1f0868a609b7",
+        sum = "h1:W18jzjh8mfPez+AwGLxmOImucz/IFjpNlrKVnaj2YVc=",
+        version = "v0.0.1-2020.1.6",
     )
     go_repository(
         name = "com_github_abourget_teamcity",
@@ -1117,6 +1117,14 @@ def go_deps():
         version = "v0.0.0-20190109223431-e84dfd68c163",
     )
     go_repository(
+        name = "com_github_google_renameio",
+        build_file_proto_mode = "disable",
+        importpath = "github.com/google/renameio",
+        sum = "h1:GOZbcHa3HfsPKPlmyPyN2KEohoMXOhdMbHrvbpl2QaA=",
+        version = "v0.1.0",
+    )
+
+    go_repository(
         name = "com_github_google_uuid",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/uuid",
@@ -2219,6 +2227,14 @@ def go_deps():
         version = "v1.2.0",
     )
     go_repository(
+        name = "com_github_rogpeppe_go_internal",
+        build_file_proto_mode = "disable",
+        importpath = "github.com/rogpeppe/go-internal",
+        sum = "h1:RR9dF3JtopPvtkroDZuVD7qquD0bnHlKSqaQhgwt8yk=",
+        version = "v1.3.0",
+    )
+
+    go_repository(
         name = "com_github_rs_xid",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rs/xid",
@@ -2659,6 +2675,14 @@ def go_deps():
         sum = "h1:Ev7yu1/f6+d+b3pi5vPdRPc6nNtP1umSfcWiEfRqv6I=",
         version = "v1.0.25",
     )
+    go_repository(
+        name = "in_gopkg_errgo_v2",
+        build_file_proto_mode = "disable",
+        importpath = "gopkg.in/errgo.v2",
+        sum = "h1:0vLT13EuvQ0hNvakwLuFZ/jYrLp5F3kcWHXdRggjCE8=",
+        version = "v2.1.0",
+    )
+
     go_repository(
         name = "in_gopkg_fsnotify_v1",
         build_file_proto_mode = "disable_global",

@@ -167,7 +167,7 @@ func registerKV(r *testRegistry) {
 			nameParts = append(nameParts, fmt.Sprintf("splt=%d", computeNumSplits(opts)))
 		}
 		if opts.sequential {
-			nameParts = append(nameParts, fmt.Sprintf("seq"))
+			nameParts = append(nameParts, "seq")
 		}
 
 		minVersion := "v2.0.0"

@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	crdberrors "github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -674,7 +673,7 @@ func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
 	}
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return pts.Release(ctx, txn, ptsID)
-	}); err != nil && !crdberrors.Is(err, protectedts.ErrNotExists) {
+	}); err != nil && !errors.Is(err, protectedts.ErrNotExists) {
 		// NB: The record should get cleaned up by the reconciliation loop.
 		// No good reason to cause more trouble by returning an error here.
 		// Log and move on.

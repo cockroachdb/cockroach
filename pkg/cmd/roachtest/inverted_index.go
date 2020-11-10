@@ -39,7 +39,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, workload, "./workload", workloadNode)
 	c.Start(ctx, t, crdbNodes)
 
-	cmdInit := fmt.Sprintf("./workload init json {pgurl:1}")
+	cmdInit := "./workload init json {pgurl:1}"
 	c.Run(ctx, workloadNode, cmdInit)
 
 	// On a 4-node GCE cluster with the standard configuration, this generates ~10 million rows

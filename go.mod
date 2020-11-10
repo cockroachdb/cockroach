@@ -166,7 +166,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	gotest.tools v2.2.0+incompatible // indirect
-	honnef.co/go/tools v0.0.0-20190530104931-1f0868a609b7
+	honnef.co/go/tools v0.0.1-2020.1.6
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
