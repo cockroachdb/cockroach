@@ -972,7 +972,6 @@ func initTableReaderSpec(
 		Table:             *n.desc.TableDesc(),
 		Reverse:           n.reverse,
 		IsCheck:           n.isCheck,
-		Visibility:        n.colCfg.visibility,
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
 		// Retain the capacity of the spans slice.
@@ -1003,20 +1002,16 @@ func initTableReaderSpec(
 }
 
 // tableOrdinal returns the index of a column with the given ID.
-func tableOrdinal(
-	desc *tabledesc.Immutable, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
-) int {
+func tableOrdinal(desc *tabledesc.Immutable, colID descpb.ColumnID) int {
 	for i := range desc.Columns {
 		if desc.Columns[i].ID == colID {
 			return i
 		}
 	}
-	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		offset := len(desc.Columns)
-		for i := range desc.MutationColumns() {
-			if desc.MutationColumns()[i].ID == colID {
-				return offset + i
-			}
+	offset := len(desc.Columns)
+	for i := range desc.MutationColumns() {
+		if desc.MutationColumns()[i].ID == colID {
+			return offset + i
 		}
 	}
 
@@ -1031,22 +1026,16 @@ func tableOrdinal(
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
 }
 
-func highestTableOrdinal(desc *tabledesc.Immutable, visibility execinfrapb.ScanVisibility) int {
-	highest := len(desc.Columns) - 1
-	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		highest = len(desc.Columns) + len(desc.MutationColumns()) - 1
-	}
-	return highest
+func highestTableOrdinal(desc *tabledesc.Immutable) int {
+	return len(desc.Columns) + len(desc.MutationColumns()) - 1
 }
 
 // toTableOrdinals returns a mapping from column ordinals in cols to table
 // reader column ordinals.
-func toTableOrdinals(
-	cols []*descpb.ColumnDescriptor, desc *tabledesc.Immutable, visibility execinfrapb.ScanVisibility,
-) []int {
+func toTableOrdinals(cols []*descpb.ColumnDescriptor, desc *tabledesc.Immutable) []int {
 	res := make([]int, len(cols))
 	for i := range res {
-		res[i] = tableOrdinal(desc, cols[i].ID, visibility)
+		res[i] = tableOrdinal(desc, cols[i].ID)
 	}
 	return res
 }
@@ -1164,7 +1153,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	}
 	// scanNodeToTableOrdinalMap is a map from scan node column ordinal to
 	// table reader column ordinal.
-	scanNodeToTableOrdinalMap := toTableOrdinals(n.cols, n.desc, n.colCfg.visibility)
+	scanNodeToTableOrdinalMap := toTableOrdinals(n.cols, n.desc)
 	spec, post, err := initTableReaderSpec(n)
 	if err != nil {
 		return nil, err
@@ -1180,7 +1169,6 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			desc:                  n.desc,
 			spans:                 n.spans,
 			reverse:               n.reverse,
-			scanVisibility:        n.colCfg.visibility,
 			parallelize:           n.parallelize,
 			estimatedRowCount:     n.estimatedRowCount,
 			reqOrdering:           n.reqOrdering,
@@ -1201,7 +1189,6 @@ type tableReaderPlanningInfo struct {
 	desc                  *tabledesc.Immutable
 	spans                 []roachpb.Span
 	reverse               bool
-	scanVisibility        execinfrapb.ScanVisibility
 	parallelize           bool
 	estimatedRowCount     uint64
 	reqOrdering           ReqOrdering
@@ -1269,12 +1256,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		corePlacement[i].Core.TableReader = tr
 	}
 
-	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-
-	numCols := len(info.desc.Columns)
-	if returnMutations {
-		numCols += len(info.desc.MutationColumns())
-	}
+	numCols := len(info.desc.Columns) + len(info.desc.MutationColumns())
 	if info.containsSystemColumns {
 		numCols += len(colinfo.AllSystemColumnDescs)
 	}
@@ -1283,10 +1265,8 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	for i := range info.desc.Columns {
 		typs = append(typs, info.desc.Columns[i].Type)
 	}
-	if returnMutations {
-		for i := range info.desc.MutationColumns() {
-			typs = append(typs, info.desc.MutationColumns()[i].Type)
-		}
+	for i := range info.desc.MutationColumns() {
+		typs = append(typs, info.desc.MutationColumns()[i].Type)
 	}
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
@@ -1306,11 +1286,9 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		descColumnIDs.Set(colID, int(info.desc.Columns[i].ID))
 		colID++
 	}
-	if returnMutations {
-		for i := range info.desc.MutationColumns() {
-			descColumnIDs.Set(colID, int(info.desc.MutationColumns()[i].ID))
-			colID++
-		}
+	for i := range info.desc.MutationColumns() {
+		descColumnIDs.Set(colID, int(info.desc.MutationColumns()[i].ID))
+		colID++
 	}
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
@@ -1979,7 +1957,6 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		Table:             *n.table.desc.TableDesc(),
 		IndexIdx:          0,
 		Type:              descpb.InnerJoin,
-		Visibility:        n.table.colCfg.visibility,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
@@ -1995,7 +1972,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(n.cols))
 
 	for i := range n.cols {
-		ord := tableOrdinal(n.table.desc, n.cols[i].ID, n.table.colCfg.visibility)
+		ord := tableOrdinal(n.table.desc, n.cols[i].ID)
 		post.OutputColumns[i] = uint32(ord)
 	}
 
@@ -2035,7 +2012,6 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Table:                    *n.table.desc.TableDesc(),
 		Type:                     n.joinType,
-		Visibility:               n.table.colCfg.visibility,
 		LockingStrength:          n.table.lockingStrength,
 		LockingWaitPolicy:        n.table.lockingWaitPolicy,
 		MaintainOrdering:         len(n.reqOrdering) > 0,
@@ -2121,13 +2097,13 @@ func mappingHelperForLookupJoins(
 	}
 	for i := range table.cols {
 		outTypes[numLeftCols+i] = table.cols[i].Type
-		ord := tableOrdinal(table.desc, table.cols[i].ID, table.colCfg.visibility)
+		ord := tableOrdinal(table.desc, table.cols[i].ID)
 		post.OutputColumns[numLeftCols+i] = uint32(numLeftCols + ord)
 	}
 	if addContinuationCol {
 		outTypes[numOutCols-1] = types.Bool
 		post.OutputColumns[numOutCols-1] =
-			uint32(numLeftCols + highestTableOrdinal(table.desc, table.colCfg.visibility) + 1)
+			uint32(numLeftCols + highestTableOrdinal(table.desc) + 1)
 	}
 
 	// Map the columns of the lookupJoinNode to the result streams of the
@@ -2297,7 +2273,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		// colCfg.wantedColumns for only the necessary columns in
 		// opt/exec/execbuilder/relational_builder.go, similar to lookup joins.
 		for colIdx := range side.scan.cols {
-			ord := tableOrdinal(side.scan.desc, side.scan.cols[colIdx].ID, side.scan.colCfg.visibility)
+			ord := tableOrdinal(side.scan.desc, side.scan.cols[colIdx].ID)
 			post.OutputColumns[i] = uint32(colOffset + ord)
 			types[i] = side.scan.cols[colIdx].Type
 			planToStreamColMap[i] = i

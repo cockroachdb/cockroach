@@ -3661,11 +3661,6 @@ func (desc *Immutable) VisibleColumns() []descpb.ColumnDescriptor {
 	return cols
 }
 
-// ColumnTypes returns the types of all columns.
-func (desc *Immutable) ColumnTypes() []*types.T {
-	return desc.ColumnTypesWithMutations(false)
-}
-
 // ColumnsWithMutations returns all column descriptors, optionally including
 // mutation columns.
 func (desc *Immutable) ColumnsWithMutations(includeMutations bool) []descpb.ColumnDescriptor {
@@ -3681,10 +3676,9 @@ func (desc *Immutable) ColumnsWithMutations(includeMutations bool) []descpb.Colu
 	return columns
 }
 
-// ColumnTypesWithMutations returns the types of all columns, optionally
-// including mutation columns, which will be returned if the input bool is true.
-func (desc *Immutable) ColumnTypesWithMutations(mutations bool) []*types.T {
-	columns := desc.ColumnsWithMutations(mutations)
+// ColumnTypes returns the types of all columns, including mutation columns.
+func (desc *Immutable) ColumnTypes() []*types.T {
+	columns := desc.ColumnsWithMutations(true /* includeMutations */)
 	types := make([]*types.T, len(columns))
 	for i := range columns {
 		types[i] = columns[i].Type

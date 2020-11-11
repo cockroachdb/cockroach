@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -69,7 +68,6 @@ func initRowFetcher(
 	isCheck bool,
 	mon *mon.BytesMonitor,
 	alloc *rowenc.DatumAlloc,
-	scanVisibility execinfrapb.ScanVisibility,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	systemColumns []descpb.ColumnDescriptor,
@@ -79,10 +77,7 @@ func initRowFetcher(
 		return nil, false, err
 	}
 
-	cols := desc.Columns
-	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns
-	}
+	cols := desc.ReadableColumns
 	// Add on any requested system columns. We slice cols to avoid modifying
 	// the underlying table descriptor.
 	cols = append(cols[:len(cols):len(cols)], systemColumns...)

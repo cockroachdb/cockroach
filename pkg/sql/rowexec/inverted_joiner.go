@@ -200,7 +200,7 @@ func newInvertedJoiner(
 
 	outputColCount := len(ij.inputTypes)
 	// Inverted joins are not used for mutations.
-	rightColTypes := ij.desc.ColumnTypesWithMutations(false /* mutations */)
+	rightColTypes := ij.desc.ColumnTypes()
 	var includeRightCols bool
 	if ij.joinType == descpb.InnerJoin || ij.joinType == descpb.LeftOuterJoin {
 		outputColCount += len(rightColTypes)
@@ -272,11 +272,9 @@ func newInvertedJoiner(
 	for _, colID := range indexColumnIDs {
 		allIndexCols.Add(ij.colIdxMap.GetDefault(colID))
 	}
-	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
-	// and so do not need to see in-progress schema changes.
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, &ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
-		allIndexCols, false /* isCheck */, flowCtx.EvalCtx.Mon, &ij.alloc, execinfra.ScanVisibilityPublic,
+		allIndexCols, false /* isCheck */, flowCtx.EvalCtx.Mon, &ij.alloc,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
 		nil, /* systemColumns */
 	)

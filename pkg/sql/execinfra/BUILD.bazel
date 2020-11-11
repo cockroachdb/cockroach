@@ -14,7 +14,6 @@ go_library(
         "processorsbase.go",
         "procstate_string.go",
         "readerbase.go",
-        "scanbase.go",
         "server_config.go",
         "testutils.go",
         "version.go",

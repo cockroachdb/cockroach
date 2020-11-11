@@ -155,14 +155,13 @@ func NewColBatchScan(
 
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
 
-	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	// TODO(ajwerner): The need to construct an Immutable here
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated Immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
-	typs := table.ColumnTypesWithMutations(returnMutations)
-	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
+	typs := table.ColumnTypes()
+	columnIdxMap := table.ColumnIdxMapWithMutations(true /* returnMutations */)
 
 	// Add all requested system columns to the output.
 	var sysColDescs []descpb.ColumnDescriptor
@@ -232,10 +231,7 @@ func initCRowFetcher(
 		return nil, false, err
 	}
 
-	cols := desc.Columns
-	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns
-	}
+	cols := desc.ReadableColumns
 	// Add on any requested system columns. We slice cols to avoid modifying
 	// the underlying table descriptor.
 	cols = append(cols[:len(cols):len(cols)], systemColumnDescs...)

@@ -18,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -118,10 +116,6 @@ type scanColumnsConfig struct {
 	// When set, the columns that are not in the wantedColumns list are added to
 	// the list of columns as hidden columns.
 	addUnwantedAsHidden bool
-
-	// If visibility is set to execinfra.ScanVisibilityPublicAndNotPublic, then
-	// mutation columns can be added to the list of columns.
-	visibility execinfrapb.ScanVisibility
 }
 
 func (cfg scanColumnsConfig) assertValidReqOrdering(reqOrdering exec.OutputOrdering) error {
@@ -275,11 +269,7 @@ func initColsForScan(
 			}
 		} else {
 			// Otherwise, collect the descriptors from the table's columns.
-			if id := descpb.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
-				c, err = desc.FindActiveColumnByID(id)
-			} else {
-				c, _, err = desc.FindReadableColumnByID(id)
-			}
+			c, _, err = desc.FindReadableColumnByID(descpb.ColumnID(wc))
 			if err != nil {
 				return cols, err
 			}

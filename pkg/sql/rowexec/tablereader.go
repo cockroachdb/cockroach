@@ -91,9 +91,8 @@ func newTableReader(
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	tableDesc := tabledesc.NewImmutable(spec.Table)
-	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	resultTypes := tableDesc.ColumnTypesWithMutations(returnMutations)
-	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(returnMutations)
+	resultTypes := tableDesc.ColumnTypes()
+	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(true /* returnMutations */)
 
 	// Add all requested system columns to the output.
 	var sysColDescs []descpb.ColumnDescriptor
@@ -140,7 +139,6 @@ func newTableReader(
 		spec.IsCheck,
 		flowCtx.EvalCtx.Mon,
 		&tr.alloc,
-		spec.Visibility,
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		sysColDescs,

@@ -223,13 +223,12 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 
 	// Phase 2: perform the table reader planning. This phase is equivalent to
 	// what DistSQLPlanner.createTableReaders does.
-	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc, colCfg.visibility)
+	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc)
 	trSpec := physicalplan.NewTableReaderSpec()
 	*trSpec = execinfrapb.TableReaderSpec{
-		Table:      *tabDesc.TableDesc(),
-		Reverse:    params.Reverse,
-		IsCheck:    false,
-		Visibility: colCfg.visibility,
+		Table:   *tabDesc.TableDesc(),
+		Reverse: params.Reverse,
+		IsCheck: false,
 		// Retain the capacity of the spans slice.
 		Spans:            trSpec.Spans[:0],
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
@@ -270,7 +269,6 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 			desc:                  tabDesc,
 			spans:                 spans,
 			reverse:               params.Reverse,
-			scanVisibility:        colCfg.visibility,
 			parallelize:           params.Parallelize,
 			estimatedRowCount:     uint64(params.EstimatedRowCount),
 			reqOrdering:           ReqOrdering(reqOrdering),
