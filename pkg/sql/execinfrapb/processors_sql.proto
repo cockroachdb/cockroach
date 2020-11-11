@@ -55,10 +55,9 @@ enum ScanVisibility {
 // columns of the rows that pass a filter expression.
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) are all the
-// columns of the table. Internally, only the values for the columns needed by
-// the post-processing stage are to be populated. If is_check is set, the
-// TableReader will run additional data checking procedures and the
-// "internal columns" are:
+// columns of the table. Internally, only the values for the columns specified
+// by needed_columns are to be populated. If is_check is set, the TableReader
+// will run additional data checking procedures and the "internal columns" are:
 //  - Error type (string).
 //  - Primary key as a string, if it was obtainable.
 //  - JSON of all decoded column values.
@@ -139,6 +138,11 @@ message TableReaderSpec {
   // Indicates whether or not this TableReader is expected to produce any
   // system columns in its output.
   optional bool has_system_columns = 14 [(gogoproto.nullable) = false];
+
+  // Indicates the ordinals of the columns values for which are needed by the
+  // post-processing stage and, therefore, are to be populated. It is ignored
+  // if is_check is true.
+  repeated uint32 needed_columns = 15;
 }
 
 // IndexSkipTableReaderSpec is the specification for a table reader that

@@ -113,6 +113,10 @@ type scanColumnsConfig struct {
 	// can add more columns). Non public columns can only be added if allowed
 	// by the visibility flag below.
 	wantedColumns []tree.ColumnID
+	// wantedColumnsOrdinals contains the ordinals of all columns in
+	// wantedColumns. Note that if addUnwantedAsHidden flag is set, the hidden
+	// columns are not included here.
+	wantedColumnsOrdinals []uint32
 
 	// When set, the columns that are not in the wantedColumns list are added to
 	// the list of columns as hidden columns.
