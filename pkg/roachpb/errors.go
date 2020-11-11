@@ -309,8 +309,7 @@ func (e *Error) SetDetail(err error) {
 		}
 		// If the specific error type exists in the detail union, set it.
 		if !e.Detail.SetInner(err) {
-			_, isInternalError := err.(*internalError)
-			if !isInternalError && e.TransactionRestart != TransactionRestart_NONE {
+			if e.TransactionRestart != TransactionRestart_NONE {
 				panic(errors.AssertionFailedf("transactionRestartError %T must be an ErrorDetail", err))
 			}
 		}
