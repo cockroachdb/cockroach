@@ -454,7 +454,7 @@ func (z *zigzagJoiner) setupInfo(
 	// Setup the RowContainers.
 	info.container.Reset()
 
-	info.spanBuilder = span.MakeBuilder(flowCtx.Codec(), info.table, info.index)
+	info.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), info.table, info.index)
 
 	// Setup the Fetcher.
 	_, _, err := initRowFetcher(

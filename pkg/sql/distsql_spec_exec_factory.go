@@ -185,7 +185,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	indexDesc := index.(*optIndex).desc
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	sb := span.MakeBuilder(e.planner.ExecCfg().Codec, tabDesc, indexDesc)
+	sb := span.MakeBuilder(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, indexDesc)
 
 	// Note that initColsForScan and setting ResultColumns below are equivalent
 	// to what scan.initTable call does in execFactory.ConstructScan.
@@ -204,7 +204,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 
 	var spans roachpb.Spans
 	if params.InvertedConstraint != nil {
-		spans, err = GenerateInvertedSpans(params.InvertedConstraint, sb)
+		spans, err = sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint)
 	} else {
 		spans, err = sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 	}

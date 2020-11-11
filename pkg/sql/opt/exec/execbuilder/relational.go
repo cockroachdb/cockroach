@@ -1578,7 +1578,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	// typing). Perhaps we need to pass this information in a more specific way
 	// and not as a generic expression?
 	ord, _ := ctx.ivarMap.Get(int(join.InvertedCol))
-	ctx.ivarMap.Set(int(join.Table.ColumnID(idx.Column(0).InvertedSourceColumnOrdinal())), ord)
+	ctx.ivarMap.Set(int(join.Table.ColumnID(idx.VirtualInvertedColumn().InvertedSourceColumnOrdinal())), ord)
 	invertedExpr, err := b.buildScalar(&ctx, join.InvertedExpr)
 	if err != nil {
 		return execPlan{}, err
