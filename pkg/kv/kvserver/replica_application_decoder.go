@@ -150,7 +150,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
 			} else {
 				cmd.sp = d.r.AmbientContext.Tracer.StartSpan(
-					"raft application", tracing.WithRemoteParent(spanCtx), tracing.WithFollowsFrom())
+					"raft application", tracing.WithParentAndManualCollection(spanCtx), tracing.WithFollowsFrom())
 				cmd.ctx = tracing.ContextWithSpan(ctx, cmd.sp)
 			}
 		} else {
