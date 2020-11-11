@@ -1035,7 +1035,7 @@ func countNotLeaseHolderErrors(ba roachpb.BatchRequest, repls []*kvserver.Replic
 					atomic.AddInt64(&notLeaseholderErrs, 1)
 					return nil
 				}
-				return pErr.GetDetail()
+				return pErr.GoError()
 			}
 			return nil
 		})

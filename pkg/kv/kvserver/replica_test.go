@@ -3897,7 +3897,7 @@ func TestSerializableDeadline(t *testing.T) {
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok ||
 		!testutils.IsError(err, expectedErrMsg) {
 		t.Fatalf("expected %q, got: %s (%T)", expectedErrMsg,
-			err, pErr.GetDetail())
+			err, pErr.GoError())
 	}
 }
 
@@ -10009,7 +10009,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 	send := func(ba roachpb.BatchRequest) (hlc.Timestamp, error) {
 		br, pErr := tc.Sender().Send(context.Background(), ba)
 		if pErr != nil {
-			return hlc.Timestamp{}, pErr.GetDetail()
+			return hlc.Timestamp{}, pErr.GoError()
 		}
 
 		// Check that we didn't mess up the stats.
