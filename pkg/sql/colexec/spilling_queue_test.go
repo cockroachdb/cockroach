@@ -143,7 +143,7 @@ func TestSpillingQueue(t *testing.T) {
 			require.NoError(t, q.close(ctx))
 
 			// Verify no directories are left over.
-			directories, err := queueCfg.FS.List(queueCfg.Path)
+			directories, err := queueCfg.FS.List(queueCfg.GetPath(ctx))
 			require.NoError(t, err)
 			require.Equal(t, 0, len(directories))
 		}
