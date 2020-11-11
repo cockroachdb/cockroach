@@ -269,9 +269,11 @@ type lockTableGuardImpl struct {
 	lt     *lockTableImpl
 
 	// Information about this request.
-	txn   *enginepb.TxnMeta
-	ts    hlc.Timestamp
-	spans *spanset.SpanSet
+	txn     *roachpb.Transaction
+	ts      hlc.Timestamp
+	spans   *spanset.SpanSet
+	readTS  hlc.Timestamp
+	writeTS hlc.Timestamp
 
 	// Snapshots of the trees for which this request has some spans. Note that
 	// the lockStates in these snapshots may have been removed from
@@ -403,19 +405,19 @@ func (g *lockTableGuardImpl) NewStateChan() chan struct{} {
 	return g.mu.signal
 }
 
-func (g *lockTableGuardImpl) CurState() waitingState {
+func (g *lockTableGuardImpl) CurState() (waitingState, *Error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if !g.mu.mustFindNextLockAfter {
-		return g.mu.state
+		return g.mu.state, nil
 	}
 	// Not actively waiting anywhere so no one else can set
 	// mustFindNextLockAfter to true while this method executes.
 	g.mu.mustFindNextLockAfter = false
 	g.mu.Unlock()
-	g.findNextLockAfter(false /* notify */)
+	err := g.findNextLockAfter(false /* notify */)
 	g.mu.Lock() // Unlock deferred
-	return g.mu.state
+	return g.mu.state, roachpb.NewError(err)
 }
 
 func (g *lockTableGuardImpl) notify() {
@@ -443,6 +445,37 @@ func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
 }
 
+// isAncestorTxn returns true if txn corresponds any of the ancestors of the
+// txn in g. We allow read-only requests due to descendants to pass through the
+// lock table without observing any locks held by the parent. However, any
+// ReadWrite requests due to descendants seeking to acquire locks over ancestors
+// will result in an assertion failure error. This is consistent with the
+// rules of child transactions which state that descendants my not acquire
+// exclusive locks or write underneath the reads or writes of any ancestors.
+//
+// Note that parent transactions may have replicated exclusive locks on keys
+// due to writes (intents) which are not discovered in the lock table. That is
+// fine and dealt with in HandleWriteIntentError. This is not handled perfectly
+// in the case where the descendant is performing a locking scan over an
+// ancestor's intent, but that ends up being okay. It's not a hazard for the
+// correctness of the descendant, and, while the unreplicated lock due to the
+// descendant remains in the lock table, no other transaction should discover
+// the lock due to its ancestor.
+//
+// See the comment on (*kv.Txn).ChildTxn() for more commentary on child
+// transactions.
+func (g *lockTableGuardImpl) isAncestorTxn(txn *enginepb.TxnMeta) bool {
+	if g.txn == nil {
+		return false
+	}
+	for cur := g.txn.Parent; cur != nil; cur = cur.Parent {
+		if cur.ID == txn.ID {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *lockTableGuardImpl) isSameTxnAsReservation(ws waitingState) bool {
 	return !ws.held && g.isSameTxn(ws.txn)
 }
@@ -452,7 +485,7 @@ func (g *lockTableGuardImpl) isSameTxnAsReservation(ws waitingState) bool {
 // told that it is done waiting. lockTableImpl.finalizedTxnCache is used to
 // accumulate intents to resolve.
 // Acquires g.mu.
-func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
+func (g *lockTableGuardImpl) findNextLockAfter(notify bool) error {
 	spans := g.spans.GetSpans(g.sa, g.ss)
 	var span *spanset.Span
 	resumingInSameSpan := false
@@ -499,12 +532,15 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 				// Else, past the lock where it stopped waiting. We may not
 				// encounter that lock since it may have been garbage collected.
 			}
-			wait, transitionedToFree := l.tryActiveWait(g, g.sa, notify)
+			wait, transitionedToFree, err := l.tryActiveWait(g, g.sa, notify)
+			if err != nil {
+				return err
+			}
 			if transitionedToFree {
 				locksToGC[g.ss] = append(locksToGC[g.ss], l)
 			}
 			if wait {
-				return
+				return nil
 			}
 		}
 		resumingInSameSpan = false
@@ -545,6 +581,14 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 		}
 		g.notify()
 	}
+	return nil
+}
+
+func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
+	if g.txn == nil {
+		return nil
+	}
+	return &g.txn.TxnMeta
 }
 
 // Waiting writers in a lockState are wrapped in a queuedGuard. A waiting
@@ -869,7 +913,7 @@ func (l *lockState) Format(buf *strings.Builder, finalizedTxnCache *txnCache) {
 	txn, ts := l.getLockHolder()
 	if txn == nil {
 		fmt.Fprintf(buf, "  res: req: %d, ", l.reservation.seqNum)
-		writeResInfo(buf, l.reservation.txn, l.reservation.ts)
+		writeResInfo(buf, l.reservation.txnMeta(), l.reservation.ts)
 	} else {
 		writeHolderInfo(buf, txn, ts)
 	}
@@ -934,7 +978,7 @@ func (l *lockState) informActiveWaiters() {
 		waitForState.txn = lockHolderTxn
 		waitForState.held = true
 	} else {
-		waitForState.txn = l.reservation.txn
+		waitForState.txn = l.reservation.txnMeta()
 		if !findDistinguished && l.distinguishedWaiter.isSameTxnAsReservation(waitForState) {
 			findDistinguished = true
 			l.distinguishedWaiter = nil
@@ -1028,7 +1072,7 @@ func (l *lockState) tryMakeNewDistinguished() {
 	} else if l.queuedWriters.Len() > 0 {
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
-			if qg.active && (l.reservation == nil || !qg.guard.isSameTxn(l.reservation.txn)) {
+			if qg.active && (l.reservation == nil || !qg.guard.isSameTxn(l.reservation.txnMeta())) {
 				g = qg.guard
 				break
 			}
@@ -1172,20 +1216,32 @@ func (l *lockState) clearLockHolder() {
 // Acquires l.mu, g.mu.
 func (l *lockState) tryActiveWait(
 	g *lockTableGuardImpl, sa spanset.SpanAccess, notify bool,
-) (wait bool, transitionedToFree bool) {
+) (wait bool, transitionedToFree bool, ancestorLockConflict error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	// It is possible that this lock is empty and has not yet been deleted.
 	if l.isEmptyLock() {
-		return false, false
+		return false, false, nil
 	}
 
 	// Lock is not empty.
 	lockHolderTxn, lockHolderTS := l.getLockHolder()
-	if lockHolderTxn != nil && g.isSameTxn(lockHolderTxn) {
-		// Already locked by this txn.
-		return false, false
+	if lockHolderTxn != nil {
+		if g.isSameTxn(lockHolderTxn) {
+			// Already locked by this txn.
+			return false, false, nil
+		}
+		// Descendants are not allowed to acquire exclusive locks which might
+		// conflict with locks held by ancestors.
+		if isAncestor := g.isAncestorTxn(lockHolderTxn); isAncestor {
+			if sa == spanset.SpanReadWrite {
+				ancestorLockConflict = errors.AssertionFailedf(
+					"descendant transaction %s attempted to lock over ancestor %s at key %s",
+					g.txn.ID, lockHolderTxn.ID, l.key)
+			}
+			return false, false, ancestorLockConflict
+		}
 	}
 
 	var replicatedLockFinalizedTxn *roachpb.Transaction
@@ -1197,7 +1253,7 @@ func (l *lockState) tryActiveWait(
 				l.clearLockHolder()
 				if l.lockIsFree() {
 					// Empty lock.
-					return false, true
+					return false, true, nil
 				}
 				lockHolderTxn = nil
 				// There is a reservation holder, which may be the caller itself,
@@ -1211,11 +1267,11 @@ func (l *lockState) tryActiveWait(
 	if sa == spanset.SpanReadOnly {
 		if lockHolderTxn == nil {
 			// Reads only care about locker, not a reservation.
-			return false, false
+			return false, false, nil
 		}
 		// Locked by some other txn.
 		if g.ts.Less(lockHolderTS) {
-			return false, false
+			return false, false, nil
 		}
 		g.mu.Lock()
 		_, alsoHasStrongerAccess := g.mu.locks[l]
@@ -1234,7 +1290,7 @@ func (l *lockState) tryActiveWait(
 		// timestamp that is not compatible with this request and it will wait
 		// here -- there is no correctness issue with doing that.
 		if alsoHasStrongerAccess {
-			return false, false
+			return false, false, nil
 		}
 	}
 
@@ -1245,7 +1301,7 @@ func (l *lockState) tryActiveWait(
 	} else {
 		if l.reservation == g {
 			// Already reserved by this request.
-			return false, false
+			return false, false, nil
 		}
 		// A non-transactional write request never makes or breaks reservations,
 		// and only waits for a reservation if the reservation has a lower
@@ -1254,9 +1310,9 @@ func (l *lockState) tryActiveWait(
 		if g.txn == nil && l.reservation.seqNum > g.seqNum {
 			// Reservation is held by a request with a higher seqNum and g is a
 			// non-transactional request. Ignore the reservation.
-			return false, false
+			return false, false, nil
 		}
-		waitForState.txn = l.reservation.txn
+		waitForState.txn = l.reservation.txnMeta()
 	}
 
 	// Incompatible with whoever is holding lock or reservation.
@@ -1270,7 +1326,7 @@ func (l *lockState) tryActiveWait(
 		// reservations. And the set of active queuedWriters has not changed, but
 		// they do need to be told about the change in who they are waiting for.
 		l.informActiveWaiters()
-		return false, false
+		return false, false, nil
 	}
 
 	// May need to wait.
@@ -1338,7 +1394,7 @@ func (l *lockState) tryActiveWait(
 	if !wait {
 		g.toResolve = append(
 			g.toResolve, roachpb.MakeLockUpdate(replicatedLockFinalizedTxn, roachpb.Span{Key: l.key}))
-		return false, false
+		return false, false, nil
 	}
 	// Make it an active waiter.
 	g.key = l.key
@@ -1362,7 +1418,7 @@ func (l *lockState) tryActiveWait(
 	if notify {
 		g.notify()
 	}
-	return true, false
+	return true, false, nil
 }
 
 // Acquires this lock. Returns the list of guards that are done actively
@@ -1966,7 +2022,7 @@ func (t *treeMu) nextLockSeqNum() uint64 {
 }
 
 // ScanAndEnqueue implements the lockTable interface.
-func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTableGuard {
+func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockTableGuard, error) {
 	// NOTE: there is no need to synchronize with enabledMu here. ScanAndEnqueue
 	// scans the lockTable and enters any conflicting lock wait-queues, but a
 	// disabled lockTable will be empty. If the scan's btree snapshot races with
@@ -1978,7 +2034,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		g = newLockTableGuardImpl()
 		g.seqNum = atomic.AddUint64(&t.seqNum, 1)
 		g.lt = t
-		g.txn = req.txnMeta()
+		g.txn = req.Txn
 		g.ts = req.Timestamp
 		g.spans = req.LockSpans
 		g.sa = spanset.NumSpanAccess - 1
@@ -2010,8 +2066,8 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 			}
 		}
 	}
-	g.findNextLockAfter(true /* notify */)
-	return g
+	err := g.findNextLockAfter(true /* notify */)
+	return g, err
 }
 
 // Dequeue implements the lockTable interface.
