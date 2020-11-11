@@ -45,7 +45,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 	defer s.Stopper().Stop(ctx)
 
 	r := sqlutils.MakeSQLRunner(conn)
-	r.Exec(b, "CREATE DATABASE b; CREATE TABLE b.test (k INT);")
+	r.Exec(b, "CREATE DATABASE b; CREATE TABLE b.test (k INT PRIMARY KEY, v INT); INSERT INTO b.test VALUES (1, 1);")
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	dsp := execCfg.DistSQLPlanner
@@ -73,7 +73,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 						if err := dsp.Exec(
 							ctx,
 							planner,
-							"SELECT k FROM b.test WHERE k=1",
+							"SELECT * FROM b.test WHERE k=1",
 							distribute,
 						); err != nil {
 							b.Fatal(err)
