@@ -54,7 +54,7 @@ func ListenAndServeGRPC(
 	return ln, nil
 }
 
-var httpLogger = log.NewStdLogger(log.Severity_ERROR, "httpLogger")
+var httpLogger = log.NewStdLogger(log.Severity_ERROR, "net/http")
 
 // Server is a thin wrapper around http.Server. See MakeServer for more detail.
 type Server struct {

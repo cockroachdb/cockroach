@@ -14,7 +14,6 @@ import (
 	"context"
 	"math"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -72,7 +71,7 @@ func (severity *logger) Warning(args ...interface{}) {
 	if log.Severity(*severity) > log.Severity_WARNING {
 		return
 	}
-	if shouldPrint(connectivitySpamRe, 30*time.Second, args...) {
+	if shouldPrintWarning(args...) {
 		log.WarningfDepth(context.TODO(), 2, "", args...)
 	}
 }
@@ -144,24 +143,27 @@ func (severity *logger) V(i int) bool {
 }
 
 // https://github.com/grpc/grpc-go/blob/v1.29.1/clientconn.go#L1275
-var (
-	transportFailedRe   = regexp.MustCompile(`^` + regexp.QuoteMeta(`grpc: addrConn.createTransport failed to connect to`))
-	connectionRefusedRe = regexp.MustCompile(
-		strings.Join([]string{
-			// *nix
-			regexp.QuoteMeta("connection refused"),
-			// Windows
-			regexp.QuoteMeta("No connection could be made because the target machine actively refused it"),
-			// Host removed from the network and no longer resolvable:
-			// https://github.com/golang/go/blob/go1.8.3/src/net/net.go#L566
-			regexp.QuoteMeta("no such host"),
-		}, "|"),
-	)
-	clientConnReuseRe = regexp.MustCompile("cannot reuse client connection")
+const (
+	outgoingConnSpamReSrc = `^grpc: addrConn\.createTransport failed to connect to.*(` +
+		// *nix
+		`connection refused` + `|` +
+		// Windows
+		`No connection could be made because the target machine actively refused it` + `|` +
+		// Host removed from the network and no longer resolvable:
+		// https://github.com/golang/go/blob/go1.8.3/src/net/net.go#L566
+		`no such host` + `|` +
+		// RPC dialer is currently failing but also retrying.
+		errCannotReuseClientConnMsg +
+		`)`
 
-	connectivitySpamRe = regexp.MustCompile(transportFailedRe.String() + `.*` +
-		"(" + connectionRefusedRe.String() + "|" + clientConnReuseRe.String() + ")")
+	// When a TCP probe simply opens and immediately closes the
+	// connection, gRPC is unhappy that the TLS handshake did not
+	// complete. We don't care.
+	incomingConnSpamReSrc = `^grpc: Server\.Serve failed to complete security handshake from "[^"]*": EOF`
 )
+
+var outgoingConnSpamRe = regexp.MustCompile(outgoingConnSpamReSrc)
+var incomingConnSpamRe = regexp.MustCompile(incomingConnSpamReSrc)
 
 var spamMu = struct {
 	syncutil.Mutex
@@ -170,14 +172,30 @@ var spamMu = struct {
 	strs: make(map[string]time.Time),
 }
 
-func shouldPrint(argsRe *regexp.Regexp, freq time.Duration, args ...interface{}) bool {
+const minSpamLogInterval = 30 * time.Second
+
+// shouldPrintWarning returns true iff the gRPC warning message
+// identified by args can be logged now. It returns false for outgoing
+// connections errors that repeat within minSpamLogInterval of each
+// other, and also for certain types of incoming connection errors.
+func shouldPrintWarning(args ...interface{}) bool {
 	for _, arg := range args {
 		if argStr, ok := arg.(string); ok {
-			if argsRe.MatchString(argStr) {
+			// Incoming connection errors that match the criteria are blocked
+			// always.
+			if incomingConnSpamRe.MatchString(argStr) {
+				return false
+			}
+
+			// Outgoing connection errors are only reported if performed too
+			// often.
+			// TODO(knz): Maybe the string map should be cleared periodically,
+			// to avoid unbounded memory growth.
+			if outgoingConnSpamRe.MatchString(argStr) {
 				now := timeutil.Now()
 				spamMu.Lock()
 				t, ok := spamMu.strs[argStr]
-				doPrint := !(ok && now.Sub(t) < freq)
+				doPrint := !(ok && now.Sub(t) < minSpamLogInterval)
 				if doPrint {
 					spamMu.strs[argStr] = now
 				}
