@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "manager.go",
         "migrations.go",
+        "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/migration",
     visibility = ["//visibility:public"],
@@ -12,8 +13,12 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/rpc/nodedialer",
+        "//pkg/server/serverpb",
         "//pkg/sql",
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/logtags",
     ],
 )
