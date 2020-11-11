@@ -105,7 +105,7 @@ func distRestore(
 	if err != nil {
 		return err
 	}
-	p := sql.MakePhysicalPlan(gatewayNodeID)
+	p := sql.MakePhysicalPlan(planCtx, gatewayNodeID)
 
 	// Plan SplitAndScatter in a round-robin fashion.
 	splitAndScatterStageID := p.NewStageOnNodes(nodes)
