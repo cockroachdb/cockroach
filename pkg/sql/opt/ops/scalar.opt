@@ -849,6 +849,24 @@ define RegressionSlope {
 }
 
 [Scalar, Aggregate]
+define RegressionSXX {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
+define RegressionSXY {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
+define RegressionSYY {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
 define Max {
     Input ScalarExpr
 }
