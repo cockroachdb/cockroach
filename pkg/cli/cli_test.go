@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -299,31 +300,16 @@ func captureOutput(f func()) (out string, err error) {
 	return
 }
 
-func isSQLCommand(args []string) bool {
-	if len(args) == 0 {
-		return false
+func isSQLCommand(args []string) (bool, error) {
+	cmd, _, err := cockroachCmd.Find(args)
+	if err != nil {
+		return false, err
 	}
-	switch args[0] {
-	case "sql", "dump", "workload", "nodelocal", "userfile", "statement-diag":
-		return true
-	case "node":
-		if len(args) == 1 {
-			return false
-		}
-		switch args[1] {
-		case "status", "ls":
-			return true
-		default:
-			return false
-		}
-	case "debug":
-		if len(args) < 3 {
-			return false
-		}
-		return args[1] == "doctor" && args[2] == "cluster"
-	default:
-		return false
+	// We use --echo-sql as a marker of SQL-only commands.
+	if f := flagSetForCmd(cmd).Lookup(cliflags.EchoSQL.Name); f != nil {
+		return true, nil
 	}
+	return false, nil
 }
 
 func (c cliTest) RunWithArgs(origArgs []string) {
@@ -333,7 +319,9 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 		args := append([]string(nil), origArgs[:1]...)
 		if c.TestServer != nil {
 			addr := c.ServingRPCAddr()
-			if isSQLCommand(origArgs) {
+			if isSQL, err := isSQLCommand(origArgs); err != nil {
+				return err
+			} else if isSQL {
 				addr = c.ServingSQLAddr()
 			}
 			h, p, err := net.SplitHostPort(addr)
