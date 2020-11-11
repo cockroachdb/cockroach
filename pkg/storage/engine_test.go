@@ -2023,7 +2023,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 			needsIntentHistory, err := ScanConflictingIntentsForDroppingLatchesEarly(
 				ctx,
 				eng,
-				txn.ID,
+				txn,
 				txn.ReadTimestamp,
 				tc.start,
 				tc.end,
@@ -2245,7 +2245,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 			needsIntentHistory, err := ScanConflictingIntentsForDroppingLatchesEarly(
 				ctx,
 				eng,
-				txn.ID,
+				txn,
 				txn.ReadTimestamp,
 				keyA,
 				nil,

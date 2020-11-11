@@ -1745,7 +1745,7 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 func ScanConflictingIntentsForDroppingLatchesEarly(
 	ctx context.Context,
 	reader Reader,
-	txnID uuid.UUID,
+	txn *roachpb.Transaction,
 	ts hlc.Timestamp,
 	start, end roachpb.Key,
 	intents *[]roachpb.Intent,
@@ -1788,7 +1788,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		if meta.Txn == nil {
 			return false, errors.Errorf("intent without transaction")
 		}
-		ownIntent := txnID != uuid.Nil && txnID == meta.Txn.ID
+		ownIntent, _, _, _ := ownsIntent(txn, &meta)
 		if ownIntent {
 			// If we ran into one of our own intents, a corresponding scan over the
 			// MVCC keyspace will need access to the key's intent history in order to

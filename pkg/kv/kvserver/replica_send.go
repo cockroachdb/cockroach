@@ -88,7 +88,7 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //	│                                                               │
 //	▼                                                               │
 //
-// executeWriteBatch                                                   │
+// executeWriteBatch                                                │
 //
 //	│                                                               │
 //	▼                                                               ▼

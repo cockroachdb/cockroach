@@ -934,7 +934,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		prevTS = metaTS.Prev()
 	}
 
-	ownIntent, epoch, seqNum, ignoredSeqNums := p.ownsIntent()
+	ownIntent, epoch, seqNum, ignoredSeqNums := ownsIntent(p.txn, &p.meta)
 	if !ownIntent {
 		conflictingIntent := metaTS.LessEq(p.ts) || p.failOnMoreRecent
 		if !conflictingIntent {
@@ -1075,14 +1075,11 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 // and ignored sequence range for the intent owner are additionally returned.
 // Note that these values may correspond to an ancestor transaction rather than
 // the transaction performing the read.
-func (p *pebbleMVCCScanner) ownsIntent() (
-	bool,
-	enginepb.TxnEpoch,
-	enginepb.TxnSeq,
-	[]enginepb.IgnoredSeqNumRange,
-) {
-	for cur := p.txn; cur != nil; cur = cur.Parent {
-		if p.meta.Txn.ID.Equal(cur.ID) {
+func ownsIntent(
+	root *roachpb.Transaction, intent *enginepb.MVCCMetadata,
+) (bool, enginepb.TxnEpoch, enginepb.TxnSeq, []enginepb.IgnoredSeqNumRange) {
+	for cur := root; cur != nil; cur = cur.Parent {
+		if intent.Txn.ID.Equal(cur.ID) {
 			return true, cur.Epoch, cur.Sequence, cur.IgnoredSeqNums
 		}
 	}
