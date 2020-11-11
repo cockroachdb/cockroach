@@ -307,14 +307,14 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 
 		// Now simulate an operator spilling to disk. The flow should have set this
 		// up to create its directory.
-		creator.diskQueueCfg.OnNewDiskQueueCb()
+		creator.diskQueueCfg.GetPath(ctx)
 
 		// We should now have one directory, the flow's temporary storage directory.
 		checkDirs(t, 1)
 
-		// Another operator calling OnNewDiskQueueCb again should not create a new
-		// directory
-		creator.diskQueueCfg.OnNewDiskQueueCb()
+		// Another operator calling GetPath again should not create a new
+		// directory.
+		creator.diskQueueCfg.GetPath(ctx)
 		checkDirs(t, 1)
 
 		// When the flow is Cleaned up, this directory should be removed.
@@ -338,7 +338,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		require.NoError(t, err)
 
 		checkDirs(t, 0)
-		creator1.diskQueueCfg.OnNewDiskQueueCb()
+		creator1.diskQueueCfg.GetPath(ctx)
 		checkDirs(t, 1)
 
 		// Now a new flow with the same ID gets set up.
@@ -353,7 +353,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 
 		// Still only 1 directory.
 		checkDirs(t, 1)
-		creator2.diskQueueCfg.OnNewDiskQueueCb()
+		creator2.diskQueueCfg.GetPath(ctx)
 		// A new directory should have been created for this flow.
 		checkDirs(t, 2)
 
@@ -373,16 +373,16 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		_, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
 		require.NoError(t, err)
 
-		createTempDir := creator.diskQueueCfg.OnNewDiskQueueCb
+		createTempDir := creator.diskQueueCfg.GetPath
 		errCh := make(chan error)
 		go func() {
-			createTempDir()
-			errCh <- ngn.MkdirAll(filepath.Join(vf.tempStorage.path, "async"))
+			createTempDir(ctx)
+			errCh <- ngn.MkdirAll(filepath.Join(vf.getTempStoragePath(ctx), "async"))
 		}()
-		createTempDir()
+		createTempDir(ctx)
 		// Both goroutines should be able to create their subdirectories within the
 		// flow's temporary directory.
-		require.NoError(t, ngn.MkdirAll(filepath.Join(vf.tempStorage.path, "main_goroutine")))
+		require.NoError(t, ngn.MkdirAll(filepath.Join(vf.getTempStoragePath(ctx), "main_goroutine")))
 		require.NoError(t, <-errCh)
 		vf.Cleanup(ctx)
 		checkDirs(t, 0)
