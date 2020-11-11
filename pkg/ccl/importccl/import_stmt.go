@@ -1245,7 +1245,7 @@ func parseAndCreateBundleTableDescs(
 	switch format.Format {
 	case roachpb.IOFileFormat_Mysqldump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
-		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner)
+		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner, walltime)
 	case roachpb.IOFileFormat_PgDump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
 		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID, walltime, fks, int(format.PgDump.MaxRowSize), owner)
@@ -1367,7 +1367,10 @@ func (r *importResumer) Resume(
 			}
 		}
 	}
-
+	// If details.Walltime is still 0, then it was not set during
+	// `prepareTableDescsForIngestion`. This indicates that we are in an IMPORT INTO,
+	// and that the walltime was not set in a previous run of IMPORT.
+	//
 	// In the case of importing into existing tables we must wait for all nodes
 	// to see the same version of the updated table descriptor, after which we
 	// shall chose a ts to import from.

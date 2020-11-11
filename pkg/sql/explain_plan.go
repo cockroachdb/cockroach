@@ -47,7 +47,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 	distribution, willVectorize := explainGetDistributedAndVectorized(params, realPlan)
 
 	ob := explain.NewOutputBuilder(e.flags)
-	if err := emitExplain(ob, params.p.ExecCfg().Codec, e.plan, distribution, willVectorize); err != nil {
+	if err := emitExplain(ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan, distribution, willVectorize); err != nil {
 		return err
 	}
 	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, 0)
@@ -66,6 +66,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 
 func emitExplain(
 	ob *explain.OutputBuilder,
+	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
 	explainPlan *explain.Plan,
 	distribution physicalplan.PlanDistribution,
@@ -83,7 +84,7 @@ func emitExplain(
 			tabDesc = table.(*optTable).desc
 			idxDesc = index.(*optIndex).desc
 		}
-		spans, err := generateScanSpans(codec, tabDesc, idxDesc, scanParams)
+		spans, err := generateScanSpans(evalCtx, codec, tabDesc, idxDesc, scanParams)
 		if err != nil {
 			return err.Error()
 		}

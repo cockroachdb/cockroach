@@ -209,11 +209,10 @@ func (tm *TableMeta) IndexKeyColumnsMapVirtual(indexOrd int) ColSet {
 
 	var indexCols ColSet
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
-		ord := 0
-		if i == 0 && index.IsInverted() {
-			ord = index.Column(i).InvertedSourceColumnOrdinal()
-		} else {
-			ord = index.Column(i).Ordinal()
+		col := index.Column(i)
+		ord := col.Ordinal()
+		if col.Kind() == cat.VirtualInverted {
+			ord = col.InvertedSourceColumnOrdinal()
 		}
 		indexCols.Add(tm.MetaID.ColumnID(ord))
 	}

@@ -244,6 +244,16 @@ func (is InvertedSpans) Swap(i, j int) {
 	is[i], is[j] = is[j], is[i]
 }
 
+// Start implements the span.KeyableInvertedSpans interface.
+func (is InvertedSpans) Start(i int) []byte {
+	return is[i].Start
+}
+
+// End implements the span.KeyableInvertedSpans interface.
+func (is InvertedSpans) End(i int) []byte {
+	return is[i].End
+}
+
 // InvertedExpression is the interface representing an expression or sub-expression
 // to be evaluated on the inverted index. Any implementation can be used in the
 // builder functions And() and Or(), but in practice there are two useful
@@ -513,6 +523,24 @@ func (n NonInvertedColExpression) SetNotTight() {}
 // Copy implements the InvertedExpression interface.
 func (n NonInvertedColExpression) Copy() InvertedExpression {
 	return NonInvertedColExpression{}
+}
+
+// SpanExpressionProtoSpans is a slice of SpanExpressionProto_Span.
+type SpanExpressionProtoSpans []SpanExpressionProto_Span
+
+// Len implements the span.KeyableInvertedSpans interface.
+func (s SpanExpressionProtoSpans) Len() int {
+	return len(s)
+}
+
+// Start implements the span.KeyableInvertedSpans interface.
+func (s SpanExpressionProtoSpans) Start(i int) []byte {
+	return s[i].Start
+}
+
+// End implements the span.KeyableInvertedSpans interface.
+func (s SpanExpressionProtoSpans) End(i int) []byte {
+	return s[i].End
 }
 
 // ExprForInvertedSpan constructs a leaf-level SpanExpression

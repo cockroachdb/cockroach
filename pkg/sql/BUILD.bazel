@@ -106,7 +106,6 @@ go_library(
         "internal.go",
         "inverted_filter.go",
         "inverted_join.go",
-        "inverted_span_encoding.go",
         "job_exec_context.go",
         "join.go",
         "join_predicate.go",

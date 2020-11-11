@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -35,6 +36,7 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	evalCtx := tree.NewTestingEvalContext(s.ClusterSettings())
 	tcs := []struct {
 		sql               string
 		index             string
@@ -105,7 +107,7 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			builder := span.MakeBuilder(execCfg.Codec, desc, idx)
+			builder := span.MakeBuilder(evalCtx, execCfg.Codec, desc, idx)
 			if res := builder.CanSplitSpanIntoSeparateFamilies(
 				tc.numNeededFamilies, tc.prefixLen, tc.containsNull); res != tc.canSplit {
 				t.Errorf("expected result to be %v, but found %v", tc.canSplit, res)
