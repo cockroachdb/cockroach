@@ -848,7 +848,7 @@ func (n *Node) batchInternal(
 		br, pErr = n.stores.Send(ctx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			log.VErrEventf(ctx, 3, "%T", pErr.GetDetail())
+			log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
