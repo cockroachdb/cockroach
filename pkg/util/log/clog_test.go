@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
@@ -533,7 +534,7 @@ func TestRollover(t *testing.T) {
 
 	setFlags()
 	var err error
-	setExitErrFunc(false /* hideStack */, func(_ int, e error) {
+	setExitErrFunc(false /* hideStack */, func(_ exit.Code, e error) {
 		err = e
 	})
 
@@ -582,7 +583,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 	setFlags()
 	mainLog.stderrThreshold = Severity_NONE
-	SetExitFunc(false /* hideStack */, func(int) {})
+	SetExitFunc(false /* hideStack */, func(exit.Code) {})
 
 	defer setFlags()
 	defer mainLog.swap(mainLog.newBuffers())
@@ -679,7 +680,7 @@ func TestExitOnFullDisk(t *testing.T) {
 	var exited sync.WaitGroup
 	exited.Add(1)
 
-	SetExitFunc(false, func(int) {
+	SetExitFunc(false, func(exit.Code) {
 		exited.Done()
 	})
 
@@ -690,7 +691,7 @@ func TestExitOnFullDisk(t *testing.T) {
 	}
 
 	l.mu.Lock()
-	l.exitLocked(fmt.Errorf("out of space"))
+	l.exitLocked(fmt.Errorf("out of space"), exit.UnspecifiedError())
 	l.mu.Unlock()
 
 	exited.Wait()

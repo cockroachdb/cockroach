@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -438,9 +439,9 @@ func main() {
 	c := &localcluster.LocalCluster{Cluster: localcluster.New(cfg)}
 	defer c.Close()
 
-	log.SetExitFunc(false /* hideStack */, func(code int) {
+	log.SetExitFunc(false /* hideStack */, func(code exit.Code) {
 		c.Close()
-		os.Exit(code)
+		exit.WithCode(code)
 	})
 
 	signalCh := make(chan os.Signal, 1)

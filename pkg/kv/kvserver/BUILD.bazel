@@ -276,6 +276,7 @@ go_test(
     embed = [":kvserver"],
     deps = [
         "//pkg/base",
+        "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",

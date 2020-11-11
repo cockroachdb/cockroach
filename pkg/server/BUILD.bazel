@@ -248,6 +248,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",

@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -85,7 +86,7 @@ func ExampleTracker_Close() {
 
 func TestTrackerDoubleRelease(t *testing.T) {
 	var exited bool
-	log.SetExitFunc(true /* hideStack */, func(int) { exited = true })
+	log.SetExitFunc(true /* hideStack */, func(exit.Code) { exited = true })
 	defer log.ResetExitFunc()
 
 	ctx := context.Background()

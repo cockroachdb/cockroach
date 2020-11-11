@@ -13,7 +13,8 @@ package log
 import (
 	"context"
 	"io"
-	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 )
 
 // SetExitFunc allows setting a function that will be called to exit
@@ -22,16 +23,16 @@ import (
 // callers wishing to keep the logs reasonably clean.
 //
 // Use ResetExitFunc() to reset.
-func SetExitFunc(hideStack bool, f func(int)) {
+func SetExitFunc(hideStack bool, f func(exit.Code)) {
 	if f == nil {
 		panic("nil exit func invalid")
 	}
-	setExitErrFunc(hideStack, func(x int, err error) { f(x) })
+	setExitErrFunc(hideStack, func(x exit.Code, err error) { f(x) })
 }
 
 // setExitErrFunc is like SetExitFunc but the function can also
 // observe the error that is triggering the exit.
-func setExitErrFunc(hideStack bool, f func(int, error)) {
+func setExitErrFunc(hideStack bool, f func(exit.Code, error)) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 
@@ -53,7 +54,7 @@ func ResetExitFunc() {
 // point in hanging around.
 //
 // l.mu is held; logging.mu is not held.
-func (l *loggerT) exitLocked(err error) {
+func (l *loggerT) exitLocked(err error, code exit.Code) {
 	l.mu.AssertHeld()
 
 	l.reportErrorEverywhereLocked(context.Background(), err)
@@ -64,11 +65,11 @@ func (l *loggerT) exitLocked(err error) {
 	if f != nil {
 		// Avoid conflicting lock order between l.mu and locks in f.
 		l.mu.Unlock()
-		f(2, err)
+		f(code, err)
 		// Avoid double unlock on l.mu.
 		l.mu.Lock()
 	} else {
-		os.Exit(2)
+		exit.WithCode(code)
 	}
 }
 
