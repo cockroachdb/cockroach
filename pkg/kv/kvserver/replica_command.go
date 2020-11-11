@@ -1919,6 +1919,18 @@ func (r *Replica) sendSnapshot(
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
 
+	// Check that the snapshot we generated has a descriptor that includes the
+	// recipient. If it doesn't, the recipient will reject it, so it's better to
+	// not send it in the first place. It's possible to hit this case if we're not
+	// the leaseholder and we haven't yet applied the configuration change that's
+	// adding the recipient to the range.
+	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
+		return errors.Newf(
+			"attempting to send snapshot that does not contain the recipient as a replica; "+
+				"snapshot type: %s, recipient: s%d, desc: %s",
+			snapType, recipient, snap.State.Desc)
+	}
+
 	sender, err := r.GetReplicaDescriptor()
 	if err != nil {
 		return errors.Wrapf(err, "%s: change replicas failed", r)
