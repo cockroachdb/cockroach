@@ -104,7 +104,8 @@ func (v *VersionSetting) SettingsListDefault() string {
 
 // Typ is part of the Setting interface.
 func (*VersionSetting) Typ() string {
-	return "v"
+	// This is named "m" (instead of "v") for backwards compatibility reasons.
+	return "m"
 }
 
 // String is part of the Setting interface.
