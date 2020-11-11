@@ -3027,6 +3027,240 @@ SELECT regr_slope('foo', v) FROM kv
 ----
 error (22P02): regr_slope(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
 
+# Tests for regr_sxx.
+
+build
+SELECT regr_sxx(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_sxx:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── regression-s-x-x [as=regr_sxx:6]
+           ├── k:1
+           └── v:2
+
+
+build
+SELECT regr_sxx(k) FROM kv
+----
+error (42883): unknown signature: regr_sxx(int)
+
+
+build
+SELECT regr_sxx(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: regr_sxx(int, string, string)
+
+
+build
+SELECT regr_sxx(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_sxx:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=regr_sxx:6]
+           └── regression-s-x-x
+                ├── k:1
+                └── v:2
+
+
+build
+SELECT max(s), regr_sxx(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 regr_sxx:7 min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── regression-s-x-x [as=regr_sxx:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+
+build
+SELECT regr_sxx(k, NULL) FROM kv
+----
+error (42725): ambiguous call: regr_sxx(int, unknown), candidates are:
+regr_sxx(int, int) -> float
+regr_sxx(int, float) -> float
+regr_sxx(int, decimal) -> float
+
+build
+SELECT regr_sxx('foo', v) FROM kv
+----
+error (22P02): regr_sxx(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+
+# Tests for regr_sxy.
+
+build
+SELECT regr_sxy(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_sxy:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── regression-s-x-y [as=regr_sxy:6]
+           ├── k:1
+           └── v:2
+
+
+build
+SELECT regr_sxy(k) FROM kv
+----
+error (42883): unknown signature: regr_sxy(int)
+
+
+build
+SELECT regr_sxy(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: regr_sxy(int, string, string)
+
+
+build
+SELECT regr_sxy(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_sxy:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=regr_sxy:6]
+           └── regression-s-x-y
+                ├── k:1
+                └── v:2
+
+
+build
+SELECT max(s), regr_sxy(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 regr_sxy:7 min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── regression-s-x-y [as=regr_sxy:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+
+build
+SELECT regr_sxy(k, NULL) FROM kv
+----
+error (42725): ambiguous call: regr_sxy(int, unknown), candidates are:
+regr_sxy(int, int) -> float
+regr_sxy(int, float) -> float
+regr_sxy(int, decimal) -> float
+
+build
+SELECT regr_sxy('foo', v) FROM kv
+----
+error (22P02): regr_sxy(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+# Tests for regr_syy.
+
+build
+SELECT regr_syy(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_syy:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── regression-s-y-y [as=regr_syy:6]
+           ├── k:1
+           └── v:2
+
+
+build
+SELECT regr_syy(k) FROM kv
+----
+error (42883): unknown signature: regr_syy(int)
+
+
+build
+SELECT regr_syy(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: regr_syy(int, string, string)
+
+
+build
+SELECT regr_syy(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_syy:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=regr_syy:6]
+           └── regression-s-y-y
+                ├── k:1
+                └── v:2
+
+
+build
+SELECT max(s), regr_syy(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 regr_syy:7 min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── regression-s-y-y [as=regr_syy:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+
+build
+SELECT regr_syy(k, NULL) FROM kv
+----
+error (42725): ambiguous call: regr_syy(int, unknown), candidates are:
+regr_syy(int, int) -> float
+regr_syy(int, float) -> float
+regr_syy(int, decimal) -> float
+
+build
+SELECT regr_syy('foo', v) FROM kv
+----
+error (22P02): regr_syy(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+# Tests for string_agg.
+
 build
 SELECT string_agg(s, 'separator') FROM kv
 ----
