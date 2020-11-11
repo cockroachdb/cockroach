@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -138,7 +139,7 @@ func TestErrorReporting(t *testing.T) {
 		{
 			desc: "single cliError",
 			err: &cliError{
-				exitCode: 1,
+				exitCode: exit.UnspecifiedError(),
 				severity: log.Severity_INFO,
 				cause:    errors.New("routine"),
 			},
@@ -148,10 +149,10 @@ func TestErrorReporting(t *testing.T) {
 		{
 			desc: "double cliError",
 			err: &cliError{
-				exitCode: 1,
+				exitCode: exit.UnspecifiedError(),
 				severity: log.Severity_INFO,
 				cause: &cliError{
-					exitCode: 1,
+					exitCode: exit.UnspecifiedError(),
 					severity: log.Severity_ERROR,
 					cause:    errors.New("serious"),
 				},
@@ -162,7 +163,7 @@ func TestErrorReporting(t *testing.T) {
 		{
 			desc: "wrapped cliError",
 			err: fmt.Errorf("some context: %w", &cliError{
-				exitCode: 1,
+				exitCode: exit.UnspecifiedError(),
 				severity: log.Severity_INFO,
 				cause:    errors.New("routine"),
 			}),

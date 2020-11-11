@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -430,7 +431,7 @@ func TestLeaseExpiration(t *testing.T) {
 	defer func() { leaseRefreshInterval = oldLeaseRefreshInterval }()
 
 	exitCalled := make(chan bool)
-	log.SetExitFunc(true /* hideStack */, func(int) { exitCalled <- true })
+	log.SetExitFunc(true /* hideStack */, func(exit.Code) { exitCalled <- true })
 	defer log.ResetExitFunc()
 	// Disable stack traces to make the test output in teamcity less deceiving.
 	defer log.DisableTracebacks()()
