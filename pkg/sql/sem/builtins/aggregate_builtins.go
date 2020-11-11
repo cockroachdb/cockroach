@@ -193,6 +193,18 @@ var aggregates = map[string]builtinDefinition{
 		newRegressionSlopeAggregate, "Calculates slope of the least-squares-fit linear equation determined by the (X, Y) pairs.",
 	),
 
+	"regr_sxx": makeRegressionAggregateBuiltin(
+		newRegressionSXXAggregate, "Calculates sum of squares of the independent variable.",
+	),
+
+	"regr_sxy": makeRegressionAggregateBuiltin(
+		newRegressionSXYAggregate, "Calculates sum of products of independent times dependent variable.",
+	),
+
+	"regr_syy": makeRegressionAggregateBuiltin(
+		newRegressionSYYAggregate, "Calculates sum of squares of the dependent variable.",
+	),
+
 	"count": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements.", tree.VolatilityImmutable),
@@ -1045,6 +1057,12 @@ var _ tree.AggregateFunc = &stUnionAgg{}
 var _ tree.AggregateFunc = &stExtentAgg{}
 var _ tree.AggregateFunc = &covarPopAggregate{}
 var _ tree.AggregateFunc = &covarSampAggregate{}
+var _ tree.AggregateFunc = &regressionInterceptAggregate{}
+var _ tree.AggregateFunc = &regressionR2Aggregate{}
+var _ tree.AggregateFunc = &regressionSlopeAggregate{}
+var _ tree.AggregateFunc = &regressionSXXAggregate{}
+var _ tree.AggregateFunc = &regressionSXYAggregate{}
+var _ tree.AggregateFunc = &regressionSYYAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
@@ -2040,6 +2058,61 @@ func (a *regressionSlopeAggregate) Result() (tree.Datum, error) {
 	}
 
 	return tree.NewDFloat(tree.DFloat(a.sxy / a.sxx)), nil
+}
+
+// regressionSXXAggregate represents sum of squares of the independent variable.
+type regressionSXXAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSXXAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSXXAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSXXAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sxx)), nil
+}
+
+// regressionSXYAggregate represents sum of products of independent
+// times dependent variable.
+type regressionSXYAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSXYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSXYAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSXYAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sxy)), nil
+}
+
+// regressionSYYAggregate represents sum of squares of the dependent variable.
+type regressionSYYAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSYYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSYYAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSYYAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.syy)), nil
 }
 
 type countAggregate struct {

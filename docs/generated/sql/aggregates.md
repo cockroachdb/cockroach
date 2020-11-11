@@ -285,6 +285,60 @@
 </span></td></tr>
 <tr><td><a name="regr_slope"></a><code>regr_slope(arg1: <a href="int.html">int</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates slope of the least-squares-fit linear equation determined by the (X, Y) pairs.</p>
 </span></td></tr>
+<tr><td><a name="regr_sxx"></a><code>regr_sxx(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the independent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxx"></a><code>regr_sxx(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the independent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxx"></a><code>regr_sxx(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the independent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxx"></a><code>regr_sxx(arg1: <a href="float.html">float</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the independent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxx"></a><code>regr_sxx(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the independent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxx"></a><code>regr_sxx(arg1: <a href="float.html">float</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the independent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxx"></a><code>regr_sxx(arg1: <a href="int.html">int</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the independent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxx"></a><code>regr_sxx(arg1: <a href="int.html">int</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the independent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxx"></a><code>regr_sxx(arg1: <a href="int.html">int</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the independent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxy"></a><code>regr_sxy(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of products of independent times dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxy"></a><code>regr_sxy(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of products of independent times dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxy"></a><code>regr_sxy(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of products of independent times dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxy"></a><code>regr_sxy(arg1: <a href="float.html">float</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of products of independent times dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxy"></a><code>regr_sxy(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of products of independent times dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxy"></a><code>regr_sxy(arg1: <a href="float.html">float</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of products of independent times dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxy"></a><code>regr_sxy(arg1: <a href="int.html">int</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of products of independent times dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxy"></a><code>regr_sxy(arg1: <a href="int.html">int</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of products of independent times dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_sxy"></a><code>regr_sxy(arg1: <a href="int.html">int</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of products of independent times dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_syy"></a><code>regr_syy(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_syy"></a><code>regr_syy(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_syy"></a><code>regr_syy(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_syy"></a><code>regr_syy(arg1: <a href="float.html">float</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_syy"></a><code>regr_syy(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_syy"></a><code>regr_syy(arg1: <a href="float.html">float</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_syy"></a><code>regr_syy(arg1: <a href="int.html">int</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_syy"></a><code>regr_syy(arg1: <a href="int.html">int</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the dependent variable.</p>
+</span></td></tr>
+<tr><td><a name="regr_syy"></a><code>regr_syy(arg1: <a href="int.html">int</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates sum of squares of the dependent variable.</p>
+</span></td></tr>
 <tr><td><a name="sqrdiff"></a><code>sqrdiff(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the sum of squared differences from the mean of the selected values.</p>
 </span></td></tr>
 <tr><td><a name="sqrdiff"></a><code>sqrdiff(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the sum of squared differences from the mean of the selected values.</p>

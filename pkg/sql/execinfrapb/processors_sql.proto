@@ -721,6 +721,9 @@ message AggregatorSpec {
     REGR_INTERCEPT = 37;
     REGR_R2 = 38;
     REGR_SLOPE = 39;
+    REGR_SXX = 40;
+    REGR_SYY = 41;
+    REGR_SXY = 42;
   }
 
   enum Type {
