@@ -1737,7 +1737,7 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 				repl := (*Replica)(v)
 				annotatedCtx := repl.AnnotateCtx(ctx)
 				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
-					if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+					if _, ok := pErr.GoError().(*roachpb.NotLeaseHolderError); !ok {
 						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
 					}
 					s.renewableLeases.Delete(k)
