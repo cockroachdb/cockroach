@@ -22,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // managerImpl implements the Manager interface.
@@ -256,11 +256,22 @@ func (m *managerImpl) HandleWriterIntentError(
 	// wait-queue. If the lock-table is disabled and one or more of the intents
 	// are ignored then we immediately wait on all intents.
 	wait := false
+	// While iterating the intents, detect if any is due to an ancestor
+	// transaction which is illegal and must be detected.
+	var parentIntentError error
 	for i := range t.Intents {
 		intent := &t.Intents[i]
 		added, err := m.lt.AddDiscoveredLock(intent, seq, g.ltg)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
+		}
+		for cur := g.Req.Txn; cur != nil && parentIntentError == nil; cur = cur.Parent {
+			if cur.ID == intent.Txn.ID {
+				parentIntentError = errors.AssertionFailedf(
+					"child transaction %s attempted to write over parent %s at key %s",
+					g.Req.Txn.Short(), cur.Short(), intent.Key)
+				break
+			}
 		}
 		if !added {
 			wait = true
@@ -272,6 +283,15 @@ func (m *managerImpl) HandleWriterIntentError(
 	// then re-sequence the Request by calling SequenceReq with the un-latched
 	// Guard. This is analogous to iterating through the loop in SequenceReq.
 	m.lm.Release(g.moveLatchGuard())
+
+	// Detect if a discovered write intent was due to an ancestor transaction.
+	// Such a conflict is illegal but needs to be surfaced to be detected.
+	//
+	// TODO(ajwerner): Consider having this return a specific roachpb.Error that
+	// will be converted to an assertion failure on the client.
+	if parentIntentError != nil {
+		return nil, roachpb.NewError(parentIntentError)
+	}
 
 	// If the lockTable was disabled then we need to immediately wait on the
 	// intents to ensure that they are resolved and moved out of the request's
@@ -401,13 +421,6 @@ func (m *managerImpl) LockTableDebug() string {
 // TxnWaitQueue implements the MetricExporter interface.
 func (m *managerImpl) TxnWaitQueue() *txnwait.Queue {
 	return m.twq.(*txnwait.Queue)
-}
-
-func (r *Request) txnMeta() *enginepb.TxnMeta {
-	if r.Txn == nil {
-		return nil
-	}
-	return &r.Txn.TxnMeta
 }
 
 // readConflictTimestamp returns the maximum timestamp at which the request

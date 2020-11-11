@@ -258,7 +258,7 @@ type lockTableGuardImpl struct {
 	seqNum uint64
 
 	// Information about this request.
-	txn     *enginepb.TxnMeta
+	txn     *roachpb.Transaction
 	spans   *spanset.SpanSet
 	readTS  hlc.Timestamp
 	writeTS hlc.Timestamp
@@ -421,8 +421,51 @@ func (g *lockTableGuardImpl) doneWaitingAtLock(hasReservation bool, l *lockState
 	g.mu.Unlock()
 }
 
+// isSameTxn returns true if txn corresponds to the txn in g or to any of its
+// parents. We allow requests due to children to pass through the lock table
+// without observing any locks held by the parent. This is seemingly hazardous
+// in the scenario that the child is attempting to write (acquire a replicated
+// lock) or to acquire an unreplicated lock. However, each of the cases ends up
+// working out either due to logic at a different level or the guarantees of the
+// the system.
+//
+//   case | parent | child
+//  ------+--------+-------
+//    (1) | r      | r
+//    (2) | r      | u
+//    (3) | u      | r
+//    (4) | u      | u
+//
+//  (1) Parent holds a replicated exclusive lock and the child is trying to
+//      write. This case is handled below the lock table by detecting the
+//      WriteIntentError for a parent and converting it to an assertion failure.
+//      Child transactions should *never* write over any of their ancestor's
+//      intents.
+//
+//  (2) Parent holds a replicated exclusive lock and the child is trying to
+//      acquire an unreplicated read lock. In this case we'll end up no-oping
+//      because we'll believe that there already is a lock. This case is okay.
+//
+//  (3) Parent holds an unreplicated lock and the child writes. When the child
+//      commits, it will invalidate the parent's read. Children should not be
+//      writing over the parent's read set. Child transactions push their
+//      parents above their commit timestamp and the timestamp cache will push
+//      the child above the parent's read timestamp so the parent is doomed
+//      to fail. That being said, this is safe from a correctness perspective.
+//      A more informative error might be better but it's hard to plumb that
+//      through.
+//
+//  (4) Parent holds an unreplicated lock and the child would like to acquire
+//      one. This case ends up just working as we'll pass through the parent's
+//      lock and not acquire anything.
+//
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
-	return g.txn != nil && g.txn.ID == txn.ID
+	for cur := g.txn; cur != nil; cur = cur.Parent {
+		if cur.ID == txn.ID {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *lockTableGuardImpl) isSameTxnAsReservation(ws waitingState) bool {
@@ -481,6 +524,13 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 	if notify {
 		g.notify()
 	}
+}
+
+func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
+	if g.txn == nil {
+		return nil
+	}
+	return &g.txn.TxnMeta
 }
 
 // Waiting writers in a lockState are wrapped in a queuedGuard. A waiting
@@ -784,7 +834,7 @@ func (l *lockState) Format(buf *strings.Builder) {
 	txn, ts := l.getLockHolder()
 	if txn == nil {
 		fmt.Fprintf(buf, "  res: req: %d, ", l.reservation.seqNum)
-		writeResInfo(buf, l.reservation.txn, l.reservation.writeTS)
+		writeResInfo(buf, l.reservation.txnMeta(), l.reservation.writeTS)
 	} else {
 		writeHolderInfo(buf, txn, ts)
 	}
@@ -849,7 +899,7 @@ func (l *lockState) informActiveWaiters() {
 		waitForState.txn = lockHolderTxn
 		waitForState.held = true
 	} else {
-		waitForState.txn = l.reservation.txn
+		waitForState.txn = l.reservation.txnMeta()
 		if !findDistinguished && l.distinguishedWaiter.isSameTxnAsReservation(waitForState) {
 			findDistinguished = true
 			l.distinguishedWaiter = nil
@@ -938,7 +988,7 @@ func (l *lockState) tryMakeNewDistinguished() {
 	} else if l.queuedWriters.Len() > 0 {
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
-			if qg.active && (l.reservation == nil || !qg.guard.isSameTxn(l.reservation.txn)) {
+			if qg.active && (l.reservation == nil || !qg.guard.isSameTxn(l.reservation.txnMeta())) {
 				g = qg.guard
 				break
 			}
@@ -1095,7 +1145,7 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 			// non-transactional request. Ignore the reservation.
 			return false
 		}
-		waitForState.txn = l.reservation.txn
+		waitForState.txn = l.reservation.txnMeta()
 	}
 
 	// Incompatible with whoever is holding lock or reservation.
@@ -1779,7 +1829,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 	if guard == nil {
 		g = newLockTableGuardImpl()
 		g.seqNum = atomic.AddUint64(&t.seqNum, 1)
-		g.txn = req.txnMeta()
+		g.txn = req.Txn
 		g.spans = req.LockSpans
 		g.readTS = req.readConflictTimestamp()
 		g.writeTS = req.writeConflictTimestamp()

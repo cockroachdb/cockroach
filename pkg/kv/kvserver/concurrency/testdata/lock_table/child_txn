@@ -1,0 +1,90 @@
+# Test that we do not block on a parent's intent.
+# Test that we do not block on a parent's read lock.
+# TODO(ajwerner): We need to test some of the more pernicious issues.
+# In particular, if there's a write-write conflict or an attempt of a child
+# to acquire a write lock over an existing read lock of the parent, then we
+# need to return an error that will end up being an assertion failure.
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-child-txn parent=txn1 txn=txn2 ts=10,1 epoch=0
+----
+
+new-request r=req1 txn=txn1 ts=10,1 spans=r@a,b+w@c,f
+----
+
+new-request r=req2 txn=txn2 ts=10,2 spans=r@a,b+w@c,f
+----
+
+scan r=req1
+----
+start-waiting: false
+
+guard-state r=req1
+----
+new: state=doneWaiting
+
+# Acquire lock on c both replicated and unreplicated. Just to trigger corner cases and since
+# uncontended replicated locks are not tracked by lockTable.
+acquire r=req1 k=c durability=r
+----
+global: num=0
+local: num=0
+
+acquire r=req1 k=c durability=u
+----
+global: num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+acquire r=req1 k=e durability=u
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+dequeue r=req1
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# req2 is also for txn1 and will not wait for locks that are held by self.
+
+scan r=req2
+----
+start-waiting: false
+
+acquire r=req2 k=b durability=u
+----
+global: num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,2, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+dequeue r=req2
+----
+global: num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,2, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+

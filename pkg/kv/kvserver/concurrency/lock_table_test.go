@@ -132,7 +132,7 @@ func TestLockTableBasic(t *testing.T) {
 
 	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
 		var lt lockTable
-		var txnsByName map[string]*enginepb.TxnMeta
+		var txnsByName map[string]*roachpb.Transaction
 		var txnCounter uint128.Uint128
 		var requestsByName map[string]Request
 		var guardsByReqName map[string]lockTableGuard
@@ -146,10 +146,44 @@ func TestLockTableBasic(t *testing.T) {
 					enabledSeq: 1,
 					maxLocks:   int64(maxLocks),
 				}
-				txnsByName = make(map[string]*enginepb.TxnMeta)
+				txnsByName = make(map[string]*roachpb.Transaction)
 				txnCounter = uint128.FromInts(0, 0)
 				requestsByName = make(map[string]Request)
 				guardsByReqName = make(map[string]lockTableGuard)
+				return ""
+			case "new-child-txn":
+				var parentName string
+				d.ScanArgs(t, "parent", &parentName)
+				parent, ok := txnsByName[parentName]
+				if !ok {
+					d.Fatalf(t, "unknown parent transaction %q", parentName)
+				}
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				ts := scanTimestamp(t, d)
+				var epoch int
+				d.ScanArgs(t, "epoch", &epoch)
+				var seq int
+				if d.HasArg("seq") {
+					d.ScanArgs(t, "seq", &seq)
+				}
+				txnMeta, ok := txnsByName[txnName]
+				var id uuid.UUID
+				if ok {
+					id = txnMeta.ID
+				} else {
+					id = nextUUID(&txnCounter)
+				}
+				txnsByName[txnName] = &roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						ID:             id,
+						Epoch:          enginepb.TxnEpoch(epoch),
+						Sequence:       enginepb.TxnSeq(seq),
+						WriteTimestamp: ts,
+					},
+					ReadTimestamp: ts,
+					Parent:        parent.Clone(),
+				}
 				return ""
 
 			case "new-txn":
@@ -173,11 +207,14 @@ func TestLockTableBasic(t *testing.T) {
 				} else {
 					id = nextUUID(&txnCounter)
 				}
-				txnsByName[txnName] = &enginepb.TxnMeta{
-					ID:             id,
-					Epoch:          enginepb.TxnEpoch(epoch),
-					Sequence:       enginepb.TxnSeq(seq),
-					WriteTimestamp: ts,
+				txnsByName[txnName] = &roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						ID:             id,
+						Epoch:          enginepb.TxnEpoch(epoch),
+						Sequence:       enginepb.TxnSeq(seq),
+						WriteTimestamp: ts,
+					},
+					ReadTimestamp: ts,
 				}
 				return ""
 
@@ -208,10 +245,8 @@ func TestLockTableBasic(t *testing.T) {
 					// Update the transaction's timestamp, if necessary. The transaction
 					// may have needed to move its timestamp for any number of reasons.
 					txnMeta.WriteTimestamp = ts
-					req.Txn = &roachpb.Transaction{
-						TxnMeta:       *txnMeta,
-						ReadTimestamp: ts,
-					}
+					req.Txn = txnMeta.Clone()
+					req.Txn.ReadTimestamp = ts
 				}
 				requestsByName[reqName] = req
 				return ""
@@ -254,7 +289,7 @@ func TestLockTableBasic(t *testing.T) {
 			case "release":
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
-				txnMeta, ok := txnsByName[txnName]
+				txn, ok := txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
@@ -262,7 +297,7 @@ func TestLockTableBasic(t *testing.T) {
 				d.ScanArgs(t, "span", &s)
 				span := getSpan(t, d, s)
 				// TODO(sbhola): also test ABORTED.
-				intent := &roachpb.LockUpdate{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
+				intent := &roachpb.LockUpdate{Span: span, Txn: txn.TxnMeta, Status: roachpb.COMMITTED}
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
@@ -271,17 +306,23 @@ func TestLockTableBasic(t *testing.T) {
 			case "update":
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
-				txnMeta, ok := txnsByName[txnName]
+				txn, ok := txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				ts := scanTimestamp(t, d)
 				var epoch int
 				d.ScanArgs(t, "epoch", &epoch)
-				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID, Sequence: txnMeta.Sequence}
-				txnMeta.Epoch = enginepb.TxnEpoch(epoch)
-				txnMeta.WriteTimestamp = ts
-				txnsByName[txnName] = txnMeta
+				txn = &roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						ID:             txn.ID,
+						Sequence:       txn.Sequence,
+						WriteTimestamp: ts,
+						Epoch:          enginepb.TxnEpoch(epoch),
+					},
+					ReadTimestamp: ts,
+				}
+				txnsByName[txnName] = txn
 				var s string
 				d.ScanArgs(t, "span", &s)
 				span := getSpan(t, d, s)
@@ -313,7 +354,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				// TODO(sbhola): also test STAGING.
 				intent := &roachpb.LockUpdate{
-					Span: span, Txn: *txnMeta, Status: roachpb.PENDING, IgnoredSeqNums: ignored}
+					Span: span, Txn: txn.TxnMeta, Status: roachpb.PENDING, IgnoredSeqNums: ignored}
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
@@ -334,7 +375,7 @@ func TestLockTableBasic(t *testing.T) {
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
-				intent := roachpb.MakeIntent(txnMeta, roachpb.Key(key))
+				intent := roachpb.MakeIntent(&txnMeta.TxnMeta, roachpb.Key(key))
 				seq := int(1)
 				if d.HasArg("lease-seq") {
 					d.ScanArgs(t, "lease-seq", &seq)
