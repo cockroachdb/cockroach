@@ -174,8 +174,8 @@ func (tm *TableMeta) clearAnnotations() {
 	}
 }
 
-// IndexColumns returns the metadata IDs for the set of columns in the given
-// index.
+// IndexColumns returns the metadata IDs for the set of table columns in the
+// given index.
 // TODO(justin): cache this value in the table metadata.
 func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
@@ -183,6 +183,24 @@ func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	var indexCols ColSet
 	for i, n := 0, index.ColumnCount(); i < n; i++ {
 		ord := index.Column(i).Ordinal()
+		indexCols.Add(tm.MetaID.ColumnID(ord))
+	}
+	return indexCols
+}
+
+// IndexColumnsMapVirtual returns the metadata IDs for the set of table columns
+// in the given index. Virtual inverted index columns are mapped to their source
+// column.
+func (tm *TableMeta) IndexColumnsMapVirtual(indexOrd int) ColSet {
+	index := tm.Table.Index(indexOrd)
+
+	var indexCols ColSet
+	for i, n := 0, index.ColumnCount(); i < n; i++ {
+		col := index.Column(i)
+		ord := col.Ordinal()
+		if col.Kind() == cat.VirtualInverted {
+			ord = col.InvertedSourceColumnOrdinal()
+		}
 		indexCols.Add(tm.MetaID.ColumnID(ord))
 	}
 	return indexCols
