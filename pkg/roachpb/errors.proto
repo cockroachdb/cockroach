@@ -263,6 +263,13 @@ message WriteIntentError {
 // value newer than its timestamp, making it impossible to rewrite
 // history. The write is instead done at actual timestamp, which is
 // the timestamp of the existing version+1.
+//
+// If a blind write request (see IsBlindWrite) returns a WriteTooOld
+// error during evaluation (in pkg/kvserver/batcheval), it must also
+// complete its work and return a valid result. This allows callers to
+// optionally defer the WriteTooOldError until later in the transaction
+// by instead bumping the transaction's write timestamp, setting the
+// transaction's WriteTooOld flag, and dropping the error.
 message WriteTooOldError {
   optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
