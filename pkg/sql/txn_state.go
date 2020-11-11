@@ -166,7 +166,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		// Create a child span for this SQL txn.
 		sp = parentSp.Tracer().StartSpan(
 			opName,
-			tracing.WithParent(parentSp),
+			tracing.WithParentAndAutoCollection(parentSp),
 			tracing.WithCtxLogTags(connCtx),
 			tracing.WithForceRealSpan(),
 		)

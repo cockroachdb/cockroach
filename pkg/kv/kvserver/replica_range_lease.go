@@ -297,7 +297,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		// except that one does not currently support FollowsFrom relationships.
 		sp = tr.StartSpan(
 			opName,
-			tracing.WithParent(parentSp),
+			tracing.WithParentAndAutoCollection(parentSp),
 			tracing.WithFollowsFrom(),
 			tracing.WithCtxLogTags(parentCtx),
 		)

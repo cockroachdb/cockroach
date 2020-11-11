@@ -404,7 +404,7 @@ func (s *Span) Finish() {
 
 // Meta returns the information which needs to be propagated across
 // process boundaries in order to derive child spans from this Span.
-// This may return nil, which is a valid input to `WithRemoteParent`,
+// This may return nil, which is a valid input to `WithParentAndManualCollection`,
 // if the Span has been optimized out.
 func (s *Span) Meta() *SpanMeta {
 	var traceID uint64

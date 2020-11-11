@@ -165,11 +165,11 @@ func (t *Tracer) StartSpan(operationName string, os ...SpanOption) *Span {
 	if !t.AlwaysTrace() {
 		if len(os) == 1 {
 			switch o := os[0].(type) {
-			case *parentOption:
+			case *parentAndAutoCollectionOption:
 				if (*Span)(o).IsBlackHole() {
 					return t.noopSpan
 				}
-			case *remoteParentOption:
+			case *parentAndManualCollectionOption:
 				if (*SpanMeta)(o).isNilOrNoop() {
 					return t.noopSpan
 				}
@@ -533,14 +533,14 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 			return ctx, sp
 		}
 		tr := sp.Tracer()
-		newSpan := tr.StartSpan(opName, WithParent(sp), WithCtxLogTags(ctx))
+		newSpan := tr.StartSpan(opName, WithParentAndAutoCollection(sp), WithCtxLogTags(ctx))
 		return ContextWithSpan(ctx, newSpan), newSpan
 	}
 	return ctx, nil
 }
 
 // ChildSpan opens a Span as a child of the current Span in the context (if
-// there is one), via the WithParent option.
+// there is one), via the WithParentAndAutoCollection option.
 // The Span's tags are inherited from the ctx's log tags automatically.
 //
 // Returns the new context and the new Span (if any). If a non-nil Span is
@@ -549,8 +549,8 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	return childSpan(ctx, opName, false /* remote */)
 }
 
-// ChildSpanRemote is like ChildSpan but the new Span is created using WithRemoteParent
-// instead of WithParent. When this is used, it's the caller's duty to collect this span's
+// ChildSpanRemote is like ChildSpan but the new Span is created using WithParentAndManualCollection
+// instead of WithParentAndAutoCollection. When this is used, it's the caller's duty to collect this span's
 // recording and return it to the root span of the trace.
 func ChildSpanRemote(ctx context.Context, opName string) (context.Context, *Span) {
 	return childSpan(ctx, opName, true /* remote */)
@@ -635,7 +635,7 @@ func StartSnowballTrace(
 	var span *Span
 	if sp := SpanFromContext(ctx); sp != nil {
 		span = sp.Tracer().StartSpan(
-			opName, WithParent(sp), WithForceRealSpan(), WithCtxLogTags(ctx),
+			opName, WithParentAndAutoCollection(sp), WithForceRealSpan(), WithCtxLogTags(ctx),
 		)
 	} else {
 		span = tracer.StartSpan(opName, WithForceRealSpan(), WithCtxLogTags(ctx))
