@@ -31,11 +31,13 @@ class NodesWrapper extends React.Component<{}, {}> {
 
 export default function createClusterOverviewRoutes(): JSX.Element {
   return (
-    <Route path="overview" component={ ClusterOverview } >
-      <Switch>
-        <Route exact path="/" component={() => <Redirect to="list" />}/>
-        <Route path="list" component={ NodesWrapper } />
-      </Switch>
+    <Route path="/overview">
+      <ClusterOverview>
+        <Switch>
+          <Redirect exact from="/overview" to="/overview/list" />
+          <Route path="/overview/list" component={ NodesWrapper } />
+        </Switch>
+      </ClusterOverview>
     </Route>
   );
 }
