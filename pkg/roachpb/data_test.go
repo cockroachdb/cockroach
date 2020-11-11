@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -563,7 +564,7 @@ func TestTransactionUpdate(t *testing.T) {
 
 	// Updating a different transaction fatals.
 	var exited bool
-	log.SetExitFunc(true /* hideStack */, func(int) { exited = true })
+	log.SetExitFunc(true /* hideStack */, func(exit.Code) { exited = true })
 	defer log.ResetExitFunc()
 
 	var txn6 Transaction

@@ -11,8 +11,7 @@
 package cli
 
 import (
-	"os"
-
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -78,7 +77,7 @@ func HandleErrs(
 			if hint != "" {
 				cmd.Println("Hint:", hint)
 			}
-			os.Exit(1)
+			exit.WithCode(exit.UnspecifiedError())
 		}
 	}
 }

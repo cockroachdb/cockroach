@@ -18,6 +18,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -36,13 +37,13 @@ func main() {
 	f, err := os.Create("../../c-deps/libroach/keys.h")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error opening file: ", err)
-		os.Exit(1)
+		exit.WithCode(exit.UnspecifiedError())
 	}
 
 	defer func() {
 		if err := f.Close(); err != nil {
 			fmt.Fprintln(os.Stderr, "Error closing file: ", err)
-			os.Exit(1)
+			exit.WithCode(exit.UnspecifiedError())
 		}
 	}()
 
