@@ -87,6 +87,98 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 	}
 }
 
+func runCommand(
+	t *testing.T,
+	dir string,
+	lintTargets []string,
+	filters stream.Filter,
+	forEachFn func(s string),
+	name string,
+	args ...string,
+) {
+	var filter stream.Filter
+	if len(lintTargets) > 0 {
+		filter = stream.Items(lintTargets...)
+	} else {
+		cmd, stderr, f, err := dirCmd(dir, name, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		filter = f
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := cmd.Wait(); err != nil {
+				if out := stderr.String(); len(out) > 0 {
+					t.Fatalf("err=%s, stderr=%s", err, out)
+				}
+			}
+		}()
+	}
+
+	err := stream.ForEach(stream.Sequence(filter, filters), forEachFn)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func getChangedFiles(t *testing.T, dir, targetBranch string) []string {
+	cmd, stderr, filter, err := dirCmd(
+		dir, "git", "diff", "--name-only", fmt.Sprintf("%s...", targetBranch),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	var changedFiles []string
+	if err := stream.ForEach(filter, func(s string) {
+		changedFiles = append(changedFiles, s)
+	}); err != nil {
+		t.Error(err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		if out := stderr.String(); len(out) > 0 {
+			t.Fatalf("err=%s, stderr=%s", err, out)
+		}
+	}
+	return changedFiles
+}
+
+func getPackages(t *testing.T, lintTargetFiles []string) []string {
+	var packages []string
+	if err := stream.ForEach(stream.Sequence(
+		stream.Items(lintTargetFiles...),
+		stream.Xargs("dirname"),
+		stream.Uniq(),
+	),
+		func(s string) {
+			packages = append(packages, s)
+		}); err != nil {
+		t.Error(err)
+	}
+
+	return packages
+}
+
+func getLintTargets(t *testing.T, crdbDir string) ([]string, []string) {
+	lintTargetBranch, targetBranchSpecified := os.LookupEnv("LINTTARGETBRANCH")
+
+	var targetFiles, targetPackages []string
+	if targetBranchSpecified {
+		t.Logf("Running lint tests against %q branch\n", lintTargetBranch)
+		targetFiles = getChangedFiles(t, crdbDir, lintTargetBranch)
+		targetPackages = getPackages(t, targetFiles)
+	}
+
+	return targetFiles, targetPackages
+}
+
 // TestLint runs a suite of linters on the codebase. This file is
 // organized into two sections. First are the global linters, which
 // run on the entire repo every time. Second are the package-scoped
@@ -126,6 +218,8 @@ func TestLint(t *testing.T) {
 	pkgDir := filepath.Join(crdb.Dir, "pkg")
 
 	pkgVar, pkgSpecified := os.LookupEnv("PKG")
+
+	lintTargetFiles, lintTargetPackages := getLintTargets(t, pkgDir)
 
 	t.Run("TestLowercaseFunctionNames", func(t *testing.T) {
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
@@ -206,21 +300,10 @@ func TestLint(t *testing.T) {
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 `)
 
-		// These extensions identify source files that should have copyright headers.
-		extensions := []string{
-			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.styl", "*.proto", "*.rl",
-		}
-
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", append([]string{"ls-files"}, extensions...)...)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(stream.Sequence(filter,
+		filters := stream.Sequence(
+			stream.Grep(`^pkg/.*`),
+			// These extensions identify source files that should have copyright headers.
+			stream.Grep(`.*\.go$|.*\.cc$|.*\.h$|.*\.js$|.*\.ts$|.*\.tsx$|.*\.s$|.*\.S$|.*\.styl$|.*\.proto$|.*\.rl$`),
 			stream.GrepNot(`\.pb\.go`),
 			stream.GrepNot(`\.pb\.gw\.go`),
 			stream.GrepNot(`\.og\.go`),
@@ -228,9 +311,10 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`_string\.go`),
 			stream.GrepNot(`_generated\.go`),
 			stream.GrepNot(`/embedded.go`),
-			stream.GrepNot(`geo/geographiclib/geodesic\.c$`),
-			stream.GrepNot(`geo/geographiclib/geodesic\.h$`),
-		), func(filename string) {
+			stream.GrepNot(`^pkg/geo/geographiclib/geodesic\.c$`),
+			stream.GrepNot(`^pkg/geo/geographiclib/geodesic\.h$`),
+		)
+		forEachFn := func(filename string) {
 			isCCL := strings.Contains(filename, "ccl/")
 			var expHeader *regexp.Regexp
 			if isCCL {
@@ -239,7 +323,8 @@ func TestLint(t *testing.T) {
 				expHeader = bslHeader
 			}
 
-			file, err := os.Open(filepath.Join(pkgDir, filename))
+			filePath := filepath.Join(crdb.Dir, filename)
+			file, err := os.Open(filePath)
 			if err != nil {
 				t.Error(err)
 				return
@@ -253,17 +338,10 @@ func TestLint(t *testing.T) {
 			data = data[0:n]
 
 			if expHeader.Find(data) == nil {
-				t.Errorf("did not find expected license header (ccl=%v) in %s", isCCL, filename)
-			}
-		}); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
+				t.Errorf("did not find expected license header (ccl=%v) in %s", isCCL, filePath)
 			}
 		}
+		runCommand(t, crdb.Dir, lintTargetFiles, filters, forEachFn, "git", "ls-files")
 	})
 
 	t.Run("TestMissingLeakTest", func(t *testing.T) {
@@ -352,37 +430,23 @@ func TestLint(t *testing.T) {
 			skip.IgnoreLint(t, "PKG specified")
 		}
 
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.opt", ":!*/testdata/*")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
 		var buf bytes.Buffer
-		if err := stream.ForEach(
-			stream.Sequence(
-				filter,
-				stream.Map(func(s string) string {
-					return filepath.Join(pkgDir, s)
-				}),
-				stream.Xargs("optfmt", "-l"),
-			), func(s string) {
-				fmt.Fprintln(&buf, s)
-			}); err != nil {
-			t.Error(err)
-		}
+		forEachFn := func(_ string) {}
+		filters := stream.Sequence(
+			stream.Grep(`^pkg/.*`),
+			stream.Grep(`.*\.opt$`),
+			stream.GrepNot(`/testdata/`),
+			stream.Map(func(s string) string {
+				return filepath.Join(crdb.Dir, s)
+			}),
+			stream.Xargs("optfmt", "-l"),
+			stream.WriteLines(&buf),
+		)
+		runCommand(t, crdb.Dir, lintTargetFiles, filters, forEachFn, "git", "ls-files")
+
 		errs := buf.String()
 		if len(errs) > 0 {
 			t.Errorf("\n%s", errs)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
 		}
 	})
 
@@ -1146,14 +1210,6 @@ func TestLint(t *testing.T) {
 		if pkgSpecified {
 			skip.IgnoreLint(t, "PKG specified")
 		}
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
 
 		ignoredRules := []string{
 			"licence",
@@ -1161,30 +1217,25 @@ func TestLint(t *testing.T) {
 			"analyse", // required by SQL grammar
 		}
 
-		if err := stream.ForEach(stream.Sequence(
-			filter,
+		filters := stream.Sequence(
+			stream.Grep(`^pkg/.*`),
 			stream.GrepNot(`.*\.lock`),
-			stream.GrepNot(`^storage\/rocksdb_error_dict\.go$`),
-			stream.GrepNot(`^workload/geospatial/geospatial.go$`),
-			stream.GrepNot(`^workload/tpcds/tpcds.go$`),
-			stream.GrepNot(`^geo/geoprojbase/projections.go$`),
-			stream.GrepNot(`^sql/logictest/testdata/logic_test/pg_extension$`),
-			stream.GrepNot(`^sql/opt/testutils/opttester/testfixtures/.*`),
+			stream.GrepNot(`^pkg/storage\/rocksdb_error_dict\.go$`),
+			stream.GrepNot(`^pkg/workload/geospatial/geospatial.go$`),
+			stream.GrepNot(`^pkg/workload/tpcds/tpcds.go$`),
+			stream.GrepNot(`^pkg/geo/geoprojbase/projections.go$`),
+			stream.GrepNot(`^pkg/sql/logictest/testdata/logic_test/pg_extension$`),
+			stream.GrepNot(`^pkg/sql/opt/testutils/opttester/testfixtures/.*`),
 			stream.Map(func(s string) string {
-				return filepath.Join(pkgDir, s)
+				return filepath.Join(crdb.Dir, s)
 			}),
 			stream.Xargs("misspell", "-locale", "US", "-i", strings.Join(ignoredRules, ",")),
-		), func(s string) {
-			t.Errorf("\n%s", s)
-		}); err != nil {
-			t.Error(err)
-		}
+		)
 
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
+		forEachFn := func(s string) {
+			t.Errorf("\n%s", s)
 		}
+		runCommand(t, crdb.Dir, lintTargetFiles, filters, forEachFn, "git", "ls-files")
 	})
 
 	t.Run("TestGofmtSimplify", func(t *testing.T) {
@@ -1193,37 +1244,24 @@ func TestLint(t *testing.T) {
 			skip.IgnoreLint(t, "PKG specified")
 		}
 
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*", ":!*_generated.go")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
 		var buf bytes.Buffer
-		if err := stream.ForEach(
-			stream.Sequence(
-				filter,
-				stream.Map(func(s string) string {
-					return filepath.Join(pkgDir, s)
-				}),
-				stream.Xargs("gofmt", "-s", "-d", "-l"),
-			), func(s string) {
-				fmt.Fprintln(&buf, s)
-			}); err != nil {
-			t.Error(err)
-		}
+		filters := stream.Sequence(
+			stream.Grep(`^pkg/.*`),
+			stream.Grep(`.*\.go$`),
+			stream.GrepNot(`/testdata/`),
+			stream.GrepNot(`_generated\.go$`),
+			stream.Map(func(s string) string {
+				return filepath.Join(crdb.Dir, s)
+			}),
+			stream.Xargs("gofmt", "-s", "-d", "-l"),
+			stream.WriteLines(&buf),
+		)
+		forEachFn := func(_ string) {}
+		runCommand(t, crdb.Dir, lintTargetFiles, filters, forEachFn, "git", "ls-files")
+
 		errs := buf.String()
 		if len(errs) > 0 {
 			t.Errorf("\n%s", errs)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
 		}
 	})
 
@@ -1468,7 +1506,11 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestGolint", func(t *testing.T) {
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
-		cmd, stderr, filter, err := dirCmd(crdb.Dir, "golint", pkgScope)
+		pkgs := []string{pkgScope}
+		if !pkgSpecified && len(lintTargetPackages) > 0 {
+			pkgs = lintTargetPackages
+		}
+		cmd, stderr, filter, err := dirCmd(crdb.Dir, "golint", pkgs...)
 		if err != nil {
 			t.Fatal(err)
 		}
