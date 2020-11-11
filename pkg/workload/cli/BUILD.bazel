@@ -15,6 +15,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/cli",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cli/exit",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/log/logflags",

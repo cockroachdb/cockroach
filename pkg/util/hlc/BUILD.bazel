@@ -30,6 +30,7 @@ go_test(
     ],
     embed = [":hlc"],
     deps = [
+        "//pkg/cli/exit",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",

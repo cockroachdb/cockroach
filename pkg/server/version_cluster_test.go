@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -400,9 +401,9 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	// GOTRACEBACK=all, as it is on CI.
 	defer log.DisableTracebacks()()
 
-	exits := make(chan int, 100)
+	exits := make(chan exit.Code, 100)
 
-	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
+	log.SetExitFunc(true /* hideStack */, func(i exit.Code) { exits <- i })
 	defer log.ResetExitFunc()
 
 	v0, v1 := v0v1()
