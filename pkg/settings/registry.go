@@ -144,7 +144,8 @@ var ReadableTypes = map[string]string{
 	"z": "byte size",
 	"d": "duration",
 	"e": "enumeration",
-	"v": "version",
+	// This is named "m" (instead of "v") for backwards compatibility reasons.
+	"m": "version",
 }
 
 // RedactedValue returns a string representation of the value for settings
