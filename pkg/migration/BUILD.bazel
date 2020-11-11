@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "migration",
+    srcs = [
+        "manager.go",
+        "migrations.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migration",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/rpc/nodedialer",
+        "//pkg/sql",
+        "//vendor/github.com/cockroachdb/logtags",
+    ],
+)

@@ -736,6 +736,11 @@ type ExecutorConfig struct {
 	HydratedTables *hydratedtables.Cache
 
 	GCJobNotifier *gcjobnotifier.Notifier
+
+	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
+	// version` but before executing it. It can carry out arbitrary migrations
+	// that allow us to eventually remove legacy code.
+	VersionUpgradeHook func(ctx context.Context, to roachpb.Version) error
 }
 
 // Organization returns the value of cluster.organization.
