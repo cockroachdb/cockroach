@@ -346,6 +346,21 @@ func TestRegressionSlope(t *testing.T) {
 	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionSlopeAggregate)
 }
 
+func TestRegressionSXX(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionSXXAggregate)
+}
+
+func TestRegressionSXY(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionSXYAggregate)
+}
+
+func TestRegressionSYY(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionSYYAggregate)
+}
+
 // testRegressionAggregateFunctionResultDeepCopy is a helper function
 // for testing regression aggregate functions.
 func testRegressionAggregateFunctionResultDeepCopy(
@@ -786,6 +801,18 @@ func BenchmarkRegressionR2Aggregate(b *testing.B) {
 
 func BenchmarkRegressionSlopeAggregate(b *testing.B) {
 	runRegressionAggregateBenchmarks(b, newRegressionSlopeAggregate)
+}
+
+func BenchmarkRegressionSXXAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionSXXAggregate)
+}
+
+func BenchmarkRegressionSXYAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionSXYAggregate)
+}
+
+func BenchmarkRegressionSYYAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionSYYAggregate)
 }
 
 // runRegressionAggregateBenchmarks is a helper function for running
