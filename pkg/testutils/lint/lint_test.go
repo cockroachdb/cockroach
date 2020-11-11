@@ -119,10 +119,11 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 // subset of the packages at a time, although this comes at the
 // expense of increased running time.
 func TestLint(t *testing.T) {
-	crdb, err := build.Import(cockroachDB, "", build.FindOnly)
-	if err != nil {
-		t.Fatal(err)
-	}
+	crdb := build.Package{Dir: "/home/kena/src/go/src/github.com/cockroachdb/cockroach"}
+	//	crdb, err := build.Import(cockroachDB, ".", build.FindOnly)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
 	pkgDir := filepath.Join(crdb.Dir, "pkg")
 
 	pkgVar, pkgSpecified := os.LookupEnv("PKG")
@@ -1066,6 +1067,48 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/tracing/span.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+		), func(s string) {
+			t.Errorf("\n%s <- forbidden; use 'protoutil.Message' instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestOsExit", func(t *testing.T) {
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nEw",
+			`os\.Exit`,
+			"--",
+			"*.go",
+			":!*_test.go",
+			":!acceptance",
+			":!cmd",
+			":!cli/exit",
+			":!bench/cmd",
+			":!sql/opt/optgen",
+			":!sql/colexec/execgen",
+			":!roachpb/gen_batch.go",
 		)
 		if err != nil {
 			t.Fatal(err)
