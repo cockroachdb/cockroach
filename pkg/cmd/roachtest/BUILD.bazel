@@ -25,6 +25,7 @@ go_library(
         "cluster_init.go",
         "copy.go",
         "decommission.go",
+        "decommission_self.go",
         "disk_full.go",
         "disk_stall.go",
         "django.go",
