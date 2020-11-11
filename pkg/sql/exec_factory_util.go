@@ -93,15 +93,19 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 	// include (or not include). Note that when wantedColumns is non-empty,
 	// the visibility flag will never trigger the addition of more columns.
 	colCfg := scanColumnsConfig{
-		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
-		visibility:    execinfra.ScanVisibilityPublicAndNotPublic,
+		wantedColumns:         make([]tree.ColumnID, 0, cols.Len()),
+		wantedColumnsOrdinals: make([]uint32, 0, cols.Len()),
+		visibility:            execinfra.ScanVisibilityPublicAndNotPublic,
 	}
 	for ord, ok := cols.Next(0); ok; ord, ok = cols.Next(ord + 1) {
 		col := table.Column(ord)
+		colOrd := ord
 		if col.Kind() == cat.VirtualInverted {
-			col = table.Column(col.InvertedSourceColumnOrdinal())
+			colOrd = col.InvertedSourceColumnOrdinal()
+			col = table.Column(colOrd)
 		}
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(col.ColID()))
+		colCfg.wantedColumnsOrdinals = append(colCfg.wantedColumnsOrdinals, uint32(colOrd))
 	}
 	return colCfg
 }

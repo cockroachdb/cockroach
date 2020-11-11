@@ -148,10 +148,14 @@ func NewColBatchScan(
 	evalCtx *tree.EvalContext,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
-) (*ColBatchScan, *execinfra.ProcOutputHelper, error) {
+) (*ColBatchScan, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
-		return nil, nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
+		return nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
+	}
+	if spec.IsCheck {
+		// cFetchers don't support these checks.
+		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
@@ -183,32 +187,21 @@ func NewColBatchScan(
 	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
 	semaCtx.TypeResolver = resolver
 	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
-		return nil, nil, err
-	}
-	helper := execinfra.NewProcOutputHelper()
-	if err := helper.Init(
-		post,
-		typs,
-		&semaCtx,
-		evalCtx,
-		nil, /* output */
-	); err != nil {
-		return nil, helper, err
+		return nil, err
 	}
 
-	neededColumns := helper.NeededColumns()
+	var neededColumns util.FastIntSet
+	for i := range spec.NeededColumns {
+		neededColumns.Add(int(spec.NeededColumns[i]))
+	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
-	if spec.IsCheck {
-		// cFetchers don't support these checks.
-		return nil, helper, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
-	}
 	if _, _, err := initCRowFetcher(
 		flowCtx.Codec(), allocator, fetcher, table, int(spec.IndexIdx), columnIdxMap,
 		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
 		sysColDescs,
 	); err != nil {
-		return nil, helper, err
+		return nil, err
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
@@ -227,7 +220,7 @@ func NewColBatchScan(
 		parallelize: spec.Parallelize && limitHint == 0,
 		ResultTypes: typs,
 	}
-	return s, helper, nil
+	return s, nil
 }
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
