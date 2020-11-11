@@ -341,10 +341,10 @@ func (ts *TestServer) JobRegistry() interface{} {
 	return nil
 }
 
-// MigrationManager returns the *sqlmigrations.Manager as an interface{}.
-func (ts *TestServer) MigrationManager() interface{} {
+// SQLMigrationsManager returns the *sqlmigrations.Manager as an interface{}.
+func (ts *TestServer) SQLMigrationsManager() interface{} {
 	if ts != nil {
-		return ts.sqlServer.migMgr
+		return ts.sqlServer.sqlmigrationsMgr
 	}
 	return nil
 }
