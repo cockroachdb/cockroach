@@ -11,7 +11,7 @@
 // Package clusterversion defines the interfaces to interact with cluster/binary
 // versions in order accommodate backward incompatible behaviors. It handles the
 // feature gates and so must maintain a fairly lightweight set of dependencies.
-// The migration sub-package will handle advancing a cluster from one version to
+// The migration sub-package handles advancing a cluster from one version to
 // a later one.
 //
 // Ideally, every code change in a database would be backward compatible, but
@@ -45,38 +45,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 )
-
-// TODO(irfansharif): Should Initialize and SetBeforeChange be a part of the
-// Handle interface? For SetBeforeChange at least, the callback is captured in
-// the Handle implementation. Given that Initialize uses recorded state from a
-// settings.Values (which is also a part of the Handle implementation), it seems
-// appropriate. On the other hand, Handle.Initialize does not make it
-// sufficiently clear that what's being initialized is the global cluster
-// version setting, despite being done through a stand alone Handle.
 
 // Initialize initializes the global cluster version. Before this method has
 // been called, usage of the cluster version (through Handle) is illegal and
 // leads to a fatal error.
+//
+// Initialization of the cluster version is tightly coupled with the setting of
+// the active cluster version (`Handle.SetActiveVersion` below). Look towards
+// there for additional commentary.
 func Initialize(ctx context.Context, ver roachpb.Version, sv *settings.Values) error {
 	return version.initialize(ctx, ver, sv)
 }
 
-// SetBeforeChange registers a callback to be called before the global cluster
-// version is updated. The new cluster version will only become "visible" after
-// the callback has returned.
-//
-// The callback can be set at most once.
-func SetBeforeChange(
-	ctx context.Context, sv *settings.Values, cb func(context.Context, ClusterVersion),
-) {
-	version.setBeforeChange(ctx, cb, sv)
-}
-
-// Handle is a read-only view to the active cluster version and this binary's
-// version details.
+// Handle is the interface through which callers access the active cluster
+// version and this binary's version details.
 type Handle interface {
 	// ActiveVersion returns the cluster's current active version: the minimum
 	// cluster version the caller may assume is in effect.
@@ -97,10 +81,11 @@ type Handle interface {
 	// with a version less than `v`.
 	//
 	// If this returns true then all nodes in the cluster will eventually see
-	// this version. However, this is not atomic because versions are gossiped.
-	// Because of this, nodes should not be gating proper handling of remotely
-	// initiated requests that their binary knows how to handle on this state.
-	// The following example shows why this is important:
+	// this version. However, this is not atomic because version gates (for a
+	// given version) are pushed through to each node in parallel. Because of
+	// this, nodes should not be gating proper handling of remotely initiated
+	// requests that their binary knows how to handle on this state. The
+	// following example shows why this is important:
 	//
 	//  The cluster restarts into the new version and the operator issues a SET
 	//  VERSION, but node1 learns of the bump 10 seconds before node2, so during
@@ -122,12 +107,35 @@ type Handle interface {
 	// BinaryMinSupportedVersion returns the earliest binary version that can
 	// interoperate with this binary.
 	BinaryMinSupportedVersion() roachpb.Version
+
+	// SetActiveVersion lets the caller set the given cluster version as the
+	// currently active one. When a new active version is set, all subsequent
+	// calls to `ActiveVersion`, `IsActive`, etc. will reflect as much. The
+	// ClusterVersion supplied here is one retrieved from other node.
+	//
+	// This has a very specific intended usage pattern, and is probably only
+	// appropriate for usage within the BumpClusterVersion RPC and during server
+	// initialization.
+	//
+	// NB: It's important to note that this method is tightly coupled to cluster
+	// version initialization (through `Initialize` above) and the version
+	// persisted to disk. Specifically the following invariant must hold true:
+	//
+	//  If a version vX is active on a given server, upon restart, the version
+	//  that is immediately active must be >= vX (in practice it'll almost
+	//  always be vX).
+	//
+	// This is currently achieved by always durably persisting the target
+	// cluster version to the store local keys.StoreClusterVersionKey() before
+	// setting it to be active. This persisted version is also consulted during
+	// node restarts when initializing the cluster version, as seen by this
+	// node.
+	SetActiveVersion(context.Context, ClusterVersion) error
 }
 
 // handleImpl is a concrete implementation of Handle. It mostly relegates to the
 // underlying cluster version setting, though provides a way for callers to
-// override the binary and minimum supported versions. It also stores the
-// callback that can be attached on cluster version change.
+// override the binary and minimum supported versions (for tests usually).
 type handleImpl struct {
 	// sv captures the mutable state associated with usage of the otherwise
 	// immutable cluster version setting.
@@ -140,14 +148,6 @@ type handleImpl struct {
 	// and minimum supported versions.
 	binaryVersion             roachpb.Version
 	binaryMinSupportedVersion roachpb.Version
-
-	// beforeClusterVersionChangeMu captures the callback that can be attached
-	// to the cluster version setting via SetBeforeChange.
-	beforeClusterVersionChangeMu struct {
-		syncutil.Mutex
-		// Callback to be called when the cluster version is about to be updated.
-		cb func(ctx context.Context, newVersion ClusterVersion)
-	}
 }
 
 var _ Handle = (*handleImpl)(nil)
@@ -174,22 +174,48 @@ func MakeVersionHandleWithOverride(
 		binaryMinSupportedVersion: binaryMinSupportedVersion,
 	}
 }
+
+// ActiveVersion implements the Handle interface.
 func (v *handleImpl) ActiveVersion(ctx context.Context) ClusterVersion {
 	return version.activeVersion(ctx, v.sv)
 }
 
+// ActiveVersionOrEmpty implements the Handle interface.
 func (v *handleImpl) ActiveVersionOrEmpty(ctx context.Context) ClusterVersion {
 	return version.activeVersionOrEmpty(ctx, v.sv)
 }
 
+// SetActiveVersion implements the Handle interface.
+func (v *handleImpl) SetActiveVersion(ctx context.Context, cv ClusterVersion) error {
+	// We only perform binary version validation here. SetActiveVersion is only
+	// called on cluster versions received from other nodes (where `SET CLUSTER
+	// SETTING version` was originally called). The stricter form of validation
+	// happens there. SetActiveVersion is simply the cluster version bump that
+	// follows from it.
+	if err := version.validateBinaryVersions(cv.Version, v.sv); err != nil {
+		return err
+	}
+
+	encoded, err := protoutil.Marshal(&cv)
+	if err != nil {
+		return err
+	}
+
+	version.SetInternal(v.sv, encoded)
+	return nil
+}
+
+// IsActive implements the Handle interface.
 func (v *handleImpl) IsActive(ctx context.Context, key VersionKey) bool {
 	return version.isActive(ctx, v.sv, key)
 }
 
+// BinaryVersion implements the Handle interface.
 func (v *handleImpl) BinaryVersion() roachpb.Version {
 	return v.binaryVersion
 }
 
+// BinaryMinSupportedVersion implements the Handle interface.
 func (v *handleImpl) BinaryMinSupportedVersion() roachpb.Version {
 	return v.binaryMinSupportedVersion
 }

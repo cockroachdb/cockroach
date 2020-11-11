@@ -68,13 +68,6 @@ func (th *testClusterWithHelpers) setVersion(i int, version string) error {
 	return err
 }
 
-func (th *testClusterWithHelpers) mustSetVersion(i int, version string) {
-	th.Helper()
-	if err := th.setVersion(i, version); err != nil {
-		th.Fatalf("%d: %s", i, err)
-	}
-}
-
 func (th *testClusterWithHelpers) setDowngrade(i int, version string) error {
 	_, err := th.ServerConn(i).Exec("SET CLUSTER SETTING cluster.preserve_downgrade_option = $1", version)
 	return err
@@ -85,11 +78,11 @@ func (th *testClusterWithHelpers) resetDowngrade(i int) error {
 	return err
 }
 
-// Set up a mixed cluster with the given initial bootstrap version and
-// len(versions) servers that each run at binary version == v[0] and
-// minimum supported version == v[1] (i.e. they identify as a binary that can
-// run with at least a v[1] mixed cluster and is itself v[0]). A directory can
-// optionally be passed in.
+// Set up a mixed cluster with the following setup:
+// - len(versions) servers
+// - server[i] runs at binary version `versions[i][0]`
+// - server[i] runs with minimum supported version `versions[i][1]`
+// A directory can optionally be passed in.
 func setupMixedCluster(
 	t *testing.T, knobs base.TestingKnobs, versions [][2]string, dir string,
 ) testClusterWithHelpers {
@@ -378,8 +371,8 @@ func TestAllVersionsAgree(t *testing.T) {
 }
 
 // Returns two versions v0 and v1 which correspond to adjacent releases. v1 will
-// equal the TestingBinaryMinSupportedVersion to avoid rot in tests using this (as we retire
-// old versions).
+// equal the TestingBinaryMinSupportedVersion to avoid rot in tests using this
+// (as we retire old versions).
 func v0v1() (roachpb.Version, roachpb.Version) {
 	v1 := clusterversion.TestingBinaryMinSupportedVersion
 	v0 := clusterversion.TestingBinaryMinSupportedVersion
@@ -391,6 +384,9 @@ func v0v1() (roachpb.Version, roachpb.Version) {
 	return v0, v1
 }
 
+// TestClusterVersionMixedVersionTooOld verifies that we're unable to bump a
+// cluster version in a mixed node cluster where one of the nodes is running a
+// binary that cannot support the targeted cluster version.
 func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -427,28 +423,30 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	tc := setupMixedCluster(t, knobs, versions, "")
 	defer tc.Stopper().Stop(ctx)
 
-	exp := v1s
-
 	// The last node refuses to perform an upgrade that would risk its own life.
-	if err := tc.setVersion(len(versions)-1, exp); !testutils.IsError(err,
+	if err := tc.setVersion(len(versions)-1, v1s); !testutils.IsError(err,
 		fmt.Sprintf("cannot upgrade to %s: node running %s", v1s, v0s),
 	) {
 		t.Fatal(err)
 	}
 
-	// The other nodes are less careful.
-	tc.mustSetVersion(0, exp)
-
-	<-exits // wait for fourth node to die
+	// The other nodes are just as careful.
+	for i := 0; i < len(versions)-2; i++ {
+		if err := tc.setVersion(i, v1s); !testutils.IsError(err,
+			fmt.Sprintf("binary version %s less than target version %s", v0s, v1s),
+		) {
+			t.Fatal(i, err)
+		}
+	}
 
 	// Check that we can still talk to the first three nodes.
 	for i := 0; i < tc.NumServers()-1; i++ {
 		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.Servers[i].ClusterSettings().Version.ActiveVersion(ctx).String(); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+			if version := tc.Servers[i].ClusterSettings().Version.ActiveVersion(ctx).String(); version != v0s {
+				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, v0s)
 			}
-			if version := tc.getVersionFromShow(i); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+			if version := tc.getVersionFromShow(i); version != v0s {
+				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, v0s)
 			}
 			return nil
 		})
