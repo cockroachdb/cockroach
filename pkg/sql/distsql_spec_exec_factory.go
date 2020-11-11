@@ -236,6 +236,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		// Retain the capacity of the spans slice.
 		Spans:            trSpec.Spans[:0],
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
+		NeededColumns:    colCfg.wantedColumnsOrdinals,
 	}
 	trSpec.IndexIdx, err = getIndexIdx(indexDesc, tabDesc)
 	if err != nil {
