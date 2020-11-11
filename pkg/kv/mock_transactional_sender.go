@@ -203,6 +203,13 @@ func (m *MockTransactionalSender) NewChildTransaction() *roachpb.Transaction {
 	panic("unimplemented")
 }
 
+// ForwardToChild is part of the TxnSender interface.
+func (m *MockTransactionalSender) ForwardToChild(
+	ctx context.Context, child *roachpb.Transaction,
+) error {
+	panic("unimplemented")
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (

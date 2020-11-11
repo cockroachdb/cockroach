@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1172,4 +1173,54 @@ func (m *TxnCoordSender) NewChildTransaction() *roachpb.Transaction {
 	// least that of the parent.
 	child.Priority = parent.Priority
 	return &child
+}
+
+// ForwardToChild is part of the TxnSender interface.
+func (tc *TxnCoordSender) ForwardToChild(ctx context.Context, child *roachpb.Transaction) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txn.Status != roachpb.PENDING {
+		// This can can happen if a heartbeat discovers that the parent is aborted.
+		// It should be rare but it is not necessarily a programming error.
+		return errors.Errorf("cannot forward parent provisional commit "+
+			"timestamp of a %s transaction", tc.mu.txn.Status)
+	}
+	if child.Parent == nil || child.Parent.ID != tc.mu.txn.ID {
+		return errors.AssertionFailedf("cannot forward parent provisional " +
+			"commit timestamp with a non-child transaction")
+	}
+	if child.Status != roachpb.COMMITTED {
+		return errors.AssertionFailedf("cannot forward parent provisional"+
+			"commit timestamp with a %s child transaction", tc.mu.txn.Status)
+	}
+	// In the case where the child's write timestamp is not greater than the
+	// read timestamp of the parent, then we know that it must not have
+	// invalidated any reads of the parent because the timestamp cache would have
+	// pushed its writes above that timestamp. We also know that the ReadTimestamp
+	// must be less than or equal to the WriteTimestamp and thus we do not need to
+	// do any forwarding. This is an optimziation to above the below checks.
+	if child.WriteTimestamp.LessEq(tc.mu.txn.ReadTimestamp) {
+		return nil
+	}
+	if len(child.LockSpans)+len(child.InFlightWrites) > 0 {
+		if tc.interceptorAlloc.refreshInvalid {
+			return errors.New("cannot forward provisional commit timestamp " +
+				"due to overlapping write")
+		}
+		writes := interval.NewRangeTree()
+		for i := range child.LockSpans {
+			writes.Add(child.LockSpans[i].AsRange())
+		}
+		for i := range child.InFlightWrites {
+			writes.Add(roachpb.Span{Key: child.InFlightWrites[i].Key}.AsRange())
+		}
+		for _, readSpan := range tc.interceptorAlloc.refreshFootprint.asSlice() {
+			if writes.Overlaps(readSpan.AsRange()) {
+				return errors.New("cannot forward provisional commit timestamp " +
+					"due to overlapping write")
+			}
+		}
+	}
+	tc.mu.txn.WriteTimestamp.Forward(child.WriteTimestamp)
+	return nil
 }

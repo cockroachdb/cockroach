@@ -294,6 +294,13 @@ type TxnSender interface {
 	// NewChildTransaction constructs a serialized transaction proto for a new
 	// child transaction.
 	NewChildTransaction() *roachpb.Transaction
+
+	// ForwardToChild will push the transaction's provisional commit timestamp to
+	// the commit timestamp of child. Child must be an immediate child of this
+	// transaction and must be committed. If the set of read spans
+	// of the transaction overlaps with the writes of the child (as accounted
+	// for in InFlightWrites and LockSpans), an error will be returned.
+	ForwardToChild(ctx context.Context, child *roachpb.Transaction) error
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

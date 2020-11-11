@@ -1300,6 +1300,11 @@ func (txn *Txn) ReleaseSavepoint(ctx context.Context, s SavepointToken) error {
 // Use of this method has rules:
 //
 //   * No concurrent operations may be performed on the parent transaction.
+//   * The child transaction must not invalidate any reads of the parent.
+//     If it does, the parent will not be able to commit. In cases where the
+//     parent is reading large volumes of data, its read set may be compressed
+//     so the child should not write over any keys which may overlap with this
+//     compressed set.
 //
 // Some notes:
 //
@@ -1308,7 +1313,9 @@ func (txn *Txn) ReleaseSavepoint(ctx context.Context, s SavepointToken) error {
 //     that it has been aborted, the child will also be aborted and the parent
 //     will encounter a retry.
 //
-func (txn *Txn) ChildTxn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
+func (txn *Txn) ChildTxn(
+	ctx context.Context, retryable func(_ context.Context, childTxn *Txn) error,
+) error {
 
 	// TODO(ajwerner): Validate the state of the parent transaction. It should be
 	// open (non-terminal), and a root transaction at the very least.
@@ -1332,7 +1339,11 @@ func (txn *Txn) ChildTxn(ctx context.Context, retryable func(context.Context, *T
 	if errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
 		return errors.Wrapf(err, "terminated retryable error")
 	}
-	// TODO(ajwerner): Push the parent transaction to the commit timestamp of the
-	// child.
-	return err
+	if err != nil {
+		return err
+	}
+	// Ensure that the parent transaction is pushed to the commit timestamp of
+	// the child. This will also detect whether the child illegally wrote over
+	// the parent's reads.
+	return txn.Sender().ForwardToChild(ctx, childTxn.TestingCloneTxn())
 }

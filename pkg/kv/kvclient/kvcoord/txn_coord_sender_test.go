@@ -2412,3 +2412,88 @@ func TestNewChildTransaction(t *testing.T) {
 	require.NotEqual(t, parent.ID, child.ID)
 	require.Nil(t, child.Key)
 }
+
+func TestForwardToChild(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	t.Run("non-child fails", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		otherTxn := db.NewTxn(ctx, "other")
+		other := otherTxn.TestingCloneTxn()
+		other.Status = roachpb.COMMITTED
+		require.Regexp(t, "a non-child transaction",
+			txn.Sender().ForwardToChild(ctx, otherTxn.TestingCloneTxn()))
+	})
+	t.Run("grandchild fails", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		child := txn.Sender().NewChildTransaction()
+		childTxn := kv.NewTxnFromProto(ctx, db, s.NodeID(), child.WriteTimestamp, kv.RootTxn, child)
+		grandChild := childTxn.Sender().NewChildTransaction()
+		grandChild.Status = roachpb.COMMITTED
+		require.Regexp(t, "a non-child transaction",
+			txn.Sender().ForwardToChild(ctx, grandChild))
+	})
+	t.Run("non-committed child fails", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		child := txn.Sender().NewChildTransaction()
+		require.Regexp(t, "with a PENDING child transaction",
+			txn.Sender().ForwardToChild(ctx, child))
+	})
+	t.Run("non-pending parent failed", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		child := txn.Sender().NewChildTransaction()
+		child.Status = roachpb.COMMITTED
+		require.NoError(t, txn.Commit(ctx))
+		require.Regexp(t, "of a COMMITTED transaction",
+			txn.Sender().ForwardToChild(ctx, child))
+	})
+	t.Run("no-op push succeeds despite refresh invalid", func(t *testing.T) {
+		// Set the max refresh span bytes to 1 so we know we can't refresh if we
+		// needed to.
+		sv := &s.ClusterSettings().SV
+		defer func(prev int64) {
+			MaxTxnRefreshSpansBytes.Override(sv, prev)
+		}(MaxTxnRefreshSpansBytes.Get(sv))
+		MaxTxnRefreshSpansBytes.Override(sv, 1)
+		txn := db.NewTxn(ctx, "test")
+		_, err := txn.Scan(ctx, keyA, keyA.PrefixEnd(), 0)
+		require.NoError(t, err)
+		child := txn.Sender().NewChildTransaction()
+		child.Status = roachpb.COMMITTED
+		require.NoError(t, txn.Sender().ForwardToChild(ctx, child))
+	})
+	t.Run("overlapping fails", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		_, err := txn.Scan(ctx, keyA, keyA.PrefixEnd(), 0)
+		require.NoError(t, err)
+		child := txn.Sender().NewChildTransaction()
+		child.Key = keyA
+		child.InFlightWrites = []roachpb.SequencedWrite{
+			{Key: keyA, Sequence: 1},
+		}
+		child.Status = roachpb.COMMITTED
+		child.WriteTimestamp.Forward(child.WriteTimestamp.Next().Next())
+		child.ReadTimestamp.Forward(child.WriteTimestamp)
+		require.Regexp(t, "due to overlapping write", txn.Sender().ForwardToChild(ctx, child))
+	})
+	t.Run("non-overlapping succeeds", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		_, err := txn.Scan(ctx, keyA, keyA.PrefixEnd(), 0)
+		require.NoError(t, err)
+		child := txn.Sender().NewChildTransaction()
+		child.Key = keyB
+		child.InFlightWrites = []roachpb.SequencedWrite{
+			{Key: keyB, Sequence: 1},
+		}
+		child.WriteTimestamp.Forward(child.WriteTimestamp.Next().Next())
+		child.ReadTimestamp.Forward(child.WriteTimestamp)
+		child.Status = roachpb.COMMITTED
+		require.NoError(t, txn.Sender().ForwardToChild(ctx, child))
+	})
+}
