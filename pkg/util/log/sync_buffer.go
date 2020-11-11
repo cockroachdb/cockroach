@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -46,13 +47,13 @@ func (sb *syncBuffer) Sync() error {
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&LogFileMaxSize) {
 		if err := sb.rotateFileLocked(timeutil.Now()); err != nil {
-			sb.logger.exitLocked(err)
+			sb.logger.exitLocked(err, exit.LoggingFileUnavailable())
 		}
 	}
 	n, err = sb.Writer.Write(p)
 	sb.nbytes += int64(n)
 	if err != nil {
-		sb.logger.exitLocked(err)
+		sb.logger.exitLocked(err, exit.LoggingFileUnavailable())
 	}
 	return
 }
