@@ -554,16 +554,17 @@ func addSSTablePreApply(
 				}
 				const seqNoMsg = "Global seqno is required, but disabled"
 				const seqNoOnReIngest = "external file have non zero sequence number"
-				// Repeated ingestion is still possible even with the link count checked
-				// above, since rocks might have already compacted away the file.
-				// However it does not flush compacted files from its cache, so it can
-				// still react poorly to attempting to ingest again. If we get an error
-				// that indicates we can't ingest, we'll make a copy and try again. That
-				// attempt must succeed or we'll fatal, so any persistent error is still
-				// going to be surfaced.
+				// Repeated ingestion is still possible even with the link
+				// count checked above, since the storage engine might have
+				// already compacted away the file.  However it does not flush
+				// compacted files from its cache, so it can still react
+				// poorly to attempting to ingest again. If we get an error
+				// that indicates we can't ingest, we'll make a copy and try
+				// again. That attempt must succeed or we'll fatal, so any
+				// persistent error is still going to be surfaced.
 				ingestErrMsg := ingestErr.Error()
 				isSeqNoErr := strings.Contains(ingestErrMsg, seqNoMsg) || strings.Contains(ingestErrMsg, seqNoOnReIngest)
-				if ingestErr := (*storage.Error)(nil); !errors.As(err, &ingestErr) || !isSeqNoErr {
+				if storageErr := (*storage.Error)(nil); !errors.As(ingestErr, &storageErr) || !isSeqNoErr {
 					log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
 				}
 			}
@@ -581,8 +582,8 @@ func addSSTablePreApply(
 		if _, err := eng.Stat(path); err == nil {
 			// The file we want to ingest exists. This can happen since the
 			// ingestion may apply twice (we ingest before we mark the Raft
-			// command as committed). Just unlink the file (RocksDB created a
-			// hard link); after that we're free to write it again.
+			// command as committed). Just unlink the file (the storage engine
+			// created a hard link); after that we're free to write it again.
 			if err := eng.Remove(path); err != nil {
 				log.Fatalf(ctx, "while removing existing file during ingestion of %s: %+v", path, err)
 			}
