@@ -159,7 +159,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 		// about another contending transaction on newStateC.
 		case <-newStateC:
 			timerC = nil
-			state := guard.CurState()
+			var state waitingState
+			if state, err = guard.CurState(); err != nil {
+				return err
+			}
 			log.Eventf(ctx, "lock wait-queue event: %s", state)
 			tracer.notify(ctx, state)
 			switch state.kind {

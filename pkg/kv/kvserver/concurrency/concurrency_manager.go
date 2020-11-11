@@ -317,7 +317,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 		} else {
 			// Scan for conflicting locks.
 			log.Event(ctx, "scanning lock table for conflicting locks")
-			g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+			g.ltg, _ = m.lt.ScanAndEnqueue(g.Req, g.ltg)
 		}
 
 		// Wait on conflicting locks, if necessary. Note that this will never be
@@ -465,6 +465,9 @@ func (m *managerImpl) HandleWriterIntentError(
 	// loop without making progress.
 	consultFinalizedTxnCache :=
 		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultFinalizedTxnCache.Get(&m.st.SV)
+	// While iterating the intents, detect if any is due to an ancestor
+	// transaction which is illegal and must be detected.
+	var parentIntentError error
 	for i := range t.Intents {
 		intent := &t.Intents[i]
 		added, err := m.lt.AddDiscoveredLock(intent, seq, consultFinalizedTxnCache, g.ltg)
@@ -476,6 +479,14 @@ func (m *managerImpl) HandleWriterIntentError(
 				"intent on %s discovered but not added to disabled lock table",
 				intent.Key.String())
 		}
+		for cur := g.Req.Txn; cur != nil && parentIntentError == nil; cur = cur.Parent {
+			if cur.ID == intent.Txn.ID {
+				parentIntentError = errors.AssertionFailedf(
+					"descendant transaction %s attempted to write over ancestor %s at key %s",
+					g.Req.Txn.Short(), cur.Short(), intent.Key)
+				break
+			}
+		}
 	}
 
 	// Release the Guard's latches but continue to remain in lock wait-queues by
@@ -483,6 +494,15 @@ func (m *managerImpl) HandleWriterIntentError(
 	// then re-sequence the Request by calling SequenceReq with the un-latched
 	// Guard. This is analogous to iterating through the loop in SequenceReq.
 	m.lm.Release(g.moveLatchGuard())
+
+	// Detect if a discovered write intent was due to an ancestor transaction.
+	// Such a conflict is illegal but needs to be surfaced to be detected.
+	//
+	// TODO(ajwerner): Consider having this return a specific roachpb.Error that
+	// will be converted to an assertion failure on the client.
+	if parentIntentError != nil {
+		return nil, kvpb.NewError(parentIntentError)
+	}
 
 	// If the discovery process collected a set of intents to resolve before the
 	// next evaluation attempt, do so.
