@@ -973,10 +973,10 @@ func initTableReaderSpec(
 		Visibility:        n.colCfg.visibility,
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
-
 		// Retain the capacity of the spans slice.
 		Spans:            s.Spans[:0],
 		HasSystemColumns: n.containsSystemColumns,
+		NeededColumns:    n.colCfg.wantedColumnsOrdinals,
 	}
 	indexIdx, err := getIndexIdx(n.index, n.desc)
 	if err != nil {

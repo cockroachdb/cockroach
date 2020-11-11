@@ -83,8 +83,9 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tr := execinfrapb.TableReaderSpec{
-		Table: *desc.TableDesc(),
-		Spans: make([]execinfrapb.TableReaderSpan, 1),
+		Table:         *desc.TableDesc(),
+		Spans:         make([]execinfrapb.TableReaderSpan, 1),
+		NeededColumns: []uint32{0},
 	}
 	var err error
 	tr.Spans[0].Span.Key, err = rowenc.TestingMakePrimaryIndexKey(desc, 0)
