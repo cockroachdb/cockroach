@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -408,5 +409,106 @@ func TestChildTransactionDeadlockDetection(t *testing.T) {
 	case strA == bValA && strB == bValB:
 	default:
 		t.Fatalf("unexpected outcome: a=%s, b=%s", strA, strB)
+	}
+}
+
+// TestChildTxnSelfInteractions is an integration-style test of child
+// transaction interactions with parent state.
+func TestChildTxnSelfInteractions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	type testCase struct {
+		name string
+		f    func(t *testing.T, db *kv.DB)
+	}
+	run := func(test testCase) {
+		t.Run(test.name, func(t *testing.T) {
+			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+			defer tc.Stopper().Stop(ctx)
+			db := tc.Server(0).DB()
+			test.f(t, db)
+		})
+	}
+	testCases := []testCase{
+		{
+			"child reads parent's write",
+			func(t *testing.T, db *kv.DB) {
+				require.NoError(t, db.Txn(ctx, func(
+					ctx context.Context, txn *kv.Txn,
+				) error {
+					require.NoError(t, txn.Put(ctx, "foo", "bar"))
+					return txn.ChildTxn(ctx, func(
+						ctx context.Context, childTxn *kv.Txn,
+					) error {
+						got, err := childTxn.Get(ctx, "foo")
+						require.NoError(t, err)
+						gotBytes, err := got.Value.GetBytes()
+						require.NoError(t, err)
+						require.Equal(t, string(gotBytes), "bar")
+						return nil
+					})
+				}))
+			},
+		},
+		{
+			"child write-write conflict gets an error",
+			func(t *testing.T, db *kv.DB) {
+				require.Regexp(t,
+					`child transaction \w+ attempted to write over parent \w+ at key "foo"`,
+					db.Txn(ctx, func(
+						ctx context.Context, txn *kv.Txn,
+					) error {
+						require.NoError(t, txn.Put(ctx, "foo", "bar"))
+
+						// This attempt to write over the parent's intent will fail.
+						return txn.ChildTxn(ctx, func(
+							ctx context.Context, childTxn *kv.Txn,
+						) error {
+							err := childTxn.Put(ctx, "foo", "baz")
+							return err
+						})
+					}))
+			},
+		},
+		{
+
+			// In this case the child should pass through the read lock of the parent,
+			// write successfully, and then it should push the parent which will then
+			// be forced to refresh.
+			"child read-write conflict forces parent to get an error (locking)",
+			func(t *testing.T, db *kv.DB) {
+				k := roachpb.Key("foo")
+				require.NoError(t, db.Put(ctx, k, "bar"))
+				require.Regexp(t,
+					`cannot forward provisional commit timestamp due to overlapping write`,
+					db.Txn(ctx, func(
+						ctx context.Context, txn *kv.Txn,
+					) error {
+						scan := &roachpb.ScanRequest{
+							KeyLocking: lock.Exclusive,
+						}
+						scan.Key = k
+						scan.EndKey = k.PrefixEnd()
+						b := txn.NewBatch()
+						b.AddRawRequest(scan)
+						require.NoError(t, txn.Run(ctx, b))
+
+						// The below write will succeed but the forwarding of the parent above
+						// the write's timestamp will fail as it detects that the parent's
+						// read has been invalidated.
+						return txn.ChildTxn(ctx, func(
+							ctx context.Context, childTxn *kv.Txn,
+						) error {
+							err := childTxn.Put(ctx, k, "baz")
+							require.NoError(t, err)
+							return nil
+						})
+					}))
+			},
+		},
+	}
+	for _, tc := range testCases {
+		run(tc)
 	}
 }
