@@ -9,6 +9,7 @@ go_library(
         "//pkg/acceptance/localcluster",
         "//pkg/acceptance/localcluster/tc",
         "//pkg/cli",
+        "//pkg/cli/exit",
         "//pkg/kv/kvserver",
         "//pkg/server/serverpb",
         "//pkg/util/log",

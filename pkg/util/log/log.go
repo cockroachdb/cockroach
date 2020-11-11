@@ -13,10 +13,10 @@ package log
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -55,7 +55,7 @@ func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{
 		// Fatal error handling later already tries to exit even if I/O should
 		// block, but crash reporting might also be in the way.
 		t := time.AfterFunc(10*time.Second, func() {
-			os.Exit(1)
+			exit.WithCode(exit.TimeoutAfterFatalError())
 		})
 		defer t.Stop()
 	}
@@ -156,7 +156,7 @@ func ErrorfDepth(ctx context.Context, depth int, format string, args ...interfac
 }
 
 // Fatalf logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
-// trace of all running goroutines, then calls os.Exit(255).
+// trace of all running goroutines, then calls exit.WithCode(exit.FatalError()).
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
@@ -165,7 +165,7 @@ func Fatalf(ctx context.Context, format string, args ...interface{}) {
 }
 
 // Fatal logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
-// trace of all running goroutines, then calls os.Exit(255).
+// trace of all running goroutines, then calls exit.WithCode(exit.FatalError()).
 // It extracts log tags from the context and logs them along with the given
 // message.
 func Fatal(ctx context.Context, msg string) {
@@ -174,7 +174,7 @@ func Fatal(ctx context.Context, msg string) {
 
 // FatalfDepth logs to the INFO, WARNING, ERROR, and FATAL logs (offsetting the
 // caller's stack frame by 'depth'), including a stack trace of all running
-// goroutines, then calls os.Exit(255).
+// goroutines, then calls exit.WithCode(exit.FatalError()).
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.

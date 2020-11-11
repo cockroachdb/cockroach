@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -812,9 +813,9 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 	var fatal bool
 	defer log.ResetExitFunc()
-	log.SetExitFunc(true /* hideStack */, func(r int) {
+	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
 		defer log.Flush()
-		if r != 0 {
+		if r == exit.FatalError() {
 			fatal = true
 		}
 	})

@@ -82,6 +82,7 @@ go_test(
     ],
     embed = [":roachpb"],
     deps = [
+        "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
