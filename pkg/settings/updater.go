@@ -83,15 +83,7 @@ func (u updater) Set(key, rawValue string, vt string) error {
 
 	u.m[key] = struct{}{}
 
-	// TODO(irfansharif): Looks like we introduced a regression in #55994. In
-	// mixed-version clusters, when the 21.1 node attempts to refresh setting,
-	// it expects to find a type "v" for the version setting, but finds "m"
-	// already present in 20.2. We just so happen to be adding dedicated
-	// functionality for the version setting update process (not doing it
-	// through updater, as here, but instead using a dedicated RPC for it).
-	// Still, this is a bit unfortunate, and maybe merits reverting the type
-	// annotation diff.
-	if expected := d.Typ(); expected != "v" && vt != expected {
+	if expected := d.Typ(); vt != expected {
 		return errors.Errorf("setting '%s' defined as type %s, not %s", key, expected, vt)
 	}
 
