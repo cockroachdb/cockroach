@@ -148,6 +148,9 @@ func TestLongDBName(t *testing.T) {
 
 func TestFailedConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 56377)
+
 	// TODO(asubiotto): consider using datadriven for these, especially if the
 	// proxy becomes more complex.
 
