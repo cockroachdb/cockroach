@@ -12,6 +12,7 @@ package kvnemesis
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -181,7 +182,7 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeF
 				// which don't need them. This means we'd want to make it an option in
 				// the request, which seems silly to do for only this test.
 				prevValue.Timestamp = hlc.Timestamp{}
-				prevValueMismatch := !prevValue.Equal(e.PrevValue)
+				prevValueMismatch := !reflect.DeepEqual(prevValue, e.PrevValue)
 				var engineContents string
 				if prevValueMismatch {
 					engineContents = w.mu.kvs.DebugPrint("  ")
