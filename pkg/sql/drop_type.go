@@ -64,6 +64,13 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 				"%q is an implicit array type and cannot be modified",
 				name,
 			)
+		case descpb.TypeDescriptor_MULTI_REGION_ENUM:
+			// The implicit array types are not directly droppable.
+			return nil, errors.WithHint(pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"%q is a multi region enum and cannot be modified directly",
+				name,
+			), "try ALTER DATABASE DROP REGION syntax")
 		case descpb.TypeDescriptor_ENUM:
 			sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumDrop)
 		}

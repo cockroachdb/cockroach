@@ -124,7 +124,7 @@ func makeImmutable(desc descpb.TypeDescriptor) Immutable {
 
 	// Initialize metadata specific to the TypeDescriptor kind.
 	switch immutDesc.Kind {
-	case descpb.TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTI_REGION_ENUM:
 		immutDesc.logicalReps = make([]string, len(desc.EnumMembers))
 		immutDesc.physicalReps = make([][]byte, len(desc.EnumMembers))
 		immutDesc.readOnlyMembers = make([]bool, len(desc.EnumMembers))
@@ -190,6 +190,12 @@ func (desc *Immutable) Dropped() bool {
 // IsUncommittedVersion implements the Descriptor interface.
 func (desc *Immutable) IsUncommittedVersion() bool {
 	return desc.isUncommittedVersion
+}
+
+// IsRegionEnum returns true if the type descriptor refers to a special
+// multi-region region enum.
+func (desc *Immutable) IsRegionEnum() bool {
+	return false
 }
 
 // DescriptorProto returns a Descriptor for serialization.
@@ -404,7 +410,7 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	}
 
 	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTI_REGION_ENUM:
 		// All of the enum members should be in sorted order.
 		if !sort.IsSorted(EnumMembers(desc.EnumMembers)) {
 			return errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers)
@@ -444,13 +450,20 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	var reqs []descpb.ID
 
 	// Validate the parentID.
-	reqs = append(reqs, desc.ParentID)
-	checks = append(checks, func(got catalog.Descriptor) error {
-		if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
-			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
-		}
-		return nil
-	})
+	// TODO(arul): This is hacky and in reality we should be checking the parentID
+	// exists regardless of what the type descriptor kind is. For now, I have this
+	// here because the multi region enum and the corresponding array type can't
+	// seem to read the database descriptor that was created as part of the same
+	// txn.
+	if desc.Kind == descpb.TypeDescriptor_ENUM {
+		reqs = append(reqs, desc.ParentID)
+		checks = append(checks, func(got catalog.Descriptor) error {
+			if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
+				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+			}
+			return nil
+		})
+	}
 
 	// Validate the parentSchemaID.
 	if desc.ParentSchemaID != keys.PublicSchemaID {
@@ -477,6 +490,9 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		if desc.ArrayTypeID != descpb.InvalidID {
 			return errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.ArrayTypeID)
 		}
+	case descpb.TypeDescriptor_MULTI_REGION_ENUM:
+		// TODO(arul): See comment about region enum stuff above -- this should
+		// probably be no different from the TypeDescriptor_ENUM case above.
 	}
 
 	// Validate that all of the referencing descriptors exist.
@@ -526,7 +542,7 @@ func (desc *Immutable) MakeTypesT(
 	ctx context.Context, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
-	case descpb.TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTI_REGION_ENUM:
 		typ := types.MakeEnum(TypeIDToOID(desc.GetID()), TypeIDToOID(desc.ArrayTypeID))
 		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
 			return nil, err
@@ -599,7 +615,7 @@ func (desc *Immutable) HydrateTypeInfoWithName(
 	}
 	typ.TypeMeta.Version = uint32(desc.Version)
 	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTI_REGION_ENUM:
 		if typ.Family() != types.EnumFamily {
 			return errors.New("cannot hydrate a non-enum type with an enum type descriptor")
 		}
@@ -638,9 +654,10 @@ func (desc *Immutable) HydrateTypeInfoWithName(
 // interpreted and used by "other".
 func (desc *Immutable) IsCompatibleWith(other *Immutable) error {
 	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM:
-		if other.Kind != descpb.TypeDescriptor_ENUM {
-			return errors.Newf("%q is not an enum", other.Name)
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTI_REGION_ENUM:
+		if other.Kind != desc.Kind {
+			return errors.Newf("%q of type %q is not compatible with type %q",
+				other.Name, other.Kind, desc.Kind)
 		}
 		// Every enum value in desc must be present in other, and all of the
 		// physical representations must be the same.
@@ -675,7 +692,7 @@ func (desc *Immutable) IsCompatibleWith(other *Immutable) error {
 // changes that need to be completed.
 func (desc *Immutable) HasPendingSchemaChanges() bool {
 	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTI_REGION_ENUM:
 		// If there are any non-public enum members, then a type schema change is
 		// needed to promote the members.
 		for i := range desc.EnumMembers {

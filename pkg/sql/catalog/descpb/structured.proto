@@ -1088,6 +1088,9 @@ message DatabaseDescriptor {
 
   optional DescriptorState state = 8 [(gogoproto.nullable) = false];
   optional string offline_reason = 9 [(gogoproto.nullable) = false];
+
+// TODO(arul): Add some words here.
+  optional uint32 region_enum_id = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "RegionEnumID", (gogoproto.casttype) = "ID"];
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
@@ -1141,6 +1144,9 @@ message TypeDescriptor {
     // Represents a user defined type that is just an alias for another type.
     // As of now, it is used only internally.
     ALIAS = 1;
+    // Represents a special multi-region enum type which tracks avaiable regions
+    // as its enum values.
+    MULTI_REGION_ENUM = 2;
     // Add more entries as we support more user defined types.
   }
   optional Kind kind = 5 [(gogoproto.nullable) = false];

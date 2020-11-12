@@ -512,9 +512,7 @@ var (
 	ErrIntOverflowTimestamp   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() {
-	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_7c076e9f3a1546ea)
-}
+func init() { proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_7c076e9f3a1546ea) }
 
 var fileDescriptor_timestamp_7c076e9f3a1546ea = []byte{
 	// 247 bytes of a gzipped FileDescriptorProto

@@ -1662,6 +1662,8 @@ CREATE TABLE crdb_internal.create_type_statements (
 	populate: func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc *typedesc.Immutable) error {
 			switch typeDesc.Kind {
+			// TODO(arul): How does TypeDescriptor_MULTI_REGION_ENUM interact w CRDB
+			// internal?
 			case descpb.TypeDescriptor_ENUM:
 				var enumLabels tree.EnumValueList
 				enumLabelsDatum := tree.NewDArray(types.String)

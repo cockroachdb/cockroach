@@ -1294,6 +1294,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 
 		return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.Immutable, _ string, typDesc *typedesc.Immutable) error {
 			// We only want to iterate over ENUM types.
+			// TODO(arul): How should multi-region enum interact with pg_catalog and SHOW ENUMS?
 			if typDesc.Kind != descpb.TypeDescriptor_ENUM {
 				return nil
 			}
