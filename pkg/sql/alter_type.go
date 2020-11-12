@@ -62,6 +62,14 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 			"%q is an implicit array type and cannot be modified",
 			tree.AsStringWithFQNames(n.Type, &p.semaCtx.Annotations),
 		)
+	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		// Multi-region enums can't be directly modified.
+		return nil, errors.WithHint(
+			pgerror.Newf(
+				pgcode.WrongObjectType,
+				"%q is a multi-region enum and can't be modified using the alter type command",
+				tree.AsStringWithFQNames(n.Type, &p.semaCtx.Annotations)),
+			"try adding/removing the region using ALTER DATABASE")
 	case descpb.TypeDescriptor_ENUM:
 		sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumAlter)
 	}
