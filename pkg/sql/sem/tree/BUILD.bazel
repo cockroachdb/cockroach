@@ -17,6 +17,7 @@ go_library(
         "casts.go",
         "changefeed.go",
         "col_name.go",
+        "collatedstring.go",
         "comment_on_column.go",
         "comment_on_database.go",
         "comment_on_index.go",
