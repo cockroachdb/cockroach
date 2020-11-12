@@ -3520,3 +3520,196 @@ project
       ├── scan xy
       └── filters
            └── (i:2 + k:1) IS NOT NULL [outer=(1,2), immutable]
+
+# --------------------------------------------------
+# ProjectInnerJoinValues
+# --------------------------------------------------
+norm expect=ProjectInnerJoinValues
+SELECT (SELECT CASE WHEN ord.approved THEN 'Approved' ELSE '---' END)
+FROM (VALUES (1, true), (2, false)) ord(id, approved)
+----
+project
+ ├── columns: case:4!null
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column2:2!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (true,)
+ │    └── (false,)
+ └── projections
+      └── CASE WHEN column2:2 THEN 'Approved' ELSE '---' END [as=case:4, outer=(2)]
+
+norm expect=ProjectInnerJoinValues
+SELECT k, i - (SELECT f::int + i) FROM a
+----
+project
+ ├── columns: k:1!null "?column?":8
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── projections
+      └── i:2 - (i:2 + f:3::INT8) [as="?column?":8, outer=(2,3), immutable]
+
+# Correlated subquery with 0 rows.
+norm expect-not=ProjectInnerJoinValues
+SELECT k, i - (SELECT f::int LIMIT 0) FROM a
+----
+project
+ ├── columns: k:1!null "?column?":8
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── left-join-apply
+ │    ├── columns: k:1!null i:2 a.f:3!null f:7
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3,7)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 a.f:3!null
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
+ │    ├── limit
+ │    │    ├── columns: f:7
+ │    │    ├── outer: (3)
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── immutable
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(7)
+ │    │    ├── values
+ │    │    │    ├── columns: f:7
+ │    │    │    ├── outer: (3)
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── immutable
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(7)
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── (a.f:3::INT8,)
+ │    │    └── 0
+ │    └── filters (true)
+ └── projections
+      └── i:2 - f:7 [as="?column?":8, outer=(2,7), immutable]
+
+# Inner join with single-row values.
+norm expect=ProjectInnerJoinValues
+SELECT a.k, vals.value
+FROM a INNER JOIN (SELECT 1, 9) vals(k, value) ON a.k = vals.k
+----
+project
+ ├── columns: k:1!null value:8!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,8)
+ ├── select
+ │    ├── columns: k:1!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ └── projections
+      └── 9 [as="?column?":8]
+
+# Inner join with zero-row values.
+norm expect-not=ProjectInnerJoinValues
+SELECT a.k, vals.value
+FROM a INNER JOIN (SELECT 1, 9 LIMIT 0) vals(k, value) ON a.k = vals.k
+----
+values
+ ├── columns: k:1!null value:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1,8)
+
+# Inner join with multi-row values.
+norm expect-not=ProjectInnerJoinValues
+SELECT a.k, vals.value
+FROM a
+INNER JOIN (SELECT 1, 10 UNION SELECT 2, 20) vals(k, value)
+ON a.k = vals.k
+----
+project
+ ├── columns: k:1!null value:12!null
+ ├── cardinality: [0 - 2]
+ ├── key: (1,12)
+ └── inner-join (hash)
+      ├── columns: k:1!null "?column?":11!null "?column?":12!null
+      ├── cardinality: [0 - 2]
+      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      ├── key: (11,12)
+      ├── fd: (1)==(11), (11)==(1)
+      ├── scan a
+      │    ├── columns: k:1!null
+      │    └── key: (1)
+      ├── union
+      │    ├── columns: "?column?":11!null "?column?":12!null
+      │    ├── left columns: "?column?":7 "?column?":8
+      │    ├── right columns: "?column?":9 "?column?":10
+      │    ├── cardinality: [1 - 2]
+      │    ├── key: (11,12)
+      │    ├── values
+      │    │    ├── columns: "?column?":7!null "?column?":8!null
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7,8)
+      │    │    └── (1, 10)
+      │    └── values
+      │         ├── columns: "?column?":9!null "?column?":10!null
+      │         ├── cardinality: [1 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(9,10)
+      │         └── (2, 20)
+      └── filters
+           └── k:1 = "?column?":11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+# Lateral inner join with single-row values.
+norm expect=ProjectInnerJoinValues
+SELECT *
+FROM a
+INNER JOIN LATERAL (VALUES (a.k, a.k + 1, a.s, 10)) vals(c1, c2, c3, c4)
+ON a.k = c1
+----
+project
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 c1:7!null c2:8!null c3:9 c4:10!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(10), (1)-->(2-5,8), (1)==(7), (7)==(1), (4)==(9), (9)==(4)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── projections
+      ├── k:1 [as=column1:7, outer=(1)]
+      ├── k:1 + 1 [as=column2:8, outer=(1), immutable]
+      ├── s:4 [as=column3:9, outer=(4)]
+      └── 10 [as=column4:10]
+
+# Lateral inner join with hidden single-row values (passed through for sort).
+norm expect=ProjectInnerJoinValues
+SELECT a.k
+FROM a
+INNER JOIN LATERAL (VALUES (a.k, a.k + 1, a.s, 10)) vals(c1, c2, c3, c4)
+ON a.k = c1
+ORDER BY c3 DESC
+----
+sort
+ ├── columns: k:1!null  [hidden: column3:9]
+ ├── key: (1)
+ ├── fd: (1)-->(9)
+ ├── ordering: -9
+ └── project
+      ├── columns: column3:9 k:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(9)
+      ├── scan a
+      │    ├── columns: k:1!null s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── projections
+           └── s:4 [as=column3:9, outer=(4)]

@@ -75,59 +75,27 @@ values
 norm format=show-all expect=InlineWith
 WITH foo AS (SELECT 1) SELECT * FROM foo CROSS JOIN (VALUES (2))
 ----
-inner-join (cross)
+values
  ├── columns: "?column?":2(int!null) column1:3(int!null)
  ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
- ├── cost: 0.09
+ ├── cost: 0.02
  ├── key: ()
  ├── fd: ()-->(2,3)
  ├── prune: (2,3)
- ├── values
- │    ├── columns: "?column?":2(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── cost: 0.02
- │    ├── key: ()
- │    ├── fd: ()-->(2)
- │    ├── prune: (2)
- │    └── tuple [type=tuple{int}]
- │         └── const: 1 [type=int]
- ├── values
- │    ├── columns: column1:3(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── cost: 0.02
- │    ├── key: ()
- │    ├── fd: ()-->(3)
- │    ├── prune: (3)
- │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
- └── filters (true)
+ └── tuple [type=tuple{int, int}]
+      ├── const: 1 [type=int]
+      └── const: 2 [type=int]
 
 norm expect=InlineWith
 WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT * FROM foo CROSS JOIN bar
 ----
-inner-join (cross)
+values
  ├── columns: "?column?":3!null "?column?":4!null
  ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: ()
  ├── fd: ()-->(3,4)
- ├── values
- │    ├── columns: "?column?":3!null
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(3)
- │    └── (1,)
- ├── values
- │    ├── columns: "?column?":4!null
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(4)
- │    └── (2,)
- └── filters (true)
+ └── (1, 2)
 
 # Descend into scalar expressions.
 

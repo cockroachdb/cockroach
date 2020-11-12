@@ -1175,27 +1175,40 @@ left-join (cross)
  └── filters (true)
 
 norm
-SELECT * FROM (SELECT 1) FULL JOIN (VALUES (1), (2)) ON true
+SELECT * FROM (SELECT 1 UNION SELECT 2) FULL JOIN (VALUES (1), (2)) ON true
 ----
 inner-join (cross)
- ├── columns: "?column?":1(int!null) column1:2(int!null)
- ├── cardinality: [2 - 2]
- ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
- ├── stats: [rows=2]
- ├── fd: ()-->(1)
+ ├── columns: "?column?":3(int!null) column1:4(int!null)
+ ├── cardinality: [2 - 4]
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ ├── stats: [rows=4]
  ├── values
- │    ├── columns: column1:2(int!null)
+ │    ├── columns: column1:4(int!null)
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2]
  │    ├── (1,) [type=tuple{int}]
  │    └── (2,) [type=tuple{int}]
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── key: ()
- │    ├── fd: ()-->(1)
- │    └── (1,) [type=tuple{int}]
+ ├── union
+ │    ├── columns: "?column?":3(int!null)
+ │    ├── left columns: "?column?":1(int)
+ │    ├── right columns: "?column?":2(int)
+ │    ├── cardinality: [1 - 2]
+ │    ├── stats: [rows=2, distinct(3)=2, null(3)=0]
+ │    ├── key: (3)
+ │    ├── values
+ │    │    ├── columns: "?column?":1(int!null)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,) [type=tuple{int}]
+ │    └── values
+ │         ├── columns: "?column?":2(int!null)
+ │         ├── cardinality: [1 - 1]
+ │         ├── stats: [rows=1, distinct(2)=1, null(2)=0]
+ │         ├── key: ()
+ │         ├── fd: ()-->(2)
+ │         └── (2,) [type=tuple{int}]
  └── filters (true)
 
 exec-ddl
