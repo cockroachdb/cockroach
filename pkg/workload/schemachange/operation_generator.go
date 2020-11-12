@@ -96,6 +96,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropColumn:        true,
 	dropColumnDefault: true,
 	dropColumnNotNull: true,
+	dropConstraint:    true,
 	dropSequence:      true,
 	dropTable:         true,
 	dropView:          true,
@@ -941,10 +942,42 @@ func (og *operationGenerator) dropConstraint(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT IrrelevantConstraintName`, tableName), nil
+	}
+
 	constraintName, err := og.randConstraint(tx, tableName.String())
 	if err != nil {
 		return "", err
 	}
+
+	// Dropping the primary key of a table without adding a new primary key
+	// subsequently in the transaction is not supported. Since addConstraint is not implemented,
+	// a replacement primary key will not be created in the same transaction. Thus,
+	// dropping a primary key will always produce an error.
+	constraintIsPrimary, err := constraintIsPrimary(tx, tableName, constraintName)
+	if err != nil {
+		return "", err
+	}
+	if constraintIsPrimary {
+		og.expectedCommitErrors.add(pgcode.FeatureNotSupported)
+	}
+
+	// DROP INDEX CASCADE is preferred for dropping unique constraints, and
+	// dropping the constraint with ALTER TABLE ... DROP CONSTRAINT is unsupported.
+	constraintIsUnique, err := constraintIsUnique(tx, tableName, constraintName)
+	if err != nil {
+		return "", err
+	}
+	if constraintIsUnique {
+		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
+
 	return fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, tableName, constraintName), nil
 }
 
