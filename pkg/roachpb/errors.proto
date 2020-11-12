@@ -12,6 +12,7 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "errorspb/errors.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
@@ -523,16 +524,20 @@ message Error {
   option (gogoproto.goproto_stringer) = false;
 
   // message is a human-readable error message.
-  optional string message = 1 [(gogoproto.nullable) = false];
+  //
+  // DEPRECATED.
+  optional string message = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "deprecatedMessage"];
 
   // If transaction_restart is not NONE, the error condition may be handled by
   // restarting the transaction.
-  optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
+  //
+  // DEPRECATED.
+  optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "deprecatedTransactionRestart"];
 
   // An optional updated transaction. This is to be used by the client in case
   // of retryable errors.
   //
-  // Not to be accessed directly - use Error.GetTxn().
+  // Not to be accessed directly - use Error.GetTxn() and Error.SetTxn().
   optional Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
@@ -540,7 +545,12 @@ message Error {
 
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
-  optional ErrorDetail detail = 6 [(gogoproto.nullable) = false];
+  //
+  // DEPRECATED - consult encoded_error instead.
+  optional ErrorDetail detail = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "deprecatedDetail"];
+
+  // encoded_error is the Go error that caused this Error.
+  optional errorspb.EncodedError encoded_error = 9 [(gogoproto.nullable) = false];
 
   // The index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.

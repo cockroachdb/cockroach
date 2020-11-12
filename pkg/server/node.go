@@ -131,7 +131,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 // calls and their latency. Currently, this only records statistics at the batch
 // level; stats on specific lower-level kv operations are not recorded.
 func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
-	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
+	if pErr != nil && pErr.TransactionRestart() == roachpb.TransactionRestart_NONE {
 		nm.Err.Inc(1)
 	} else {
 		nm.Success.Inc(1)
