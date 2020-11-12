@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	"github.com/cockroachdb/redact"
 )
 
@@ -145,13 +146,21 @@ func NewError(err error) *Error {
 	if err == nil {
 		return nil
 	}
-	e := &Error{}
-	if intErr, ok := err.(*internalError); ok {
-		*e = *(*Error)(intErr)
-	} else if msg, ok := err.(ErrorDetailInterface); ok {
-		e.SetDetail(msg)
-	} else {
-		e.Message = err.Error()
+	e := &Error{
+		EncodedError: errors.EncodeError(context.Background(), err),
+	}
+
+	// This block is deprecated behavior retained for compat with
+	// 20.2 nodes. It makes sure that if applicable, deprecatedMessage,
+	// ErrorDetail, and deprecatedTransactionRestart are set.
+	{
+		if intErr, ok := err.(*internalError); ok {
+			*e = *(*Error)(intErr)
+		} else if msg, ok := err.(ErrorDetailInterface); ok {
+			e.DeprecatedSetDetail(msg)
+		} else {
+			e.deprecatedMessage = err.Error()
+		}
 	}
 	return e
 }
@@ -181,26 +190,44 @@ func (e *Error) SafeFormat(s redact.SafePrinter, _ rune) {
 		s.Print(nil)
 		return
 	}
-	// NB: There's lots of potential for infinite recursion here. For example,
-	// e.GoError() sometimes prepends an UnhandledRetryableError, so if we rely
-	// on it here we may catch a recursive call. Also, *internalError is just the
-	// an alias to *Error and is returned from GetDetail(), so we have to make
-	// sure to terminate it here as well. These are all hints that *Error is not
-	// well constructed.
-	switch t := e.GetDetail().(type) {
-	case nil:
-		// No detail was returned. All we have is a message
-		// that will get stripped during redaction.
-		//
-		// TODO(tbg): improve this after this issue has been addressed:
-		// https://github.com/cockroachdb/cockroach/issues/54939
-		s.Print(e.Message)
-	default:
-		// We have a detail and ignore e.Message. We do assume that if a detail is
-		// present, e.Message does correspond to that detail's message. This
-		// assumption is not enforced but appears sane.
-		s.Print(t)
+
+	if e.EncodedError != (errors.EncodedError{}) {
+		err := errors.DecodeError(context.Background(), e.EncodedError)
+		var iface ErrorDetailInterface
+		if errors.As(err, &iface) {
+			// Deprecated code: if there is a detail and the message produced by the detail
+			// (which gets to see the surrounding Error) is different, then use that message.
+			// What is likely the cause of that is that someone passed an updated Transaction
+			// to the Error via SetTxn, and the error detail prints that txn.
+			//
+			// TODO(tbg): change SetTxn so that instead of stashing the transaction on the
+			// Error struct, it wraps the EncodedError with an error containing the updated
+			// txn. Make GetTxn retrieve the first one it sees (overridden by UnexposedTxn
+			// while it's still around). Remove the `message(Error)` methods from ErrorDetailInterface.
+			// We also have to remove GetDetail() in the process since it doesn't understand the
+			// wrapping; instead we need a method that looks for a specific kind of detail, i.e.
+			// we basically want to use `errors.As` instead.
+			deprecatedMsg := iface.message(e)
+			if deprecatedMsg != err.Error() {
+				s.Print(deprecatedMsg)
+				return
+			}
+		}
+		s.Print(err)
+	} else {
+		// TODO(tbg): remove this block in the 21.2 cycle and rely on EncodedError
+		// always being populated.
+		switch t := e.GetDetail().(type) {
+		case nil:
+			s.Print(e.deprecatedMessage)
+		default:
+			// We have a detail and ignore e.deprecatedMessage. We do assume that if a detail is
+			// present, e.deprecatedMessage does correspond to that detail's message. This
+			// assumption is not enforced but appears sane.
+			s.Print(t)
+		}
 	}
+
 	if txn := e.GetTxn(); txn != nil {
 		s.SafeString(": ")
 		s.Print(txn)
@@ -212,6 +239,21 @@ func (e *Error) String() string {
 	return redact.StringWithoutMarkers(e)
 }
 
+// TransactionRestart returns the TransactionRestart for this Error.
+func (e *Error) TransactionRestart() TransactionRestart {
+	if e.EncodedError == (errorspb.EncodedError{}) {
+		// Legacy code.
+		//
+		// TODO(tbg): delete in 21.2.
+		return e.deprecatedTransactionRestart
+	}
+	var iface transactionRestartError
+	if errors.As(errors.DecodeError(context.Background(), e.EncodedError), &iface) {
+		return iface.canRestartTransaction()
+	}
+	return TransactionRestart_NONE
+}
+
 type internalError Error
 
 func (e *internalError) Error() string {
@@ -221,7 +263,7 @@ func (e *internalError) Error() string {
 // ErrorDetailInterface is an interface for each error detail.
 // These must not be implemented by anything other than our protobuf-backed error details
 // as we rely on a 1:1 correspondence between the interface and what can be stored via
-// `Error.SetDetail`.
+// `Error.DeprecatedSetDetail`.
 type ErrorDetailInterface interface {
 	error
 	protoutil.Message
@@ -287,8 +329,23 @@ func (e *Error) GoError() error {
 	if e == nil {
 		return nil
 	}
+	if e.EncodedError != (errorspb.EncodedError{}) {
+		err := errors.DecodeError(context.Background(), e.EncodedError)
+		var iface transactionRestartError
+		if errors.As(err, &iface) {
+			if txnRestart := iface.canRestartTransaction(); txnRestart != TransactionRestart_NONE {
+				// TODO(tbg): revisit this unintuitive error wrapping here and see if
+				// a better solution can be found.
+				return &UnhandledRetryableError{
+					PErr: *e,
+				}
+			}
+		}
+		return err
+	}
 
-	if e.TransactionRestart != TransactionRestart_NONE {
+	// Everything below is legacy behavior that can be deleted in 21.2.
+	if e.TransactionRestart() != TransactionRestart_NONE {
 		return &UnhandledRetryableError{
 			PErr: *e,
 		}
@@ -299,18 +356,22 @@ func (e *Error) GoError() error {
 	return (*internalError)(e)
 }
 
-// SetDetail sets the error detail for the error. The argument cannot be nil.
-func (e *Error) SetDetail(detail ErrorDetailInterface) {
+// DeprecatedSetDetail sets the error detail for the error. The argument cannot be nil.
+//
+// DEPRECATED: see Error.EncodedError instead.
+func (e *Error) DeprecatedSetDetail(detail ErrorDetailInterface) {
 	if detail == nil {
 		panic("nil detail argument")
 	}
-	e.Message = detail.message(e)
+	e.EncodedError = errors.EncodeError(context.Background(), detail)
+
+	e.deprecatedMessage = detail.message(e)
 	if r, ok := detail.(transactionRestartError); ok {
-		e.TransactionRestart = r.canRestartTransaction()
+		e.deprecatedTransactionRestart = r.canRestartTransaction()
 	} else {
-		e.TransactionRestart = TransactionRestart_NONE
+		e.deprecatedTransactionRestart = TransactionRestart_NONE
 	}
-	e.Detail.MustSetInner(detail)
+	e.deprecatedDetail.MustSetInner(detail)
 	e.checkTxnStatusValid()
 }
 
@@ -319,7 +380,15 @@ func (e *Error) GetDetail() ErrorDetailInterface {
 	if e == nil {
 		return nil
 	}
-	detail, _ := e.Detail.GetInner().(ErrorDetailInterface)
+	var detail ErrorDetailInterface
+	if e.EncodedError != (errorspb.EncodedError{}) {
+		errors.As(errors.DecodeError(context.Background(), e.EncodedError), &detail)
+	} else {
+		// Legacy behavior.
+		//
+		// TODO(tbg): delete in v21.2.
+		detail, _ = e.deprecatedDetail.GetInner().(ErrorDetailInterface)
+	}
 	return detail
 }
 
@@ -341,9 +410,11 @@ func (e *Error) UpdateTxn(o *Transaction) {
 	} else {
 		e.UnexposedTxn.Update(o)
 	}
-	if sErr, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
+	if sErr, ok := e.deprecatedDetail.GetInner().(ErrorDetailInterface); ok {
 		// Refresh the message as the txn is updated.
-		e.Message = sErr.message(e)
+		//
+		// TODO(tbg): deprecated, remove in 21.2.
+		e.deprecatedMessage = sErr.message(e)
 	}
 	e.checkTxnStatusValid()
 }
@@ -351,12 +422,15 @@ func (e *Error) UpdateTxn(o *Transaction) {
 // checkTxnStatusValid verifies that the transaction status is in-sync with the
 // error detail.
 func (e *Error) checkTxnStatusValid() {
+	// TODO(tbg): this will need to be updated when we
+	// remove all of these deprecated fields in 21.2.
+
 	txn := e.UnexposedTxn
-	err := e.Detail.GetInner()
+	err := e.deprecatedDetail.GetInner()
 	if txn == nil {
 		return
 	}
-	if e.TransactionRestart == TransactionRestart_NONE {
+	if e.deprecatedTransactionRestart == TransactionRestart_NONE {
 		return
 	}
 	if errors.HasType(err, (*TransactionAbortedError)(nil)) {
@@ -649,6 +723,11 @@ func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbo
 //
 // txnID is the ID of the transaction being restarted.
 // txn is the transaction that the client should use for the next attempts.
+//
+// TODO(tbg): the message passed here is usually pErr.String(), which is a bad
+// pattern (loses structure, thus redaction). We can leverage error chaining
+// to improve this: wrap `pErr.GoError()` with a barrier and then with the
+// TransactionRetryWithProtoRefreshError.
 func NewTransactionRetryWithProtoRefreshError(
 	msg string, txnID uuid.UUID, txn Transaction,
 ) *TransactionRetryWithProtoRefreshError {
