@@ -19,7 +19,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -491,6 +493,41 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 	c.servers[nodeIndex] = serv
 	return nil
+}
+
+// AddNode create a new node in the cluster and start it.
+// This function uses RestartNode to perform the actual node
+// starting.
+func (c *transientCluster) AddNode(localityString string) error {
+	// '\demo add' accepts both strings that are quoted and not quoted. To properly make use of
+	// quoted strings, strip off the quotes.  Before we do that though, make sure that the quotes match,
+	// or that there aren't any quotes in the string.
+	re := regexp.MustCompile(`".+"|'.+'|[^'"]+`)
+	if localityString != re.FindString(localityString) {
+		return errors.Errorf(`Invalid locality (missing " or '): %s`, localityString)
+	}
+	trimmedString := strings.Trim(localityString, `"'`)
+
+	// Setup locality based on supplied string.
+	var loc roachpb.Locality
+	if err := loc.Set(trimmedString); err != nil {
+		return err
+	}
+
+	// Ensure that the cluster is sane before we start messing around with it.
+	if len(demoCtx.localities) != demoCtx.nodes || demoCtx.nodes != len(c.servers) {
+		return errors.Errorf("number of localities specified (%d) must equal number of "+
+			"nodes (%d) and number of servers (%d)", len(demoCtx.localities), demoCtx.nodes, len(c.servers))
+	}
+
+	// Create a new empty server element and add associated locality info.
+	// When we call RestartNode below, this element will be properly initialized.
+	c.servers = append(c.servers, nil)
+	demoCtx.localities = append(demoCtx.localities, loc)
+	demoCtx.nodes++
+	newNodeID := roachpb.NodeID(demoCtx.nodes)
+
+	return c.RestartNode(newNodeID)
 }
 
 func maybeWarnMemSize(ctx context.Context) {
