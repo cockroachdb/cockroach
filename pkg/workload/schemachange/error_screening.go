@@ -415,3 +415,31 @@ func columnContainsNull(tx *pgx.Tx, tableName *tree.TableName, columnName string
 	   WHERE %s IS NULL
 	)`, columnName, tableName.String(), columnName))
 }
+
+func constraintIsPrimary(
+	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
+) (bool, error) {
+	return scanBool(tx, fmt.Sprintf(`
+	SELECT EXISTS(
+	        SELECT *
+	          FROM pg_catalog.pg_constraint
+	         WHERE conrelid = '%s'::REGCLASS::INT
+	           AND conname = '%s'
+	           AND (contype = 'p')
+	       );
+	`, tableName.String(), constraintName))
+}
+
+func constraintIsUnique(
+	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
+) (bool, error) {
+	return scanBool(tx, fmt.Sprintf(`
+	SELECT EXISTS(
+	        SELECT *
+	          FROM pg_catalog.pg_constraint
+	         WHERE conrelid = '%s'::REGCLASS::INT
+	           AND conname = '%s'
+	           AND (contype = 'u')
+	       );
+	`, tableName.String(), constraintName))
+}
