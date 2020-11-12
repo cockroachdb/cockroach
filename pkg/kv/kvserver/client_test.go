@@ -1157,24 +1157,6 @@ func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.R
 	return nil // unreached, but the compiler can't tell.
 }
 
-// findMemberStoreLocked finds a non-stopped Store which is a member
-// of the given range.
-func (m *multiTestContext) findMemberStoreLocked(desc roachpb.RangeDescriptor) *kvserver.Store {
-	for _, s := range m.stores {
-		if s == nil {
-			// Store is stopped.
-			continue
-		}
-		for _, r := range desc.InternalReplicas {
-			if s.StoreID() == r.StoreID {
-				return s
-			}
-		}
-	}
-	m.t.Fatalf("couldn't find a live member of %s", &desc)
-	return nil // unreached, but the compiler can't tell.
-}
-
 // restart stops and restarts all stores but leaves the engines intact,
 // so the stores should contain the same persistent storage as before.
 func (m *multiTestContext) restart() {

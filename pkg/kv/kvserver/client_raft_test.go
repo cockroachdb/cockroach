@@ -1166,6 +1166,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.TestingKnobs.DisableReplicateQueue = true
@@ -1201,11 +1202,11 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	// Split the range.
 	splitKey := roachpb.Key("m")
 	splitArgs := adminSplitArgs(splitKey)
-	if _, err := rep1.AdminSplit(context.Background(), *splitArgs, "test"); err != nil {
+	if _, err := rep1.AdminSplit(ctx, *splitArgs, "test"); err != nil {
 		t.Fatal(err)
 	}
 
-	mtc.advanceClock(context.Background())
+	mtc.advanceClock(ctx)
 
 	// Restart store 2.
 	mtc.restartStore(2)
@@ -1217,12 +1218,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		startKey := roachpb.RKey(splitKey)
 
 		var desc roachpb.RangeDescriptor
-		if err := mtc.dbs[0].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
-			t.Fatal(err)
-		}
-
-		rep2, err := mtc.findMemberStoreLocked(desc).GetReplica(desc.RangeID)
-		if err != nil {
+		if err := mtc.dbs[0].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1230,7 +1226,8 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 			NodeID:  mtc.stores[2].Ident.NodeID,
 			StoreID: mtc.stores[2].Ident.StoreID,
 		})
-		_, err = rep2.ChangeReplicas(context.Background(), &desc, kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
+
+		_, err = mtc.dbs[0].AdminChangeReplicas(ctx, startKey, desc, chgs)
 		return err
 	}
 
