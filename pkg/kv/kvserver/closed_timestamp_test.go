@@ -1239,12 +1239,12 @@ func retryOnError(f func(*roachpb.Error) bool) respFunc {
 }
 
 var retryOnRangeKeyMismatch = retryOnError(func(pErr *roachpb.Error) bool {
-	_, isRangeKeyMismatch := pErr.Detail.Value.(*roachpb.ErrorDetail_RangeKeyMismatch)
+	_, isRangeKeyMismatch := pErr.GetDetail().(*roachpb.RangeKeyMismatchError)
 	return isRangeKeyMismatch
 })
 
 var retryOnRangeNotFound = retryOnError(func(pErr *roachpb.Error) bool {
-	_, isRangeNotFound := pErr.Detail.Value.(*roachpb.ErrorDetail_RangeNotFound)
+	_, isRangeNotFound := pErr.GetDetail().(*roachpb.RangeNotFoundError)
 	return isRangeNotFound
 })
 

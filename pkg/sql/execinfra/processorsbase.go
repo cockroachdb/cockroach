@@ -667,8 +667,7 @@ func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 				// be transformed by the Root TxnCoordSender into
 				// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
 				if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
-					uncertain := ure.PErr.Detail.GetReadWithinUncertaintyInterval()
-					if uncertain != nil {
+					if _, uncertain := ure.PErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); uncertain {
 						continue
 					}
 				}

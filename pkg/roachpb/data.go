@@ -1361,7 +1361,7 @@ func (tr *TransactionRecord) AsTransaction() Transaction {
 func PrepareTransactionForRetry(
 	ctx context.Context, pErr *Error, pri UserPriority, clock *hlc.Clock,
 ) Transaction {
-	if pErr.TransactionRestart == TransactionRestart_NONE {
+	if pErr.TransactionRestart() == TransactionRestart_NONE {
 		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
 

@@ -608,7 +608,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		newTxn := roachpb.PrepareTransactionForRetry(
 			ctx, abortedErr, roachpb.NormalUserPriority, tc.clock)
 		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-			abortedErr.Message, tc.mu.txn.ID, newTxn))
+			abortedErr.String(), tc.mu.txn.ID, newTxn))
 	case protoStatus != roachpb.PENDING || hbObservedStatus != roachpb.PENDING:
 		// The transaction proto is in an unexpected state.
 		return roachpb.NewErrorf(
@@ -687,7 +687,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 
 	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
 	retErr := roachpb.NewTransactionRetryWithProtoRefreshError(
-		pErr.Message,
+		pErr.String(),
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)
 
@@ -747,7 +747,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 		return nil
 	}
 
-	if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+	if pErr.TransactionRestart() != roachpb.TransactionRestart_NONE {
 		if tc.typ == kv.LeafTxn {
 			// Leaves handle retriable errors differently than roots. The leaf
 			// transaction is not supposed to be used any more after a retriable
