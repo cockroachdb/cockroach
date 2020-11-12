@@ -1483,14 +1483,11 @@ ON True
 distinct-on
  ├── left-join-apply
  │    ├── scan uv
- │    ├── inner-join (cross)
- │    │    ├── project
- │    │    │    ├── scan ab
- │    │    │    └── projections
- │    │    │         └── a * u
- │    │    ├── values
- │    │    │    └── (1,)
- │    │    └── filters (true)
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         ├── 1
+ │    │         └── a * u
  │    └── filters (true)
  └── aggregations
       ├── const-agg

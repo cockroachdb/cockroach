@@ -487,12 +487,11 @@ INNER MERGE JOIN (SELECT k2, v2 FROM kv2) ON k2 = lookup_k;
 project
  └── inner-join (merge)
       ├── flags: force merge join
-      ├── inner-join (merge)
-      │    ├── flags: force merge join
+      ├── project
       │    ├── scan kv
-      │    ├── values
-      │    │    └── (1,)
-      │    └── filters (true)
+      │    │    └── constraint: /1: [/1 - /1]
+      │    └── projections
+      │         └── 1
       ├── scan kv2
       └── filters (true)
 

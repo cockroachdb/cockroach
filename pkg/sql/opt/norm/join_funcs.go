@@ -583,3 +583,18 @@ func (c *CustomFuncs) CommuteJoinFlags(p *memo.JoinPrivate) *memo.JoinPrivate {
 	res.Flags = f
 	return &res
 }
+
+// MakeProjectionsFromValues converts single-row values into projections, for
+// use when transforming inner joins with a values operator into a projection.
+func (c *CustomFuncs) MakeProjectionsFromValues(values *memo.ValuesExpr) memo.ProjectionsExpr {
+	if len(values.Rows) != 1 {
+		panic(errors.AssertionFailedf("MakeProjectionsFromValues expects 1 row, got %d",
+			len(values.Rows)))
+	}
+	projections := make(memo.ProjectionsExpr, 0, len(values.Cols))
+	elems := values.Rows[0].(*memo.TupleExpr).Elems
+	for i, col := range values.Cols {
+		projections = append(projections, c.f.ConstructProjectionsItem(elems[i], col))
+	}
+	return projections
+}
