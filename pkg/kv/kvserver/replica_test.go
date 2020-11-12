@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -12791,29 +12790,11 @@ func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
 	}
 }
 
-type fakeStore struct {
-	*cluster.Settings
-	*StoreTestingKnobs
-}
-
-func (s fakeStore) ClusterSettings() *cluster.Settings {
-	return s.Settings
-}
-
-func (s fakeStore) TestingKnobs() *StoreTestingKnobs {
-	return s.StoreTestingKnobs
-}
-
 func TestPrepareChangeReplicasTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	s := fakeStore{
-		Settings:          cluster.MakeTestingClusterSettings(),
-		StoreTestingKnobs: &StoreTestingKnobs{},
-	}
 
 	type typOp struct {
 		roachpb.ReplicaType
@@ -12931,9 +12912,9 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			trigger, err := prepareChangeReplicasTrigger(
 				ctx,
-				s,
 				tc.desc,
 				tc.chgs,
+				nil, /* testingForceJointConfig */
 			)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expTrigger, trigger.String())
