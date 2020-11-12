@@ -18,12 +18,40 @@ import (
 // delegateShowRanges implements the SHOW REGIONS statement.
 func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Regions)
-	query := `SELECT
-        substring (locality, 'region=([^,]*)') AS region,
-        array_agg(COALESCE (substring (locality, 'az=([^,]*)'),
-                substring (locality, 'availability-zone=([^,]*)'))) AS availability_zones
-        FROM crdb_internal.gossip_nodes
-        group by region ORDER BY region`
+	// TODO (storm): Change this so that it doesn't use hard-coded strings and is
+	// more flexible for custom named sub-regions.
+	query := `
+SELECT
+	region, zones
+FROM
+	(
+		SELECT
+			substring(locality, 'region=([^,]*)') AS region,
+			array_remove(
+				array_agg(
+					COALESCE(
+						substring(locality, 'az=([^,]*)'),
+						substring(
+							locality,
+							'availability-zone=([^,]*)'),
+						substring(
+							locality,
+							'zone=([^,]*)'
+						)
+					)
+				),
+				NULL
+			)
+				AS zones
+		FROM
+			crdb_internal.kv_node_status
+		GROUP BY
+			region
+	)
+WHERE
+	region IS NOT NULL
+ORDER BY
+	region`
 
 	return parse(query)
 }

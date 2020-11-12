@@ -98,6 +98,7 @@ Commands specific to the demo shell (EXPERIMENTAL):
   \demo restart <nodeid>       restart a stopped demo node.
   \demo decommission <nodeid>  decommission a node.
   \demo recommission <nodeid>  recommission a node.
+  \demo add <locality>         add a node (locality specified as "region=<region>,zone=<zone>").
 `
 
 	defaultPromptPattern = "%n@%M/%/%x>"
@@ -531,6 +532,13 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 		return c.invalidSyntax(errState, `\demo can only be run with cockroach demo`)
 	}
 
+	// The \demo command has one of three patterns:
+	//
+	//	- A lone command (currently, only ls)
+	//	- A command followed by a string (add followed by locality string)
+	//	- A command followed by a node number (shutdown, restart, decommission, recommission)
+	//
+	// We parse these commands separately, in the following blocks.
 	if len(cmd) == 1 && cmd[0] == "ls" {
 		demoCtx.transientCluster.listDemoNodes(os.Stdout, false /* justOne */)
 		return nextState
@@ -540,6 +548,40 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 		return c.invalidSyntax(errState, `\demo expects 2 parameters`)
 	}
 
+	// Special case the add command it takes a string instead of a node number.
+	if cmd[0] == "add" {
+		return c.handleDemoAddNode(cmd, nextState, errState)
+	}
+
+	// If we've made it down here, we're handling the remaining demo node commands.
+	return c.handleDemoNodeCommands(cmd, nextState, errState)
+}
+
+// handleDemoAddNode handles the `add` node command in demo.
+func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
+	if cmd[0] != "add" {
+		return c.internalServerError(errState, fmt.Errorf("bad call to handleDemoAddNode"))
+	}
+
+	if demoCtx.simulateLatency {
+		fmt.Printf("add command is not supported in --global configurations")
+		return nextState
+	}
+
+	if err := demoCtx.transientCluster.AddNode(cmd[1]); err != nil {
+		return c.internalServerError(errState, err)
+	}
+	addedNodeID := len(demoCtx.transientCluster.servers)
+	fmt.Printf("node %v has been added with locality \"%s\"\n",
+		addedNodeID, demoCtx.localities[addedNodeID-1].String())
+	return nextState
+}
+
+// handleDemoNodeCommands handles the node commands in demo (with the exception of `add` which is handled
+// with handleDemoAddNode.
+func (c *cliState) handleDemoNodeCommands(
+	cmd []string, nextState, errState cliStateEnum,
+) cliStateEnum {
 	nodeID, err := strconv.ParseInt(cmd[1], 10, 32)
 	if err != nil {
 		return c.invalidSyntax(
