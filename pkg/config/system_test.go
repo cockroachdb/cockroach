@@ -13,6 +13,7 @@ package config_test
 import (
 	"context"
 	"math"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -139,7 +140,7 @@ func TestGet(t *testing.T) {
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		if val := cfg.GetValue([]byte(tc.key)); !val.Equal(tc.value) {
+		if val := cfg.GetValue([]byte(tc.key)); !reflect.DeepEqual(val, tc.value) {
 			t.Errorf("#%d: expected=%s, found=%s", tcNum, tc.value, val)
 		}
 	}

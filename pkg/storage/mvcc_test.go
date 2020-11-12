@@ -5333,7 +5333,7 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 				}
 			}
 
-			if first, second := vals[0], vals[1]; !first.Equal(second) {
+			if first, second := vals[0], vals[1]; !reflect.DeepEqual(first, second) {
 				var firstTS, secondTS roachpb.InternalTimeSeriesData
 				if err := first.GetProto(&firstTS); err != nil {
 					t.Fatal(err)
