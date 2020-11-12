@@ -68,6 +68,13 @@ type Stream struct {
 // unconnected output routers of a subset of processors; all these routers
 // output the same kind of data (same schema).
 type PhysicalPlan struct {
+	// -- The following fields are immutable --
+
+	FlowID        uuid.UUID
+	GatewayNodeID roachpb.NodeID
+
+	// -- The following fields are mutable --
+
 	// Processors in the plan.
 	Processors []Processor
 
@@ -116,10 +123,6 @@ type PhysicalPlan struct {
 	// Used internally for numbering stages.
 	stageCounter int32
 
-	// Used internally to avoid creating flow IDs for local flows. This boolean
-	// specifies whether there is more than one node involved in a plan.
-	remotePlan bool
-
 	// MaxEstimatedRowCount tracks the maximum estimated row count that a table
 	// reader in this plan will output. This information is used to decide
 	// whether to use the vectorized execution engine.
@@ -128,10 +131,16 @@ type PhysicalPlan struct {
 	// table readers in the plan.
 	TotalEstimatedScannedRows uint64
 
-	// GatewayNodeID is the gateway node of the physical plan.
-	GatewayNodeID roachpb.NodeID
 	// Distribution is the indicator of the distribution of the physical plan.
 	Distribution PlanDistribution
+}
+
+// MakePhysicalPlan initializes a PhysicalPlan.
+func MakePhysicalPlan(flowID uuid.UUID, gatewayNodeID roachpb.NodeID) PhysicalPlan {
+	return PhysicalPlan{
+		FlowID:        flowID,
+		GatewayNodeID: gatewayNodeID,
+	}
 }
 
 // GetResultTypes returns the schema (column types) of the rows produced by the
@@ -932,9 +941,6 @@ func (p *PhysicalPlan) PopulateEndpoints() {
 			endpoint.Type = execinfrapb.StreamEndpointSpec_REMOTE
 		}
 		if endpoint.Type == execinfrapb.StreamEndpointSpec_REMOTE {
-			if !p.remotePlan {
-				p.remotePlan = true
-			}
 			endpoint.OriginNodeID = p1.Node
 			endpoint.TargetNodeID = p2.Node
 		}
@@ -959,12 +965,8 @@ func (p *PhysicalPlan) PopulateEndpoints() {
 //
 // gateway is the current node's NodeID.
 func (p *PhysicalPlan) GenerateFlowSpecs() map[roachpb.NodeID]*execinfrapb.FlowSpec {
-	// Only generate a flow ID for a remote plan because it will need to be
-	// referenced by remote nodes when connecting streams. This id generation is
-	// skipped for performance reasons on local flows.
-	flowID := execinfrapb.FlowID{}
-	if p.remotePlan {
-		flowID.UUID = uuid.MakeV4()
+	flowID := execinfrapb.FlowID{
+		UUID: p.FlowID,
 	}
 	flows := make(map[roachpb.NodeID]*execinfrapb.FlowSpec, 1)
 

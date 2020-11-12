@@ -322,47 +322,6 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		checkDirs(t, 0)
 	})
 
-	// This subtest verifies that two local flows with the same ID create
-	// different directories. This case happens regularly with local flows, since
-	// they have an unset ID.
-	t.Run("DirCreationHandlesUnsetIDCollisions", func(t *testing.T) {
-		flowID := execinfrapb.FlowID{}
-		vf1 := newVectorizedFlow()
-		var creator1 *vectorizedFlowCreator
-		vf1.testingKnobs.onSetupFlow = func(c *vectorizedFlowCreator) {
-			creator1 = c
-		}
-		// Explicitly set an empty ID.
-		vf1.ID = flowID
-		_, err := vf1.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
-		require.NoError(t, err)
-
-		checkDirs(t, 0)
-		creator1.diskQueueCfg.GetPath(ctx)
-		checkDirs(t, 1)
-
-		// Now a new flow with the same ID gets set up.
-		vf2 := newVectorizedFlow()
-		var creator2 *vectorizedFlowCreator
-		vf2.testingKnobs.onSetupFlow = func(c *vectorizedFlowCreator) {
-			creator2 = c
-		}
-		vf2.ID = flowID
-		_, err = vf2.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
-		require.NoError(t, err)
-
-		// Still only 1 directory.
-		checkDirs(t, 1)
-		creator2.diskQueueCfg.GetPath(ctx)
-		// A new directory should have been created for this flow.
-		checkDirs(t, 2)
-
-		vf1.Cleanup(ctx)
-		checkDirs(t, 1)
-		vf2.Cleanup(ctx)
-		checkDirs(t, 0)
-	})
-
 	t.Run("DirCreationRace", func(t *testing.T) {
 		vf := newVectorizedFlow()
 		var creator *vectorizedFlowCreator

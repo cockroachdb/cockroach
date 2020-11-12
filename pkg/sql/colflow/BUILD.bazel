@@ -33,7 +33,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
-        "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/logtags",
         "//vendor/github.com/marusama/semaphore",
