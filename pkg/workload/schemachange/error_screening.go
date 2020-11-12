@@ -407,3 +407,11 @@ func canApplyUniqueConstraint(
 	`, columnNames, tableName.String(), whereNotNullClause.String(), tableName.String(), whereNotNullClause.String()))
 
 }
+
+func columnContainsNull(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+	return scanBool(tx, fmt.Sprintf(`SELECT EXISTS (
+		SELECT %s
+		  FROM %s
+	   WHERE %s IS NULL
+	)`, columnName, tableName.String(), columnName))
+}
