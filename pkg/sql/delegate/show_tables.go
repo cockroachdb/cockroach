@@ -45,7 +45,7 @@ func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, erro
 
 	const getTablesQuery = `
 SELECT ns.nspname AS schema_name,
-       pc.relname AS table_name,
+			 pc.relname::string AS table_name,
        CASE
        WHEN pc.relkind = 'v' THEN 'view'
        WHEN pc.relkind = 'm' THEN 'materialized view'

@@ -221,6 +221,43 @@ SET
 	b.Reset()
 }
 
+func TestUtfTableName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+
+	conn := makeSQLConn(url.String())
+	defer conn.Close()
+
+	setCLIDefaultsForTests()
+
+	var b bytes.Buffer
+
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`create database test_utf; create table test_utf.żółw (id int primary key)`)); err != nil {
+		t.Fatal(err)
+	}
+	b.Reset()
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`SHOW TABLES FROM test_utf;`)); err != nil {
+		t.Fatal(err)
+	}
+	expected := `
+  schema_name | table_name | type  | owner | estimated_row_count
+--------------+------------+-------+-------+----------------------
+  public      | żółw       | table | root  |                NULL
+(1 row)
+`
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
+	}
+	b.Reset()
+}
+
 func TestTransactionRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
