@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync/atomic"
 	"testing"
 
@@ -223,12 +224,12 @@ func TestReadOnlyBasics(t *testing.T) {
 				}
 				shouldPanic(t, func() { ro.Close() }, "Close", "closing an already-closed "+name)
 				for i, f := range successTestCases {
-					shouldPanic(t, f, string(i), "using a closed "+name)
+					shouldPanic(t, f, strconv.Itoa(i), "using a closed "+name)
 				}
 			}()
 
 			for i, f := range successTestCases {
-				shouldNotPanic(t, f, string(i))
+				shouldNotPanic(t, f, strconv.Itoa(i))
 			}
 
 			// For a read-only ReadWriter, all Writer methods should panic.
@@ -240,7 +241,7 @@ func TestReadOnlyBasics(t *testing.T) {
 				func() { _ = ro.PutUnversioned(a.Key, nil) },
 			}
 			for i, f := range failureTestCases {
-				shouldPanic(t, f, string(i), "not implemented")
+				shouldPanic(t, f, strconv.Itoa(i), "not implemented")
 			}
 
 			if err := e.PutUnversioned(mvccKey("a").Key, []byte("value")); err != nil {
