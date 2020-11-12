@@ -14,8 +14,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
@@ -51,6 +53,33 @@ func TestSetTxn(t *testing.T) {
 		e.Message, "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
 		t.Errorf("unexpected message: %s", e.Message)
 	}
+}
+
+func TestErrPriority(t *testing.T) {
+	unhandledAbort := &UnhandledRetryableError{
+		PErr: *NewError(&TransactionAbortedError{}),
+	}
+	unhandledRetry := &UnhandledRetryableError{
+		PErr: *NewError(&ReadWithinUncertaintyIntervalError{}),
+	}
+	require.Equal(t, ErrorPriority(0), ErrPriority(nil))
+	require.Equal(t, ErrorScoreTxnAbort, ErrPriority(unhandledAbort))
+	require.Equal(t, ErrorScoreTxnRestart, ErrPriority(unhandledRetry))
+	{
+		id1 := uuid.Must(uuid.NewV4())
+		require.Equal(t, ErrorScoreTxnRestart, ErrPriority(&TransactionRetryWithProtoRefreshError{
+			TxnID:       id1,
+			Transaction: Transaction{TxnMeta: enginepb.TxnMeta{ID: id1}},
+		}))
+		id2 := uuid.Nil
+		require.Equal(t, ErrorScoreTxnAbort, ErrPriority(&TransactionRetryWithProtoRefreshError{
+			TxnID:       id1,
+			Transaction: Transaction{TxnMeta: enginepb.TxnMeta{ID: id2}},
+		}))
+	}
+	require.Equal(t, ErrorScoreUnambiguousError, ErrPriority(&ConditionFailedError{}))
+	require.Equal(t, ErrorScoreUnambiguousError, ErrPriority(NewError(&ConditionFailedError{}).GoError()))
+	require.Equal(t, ErrorScoreNonRetriable, ErrPriority(errors.New("foo")))
 }
 
 func TestErrorTxn(t *testing.T) {
