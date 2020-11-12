@@ -425,7 +425,14 @@ func (p *planner) initiateDropTable(
 		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
 	}
 
-	// Mark all jobs scheduled for schema changes as successful.
+	// For this table descriptor, mark all previous jobs scheduled for schema changes as successful
+	// and delete them from the schema change job cache.
+	//
+	// Since the table is being dropped, any previous schema changes to the table do not need to complete
+	// and can be put in a terminal state such as Succeeded. Deleting the jobs from the cache ensures that
+	// subsequent schema changes in the transaction (ie. this drop table statement) do not get a cache hit
+	// and do not try to update succeeded jobs, which would raise an error. Instead, this drop table
+	// statement will create a new job to drop the table.
 	jobIDs := make(map[int64]struct{})
 	var id descpb.MutationID
 	for _, m := range tableDesc.Mutations {
@@ -443,7 +450,9 @@ func (p *planner) initiateDropTable(
 			return errors.Wrapf(err,
 				"failed to mark job %d as as successful", errors.Safe(jobID))
 		}
+		delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
 	}
+
 	// Initiate an immediate schema change. When dropping a table
 	// in a session, the data and the descriptor are not deleted.
 	// Instead, that is taken care of asynchronously by the schema

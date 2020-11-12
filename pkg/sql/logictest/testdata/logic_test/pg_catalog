@@ -595,12 +595,12 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 relname  attname  typname   attcollation  collname
-t1       d        varchar   3903121477    en-US
-t1       h        _bpchar   3903121477    en-US
-t1       i        _varchar  3903121477    en-US
-t1       j        char      3903121477    en-US
+t1       d        varchar   3403232968    default
+t1       h        _bpchar   3403232968    default
+t1       i        _varchar  3403232968    default
+t1       j        char      3403232968    default
+t3       c        text      3403232968    default
 t1       k        varchar   999873346     sv
-t3       c        text      3903121477    en-US
 
 
 ## pg_catalog.pg_am
@@ -701,11 +701,11 @@ ORDER BY indexrelid
 indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation               indclass  indoption  indexprs  indpred
 144368028   32        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 404104299   39        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
-543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
-543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3903121477                 0         2          NULL      NULL
-543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
-803027558   26        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     2 2 2      NULL      NULL
-1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 3903121477 3903121477  0 0 0 0   2 2 2 2    NULL      NULL
+543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL
+543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3403232968                 0         2          NULL      NULL
+543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL
+803027558   26        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3403232968             0 0 0     2 2 2      NULL      NULL
+1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 3403232968 3403232968  0 0 0 0   2 2 2 2    NULL      NULL
 1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                        0 0       2 2        NULL      NULL
 1322500096  28        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 1489445036  35        2         false        false         false           false         false           true        false         false       true       false           2 1      0 0                        0 0       2 2        NULL      NULL
@@ -714,27 +714,27 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL
 1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4        0                          0         2          NULL      NULL
 1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
-1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
+1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL
 2008917577  37        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2008917578  37        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL
 2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
-2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
+2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL
 2361445172  8         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                      0 0 0     2 2 2      NULL      NULL
-2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3903121477 0               0 0       2 2        NULL      NULL
-2621181441  15        2         false        false         false           false         false           true        false         false       true       false           6 7      3903121477 0               0 0       2 2        NULL      NULL
+2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3403232968 0               0 0       2 2        NULL      NULL
+2621181441  15        2         false        false         false           false         false           true        false         false       true       false           6 7      3403232968 0               0 0       2 2        NULL      NULL
 2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
-2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3903121477               0 0       2 2        NULL      NULL
-3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
+2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3403232968               0 0       2 2        NULL      NULL
+3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL
 3353994584  36        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
-3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
+3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL
 3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL
 3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                    0 0 0 0   2 2 2 2    NULL      NULL
 3752917847  27        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL
-3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
-4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     2 2 2      NULL      NULL
+3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL
+4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3403232968             0 0 0     2 2 2      NULL      NULL
 4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       2 2        NULL      NULL
 
 # From #26504
@@ -1358,14 +1358,14 @@ ORDER BY oid
 oid     typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 16      bool           0         0             NULL           NULL        NULL
 17      bytea          0         0             NULL           NULL        NULL
-18      char           0         3903121477    NULL           NULL        NULL
-19      name           0         3903121477    NULL           NULL        NULL
+18      char           0         3403232968    NULL           NULL        NULL
+19      name           0         3403232968    NULL           NULL        NULL
 20      int8           0         0             NULL           NULL        NULL
 21      int2           0         0             NULL           NULL        NULL
 22      int2vector     0         0             NULL           NULL        NULL
 23      int4           0         0             NULL           NULL        NULL
 24      regproc        0         0             NULL           NULL        NULL
-25      text           0         3903121477    NULL           NULL        NULL
+25      text           0         3403232968    NULL           NULL        NULL
 26      oid            0         0             NULL           NULL        NULL
 30      oidvector      0         0             NULL           NULL        NULL
 700     float4         0         0             NULL           NULL        NULL
@@ -1374,23 +1374,23 @@ oid     typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 869     inet           0         0             NULL           NULL        NULL
 1000    _bool          0         0             NULL           NULL        NULL
 1001    _bytea         0         0             NULL           NULL        NULL
-1002    _char          0         3903121477    NULL           NULL        NULL
-1003    _name          0         3903121477    NULL           NULL        NULL
+1002    _char          0         3403232968    NULL           NULL        NULL
+1003    _name          0         3403232968    NULL           NULL        NULL
 1005    _int2          0         0             NULL           NULL        NULL
 1006    _int2vector    0         0             NULL           NULL        NULL
 1007    _int4          0         0             NULL           NULL        NULL
 1008    _regproc       0         0             NULL           NULL        NULL
-1009    _text          0         3903121477    NULL           NULL        NULL
+1009    _text          0         3403232968    NULL           NULL        NULL
 1013    _oidvector     0         0             NULL           NULL        NULL
-1014    _bpchar        0         3903121477    NULL           NULL        NULL
-1015    _varchar       0         3903121477    NULL           NULL        NULL
+1014    _bpchar        0         3403232968    NULL           NULL        NULL
+1015    _varchar       0         3403232968    NULL           NULL        NULL
 1016    _int8          0         0             NULL           NULL        NULL
 1021    _float4        0         0             NULL           NULL        NULL
 1022    _float8        0         0             NULL           NULL        NULL
 1028    _oid           0         0             NULL           NULL        NULL
 1041    _inet          0         0             NULL           NULL        NULL
-1042    bpchar         0         3903121477    NULL           NULL        NULL
-1043    varchar        0         3903121477    NULL           NULL        NULL
+1042    bpchar         0         3403232968    NULL           NULL        NULL
+1043    varchar        0         3403232968    NULL           NULL        NULL
 1082    date           0         0             NULL           NULL        NULL
 1083    time           0         0             NULL           NULL        NULL
 1114    timestamp      0         0             NULL           NULL        NULL
@@ -1416,7 +1416,7 @@ oid     typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 2210    _regclass      0         0             NULL           NULL        NULL
 2211    _regtype       0         0             NULL           NULL        NULL
 2249    record         0         0             NULL           NULL        NULL
-2277    anyarray       0         3903121477    NULL           NULL        NULL
+2277    anyarray       0         3403232968    NULL           NULL        NULL
 2283    anyelement     0         0             NULL           NULL        NULL
 2287    _record        0         0             NULL           NULL        NULL
 2950    uuid           0         0             NULL           NULL        NULL

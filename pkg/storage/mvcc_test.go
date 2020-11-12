@@ -4233,7 +4233,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 			if num != 5 || resumeSpan == nil {
 				t.Errorf("expected resolution for only 5 keys; got %d, resume=%s", num, resumeSpan)
 			}
-			expResumeSpan := &roachpb.Span{Key: roachpb.Key("12").Next(), EndKey: roachpb.Key("30")}
+			expResumeSpan := roachpb.Span{Key: roachpb.Key("12").Next(), EndKey: roachpb.Key("30")}
 			if !resumeSpan.Equal(expResumeSpan) {
 				t.Errorf("expected resume span %s; got %s", expResumeSpan, resumeSpan)
 			}
@@ -5333,7 +5333,7 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 				}
 			}
 
-			if first, second := vals[0], vals[1]; !first.Equal(second) {
+			if first, second := vals[0], vals[1]; !reflect.DeepEqual(first, second) {
 				var firstTS, secondTS roachpb.InternalTimeSeriesData
 				if err := first.GetProto(&firstTS); err != nil {
 					t.Fatal(err)
