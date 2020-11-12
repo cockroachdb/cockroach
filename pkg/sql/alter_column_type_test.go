@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,6 +35,7 @@ import (
 func TestInsertBeforeOldColumnIsDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 54844)
 
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
@@ -96,6 +98,7 @@ ALTER TABLE test ALTER COLUMN x TYPE STRING;`)
 func TestInsertBeforeOldColumnIsDroppedUsingExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 54844)
 
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
@@ -159,6 +162,7 @@ ALTER TABLE test ALTER COLUMN x TYPE BOOL USING (x > 0);`)
 func TestVisibilityDuringAlterColumnType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 54844)
 
 	defer setTestJobsAdoptInterval()()
 
@@ -223,6 +227,7 @@ INSERT INTO t.test VALUES (1), (2), (3);
 func TestAlterColumnTypeFailureRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 54844)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -257,6 +262,7 @@ func TestQueryIntToString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
+	skip.WithIssue(t, 54844)
 
 	params, _ := tests.CreateTestServerParams()
 
@@ -283,6 +289,7 @@ ALTER TABLE t.test ALTER COLUMN y TYPE STRING;
 func TestSchemaChangeBeforeAlterColumnType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 54844)
 
 	ctx := context.Background()
 
@@ -332,6 +339,7 @@ ALTER TABLE t.test ALTER COLUMN y TYPE STRING;`)
 func TestSchemaChangeWhileExecutingAlterColumnType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 54844)
 
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
