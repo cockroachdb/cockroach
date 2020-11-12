@@ -385,6 +385,7 @@ func (h *crdbInstallHelper) generateStartCmd(
 		[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> %[1]s/roachprod.log; %[2]s
 		export ROACHPROD=%[3]d%[4]s;
 		GOTRACEBACK=crash COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 %[5]s \
+		COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true \
 		%[6]s %[7]s %[8]s >> %[1]s/cockroach.stdout.log \
 		                 2>> %[1]s/cockroach.stderr.log \
 			|| (x=$?; cat %[1]s/cockroach.stderr.log; exit $x)`,
