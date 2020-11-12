@@ -12,6 +12,17 @@ exec-sql
 BACKUP TO 'nodelocal://0/test/'
 ----
 
+# Restores should succeed as a non-root user with admin role.
+exec-sql
+CREATE USER testuser;
+GRANT ADMIN TO testuser;
+----
+
+exec-sql user=testuser
+DROP DATABASE d;
+RESTORE DATABASE d FROM 'nodelocal://0/test/';
+----
+
 # Start a new cluster with the same IO dir.
 new-server name=s2 share-io-dir=s1 allow-implicit-access
 ----
