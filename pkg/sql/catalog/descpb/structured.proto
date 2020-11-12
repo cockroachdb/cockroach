@@ -1088,6 +1088,9 @@ message DatabaseDescriptor {
 
   optional DescriptorState state = 8 [(gogoproto.nullable) = false];
   optional string offline_reason = 9 [(gogoproto.nullable) = false];
+
+// TODO(arul): Add some words here.
+  optional uint32 region_enum_id = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "RegionEnumID", (gogoproto.casttype) = "ID"];
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
@@ -1175,6 +1178,9 @@ message TypeDescriptor {
 
   // alias is the types.T that this descriptor is an alias for.
   optional sql.sem.types.T alias = 7;
+
+  // Set to true if the enum is an internal, regional enum.
+  optional bool is_region_enum = 16 [(gogoproto.nullable) = false];
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured

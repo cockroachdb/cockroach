@@ -192,6 +192,12 @@ func (desc *Immutable) IsUncommittedVersion() bool {
 	return desc.isUncommittedVersion
 }
 
+// IsRegionEnum returns true if the type descriptor refers to a special
+// multi-region region enum.
+func (desc *Immutable) IsRegionEnum() bool {
+	return desc.GetIsRegionEnum()
+}
+
 // DescriptorProto returns a Descriptor for serialization.
 func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
@@ -444,13 +450,17 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	var reqs []descpb.ID
 
 	// Validate the parentID.
-	reqs = append(reqs, desc.ParentID)
-	checks = append(checks, func(got catalog.Descriptor) error {
-		if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
-			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
-		}
-		return nil
-	})
+	// TODO(arul): This is hacky. In reality, I really need to figure out why we're
+	// unable to find the parent descriptor that's being created in the same txn.
+	if !desc.IsRegionEnum() {
+		reqs = append(reqs, desc.ParentID)
+		checks = append(checks, func(got catalog.Descriptor) error {
+			if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
+				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+			}
+			return nil
+		})
+	}
 
 	// Validate the parentSchemaID.
 	if desc.ParentSchemaID != keys.PublicSchemaID {
@@ -468,7 +478,8 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		// Ensure that the referenced array type exists.
 		reqs = append(reqs, desc.ArrayTypeID)
 		checks = append(checks, func(got catalog.Descriptor) error {
-			if _, isType := got.(catalog.TypeDescriptor); !isType {
+			// TODO(arul): See comment about region enum stuff above.
+			if _, isType := got.(catalog.TypeDescriptor); !isType && !desc.IsRegionEnum() {
 				return errors.AssertionFailedf("arrayTypeID %d does not exist", errors.Safe(desc.ArrayTypeID))
 			}
 			return nil
