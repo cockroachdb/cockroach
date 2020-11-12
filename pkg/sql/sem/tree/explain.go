@@ -246,7 +246,7 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 	}
 
 	if analyze {
-		if opts.Mode != ExplainDistSQL && opts.Mode != ExplainDebug {
+		if opts.Mode != ExplainDistSQL && opts.Mode != ExplainDebug && opts.Mode != ExplainPlan {
 			return nil, pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE cannot be used with %s", opts.Mode)
 		}
 		return &ExplainAnalyze{

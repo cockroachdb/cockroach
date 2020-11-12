@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -341,12 +342,19 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 	ih := &p.instrumentation
 
-	if explain, ok := ast.(*tree.ExplainAnalyze); ok && explain.Mode == tree.ExplainDebug {
-		telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
-		ih.SetOutputMode(explainAnalyzeDebugOutput)
+	if e, ok := ast.(*tree.ExplainAnalyze); ok &&
+		(e.Mode == tree.ExplainDebug || e.Mode == tree.ExplainPlan) {
+		if e.Mode == tree.ExplainDebug {
+			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
+			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
+		} else {
+			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
+			flags := explain.MakeFlags(&e.ExplainOptions)
+			ih.SetOutputMode(explainAnalyzePlanOutput, flags)
+		}
 		// Strip off the explain node to execute the inner statement.
-		stmt.AST = explain.Statement
-		ast = stmt.AST
+		stmt.AST = e.Statement
+		ast = e.Statement
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?
 
@@ -364,7 +372,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	if needFinish {
 		sql := stmt.SQL
 		defer func() {
-			retErr = ih.Finish(ex.server.cfg, ex.appStats, p, ast, sql, res, retErr)
+			retErr = ih.Finish(ex.server.cfg, ex.appStats, ex.statsCollector, p, ast, sql, res, retErr)
 		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx

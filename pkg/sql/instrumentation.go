@@ -13,10 +13,12 @@ package sql
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,6 +44,8 @@ import (
 //
 type instrumentationHelper struct {
 	outputMode outputMode
+	// explainFlags is used when outputMode is explainAnalyzePlanOutput.
+	explainFlags explain.Flags
 
 	// Query fingerprint (anonymized statement).
 	fingerprint string
@@ -84,12 +88,14 @@ type outputMode int8
 const (
 	unmodifiedOutput outputMode = iota
 	explainAnalyzeDebugOutput
+	explainAnalyzePlanOutput
 )
 
 // SetOutputMode can be called before Setup, if we are running an EXPLAIN
 // ANALYZE variant.
-func (ih *instrumentationHelper) SetOutputMode(outputMode outputMode) {
+func (ih *instrumentationHelper) SetOutputMode(outputMode outputMode, explainFlags explain.Flags) {
 	ih.outputMode = outputMode
+	ih.explainFlags = explainFlags
 }
 
 // Setup potentially enables snowball tracing for the statement, depending on
@@ -109,14 +115,19 @@ func (ih *instrumentationHelper) Setup(
 	ih.implicitTxn = implicitTxn
 	ih.codec = cfg.Codec
 
-	if ih.outputMode == explainAnalyzeDebugOutput {
+	switch ih.outputMode {
+	case explainAnalyzeDebugOutput:
 		ih.collectBundle = true
 		// EXPLAIN ANALYZE (DEBUG) does not return the rows for the given query;
 		// instead it returns some text which includes a URL.
 		// TODO(radu): maybe capture some of the rows and include them in the
 		// bundle.
 		ih.discardRows = true
-	} else {
+
+	case explainAnalyzePlanOutput:
+		ih.discardRows = true
+
+	default:
 		ih.collectBundle, ih.diagRequestID, ih.finishCollectionDiagnostics =
 			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint)
 	}
@@ -125,7 +136,7 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(fingerprint, implicitTxn)
 
-	if !ih.collectBundle && ih.withStatementTrace == nil {
+	if !ih.collectBundle && ih.withStatementTrace == nil && ih.outputMode == unmodifiedOutput {
 		return ctx, false
 	}
 
@@ -138,6 +149,7 @@ func (ih *instrumentationHelper) Setup(
 func (ih *instrumentationHelper) Finish(
 	cfg *ExecutorConfig,
 	appStats *appStats,
+	statsCollector *sqlStatsCollector,
 	p *planner,
 	ast tree.Statement,
 	stmtRawSQL string,
@@ -158,7 +170,7 @@ func (ih *instrumentationHelper) Finish(
 	placeholders := p.extendedEvalCtx.Placeholders
 	if ih.collectBundle {
 		bundle := buildStatementBundle(
-			ih.origCtx, cfg.DB, ie, &p.curPlan, ih.planString(), trace, placeholders,
+			ih.origCtx, cfg.DB, ie, &p.curPlan, ih.planStringForBundle(), trace, placeholders,
 		)
 		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
 		if ih.finishCollectionDiagnostics != nil {
@@ -172,8 +184,17 @@ func (ih *instrumentationHelper) Finish(
 			retErr = setExplainBundleResult(ctx, res, bundle, cfg)
 		}
 	}
+
 	if ih.withStatementTrace != nil {
 		ih.withStatementTrace(trace, stmtRawSQL)
+	}
+
+	if ih.outputMode == explainAnalyzePlanOutput && retErr == nil {
+		phaseTimes := &statsCollector.phaseTimes
+		if cfg.TestingKnobs.DeterministicExplainAnalyze {
+			phaseTimes = &deterministicPhaseTimes
+		}
+		retErr = ih.setExplainAnalyzePlanResult(ctx, res, phaseTimes)
 	}
 
 	// TODO(radu): this should be unified with other stmt stats accesses.
@@ -229,7 +250,7 @@ func (ih *instrumentationHelper) ShouldCollectBundle() bool {
 // ShouldBuildExplainPlan returns true if we should build an explain plan and
 // call RecordExplainPlan.
 func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
-	return ih.collectBundle || ih.savePlanForStats
+	return ih.collectBundle || ih.savePlanForStats || ih.outputMode == explainAnalyzePlanOutput
 }
 
 // RecordExplainPlan records the explain.Plan for this query.
@@ -263,8 +284,8 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 	return ob.BuildProtoTree()
 }
 
-// planString generates the plan tree as a string; used internally for bundles.
-func (ih *instrumentationHelper) planString() string {
+// planStringForBundle generates the plan tree as a string; used internally for bundles.
+func (ih *instrumentationHelper) planStringForBundle() string {
 	if ih.explainPlan == nil {
 		return ""
 	}
@@ -276,4 +297,55 @@ func (ih *instrumentationHelper) planString() string {
 		return fmt.Sprintf("error emitting plan: %v", err)
 	}
 	return ob.BuildString()
+}
+
+// planRowsForExplainAnalyze generates the plan tree as a list of strings (one
+// for each line).
+// Used in explainAnalyzePlanOutput mode.
+func (ih *instrumentationHelper) planRowsForExplainAnalyze(phaseTimes *phaseTimes) []string {
+	if ih.explainPlan == nil {
+		return nil
+	}
+	ob := explain.NewOutputBuilder(ih.explainFlags)
+	ob.AddField("planning time", phaseTimes.getPlanningLatency().Round(time.Microsecond).String())
+	ob.AddField("execution time", phaseTimes.getRunLatency().Round(time.Microsecond).String())
+	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
+		return []string{fmt.Sprintf("error emitting plan: %v", err)}
+	}
+	return ob.BuildStringRows()
+}
+
+// setExplainAnalyzePlanResult sets the result for an EXPLAIN ANALYZE (PLAN)
+// statement. It returns an error only if there was an error adding rows to the
+// result.
+func (ih *instrumentationHelper) setExplainAnalyzePlanResult(
+	ctx context.Context, res RestrictedCommandResult, phaseTimes *phaseTimes,
+) (commErr error) {
+	res.ResetStmtType(&tree.ExplainAnalyze{})
+	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
+
+	if res.Err() != nil {
+		// Can't add rows if there was an error.
+		return nil //nolint:returnerrcheck
+	}
+
+	rows := ih.planRowsForExplainAnalyze(phaseTimes)
+	rows = append(rows, "")
+	rows = append(rows, "WARNING: this statement is experimental!")
+	for _, row := range rows {
+		if err := res.AddRow(ctx, tree.Datums{tree.NewDString(row)}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var deterministicPhaseTimes = phaseTimes{
+	sessionQueryReceived:    time.Time{},
+	sessionStartParse:       time.Time{},
+	sessionEndParse:         time.Time{}.Add(1 * time.Microsecond),
+	plannerStartLogicalPlan: time.Time{}.Add(1 * time.Microsecond),
+	plannerEndLogicalPlan:   time.Time{}.Add(11 * time.Microsecond),
+	plannerStartExecStmt:    time.Time{}.Add(11 * time.Microsecond),
+	plannerEndExecStmt:      time.Time{}.Add(111 * time.Microsecond),
 }

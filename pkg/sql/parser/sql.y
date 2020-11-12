@@ -3571,8 +3571,9 @@ analyze_target:
 // %Text:
 // EXPLAIN <statement>
 // EXPLAIN ([PLAN ,] <planoptions...> ) <statement>
-// EXPLAIN [ANALYZE] (DISTSQL) <statement>
+// EXPLAIN (DISTSQL) <statement>
 // EXPLAIN ANALYZE [(DISTSQL)] <statement>
+// EXPLAIN ANALYZE (PLAN <planoptions...>) <statement>
 //
 // Explainable statements:
 //     SELECT, CREATE, DROP, ALTER, INSERT, UPSERT, UPDATE, DELETE,
