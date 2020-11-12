@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // loadTestData writes numKeys keys in numBatches separate batches. Keys are
@@ -47,7 +48,7 @@ func loadTestData(
 	ctx := context.Background()
 
 	exists := true
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
+	if _, err := os.Stat(dir); oserror.IsNotExist(err) {
 		exists = false
 	}
 

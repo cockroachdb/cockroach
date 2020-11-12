@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 )
 
@@ -299,7 +300,7 @@ func getActiveEncryptionkey(dir string) (string, string, error) {
 	// Open the file registry. Return plaintext if it does not exist.
 	contents, err := ioutil.ReadFile(registryFile)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			return enginepbccl.EncryptionType_Plaintext.String(), "", nil
 		}
 		return "", "", errors.Wrapf(err, "could not open registry file %s", registryFile)

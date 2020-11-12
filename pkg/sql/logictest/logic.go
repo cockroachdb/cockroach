@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -3194,7 +3195,7 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 	}
 
 	logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
-	if _, err := os.Stat(logicTestPath); os.IsNotExist(err) {
+	if _, err := os.Stat(logicTestPath); oserror.IsNotExist(err) {
 		fullPath, err := filepath.Abs(logicTestPath)
 		if err != nil {
 			t.Fatal(err)

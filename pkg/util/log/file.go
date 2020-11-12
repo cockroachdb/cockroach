@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // LogFileMaxSize is the maximum size of a log file in bytes.
@@ -255,7 +256,7 @@ func create(
 
 func createSymlink(fname, symlink string) {
 	// Symlinks are best-effort.
-	if err := os.Remove(symlink); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(symlink); err != nil && !oserror.IsNotExist(err) {
 		fmt.Fprintf(OrigStderr, "log: failed to remove symlink %s: %s\n", symlink, err)
 	}
 	if err := os.Symlink(filepath.Base(fname), symlink); err != nil {
@@ -356,7 +357,7 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 		// Symlinks are not followed in restricted mode.
 		info, err := os.Lstat(filename)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if oserror.IsNotExist(err) {
 				return nil, errors.Errorf("no such file %s in the log directory", filename)
 			}
 			return nil, errors.Wrapf(err, "Lstat: %s", filename)
@@ -371,7 +372,7 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 	case false:
 		info, err := osStat(filename)
 		if err != nil {
-			if !os.IsNotExist(err) {
+			if !oserror.IsNotExist(err) {
 				return nil, errors.Wrapf(err, "Stat: %s", filename)
 			}
 			// The absolute filename didn't work, so try within the log
@@ -382,7 +383,7 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 			filenameAttempt := filepath.Join(dir, filename)
 			info, err = osStat(filenameAttempt)
 			if err != nil {
-				if os.IsNotExist(err) {
+				if oserror.IsNotExist(err) {
 					return nil, errors.Errorf("no such file %s either in current directory or in %s", filename, dir)
 				}
 				return nil, errors.Wrapf(err, "Stat: %s", filename)

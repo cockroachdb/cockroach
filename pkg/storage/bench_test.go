@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // Note: most benchmarks in this package have an engine-specific Benchmark
@@ -166,7 +167,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 	ctx := context.Background()
 
 	exists := true
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
+	if _, err := os.Stat(dir); oserror.IsNotExist(err) {
 		exists = false
 	}
 
@@ -262,7 +263,7 @@ func setupMVCCData(
 	}
 
 	exists := true
-	if _, err := os.Stat(loc); os.IsNotExist(err) {
+	if _, err := os.Stat(loc); oserror.IsNotExist(err) {
 		exists = false
 	} else if err != nil {
 		b.Fatal(err)
