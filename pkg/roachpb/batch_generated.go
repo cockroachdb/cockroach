@@ -263,8 +263,9 @@ func (ru ResponseUnion) GetInner() Response {
 	}
 }
 
-// SetInner sets the error in the union.
-func (ru *ErrorDetail) SetInner(r error) bool {
+// MustSetInner sets the error in the union.
+func (ru *ErrorDetail) MustSetInner(r error) {
+	ru.Reset()
 	var union isErrorDetail_Value
 	switch t := r.(type) {
 	case *NotLeaseHolderError:
@@ -324,14 +325,14 @@ func (ru *ErrorDetail) SetInner(r error) bool {
 	case *IndeterminateCommitError:
 		union = &ErrorDetail_IndeterminateCommit{t}
 	default:
-		return false
+		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
-	return true
 }
 
-// SetInner sets the Request in the union.
-func (ru *RequestUnion) SetInner(r Request) bool {
+// MustSetInner sets the Request in the union.
+func (ru *RequestUnion) MustSetInner(r Request) {
+	ru.Reset()
 	var union isRequestUnion_Value
 	switch t := r.(type) {
 	case *GetRequest:
@@ -423,14 +424,14 @@ func (ru *RequestUnion) SetInner(r Request) bool {
 	case *AdminVerifyProtectedTimestampRequest:
 		union = &RequestUnion_AdminVerifyProtectedTimestamp{t}
 	default:
-		return false
+		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
-	return true
 }
 
-// SetInner sets the Response in the union.
-func (ru *ResponseUnion) SetInner(r Response) bool {
+// MustSetInner sets the Response in the union.
+func (ru *ResponseUnion) MustSetInner(r Response) {
+	ru.Reset()
 	var union isResponseUnion_Value
 	switch t := r.(type) {
 	case *GetResponse:
@@ -520,10 +521,9 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 	case *AdminVerifyProtectedTimestampResponse:
 		union = &ResponseUnion_AdminVerifyProtectedTimestamp{t}
 	default:
-		return false
+		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
-	return true
 }
 
 type reqCounts [44]int32

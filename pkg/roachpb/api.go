@@ -597,26 +597,6 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 	return nil
 }
 
-// MustSetInner sets the Request contained in the union. It panics if the
-// request is not recognized by the union type. The RequestUnion is reset
-// before being repopulated.
-func (ru *RequestUnion) MustSetInner(args Request) {
-	ru.Reset()
-	if !ru.SetInner(args) {
-		panic(errors.AssertionFailedf("%T excludes %T", ru, args))
-	}
-}
-
-// MustSetInner sets the Response contained in the union. It panics if the
-// response is not recognized by the union type. The ResponseUnion is reset
-// before being repopulated.
-func (ru *ResponseUnion) MustSetInner(reply Response) {
-	ru.Reset()
-	if !ru.SetInner(reply) {
-		panic(errors.AssertionFailedf("%T excludes %T", ru, reply))
-	}
-}
-
 // Method implements the Request interface.
 func (*GetRequest) Method() Method { return Get }
 
