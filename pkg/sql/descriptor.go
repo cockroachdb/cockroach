@@ -88,6 +88,7 @@ func (p *planner) createDatabase(
 	}
 
 	regionConfig, err := p.createRegionConfig(
+		ctx,
 		database.SurvivalGoal,
 		database.PrimaryRegion,
 		database.Regions,
@@ -102,8 +103,30 @@ func (p *planner) createDatabase(
 		p.SessionData().User(),
 		dbdesc.NewInitialOptionDatabaseRegionConfig(regionConfig),
 	)
+
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
+	}
+
+	// Create the multi-region enum if the region config dictates so.
+	if desc.RegionConfig.RegionEnumID != descpb.InvalidID {
+		regionLabels := make(tree.EnumValueList, 0, len(regionConfig.Regions))
+		for _, region := range regionConfig.Regions {
+			regionLabels = append(regionLabels, tree.EnumValue(region))
+		}
+		// TODO(#multiregion): See github issue:
+		// https://github.com/cockroachdb/cockroach/issues/56877.
+		err := p.createEnumWithID(
+			p.RunParams(ctx),
+			desc.RegionConfig.RegionEnumID,
+			regionLabels,
+			desc,
+			tree.NewQualifiedTypeName(dbName, tree.PublicSchema, tree.RegionEnum),
+			EnumTypeMultiRegion,
+		)
+		if err != nil {
+			return nil, false, err
+		}
 	}
 
 	// TODO(solon): This check should be removed and a public schema should
@@ -232,6 +255,9 @@ func translateSurvivalGoal(g tree.SurvivalGoal) (descpb.SurvivalGoal, error) {
 
 // validateDatabaseRegionConfig validates that a descpb.DatabaseRegionConfig is valid.
 func validateDatabaseRegionConfig(regionConfig descpb.DatabaseRegionConfig) error {
+	if regionConfig.RegionEnumID == descpb.InvalidID {
+		errors.AssertionFailedf("invalid multi-region enum ID")
+	}
 	if regionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE && len(regionConfig.Regions) < 3 {
 		return pgerror.New(
 			pgcode.InvalidParameterValue,
@@ -243,7 +269,7 @@ func validateDatabaseRegionConfig(regionConfig descpb.DatabaseRegionConfig) erro
 
 // createRegionConfig creates a new region config from the given parameters.
 func (p *planner) createRegionConfig(
-	survivalGoal tree.SurvivalGoal, primaryRegion tree.Name, regions []tree.Name,
+	ctx context.Context, survivalGoal tree.SurvivalGoal, primaryRegion tree.Name, regions []tree.Name,
 ) (descpb.DatabaseRegionConfig, error) {
 	var regionConfig descpb.DatabaseRegionConfig
 	var err error
@@ -300,6 +326,13 @@ func (p *planner) createRegionConfig(
 		} else {
 			regionConfig.Regions = []descpb.Region{regionConfig.PrimaryRegion}
 		}
+		// Generate a unique ID for the multi-region enum type descriptor here as
+		// well.
+		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		if err != nil {
+			return descpb.DatabaseRegionConfig{}, err
+		}
+		regionConfig.RegionEnumID = id
 	}
 	if err := validateDatabaseRegionConfig(regionConfig); err != nil {
 		return descpb.DatabaseRegionConfig{}, err
