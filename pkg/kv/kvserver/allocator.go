@@ -502,8 +502,11 @@ func (a *Allocator) allocateTargetFromList(
 	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, candidateReplicas, zone)
 	candidates := allocateCandidates(
+		ctx,
 		sl, analyzedConstraints, candidateReplicas,
-		a.storePool.getLocalitiesByStore(candidateReplicas), options,
+		a.storePool.getLocalitiesByStore(candidateReplicas),
+		a.storePool.isNodeReadyForRoutineReplicaTransfer,
+		options,
 	)
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -664,6 +667,7 @@ func (a Allocator) RebalanceTarget(
 		analyzedConstraints,
 		existingReplicas,
 		a.storePool.getLocalitiesByStore(existingReplicas),
+		a.storePool.isNodeReadyForRoutineReplicaTransfer,
 		options,
 	)
 

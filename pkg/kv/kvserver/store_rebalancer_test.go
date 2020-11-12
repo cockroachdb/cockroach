@@ -29,8 +29,8 @@ import (
 )
 
 var (
-	// noLocalityStores specifies a set of stores where one store is
-	// under-utilized in terms of QPS, three are in the middle, and one is
+	// noLocalityStores specifies a set of stores where s5 is
+	// under-utilized in terms of QPS, s2-s4 are in the middle, and s1 is
 	// over-utilized.
 	noLocalityStores = []*roachpb.StoreDescriptor{
 		{
@@ -237,34 +237,60 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 
 	testCases := []struct {
 		storeIDs      []roachpb.StoreID
+		excluded      []roachpb.StoreID // stores that are not to be considered for rebalancing
 		qps           float64
 		expectTargets []roachpb.StoreID // the first listed store is expected to be the leaseholder
 	}{
-		{[]roachpb.StoreID{1}, 100, []roachpb.StoreID{5}},
-		{[]roachpb.StoreID{1}, 500, []roachpb.StoreID{5}},
-		{[]roachpb.StoreID{1}, 700, []roachpb.StoreID{5}},
-		{[]roachpb.StoreID{1}, 800, nil},
-		{[]roachpb.StoreID{1}, 1.5, []roachpb.StoreID{5}},
-		{[]roachpb.StoreID{1}, 1.49, nil},
-		{[]roachpb.StoreID{1, 2}, 100, []roachpb.StoreID{5, 2}},
-		{[]roachpb.StoreID{1, 3}, 100, []roachpb.StoreID{5, 3}},
-		{[]roachpb.StoreID{1, 4}, 100, []roachpb.StoreID{5, 4}},
-		{[]roachpb.StoreID{1, 2}, 800, nil},
-		{[]roachpb.StoreID{1, 2}, 1.49, nil},
-		{[]roachpb.StoreID{1, 4, 5}, 500, nil},
-		{[]roachpb.StoreID{1, 4, 5}, 100, nil},
-		{[]roachpb.StoreID{1, 3, 5}, 500, nil},
-		{[]roachpb.StoreID{1, 3, 4}, 500, []roachpb.StoreID{5, 4, 3}},
-		{[]roachpb.StoreID{1, 3, 5}, 100, []roachpb.StoreID{5, 4, 3}},
+		{[]roachpb.StoreID{1}, nil, 100, []roachpb.StoreID{5}},
+		// If s5 is unavailable, s4 is the next best guess.
+		{[]roachpb.StoreID{1}, []roachpb.StoreID{5}, 100, []roachpb.StoreID{4}},
+		{[]roachpb.StoreID{1}, []roachpb.StoreID{4, 5}, 100, []roachpb.StoreID{}},
+
+		{[]roachpb.StoreID{1}, nil, 500, []roachpb.StoreID{5}},
+		{[]roachpb.StoreID{1}, []roachpb.StoreID{5}, 500, []roachpb.StoreID{}},
+
+		{[]roachpb.StoreID{1}, nil, 800, nil},
+
+		{[]roachpb.StoreID{1}, nil, 1.5, []roachpb.StoreID{5}},
+		{[]roachpb.StoreID{1}, []roachpb.StoreID{5}, 1.5, []roachpb.StoreID{4}},
+
+		{[]roachpb.StoreID{1}, nil, 1.49, nil},
+
+		{[]roachpb.StoreID{1, 2}, nil, 100, []roachpb.StoreID{5, 2}},
+		{[]roachpb.StoreID{1, 2}, []roachpb.StoreID{5}, 100, []roachpb.StoreID{4, 2}},
+
+		{[]roachpb.StoreID{1, 3}, nil, 100, []roachpb.StoreID{5, 3}},
+		{[]roachpb.StoreID{1, 4}, nil, 100, []roachpb.StoreID{5, 4}},
+
+		{[]roachpb.StoreID{1, 2}, nil, 800, nil},
+		{[]roachpb.StoreID{1, 2}, nil, 1.49, nil},
+		{[]roachpb.StoreID{1, 4, 5}, nil, 500, nil},
+		{[]roachpb.StoreID{1, 4, 5}, nil, 100, nil},
+		{[]roachpb.StoreID{1, 3, 5}, nil, 500, nil},
+		{[]roachpb.StoreID{1, 3, 4}, nil, 500, []roachpb.StoreID{5, 4, 3}},
+
+		{[]roachpb.StoreID{1, 3, 5}, nil, 100, []roachpb.StoreID{5, 4, 3}},
+		{[]roachpb.StoreID{1, 3, 5}, []roachpb.StoreID{4}, 100, nil},
+
 		// Rebalancing to s2 isn't chosen even though it's better than s1 because it's above the mean.
-		{[]roachpb.StoreID{1, 3, 4, 5}, 100, nil},
-		{[]roachpb.StoreID{1, 2, 4, 5}, 100, nil},
-		{[]roachpb.StoreID{1, 2, 3, 5}, 100, []roachpb.StoreID{5, 4, 3, 2}},
-		{[]roachpb.StoreID{1, 2, 3, 4}, 100, []roachpb.StoreID{5, 4, 3, 2}},
+		{[]roachpb.StoreID{1, 3, 4, 5}, nil, 100, nil},
+		{[]roachpb.StoreID{1, 2, 4, 5}, nil, 100, nil},
+		{[]roachpb.StoreID{1, 2, 3, 5}, nil, 100, []roachpb.StoreID{5, 4, 3, 2}},
+		{[]roachpb.StoreID{1, 2, 3, 4}, nil, 100, []roachpb.StoreID{5, 4, 3, 2}},
 	}
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
+			a.storePool.isNodeReadyForRoutineReplicaTransfer = func(_ context.Context, n roachpb.NodeID) bool {
+				for _, s := range tc.excluded {
+					// NodeID match StoreIDs here, so this comparison is valid.
+					if roachpb.NodeID(s) == n {
+						return false
+					}
+				}
+				return true
+			}
+
 			s.cfg.DefaultZoneConfig.NumReplicas = proto.Int32(int32(len(tc.storeIDs)))
 			loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
 			hottestRanges := rr.topQPS()

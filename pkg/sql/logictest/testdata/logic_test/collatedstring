@@ -402,3 +402,28 @@ SELECT id, a, length(a), b, length(b::string) FROM t50015 ORDER BY id ASC
 1  hello                                                                                                 5   hello        5
 2  hello                                                                                                 5   hello        5
 3  hello hello                                                                                           11  hello hello  11
+
+statement ok
+CREATE TABLE t54989(
+  no_collation_str text,
+  no_collation_str_array text[],
+  collated_str text COLLATE en,
+  default_collation text COLLATE "default"
+)
+
+query TT
+SELECT
+    a.attname AS column_name,
+    collname AS collation
+FROM pg_attribute a
+LEFT JOIN pg_collation co ON a.attcollation = co.oid
+JOIN pg_class c ON a.attrelid = c.oid
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.relname = 't54989'
+ORDER BY column_name
+----
+collated_str            en
+default_collation       default
+no_collation_str        default
+no_collation_str_array  default
+rowid                   NULL

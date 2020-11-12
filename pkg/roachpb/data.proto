@@ -21,8 +21,6 @@ import "gogoproto/gogo.proto";
 
 // Span is a key range with an inclusive start Key and an exclusive end Key.
 message Span {
-  option (gogoproto.equal) = true;
-
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
@@ -83,8 +81,6 @@ enum ValueType {
 // TODO(peter): Is a 4-byte checksum overkill when most (all?) values
 // will be less than 64KB?
 message Value {
-  option (gogoproto.equal) = true;
-
   // raw_bytes contains the encoded value and checksum.
   //
   // Its contents may be modified on the next call to Value.SetFoo.
@@ -118,6 +114,7 @@ message StoreIdent {
 // allows the final bookkeeping for the split to be completed and the
 // new range put into operation.
 message SplitTrigger {
+  // Needed for ReplicatedEvalResult.Equal().
   option (gogoproto.equal) = true;
 
   RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
@@ -133,6 +130,7 @@ message SplitTrigger {
 // (right_desc). This information allows the final bookkeeping for the
 // merge to be completed and put into operation.
 message MergeTrigger {
+  // Needed for ReplicatedEvalResult.Equal().
   option (gogoproto.equal) = true;
 
   RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
@@ -173,8 +171,6 @@ enum ReplicaChangeType {
 // configuration is left via another ChangeReplicasTrigger which does not
 // specify any additions nor removals.
 message ChangeReplicasTrigger {
-  option (gogoproto.equal) = true;
-
   option (gogoproto.goproto_stringer) = false;
 
   // TODO(tbg): remove once we know that no trigger using this will ever be
@@ -212,8 +208,6 @@ message ChangeReplicasTrigger {
 // ModifiedSpanTrigger indicates that a specific span has been modified.
 // This can be used to trigger scan-and-gossip for the given span.
 message ModifiedSpanTrigger {
-  option (gogoproto.equal) = true;
-
   bool system_config_span = 1;
   // node_liveness_span is set to indicate that node liveness records
   // need re-gossiping after modification or range lease updates. The
@@ -237,8 +231,6 @@ message ModifiedSpanTrigger {
 // update the range descriptor and it's the client's responsibility that the
 // timestamps are aligned.
 message StickyBitTrigger {
-  option (gogoproto.equal) = true;
-
   // Set to nil to remove a RangeDescriptor's sticky bit.
   util.hlc.Timestamp sticky_bit = 1 [(gogoproto.nullable) = false];
 }
@@ -246,8 +238,6 @@ message StickyBitTrigger {
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.
 // Only one may be set.
 message InternalCommitTrigger {
-  option (gogoproto.equal) = true;
-
   // InternalCommitTrigger is always nullable, and these getters are
   // nil-safe, which is often convenient.
   option (gogoproto.goproto_getters) = true;
@@ -292,8 +282,6 @@ enum TransactionStatus {
 }
 
 message ObservedTimestamp {
-  option (gogoproto.equal) = true;
-
   option (gogoproto.populate) = true;
 
   int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
@@ -309,8 +297,6 @@ message ObservedTimestamp {
 // If you add fields to Transaction you'll need to update
 // Transaction.Clone. Failure to do so will result in test failures.
 message Transaction {
-  option (gogoproto.equal) = true;
-
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
@@ -523,7 +509,6 @@ message Transaction {
 // NOTE: any changes to this type must be reflected in the AsRecord and
 // AsTransaction methods.
 message TransactionRecord {
-  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // See comments on Transaction proto.
@@ -546,14 +531,10 @@ message TransactionRecord {
 //
 // Note: avoid constructing Intent directly; consider using MakeIntent() instead.
 message Intent {
-  option (gogoproto.equal) = true;
-
   // SingleKeySpan preseves wire compatibility with an earlier version of this
   // proto which used a Span. An Intent never spans keys, so there was no need
   // for this to contain an EndKey.
   message SingleKeySpan {
-    option (gogoproto.equal) = true;
-
     reserved 1, 2, 4;
     // The start key of the key range.
     bytes key = 3 [(gogoproto.casttype) = "Key"];
@@ -565,8 +546,6 @@ message Intent {
 // A LockAcquisition represents the action of a Transaction acquiring a lock
 // with a specified durbility level over a Span of keys.
 message LockAcquisition {
-  option (gogoproto.equal) = true;
-
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   kv.kvserver.concurrency.lock.Durability durability = 3;
@@ -578,8 +557,6 @@ message LockAcquisition {
 // argument to intent resolution, to pass the current txn status, timestamps and
 // ignored seqnum ranges to the resolution algorithm.
 message LockUpdate {
-  option (gogoproto.equal) = true;
-
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
@@ -588,7 +565,6 @@ message LockUpdate {
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
 message SequencedWrite {
-  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // The key that the write was made at.
@@ -651,8 +627,9 @@ message Lease {
 // previously, this entry informs the transaction that it has aborted
 // and must start fresh with an updated priority.
 message AbortSpanEntry {
-  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
+  // We want to compare abort span entries to avoid unnecessary disk writes.
+  option (gogoproto.equal) = true;
 
   // The key of the associated transaction.
   bytes key = 1 [(gogoproto.casttype) = "Key"];
@@ -725,7 +702,6 @@ message LeafTxnFinalState {
 // RangeInfo describes a range which executed a request. It contains
 // the range descriptor and lease information at the time of execution.
 message RangeInfo {
-  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
 
   RangeDescriptor desc = 1 [(gogoproto.nullable) = false];

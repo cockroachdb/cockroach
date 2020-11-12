@@ -44,8 +44,6 @@ enum ReadConsistencyType {
 
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
-  option (gogoproto.equal) = true;
-
   reserved 1, 2;
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.
@@ -114,8 +112,6 @@ message ResponseHeader {
 
 // A GetRequest is the argument for the Get() method.
 message GetRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
@@ -136,8 +132,6 @@ message GetResponse {
 
 // A PutRequest is the argument to the Put() method.
 message PutRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Value value = 2 [(gogoproto.nullable) = false];
   // Specify as true to put the value without a corresponding
@@ -169,8 +163,6 @@ message PutResponse {
 // error carries a WriteTimestamp that's the upper bound of the timestamps
 // intents were written at.
 message ConditionalPutRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
   Value value = 2 [(gogoproto.nullable) = false];
@@ -223,8 +215,6 @@ message ConditionalPutResponse {
 //   If failOnTombstones is set to true, tombstone values count as mismatched
 //   values and will cause a ConditionFailedError.
 message InitPutRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Value value = 2 [(gogoproto.nullable) = false];
   // NOTE: For internal use only! Set to indicate that the put is
@@ -247,8 +237,6 @@ message InitPutResponse {
 // by Put() or ConditionalPut(). Similarly, Put() and ConditionalPut()
 // cannot be invoked on an incremented key.
 message IncrementRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   int64 increment = 2;
 }
@@ -263,8 +251,6 @@ message IncrementResponse {
 
 // A DeleteRequest is the argument to the Delete() method.
 message DeleteRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
@@ -279,8 +265,6 @@ message DeleteResponse {
 // A DeleteRangeRequest populates the timestamp cache and is tracked for
 // refreshes.
 message DeleteRangeRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   reserved 2;
   // return the keys that are deleted in the response.
@@ -323,8 +307,6 @@ message DeleteRangeResponse {
 // writes (until Deadline, if set, below).
 // Ignoring this warning may result in data loss.
 message ClearRangeRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // Deadline can be set to a time at or after which the server will refuse to
@@ -346,8 +328,6 @@ message ClearRangeResponse {
 // revisions more recent than some TargetTime from the underlying engine, thus
 // reverting the range (from the perspective of an MVCC scan) to that time.
 message RevertRangeRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // TargetTime specifies a the time to which to "revert" the range by clearing
@@ -379,8 +359,6 @@ enum ScanFormat {
 // start and end keys for an ascending scan of [start,end) and the maximum
 // number of results (unbounded if zero).
 message ScanRequest {
-  option (gogoproto.equal) = true;
-
   reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -431,8 +409,6 @@ message ScanResponse {
 // start and end keys for a descending scan of [start,end) and the maximum
 // number of results (unbounded if zero).
 message ReverseScanRequest {
-  option (gogoproto.equal) = true;
-
   reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -512,8 +488,6 @@ enum ChecksumMode {
 // consistency check should be applied. A consistency check on a range involves
 // running a ComputeChecksum on the range followed by a storage.CollectChecksum.
 message CheckConsistencyRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // log a diff of inconsistencies if such inconsistencies are found. This is only
   // valid if mode == FROM_QUEUE
@@ -587,8 +561,6 @@ message CheckConsistencyResponse {
 // it is safe to invoke at any time, including repeatedly, though it should be
 // used conservatively due to performing a full scan of the Range.
 message RecomputeStatsRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // When dry_run is true, the stats delta is computed, but no stats adjustment
   // is performed. This isn't useful outside of testing since RecomputeStats is
@@ -607,8 +579,6 @@ message RecomputeStatsResponse {
 // An EndTxnRequest is the argument to the EndTxn() method. It specifies
 // whether to commit or roll back an extant transaction.
 message EndTxnRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // False to abort and rollback.
   bool commit = 2;
@@ -735,8 +705,6 @@ message EndTxnResponse {
 // of hlc.Timestamp{} (I.E. The zero timestamp so they are always eligible for
 // automatic merging).
 message AdminSplitRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes split_key = 2 [(gogoproto.casttype) = "Key"];
   reserved 3;
@@ -756,8 +724,6 @@ message AdminSplitResponse {
 // Ranges that do not have the sticky bit set are eligible for
 // automatic merging.
 message AdminUnsplitRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
@@ -778,8 +744,6 @@ message AdminUnsplitResponse {
 // in the key space, it is a noop.
 // The request must be addressed to the start key of the left hand side.
 message AdminMergeRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
@@ -794,8 +758,6 @@ message AdminMergeResponse {
 // holder for a range. The target of the lease transfer needs to be a valid
 // replica of the range.
 message AdminTransferLeaseRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   int32 target = 2 [(gogoproto.casttype) = "StoreID"];
 }
@@ -806,8 +768,6 @@ message AdminTransferLeaseResponse {
 
 // A ReplicationChange specifies the type and target of a replication change operation.
 message ReplicationChange {
-  option (gogoproto.equal) = true;
-
   ReplicaChangeType change_type = 1;
   ReplicationTarget target = 2 [(gogoproto.nullable) = false];
 }
@@ -816,8 +776,6 @@ message ReplicationChange {
 // method. A change replicas operation allows adding or removing a set of
 // replicas for a range.
 message AdminChangeReplicasRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Never access directly: use .Changes()
   //
@@ -854,8 +812,6 @@ message AdminChangeReplicasResponse {
 // method. Relocates the replicas for a range to the specified target stores.
 // The first store in the list of targets becomes the new leaseholder.
 message AdminRelocateRangeRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ReplicationTarget targets = 2 [(gogoproto.nullable) = false];
   // TODO(a-robinson): Add "reason"/"details" string fields?
@@ -871,8 +827,6 @@ message AdminRelocateRangeResponse {
 // heartbeat message is different from the heartbeat message in the
 // gossip protocol.
 message HeartbeatTxnRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
 }
@@ -888,13 +842,9 @@ message HeartbeatTxnResponse {
 // A GCRequest is arguments to the GC() method. It's sent by range
 // lease holders after scanning range data to find expired MVCC values.
 message GCRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   message GCKey {
-    option (gogoproto.equal) = true;
-
     bytes key = 1 [(gogoproto.casttype) = "Key"];
     util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
@@ -939,8 +889,6 @@ enum PushTxnType {
 // course of action is determined by the specified push type, and by
 // the owning txn's status and priority.
 message PushTxnRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Transaction which encountered the intent, if applicable. For a
   // non-transactional pusher, pusher_txn will only have the priority set (in
@@ -990,8 +938,6 @@ message PushTxnResponse {
 // used to determine whether the result of the recovery should be committing the
 // abandoned transaction or aborting it.
 message RecoverTxnRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Transaction record to recover.
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
@@ -1016,8 +962,6 @@ message RecoverTxnResponse {
 // of conflicting write intents to fetch updates to either the pusher's
 // or the pushee's transaction records.
 message QueryTxnRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Transaction record to query.
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
@@ -1048,8 +992,6 @@ message QueryTxnResponse {
 // transaction. If the intent is found to be missing then it is prevented
 // from ever being written in the future.
 message QueryIntentRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // The TxnMeta that the intent is expected to have. Specifically, whether an
@@ -1090,8 +1032,6 @@ message QueryIntentResponse {
 // calling PushTxn to clean up write intents: either to remove, commit
 // or move them forward in time.
 message ResolveIntentRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intent is being resolved.
   storage.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
@@ -1119,8 +1059,6 @@ message ResolveIntentResponse {
 // clean up write intents: either to remove, commit or move them forward in
 // time.
 message ResolveIntentRangeRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intents are being resolved.
   storage.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
@@ -1151,8 +1089,6 @@ message ResolveIntentRangeResponse {
 // specifies a key and a value which should be merged into the
 // existing value at that key.
 message MergeRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Value value = 2 [(gogoproto.nullable) = false];
 }
@@ -1168,8 +1104,6 @@ message MergeResponse {
 // to identical as possible. The raft leader can also inform decisions about the cutoff point
 // with its knowledge of the replicas' acknowledgment status.
 message TruncateLogRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // Log entries < this index are to be discarded.
@@ -1191,8 +1125,6 @@ message TruncateLogResponse {
 // method. It is sent by the store on behalf of one of its ranges upon receipt
 // of a command requiring a lease when none is found.
 message RequestLeaseRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Lease lease = 2 [(gogoproto.nullable) = false];
   // The previous lease is specified by the caller to verify
@@ -1217,8 +1149,6 @@ message RequestLeaseRequest {
 // special in this respect (for example, the proposer of this command is
 // checked to have been holding the lease when the proposal was made).
 message TransferLeaseRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Lease lease = 2 [(gogoproto.nullable) = false];
   // The previous lease is specified by the caller to verify
@@ -1231,8 +1161,6 @@ message TransferLeaseRequest {
 // It's a point request, so it addresses one single range, and returns the lease
 // currently in effect for that range.
 message LeaseInfoRequest{
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 // LeaseInfoResponse is the response to a LeaseInfo() operation.
@@ -1254,8 +1182,6 @@ message RequestLeaseResponse{
 // request command. A response is returned without the checksum. The computed
 // checksum is retrieved via a storage.CollectChecksumRequest.
 message ComputeChecksumRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The version used to pick the checksum method. It allows us to use a
   // consistent checksumming method across replicas.
@@ -1301,24 +1227,16 @@ enum ExternalStorageProvider {
 }
 
 message ExternalStorage {
-  option (gogoproto.equal) = true;
-
   ExternalStorageProvider provider = 1;
 
   message LocalFilePath {
-    option (gogoproto.equal) = true;
-
     string path = 1;
     uint32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   }
   message Http {
-    option (gogoproto.equal) = true;
-
     string baseUri = 1;
   }
   message S3 {
-    option (gogoproto.equal) = true;
-
     string bucket = 1;
     string prefix = 2;
 
@@ -1332,8 +1250,6 @@ message ExternalStorage {
     string server_kms_id = 10  [(gogoproto.customname) = "ServerKMSID"];
   }
   message GCS {
-    option (gogoproto.equal) = true;
-
     string bucket = 1;
     string prefix = 2;
     string auth = 3;
@@ -1345,8 +1261,6 @@ message ExternalStorage {
     string credentials = 5;
   }
   message Azure {
-    option (gogoproto.equal) = true;
-
     string container = 1;
     string prefix = 2;
 
@@ -1354,8 +1268,6 @@ message ExternalStorage {
     string account_key = 4;
   }
   message Workload {
-    option (gogoproto.equal) = true;
-
     string generator = 1;
     string version = 2;
     string table = 3;
@@ -1365,8 +1277,6 @@ message ExternalStorage {
     int64 batch_end = 7;
   }
   message FileTable {
-    option (gogoproto.equal) = true;
-
     // User interacting with the external storage. This is used to check access
     // privileges of the requested user scoped tables.
     // This field is really of type security.SQLUsername. We can't use
@@ -1392,8 +1302,6 @@ message ExternalStorage {
 // WriteBatchRequest is arguments to the WriteBatch() method, to apply the
 // operations encoded in a BatchRepr.
 message WriteBatchRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The span of keys encoded in data, duplicated because the header span can
   // be modified by DistSender and we use this one to fail fast.
@@ -1415,7 +1323,6 @@ enum MVCCFilter {
 // FileEncryptionOptions stores information needed by KV level requests (egs:
 // ExportRequest, ImportRequest) to encrypt or decrypt data.
 message FileEncryptionOptions {
-  option (gogoproto.equal) = true;
   // Key specifies the key to use for encryption or decryption.
   bytes key = 1;
 }
@@ -1423,8 +1330,6 @@ message FileEncryptionOptions {
 // ExportRequest is the argument to the Export() method, to dump a keyrange into
 // files under a basepath.
 message ExportRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   ExternalStorage storage = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
@@ -1517,10 +1422,7 @@ message ExportResponse {
 // ImportRequest is the argument to the Import() method, to bulk load key/value
 // entries.
 message ImportRequest {
-  option (gogoproto.equal) = true;
-
   message File {
-    option (gogoproto.equal) = true;
 
     ExternalStorage dir = 1 [(gogoproto.nullable) = false];
     string path = 2;
@@ -1538,7 +1440,6 @@ message ImportRequest {
   util.hlc.Timestamp end_time = 6 [(gogoproto.nullable) = false];
   reserved 4;
   message TableRekey {
-    option (gogoproto.equal) = true;
 
     // OldID is the previous ID of `new_desc`.
     uint32 old_id = 1 [(gogoproto.customname) = "OldID"];
@@ -1568,8 +1469,6 @@ message ImportResponse {
 // ranges that cannot be moved will include an error detail in the response and
 // won't fail the request.
 message AdminScatterRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
 }
@@ -1592,8 +1491,6 @@ message AdminScatterResponse {
 // AdminVerifyProtectedTimestamp method which ensures that the specified record
 // will be seen before data can be garbage collected at the timestamp.
 message AdminVerifyProtectedTimestampRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // RecordID is the ID of the protected timestamp Record being verified.
@@ -1628,8 +1525,6 @@ message AdminVerifyProtectedTimestampResponse {
 // AddSSTableRequest is arguments to the AddSSTable() method, to link a file
 // into the RocksDB log-structured merge-tree.
 message AddSSTableRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes data = 2;
   // If set, indicates that AddSSTable will not allow ingestion of keys which
@@ -1666,8 +1561,6 @@ message AddSSTableResponse {
 // The timestamp cache is updated to txn.read_timestamp, like it is for all
 // requests.
 message RefreshRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   reserved 2;
 
@@ -1685,8 +1578,6 @@ message RefreshResponse {
 // is similar to RefreshRequest (see comments above), but operates on
 // a key span instead of a single key.
 message RefreshRangeRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   reserved 2;
 
@@ -1711,8 +1602,6 @@ message RefreshRangeResponse {
 // transaction. As a rule of thumb, it is incorrect to call Subsume, except from
 // its carefully-chosen location within a merge transaction.
 message SubsumeRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // The range descriptor for the left-hand side of the merge. Used by the
@@ -1754,8 +1643,6 @@ message SubsumeResponse {
 // RangeStatsRequest is the argument to the RangeStats() method. It requests the
 // MVCC statistics of the receiving range.
 message RangeStatsRequest {
-  option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 

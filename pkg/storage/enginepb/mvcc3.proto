@@ -17,7 +17,6 @@ import "gogoproto/gogo.proto";
 // TxnMeta is the metadata of a Transaction record.
 message TxnMeta {
   option (gogoproto.goproto_stringer) = false;
-  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // id is a unique UUID value which identifies the transaction.

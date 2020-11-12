@@ -70,7 +70,7 @@ func isTrivial(r *kvserverpb.ReplicatedEvalResult) bool {
 	allowlist.DeprecatedDelta = nil
 	allowlist.PrevLeaseProposal = nil
 	allowlist.State = nil
-	return allowlist.Equal(kvserverpb.ReplicatedEvalResult{})
+	return allowlist.IsZero()
 }
 
 // clearTrivialReplicatedEvalResultFields is used to zero out the fields of a
@@ -214,8 +214,8 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 			r.mu.state.Lease,
 			r.store.StoreID(),
 			r.mu.state.Desc,
+			"reproposal failed due to closed timestamp",
 		)
-		err.CustomMsg = "reproposal failed due to closed timestamp"
 		return roachpb.NewError(err)
 	}
 	// Some tests check for this log message in the trace.

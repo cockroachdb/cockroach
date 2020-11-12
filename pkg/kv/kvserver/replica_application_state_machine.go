@@ -261,10 +261,11 @@ func checkForcedErr(
 		// We return a NotLeaseHolderError so that the DistSender retries.
 		// NB: we set proposerStoreID to 0 because we don't know who proposed the
 		// Raft command. This is ok, as this is only used for debug information.
-		nlhe := newNotLeaseHolderError(replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc)
-		nlhe.CustomMsg = fmt.Sprintf(
-			"stale proposal: command was proposed under lease #%d but is being applied "+
-				"under lease: %s", raftCmd.ProposerLeaseSequence, replicaState.Lease)
+		nlhe := newNotLeaseHolderError(
+			replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc,
+			fmt.Sprintf(
+				"stale proposal: command was proposed under lease #%d but is being applied "+
+					"under lease: %s", raftCmd.ProposerLeaseSequence, replicaState.Lease))
 		return leaseIndex, proposalNoReevaluation, roachpb.NewError(nlhe)
 	}
 
@@ -1070,7 +1071,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.mu.Unlock()
 			sm.stats.stateAssertions++
 		}
-	} else if res := cmd.replicatedResult(); !res.Equal(kvserverpb.ReplicatedEvalResult{}) {
+	} else if res := cmd.replicatedResult(); !res.IsZero() {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
 	}
 
@@ -1126,7 +1127,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	ctx context.Context, rResult *kvserverpb.ReplicatedEvalResult,
 ) (shouldAssert, isRemoved bool) {
 	// Assert that this replicatedResult implies at least one side-effect.
-	if rResult.Equal(kvserverpb.ReplicatedEvalResult{}) {
+	if rResult.IsZero() {
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
@@ -1159,7 +1160,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	// The rest of the actions are "nontrivial" and may have large effects on the
 	// in-memory and on-disk ReplicaStates. If any of these actions are present,
 	// we want to assert that these two states do not diverge.
-	shouldAssert = !rResult.Equal(kvserverpb.ReplicatedEvalResult{})
+	shouldAssert = !rResult.IsZero()
 	if !shouldAssert {
 		return false, false
 	}
@@ -1200,7 +1201,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		rResult.ComputeChecksum = nil
 	}
 
-	if !rResult.Equal(kvserverpb.ReplicatedEvalResult{}) {
+	if !rResult.IsZero() {
 		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, kvserverpb.ReplicatedEvalResult{}))
 	}
 	return true, isRemoved

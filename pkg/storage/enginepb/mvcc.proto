@@ -22,7 +22,6 @@ import "gogoproto/gogo.proto";
 // that key.
 message MVCCMetadata {
   option (gogoproto.goproto_stringer) = false;
-  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // The transaction metadata. Present for intents, but not for inline

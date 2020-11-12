@@ -10,7 +10,10 @@
 
 package roachpb
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestSpanGroup(t *testing.T) {
 	g := &SpanGroup{}
@@ -38,7 +41,7 @@ func TestSpanGroup(t *testing.T) {
 	if got, expected := g.Len(), 1; got != expected {
 		t.Fatalf("got %d, expected %d", got, expected)
 	}
-	if got, expected := g.Slice(), be; len(got) != 1 || !got[0].Equal(expected) {
+	if got, expected := g.Slice(), be; len(got) != 1 || !reflect.DeepEqual(got[0], expected) {
 		t.Fatalf("got %v, expected %v", got, expected)
 	}
 	for _, k := range []string{"b", "c", "d"} {
