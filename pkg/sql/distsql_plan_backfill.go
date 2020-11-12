@@ -68,7 +68,7 @@ func (dsp *DistSQLPlanner) createBackfiller(
 		return PhysicalPlan{}, err
 	}
 
-	p := MakePhysicalPlan(dsp.gatewayNodeID)
+	p := MakePhysicalPlan(planCtx, dsp.gatewayNodeID)
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ib := &execinfrapb.BackfillerSpec{}
