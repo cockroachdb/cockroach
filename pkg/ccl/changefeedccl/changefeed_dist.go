@@ -157,7 +157,7 @@ func distChangefeedFlow(
 		UserProto:    execCtx.User().EncodeProto(),
 	}
 
-	p := sql.MakePhysicalPlan(gatewayNodeID)
+	p := sql.MakePhysicalPlan(planCtx, gatewayNodeID)
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
 	p.AddSingleGroupStage(
 		gatewayNodeID,

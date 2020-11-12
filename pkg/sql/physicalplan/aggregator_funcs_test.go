@@ -67,7 +67,7 @@ func runTestFlow(
 		Version:           execinfra.Version,
 		LeafTxnInputState: &leafInputState,
 		Flow: execinfrapb.FlowSpec{
-			FlowID:     execinfrapb.FlowID{UUID: uuid.MakeV4()},
+			FlowID:     execinfrapb.FlowID{UUID: uuid.FastMakeV4()},
 			Processors: procs,
 		},
 	}

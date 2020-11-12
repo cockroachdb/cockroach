@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/marusama/semaphore"
@@ -268,16 +267,8 @@ func (f *vectorizedFlow) getTempStoragePath(ctx context.Context) string {
 		return f.tempStorage.path
 	}
 	// We haven't created this flow's temporary directory yet, so we do so now.
-	// The directory name is the flow's ID in most cases apart from when the
-	// flow's ID is unset (in the case of local flows). In this case the
-	// directory will be prefixed with "local-flow" and a uuid is generated on
-	// the spot to provide a unique name.
-	var tempDirName string
-	if id := f.GetID(); id.Equal(uuid.Nil) {
-		tempDirName = "local-flow" + uuid.FastMakeV4().String()
-	} else {
-		tempDirName = id.String()
-	}
+	// The directory name is the flow's ID.
+	tempDirName := f.GetID().String()
 	f.tempStorage.path = filepath.Join(f.Cfg.TempStoragePath, tempDirName)
 	log.VEventf(ctx, 1, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
 	if err := f.Cfg.TempFS.MkdirAll(f.tempStorage.path); err != nil {

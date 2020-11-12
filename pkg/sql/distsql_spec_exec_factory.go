@@ -103,8 +103,9 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols colinfo.ResultColumns,
 ) (exec.Node, error) {
 	if (len(cols) == 0 && len(rows) == 1) || len(rows) == 0 {
+		planCtx := e.getPlanCtx(canDistribute)
 		physPlan, err := e.dsp.createValuesPlan(
-			getTypesFromResultColumns(cols), len(rows), nil, /* rawBytes */
+			planCtx, getTypesFromResultColumns(cols), len(rows), nil, /* rawBytes */
 		)
 		if err != nil {
 			return nil, err
@@ -112,6 +113,7 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 		physPlan.ResultColumns = cols
 		return makePlanMaybePhysical(physPlan, nil /* planNodesToClose */), nil
 	}
+
 	recommendation := shouldDistribute
 	for _, exprs := range rows {
 		recommendation = recommendation.compose(
@@ -170,7 +172,6 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		)
 	}
 
-	p := MakePhysicalPlan(e.gatewayNodeID)
 	// Although we don't yet recommend distributing plans where soft limits
 	// propagate to scan nodes because we don't have infrastructure to only
 	// plan for a few ranges at a time, the propagation of the soft limits
@@ -178,6 +179,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// previous behavior we continue to ignore the soft limits for now.
 	// TODO(yuzefovich): pay attention to the soft limits.
 	recommendation := canDistribute
+	planCtx := e.getPlanCtx(recommendation)
+	p := MakePhysicalPlan(planCtx, e.gatewayNodeID)
 
 	// Phase 1: set up all necessary infrastructure for table reader planning
 	// below. This phase is equivalent to what execFactory.ConstructScan does.
@@ -995,14 +998,15 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	post, joinToStreamColMap := helper.joinOutColumns(joinType, resultColumns)
 	// We always try to distribute the join, but planJoiners() itself might
 	// decide not to.
-	onExpr, err := helper.remapOnExpr(e.getPlanCtx(shouldDistribute), onCond)
+	planCtx := e.getPlanCtx(shouldDistribute)
+	onExpr, err := helper.remapOnExpr(planCtx, onCond)
 	if err != nil {
 		return nil, err
 	}
 
 	leftEqColsRemapped := eqCols(leftEqCols, leftMap)
 	rightEqColsRemapped := eqCols(rightEqCols, rightMap)
-	p := e.dsp.planJoiners(&joinPlanningInfo{
+	info := joinPlanningInfo{
 		leftPlan:              leftPhysPlan,
 		rightPlan:             rightPhysPlan,
 		joinType:              joinType,
@@ -1018,7 +1022,8 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 		rightMergeOrd:         distsqlOrdering(mergeJoinOrdering, rightEqColsRemapped),
 		leftPlanDistribution:  leftPhysPlan.Distribution,
 		rightPlanDistribution: rightPhysPlan.Distribution,
-	}, ReqOrdering(reqOrdering))
+	}
+	p := e.dsp.planJoiners(planCtx, &info, ReqOrdering(reqOrdering))
 	p.ResultColumns = resultColumns
 	return makePlanMaybePhysical(p, append(leftPlan.physPlan.planNodesToClose, rightPlan.physPlan.planNodesToClose...)), nil
 }

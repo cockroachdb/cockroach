@@ -207,7 +207,7 @@ func DistIngest(
 	if err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
-	p := MakePhysicalPlan(gatewayNodeID)
+	p := MakePhysicalPlan(planCtx, gatewayNodeID)
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(inputSpecs))

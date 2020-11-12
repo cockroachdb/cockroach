@@ -322,22 +322,27 @@ func testNewV5DifferentNamespaces(t *testing.T) {
 }
 
 func BenchmarkGenerator(b *testing.B) {
-	b.Run("NewV1", func(b *testing.B) {
+	b.Run("V1", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			Must(NewV1())
 		}
 	})
-	b.Run("NewV3", func(b *testing.B) {
+	b.Run("V3", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			NewV3(NamespaceDNS, "www.example.com")
 		}
 	})
-	b.Run("NewV4", func(b *testing.B) {
+	b.Run("V4", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			Must(NewV4())
 		}
 	})
-	b.Run("NewV5", func(b *testing.B) {
+	b.Run("FastV4", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			FastMakeV4()
+		}
+	})
+	b.Run("V5", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			NewV5(NamespaceDNS, "www.example.com")
 		}
