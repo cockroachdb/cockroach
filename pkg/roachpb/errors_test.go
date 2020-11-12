@@ -50,8 +50,8 @@ func TestSetTxn(t *testing.T) {
 	txn := MakeTransaction("test", Key("a"), 1, hlc.Timestamp{}, 0)
 	e.SetTxn(&txn)
 	if !strings.HasPrefix(
-		e.Message, "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
-		t.Errorf("unexpected message: %s", e.Message)
+		e.String(), "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
+		t.Errorf("unexpected message: %s", e.String())
 	}
 }
 
