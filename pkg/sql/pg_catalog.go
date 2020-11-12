@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -272,42 +273,7 @@ var pgCatalog = virtualSchema{
 var pgCatalogAmTable = virtualSchemaTable{
 	comment: `index access methods (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-am.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_am (
-	oid OID,
-	amname NAME,
-	amstrategies INT2,
-	amsupport INT2,
-	amcanorder BOOL,
-	amcanorderbyop BOOL,
-	amcanbackward BOOL,
-	amcanunique BOOL,
-	amcanmulticol BOOL,
-	amoptionalkey BOOL,
-	amsearcharray BOOL,
-	amsearchnulls BOOL,
-	amstorage BOOL,
-	amclusterable BOOL,
-	ampredlocks BOOL,
-	amkeytype OID,
-	aminsert OID,
-	ambeginscan OID,
-	amgettuple OID,
-	amgetbitmap OID,
-	amrescan OID,
-	amendscan OID,
-	ammarkpos OID,
-	amrestrpos OID,
-	ambuild OID,
-	ambuildempty OID,
-	ambulkdelete OID,
-	amvacuumcleanup OID,
-	amcanreturn OID,
-	amcostestimate OID,
-	amoptions OID,
-	amhandler OID,
-	amtype CHAR
-)`,
+	schema: vtable.PGCatalogAm,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// add row for forward indexes
 		if err := addRow(
@@ -393,15 +359,7 @@ CREATE TABLE pg_catalog.pg_am (
 var pgCatalogAttrDefTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`column default values
 https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
-	`
-CREATE TABLE pg_catalog.pg_attrdef (
-	oid OID,
-	adrelid OID NOT NULL,
-	adnum INT2,
-	adbin STRING,
-	adsrc STRING,
-  INDEX(adrelid)
-)`,
+	vtable.PGCatalogAttrDef,
 	virtualMany, false, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *dbdesc.Immutable, scName string,
 		table catalog.TableDescriptor,
@@ -432,33 +390,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table columns (incomplete - see also information_schema.columns)
 https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
-	`
-CREATE TABLE pg_catalog.pg_attribute (
-	attrelid OID NOT NULL,
-	attname NAME,
-	atttypid OID,
-	attstattarget INT4,
-	attlen INT2,
-	attnum INT2,
-	attndims INT4,
-	attcacheoff INT4,
-	atttypmod INT4,
-	attbyval BOOL,
-	attstorage CHAR,
-	attalign CHAR,
-	attnotnull BOOL,
-	atthasdef BOOL,
-	attidentity CHAR, 
-	attgenerated CHAR,
-	attisdropped BOOL,
-	attislocal BOOL,
-	attinhcount INT4,
-	attcollation OID,
-	attacl STRING[],
-	attoptions STRING[],
-	attfdwoptions STRING[],
-  INDEX(attrelid)
-)`,
+	vtable.PGCatalogAttribute,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *dbdesc.Immutable, scName string,
 		table catalog.TableDescriptor,
@@ -527,15 +459,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 var pgCatalogCastTable = virtualSchemaTable{
 	comment: `casts (empty - needs filling out)
 https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_cast (
-	oid OID,
-	castsource OID,
-	casttarget OID,
-	castfunc OID,
-	castcontext CHAR,
-	castmethod CHAR
-)`,
+	schema: vtable.PGCatalogCast,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// TODO(someone): to populate this, we should split up the big PerformCast
 		// method in tree/eval.go into entries in a list. Then, this virtual table
@@ -549,21 +473,7 @@ var pgCatalogAuthIDTable = virtualSchemaTable{
 	comment: `authorization identifiers - differs from postgres as we do not display passwords, 
 and thus do not require admin privileges for access. 
 https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_authid (
-  oid OID,
-  rolname NAME,
-  rolsuper BOOL,
-  rolinherit BOOL,
-  rolcreaterole BOOL,
-  rolcreatedb BOOL,
-  rolcanlogin BOOL,
-  rolreplication BOOL,
-  rolbypassrls BOOL,
-  rolconnlimit INT4,
-  rolpassword TEXT, 
-  rolvaliduntil TIMESTAMPTZ
-)`,
+	schema: vtable.PGCatalogAuthID,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRole(ctx, p, func(username string, isRole bool, noLogin bool, rolValidUntil *time.Time) error {
@@ -600,13 +510,7 @@ CREATE TABLE pg_catalog.pg_authid (
 var pgCatalogAuthMembersTable = virtualSchemaTable{
 	comment: `role membership
 https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_auth_members (
-	roleid OID,
-	member OID,
-	grantor OID,
-	admin_option BOOL
-)`,
+	schema: vtable.PGCatalogAuthMembers,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRoleMembership(ctx, p,
@@ -624,13 +528,7 @@ CREATE TABLE pg_catalog.pg_auth_members (
 var pgCatalogAvailableExtensionsTable = virtualSchemaTable{
 	comment: `available extensions
 https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_available_extensions (
-	name NAME,
-	default_version TEXT,
-	installed_version TEXT,
-	comment TEXT
-)`,
+	schema: vtable.PGCatalogAvailableExtensions,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// We support no extensions.
 		return nil
@@ -661,38 +559,7 @@ var (
 var pgCatalogClassTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
 https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
-	`
-CREATE TABLE pg_catalog.pg_class (
-	oid OID NOT NULL,
-	relname NAME NOT NULL,
-	relnamespace OID,
-	reltype OID,
-	reloftype OID,
-	relowner OID,
-	relam OID,
-	relfilenode OID,
-	reltablespace OID,
-	relpages INT4,
-	reltuples FLOAT4,
-	relallvisible INT4,
-	reltoastrelid OID,
-	relhasindex BOOL,
-	relisshared BOOL,
-	relpersistence CHAR,
-	relistemp BOOL,
-	relkind CHAR,
-	relnatts INT2,
-	relchecks INT2,
-	relhasoids BOOL,
-	relhaspkey BOOL,
-	relhasrules BOOL,
-	relhastriggers BOOL,
-	relhassubclass BOOL,
-	relfrozenxid INT,
-	relacl STRING[],
-	reloptions STRING[],
-  INDEX (oid)
-)`,
+	vtable.PGCatalogClass,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *dbdesc.Immutable, scName string,
 		table catalog.TableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error) error {
@@ -792,16 +659,7 @@ CREATE TABLE pg_catalog.pg_class (
 var pgCatalogCollationTable = virtualSchemaTable{
 	comment: `available collations (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_collation (
-  oid OID,
-  collname STRING,
-  collnamespace OID,
-  collowner OID,
-  collencoding INT4,
-  collcollate STRING,
-  collctype STRING
-)`,
+	schema: vtable.PGCatalogCollation,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false /* requiresPrivileges */, func(db *dbdesc.Immutable) error {
@@ -1135,38 +993,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 var pgCatalogConstraintTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table constraints (incomplete - see also information_schema.table_constraints)
 https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html`,
-	`
-CREATE TABLE pg_catalog.pg_constraint (
-	oid OID,
-	conname NAME,
-	connamespace OID,
-	contype STRING,
-	condeferrable BOOL,
-	condeferred BOOL,
-	convalidated BOOL,
-	conrelid OID NOT NULL,
-	contypid OID,
-	conindid OID,
-	confrelid OID,
-	confupdtype STRING,
-	confdeltype STRING,
-	confmatchtype STRING,
-	conislocal BOOL,
-	coninhcount INT4,
-	connoinherit BOOL,
-	conkey INT2[],
-	confkey INT2[],
-	conpfeqop OID[],
-	conppeqop OID[],
-	conffeqop OID[],
-	conexclop OID[],
-	conbin STRING,
-	consrc STRING,
-	-- condef is a CockroachDB extension that provides a SHOW CREATE CONSTRAINT
-	-- style string, for use by pg_get_constraintdef().
-	condef STRING,
-  INDEX (conrelid)
-)`,
+	vtable.PGCatalogConstraint,
 	hideVirtual, /* Virtual tables have no constraints */
 	false,       /* includesIndexEntries */
 	populateTableConstraints)
@@ -1202,17 +1029,7 @@ func colIDArrayToVector(arr []descpb.ColumnID) (tree.Datum, error) {
 var pgCatalogConversionTable = virtualSchemaTable{
 	comment: `encoding conversions (empty - unimplemented)
 https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_conversion (
-	oid OID,
-	conname NAME,
-	connamespace OID,
-	conowner OID,
-	conforencoding INT4,
-	contoencoding INT4,
-	conproc OID,
-	condefault BOOL
-)`,
+	schema: vtable.PGCatalogConversion,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1221,23 +1038,7 @@ CREATE TABLE pg_catalog.pg_conversion (
 var pgCatalogDatabaseTable = virtualSchemaTable{
 	comment: `available databases (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_database (
-	oid OID,
-	datname Name,
-	datdba OID,
-	encoding INT4,
-	datcollate STRING,
-	datctype STRING,
-	datistemplate BOOL,
-	datallowconn BOOL,
-	datconnlimit INT4,
-	datlastsysoid OID,
-	datfrozenxid INT,
-	datminmxid INT,
-	dattablespace OID,
-	datacl STRING[]
-)`,
+	schema: vtable.PGCatalogDatabase,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, false, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
@@ -1266,14 +1067,7 @@ CREATE TABLE pg_catalog.pg_database (
 var pgCatalogDefaultACLTable = virtualSchemaTable{
 	comment: `default ACLs (empty - unimplemented)
 https://www.postgresql.org/docs/9.6/catalog-pg-default-acl.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_default_acl (
-	oid OID,
-	defaclrole OID,
-	defaclnamespace OID,
-	defaclobjtype CHAR,
-	defaclacl STRING[]
-)`,
+	schema: vtable.PGCatalogDefaultACL,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1309,16 +1103,7 @@ var (
 var pgCatalogDependTable = virtualSchemaTable{
 	comment: `dependency relationships (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_depend (
-  classid OID,
-  objid OID,
-  objsubid INT4,
-  refclassid OID,
-  refobjid OID,
-  refobjsubid INT4,
-  deptype CHAR
-)`,
+	schema: vtable.PGCatalogDepend,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		vt := p.getVirtualTabler()
 		pgConstraintsDesc, err := vt.getVirtualTableDesc(&pgConstraintsTableName)
@@ -1414,13 +1199,7 @@ func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
 var pgCatalogDescriptionTable = virtualSchemaTable{
 	comment: `object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_description (
-	objoid OID,
-	classoid OID,
-	objsubid INT4,
-	description STRING
-)`,
+	schema: vtable.PGCatalogDescription,
 	populate: func(
 		ctx context.Context,
 		p *planner,
@@ -1471,12 +1250,7 @@ CREATE TABLE pg_catalog.pg_description (
 var pgCatalogSharedDescriptionTable = virtualSchemaTable{
 	comment: `shared object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_shdescription (
-	objoid OID,
-	classoid OID,
-	description STRING
-)`,
+	schema: vtable.PGCatalogSharedDescription,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// See comment above - could make this more efficient if necessary.
 		comments, err := getComments(ctx, p)
@@ -1505,13 +1279,7 @@ CREATE TABLE pg_catalog.pg_shdescription (
 var pgCatalogEnumTable = virtualSchemaTable{
 	comment: `enum types and labels (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_enum (
-  oid OID,
-  enumtypid OID,
-  enumsortorder FLOAT4,
-  enumlabel STRING
-)`,
+	schema: vtable.PGCatalogEnum,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 
@@ -1542,15 +1310,7 @@ CREATE TABLE pg_catalog.pg_enum (
 var pgCatalogEventTriggerTable = virtualSchemaTable{
 	comment: `event triggers (empty - feature does not exist)
 https://www.postgresql.org/docs/9.6/catalog-pg-event-trigger.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_event_trigger (
-	evtname NAME,
-	evtevent NAME,
-	evtowner OID,
-	evtfoid OID,
-	evtenabled CHAR,
-	evttags TEXT[]
-)`,
+	schema: vtable.PGCatalogEventTrigger,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Event triggers are not currently supported.
 		return nil
@@ -1560,17 +1320,7 @@ CREATE TABLE pg_catalog.pg_event_trigger (
 var pgCatalogExtensionTable = virtualSchemaTable{
 	comment: `installed extensions (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-extension.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_extension (
-  oid OID,
-  extname NAME,
-  extowner OID,
-  extnamespace OID,
-  extrelocatable BOOL,
-  extversion STRING,
-  extconfig STRING,
-  extcondition STRING
-)`,
+	schema: vtable.PGCatalogExtension,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Extensions are not supported.
 		return nil
@@ -1580,16 +1330,7 @@ CREATE TABLE pg_catalog.pg_extension (
 var pgCatalogForeignDataWrapperTable = virtualSchemaTable{
 	comment: `foreign data wrappers (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-foreign-data-wrapper.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
-  oid OID,
-  fdwname NAME,
-  fdwowner OID,
-  fdwhandler OID,
-  fdwvalidator OID,
-  fdwacl STRING[],
-  fdwoptions STRING[]
-)`,
+	schema: vtable.PGCatalogForeignDataWrapper,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Foreign data wrappers are not supported.
 		return nil
@@ -1599,17 +1340,7 @@ CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
 var pgCatalogForeignServerTable = virtualSchemaTable{
 	comment: `foreign servers (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-foreign-server.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_foreign_server (
-  oid OID,
-  srvname NAME,
-  srvowner OID,
-  srvfdw OID,
-  srvtype STRING,
-  srvversion STRING,
-  srvacl STRING[],
-  srvoptions STRING[]
-)`,
+	schema: vtable.PGCatalogForeignServer,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Foreign servers are not supported.
 		return nil
@@ -1619,12 +1350,7 @@ CREATE TABLE pg_catalog.pg_foreign_server (
 var pgCatalogForeignTableTable = virtualSchemaTable{
 	comment: `foreign tables (empty  - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-foreign-table.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_foreign_table (
-  ftrelid OID,
-  ftserver OID,
-  ftoptions STRING[]
-)`,
+	schema: vtable.PGCatalogForeignTable,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Foreign tables are not supported.
 		return nil
@@ -1644,28 +1370,7 @@ func makeZeroedOidVector(size int) (tree.Datum, error) {
 var pgCatalogIndexTable = virtualSchemaTable{
 	comment: `indexes (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_index (
-    indexrelid OID,
-    indrelid OID,
-    indnatts INT2,
-    indisunique BOOL,
-    indisprimary BOOL,
-    indisexclusion BOOL,
-    indimmediate BOOL,
-    indisclustered BOOL,
-    indisvalid BOOL,
-    indcheckxmin BOOL,
-    indisready BOOL,
-    indislive BOOL,
-    indisreplident BOOL,
-    indkey INT2VECTOR,
-    indcollation OIDVECTOR,
-    indclass OIDVECTOR,
-    indoption INT2VECTOR,
-    indexprs STRING,
-    indpred STRING
-)`,
+	schema: vtable.PGCatalogIndex,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
@@ -1742,17 +1447,7 @@ CREATE TABLE pg_catalog.pg_index (
 var pgCatalogIndexesTable = virtualSchemaTable{
 	comment: `index creation statements
 https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
-	// Note: crdb_oid is an extension of the schema to much more easily map
-	// index OIDs to the corresponding index definition.
-	schema: `
-CREATE TABLE pg_catalog.pg_indexes (
-	crdb_oid OID,
-	schemaname NAME,
-	tablename NAME,
-	indexname NAME,
-	tablespace NAME,
-	indexdef STRING
-)`,
+	schema: vtable.PGCatalogIndexes,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
@@ -1859,12 +1554,7 @@ func indexDefFromDescriptor(
 var pgCatalogInheritsTable = virtualSchemaTable{
 	comment: `table inheritance hierarchy (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-inherits.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_inherits (
-	inhrelid OID,
-	inhparent OID,
-	inhseqno INT4
-)`,
+	schema: vtable.PGCatalogInherits,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Table inheritance is not supported.
 		return nil
@@ -1874,18 +1564,7 @@ CREATE TABLE pg_catalog.pg_inherits (
 var pgCatalogLanguageTable = virtualSchemaTable{
 	comment: `available languages (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-language.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_language (
-	oid OID,
-	lanname NAME,
-	lanowner OID,
-	lanispl BOOL,
-	lanpltrusted BOOL,
-	lanplcallfoid OID,
-	laninline OID,
-	lanvalidator OID,
-	lanacl STRING[]
-)`,
+	schema: vtable.PGCatalogLanguage,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Languages to write functions and stored procedures are not supported.
 		return nil
@@ -1895,24 +1574,7 @@ CREATE TABLE pg_catalog.pg_language (
 var pgCatalogLocksTable = virtualSchemaTable{
 	comment: `locks held by active processes (empty - feature does not exist)
 https://www.postgresql.org/docs/9.6/view-pg-locks.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_locks (
-  locktype TEXT,
-  database OID,
-  relation OID,
-  page INT4,
-  tuple SMALLINT,
-  virtualxid TEXT,
-  transactionid INT,
-  classid OID,
-  objid OID,
-  objsubid SMALLINT,
-  virtualtransaction TEXT,
-  pid INT4,
-  mode TEXT,
-  granted BOOLEAN,
-  fastpath BOOLEAN
-)`,
+	schema: vtable.PGCatalogLocks,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1921,16 +1583,7 @@ CREATE TABLE pg_catalog.pg_locks (
 var pgCatalogMatViewsTable = virtualSchemaTable{
 	comment: `available materialized views (empty - feature does not exist)
 https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_matviews (
-  schemaname NAME,
-  matviewname NAME,
-  matviewowner NAME,
-  tablespace NAME,
-  hasindexes BOOL,
-  ispopulated BOOL,
-  definition TEXT
-)`,
+	schema: vtable.PGCatalogMatViews,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual,
 			func(db *dbdesc.Immutable, scName string, desc catalog.TableDescriptor) error {
@@ -1961,13 +1614,7 @@ CREATE TABLE pg_catalog.pg_matviews (
 var pgCatalogNamespaceTable = virtualSchemaTable{
 	comment: `available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
 https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_namespace (
-	oid OID,
-	nspname NAME NOT NULL,
-	nspowner OID,
-	nspacl STRING[]
-)`,
+	schema: vtable.PGCatalogNamespace,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
@@ -2003,24 +1650,7 @@ var (
 var pgCatalogOperatorTable = virtualSchemaTable{
 	comment: `operators (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_operator (
-	oid OID,
-	oprname NAME,
-	oprnamespace OID,
-	oprowner OID,
-	oprkind TEXT,
-	oprcanmerge BOOL,
-	oprcanhash BOOL,
-	oprleft OID,
-	oprright OID,
-	oprresult OID,
-	oprcom OID,
-	oprnegate OID,
-	oprcode OID,
-	oprrest OID,
-	oprjoin OID
-)`,
+	schema: vtable.PGCatalogOperator,
 	populate: func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
@@ -2118,14 +1748,7 @@ var (
 var pgCatalogPreparedXactsTable = virtualSchemaTable{
 	comment: `prepared transactions (empty - feature does not exist)
 https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_prepared_xacts (
-  transaction INTEGER,
-  gid TEXT,
-  prepared TIMESTAMP WITH TIME ZONE,
-  owner NAME,
-  database NAME
-)`,
+	schema: vtable.PGCatalogPreparedXacts,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -2139,14 +1762,7 @@ CREATE TABLE pg_catalog.pg_prepared_xacts (
 var pgCatalogPreparedStatementsTable = virtualSchemaTable{
 	comment: `prepared statements
 https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_prepared_statements (
-	name TEXT,
-	statement TEXT,
-	prepare_time TIMESTAMPTZ,
-	parameter_types REGTYPE[],
-	from_sql boolean
-)`,
+	schema: vtable.PGCatalogPreparedStatements,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		for name, stmt := range p.preparedStatements.List() {
 			placeholderTypes := stmt.PrepareMetadata.PlaceholderTypesInfo.Types
@@ -2195,39 +1811,7 @@ CREATE TABLE pg_catalog.pg_prepared_statements (
 var pgCatalogProcTable = virtualSchemaTable{
 	comment: `built-in functions (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_proc (
-	oid OID,
-	proname NAME,
-	pronamespace OID,
-	proowner OID,
-	prolang OID,
-	procost FLOAT4,
-	prorows FLOAT4,
-	provariadic OID,
-	protransform STRING,
-	proisagg BOOL,
-	proiswindow BOOL,
-	prosecdef BOOL,
-	proleakproof BOOL,
-	proisstrict BOOL,
-	proretset BOOL,
-	provolatile CHAR,
-	proparallel CHAR,
-	pronargs INT2,
-	pronargdefaults INT2,
-	prorettype OID,
-	proargtypes OIDVECTOR,
-	proallargtypes OID[],
-	proargmodes STRING[],
-	proargnames STRING[],
-	proargdefaults STRING,
-	protrftypes OID[],
-	prosrc STRING,
-	probin STRING,
-	proconfig STRING[],
-	proacl STRING[]
-)`,
+	schema: vtable.PGCatalogProc,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
@@ -2356,15 +1940,7 @@ CREATE TABLE pg_catalog.pg_proc (
 var pgCatalogRangeTable = virtualSchemaTable{
 	comment: `range types (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-range.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_range (
-	rngtypid OID,
-	rngsubtype OID,
-	rngcollation OID,
-	rngsubopc OID,
-	rngcanonical OID,
-	rngsubdiff OID
-)`,
+	schema: vtable.PGCatalogRange,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// We currently do not support any range types, so this table is empty.
 		// This table should be populated when any range types are added to
@@ -2376,17 +1952,7 @@ CREATE TABLE pg_catalog.pg_range (
 var pgCatalogRewriteTable = virtualSchemaTable{
 	comment: `rewrite rules (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-rewrite.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_rewrite (
-	oid OID,
-	rulename NAME,
-	ev_class OID,
-	ev_type TEXT,
-	ev_enabled TEXT,
-	is_instead BOOL,
-	ev_qual TEXT,
-	ev_action TEXT
-)`,
+	schema: vtable.PGCatalogRewrite,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Rewrite rules are not supported.
 		return nil
@@ -2396,23 +1962,7 @@ CREATE TABLE pg_catalog.pg_rewrite (
 var pgCatalogRolesTable = virtualSchemaTable{
 	comment: `database roles
 https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_roles (
-	oid OID,
-	rolname NAME,
-	rolsuper BOOL,
-	rolinherit BOOL,
-	rolcreaterole BOOL,
-	rolcreatedb BOOL,
-	rolcatupdate BOOL,
-	rolcanlogin BOOL,
-	rolreplication BOOL,
-	rolconnlimit INT4,
-	rolpassword STRING,
-	rolvaliduntil TIMESTAMPTZ,
-	rolbypassrls BOOL,
-	rolconfig STRING[]
-)`,
+	schema: vtable.PGCatalogRoles,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// We intentionally do not check if the user has access to system.user.
 		// Because Postgres allows access to pg_roles by non-privileged users, we
@@ -2456,17 +2006,7 @@ CREATE TABLE pg_catalog.pg_roles (
 var pgCatalogSecLabelsTable = virtualSchemaTable{
 	comment: `security labels (empty)
 https://www.postgresql.org/docs/9.6/view-pg-seclabels.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_seclabels (
-	objoid OID,
-  classoid OID,
-  objsubid INT4,
-  objtype TEXT,
-	objnamespace OID,
-	objname TEXT,
-	provider TEXT,
-	label TEXT
-)`,
+	schema: vtable.PGCatalogSecLabels,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -2475,17 +2015,7 @@ CREATE TABLE pg_catalog.pg_seclabels (
 var pgCatalogSequencesTable = virtualSchemaTable{
 	comment: `sequences (see also information_schema.sequences)
 https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_sequence (
-	seqrelid OID,
-	seqtypid OID,
-	seqstart INT8,
-	seqincrement INT8,
-	seqmax INT8,
-	seqmin INT8,
-	seqcache INT8,
-	seqcycle BOOL
-)`,
+	schema: vtable.PGCatalogSequence,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas do not have indexes */
 			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
@@ -2515,26 +2045,7 @@ var (
 var pgCatalogSettingsTable = virtualSchemaTable{
 	comment: `session variables (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_settings (
-    name STRING,
-    setting STRING,
-    unit STRING,
-    category STRING,
-    short_desc STRING,
-    extra_desc STRING,
-    context STRING,
-    vartype STRING,
-    source STRING,
-    min_val STRING,
-    max_val STRING,
-    enumvals STRING,
-    boot_val STRING,
-    reset_val STRING,
-    sourcefile STRING,
-    sourceline INT4,
-    pending_restart BOOL
-)`,
+	schema: vtable.PGCatalogSettings,
 	populate: func(_ context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
@@ -2588,16 +2099,7 @@ CREATE TABLE pg_catalog.pg_settings (
 var pgCatalogShdependTable = virtualSchemaTable{
 	comment: `shared dependencies (empty - not implemented)
 https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_shdepend (
-	dbid OID,
-	classid OID,
-	objid OID,
-  objsubid INT4,
-	refclassid OID,
-	refobjid OID,
-	deptype CHAR
-)`,
+	schema: vtable.PGCatalogShdepend,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -2606,17 +2108,7 @@ CREATE TABLE pg_catalog.pg_shdepend (
 var pgCatalogTablesTable = virtualSchemaTable{
 	comment: `tables summary (see also information_schema.tables, pg_catalog.pg_class)
 https://www.postgresql.org/docs/9.5/view-pg-tables.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_tables (
-	schemaname NAME,
-	tablename NAME,
-	tableowner NAME,
-	tablespace NAME,
-	hasindexes BOOL,
-	hasrules BOOL,
-	hastriggers BOOL,
-	rowsecurity BOOL
-)`,
+	schema: vtable.PGCatalogTables,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Note: pg_catalog.pg_tables is not well-defined if the dbContext is
 		// empty -- listing tables across databases can yield duplicate
@@ -2643,15 +2135,7 @@ CREATE TABLE pg_catalog.pg_tables (
 var pgCatalogTablespaceTable = virtualSchemaTable{
 	comment: `available tablespaces (incomplete; concept inapplicable to CockroachDB)
 https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_tablespace (
-	oid OID,
-	spcname NAME,
-	spcowner OID,
-	spclocation TEXT,
-	spcacl TEXT[],
-	spcoptions TEXT[]
-)`,
+	schema: vtable.PGCatalogTablespace,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return addRow(
 			oidZero,                       // oid
@@ -2667,27 +2151,7 @@ CREATE TABLE pg_catalog.pg_tablespace (
 var pgCatalogTriggerTable = virtualSchemaTable{
 	comment: `triggers (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-trigger.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_trigger (
-	oid OID,
-	tgrelid OID,
-	tgname NAME,
-	tgfoid OID,
-	tgtype INT2,
-	tgenabled TEXT,
-	tgisinternal BOOL,
-	tgconstrrelid OID,
-	tgconstrindid OID,
-	tgconstraint OID,
-	tgdeferrable BOOL,
-	tginitdeferred BOOL,
-	tgnargs INT2,
-	tgattr INT2VECTOR,
-	tgargs BYTEA,
-	tgqual TEXT,
-	tgoldtable NAME,
-	tgnewtable NAME
-)`,
+	schema: vtable.PGCatalogTrigger,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Triggers are unsupported.
 		return nil
@@ -2815,41 +2279,7 @@ func addPGTypeRow(
 var pgCatalogTypeTable = virtualSchemaTable{
 	comment: `scalar types (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_type (
-	oid OID NOT NULL,
-	typname NAME NOT NULL,
-	typnamespace OID,
-	typowner OID,
-	typlen INT2,
-	typbyval BOOL,
-	typtype CHAR,
-	typcategory CHAR,
-	typispreferred BOOL,
-	typisdefined BOOL,
-	typdelim CHAR,
-	typrelid OID,
-	typelem OID,
-	typarray OID,
-	typinput REGPROC,
-	typoutput REGPROC,
-	typreceive REGPROC,
-	typsend REGPROC,
-	typmodin REGPROC,
-	typmodout REGPROC,
-	typanalyze REGPROC,
-	typalign CHAR,
-	typstorage CHAR,
-	typnotnull BOOL,
-	typbasetype OID,
-	typtypmod INT4,
-	typndims INT4,
-	typcollation OID,
-	typdefaultbin STRING,
-	typdefault STRING,
-	typacl STRING[],
-  INDEX(oid)
-)`,
+	schema: vtable.PGCatalogType,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
@@ -2933,18 +2363,7 @@ CREATE TABLE pg_catalog.pg_type (
 var pgCatalogUserTable = virtualSchemaTable{
 	comment: `database users
 https://www.postgresql.org/docs/9.5/view-pg-user.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_user (
-	usename NAME,
-	usesysid OID,
-	usecreatedb BOOL,
-	usesuper BOOL,
-	userepl  BOOL,
-	usebypassrls BOOL,
-	passwd TEXT,
-	valuntil TIMESTAMP,
-	useconfig TEXT[]
-)`,
+	schema: vtable.PGCatalogUser,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
@@ -2971,13 +2390,7 @@ CREATE TABLE pg_catalog.pg_user (
 var pgCatalogUserMappingTable = virtualSchemaTable{
 	comment: `local to remote user mapping (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-user-mapping.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_user_mapping (
-	oid OID,
-	umuser OID,
-	umserver OID,
-	umoptions TEXT[]
-)`,
+	schema: vtable.PGCatalogUserMapping,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// This table stores the mapping to foreign server users.
 		// Foreign servers are not supported.
@@ -2988,29 +2401,7 @@ CREATE TABLE pg_catalog.pg_user_mapping (
 var pgCatalogStatActivityTable = virtualSchemaTable{
 	comment: `backend access statistics (empty - monitoring works differently in CockroachDB)
 https://www.postgresql.org/docs/9.6/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW`,
-	schema: `
-CREATE TABLE pg_catalog.pg_stat_activity (
-	datid OID,
-	datname NAME,
-	pid INTEGER,
-	usesysid OID,
-	usename NAME,
-	application_name TEXT,
-	client_addr INET,
-	client_hostname TEXT,
-	client_port INTEGER,
-	backend_start TIMESTAMPTZ,
-	xact_start TIMESTAMPTZ,
-	query_start TIMESTAMPTZ,
-	state_change TIMESTAMPTZ,
-	wait_event_type TEXT,
-	wait_event TEXT,
-	state TEXT,
-	backend_xid INTEGER,
-	backend_xmin INTEGER,
-	query TEXT
-)
-`,
+	schema: vtable.PGCatalogStatActivity,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -3019,15 +2410,7 @@ CREATE TABLE pg_catalog.pg_stat_activity (
 var pgCatalogSecurityLabelTable = virtualSchemaTable{
 	comment: `security labels (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-seclabel.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_seclabel (
-	objoid OID,
-	classoid OID,
-	objsubid INTEGER,
-	provider TEXT,
-	label TEXT
-)
-`,
+	schema: vtable.PGCatalogSecurityLabel,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -3036,14 +2419,7 @@ CREATE TABLE pg_catalog.pg_seclabel (
 var pgCatalogSharedSecurityLabelTable = virtualSchemaTable{
 	comment: `shared security labels (empty - feature not supported)
 https://www.postgresql.org/docs/9.5/catalog-pg-shseclabel.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_shseclabel (
-	objoid OID,
-	classoid OID,
-	provider TEXT,
-	label TEXT
-)
-`,
+	schema: vtable.PGCatalogSharedSecurityLabel,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -3127,13 +2503,7 @@ func typCategory(typ *types.T) tree.Datum {
 var pgCatalogViewsTable = virtualSchemaTable{
 	comment: `view definitions (incomplete - see also information_schema.views)
 https://www.postgresql.org/docs/9.5/view-pg-views.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_views (
-	schemaname NAME,
-	viewname NAME,
-	viewowner NAME,
-	definition STRING
-)`,
+	schema: vtable.PGCatalogViews,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		// Note: pg_views is not well defined if the dbContext is empty,
 		// because it does not distinguish views in separate databases.
@@ -3163,30 +2533,7 @@ CREATE TABLE pg_catalog.pg_views (
 var pgCatalogAggregateTable = virtualSchemaTable{
 	comment: `aggregated built-in functions (incomplete)
 https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
-	schema: `
-CREATE TABLE pg_catalog.pg_aggregate (
-	aggfnoid REGPROC,
-	aggkind  CHAR,
-	aggnumdirectargs INT2,
-	aggtransfn REGPROC,
-	aggfinalfn REGPROC,
-	aggcombinefn REGPROC,
-	aggserialfn REGPROC,
-	aggdeserialfn REGPROC,
-	aggmtransfn REGPROC,
-	aggminvtransfn REGPROC,
-	aggmfinalfn REGPROC,
-	aggfinalextra BOOL,
-	aggmfinalextra BOOL,
-	aggsortop OID,
-	aggtranstype OID,
-	aggtransspace INT4,
-	aggmtranstype OID,
-	aggmtransspace INT4,
-	agginitval TEXT,
-	aggminitval TEXT
-)
-`,
+	schema: vtable.PGCatalogAggregate,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */

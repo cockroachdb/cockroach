@@ -838,3 +838,90 @@ insert c
                 │    ├── key: ()
                 │    └── fd: ()-->(6)
                 └── filters (true)
+
+# Avoid performing a lookup join with virtual tables if the filter is
+# not extremely selective.
+
+opt
+SELECT
+  a.attname,
+  a.atttypid,
+  t.typbasetype,
+  t.typtype
+FROM
+  pg_catalog.pg_attribute AS a
+  JOIN pg_catalog.pg_type AS t ON (a.atttypid = t.oid)
+WHERE
+  a.attname IN ('descriptor_id', 'descriptor_name')
+----
+project
+ ├── columns: attname:3!null atttypid:4!null typbasetype:50 typtype:32
+ ├── stats: [rows=198]
+ ├── cost: 2844.37877
+ └── inner-join (merge)
+      ├── columns: attname:3!null atttypid:4!null oid:26!null typtype:32 typbasetype:50
+      ├── left ordering: +26
+      ├── right ordering: +4
+      ├── stats: [rows=198, distinct(4)=17.2927193, null(4)=0, distinct(26)=17.2927193, null(26)=0]
+      ├── cost: 2842.38877
+      ├── fd: (4)==(26), (26)==(4)
+      ├── scan t@secondary
+      │    ├── columns: oid:26!null typtype:32 typbasetype:50
+      │    ├── stats: [rows=1000, distinct(26)=100, null(26)=0]
+      │    ├── cost: 1454.02
+      │    └── ordering: +26
+      ├── sort
+      │    ├── columns: attname:3!null atttypid:4
+      │    ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927193, null(4)=0.2]
+      │    ├── cost: 1376.17877
+      │    ├── ordering: +4
+      │    └── select
+      │         ├── columns: attname:3!null atttypid:4
+      │         ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927193, null(4)=0.2]
+      │         ├── cost: 1374.04
+      │         ├── scan a
+      │         │    ├── columns: attname:3 atttypid:4
+      │         │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
+      │         │    └── cost: 1364.02
+      │         └── filters
+      │              └── attname:3 IN ('descriptor_id', 'descriptor_name') [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id'] [/'descriptor_name' - /'descriptor_name']; tight)]
+      └── filters (true)
+
+
+# A lookup join should be performed with a virtual table if the filter
+# is very selective.
+opt
+SELECT
+  a.attname,
+  a.atttypid,
+  t.typbasetype,
+  t.typtype
+FROM
+  pg_catalog.pg_attribute AS a
+  JOIN pg_catalog.pg_type AS t ON (a.atttypid = t.oid)
+WHERE
+  a.attname = 'descriptor_id'
+----
+project
+ ├── columns: attname:3!null atttypid:4!null typbasetype:50 typtype:32
+ ├── stats: [rows=99]
+ ├── cost: 2808.69
+ ├── fd: ()-->(3)
+ └── inner-join (lookup pg_type@secondary)
+      ├── columns: attname:3!null atttypid:4!null oid:26!null typtype:32 typbasetype:50
+      ├── key columns: [4] = [26]
+      ├── stats: [rows=99, distinct(4)=8.5617925, null(4)=0, distinct(26)=8.5617925, null(26)=0]
+      ├── cost: 2807.69
+      ├── fd: ()-->(3), (4)==(26), (26)==(4)
+      ├── select
+      │    ├── columns: attname:3!null atttypid:4
+      │    ├── stats: [rows=10, distinct(3)=1, null(3)=0, distinct(4)=9.5617925, null(4)=0.1]
+      │    ├── cost: 1374.04
+      │    ├── fd: ()-->(3)
+      │    ├── scan a
+      │    │    ├── columns: attname:3 atttypid:4
+      │    │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
+      │    │    └── cost: 1364.02
+      │    └── filters
+      │         └── attname:3 = 'descriptor_id' [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id']; tight), fd=()-->(3)]
+      └── filters (true)

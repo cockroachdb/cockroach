@@ -115,40 +115,43 @@ WHERE
 ORDER BY
         c.conname
 ----
-·                                                                  distribution  local
-·                                                                  vectorized    false
-sort                                                               ·             ·
- │                                                                 order         +conname
- └── render                                                        ·             ·
-      └── hash join                                                ·             ·
-           │                                                       equality      (oid) = (connamespace)
-           ├── filter                                              ·             ·
-           │    │                                                  filter        nspname IN ('public',)
-           │    └── virtual table                                  ·             ·
-           │                                                       table         pg_namespace@primary
-           └── virtual table lookup join                           ·             ·
-                │                                                  table         pg_attribute@pg_attribute_attrelid_idx
-                │                                                  equality      (oid) = (attrelid)
-                │                                                  pred          column135 = attnum
-                └── render                                         ·             ·
-                     └── hash join                                 ·             ·
-                          │                                        equality      (attrelid, attnum) = (oid, column110)
-                          ├── filter                               ·             ·
-                          │    │                                   filter        attrelid = 'b'::REGCLASS
-                          │    └── virtual table                   ·             ·
-                          │                                        table         pg_attribute@primary
-                          └── render                               ·             ·
-                               └── virtual table lookup join       ·             ·
-                                    │                              table         pg_class@pg_class_oid_idx
-                                    │                              equality      (confrelid) = (oid)
-                                    └── virtual table lookup join  ·             ·
-                                         │                         table         pg_class@pg_class_oid_idx
-                                         │                         equality      (conrelid) = (oid)
-                                         │                         pred          oid = 'b'::REGCLASS
-                                         └── filter                ·             ·
-                                              │                    filter        (conrelid = 'b'::REGCLASS) AND (contype = 'f')
-                                              └── virtual table    ·             ·
-·                                                                  table         pg_constraint@primary
+·                                                                     distribution  local
+·                                                                     vectorized    false
+sort                                                                  ·             ·
+ │                                                                    order         +conname
+ └── render                                                           ·             ·
+      └── hash join                                                   ·             ·
+           │                                                          equality      (oid) = (connamespace)
+           ├── filter                                                 ·             ·
+           │    │                                                     filter        nspname IN ('public',)
+           │    └── virtual table                                     ·             ·
+           │                                                          table         pg_namespace@primary
+           └── virtual table lookup join                              ·             ·
+                │                                                     table         pg_attribute@pg_attribute_attrelid_idx
+                │                                                     equality      (oid) = (attrelid)
+                │                                                     pred          column135 = attnum
+                └── render                                            ·             ·
+                     └── hash join                                    ·             ·
+                          │                                           equality      (attrelid, attnum) = (oid, column110)
+                          ├── filter                                  ·             ·
+                          │    │                                      filter        attrelid = 'b'::REGCLASS
+                          │    └── virtual table                      ·             ·
+                          │                                           table         pg_attribute@primary
+                          └── render                                  ·             ·
+                               └── merge join                         ·             ·
+                                    │                                 equality      (oid) = (confrelid)
+                                    ├── virtual table                 ·             ·
+                                    │                                 table         pg_class@pg_class_oid_idx
+                                    └── virtual table lookup join     ·             ·
+                                         │                            table         pg_class@pg_class_oid_idx
+                                         │                            equality      (conrelid) = (oid)
+                                         │                            pred          oid = 'b'::REGCLASS
+                                         └── sort                     ·             ·
+                                              │                       order         +confrelid
+                                              └── filter              ·             ·
+                                                   │                  filter        (conrelid = 'b'::REGCLASS) AND (contype = 'f')
+                                                   └── virtual table  ·             ·
+·                                                                     table         pg_constraint@primary
 
 # Test that limits are respected.
 query TTT

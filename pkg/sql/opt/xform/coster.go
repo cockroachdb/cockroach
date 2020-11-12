@@ -108,6 +108,10 @@ const (
 	// justification for this constant.
 	lookupJoinRetrieveRowCost = 2 * seqIOCostFactor
 
+	// virtualScanTableDescriptorFetchCost is the cost to retrieve the table
+	// descriptors when performing a virtual table scan.
+	virtualScanTableDescriptorFetchCost = 25 * randIOCostFactor
+
 	// Input rows to a join are processed in batches of this size.
 	// See joinreader.go.
 	joinReaderBatchSize = 100.0
@@ -579,6 +583,11 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 	baseCost := memo.Cost(numSpans * randIOCostFactor)
 
+	// If this is a virtual scan, add the cost of fetching table descriptors.
+	if c.mem.Metadata().Table(scan.Table).IsVirtualTable() {
+		baseCost += virtualScanTableDescriptorFetchCost
+	}
+
 	// Add a small cost if the scan is unconstrained, so all else being equal, we
 	// will prefer a constrained scan. This is important if our row count
 	// estimate turns out to be smaller than the actual row count.
@@ -749,6 +758,11 @@ func (c *coster) computeLookupJoinCost(
 		// 100 ranges showed that a "non-parallel" lookup join is about 5 times
 		// slower.
 		perLookupCost *= 5
+	}
+	if c.mem.Metadata().Table(join.Table).IsVirtualTable() {
+		// It's expensive to perform a lookup join into a virtual table because
+		// we need to fetch the table descriptors on each lookup.
+		perLookupCost += virtualScanTableDescriptorFetchCost
 	}
 	cost := memo.Cost(lookupCount) * perLookupCost
 
