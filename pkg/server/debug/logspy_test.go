@@ -84,7 +84,7 @@ func TestDebugLogSpyOptions(t *testing.T) {
 			vals: map[string][]string{
 				"Duration": {"very long"},
 			},
-			expErr: `time: invalid duration very long`,
+			expErr: `time: invalid duration "very long"`,
 		},
 		{
 			vals: map[string][]string{
@@ -124,7 +124,7 @@ func TestDebugLogSpyHandle(t *testing.T) {
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status: %d", rec.Code)
 		}
-		exp := "while parsing options: time: invalid duration notaduration\n"
+		exp := "while parsing options: time: invalid duration \"notaduration\"\n"
 		if body := rec.Body.String(); body != exp {
 			t.Fatalf("expected: %q\ngot: %q", exp, body)
 		}
