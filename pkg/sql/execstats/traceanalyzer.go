@@ -14,8 +14,8 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -132,10 +132,8 @@ func getNetworkBytesFromDistSQLSpanStats(dss execinfrapb.DistSQLSpanStats) (int6
 	switch v := dss.(type) {
 	case *flowinfra.OutboxStats:
 		return v.BytesSent, nil
-	case *execpb.VectorizedInboxStats:
-		// VectorizedInboxStats are output by the Inbox, hence the read/sent difference
-		// with OutboxStats.
-		return v.BaseVectorizedStats.BytesRead, nil
+	case *execstatspb.ComponentStats:
+		return int64(v.NetRx.BytesReceived.Value()), nil
 	}
 	return 0, errors.Errorf("could not get network bytes from %T", dss)
 }
