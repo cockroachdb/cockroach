@@ -1125,7 +1125,7 @@ func TestSpanCombine(t *testing.T) {
 		{sCtoA, sBtoD, Span{}},
 	}
 	for i, test := range testData {
-		if combined := test.s1.Combine(test.s2); !combined.Equal(test.combined) {
+		if combined := test.s1.Combine(test.s2); !reflect.DeepEqual(combined, test.combined) {
 			t.Errorf("%d: expected combined %s; got %s between %s vs. %s", i, test.combined, combined, test.s1, test.s2)
 		}
 	}
@@ -1208,11 +1208,11 @@ func TestSpanSplitOnKey(t *testing.T) {
 	for testIdx, test := range testData {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
 			actualL, actualR := s.SplitOnKey(test.split)
-			if !test.left.EqualValue(actualL) {
+			if !test.left.Equal(actualL) {
 				t.Fatalf("expected left span after split to be %v, got %v", test.left, actualL)
 			}
 
-			if !test.right.EqualValue(actualR) {
+			if !test.right.Equal(actualR) {
 				t.Fatalf("expected right span after split to be %v, got %v", test.right, actualL)
 			}
 		})
