@@ -413,9 +413,6 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftProposalQuota > int64(cfg.RaftMaxUncommittedEntriesSize) {
 		panic("raft proposal quota should not be above max uncommitted entries size")
 	}
-	if cfg.RaftProposalQuota < int64(cfg.RaftMaxSizePerMsg)*int64(cfg.RaftMaxInflightMsgs) {
-		panic("raft proposal quota should not be below per-replica replication window size")
-	}
 }
 
 // RaftElectionTimeout returns the raft election timeout, as computed from the
