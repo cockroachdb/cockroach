@@ -40,6 +40,43 @@ EXPLAIN ANALYZE (DISTSQL) DELETE FROM a
 statement ok
 EXPLAIN ANALYZE (DISTSQL) DROP TABLE a
 
+statement ok
+EXPLAIN ANALYZE (PLAN) CREATE TABLE a (a INT PRIMARY KEY)
+
+statement ok
+EXPLAIN ANALYZE (PLAN) CREATE INDEX ON a(a)
+
+statement ok
+EXPLAIN ANALYZE (PLAN) INSERT INTO a VALUES (1)
+
+# Make sure failures are okay.
+statement error duplicate
+EXPLAIN ANALYZE (PLAN) INSERT INTO a VALUES (1)
+
+statement error value type string doesn't match type int of column "a"
+EXPLAIN ANALYZE (PLAN) INSERT INTO a VALUES ('a'::string)
+
+statement ok
+EXPLAIN ANALYZE (PLAN) INSERT INTO a SELECT a+1 FROM a
+
+statement ok
+EXPLAIN ANALYZE (PLAN) UPDATE a SET a = a*3
+
+statement ok
+EXPLAIN ANALYZE (PLAN) UPDATE a SET a = a*3 RETURNING a
+
+statement ok
+EXPLAIN ANALYZE (PLAN) UPSERT INTO a VALUES(10)
+
+statement ok
+EXPLAIN ANALYZE (PLAN) SELECT (SELECT 1);
+
+statement ok
+EXPLAIN ANALYZE (PLAN) DELETE FROM a
+
+statement ok
+EXPLAIN ANALYZE (PLAN) DROP TABLE a
+
 # Tests with EXPLAIN ANALYZE and subqueries.
 
 statement ok
