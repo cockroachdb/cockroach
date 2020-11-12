@@ -1567,17 +1567,6 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 		subsumedRepls = append(subsumedRepls, sRepl)
 		endKey = sRepl.Desc().EndKey
 	}
-	// TODO(benesch): we may be unnecessarily forcing another Raft snapshot here
-	// by subsuming too much. Consider the case where [a, b) and [c, e) first
-	// merged into [a, e), then split into [a, d) and [d, e), and we're applying a
-	// snapshot that spans this merge and split. The bounds of this snapshot will
-	// be [a, d), so we'll subsume [c, e). But we're still a member of [d, e)!
-	// We'll currently be forced to get a Raft snapshot to catch up. Ideally, we'd
-	// subsume only half of [c, e) and synthesize a new RHS [d, e), effectively
-	// applying both the split and merge during snapshot application. This isn't a
-	// huge deal, though: we're probably behind enough that the RHS would need to
-	// get caught up with a Raft snapshot anyway, even if we synthesized it
-	// properly.
 	return subsumedRepls, func() {
 		for _, sr := range subsumedRepls {
 			sr.raftMu.Unlock()
