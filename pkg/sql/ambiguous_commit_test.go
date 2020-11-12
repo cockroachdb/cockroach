@@ -13,6 +13,7 @@ package sql_test
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"sync/atomic"
 	"testing"
 
@@ -98,7 +99,7 @@ func TestAmbiguousCommit(t *testing.T) {
 							//
 							// For the rest, compare and perhaps inject an
 							// RPC error ourselves.
-							if err == nil && br.Error.Equal(translateToRPCError) {
+							if err == nil && reflect.DeepEqual(br.Error, translateToRPCError) {
 								// Translate the injected error into an RPC
 								// error to simulate an ambiguous result.
 								return nil, br.Error.GoError()
