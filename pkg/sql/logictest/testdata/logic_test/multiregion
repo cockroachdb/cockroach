@@ -8,11 +8,29 @@ test1   {test1-az1,test1-az2,test1-az3}
 test2   {test2-az1,test2-az2,test2-az3}
 test3   {test3-az1,test3-az2,test3-az3}
 
-statement error implementation pending
+statement ok
 CREATE DATABASE region_test_db REGION "test1"
 
-statement error implementation pending
+statement ok
+SELECT 'test1'::region_test_db.public.region
+
+statement error invalid input value for enum region: "test2"
+SELECT 'test2'::region_test_db.public.region
+
+statement ok
 CREATE DATABASE multi_region_test_db REGIONS "test1", "test2"
+
+statement ok
+SELECT 'test1'::multi_region_test_db.public.region
+
+statement ok
+SELECT 'test2'::multi_region_test_db.public.region
+
+statement error "multi_region_test_db.public.region" is a multi-region enum and cannot be modified directly
+DROP TYPE multi_region_test_db.public.region
+
+statement error "multi_region_test_db.public.region" is a multi-region enum and can't be modified using the alter type command
+ALTER TYPE multi_region_test_db.public.region ADD VALUE 'test3'
 
 statement error region "region_no_exists" does not exist\nHINT:.*valid regions: test1, test2, test3
 CREATE DATABASE invalid_region_db REGION "region_no_exists"

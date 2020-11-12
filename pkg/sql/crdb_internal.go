@@ -1663,6 +1663,8 @@ CREATE TABLE crdb_internal.create_type_statements (
 	populate: func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc *typedesc.Immutable) error {
 			switch typeDesc.Kind {
+			// TODO(#multiregion): We're missing multi region enum introspection
+			// currently. see https://github.com/cockroachdb/cockroach/issues/56905
 			case descpb.TypeDescriptor_ENUM:
 				var enumLabels tree.EnumValueList
 				enumLabelsDatum := tree.NewDArray(types.String)
