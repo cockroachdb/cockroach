@@ -52,6 +52,7 @@ go_library(
         "//vendor/github.com/aws/aws-sdk-go/aws/credentials",
         "//vendor/github.com/cockroachdb/apd/v2:apd",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/errorspb",
         "//vendor/github.com/cockroachdb/redact",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/gogo/protobuf/sortkeys",

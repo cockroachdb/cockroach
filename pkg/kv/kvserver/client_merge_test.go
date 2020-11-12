@@ -1590,9 +1590,7 @@ func TestStoreRangeMergeCheckConsistencyAfterSubsumption(t *testing.T) {
 			if et := r.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				mergeEndTxnReceived <- ba.Txn
 				<-abortMergeTxn
-				return &roachpb.Error{
-					Message: "abort the merge for test",
-				}
+				return roachpb.NewError(errors.New("abort the merge for test"))
 			}
 		}
 		return nil
@@ -1653,7 +1651,7 @@ func TestStoreRangeMergeCheckConsistencyAfterSubsumption(t *testing.T) {
 
 	pErr := <-mergeErr
 	require.IsType(t, &roachpb.Error{}, pErr)
-	require.Regexp(t, "abort the merge for test", pErr.Message)
+	require.Regexp(t, "abort the merge for test", pErr.String())
 
 	testutils.SucceedsSoon(t, func() error {
 		pErr := <-checkConsistencyResp

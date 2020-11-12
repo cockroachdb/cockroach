@@ -244,6 +244,11 @@ func (s *Store) Send(
 				return true // continue visiting
 			}
 			t.AppendRangeInfo(ctx, desc, l)
+			// We have to write `t` back to `pErr` so that it picks up the changes.
+			//
+			// TODO(tbg): avoid DeprecatedSetDetail. Instead, collect the range infos
+			// separately and make a new pErr at the end.
+			pErr.DeprecatedSetDetail(t)
 			return true // continue visiting
 		})
 	case *roachpb.RaftGroupDeletedError:

@@ -423,6 +423,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				// Don't send the same transaction object twice; this can lead to races.
 				if pErr != nil {
 					pErrClone := *pErr
+					// TODO(tbg): why?
 					pErrClone.SetTxn(pErr.GetTxn())
 					llHandle.resolve(&pErrClone)
 				} else {

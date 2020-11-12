@@ -224,7 +224,7 @@ func runBackupProcessor(
 					span.span, span.attempts+1, header.UserPriority.String())
 				rawRes, pErr := kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, req)
 				if pErr != nil {
-					if err := pErr.Detail.GetWriteIntent(); err != nil {
+					if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
 						span.lastTried = timeutil.Now()
 						span.attempts++
 						todo <- span

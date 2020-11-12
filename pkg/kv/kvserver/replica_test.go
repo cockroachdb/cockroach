@@ -2290,16 +2290,16 @@ func TestLeaseConcurrent(t *testing.T) {
 			pErrs[i] = <-pErrCh
 		}
 
-		newMsg := "moob"
+		newErr := errors.New("moob")
 		for i, pErr := range pErrs {
 			if withError != (pErr != nil) {
 				t.Errorf("%d: wanted error: %t, got error %v", i, withError, pErr)
 			}
-			if testutils.IsPError(pErr, newMsg) {
+			if testutils.IsPError(pErr, newErr.Error()) {
 				t.Errorf("%d: errors shared memory: %v", i, pErr)
 			} else if testutils.IsPError(pErr, origMsg) {
 				// Mess with anyone holding the same reference.
-				pErr.Message = newMsg
+				pErr.EncodedError = errors.EncodeError(context.Background(), newErr)
 			} else if pErr != nil {
 				t.Errorf("%d: unexpected error: %s", i, pErr)
 			}
