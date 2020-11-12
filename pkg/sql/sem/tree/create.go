@@ -460,15 +460,21 @@ func NewColumnTableDef(
 		switch t := c.Qualification.(type) {
 		case ColumnCollation:
 			locale := string(t)
-			_, err := language.Parse(locale)
-			if err != nil {
-				return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
+			// In postgres, all strings have collations defaulting to "default".
+			// In CRDB, collated strings are treated separately to string family types.
+			// To most behave like postgres, set the CollatedString type if a non-"default"
+			// collation is used.
+			if locale != DefaultCollationTag {
+				_, err := language.Parse(locale)
+				if err != nil {
+					return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
+				}
+				collatedTyp, err := processCollationOnType(name, d.Type, t)
+				if err != nil {
+					return nil, err
+				}
+				d.Type = collatedTyp
 			}
-			collatedTyp, err := processCollationOnType(name, d.Type, t)
-			if err != nil {
-				return nil, err
-			}
-			d.Type = collatedTyp
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
 				return nil, pgerror.Newf(pgcode.Syntax,

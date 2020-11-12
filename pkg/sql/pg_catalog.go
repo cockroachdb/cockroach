@@ -57,7 +57,6 @@ var (
 const (
 	indexTypeForwardIndex  = "prefix"
 	indexTypeInvertedIndex = "inverted"
-	defaultCollationTag    = "en-US"
 )
 
 // Bitmasks for pg_index.indoption. Each column in the index has a bitfield
@@ -664,9 +663,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false /* requiresPrivileges */, func(db *dbdesc.Immutable) error {
 			namespaceOid := h.NamespaceOid(db.GetID(), pgCatalogName)
-			for _, tag := range collate.Supported() {
-				collName := tag.String()
-				if err := addRow(
+			add := func(collName string) error {
+				return addRow(
 					h.CollationOid(collName),  // oid
 					tree.NewDString(collName), // collname
 					namespaceOid,              // collnamespace
@@ -676,7 +674,14 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 					// required by LC_COLLATE and LC_CTYPE.
 					tree.DNull, // collcollate
 					tree.DNull, // collctype
-				); err != nil {
+				)
+			}
+			if err := add(tree.DefaultCollationTag); err != nil {
+				return err
+			}
+			for _, tag := range collate.Supported() {
+				collName := tag.String()
+				if err := add(collName); err != nil {
 					return err
 				}
 			}
@@ -2456,13 +2461,13 @@ func typColl(typ *types.T, h oidHasher) tree.Datum {
 	case types.AnyFamily:
 		return oidZero
 	case types.StringFamily:
-		return h.CollationOid(defaultCollationTag)
+		return h.CollationOid(tree.DefaultCollationTag)
 	case types.CollatedStringFamily:
 		return h.CollationOid(typ.Locale())
 	}
 
 	if typ.Equivalent(types.StringArray) {
-		return h.CollationOid(defaultCollationTag)
+		return h.CollationOid(tree.DefaultCollationTag)
 	}
 	return oidZero
 }
