@@ -777,7 +777,7 @@ func (r *Replica) evaluateProposal(
 	// 3. the request has replicated side-effects.
 	needConsensus := !batch.Empty() ||
 		ms != (enginepb.MVCCStats{}) ||
-		!res.Replicated.Equal(kvserverpb.ReplicatedEvalResult{})
+		!res.Replicated.IsZero()
 
 	if needConsensus {
 		// Set the proposal's WriteBatch, which is the serialized representation of

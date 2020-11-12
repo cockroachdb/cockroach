@@ -21,3 +21,8 @@ var maxRaftCommandFooterSize = (&RaftCommandFooter{
 func MaxRaftCommandFooterSize() int {
 	return maxRaftCommandFooterSize
 }
+
+// IsZero returns whether all fields are set to their zero value.
+func (r ReplicatedEvalResult) IsZero() bool {
+	return r == ReplicatedEvalResult{}
+}

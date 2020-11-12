@@ -70,7 +70,7 @@ func isTrivial(r *kvserverpb.ReplicatedEvalResult) bool {
 	allowlist.DeprecatedDelta = nil
 	allowlist.PrevLeaseProposal = nil
 	allowlist.State = nil
-	return allowlist.Equal(kvserverpb.ReplicatedEvalResult{})
+	return allowlist.IsZero()
 }
 
 // clearTrivialReplicatedEvalResultFields is used to zero out the fields of a
