@@ -15,10 +15,7 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
-// MaxPoints is the maximum number of points segmentize is allowed to generate.
-const MaxPoints = 16336
-
-// SegmentizeGeom returns a modified geom.T having no segment longer
+// Segmentize returns a modified geom.T having no segment longer
 // than the given maximum segment length.
 // segmentMaxAngleOrLength represents two different things depending
 // on the object, which is about to segmentize as in case of geography
@@ -28,7 +25,7 @@ const MaxPoints = 16336
 // us to segmentize given two-points. We have to specify segmentizeCoords
 // explicitly, as the algorithm for segmentization is significantly
 // different for geometry and geography.
-func SegmentizeGeom(
+func Segmentize(
 	geometry geom.T,
 	segmentMaxAngleOrLength float64,
 	segmentizeCoords func(geom.Coord, geom.Coord, float64) ([]float64, error),
@@ -57,7 +54,7 @@ func SegmentizeGeom(
 	case *geom.MultiLineString:
 		segMultiLine := geom.NewMultiLineString(geom.XY).SetSRID(geometry.SRID())
 		for lineIdx := 0; lineIdx < geometry.NumLineStrings(); lineIdx++ {
-			l, err := SegmentizeGeom(geometry.LineString(lineIdx), segmentMaxAngleOrLength, segmentizeCoords)
+			l, err := Segmentize(geometry.LineString(lineIdx), segmentMaxAngleOrLength, segmentizeCoords)
 			if err != nil {
 				return nil, err
 			}
@@ -85,7 +82,7 @@ func SegmentizeGeom(
 	case *geom.Polygon:
 		segPolygon := geom.NewPolygon(geom.XY).SetSRID(geometry.SRID())
 		for loopIdx := 0; loopIdx < geometry.NumLinearRings(); loopIdx++ {
-			l, err := SegmentizeGeom(geometry.LinearRing(loopIdx), segmentMaxAngleOrLength, segmentizeCoords)
+			l, err := Segmentize(geometry.LinearRing(loopIdx), segmentMaxAngleOrLength, segmentizeCoords)
 			if err != nil {
 				return nil, err
 			}
@@ -98,7 +95,7 @@ func SegmentizeGeom(
 	case *geom.MultiPolygon:
 		segMultiPolygon := geom.NewMultiPolygon(geom.XY).SetSRID(geometry.SRID())
 		for polygonIdx := 0; polygonIdx < geometry.NumPolygons(); polygonIdx++ {
-			p, err := SegmentizeGeom(geometry.Polygon(polygonIdx), segmentMaxAngleOrLength, segmentizeCoords)
+			p, err := Segmentize(geometry.Polygon(polygonIdx), segmentMaxAngleOrLength, segmentizeCoords)
 			if err != nil {
 				return nil, err
 			}
@@ -111,7 +108,7 @@ func SegmentizeGeom(
 	case *geom.GeometryCollection:
 		segGeomCollection := geom.NewGeometryCollection().SetSRID(geometry.SRID())
 		for geoIdx := 0; geoIdx < geometry.NumGeoms(); geoIdx++ {
-			g, err := SegmentizeGeom(geometry.Geom(geoIdx), segmentMaxAngleOrLength, segmentizeCoords)
+			g, err := Segmentize(geometry.Geom(geoIdx), segmentMaxAngleOrLength, segmentizeCoords)
 			if err != nil {
 				return nil, err
 			}

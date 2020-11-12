@@ -49,6 +49,9 @@ const (
 // while DWithinExclusive == (Distance < x).
 type FnExclusivity bool
 
+// MaxAllowedSplitPoints is the maximum number of points any spatial function may split to.
+const MaxAllowedSplitPoints = 65336
+
 const (
 	// FnExclusive indicates that the corresponding geo function should have
 	// exclusive semantics.
