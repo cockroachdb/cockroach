@@ -67,12 +67,12 @@ go_library(
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecagg",  # keep
         "//pkg/sql/colexec/execgen",  # keep
-        "//pkg/sql/colexec/execpb",
         "//pkg/sql/colexecbase",
         "//pkg/sql/colexecbase/colexecerror",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/execstats/execstatspb",
         "//pkg/sql/parser",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",

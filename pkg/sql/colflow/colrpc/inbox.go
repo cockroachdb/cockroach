@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -120,7 +119,6 @@ type Inbox struct {
 }
 
 var _ colexecbase.Operator = &Inbox{}
-var _ execinfra.IOReader = &Inbox{}
 var _ colexec.NetworkReader = &Inbox{}
 
 // NewInbox creates a new Inbox.
@@ -333,12 +331,12 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-// GetBytesRead is part of the execinfra.IOReader interface.
+// GetBytesRead is part of the colexec.NetworkReader interface.
 func (i *Inbox) GetBytesRead() int64 {
 	return i.bytesRead
 }
 
-// GetRowsRead is part of the execinfra.IOReader interface.
+// GetRowsRead is part of the colexec.NetworkReader interface.
 func (i *Inbox) GetRowsRead() int64 {
 	return i.rowsRead
 }
