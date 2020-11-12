@@ -67,7 +67,7 @@ which may or may not work (and are not officially supported).
 Please copy this checklist (based on [Basic Process](#basic-process)) into the relevant commit message, with a link
 back to this document and perform these steps:
 
-* [ ] Adjust the Pebble tests to run in 1.14.
+* [ ] Adjust the Pebble tests to run in new version.
 * [ ] Adjust version in Docker image ([source](./builder/Dockerfile#L199-L200)).
 * [ ] Rebuild and push the Docker image (following [Basic Process](#basic-process))
 * [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).

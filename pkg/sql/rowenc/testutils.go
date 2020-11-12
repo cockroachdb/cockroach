@@ -334,7 +334,7 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 }
 
 func randStringSimple(rng *rand.Rand) string {
-	return string('A' + rng.Intn(simpleRange))
+	return string(rune('A' + rng.Intn(simpleRange)))
 }
 
 func randJSONSimple(rng *rand.Rand) json.JSON {
