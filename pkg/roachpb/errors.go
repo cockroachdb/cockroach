@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -106,15 +107,24 @@ const (
 
 // ErrPriority computes the priority of the given error.
 func ErrPriority(err error) ErrorPriority {
-	if err == nil {
+	// TODO(tbg): this method could take an `*Error` if it weren't for SQL
+	// propagating these as an `error`. See `DistSQLReceiver.Push`.
+	var detail ErrorDetailInterface
+	switch tErr := err.(type) {
+	case nil:
 		return 0
-	}
-	switch v := err.(type) {
+	case ErrorDetailInterface:
+		detail = tErr
+	case *internalError:
+		detail = (*Error)(tErr).GetDetail()
 	case *UnhandledRetryableError:
-		if _, ok := v.PErr.GetDetail().(*TransactionAbortedError); ok {
+		if _, ok := tErr.PErr.GetDetail().(*TransactionAbortedError); ok {
 			return ErrorScoreTxnAbort
 		}
 		return ErrorScoreTxnRestart
+	}
+
+	switch v := detail.(type) {
 	case *TransactionRetryWithProtoRefreshError:
 		if v.PrevTxnAborted() {
 			return ErrorScoreTxnAbort
@@ -136,7 +146,13 @@ func NewError(err error) *Error {
 		return nil
 	}
 	e := &Error{}
-	e.SetDetail(err)
+	if intErr, ok := err.(*internalError); ok {
+		*e = *(*Error)(intErr)
+	} else if msg, ok := err.(ErrorDetailInterface); ok {
+		e.SetDetail(msg)
+	} else {
+		e.Message = err.Error()
+	}
 	return e
 }
 
@@ -172,12 +188,11 @@ func (e *Error) SafeFormat(s redact.SafePrinter, _ rune) {
 	// sure to terminate it here as well. These are all hints that *Error is not
 	// well constructed.
 	switch t := e.GetDetail().(type) {
-	case *internalError:
-		// *internalError is just our starting point *Error, i.e. no detail was
-		// returned. All we have is a message that will get stripped during redaction.
+	case nil:
+		// No detail was returned. All we have is a message
+		// that will get stripped during redaction.
 		//
-		// TODO(tbg): using cockroachdb/errors for this case would get us much more
-		// mileage and usability here. See also:
+		// TODO(tbg): improve this after this issue has been addressed:
 		// https://github.com/cockroachdb/cockroach/issues/54939
 		s.Print(e.Message)
 	default:
@@ -199,28 +214,14 @@ func (e *Error) String() string {
 
 type internalError Error
 
-// Type is part of the ErrorDetailInterface.
-func (e *internalError) Type() ErrorDetailType {
-	return InternalErrType
-}
-
 func (e *internalError) Error() string {
 	return (*Error)(e).String()
 }
 
-func (e *internalError) message(_ *Error) string {
-	return (*Error)(e).String()
-}
-
-func (e *internalError) canRestartTransaction() TransactionRestart {
-	return e.TransactionRestart
-}
-
-var _ ErrorDetailInterface = &internalError{}
-
 // ErrorDetailInterface is an interface for each error detail.
 type ErrorDetailInterface interface {
 	error
+	protoutil.Message
 	// message returns an error message.
 	message(*Error) string
 	// Type returns the error's type.
@@ -275,7 +276,10 @@ const (
 	NumErrors int = 40
 )
 
-// GoError returns a Go error converted from Error.
+// GoError returns a Go error converted from Error. If the error is a transaction
+// retry error, it returns the error itself wrapped in an UnhandledRetryableError.
+// Otherwise, if an error detail is present, is is returned (i.e. the result will
+// match GetDetail()). Otherwise, returns the error itself masqueraded as an `error`.
 func (e *Error) GoError() error {
 	if e == nil {
 		return nil
@@ -286,48 +290,39 @@ func (e *Error) GoError() error {
 			PErr: *e,
 		}
 	}
-	return e.GetDetail()
+	if detail := e.GetDetail(); detail != nil {
+		return detail
+	}
+	return (*internalError)(e)
 }
 
 // SetDetail sets the error detail for the error. The argument cannot be nil.
-func (e *Error) SetDetail(err error) {
-	if err == nil {
-		panic("nil err argument")
+func (e *Error) SetDetail(detail ErrorDetailInterface) {
+	if detail == nil {
+		panic("nil detail argument")
 	}
-	if intErr, ok := err.(*internalError); ok {
-		*e = *(*Error)(intErr)
+	e.Message = detail.message(e)
+	if r, ok := detail.(transactionRestartError); ok {
+		e.TransactionRestart = r.canRestartTransaction()
 	} else {
-		if sErr, ok := err.(ErrorDetailInterface); ok {
-			e.Message = sErr.message(e)
-		} else {
-			e.Message = err.Error()
-		}
-		if r, ok := err.(transactionRestartError); ok {
-			e.TransactionRestart = r.canRestartTransaction()
-		} else {
-			e.TransactionRestart = TransactionRestart_NONE
-		}
-		// If the specific error type exists in the detail union, set it.
-		if !e.Detail.SetInner(err) {
-			_, isInternalError := err.(*internalError)
-			if !isInternalError && e.TransactionRestart != TransactionRestart_NONE {
-				panic(errors.AssertionFailedf("transactionRestartError %T must be an ErrorDetail", err))
-			}
-		}
-		e.checkTxnStatusValid()
+		e.TransactionRestart = TransactionRestart_NONE
 	}
+	// If the specific error type exists in the detail union, set it.
+	if !e.Detail.SetInner(detail) {
+		if e.TransactionRestart != TransactionRestart_NONE {
+			panic(errors.AssertionFailedf("transactionRestartError %T must be an ErrorDetail", detail))
+		}
+	}
+	e.checkTxnStatusValid()
 }
 
-// GetDetail returns an error detail associated with the error.
+// GetDetail returns an error detail associated with the error, or nil otherwise.
 func (e *Error) GetDetail() ErrorDetailInterface {
 	if e == nil {
 		return nil
 	}
-	if err, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
-		return err
-	}
-	// Unknown error detail; return the generic error.
-	return (*internalError)(e)
+	detail, _ := e.Detail.GetInner().(ErrorDetailInterface)
+	return detail
 }
 
 // SetTxn sets the error transaction and resets the error message.

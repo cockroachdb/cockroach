@@ -1961,17 +1961,22 @@ func (ds *DistSender) sendToReplicas(
 				ds.clock.Update(br.Now)
 			}
 
-			// TODO(andrei): There are errors below that cause us to move to a
-			// different replica without updating our caches. This means that future
-			// requests will attempt the same useless replicas.
-			switch tErr := br.Error.GetDetail().(type) {
-			case nil:
+			if br.Error == nil {
 				// If the server gave us updated range info, lets update our cache with it.
+				//
+				// TODO(andreimatei): shouldn't we do this unconditionally? Our cache knows how
+				// to disregard stale information.
 				if len(br.RangeInfos) > 0 {
 					log.VEventf(ctx, 2, "received updated range info: %s", br.RangeInfos)
 					routing.EvictAndReplace(ctx, br.RangeInfos...)
 				}
 				return br, nil
+			}
+
+			// TODO(andrei): There are errors below that cause us to move to a
+			// different replica without updating our caches. This means that future
+			// requests will attempt the same useless replicas.
+			switch tErr := br.Error.GetDetail().(type) {
 			case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
 				// These errors are likely to be unique to the replica that reported
 				// them, so no action is required before the next retry.
@@ -2064,7 +2069,11 @@ func (ds *DistSender) maybeIncrementErrCounters(br *roachpb.BatchResponse, err e
 	if err != nil {
 		ds.metrics.ErrCounts[roachpb.CommunicationErrType].Inc(1)
 	} else {
-		ds.metrics.ErrCounts[br.Error.GetDetail().Type()].Inc(1)
+		typ := roachpb.InternalErrType
+		if detail := br.Error.GetDetail(); detail != nil {
+			typ = detail.Type()
+		}
+		ds.metrics.ErrCounts[typ].Inc(1)
 	}
 }
 
