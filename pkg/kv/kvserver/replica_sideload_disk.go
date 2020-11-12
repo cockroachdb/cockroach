@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"golang.org/x/time/rate"
 )
 
@@ -66,7 +66,7 @@ func exists(eng storage.Engine, path string) (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	if os.IsNotExist(err) {
+	if oserror.IsNotExist(err) {
 		return false, nil
 	}
 	return false, err
@@ -140,7 +140,7 @@ func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 		// https://github.com/facebook/rocksdb/blob/56656e12d67d8a63f1e4c4214da9feeec2bd442b/env/env_posix.cc#L171
 		if err := writeFileSyncing(ctx, filename, contents, ss.eng, 0644, ss.st, ss.limiter); err == nil {
 			return nil
-		} else if !os.IsNotExist(err) {
+		} else if !oserror.IsNotExist(err) {
 			return err
 		}
 		// createDir() ensures ss.dir exists but will not create any subdirectories
@@ -156,7 +156,7 @@ func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 func (ss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]byte, error) {
 	filename := ss.filename(ctx, index, term)
 	b, err := ss.eng.ReadFile(filename)
-	if os.IsNotExist(err) {
+	if oserror.IsNotExist(err) {
 		return nil, errSideloadedFileNotFound
 	}
 	return b, err
@@ -179,7 +179,7 @@ func (ss *diskSideloadStorage) Purge(ctx context.Context, index, term uint64) (i
 func (ss *diskSideloadStorage) fileSize(filename string) (int64, error) {
 	info, err := ss.eng.Stat(filename)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			return 0, errSideloadedFileNotFound
 		}
 		return 0, err
@@ -193,7 +193,7 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 		return 0, err
 	}
 	if err := ss.eng.Remove(filename); err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			return 0, errSideloadedFileNotFound
 		}
 		return 0, err
@@ -237,7 +237,7 @@ func (ss *diskSideloadStorage) TruncateTo(
 		// The directory may not exist, or it may exist and have been empty.
 		// Not worth trying to figure out which one, just try to delete.
 		err := ss.eng.RemoveDir(ss.dir)
-		if err != nil && !os.IsNotExist(err) {
+		if err != nil && !oserror.IsNotExist(err) {
 			return bytesFreed, 0, errors.Wrapf(err, "while purging %q", ss.dir)
 		}
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -74,7 +75,7 @@ func getSSHAgentSigners() []ssh.Signer {
 func getSSHKeySigner(path string, haveAgent bool) ssh.Signer {
 	key, err := ioutil.ReadFile(path)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !oserror.IsNotExist(err) {
 			log.Printf("unable to read SSH key %q: %s", path, err)
 		}
 		return nil

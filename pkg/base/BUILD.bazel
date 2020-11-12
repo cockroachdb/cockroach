@@ -34,6 +34,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/cockroachdb/pebble",
         "//vendor/github.com/cockroachdb/redact",
         "//vendor/github.com/dustin/go-humanize",

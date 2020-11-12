@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 func init() {
@@ -276,7 +277,7 @@ func (cl *CertificateLoader) MaybeCreateCertsDir() error {
 		return nil
 	}
 
-	if !os.IsNotExist(err) {
+	if !oserror.IsNotExist(err) {
 		return makeErrorf(err, "could not stat certs directory %s", cl.certsDir)
 	}
 
@@ -298,7 +299,7 @@ func (cl *CertificateLoader) TestDisablePermissionChecks() {
 func (cl *CertificateLoader) Load() error {
 	fileInfos, err := assetLoaderImpl.ReadDir(cl.certsDir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			// Directory does not exist.
 			if log.V(3) {
 				log.Infof(context.Background(), "missing certs directory %s", cl.certsDir)

@@ -24,6 +24,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/docker/distribution/reference",
         "//vendor/github.com/docker/docker/api/types",
         "//vendor/github.com/docker/docker/api/types/container",

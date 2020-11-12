@@ -48,7 +48,7 @@ type FS interface {
 	OpenDir(name string) (File, error)
 
 	// Remove removes the named file. If the file with given name doesn't
-	// exist, return an error that returns true from os.IsNotExist().
+	// exist, return an error that returns true from oserror.IsNotExist().
 	Remove(name string) error
 
 	// Rename renames a file. It overwrites the file at newname if one exists,

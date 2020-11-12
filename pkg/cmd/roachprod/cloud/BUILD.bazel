@@ -13,6 +13,7 @@ go_library(
         "//pkg/cmd/roachprod/vm",
         "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/nlopes/slack",
     ],
 )

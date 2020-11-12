@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -110,7 +111,7 @@ func CleanupTempDirs(recordPath string) error {
 	// entries.
 	f, err := os.OpenFile(recordPath, os.O_RDWR, 0644)
 	// There is no existing record file and thus nothing to clean up.
-	if os.IsNotExist(err) {
+	if oserror.IsNotExist(err) {
 		return nil
 	}
 	if err != nil {
@@ -128,7 +129,7 @@ func CleanupTempDirs(recordPath string) error {
 		}
 
 		// Check if the temporary directory exists; if it does not, skip over it.
-		if _, err := os.Stat(path); os.IsNotExist(err) {
+		if _, err := os.Stat(path); oserror.IsNotExist(err) {
 			log.Warningf(context.Background(), "could not locate previous temporary directory %s, might require manual cleanup, or might have already been cleaned up.", path)
 			continue
 		}

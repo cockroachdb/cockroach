@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // TestLogScope represents the lifetime of a logging output.  It
@@ -313,7 +314,7 @@ func (l *loggerT) dirTestOverride(expected, newDir string) error {
 func isDirEmpty(dirname string) (bool, error) {
 	f, err := os.Open(dirname)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			return true, nil
 		}
 		return false, err

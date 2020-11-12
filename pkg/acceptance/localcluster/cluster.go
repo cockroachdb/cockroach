@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/gogo/protobuf/proto"
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -667,7 +668,7 @@ func (n *Node) httpAddrFile() string {
 func readFileOrEmpty(f string) string {
 	c, err := ioutil.ReadFile(f)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !oserror.IsNotExist(err) {
 			panic(err)
 		}
 		return ""

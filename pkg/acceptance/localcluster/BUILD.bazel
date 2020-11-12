@@ -27,6 +27,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/errors/oserror",
         "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/lib/pq",
     ],

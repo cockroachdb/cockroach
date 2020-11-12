@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 const (
@@ -166,7 +167,7 @@ func createCACertAndKey(
 
 	var key crypto.PrivateKey
 	if _, err := os.Stat(caKeyPath); err != nil {
-		if !os.IsNotExist(err) {
+		if !oserror.IsNotExist(err) {
 			return errors.Errorf("could not stat CA key file %s: %v", caKeyPath, err)
 		}
 
@@ -235,7 +236,7 @@ func createCACertAndKey(
 		}
 		log.Infof(context.Background(), "found %d certificates in %s",
 			len(existingCertificates), certPath)
-	} else if !os.IsNotExist(err) {
+	} else if !oserror.IsNotExist(err) {
 		return errors.Errorf("could not stat CA cert file %s: %v", certPath, err)
 	}
 
