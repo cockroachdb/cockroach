@@ -224,7 +224,7 @@ func TestMustSetInner(t *testing.T) {
 	req := RequestUnion{}
 	res := ResponseUnion{}
 
-	// GetRequest is checked first in the generated code for SetInner.
+	// GetRequest is checked first in the generated code for MustSetInner.
 	req.MustSetInner(&GetRequest{})
 	res.MustSetInner(&GetResponse{})
 	req.MustSetInner(&EndTxnRequest{})
