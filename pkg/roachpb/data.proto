@@ -172,8 +172,6 @@ enum ReplicaChangeType {
 // specify any additions nor removals.
 message ChangeReplicasTrigger {
   option (gogoproto.goproto_stringer) = false;
-  // Needed for ReplicatedEvalResult.Equal().
-  option (gogoproto.equal) = true;
 
   // TODO(tbg): remove once we know that no trigger using this will ever be
   // applied (this will require something like #39182).

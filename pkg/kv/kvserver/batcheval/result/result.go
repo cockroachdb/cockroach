@@ -164,7 +164,7 @@ func (p *Result) IsZero() bool {
 	if !p.Local.IsZero() {
 		return false
 	}
-	if !p.Replicated.Equal(kvserverpb.ReplicatedEvalResult{}) {
+	if !p.Replicated.IsZero() {
 		return false
 	}
 	if p.WriteBatch != nil {

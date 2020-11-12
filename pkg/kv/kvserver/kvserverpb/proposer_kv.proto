@@ -50,8 +50,6 @@ message Merge {
 // ChangeReplicas is emitted by a Replica which commits a transaction with
 // a ChangeReplicasTrigger.
 message ChangeReplicas {
-  option (gogoproto.equal) = true;
-
   option (gogoproto.goproto_stringer) = false;
 
   roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
@@ -117,8 +115,6 @@ message SuggestedCompaction {
 // leases, log truncation, ...) of the Replica or certain special commands must
 // sideline information here based on which all Replicas must take action.
 message ReplicatedEvalResult {
-  option (gogoproto.equal) = true;
-
   // Updates to the Replica's ReplicaState. By convention and as outlined on
   // the comment on the ReplicaState message, this field is sparsely populated
   // and any field set overwrites the corresponding field in the state, perhaps
