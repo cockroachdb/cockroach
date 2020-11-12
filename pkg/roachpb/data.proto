@@ -81,9 +81,6 @@ enum ValueType {
 // TODO(peter): Is a 4-byte checksum overkill when most (all?) values
 // will be less than 64KB?
 message Value {
-  // It's convenient for tests to be able to compare values.
-  option (gogoproto.equal) = true;
-
   // raw_bytes contains the encoded value and checksum.
   //
   // Its contents may be modified on the next call to Value.SetFoo.
