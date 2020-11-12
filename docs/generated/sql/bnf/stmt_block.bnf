@@ -664,7 +664,7 @@ show_range_for_row_stmt ::=
 	| 'SHOW' 'RANGE' 'FROM' 'INDEX' table_index_name 'FOR' 'ROW' '(' expr_list ')'
 
 show_regions_stmt ::=
-	'SHOW' 'REGIONS'
+	'SHOW' 'REGIONS' 'FROM' 'CLUSTER'
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE' database_name
 
 show_roles_stmt ::=
