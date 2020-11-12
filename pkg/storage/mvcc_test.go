@@ -4233,7 +4233,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 			if num != 5 || resumeSpan == nil {
 				t.Errorf("expected resolution for only 5 keys; got %d, resume=%s", num, resumeSpan)
 			}
-			expResumeSpan := &roachpb.Span{Key: roachpb.Key("12").Next(), EndKey: roachpb.Key("30")}
+			expResumeSpan := roachpb.Span{Key: roachpb.Key("12").Next(), EndKey: roachpb.Key("30")}
 			if !resumeSpan.Equal(expResumeSpan) {
 				t.Errorf("expected resume span %s; got %s", expResumeSpan, resumeSpan)
 			}

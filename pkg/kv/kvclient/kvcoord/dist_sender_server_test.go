@@ -1540,7 +1540,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	containsObservedTSs := func(txn *roachpb.Transaction) bool {
 		contains := func(ot roachpb.ObservedTimestamp) bool {
 			for _, ts := range txn.ObservedTimestamps {
-				if ts.Equal(ot) {
+				if ts == ot {
 					return true
 				}
 			}

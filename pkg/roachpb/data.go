@@ -2035,8 +2035,15 @@ func (u *LockUpdate) SetTxn(txn *Transaction) {
 	u.IgnoredSeqNums = txn.IgnoredSeqNums
 }
 
-// EqualValue compares for equality.
+// EqualValue is Equal.
+//
+// TODO(tbg): remove this passthrough.
 func (s Span) EqualValue(o Span) bool {
+	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
+}
+
+// Equal compares two spans.
+func (s Span) Equal(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
 }
 
