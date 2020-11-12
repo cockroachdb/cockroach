@@ -106,6 +106,8 @@ var opsWithExecErrorScreening = map[opType]bool{
 	renameTable:    true,
 	renameView:     true,
 
+	setColumnNotNull: true,
+
 	insertRow: true,
 }
 
@@ -1260,10 +1262,37 @@ func (og *operationGenerator) setColumnNotNull(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET NOT NULL`, tableName), nil
+	}
+
 	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
+	columnExists, err := columnExistsOnTable(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+
+	if !columnExists {
+		og.expectedExecErrors.add(pgcode.UndefinedColumn)
+	} else {
+		// If the column has null values, then a check violation will occur upon committing.
+		colContainsNull, err := columnContainsNull(tx, tableName, columnName)
+		if err != nil {
+			return "", err
+		}
+		if colContainsNull {
+			og.expectedCommitErrors.add(pgcode.CheckViolation)
+		}
+	}
+
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName), nil
 }
 
