@@ -185,7 +185,7 @@ func (sr *txnSpanRefresher) SendLocked(
 			isReissue := et.DeprecatedCanCommitAtHigherTimestamp
 			if isReissue {
 				etCpy := *et
-				ba.Requests[len(ba.Requests)-1].SetInner(&etCpy)
+				ba.Requests[len(ba.Requests)-1].MustSetInner(&etCpy)
 				et = &etCpy
 			}
 			et.DeprecatedCanCommitAtHigherTimestamp = ba.CanForwardReadTimestamp
