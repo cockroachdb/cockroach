@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/pkg/errors"
@@ -60,9 +61,9 @@ func TestHeuristic(t *testing.T) {
 				{220, 100, 500}, // trigger since N has doubled since last dump
 			},
 			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.double_since_last_dump.000000120",
-				"goroutine_dump.2019-01-01T00_01_20.double_since_last_dump.000000250",
-				"goroutine_dump.2019-01-01T00_03_40.double_since_last_dump.000000500",
+				"goroutine_dump.2019-01-01T00_00_20.000.double_since_last_dump.000000120",
+				"goroutine_dump.2019-01-01T00_01_20.000.double_since_last_dump.000000250",
+				"goroutine_dump.2019-01-01T00_03_40.000.double_since_last_dump.000000500",
 			},
 		},
 		{
@@ -83,12 +84,12 @@ func TestHeuristic(t *testing.T) {
 				{220, 100, 500}, // not trigger since N has not doubled since last dump
 			},
 			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.double_since_last_dump.000000110",
-				"goroutine_dump.2019-01-01T00_01_40.double_since_last_dump.000000220",
-				"goroutine_dump.2019-01-01T00_03_20.double_since_last_dump.000000450",
+				"goroutine_dump.2019-01-01T00_00_20.000.double_since_last_dump.000000110",
+				"goroutine_dump.2019-01-01T00_01_40.000.double_since_last_dump.000000220",
+				"goroutine_dump.2019-01-01T00_03_20.000.double_since_last_dump.000000450",
 			},
 			dumpsToFail: []string{
-				"goroutine_dump.2019-01-01T00_01_20.double_since_last_dump.000000230",
+				"goroutine_dump.2019-01-01T00_01_20.000.double_since_last_dump.000000230",
 			},
 		},
 		{
@@ -108,9 +109,9 @@ func TestHeuristic(t *testing.T) {
 				{220, 200, 500}, // trigger since N has doubled since last dump
 			},
 			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.double_since_last_dump.000000120",
-				"goroutine_dump.2019-01-01T00_01_30.double_since_last_dump.000000210",
-				"goroutine_dump.2019-01-01T00_03_40.double_since_last_dump.000000500",
+				"goroutine_dump.2019-01-01T00_00_20.000.double_since_last_dump.000000120",
+				"goroutine_dump.2019-01-01T00_01_30.000.double_since_last_dump.000000210",
+				"goroutine_dump.2019-01-01T00_03_40.000.double_since_last_dump.000000500",
 			},
 		},
 		{
@@ -143,18 +144,16 @@ func TestHeuristic(t *testing.T) {
 				currentTime: func() time.Time {
 					return currentTime
 				},
-				takeGoroutineDump: func(dir string, filename string) error {
-					assert.Equal(t, dumpDir, dir)
+				takeGoroutineDump: func(path string) error {
 					for _, d := range c.dumpsToFail {
-						if filename == d {
+						if path == filepath.Join(dumpDir, d) {
 							return errors.New("this dump is set to fail")
 						}
 					}
-					dumps = append(dumps, filename)
+					dumps = append(dumps, filepath.Base(path))
 					return nil
 				},
-				gc:  func(ctx context.Context, dir string, sizeLimit int64) {},
-				dir: dumpDir,
+				store: dumpstore.NewStore(dumpDir, nil, nil),
 			}
 
 			ctx := context.TODO()
@@ -170,130 +169,18 @@ func TestHeuristic(t *testing.T) {
 
 func TestNewGoroutineDumper(t *testing.T) {
 	t.Run("fails because no directory is specified", func(t *testing.T) {
-		_, err := NewGoroutineDumper("")
+		_, err := NewGoroutineDumper(context.Background(), "", nil)
 		assert.EqualError(t, err, "directory to store dumps could not be determined")
 	})
 
 	t.Run("succeeds", func(t *testing.T) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)
 		defer dirCleanupFn()
-		gd, err := NewGoroutineDumper(tempDir)
+		gd, err := NewGoroutineDumper(context.Background(), tempDir, nil)
 		assert.NoError(t, err, "unexpected error in NewGoroutineDumper")
 		assert.Equal(t, int64(0), gd.goroutinesThreshold)
 		assert.Equal(t, int64(0), gd.maxGoroutinesDumped)
-		assert.Equal(t, tempDir, gd.dir)
 	})
-}
-
-func TestGC(t *testing.T) {
-	type file struct {
-		name string
-		size int64
-	}
-	cases := []struct {
-		name      string
-		files     []file
-		sizeLimit int64
-		expected  []string
-	}{
-		{
-			name: "total size smaller than size limit",
-			files: []file{
-				{name: "goroutine_dump.2019-01-01T00_00_00", size: 1},
-				{name: "goroutine_dump.2019-01-01T00_10_00", size: 1},
-				{name: "goroutine_dump.2019-01-01T00_20_00", size: 1},
-			},
-			sizeLimit: 5,
-			expected: []string{
-				"goroutine_dump.2019-01-01T00_00_00",
-				"goroutine_dump.2019-01-01T00_10_00",
-				"goroutine_dump.2019-01-01T00_20_00",
-			},
-		},
-		{
-			name: "total size smaller than size limit and unknown files are removed",
-			files: []file{
-				{name: "goroutine_dump.2019-01-01T00_00_00", size: 1},
-				{name: "goroutine_dump.2019-01-01T00_10_00", size: 1},
-				{name: "goroutine_dump.2019-01-01T00_20_00", size: 1},
-				{name: "unknown_file", size: 1},
-				{name: "unknown_file2", size: 1},
-			},
-			sizeLimit: 5,
-			expected: []string{
-				"goroutine_dump.2019-01-01T00_00_00",
-				"goroutine_dump.2019-01-01T00_10_00",
-				"goroutine_dump.2019-01-01T00_20_00",
-			},
-		},
-		{
-			name: "total size larger than size limit",
-			files: []file{
-				{name: "goroutine_dump.2019-01-01T00_00_00", size: 1},
-				{name: "goroutine_dump.2019-01-01T00_10_00", size: 1},
-				{name: "goroutine_dump.2019-01-01T00_20_00", size: 1},
-				{name: "unknown_file", size: 1},
-			},
-			sizeLimit: 2,
-			expected: []string{
-				"goroutine_dump.2019-01-01T00_10_00",
-				"goroutine_dump.2019-01-01T00_20_00",
-			},
-		},
-		{
-			name: "newest dump is already larger than size limit",
-			files: []file{
-				{name: "goroutine_dump.2019-01-01T00_00_00", size: 1},
-				{name: "goroutine_dump.2019-01-01T00_10_00", size: 1},
-				{name: "goroutine_dump.2019-01-01T00_20_00", size: 10},
-				{name: "unknown_file", size: 1},
-			},
-			sizeLimit: 5,
-			expected: []string{
-				"goroutine_dump.2019-01-01T00_20_00",
-			},
-		},
-		{
-			name: "no dump in directory",
-			files: []file{
-				{name: "unknown_file", size: 1},
-			},
-			sizeLimit: 5,
-			expected:  nil,
-		},
-		{
-			name:      "no file in directory",
-			files:     []file{},
-			sizeLimit: 5,
-			expected:  nil,
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			tempDir, dirCleanupFn := testutils.TempDir(t)
-			defer dirCleanupFn()
-
-			for _, f := range c.files {
-				path := filepath.Join(tempDir, f.name)
-				fi, err := os.Create(path)
-				assert.NoError(t, err, "unexpected error when creating file %s", path)
-				err = fi.Close()
-				assert.NoError(t, err, "unexpected error when closing file %s", path)
-				err = os.Truncate(path, f.size)
-				assert.NoError(t, err, "unexpected error when truncating file %s", path)
-			}
-			ctx := context.TODO()
-			gc(ctx, tempDir, c.sizeLimit)
-			files, err := ioutil.ReadDir(tempDir)
-			assert.NoError(t, err, "unexpected error when listing files in %s", tempDir)
-			var actual []string
-			for _, f := range files {
-				actual = append(actual, f.Name())
-			}
-			assert.Equal(t, c.expected, actual)
-		})
-	}
 }
 
 func TestTakeGoroutineDump(t *testing.T) {
@@ -304,8 +191,8 @@ func TestTakeGoroutineDump(t *testing.T) {
 		err := os.Mkdir(path, 0755)
 		assert.NoError(t, err, "failed to make dump directory %s", path)
 
-		filename := "goroutine_dump"
-		err = takeGoroutineDump(tempDir, filename)
+		filename := filepath.Join(tempDir, "goroutine_dump")
+		err = takeGoroutineDump(filename)
 		assert.Error(t, err)
 		assert.Contains(
 			t,
@@ -318,7 +205,8 @@ func TestTakeGoroutineDump(t *testing.T) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)
 		defer dirCleanupFn()
 
-		err := takeGoroutineDump(tempDir, "goroutine_dump")
+		path := filepath.Join(tempDir, "goroutine_dump")
+		err := takeGoroutineDump(path)
 		assert.NoError(t, err, "unexpected error when dumping goroutines")
 
 		expectedFile := filepath.Join(tempDir, "goroutine_dump.txt.gz")
