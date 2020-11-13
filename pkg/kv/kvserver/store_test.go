@@ -1134,19 +1134,13 @@ func TestStoreObservedTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	badKey := []byte("a")
 	goodKey := []byte("b")
-	desc := roachpb.ReplicaDescriptor{
-		NodeID: 5,
-		// not relevant
-		StoreID:   1,
-		ReplicaID: 2,
-	}
 
 	testCases := []struct {
 		key   roachpb.Key
-		check func(int64, roachpb.Response, *roachpb.Error)
+		check func(int64, roachpb.NodeID, roachpb.Response, *roachpb.Error)
 	}{
 		{badKey,
-			func(wallNanos int64, _ roachpb.Response, pErr *roachpb.Error) {
+			func(wallNanos int64, nodeID roachpb.NodeID, _ roachpb.Response, pErr *roachpb.Error) {
 				if pErr == nil {
 					t.Fatal("expected an error")
 				}
@@ -1154,18 +1148,18 @@ func TestStoreObservedTimestamp(t *testing.T) {
 				if txn == nil || txn.ID == (uuid.UUID{}) {
 					t.Fatalf("expected nontrivial transaction in %s", pErr)
 				}
-				if ts, _ := txn.GetObservedTimestamp(desc.NodeID); ts.WallTime != wallNanos {
+				if ts, _ := txn.GetObservedTimestamp(nodeID); ts.WallTime != wallNanos {
 					t.Fatalf("unexpected observed timestamps, expected %d->%d but got map %+v",
-						desc.NodeID, wallNanos, txn.ObservedTimestamps)
+						nodeID, wallNanos, txn.ObservedTimestamps)
 				}
-				if pErr.OriginNode != desc.NodeID {
+				if pErr.OriginNode != nodeID {
 					t.Fatalf("unexpected OriginNode %d, expected %d",
-						pErr.OriginNode, desc.NodeID)
+						pErr.OriginNode, nodeID)
 				}
 
 			}},
 		{goodKey,
-			func(wallNanos int64, pReply roachpb.Response, pErr *roachpb.Error) {
+			func(wallNanos int64, nodeID roachpb.NodeID, pReply roachpb.Response, pErr *roachpb.Error) {
 				if pErr != nil {
 					t.Fatal(pErr)
 				}
@@ -1173,7 +1167,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 				if txn == nil || txn.ID == (uuid.UUID{}) {
 					t.Fatal("expected transactional response")
 				}
-				obs, _ := txn.GetObservedTimestamp(desc.NodeID)
+				obs, _ := txn.GetObservedTimestamp(nodeID)
 				if act, exp := obs.WallTime, wallNanos; exp != act {
 					t.Fatalf("unexpected observed wall time: %d, wanted %d", act, exp)
 				}
@@ -1196,14 +1190,11 @@ func TestStoreObservedTimestamp(t *testing.T) {
 			store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			txn := newTransaction("test", test.key, 1, store.cfg.Clock)
 			txn.MaxTimestamp = hlc.MaxTimestamp
+			h := roachpb.Header{Txn: txn}
 			pArgs := putArgs(test.key, []byte("value"))
-			h := roachpb.Header{
-				Txn:     txn,
-				Replica: desc,
-			}
 			assignSeqNumsForReqs(txn, &pArgs)
 			pReply, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), h, &pArgs)
-			test.check(manual.UnixNano(), pReply, pErr)
+			test.check(manual.UnixNano(), store.NodeID(), pReply, pErr)
 		}()
 	}
 }

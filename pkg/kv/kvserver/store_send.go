@@ -108,7 +108,7 @@ func (s *Store) Send(
 			// can use it to shorten its uncertainty interval when it comes back to
 			// this node.
 			if pErr != nil {
-				pErr.OriginNode = ba.Replica.NodeID
+				pErr.OriginNode = s.NodeID()
 				if txn := pErr.GetTxn(); txn == nil {
 					pErr.SetTxn(ba.Txn)
 				}
@@ -150,9 +150,9 @@ func (s *Store) Send(
 		// updating the top end of our uncertainty timestamp would lead to a
 		// restart (at least in the absence of a prior observed timestamp from
 		// this node, in which case the following is a no-op).
-		if _, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID); !ok {
+		if _, ok := ba.Txn.GetObservedTimestamp(s.NodeID()); !ok {
 			txnClone := ba.Txn.Clone()
-			txnClone.UpdateObservedTimestamp(ba.Replica.NodeID, s.cfg.Clock.Now())
+			txnClone.UpdateObservedTimestamp(s.NodeID(), s.Clock().Now())
 			ba.Txn = txnClone
 		}
 	}

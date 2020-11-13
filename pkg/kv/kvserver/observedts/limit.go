@@ -18,14 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// LimitTxnMaxTimestamp limits the batch transaction's max timestamp
-// so that it respects any timestamp already observed on this node.
-// This prevents unnecessary uncertainty interval restarts caused by
-// reading a value written at a timestamp between txn.Timestamp and
-// txn.MaxTimestamp. The replica lease's start time is also taken into
-// consideration to ensure that a lease transfer does not result in
-// the observed timestamp for this node being inapplicable to data
-// previously written by the former leaseholder. To wit:
+// LimitTxnMaxTimestamp limits the transaction's max timestamp so that it
+// respects any timestamp already observed on the leaseholder's node. This
+// prevents unnecessary uncertainty interval restarts caused by reading a value
+// written at a timestamp between txn.Timestamp and txn.MaxTimestamp.
+//
+// The lease's start time is also taken into consideration to ensure that a
+// lease transfer does not result in the observed timestamp for this node being
+// inapplicable to data previously written by the former leaseholder. To wit:
 //
 //  1. put(k on leaseholder n1), gateway chooses t=1.0
 //  2. begin; read(unrelated key on n2); gateway chooses t=0.98
@@ -39,40 +39,42 @@ import (
 //     the previous leaseholder.
 //
 func LimitTxnMaxTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, status kvserverpb.LeaseStatus,
-) {
-	if ba.Txn == nil {
-		return
+	ctx context.Context, txn *roachpb.Transaction, status kvserverpb.LeaseStatus,
+) *roachpb.Transaction {
+	if txn == nil || status.State != kvserverpb.LeaseState_VALID {
+		return txn
 	}
 	// For calls that read data within a txn, we keep track of timestamps
-	// observed from the various participating nodes' HLC clocks. If we have
-	// a timestamp on file for this Node which is smaller than MaxTimestamp,
-	// we can lower MaxTimestamp accordingly. If MaxTimestamp drops below
-	// ReadTimestamp, we effectively can't see uncertainty restarts anymore.
-	// TODO(nvanbenschoten): This should use the lease's node id.
-	obsTS, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID)
+	// observed from the various participating nodes' HLC clocks. If we have a
+	// timestamp on file for the leaseholder's node which is smaller than
+	// MaxTimestamp, we can lower MaxTimestamp accordingly. If MaxTimestamp
+	// drops below ReadTimestamp, we effectively can't see uncertainty restarts
+	// anymore.
+	//
+	// Note that we care about an observed timestamp from the leaseholder's
+	// node, even if this is a follower read on a different node. See the
+	// comment in doc.go about "Follower Reads" for more.
+	obsTS, ok := txn.GetObservedTimestamp(status.Lease.Replica.NodeID)
 	if !ok {
-		return
+		return txn
 	}
-	// If the lease is valid, we use the greater of the observed
-	// timestamp and the lease start time, up to the max timestamp. This
-	// ensures we avoid incorrect assumptions about when data was
-	// written, in absolute time on a different node, which held the
-	// lease before this replica acquired it.
-	// TODO(nvanbenschoten): Do we ever need to call this when
-	//   status.State != VALID?
-	if status.State == kvserverpb.LeaseState_VALID {
-		obsTS.Forward(status.Lease.Start)
-	}
-	if obsTS.Less(ba.Txn.MaxTimestamp) {
+	// If the lease is valid, we use the greater of the observed timestamp and
+	// the lease start time, up to the max timestamp. This ensures we avoid
+	// incorrect assumptions about when data was written, in absolute time on a
+	// different node, which held the lease before this replica acquired it.
+	obsTS.Forward(status.Lease.Start)
+	// If the observed timestamp reduces the transaction's uncertainty interval,
+	// update the transacion proto.
+	if obsTS.Less(txn.MaxTimestamp) {
 		// Copy-on-write to protect others we might be sharing the Txn with.
-		txnClone := ba.Txn.Clone()
+		txnClone := txn.Clone()
 		// The uncertainty window is [ReadTimestamp, maxTS), so if that window
 		// is empty, there won't be any uncertainty restarts.
-		if obsTS.LessEq(ba.Txn.ReadTimestamp) {
+		if obsTS.LessEq(txn.ReadTimestamp) {
 			log.Event(ctx, "read has no clock uncertainty")
 		}
 		txnClone.MaxTimestamp.Backward(obsTS)
-		ba.Txn = txnClone
+		txn = txnClone
 	}
+	return txn
 }
