@@ -10,6 +10,8 @@
 
 package execstatspb
 
+import fmt "fmt"
+
 // IntValue stores an optional unsigned integer value, used in the ComponentStats
 // message.
 //
@@ -33,6 +35,13 @@ func (i IntValue) Value() uint64 {
 		return 0
 	}
 	return uint64(i - 1)
+}
+
+func (i IntValue) String() string {
+	if i.HasValue() {
+		return "<unset>"
+	}
+	return fmt.Sprintf("%d", i.Value())
 }
 
 // Clear the value.

@@ -12,15 +12,14 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -79,7 +78,7 @@ func newMergeJoiner(
 	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		m.leftSource = newInputStatCollector(m.leftSource)
 		m.rightSource = newInputStatCollector(m.rightSource)
-		m.FinishTrace = m.outputStatsToTrace
+		m.ExecStatsForTrace = m.execStatsForTrace
 	}
 
 	if err := m.joinerBase.init(
@@ -274,55 +273,21 @@ func (m *mergeJoiner) ConsumerClosed() {
 	m.close()
 }
 
-var _ execinfrapb.DistSQLSpanStats = &MergeJoinerStats{}
-
-const mergeJoinerTagPrefix = "mergejoiner."
-
-// Stats implements the SpanStats interface.
-func (mjs *MergeJoinerStats) Stats() map[string]string {
-	// statsMap starts off as the left input stats map.
-	statsMap := mjs.LeftInputStats.Stats(mergeJoinerTagPrefix + "left.")
-	rightInputStatsMap := mjs.RightInputStats.Stats(mergeJoinerTagPrefix + "right.")
-	// Merge the two input maps.
-	for k, v := range rightInputStatsMap {
-		statsMap[k] = v
-	}
-	statsMap[mergeJoinerTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(mjs.MaxAllocatedMem)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (mjs *MergeJoinerStats) StatsForQueryPlan() []string {
-	stats := append(
-		mjs.LeftInputStats.StatsForQueryPlan("left "),
-		mjs.RightInputStats.StatsForQueryPlan("right ")...,
-	)
-	if mjs.MaxAllocatedMem != 0 {
-		stats =
-			append(stats, fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(mjs.MaxAllocatedMem)))
-	}
-	return stats
-}
-
-// outputStatsToTrace outputs the collected mergeJoiner stats to the trace. Will
-// fail silently if the mergeJoiner is not collecting stats.
-func (m *mergeJoiner) outputStatsToTrace() {
-	lis, ok := getInputStats(m.FlowCtx, m.leftSource)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (m *mergeJoiner) execStatsForTrace() *execstatspb.ComponentStats {
+	lis, ok := getInputStats(m.leftSource)
 	if !ok {
-		return
+		return nil
 	}
-	ris, ok := getInputStats(m.FlowCtx, m.rightSource)
+	ris, ok := getInputStats(m.rightSource)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(m.Ctx); sp != nil {
-		sp.SetSpanStats(
-			&MergeJoinerStats{
-				LeftInputStats:  lis,
-				RightInputStats: ris,
-				MaxAllocatedMem: m.MemMonitor.MaximumBytes(),
-			},
-		)
+	return &execstatspb.ComponentStats{
+		Inputs: []execstatspb.InputStats{lis, ris},
+		Exec: execstatspb.ExecStats{
+			MaxAllocatedMem: execstatspb.MakeIntValue(uint64(m.MemMonitor.MaximumBytes())),
+		},
 	}
 }
 
