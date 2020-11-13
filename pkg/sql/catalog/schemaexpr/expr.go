@@ -43,8 +43,8 @@ func DequalifyAndValidateExpr(
 	semaCtx *tree.SemaContext,
 	maxVolatility tree.Volatility,
 	tn *tree.TableName,
-) (string, TableColSet, error) {
-	var colIDs TableColSet
+) (string, catalog.TableColSet, error) {
+	var colIDs catalog.TableColSet
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
 		*tn, colinfo.ResultColumnsFromColDescs(
 			desc.GetID(),
@@ -80,8 +80,10 @@ func DequalifyAndValidateExpr(
 }
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
-func ExtractColumnIDs(desc catalog.TableDescriptor, rootExpr tree.Expr) (TableColSet, error) {
-	var colIDs TableColSet
+func ExtractColumnIDs(
+	desc catalog.TableDescriptor, rootExpr tree.Expr,
+) (catalog.TableColSet, error) {
+	var colIDs catalog.TableColSet
 
 	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)

@@ -92,7 +92,7 @@ func MakePartialIndexExprs(
 	tableDesc catalog.TableDescriptor,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-) (_ map[descpb.IndexID]tree.TypedExpr, refColIDs TableColSet, _ error) {
+) (_ map[descpb.IndexID]tree.TypedExpr, refColIDs catalog.TableColSet, _ error) {
 	// If none of the indexes are partial indexes, return early.
 	partialIndexCount := 0
 	for i := range indexes {

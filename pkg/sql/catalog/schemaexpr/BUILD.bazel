@@ -13,7 +13,6 @@ go_library(
         "expr_filter.go",
         "partial_index.go",
         "select_name_resolution.go",
-        "table_col_set.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr",
     visibility = ["//visibility:public"],
@@ -28,7 +27,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
-        "//pkg/util",
         "//vendor/github.com/cockroachdb/errors",
     ],
 )
@@ -40,7 +38,6 @@ go_test(
         "column_test.go",
         "expr_test.go",
         "partial_index_test.go",
-        "table_col_set_test.go",
         "testutils_test.go",
     ],
     embed = [":schemaexpr"],
@@ -53,6 +50,5 @@ go_test(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/util",
     ],
 )

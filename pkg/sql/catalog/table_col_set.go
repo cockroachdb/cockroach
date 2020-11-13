@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package schemaexpr
+package catalog
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -46,9 +46,6 @@ func (s TableColSet) ForEach(f func(col descpb.ColumnID)) {
 	s.set.ForEach(func(i int) { f(descpb.ColumnID(i)) })
 }
 
-// UnionWith adds all the columns from rhs to this set.
-func (s *TableColSet) UnionWith(rhs TableColSet) { s.set.UnionWith(rhs.set) }
-
 // Ordered returns a slice with all the descpb.ColumnIDs in the set, in
 // increasing order.
 func (s TableColSet) Ordered() []descpb.ColumnID {
@@ -61,6 +58,9 @@ func (s TableColSet) Ordered() []descpb.ColumnID {
 	})
 	return result
 }
+
+// UnionWith adds all the columns from rhs to this set.
+func (s *TableColSet) UnionWith(rhs TableColSet) { s.set.UnionWith(rhs.set) }
 
 // String returns a list representation of elements. Sequential runs of positive
 // numbers are shown as ranges. For example, for the set {1, 2, 3  5, 6, 10},
