@@ -357,14 +357,6 @@ func (sc *SchemaChanger) dropConstraints(
 		if err != nil {
 			return err
 		}
-		// TODO(ajwerner): The need to do this implies that we should cache all
-		// mutable descriptors inside of the collection when they are resolved
-		// such that all attempts to resolve a mutable descriptor from a
-		// collection will always give you the same exact pointer.
-		scTable.MaybeIncrementVersion()
-		if err := descsCol.AddUncommittedDescriptor(scTable); err != nil {
-			return err
-		}
 		b := txn.NewBatch()
 		for i := range constraints {
 			constraint := &constraints[i]
@@ -490,14 +482,7 @@ func (sc *SchemaChanger) addConstraints(
 		if err != nil {
 			return err
 		}
-		// TODO(ajwerner): The need to do this implies that we should cache all
-		// mutable descriptors inside of the collection when they are resolved
-		// such that all attempts to resolve a mutable descriptor from a
-		// collection will always give you the same exact pointer.
-		scTable.MaybeIncrementVersion()
-		if err := descsCol.AddUncommittedDescriptor(scTable); err != nil {
-			return err
-		}
+
 		b := txn.NewBatch()
 		for i := range constraints {
 			constraint := &constraints[i]
