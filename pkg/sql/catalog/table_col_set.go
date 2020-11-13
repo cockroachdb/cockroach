@@ -41,6 +41,13 @@ func (s TableColSet) Empty() bool { return s.set.Empty() }
 // Len returns the number of the columns in the set.
 func (s TableColSet) Len() int { return s.set.Len() }
 
+// Next returns the first value in the set which is >= startVal. If there is no
+// value, the second return value is false.
+func (s TableColSet) Next(startVal descpb.ColumnID) (descpb.ColumnID, bool) {
+	c, ok := s.set.Next(int(startVal))
+	return descpb.ColumnID(c), ok
+}
+
 // ForEach calls a function for each column in the set (in increasing order).
 func (s TableColSet) ForEach(f func(col descpb.ColumnID)) {
 	s.set.ForEach(func(i int) { f(descpb.ColumnID(i)) })

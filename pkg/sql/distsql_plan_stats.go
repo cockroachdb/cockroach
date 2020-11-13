@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -64,11 +64,11 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	// Calculate the set of columns we need to scan.
 	var colCfg scanColumnsConfig
-	var tableColSet util.FastIntSet
+	var tableColSet catalog.TableColSet
 	for _, s := range reqStats {
 		for _, c := range s.columns {
-			if !tableColSet.Contains(int(c)) {
-				tableColSet.Add(int(c))
+			if !tableColSet.Contains(c) {
+				tableColSet.Add(c)
 				colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(c))
 			}
 		}

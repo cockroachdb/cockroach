@@ -853,9 +853,9 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 		return false
 	}
 
-	primaryIndexColumnIds := make(map[descpb.ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
+	var primaryIndexColumnIDs catalog.TableColSet
 	for _, colID := range desc.PrimaryIndex.ColumnIDs {
-		primaryIndexColumnIds[colID] = struct{}{}
+		primaryIndexColumnIDs.Add(colID)
 	}
 
 	desc.Families = []descpb.ColumnFamilyDescriptor{
@@ -863,7 +863,7 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 	}
 	desc.NextFamilyID = desc.Families[0].ID + 1
 	addFamilyForCol := func(col *descpb.ColumnDescriptor) {
-		if _, ok := primaryIndexColumnIds[col.ID]; ok {
+		if primaryIndexColumnIDs.Contains(col.ID) {
 			desc.Families[0].ColumnNames = append(desc.Families[0].ColumnNames, col.Name)
 			desc.Families[0].ColumnIDs = append(desc.Families[0].ColumnIDs, col.ID)
 			return
@@ -1172,11 +1172,11 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		allocateIndexName(desc, index)
 	}
 
-	isCompositeColumn := make(map[descpb.ColumnID]struct{})
+	var compositeColIDs catalog.TableColSet
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
 		if colinfo.HasCompositeKeyEncoding(col.Type) {
-			isCompositeColumn[col.ID] = struct{}{}
+			compositeColIDs.Add(col.ID)
 		}
 	}
 
@@ -1240,12 +1240,12 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 
 		index.CompositeColumnIDs = nil
 		for _, colID := range index.ColumnIDs {
-			if _, ok := isCompositeColumn[colID]; ok {
+			if compositeColIDs.Contains(colID) {
 				index.CompositeColumnIDs = append(index.CompositeColumnIDs, colID)
 			}
 		}
 		for _, colID := range index.ExtraColumnIDs {
-			if _, ok := isCompositeColumn[colID]; ok {
+			if compositeColIDs.Contains(colID) {
 				index.CompositeColumnIDs = append(index.CompositeColumnIDs, colID)
 			}
 		}
@@ -1263,7 +1263,7 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 		desc.NextFamilyID = 1
 	}
 
-	columnsInFamilies := make(map[descpb.ColumnID]struct{}, len(desc.Columns))
+	var columnsInFamilies catalog.TableColSet
 	for i := range desc.Families {
 		family := &desc.Families[i]
 		if family.ID == 0 && i != 0 {
@@ -1278,22 +1278,22 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 			if family.ColumnIDs[j] == 0 {
 				family.ColumnIDs[j] = columnNames[colName]
 			}
-			columnsInFamilies[family.ColumnIDs[j]] = struct{}{}
+			columnsInFamilies.Add(family.ColumnIDs[j])
 		}
 
 		desc.Families[i] = *family
 	}
 
-	primaryIndexColIDs := make(map[descpb.ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
+	var primaryIndexColIDs catalog.TableColSet
 	for _, colID := range desc.PrimaryIndex.ColumnIDs {
-		primaryIndexColIDs[colID] = struct{}{}
+		primaryIndexColIDs.Add(colID)
 	}
 
 	ensureColumnInFamily := func(col *descpb.ColumnDescriptor) {
-		if _, ok := columnsInFamilies[col.ID]; ok {
+		if columnsInFamilies.Contains(col.ID) {
 			return
 		}
-		if _, ok := primaryIndexColIDs[col.ID]; ok {
+		if primaryIndexColIDs.Contains(col.ID) {
 			// Primary index columns are required to be assigned to family 0.
 			desc.Families[0].ColumnNames = append(desc.Families[0].ColumnNames, col.Name)
 			desc.Families[0].ColumnIDs = append(desc.Families[0].ColumnIDs, col.ID)
@@ -1347,7 +1347,7 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 		if family.DefaultColumnID == 0 {
 			defaultColumnID := descpb.ColumnID(0)
 			for _, colID := range family.ColumnIDs {
-				if _, ok := primaryIndexColIDs[colID]; !ok {
+				if !primaryIndexColIDs.Contains(colID) {
 					if defaultColumnID == 0 {
 						defaultColumnID = colID
 					} else {
@@ -2056,7 +2056,7 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 			return fmt.Errorf("index %q must contain at least 1 column", index.Name)
 		}
 
-		validateIndexDup := make(map[descpb.ColumnID]struct{})
+		var validateIndexDup catalog.TableColSet
 		for i, name := range index.ColumnNames {
 			colID, ok := columnNames[name]
 			if !ok {
@@ -2066,10 +2066,10 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
 					index.Name, name, colID, index.ColumnIDs[i])
 			}
-			if _, ok := validateIndexDup[colID]; ok {
+			if validateIndexDup.Contains(colID) {
 				return fmt.Errorf("index %q contains duplicate column %q", index.Name, name)
 			}
-			validateIndexDup[colID] = struct{}{}
+			validateIndexDup.Add(colID)
 		}
 		if index.IsSharded() {
 			if err := desc.ensureShardedIndexNotComputed(index); err != nil {
@@ -3639,7 +3639,7 @@ func (desc *Immutable) ColumnsUsed(
 			"could not parse check constraint %s", cc.Expr)
 	}
 
-	colIDsUsed := make(map[descpb.ColumnID]struct{})
+	var colIDsUsed catalog.TableColSet
 	visitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		if vBase, ok := expr.(tree.VarName); ok {
 			v, err := vBase.NormalizeVarName()
@@ -3653,7 +3653,7 @@ func (desc *Immutable) ColumnsUsed(
 						"column %q not found for constraint %q",
 						c.ColumnName, parsed.String())
 				}
-				colIDsUsed[col.ID] = struct{}{}
+				colIDsUsed.Add(col.ID)
 			}
 			return false, v, nil
 		}
@@ -3663,8 +3663,8 @@ func (desc *Immutable) ColumnsUsed(
 		return nil, err
 	}
 
-	cc.ColumnIDs = make([]descpb.ColumnID, 0, len(colIDsUsed))
-	for colID := range colIDsUsed {
+	cc.ColumnIDs = make([]descpb.ColumnID, 0, colIDsUsed.Len())
+	for colID, ok := colIDsUsed.Next(0); ok; colID, ok = colIDsUsed.Next(colID + 1) {
 		cc.ColumnIDs = append(cc.ColumnIDs, colID)
 	}
 	sort.Sort(descpb.ColumnIDs(cc.ColumnIDs))
