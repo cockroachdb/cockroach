@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -483,11 +484,13 @@ type ProcessorBase struct {
 
 	State procState
 
-	// FinishTrace, if set, will be called before getting the trace data from
-	// the span and adding the recording to the trailing metadata. Useful for
-	// adding any extra information (e.g. stats) that should be captured in a
-	// trace.
-	FinishTrace func()
+	// ExecStatsForTrace, if set, will be called before getting the trace data from
+	// the span and adding the recording to the trailing metadata. The returned
+	// ComponentStats are associated with the processor's span. Note that
+	// MakeDeterministic might get called on the returned stats.
+	//
+	// Can return nil.
+	ExecStatsForTrace func() *execstatspb.ComponentStats
 
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
@@ -710,13 +713,17 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 		)
 	}
 
-	if pb.FinishTrace != nil {
-		pb.FinishTrace()
-	}
-
 	pb.State = StateTrailingMeta
 	if pb.span != nil {
-		if trace := GetTraceData(pb.Ctx); trace != nil {
+		if pb.ExecStatsForTrace != nil {
+			if stats := pb.ExecStatsForTrace(); stats != nil {
+				if pb.FlowCtx.Cfg.TestingKnobs.DeterministicStats {
+					stats.MakeDeterministic()
+				}
+				pb.span.SetSpanStats(stats)
+			}
+		}
+		if trace := pb.span.GetRecording(); trace != nil {
 			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 		}
 	}

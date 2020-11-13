@@ -12,6 +12,7 @@ package execstatspb
 
 import (
 	fmt "fmt"
+	"strings"
 	time "time"
 
 	"github.com/dustin/go-humanize"
@@ -20,8 +21,11 @@ import (
 // Stats is part of SpanStats interface.
 func (s *ComponentStats) Stats() map[string]string {
 	result := make(map[string]string, 4)
-	s.formatStats(func(suffix string, value interface{}) {
-		result[suffix] = fmt.Sprint(value)
+	s.formatStats(func(key string, value interface{}) {
+		// The key becomes a tracing span tag. Replace spaces with dots and use
+		// only lowercase characters.
+		key = strings.ToLower(strings.ReplaceAll(key, " ", "."))
+		result[key] = fmt.Sprint(value)
 	})
 	return result
 }
@@ -29,8 +33,8 @@ func (s *ComponentStats) Stats() map[string]string {
 // StatsForQueryPlan is part of DistSQLSpanStats interface.
 func (s *ComponentStats) StatsForQueryPlan() []string {
 	result := make([]string, 0, 4)
-	s.formatStats(func(suffix string, value interface{}) {
-		result = append(result, fmt.Sprintf("%s: %v", suffix, value))
+	s.formatStats(func(key string, value interface{}) {
+		result = append(result, fmt.Sprintf("%s: %v", key, value))
 	})
 	return result
 }
@@ -51,7 +55,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		fn("network tuples received", s.NetRx.TuplesReceived.Value())
 	}
 	if s.NetRx.BytesReceived.HasValue() {
-		fn("network bytes received", s.NetRx.BytesReceived.Value())
+		fn("network bytes received", humanize.IBytes(s.NetRx.BytesReceived.Value()))
 	}
 
 	// Network Tx stats.
@@ -59,7 +63,32 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		fn("network tuples sent", s.NetTx.TuplesSent.Value())
 	}
 	if s.NetTx.BytesSent.HasValue() {
-		fn("network bytes sent", s.NetTx.BytesSent.Value())
+		fn("network bytes sent", humanize.IBytes(s.NetTx.BytesSent.Value()))
+	}
+
+	// Input stats.
+	switch len(s.Inputs) {
+	case 1:
+		if s.Inputs[0].NumTuples.HasValue() {
+			fn("input tuples", s.Inputs[0].NumTuples.Value())
+		}
+		if s.Inputs[0].WaitTime != 0 {
+			fn("input stall time", s.Inputs[0].WaitTime.Round(time.Microsecond))
+		}
+
+	case 2:
+		if s.Inputs[0].NumTuples.HasValue() {
+			fn("left tuples", s.Inputs[0].NumTuples.Value())
+		}
+		if s.Inputs[0].WaitTime != 0 {
+			fn("left stall time", s.Inputs[0].WaitTime.Round(time.Microsecond))
+		}
+		if s.Inputs[1].NumTuples.HasValue() {
+			fn("right tuples", s.Inputs[1].NumTuples.Value())
+		}
+		if s.Inputs[1].WaitTime != 0 {
+			fn("right stall time", s.Inputs[1].WaitTime.Round(time.Microsecond))
+		}
 	}
 
 	// KV stats.
@@ -131,7 +160,7 @@ func (s *ComponentStats) MakeDeterministic() {
 	timeVal(&s.KV.KVTime)
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
-		s.KV.BytesRead.Set(8 * s.Output.NumTuples.Value())
+		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())
 	}
 
 	// Exec.
@@ -141,4 +170,9 @@ func (s *ComponentStats) MakeDeterministic() {
 
 	// Output.
 	intVal(&s.Output.NumBatches)
+
+	// Inputs.
+	for i := range s.Inputs {
+		timeVal(&s.Inputs[i].WaitTime)
+	}
 }

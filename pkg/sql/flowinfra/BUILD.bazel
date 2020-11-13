@@ -8,7 +8,6 @@ go_library(
         "flow_scheduler.go",
         "inbound.go",
         "outbox.go",
-        "stats.pb.go",
         "stream_decoder.go",
         "stream_encoder.go",
         "testing_knobs.go",
@@ -25,6 +24,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/execstats/execstatspb",
         "//pkg/sql/mutations",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -32,7 +32,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/cancelchecker",
         "//pkg/util/contextutil",
-        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
@@ -40,7 +39,6 @@ go_library(
         "//pkg/util/tracing",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/gogo/protobuf/proto",
     ],
 )
 
