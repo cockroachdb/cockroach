@@ -2104,18 +2104,32 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"val", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.TimestampDifference(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
+				return &tree.DInterval{
+					Duration: duration.Age(
+						args[0].(*tree.DTimestampTZ).Time,
+						ctx.GetTxnTimestamp(time.Microsecond).Time,
+					),
+				}, nil
 			},
-			Info:       "Calculates the interval between `val` and the current time.",
+			Info: "Calculates the interval between `val` and the current time, normalized into years, months and days." + `
+
+			Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context. Use ` + "`timestamptz - now()`" + ` for day rounding which maintains this accuracy.`,
 			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"end", types.TimestampTZ}, {"begin", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.TimestampDifference(ctx, args[0], args[1])
+				return &tree.DInterval{
+					Duration: duration.Age(
+						args[0].(*tree.DTimestampTZ).Time,
+						args[1].(*tree.DTimestampTZ).Time,
+					),
+				}, nil
 			},
-			Info:       "Calculates the interval between `begin` and `end`.",
+			Info: "Calculates the interval between `begin` and `end`, normalized into years, months and days." + `
+
+			Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context. Use the subtraction operator instead for day rounding which maintains this accuracy.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
