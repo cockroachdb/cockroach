@@ -534,7 +534,10 @@ func maybeAddSequenceDependencies(
 func (p *planner) dropSequencesOwnedByCol(
 	ctx context.Context, col *descpb.ColumnDescriptor, queueJob bool,
 ) error {
-	for _, sequenceID := range col.OwnsSequenceIds {
+	// Copy out the sequence IDs as the code to drop the sequence will reach
+	// back around and update the descriptor from underneath us.
+	ownsSequenceIDs := append([]descpb.ID(nil), col.OwnsSequenceIds...)
+	for _, sequenceID := range ownsSequenceIDs {
 		seqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
 		// Special case error swallowing for #50781, which can cause a
 		// column to own sequences that do not exist.
@@ -551,6 +554,8 @@ func (p *planner) dropSequencesOwnedByCol(
 		}
 		jobDesc := fmt.Sprintf("removing sequence %q dependent on column %q which is being dropped",
 			seqDesc.Name, col.ColName())
+		// Note that this call will end up resolving and modifying the table
+		// descriptor.
 		if err := p.dropSequenceImpl(
 			ctx, seqDesc, queueJob, jobDesc, tree.DropRestrict,
 		); err != nil {
