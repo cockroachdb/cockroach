@@ -18,6 +18,7 @@ type Metrics struct {
 	ClientDisconnectCount  *metric.Counter
 	CurConnCount           *metric.Gauge
 	RoutingErrCount        *metric.Counter
+	RefusedConnCount       *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -56,6 +57,12 @@ var (
 		Measurement: "Disconnects",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRefusedConnCount = metric.Metadata{
+		Name:        "proxy.err.refused_conn",
+		Help:        "Number of refused connections initiated by a given IP",
+		Measurement: "Refused",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // MakeProxyMetrics instantiates the metrics holder for proxy monitoring.
@@ -66,5 +73,6 @@ func MakeProxyMetrics() Metrics {
 		ClientDisconnectCount:  metric.NewCounter(metaClientDisconnectCount),
 		CurConnCount:           metric.NewGauge(metaCurConnCount),
 		RoutingErrCount:        metric.NewCounter(metaRoutingErrCount),
+		RefusedConnCount:       metric.NewCounter(metaRefusedConnCount),
 	}
 }
