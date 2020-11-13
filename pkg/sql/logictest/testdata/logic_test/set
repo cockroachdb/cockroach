@@ -421,3 +421,12 @@ SET TRANSACTION DEFERRABLE
 
 statement ok
 rollback
+
+statement ok
+SET standard_conforming_strings=true
+
+statement ok
+SET standard_conforming_strings='true'
+
+statement ok
+SET standard_conforming_strings='on'
