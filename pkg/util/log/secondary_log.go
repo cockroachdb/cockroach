@@ -55,16 +55,19 @@ func NewSecondaryLogger(
 	}
 	l := &SecondaryLogger{
 		logger: loggerT{
-			logDir:                  DirName{name: dir},
-			prefix:                  program + "-" + fileNamePrefix,
-			fileThreshold:           severity.INFO,
-			logFileMaxSize:          logging.logFileMaxSize,
-			logFilesCombinedMaxSize: logging.logFilesCombinedMaxSize,
-			logCounter:              EntryCounter{EnableMsgCount: enableMsgCount},
-			gcNotify:                make(chan struct{}, 1),
-			syncWrites:              forceSyncWrites,
+			logCounter: EntryCounter{EnableMsgCount: enableMsgCount},
+			syncWrites: forceSyncWrites,
 		},
 	}
+	l.logger.fileSink = newFileSink(
+		dir,
+		fileNamePrefix,
+		severity.INFO,
+		logging.logFileMaxSize,
+		logging.logFilesCombinedMaxSize,
+		l.logger.getStartLines,
+	)
+
 	l.logger.redactableLogs.Set(logging.redactableLogs)
 
 	// Ensure the registry knows about this logger.
@@ -72,7 +75,7 @@ func NewSecondaryLogger(
 
 	if enableGc {
 		// Start the log file GC for the secondary logger.
-		go l.logger.gcDaemon(ctx)
+		go l.logger.fileSink.gcDaemon(ctx)
 	}
 
 	return l

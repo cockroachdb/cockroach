@@ -33,6 +33,9 @@ func getBuffer() *buffer {
 
 // putBuffer returns a buffer to the free list.
 func putBuffer(b *buffer) {
+	if b == nil {
+		return
+	}
 	if b.Len() >= 256 {
 		// Let big buffers die a natural death.
 		return

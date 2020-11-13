@@ -15,12 +15,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -181,6 +183,45 @@ func (l *loggingT) processForStderr(entry logpb.Entry, stacks []byte) *buffer {
 // processForFile formats a log entry for output to a file.
 func (l *loggingT) processForFile(entry logpb.Entry, stacks []byte) *buffer {
 	return l.formatLogEntry(entry, stacks, nil)
+}
+
+// makeStartLine creates a log entry suitable for the start of a logging
+// output using the canonical logging format.
+func (l *loggerT) makeStartLine(format string, args ...interface{}) logpb.Entry {
+	entry := MakeEntry(
+		context.Background(),
+		severity.INFO,
+		nil, /* logCounter */
+		2,   /* depth */
+		l.redactableLogs.Get(),
+		format,
+		args...)
+	entry.Tags = "config"
+	return entry
+}
+
+// getStartLines retrieves the log entries for the start
+// of a new logging output.
+func (l *loggerT) getStartLines(now time.Time) []logpb.Entry {
+	messages := make([]logpb.Entry, 0, 6)
+	messages = append(messages,
+		l.makeStartLine("file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
+		l.makeStartLine("running on machine: %s", host),
+		l.makeStartLine("binary: %s", Safe(build.GetInfo().Short())),
+		l.makeStartLine("arguments: %s", os.Args),
+	)
+
+	logging.mu.Lock()
+	if logging.mu.clusterID != "" {
+		messages = append(messages, l.makeStartLine("clusterID: %s", logging.mu.clusterID))
+	}
+	logging.mu.Unlock()
+
+	// Including a non-ascii character in the first 1024 bytes of the log helps
+	// viewers that attempt to guess the character encoding.
+	messages = append(messages,
+		l.makeStartLine("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713"))
+	return messages
 }
 
 // MakeEntry creates an logpb.Entry.
