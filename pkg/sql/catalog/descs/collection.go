@@ -285,6 +285,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 		// of bugs.
 		return nil, nil
 	}
+	tc.AddUncommittedDescriptor(mutDesc)
 	return mutDesc, nil
 }
 
@@ -372,6 +373,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 	if !ok {
 		return nil, nil
 	}
+	tc.AddUncommittedDescriptor(mutDesc)
 	return mutDesc, nil
 }
 
@@ -397,7 +399,9 @@ func (tc *Collection) getMutableUserDefinedSchemaDescriptor(
 	if err != nil || !found {
 		return nil, err
 	}
-	return schema.Desc.(*schemadesc.Mutable), nil
+	desc := schema.Desc.(*schemadesc.Mutable)
+	tc.AddUncommittedDescriptor(desc)
+	return desc, nil
 }
 
 func (tc *Collection) getUserDefinedSchemaVersion(
@@ -790,7 +794,7 @@ func (tc *Collection) getDescriptorVersionByID(
 	}
 
 	for _, ud := range tc.uncommittedDescriptors {
-		if immut := ud.immutable; immut.GetID() == id {
+		if immut := ud.immutable; immut != nil && immut.GetID() == id {
 			log.VEventf(ctx, 2, "found uncommitted descriptor %d", id)
 			if immut.Dropped() {
 				// TODO (lucy): This error is meant to be parallel to the error returned
@@ -865,7 +869,9 @@ func (tc *Collection) GetMutableDescriptorByID(
 	if err != nil {
 		return nil, err
 	}
-	return desc.(catalog.MutableDescriptor), nil
+	mut := desc.(catalog.MutableDescriptor)
+	tc.AddUncommittedDescriptor(mut)
+	return mut, nil
 }
 
 // ResolveSchemaByID looks up a schema by ID.
@@ -1100,23 +1106,35 @@ var _ = (*Collection).HasUncommittedTypes
 // AddUncommittedDescriptor adds an uncommitted descriptor modified in the
 // transaction to the Collection. The descriptor must either be a new descriptor
 // or carry the subsequent version to the original version.
+//
+// Note that while a descriptor is added to the collection and will be available
+// for subsequent mutable access, it is only made available for subsequent
+// immutable access when it has changed and then is added again. When writing
+// a mutable descriptor to the store, it should be added again here.
 func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) error {
-	if desc.GetVersion() != desc.OriginalVersion()+1 {
+	version := desc.GetVersion()
+	origVersion := desc.OriginalVersion()
+	if version != origVersion && version != origVersion+1 {
 		return errors.AssertionFailedf(
-			"descriptor version %d not incremented from cluster version %d",
-			desc.GetVersion(), desc.OriginalVersion())
+			"descriptor %d version %d not compatible with cluster version %d",
+			desc.GetID(), version, origVersion)
 	}
-	tbl := uncommittedDescriptor{
-		mutable:   desc,
-		immutable: desc.ImmutableCopy(),
+
+	ud := uncommittedDescriptor{mutable: desc}
+	if isNewVersion := version == origVersion+1; isNewVersion {
+		ud.immutable = desc.ImmutableCopy()
 	}
+
+	var found bool
 	for i, d := range tc.uncommittedDescriptors {
 		if d.mutable.GetID() == desc.GetID() {
-			tc.uncommittedDescriptors[i] = tbl
-			return nil
+			tc.uncommittedDescriptors[i], found = ud, true
+			break
 		}
 	}
-	tc.uncommittedDescriptors = append(tc.uncommittedDescriptors, tbl)
+	if !found {
+		tc.uncommittedDescriptors = append(tc.uncommittedDescriptors, ud)
+	}
 	tc.releaseAllDescriptors()
 	return nil
 }
