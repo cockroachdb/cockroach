@@ -114,7 +114,7 @@ func newScrubTableReader(
 	} else {
 		colIdxMap := tr.tableDesc.ColumnIdxMap()
 		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id descpb.ColumnID) error {
-			neededColumns.Add(colIdxMap[id])
+			neededColumns.Add(colIdxMap.GetDefault(int(id)))
 			return nil
 		})
 		if err != nil {

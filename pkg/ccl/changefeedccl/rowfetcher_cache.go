@@ -152,10 +152,10 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		return rf, nil
 	}
 	// TODO(dan): Allow for decoding a subset of the columns.
-	colIdxMap := make(map[descpb.ColumnID]int)
+	var colIdxMap util.FastIntMap
 	var valNeededForCol util.FastIntSet
 	for colIdx := range tableDesc.Columns {
-		colIdxMap[tableDesc.Columns[colIdx].ID] = colIdx
+		colIdxMap.Set(int(tableDesc.Columns[colIdx].ID), colIdx)
 		valNeededForCol.Add(colIdx)
 	}
 

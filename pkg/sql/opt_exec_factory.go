@@ -1338,10 +1338,10 @@ func (ef *execFactory) ConstructUpdate(
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
+	var updateColsIdx util.FastIntMap
 	for i := range ru.UpdateCols {
 		id := ru.UpdateCols[i].ID
-		updateColsIdx[id] = i
+		updateColsIdx.Set(int(id), i)
 	}
 
 	upd := updateNodePool.Get().(*updateNode)
@@ -1453,14 +1453,6 @@ func (ef *execFactory) ConstructUpsert(
 	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
 	// computed a correct set that can sometimes be smaller.
 	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
-
-	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
-	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
-	for i := range ru.UpdateCols {
-		id := ru.UpdateCols[i].ID
-		updateColsIdx[id] = i
-	}
 
 	// Instantiate the upsert node.
 	ups := upsertNodePool.Get().(*upsertNode)

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -27,7 +28,7 @@ import (
 type Deleter struct {
 	Helper               rowHelper
 	FetchCols            []descpb.ColumnDescriptor
-	FetchColIDtoRowIndex map[descpb.ColumnID]int
+	FetchColIDtoRowIndex util.FastIntMap
 	// For allocation avoidance.
 	key roachpb.Key
 }
@@ -46,12 +47,12 @@ func MakeDeleter(
 	fetchColIDtoRowIndex := ColIDtoRowIndexFromCols(fetchCols)
 
 	maybeAddCol := func(colID descpb.ColumnID) error {
-		if _, ok := fetchColIDtoRowIndex[colID]; !ok {
+		if _, ok := fetchColIDtoRowIndex.Get(int(colID)); !ok {
 			col, err := tableDesc.FindColumnByID(colID)
 			if err != nil {
 				return err
 			}
-			fetchColIDtoRowIndex[col.ID] = len(fetchCols)
+			fetchColIDtoRowIndex.Set(int(col.ID), len(fetchCols))
 			fetchCols = append(fetchCols, *col)
 		}
 		return nil

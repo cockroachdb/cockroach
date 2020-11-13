@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -531,7 +532,7 @@ func (e virtualDefEntry) makeConstrainedRowsGenerator(
 	dbDesc *dbdesc.Immutable,
 	index *descpb.IndexDescriptor,
 	indexKeyDatums []tree.Datum,
-	columnIdxMap map[descpb.ColumnID]int,
+	columnIdxMap util.FastIntMap,
 	idxConstraint *constraint.Constraint,
 	columns colinfo.ResultColumns,
 ) func(pusher rowPusher) error {
@@ -541,7 +542,7 @@ func (e virtualDefEntry) makeConstrainedRowsGenerator(
 		addRowIfPassesFilter := func(idxConstraint *constraint.Constraint) func(datums ...tree.Datum) error {
 			return func(datums ...tree.Datum) error {
 				for i, id := range index.ColumnIDs {
-					indexKeyDatums[i] = datums[columnIdxMap[id]]
+					indexKeyDatums[i] = datums[columnIdxMap.GetDefault(int(id))]
 				}
 				// Construct a single key span out of the current row, so that
 				// we can test it for containment within the constraint span of the

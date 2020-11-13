@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -3635,9 +3636,9 @@ may increase either contention or retry errors, or both.`,
 
 				// Create a column id to row index map. In this case, each column ID
 				// just maps to the i'th ordinal.
-				colMap := make(map[descpb.ColumnID]int)
+				var colMap util.FastIntMap
 				for i, id := range indexColIDs {
-					colMap[id] = i
+					colMap.Set(int(id), i)
 				}
 				// Finally, encode the index key using the provided datums.
 				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, indexDesc.ID)

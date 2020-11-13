@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -29,7 +30,7 @@ import (
 type Inserter struct {
 	Helper                rowHelper
 	InsertCols            []descpb.ColumnDescriptor
-	InsertColIDtoRowIndex map[descpb.ColumnID]int
+	InsertColIDtoRowIndex util.FastIntMap
 
 	// For allocation avoidance.
 	marshaled []roachpb.Value
@@ -57,7 +58,7 @@ func MakeInserter(
 	}
 
 	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
-		if _, ok := ri.InsertColIDtoRowIndex[col]; !ok {
+		if _, ok := ri.InsertColIDtoRowIndex.Get(int(col)); !ok {
 			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}

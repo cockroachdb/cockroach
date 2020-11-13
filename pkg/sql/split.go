@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -92,9 +93,9 @@ func getRowKey(
 	index *descpb.IndexDescriptor,
 	values []tree.Datum,
 ) ([]byte, error) {
-	colMap := make(map[descpb.ColumnID]int)
+	var colMap util.FastIntMap
 	for i := range values {
-		colMap[index.ColumnIDs[i]] = i
+		colMap.Set(int(index.ColumnIDs[i]), i)
 	}
 	prefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc, index.ID)
 	key, _, err := rowenc.EncodePartialIndexKey(

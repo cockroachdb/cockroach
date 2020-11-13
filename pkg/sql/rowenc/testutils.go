@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -1019,9 +1020,9 @@ func TestingMakePrimaryIndexKey(
 	}
 	// Create the ColumnID to index in datums slice map needed by
 	// MakeIndexKeyPrefix.
-	colIDToRowIndex := make(map[descpb.ColumnID]int)
+	var colIDToRowIndex util.FastIntMap
 	for i := range vals {
-		colIDToRowIndex[index.ColumnIDs[i]] = i
+		colIDToRowIndex.Set(int(index.ColumnIDs[i]), i)
 	}
 
 	keyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, index.ID)

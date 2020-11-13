@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // RowIndexedVarContainer is used to evaluate expressions over various rows.
@@ -26,7 +27,7 @@ type RowIndexedVarContainer struct {
 	// original table, we need to store a mapping between them.
 
 	Cols    []descpb.ColumnDescriptor
-	Mapping map[descpb.ColumnID]int
+	Mapping util.FastIntMap
 }
 
 var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
@@ -35,7 +36,7 @@ var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
 func (r *RowIndexedVarContainer) IndexedVarEval(
 	idx int, ctx *tree.EvalContext,
 ) (tree.Datum, error) {
-	rowIdx, ok := r.Mapping[r.Cols[idx].ID]
+	rowIdx, ok := r.Mapping.Get(int(r.Cols[idx].ID))
 	if !ok {
 		return tree.DNull, nil
 	}

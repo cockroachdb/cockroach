@@ -2585,25 +2585,25 @@ func (desc *Immutable) FindColumnMutationByName(name tree.Name) *descpb.Descript
 
 // ColumnIdxMap returns a map from Column ID to the ordinal position of that
 // column.
-func (desc *Immutable) ColumnIdxMap() map[descpb.ColumnID]int {
+func (desc *Immutable) ColumnIdxMap() util.FastIntMap {
 	return desc.ColumnIdxMapWithMutations(false)
 }
 
 // ColumnIdxMapWithMutations returns a map from Column ID to the ordinal
 // position of that column, optionally including mutation columns if the input
 // bool is true.
-func (desc *Immutable) ColumnIdxMapWithMutations(mutations bool) map[descpb.ColumnID]int {
-	colIdxMap := make(map[descpb.ColumnID]int, len(desc.Columns))
+func (desc *Immutable) ColumnIdxMapWithMutations(mutations bool) util.FastIntMap {
+	var colIdxMap util.FastIntMap
 	for i := range desc.Columns {
 		id := desc.Columns[i].ID
-		colIdxMap[id] = i
+		colIdxMap.Set(int(id), i)
 	}
 	if mutations {
 		idx := len(desc.Columns)
 		for i := range desc.Mutations {
 			col := desc.Mutations[i].GetColumn()
 			if col != nil {
-				colIdxMap[col.ID] = idx
+				colIdxMap.Set(int(col.ID), idx)
 				idx++
 			}
 		}

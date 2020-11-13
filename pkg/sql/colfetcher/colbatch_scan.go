@@ -176,7 +176,7 @@ func NewColBatchScan(
 	}
 	for i := range sysColDescs {
 		typs = append(typs, sysColDescs[i].Type)
-		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+		columnIdxMap.Set(int(sysColDescs[i].ID), columnIdxMap.Len())
 	}
 
 	semaCtx := tree.MakeSemaContext()
@@ -230,7 +230,7 @@ func initCRowFetcher(
 	fetcher *cFetcher,
 	desc *tabledesc.Immutable,
 	indexIdx int,
-	colIdxMap map[descpb.ColumnID]int,
+	colIdxMap util.FastIntMap,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	scanVisibility execinfrapb.ScanVisibility,

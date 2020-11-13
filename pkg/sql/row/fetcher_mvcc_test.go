@@ -90,11 +90,11 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	childDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `child`)
 	var args []row.FetcherTableArgs
 	for _, desc := range []*tabledesc.Immutable{parentDesc, childDesc} {
-		colIdxMap := make(map[descpb.ColumnID]int)
+		colIdxMap := util.FastIntMap{}
 		var valNeededForCol util.FastIntSet
 		for colIdx := range desc.Columns {
 			id := desc.Columns[colIdx].ID
-			colIdxMap[id] = colIdx
+			colIdxMap.Set(int(id), colIdx)
 			valNeededForCol.Add(colIdx)
 		}
 		args = append(args, row.FetcherTableArgs{

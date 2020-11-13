@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -104,7 +105,7 @@ type updateRun struct {
 	// updateColsIdx maps the order of the 2nd stage into the order of the 3rd stage.
 	// This provides the inverse mapping of sourceSlots.
 	//
-	updateColsIdx map[descpb.ColumnID]int
+	updateColsIdx util.FastIntMap
 
 	// rowIdxToRetIdx is the mapping from the columns in ru.FetchCols to the
 	// columns in the resultRowBuffer. A value of -1 is used to indicate
@@ -255,7 +256,9 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		copy(u.run.iVarContainerForComputedCols.CurSourceRow, oldValues)
 		for i := range u.run.tu.ru.UpdateCols {
 			id := u.run.tu.ru.UpdateCols[i].ID
-			u.run.iVarContainerForComputedCols.CurSourceRow[u.run.tu.ru.FetchColIDtoRowIndex[id]] = u.run.updateValues[i]
+			idx := u.run.tu.ru.FetchColIDtoRowIndex.GetDefault(int(id))
+			u.run.iVarContainerForComputedCols.CurSourceRow[idx] = u.run.
+				updateValues[i]
 		}
 
 		// Now (re-)compute the computed columns.
@@ -268,7 +271,8 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 				params.EvalContext().IVarContainer = nil
 				return errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&u.run.computedCols[i].Name)))
 			}
-			u.run.updateValues[u.run.updateColsIdx[u.run.computedCols[i].ID]] = d
+			idx := u.run.updateColsIdx.GetDefault(int(u.run.computedCols[i].ID))
+			u.run.updateValues[idx] = d
 		}
 		params.EvalContext().PopIVarContainer()
 	}

@@ -63,7 +63,7 @@ func MakeIndexKeyPrefix(
 func EncodeIndexKey(
 	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap util.FastIntMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
@@ -84,7 +84,7 @@ func EncodePartialIndexSpan(
 	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	numCols int,
-	colMap map[descpb.ColumnID]int,
+	colMap util.FastIntMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (span roachpb.Span, containsNull bool, err error) {
@@ -113,7 +113,7 @@ func EncodePartialIndexKey(
 	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	numCols int,
-	colMap map[descpb.ColumnID]int,
+	colMap util.FastIntMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
@@ -259,15 +259,15 @@ func NeededColumnFamilyIDs(
 	var compositeCols util.FastIntSet
 	var extraCols util.FastIntSet
 	for _, columnID := range index.ColumnIDs {
-		columnOrdinal := colIdxMap[columnID]
+		columnOrdinal := colIdxMap.GetDefault(int(columnID))
 		indexedCols.Add(columnOrdinal)
 	}
 	for _, columnID := range index.CompositeColumnIDs {
-		columnOrdinal := colIdxMap[columnID]
+		columnOrdinal := colIdxMap.GetDefault(int(columnID))
 		compositeCols.Add(columnOrdinal)
 	}
 	for _, columnID := range index.ExtraColumnIDs {
-		columnOrdinal := colIdxMap[columnID]
+		columnOrdinal := colIdxMap.GetDefault(int(columnID))
 		extraCols.Add(columnOrdinal)
 	}
 
@@ -339,7 +339,7 @@ func NeededColumnFamilyIDs(
 				// Nothing left to check.
 				break
 			}
-			columnOrdinal := colIdxMap[columnID]
+			columnOrdinal := colIdxMap.GetDefault(int(columnID))
 			if nc.Contains(columnOrdinal) {
 				needed = true
 			}
@@ -483,9 +483,9 @@ func makeKeyFromEncDatums(
 // findColumnValue returns the value corresponding to the column. If
 // the column isn't present return a NULL value.
 func findColumnValue(
-	column descpb.ColumnID, colMap map[descpb.ColumnID]int, values []tree.Datum,
+	column descpb.ColumnID, colMap util.FastIntMap, values []tree.Datum,
 ) tree.Datum {
-	if i, ok := colMap[column]; ok {
+	if i, ok := colMap.Get(int(column)); ok {
 		// TODO(pmattis): Need to convert the values[i] value to the type
 		// expected by the column.
 		return values[i]
@@ -754,17 +754,14 @@ func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 // concatenating keyPrefix with the encodings of the column in the
 // index.
 func EncodeInvertedIndexKeys(
-	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
-	values []tree.Datum,
-	keyPrefix []byte,
+	index *descpb.IndexDescriptor, colMap util.FastIntMap, values []tree.Datum, keyPrefix []byte,
 ) (key [][]byte, err error) {
 	if len(index.ColumnIDs) > 1 {
 		return nil, errors.AssertionFailedf("trying to apply inverted index to more than one column")
 	}
 
 	var val tree.Datum
-	if i, ok := colMap[index.ColumnIDs[0]]; ok {
+	if i, ok := colMap.Get(int(index.ColumnIDs[0])); ok {
 		val = values[i]
 	} else {
 		val = tree.DNull
@@ -975,7 +972,7 @@ func EncodePrimaryIndex(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap util.FastIntMap,
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
@@ -1027,7 +1024,7 @@ func EncodePrimaryIndex(
 				columnsToEncode = append(columnsToEncode, valueEncodedColumn{id: colID})
 				continue
 			}
-			if cdatum, ok := values[colMap[colID]].(tree.CompositeDatum); ok {
+			if cdatum, ok := values[colMap.GetDefault(int(colID))].(tree.CompositeDatum); ok {
 				if cdatum.IsComposite() {
 					columnsToEncode = append(columnsToEncode, valueEncodedColumn{id: colID, isComposite: true})
 					continue
@@ -1062,7 +1059,7 @@ func EncodeSecondaryIndex(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	secondaryIndex *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap util.FastIntMap,
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
@@ -1164,7 +1161,7 @@ func EncodeSecondaryIndex(
 func encodeSecondaryIndexWithFamilies(
 	familyMap map[descpb.FamilyID][]valueEncodedColumn,
 	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap util.FastIntMap,
 	key []byte,
 	row []tree.Datum,
 	extraKeyCols []byte,
@@ -1244,7 +1241,7 @@ func encodeSecondaryIndexWithFamilies(
 // families were introduced onto secondary indexes.
 func encodeSecondaryIndexNoFamilies(
 	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap util.FastIntMap,
 	key []byte,
 	row []tree.Datum,
 	extraKeyCols []byte,
@@ -1293,7 +1290,7 @@ func encodeSecondaryIndexNoFamilies(
 // writeColumnValues writes the value encoded versions of the desired columns from the input
 // row of datums into the value byte slice.
 func writeColumnValues(
-	value []byte, colMap map[descpb.ColumnID]int, row []tree.Datum, columns []valueEncodedColumn,
+	value []byte, colMap util.FastIntMap, row []tree.Datum, columns []valueEncodedColumn,
 ) ([]byte, error) {
 	var lastColID descpb.ColumnID
 	for _, col := range columns {
@@ -1324,7 +1321,7 @@ func EncodeSecondaryIndexes(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexes []*descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap util.FastIntMap,
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 	includeEmpty bool,
@@ -1761,7 +1758,7 @@ func AdjustEndKeyForInterleave(
 func EncodeColumns(
 	columnIDs []descpb.ColumnID,
 	directions directions,
-	colMap map[descpb.ColumnID]int,
+	colMap util.FastIntMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -90,7 +91,7 @@ type insertFastPathFKCheck struct {
 	tabDesc     *tabledesc.Immutable
 	idxDesc     *descpb.IndexDescriptor
 	keyPrefix   []byte
-	colMap      map[descpb.ColumnID]int
+	colMap      util.FastIntMap
 	spanBuilder *span.Builder
 }
 
@@ -108,7 +109,6 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 			"%d FK cols, only %d cols in index", len(c.InsertCols), idx.numLaxKeyCols,
 		)
 	}
-	c.colMap = make(map[descpb.ColumnID]int, len(c.InsertCols))
 	for i, ord := range c.InsertCols {
 		var colID descpb.ColumnID
 		if i < len(c.idxDesc.ColumnIDs) {
@@ -117,7 +117,7 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 			colID = c.idxDesc.ExtraColumnIDs[i-len(c.idxDesc.ColumnIDs)]
 		}
 
-		c.colMap[colID] = int(ord)
+		c.colMap.Set(int(colID), int(ord))
 	}
 	return nil
 }

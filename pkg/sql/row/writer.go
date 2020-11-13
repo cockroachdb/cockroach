@@ -28,10 +28,10 @@ import (
 // ColIDtoRowIndexFromCols groups a slice of ColumnDescriptors by their ID
 // field, returning a map from ID to the index of the column in the input slice.
 // It assumes there are no duplicate descriptors in the input.
-func ColIDtoRowIndexFromCols(cols []descpb.ColumnDescriptor) map[descpb.ColumnID]int {
-	colIDtoRowIndex := make(map[descpb.ColumnID]int, len(cols))
+func ColIDtoRowIndexFromCols(cols []descpb.ColumnDescriptor) util.FastIntMap {
+	var colIDtoRowIndex util.FastIntMap
 	for i := range cols {
-		colIDtoRowIndex[cols[i].ID] = i
+		colIDtoRowIndex.Set(int(cols[i].ID), i)
 	}
 	return colIDtoRowIndex
 }
@@ -95,9 +95,9 @@ func prepareInsertOrUpdateBatch(
 	primaryIndexKey []byte,
 	fetchedCols []descpb.ColumnDescriptor,
 	values []tree.Datum,
-	valColIDMapping map[descpb.ColumnID]int,
+	valColIDMapping util.FastIntMap,
 	marshaledValues []roachpb.Value,
-	marshaledColIDMapping map[descpb.ColumnID]int,
+	marshaledColIDMapping util.FastIntMap,
 	kvKey *roachpb.Key,
 	kvValue *roachpb.Value,
 	rawValueBuf []byte,
@@ -109,7 +109,7 @@ func prepareInsertOrUpdateBatch(
 		family := &families[i]
 		update := false
 		for _, colID := range family.ColumnIDs {
-			if _, ok := marshaledColIDMapping[colID]; ok {
+			if _, ok := marshaledColIDMapping.Get(int(colID)); ok {
 				update = true
 				break
 			}
@@ -138,7 +138,7 @@ func prepareInsertOrUpdateBatch(
 			// Storage optimization to store DefaultColumnID directly as a value. Also
 			// backwards compatible with the original BaseFormatVersion.
 
-			idx, ok := marshaledColIDMapping[family.DefaultColumnID]
+			idx, ok := marshaledColIDMapping.Get(int(family.DefaultColumnID))
 			if !ok {
 				continue
 			}
@@ -167,7 +167,7 @@ func prepareInsertOrUpdateBatch(
 			return nil, errors.AssertionFailedf("invalid family sorted column id map")
 		}
 		for _, colID := range familySortedColumnIDs {
-			idx, ok := valColIDMapping[colID]
+			idx, ok := valColIDMapping.Get(int(colID))
 			if !ok || values[idx] == tree.DNull {
 				// Column not being updated or inserted.
 				continue

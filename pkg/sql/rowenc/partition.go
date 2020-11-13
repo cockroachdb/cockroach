@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -159,9 +160,9 @@ func DecodePartitionTuple(
 	}
 
 	allDatums := append(prefixDatums, t.Datums...)
-	colMap := make(map[descpb.ColumnID]int, len(allDatums))
+	var colMap util.FastIntMap
 	for i := range allDatums {
-		colMap[idxDesc.ColumnIDs[i]] = i
+		colMap.Set(int(idxDesc.ColumnIDs[i]), i)
 	}
 
 	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, idxDesc.ID)

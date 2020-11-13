@@ -149,7 +149,7 @@ func (s *Builder) SpanFromEncDatums(
 // It also returns whether or not the input values contain a null value or not, which can be
 // used as input for CanSplitSpanIntoSeparateFamilies.
 func (s *Builder) SpanFromDatumRow(
-	values tree.Datums, prefixLen int, colMap map[descpb.ColumnID]int,
+	values tree.Datums, prefixLen int, colMap util.FastIntMap,
 ) (_ roachpb.Span, containsNull bool, _ error) {
 	return rowenc.EncodePartialIndexSpan(s.table, s.index, prefixLen, colMap, values, s.KeyPrefix)
 }
