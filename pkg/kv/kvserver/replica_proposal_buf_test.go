@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 	"golang.org/x/sync/errgroup"
 )
 

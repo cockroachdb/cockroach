@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	"github.com/kr/pretty"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 )
 

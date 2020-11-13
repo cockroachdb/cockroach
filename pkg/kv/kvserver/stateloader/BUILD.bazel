@@ -19,7 +19,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//vendor/github.com/cockroachdb/errors",
-        "//vendor/go.etcd.io/etcd/raft/raftpb",
+        "//vendor/go.etcd.io/etcd/raft/v3/raftpb",
     ],
 )
 
@@ -33,6 +33,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/stop",
-        "//vendor/go.etcd.io/etcd/raft/raftpb",
+        "//vendor/go.etcd.io/etcd/raft/v3/raftpb",
     ],
 )
