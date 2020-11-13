@@ -410,7 +410,7 @@ func (r opResult) createDiskBackedSort(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen),
 		)
-	} else if post.Limit != 0 && post.Filter.Empty() && int(post.Limit+post.Offset) > 0 {
+	} else if post.Limit != 0 && post.Filter.Empty() && sumFitsInInt(post.Limit, post.Offset) {
 		// There is a limit specified with no post-process filter, so we know
 		// exactly how many rows the sorter should output. The last part of the
 		// condition is making sure there is no overflow when converting from
@@ -1335,10 +1335,20 @@ func (r *postProcessResult) planPostProcessSpec(
 		r.ColumnTypes = newTypes
 	}
 	if post.Offset != 0 {
-		r.Op = colexec.NewOffsetOp(r.Op, int(post.Offset))
+		offset := post.Offset
+		// TODO(radu): this is buggy on 32-bit machines (but only if we actually
+		// get 2B rows).
+		if offset > maxInt {
+			offset = maxInt
+		}
+		r.Op = colexec.NewOffsetOp(r.Op, int(offset))
 	}
 	if post.Limit != 0 {
-		r.Op = colexec.NewLimitOp(r.Op, int(post.Limit))
+		// TODO(radu): this is buggy on 32-bit machines (but only if we actually
+		// get 2B rows).
+		if post.Limit < maxInt {
+			r.Op = colexec.NewLimitOp(r.Op, int(post.Limit))
+		}
 	}
 	return nil
 }
@@ -2158,4 +2168,11 @@ func tupleContainsTuples(tuple *tree.DTuple) bool {
 		}
 	}
 	return false
+}
+
+const maxInt = uint64(int((^uint(0)) >> 1))
+
+// sumFitsInInt returns true if a+b fits in an int.
+func sumFitsInInt(a, b uint64) bool {
+	return b <= maxInt && a <= maxInt-b
 }
