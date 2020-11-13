@@ -82,7 +82,7 @@ eexpect "internal server error: tier must be in the form \"key=value\" not \"bla
 send "\\demo add region=ca-central,zone=a\r"
 eexpect "node 6 has been added with locality \"region=ca-central,zone=a\""
 
-send "show regions;\r"
+send "show regions from cluster;\r"
 eexpect "ca-central | \{a\}"
 eexpect "us-east1   | \{b,c,d\}"
 eexpect "us-west1   | \{a,b\}"

@@ -1,7 +1,7 @@
 # LogicTest: multiregion-9node-3region-3azs
 
 query TT colnames
-SHOW REGIONS
+SHOW REGIONS FROM CLUSTER
 ----
 region  zones
 test1   {test1-az1,test1-az2,test1-az3}

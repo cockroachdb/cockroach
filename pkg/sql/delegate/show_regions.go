@@ -13,11 +13,21 @@ package delegate
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // delegateShowRanges implements the SHOW REGIONS statement.
 func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, error) {
-	sqltelemetry.IncrementShowCounter(sqltelemetry.Regions)
+
+	if n.Database != "" {
+		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromDatabase)
+		return nil, unimplemented.New(
+			"show regions from database",
+			"SHOW REGIONS FROM DATABASE not yet implemented",
+		)
+	}
+	sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromCluster)
+
 	// TODO (storm): Change this so that it doesn't use hard-coded strings and is
 	// more flexible for custom named sub-regions.
 	query := `
