@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -2553,7 +2552,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			splitEnforcedUntil := tree.DNull
-			if (desc.GetStickyBit() != hlc.Timestamp{}) {
+			if !desc.GetStickyBit().IsEmpty() {
 				splitEnforcedUntil = tree.TimestampToInexactDTimestamp(*desc.StickyBit)
 			}
 

@@ -290,7 +290,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if (desc.GetStickyBit() == hlc.Timestamp{}) {
+	if desc.GetStickyBit().IsEmpty() {
 		t.Fatal("Sticky bit not set after splitting")
 	}
 
@@ -309,7 +309,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if (desc.GetStickyBit() == hlc.Timestamp{}) {
+	if desc.GetStickyBit().IsEmpty() {
 		t.Fatal("Sticky bit not set after splitting")
 	}
 }

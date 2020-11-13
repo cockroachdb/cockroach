@@ -199,7 +199,7 @@ func kvsToRows(
 				}
 				schemaTimestamp := kv.Value.Timestamp
 				prevSchemaTimestamp := schemaTimestamp
-				if backfillTs := input.BackfillTimestamp(); backfillTs != (hlc.Timestamp{}) {
+				if backfillTs := input.BackfillTimestamp(); !backfillTs.IsEmpty() {
 					schemaTimestamp = backfillTs
 					prevSchemaTimestamp = schemaTimestamp.Prev()
 				}

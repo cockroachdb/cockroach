@@ -564,7 +564,7 @@ func (r *Replica) leaseStatus(
 			status.State = kvserverpb.LeaseState_EXPIRED
 			return status
 		}
-		expiration = hlc.Timestamp(status.Liveness.Expiration)
+		expiration = status.Liveness.Expiration.ToTimestamp()
 	}
 	maxOffset := r.store.Clock().MaxOffset()
 	stasis := expiration.Add(-int64(maxOffset), 0)

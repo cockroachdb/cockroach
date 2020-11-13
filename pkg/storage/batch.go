@@ -77,17 +77,16 @@ const (
 // The keys encoded into the batch are MVCC keys: a string key with a timestamp
 // suffix. MVCC keys are encoded as:
 //
-//   <key>[<wall_time>[<logical>]]<#timestamp-bytes>
+//   <key>[<wall_time>[<logical>[<flags>]]]<#timestamp-bytes>
 //
-// The <wall_time> and <logical> portions of the key are encoded as 64 and
-// 32-bit big-endian integers. A custom RocksDB comparator is used to maintain
-// the desired ordering as these keys do not sort lexicographically correctly.
-// Note that the encoding of these keys needs to match up with the encoding in
-// rocksdb/db.cc:EncodeKey().
+// The <wall_time>, <logical>, and <flags> portions of the key are encoded as
+// 64-bit, 32-bit, and 8-bit big-endian integers, respectively. A custom RocksDB
+// comparator is used to maintain the desired ordering as these keys do not sort
+// lexicographically correctly.
 //
-// TODO(bilal): This struct exists mostly as a historic artifact. Transition
-// the remaining few test uses of this struct over to pebble.Batch, and remove
-// it entirely.
+// TODO(bilal): This struct exists mostly as a historic artifact. Transition the
+// remaining few test uses of this struct over to pebble.Batch, and remove it
+// entirely.
 type RocksDBBatchBuilder struct {
 	batch pebble.Batch
 }
@@ -121,8 +120,7 @@ func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 	// deferredOp.Finish.
 }
 
-// EncodeKey encodes an engine.MVCC key into the RocksDB representation. This
-// encoding must match with the encoding in engine/db.cc:EncodeKey().
+// EncodeKey encodes an engine.MVCC key into the RocksDB representation.
 func EncodeKey(key MVCCKey) []byte {
 	keyLen := key.Len()
 	buf := make([]byte, keyLen)
@@ -131,7 +129,6 @@ func EncodeKey(key MVCCKey) []byte {
 }
 
 // EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
-// This encoding must match with the encoding in engine/db.cc:EncodeKey().
 func EncodeKeyToBuf(buf []byte, key MVCCKey) []byte {
 	keyLen := key.Len()
 	if cap(buf) < keyLen {
@@ -148,6 +145,7 @@ func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 		timestampSentinelLen = 1
 		walltimeEncodedLen   = 8
 		logicalEncodedLen    = 4
+		flagsEncodedLen      = 1
 	)
 
 	copy(buf, key.Key)
@@ -159,9 +157,13 @@ func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 		pos += timestampSentinelLen
 		binary.BigEndian.PutUint64(buf[pos:], uint64(key.Timestamp.WallTime))
 		pos += walltimeEncodedLen
-		if key.Timestamp.Logical != 0 {
+		if key.Timestamp.Logical != 0 || key.Timestamp.Flags != 0 {
 			binary.BigEndian.PutUint32(buf[pos:], uint32(key.Timestamp.Logical))
 			pos += logicalEncodedLen
+		}
+		if key.Timestamp.Flags != 0 {
+			buf[pos] = uint8(key.Timestamp.Flags)
+			pos += flagsEncodedLen
 		}
 	}
 	buf[len(buf)-1] = byte(timestampLength)
@@ -172,8 +174,7 @@ func encodeTimestamp(ts hlc.Timestamp) []byte {
 	return encodedTS
 }
 
-// DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation. This
-// decoding must match engine/db.cc:DecodeKey().
+// DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation.
 func DecodeMVCCKey(encodedKey []byte) (MVCCKey, error) {
 	k, ts, err := enginepb.DecodeKey(encodedKey)
 	return MVCCKey{k, ts}, err

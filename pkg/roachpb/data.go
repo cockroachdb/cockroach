@@ -918,7 +918,7 @@ func (t Transaction) Clone() *Transaction {
 
 // AssertInitialized crashes if the transaction is not initialized.
 func (t *Transaction) AssertInitialized(ctx context.Context) {
-	if t.ID == (uuid.UUID{}) || t.WriteTimestamp == (hlc.Timestamp{}) {
+	if t.ID == (uuid.UUID{}) || t.WriteTimestamp.IsEmpty() {
 		log.Fatalf(ctx, "uninitialized txn: %s", *t)
 	}
 }
@@ -1098,7 +1098,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// Nothing to do.
 		}
 
-		if t.ReadTimestamp.Equal(o.ReadTimestamp) {
+		if t.ReadTimestamp == o.ReadTimestamp {
 			// If neither of the transactions has a bumped ReadTimestamp, then the
 			// WriteTooOld flag is cumulative.
 			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
@@ -1150,9 +1150,9 @@ func (t *Transaction) Update(o *Transaction) {
 	// On update, set lower bound timestamps to the minimum seen by either txn.
 	// These shouldn't differ unless one of them is empty, but we're careful
 	// anyway.
-	if t.MinTimestamp == (hlc.Timestamp{}) {
+	if t.MinTimestamp.IsEmpty() {
 		t.MinTimestamp = o.MinTimestamp
-	} else if o.MinTimestamp != (hlc.Timestamp{}) {
+	} else if !o.MinTimestamp.IsEmpty() {
 		t.MinTimestamp.Backward(o.MinTimestamp)
 	}
 
@@ -1935,11 +1935,11 @@ func equivalentTimestamps(a, b *hlc.Timestamp) bool {
 		if b == nil {
 			return true
 		}
-		if (*b == hlc.Timestamp{}) {
+		if b.IsEmpty() {
 			return true
 		}
 	} else if b == nil {
-		if (*a == hlc.Timestamp{}) {
+		if a.IsEmpty() {
 			return true
 		}
 	}

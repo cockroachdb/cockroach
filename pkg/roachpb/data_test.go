@@ -46,6 +46,10 @@ func makeTS(walltime int64, logical int32) hlc.Timestamp {
 	}
 }
 
+func makeTSWithFlag(walltime int64, logical int32) hlc.Timestamp {
+	return makeTS(walltime, logical).SetFlag(hlc.TimestampFlag_SYNTHETIC)
+}
+
 // TestKeyNext tests that the method for creating lexicographic
 // successors to byte slices works as expected.
 func TestKeyNext(t *testing.T) {
@@ -457,17 +461,17 @@ var nonZeroTxn = Transaction{
 		Key:            Key("foo"),
 		ID:             uuid.MakeV4(),
 		Epoch:          2,
-		WriteTimestamp: makeTS(20, 21),
-		MinTimestamp:   makeTS(10, 11),
+		WriteTimestamp: makeTSWithFlag(20, 21),
+		MinTimestamp:   makeTSWithFlag(10, 11),
 		Priority:       957356782,
 		Sequence:       123,
 	},
 	Name:                 "name",
 	Status:               COMMITTED,
-	LastHeartbeat:        makeTS(1, 2),
-	ReadTimestamp:        makeTS(20, 22),
-	MaxTimestamp:         makeTS(40, 41),
-	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
+	LastHeartbeat:        makeTSWithFlag(1, 2),
+	ReadTimestamp:        makeTSWithFlag(20, 22),
+	MaxTimestamp:         makeTSWithFlag(40, 41),
+	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeTSWithFlag(1, 2)}},
 	WriteTooOld:          true,
 	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:       []SequencedWrite{{Key: []byte("c"), Sequence: 1}},

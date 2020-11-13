@@ -838,7 +838,7 @@ func backupPlanHook(
 				keys.MinKey,
 				p.User(),
 				func(span covering.Range, start, end hlc.Timestamp) error {
-					if (start == hlc.Timestamp{}) {
+					if start.IsEmpty() {
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
 						return nil
 					}

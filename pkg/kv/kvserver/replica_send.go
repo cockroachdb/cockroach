@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -644,7 +643,7 @@ func (r *Replica) executeAdminBatch(
 // TODO(tschottdorf): should check that request is contained in range and that
 // EndTxn only occurs at the very end.
 func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) error {
-	if ba.Timestamp == (hlc.Timestamp{}) {
+	if ba.Timestamp.IsEmpty() {
 		// For transactional requests, Store.Send sets the timestamp. For non-
 		// transactional requests, the client sets the timestamp. Either way, we
 		// need to have a timestamp at this point.

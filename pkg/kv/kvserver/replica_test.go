@@ -324,7 +324,7 @@ func (tc *testContext) Sender() kv.Sender {
 		if ba.RangeID == 0 {
 			ba.RangeID = 1
 		}
-		if ba.Timestamp == (hlc.Timestamp{}) {
+		if ba.Timestamp.IsEmpty() {
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				tc.Fatal(err)
 			}
@@ -2931,7 +2931,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 			} else if err := iter.ValueProto(&keyMeta); err != nil {
 				t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
 			}
-			if tsNext := tsNew.Next(); hlc.Timestamp(keyMeta.Timestamp) != tsNext {
+			if tsNext := tsNew.Next(); keyMeta.Timestamp.ToTimestamp() != tsNext {
 				t.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
 					key, tsNext, keyMeta.Timestamp)
 			}
