@@ -143,15 +143,23 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 	return false
 }
 
-// GetColumnTypes returns the types of the columns with the given IDs.
-func GetColumnTypes(desc catalog.TableDescriptor, columnIDs []descpb.ColumnID) ([]*types.T, error) {
-	types := make([]*types.T, len(columnIDs))
+// GetColumnTypes populates the types of the columns with the given IDs into the
+// outTypes slice, returning it. You must use the returned slice, as this
+// function might allocate a new slice.
+func GetColumnTypes(
+	desc catalog.TableDescriptor, columnIDs []descpb.ColumnID, outTypes []*types.T,
+) ([]*types.T, error) {
+	if cap(outTypes) < len(columnIDs) {
+		outTypes = make([]*types.T, len(columnIDs))
+	} else {
+		outTypes = outTypes[:len(columnIDs)]
+	}
 	for i, id := range columnIDs {
 		col, err := desc.FindActiveColumnByID(id)
 		if err != nil {
 			return nil, err
 		}
-		types[i] = col.Type
+		outTypes[i] = col.Type
 	}
-	return types, nil
+	return outTypes, nil
 }
