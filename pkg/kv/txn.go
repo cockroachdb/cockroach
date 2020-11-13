@@ -1040,7 +1040,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
-	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
+	if pErr.TransactionRestart() == roachpb.TransactionRestart_NONE {
 		log.Fatalf(ctx, "unexpected non-retryable error: %s", pErr)
 	}
 
