@@ -1,0 +1,13 @@
+# If you change this file, regenerate the certificate with
+# openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt -days 3650 -config testserver_config.cnf
+#
+default_bits        = 2048
+distinguished_name  = dn
+x509_extensions     = san
+req_extensions      = san
+extensions          = san
+prompt              = no
+[ dn ]
+organizationName    = MyCompany
+[ san ]
+subjectAltName      = DNS:localhost
