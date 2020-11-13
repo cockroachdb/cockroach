@@ -25,6 +25,7 @@ import (
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
+	// Look ma, poking the bear.
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
