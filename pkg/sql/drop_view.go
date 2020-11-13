@@ -192,7 +192,8 @@ func (p *planner) dropViewImpl(
 	var cascadeDroppedViews []string
 
 	// Remove back-references from the tables/views this view depends on.
-	for _, depID := range viewDesc.DependsOn {
+	dependedOn := append([]descpb.ID(nil), viewDesc.DependsOn...)
+	for _, depID := range dependedOn {
 		dependencyDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, depID, p.txn)
 		if err != nil {
 			return cascadeDroppedViews,
@@ -215,7 +216,8 @@ func (p *planner) dropViewImpl(
 	viewDesc.DependsOn = nil
 
 	if behavior == tree.DropCascade {
-		for _, ref := range viewDesc.DependedOnBy {
+		dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
+		for _, ref := range dependedOnBy {
 			dependentDesc, err := p.getViewDescForCascade(
 				ctx, viewDesc.TypeName(), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior,
 			)

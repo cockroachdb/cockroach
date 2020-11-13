@@ -1228,7 +1228,7 @@ func TestAddingFKs(t *testing.T) {
 	// Client should not see the orders table.
 	if _, err := sqlDB.Exec(
 		`SELECT * FROM t.orders`,
-	); !testutils.IsError(err, `table is being added`) {
+	); !testutils.IsError(err, `table "\w+" is being added`) {
 		t.Fatal(err)
 	}
 }

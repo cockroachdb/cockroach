@@ -6315,10 +6315,10 @@ func TestAddingTableResolution(t *testing.T) {
 	// In this test it gets stuck in the adding state.
 	sqlRun.Exec(t, `CREATE MATERIALIZED VIEW foo AS SELECT random(), generate_series FROM generate_series(1, 10);`)
 
-	sqlRun.ExpectErr(t, `pq: table is being added`, `SELECT * FROM foo`)
-	sqlRun.ExpectErr(t, `pq: relation "foo" does not exist`, `ALTER MATERIALIZED VIEW foo RENAME TO bar`)
+	sqlRun.ExpectErr(t, `pq: materialized view "foo" is being added`, `SELECT * FROM foo`)
+	sqlRun.ExpectErr(t, `pq: materialized view "foo" is being added`, `ALTER MATERIALIZED VIEW foo RENAME TO bar`)
 	// Regression test for #52829.
-	sqlRun.ExpectErr(t, `pq: relation "foo" does not exist`, `SHOW CREATE foo`)
+	sqlRun.ExpectErr(t, `pq: materialized view "foo" is being added`, `SHOW CREATE foo`)
 }
 
 // TestFailureToMarkCanceledReversalLeadsToCanceledStatus is a regression test
