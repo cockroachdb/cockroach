@@ -281,7 +281,7 @@ b  CREATE TABLE public.b (
 )
 
 # table b is not visible to the transaction #17949
-statement error pgcode 42P01 relation "b" does not exist
+statement error pgcode 55000 table "b" is being added
 INSERT INTO b VALUES (1);
 
 statement ok
@@ -299,7 +299,7 @@ statement count 3
 SELECT * FROM stock
 
 # index is only over data added in the transaction so the backfill occurs
-# within the trasaction.
+# within the transaction.
 statement ok
 CREATE INDEX idx_quantity ON stock (quantity)
 
