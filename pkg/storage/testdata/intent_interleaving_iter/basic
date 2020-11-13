@@ -1,0 +1,428 @@
+# Both separated and interleaved intents, and one inline meta.
+define
+locks
+meta k=a ts=20 txn=1
+mvcc
+value k=a ts=20 v=a20
+value k=a ts=10 v=a10
+meta k=b ts=30 txn=2
+value k=b ts=30 v=b30
+meta k=c
+value k=d ts=25 v=d25
+----
+
+# Exercise basic forward and reverse iteration.
+iter lower=a upper=f
+seek-ge k=a
+next
+next
+next
+next
+next
+next
+next
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+set-upper k=c
+seek-ge k=b
+next
+next
+prev
+prev
+prev
+seek-lt k=b
+next
+prev
+prev
+prev
+prev
+next
+----
+seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
+next: output: value k=a ts=20 v=a20
+next: output: value k=a ts=10 v=a10
+next: output: meta k=b ts=30 txn=2
+next: output: value k=b ts=30 v=b30
+next: output: meta k=c
+next: output: value k=d ts=25 v=d25
+next: output: .
+prev: output: value k=d ts=25 v=d25
+prev: output: meta k=c
+prev: output: value k=b ts=30 v=b30
+prev: output: meta k=b ts=30 txn=2
+prev: output: value k=a ts=10 v=a10
+prev: output: value k=a ts=20 v=a20
+prev: output: meta k=a ts=20 txn=1
+prev: output: .
+set-upper c
+seek-ge "b"/0,0: output: meta k=b ts=30 txn=2
+next: output: value k=b ts=30 v=b30
+next: output: .
+prev: output: value k=b ts=30 v=b30
+prev: output: meta k=b ts=30 txn=2
+prev: output: value k=a ts=10 v=a10
+seek-lt "b"/0,0: output: value k=a ts=10 v=a10
+next: output: meta k=b ts=30 txn=2
+prev: output: value k=a ts=10 v=a10
+prev: output: value k=a ts=20 v=a20
+prev: output: meta k=a ts=20 txn=1
+prev: output: .
+next: output: meta k=a ts=20 txn=1
+
+
+# More forward and reverse iteration.
+iter upper=b
+seek-ge k=a
+next
+next
+next
+prev
+prev
+prev
+----
+seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
+next: output: value k=a ts=20 v=a20
+next: output: value k=a ts=10 v=a10
+next: output: .
+prev: output: value k=a ts=10 v=a10
+prev: output: value k=a ts=20 v=a20
+prev: output: meta k=a ts=20 txn=1
+
+# Prefix iteration.
+iter prefix=true
+seek-ge k=b
+next
+next
+seek-ge k=a
+next
+next
+next
+prev
+seek-ge k=f
+seek-ge k=c
+next
+----
+seek-ge "b"/0,0: output: meta k=b ts=30 txn=2
+next: output: value k=b ts=30 v=b30
+next: output: .
+seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
+next: output: value k=a ts=20 v=a20
+next: output: value k=a ts=10 v=a10
+next: output: .
+prev: output: err: pebble: unsupported reverse prefix iteration
+seek-ge "f"/0,0: output: .
+seek-ge "c"/0,0: output: meta k=c
+next: output: .
+
+# Prefix iteration and NextKey. What we will see after the prefix is
+# exhausted is undefined.
+iter prefix=true
+seek-ge k=d
+next-key
+seek-ge k=a
+next-key
+seek-ge k=a
+next
+next-key
+----
+seek-ge "d"/0,0: output: value k=d ts=25 v=d25
+next-key: output: .
+seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
+next-key: output: meta k=b ts=30 txn=2
+seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
+next: output: value k=a ts=20 v=a20
+next-key: output: meta k=b ts=30 txn=2
+
+# Seek to particular timestamp.
+iter lower=a upper=f
+seek-ge k=a ts=10
+next
+next
+seek-ge k=a ts=25
+next
+next
+seek-lt k=a ts=1
+prev
+prev
+prev
+next
+next
+prev
+next
+seek-lt k=a ts=15
+prev
+prev
+next
+seek-lt k=a ts=25
+prev
+next
+seek-ge k=a ts=5
+next
+next
+prev
+seek-lt k=b ts=40
+prev
+prev
+prev
+next
+----
+seek-ge "a"/0.000000010,0: output: value k=a ts=10 v=a10
+next: output: meta k=b ts=30 txn=2
+next: output: value k=b ts=30 v=b30
+seek-ge "a"/0.000000025,0: output: value k=a ts=20 v=a20
+next: output: value k=a ts=10 v=a10
+next: output: meta k=b ts=30 txn=2
+seek-lt "a"/0.000000001,0: output: value k=a ts=10 v=a10
+prev: output: value k=a ts=20 v=a20
+prev: output: meta k=a ts=20 txn=1
+prev: output: .
+next: output: meta k=a ts=20 txn=1
+next: output: value k=a ts=20 v=a20
+prev: output: meta k=a ts=20 txn=1
+next: output: value k=a ts=20 v=a20
+seek-lt "a"/0.000000015,0: output: value k=a ts=20 v=a20
+prev: output: meta k=a ts=20 txn=1
+prev: output: .
+next: output: meta k=a ts=20 txn=1
+seek-lt "a"/0.000000025,0: output: meta k=a ts=20 txn=1
+prev: output: .
+next: output: meta k=a ts=20 txn=1
+seek-ge "a"/0.000000005,0: output: meta k=b ts=30 txn=2
+next: output: value k=b ts=30 v=b30
+next: output: meta k=c
+prev: output: value k=b ts=30 v=b30
+seek-lt "b"/0.000000040,0: output: meta k=b ts=30 txn=2
+prev: output: value k=a ts=10 v=a10
+prev: output: value k=a ts=20 v=a20
+prev: output: meta k=a ts=20 txn=1
+next: output: value k=a ts=20 v=a20
+
+# Seek to particular timestamp and prefix iteration. What we will
+# see after the prefix is exhausted is undefined.
+iter prefix=true
+seek-ge k=a ts=25
+next
+next
+seek-ge k=a ts=15
+next
+seek-ge k=a ts=5
+seek-lt k=a ts=1
+----
+seek-ge "a"/0.000000025,0: output: value k=a ts=20 v=a20
+next: output: value k=a ts=10 v=a10
+next: output: .
+seek-ge "a"/0.000000015,0: output: value k=a ts=10 v=a10
+next: output: .
+seek-ge "a"/0.000000005,0: output: .
+seek-lt "a"/0.000000001,0: output: err: prefix iteration is not permitted with SeekLT
+
+# Exercise NextKey
+iter lower=a upper=f
+seek-ge k=a
+next-key
+prev
+next-key
+next
+seek-ge k=b
+next-key
+prev
+prev
+prev
+next
+next-key
+next-key
+next-key
+----
+seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
+next-key: output: meta k=b ts=30 txn=2
+prev: output: value k=a ts=10 v=a10
+next-key: output: err: NextKey cannot be used to switch iteration direction
+next: output: err: NextKey cannot be used to switch iteration direction
+seek-ge "b"/0,0: output: meta k=b ts=30 txn=2
+next-key: output: meta k=c
+prev: output: value k=b ts=30 v=b30
+prev: output: meta k=b ts=30 txn=2
+prev: output: value k=a ts=10 v=a10
+next: output: meta k=b ts=30 txn=2
+next-key: output: meta k=c
+next-key: output: value k=d ts=25 v=d25
+next-key: output: .
+
+
+# Multiple separated intents and multiple interleaved intents.
+define
+locks
+meta k=b ts=20 txn=2
+meta k=d ts=40 txn=4
+meta k=e ts=50 txn=5
+mvcc
+meta k=a ts=10 txn=1
+value k=a ts=10 v=a10
+value k=b ts=20 v=b20
+meta k=c ts=30 txn=3
+value k=c ts=30 v=c30
+value k=d ts=40 v=d40
+value k=e ts=50 v=e50
+----
+
+# Exercise basic forward and reverse iteration.
+iter lower=a upper=f
+seek-ge k=a
+next
+next
+prev
+prev
+prev
+next
+next
+next
+next
+next
+next
+next
+next
+next
+next-key
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+----
+seek-ge "a"/0,0: output: meta k=a ts=10 txn=1
+next: output: value k=a ts=10 v=a10
+next: output: meta k=b ts=20 txn=2
+prev: output: value k=a ts=10 v=a10
+prev: output: meta k=a ts=10 txn=1
+prev: output: .
+next: output: meta k=a ts=10 txn=1
+next: output: value k=a ts=10 v=a10
+next: output: meta k=b ts=20 txn=2
+next: output: value k=b ts=20 v=b20
+next: output: meta k=c ts=30 txn=3
+next: output: value k=c ts=30 v=c30
+next: output: meta k=d ts=40 txn=4
+next: output: value k=d ts=40 v=d40
+next: output: meta k=e ts=50 txn=5
+next-key: output: .
+prev: output: value k=e ts=50 v=e50
+prev: output: meta k=e ts=50 txn=5
+prev: output: value k=d ts=40 v=d40
+prev: output: meta k=d ts=40 txn=4
+prev: output: value k=c ts=30 v=c30
+prev: output: meta k=c ts=30 txn=3
+prev: output: value k=b ts=20 v=b20
+prev: output: meta k=b ts=20 txn=2
+prev: output: value k=a ts=10 v=a10
+prev: output: meta k=a ts=10 txn=1
+prev: output: .
+
+# Error case: Multiple separated intents with no provisional values
+define
+locks
+meta k=b ts=20 txn=2
+meta k=d ts=40 txn=4
+----
+
+iter lower=a upper=f
+seek-ge k=a
+next
+seek-lt k=e
+next
+seek-ge k=d
+next-key
+seek-ge k=d
+prev
+seek-lt k=e
+prev
+----
+seek-ge "a"/0,0: output: meta k=b ts=20 txn=2
+next: output: err: intentIter at intent, but iter not at provisional value
+seek-lt "e"/0,0: output: meta k=d ts=40 txn=4
+next: output: err: intent has no provisional value
+seek-ge "d"/0,0: output: meta k=d ts=40 txn=4
+next-key: output: err: intentIter at intent, but iter not at provisional value
+seek-ge "d"/0,0: output: meta k=d ts=40 txn=4
+prev: output: err: iter not at provisional value, cmp: -1
+seek-lt "e"/0,0: output: meta k=d ts=40 txn=4
+prev: output: err: reverse iteration discovered intent without provisional value
+
+# Local range keys. This exercises local keys having separated locks.
+define
+locks
+meta k=Lb ts=20 txn=2
+meta k=Lc ts=30 txn=4
+mvcc
+meta k=La ts=10 txn=1
+value k=La ts=10 v=a10
+value k=Lb ts=20 v=b20
+value k=Lc ts=30 v=c30
+----
+
+iter lower=La upper=Ld
+seek-ge k=La
+next
+next
+next
+next
+next
+next
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+----
+seek-ge "La"/0,0: output: meta k=La ts=10 txn=1
+next: output: value k=La ts=10 v=a10
+next: output: meta k=Lb ts=20 txn=2
+next: output: value k=Lb ts=20 v=b20
+next: output: meta k=Lc ts=30 txn=4
+next: output: value k=Lc ts=30 v=c30
+next: output: .
+prev: output: value k=Lc ts=30 v=c30
+prev: output: meta k=Lc ts=30 txn=4
+prev: output: value k=Lb ts=20 v=b20
+prev: output: meta k=Lb ts=20 txn=2
+prev: output: value k=La ts=10 v=a10
+prev: output: meta k=La ts=10 txn=1
+prev: output: .
+
+iter prefix=true
+seek-ge k=Lb
+next
+next
+seek-ge k=Lc
+next
+next
+seek-ge k=La ts=25
+next
+seek-ge k=Lb ts=25
+next
+seek-ge k=Lc ts=25
+----
+seek-ge "Lb"/0,0: output: meta k=Lb ts=20 txn=2
+next: output: value k=Lb ts=20 v=b20
+next: output: .
+seek-ge "Lc"/0,0: output: meta k=Lc ts=30 txn=4
+next: output: value k=Lc ts=30 v=c30
+next: output: .
+seek-ge "La"/0.000000025,0: output: value k=La ts=10 v=a10
+next: output: .
+seek-ge "Lb"/0.000000025,0: output: value k=Lb ts=20 v=b20
+next: output: .
+seek-ge "Lc"/0.000000025,0: output: .

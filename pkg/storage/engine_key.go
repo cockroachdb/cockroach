@@ -251,8 +251,9 @@ func (lk LockTableKey) ToEngineKey() EngineKey {
 	if lk.Strength != lock.Exclusive {
 		panic("unsupported lock strength")
 	}
+	ltKey, _ := keys.LockTableSingleKey(lk.Key, nil)
 	k := EngineKey{
-		Key:     keys.LockTableSingleKey(lk.Key),
+		Key:     ltKey,
 		Version: make([]byte, engineKeyVersionLockTableLen),
 	}
 	k.Version[0] = byte(lk.Strength)
