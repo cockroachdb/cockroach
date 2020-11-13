@@ -180,7 +180,7 @@ func (c *csvRowConsumer) FillDatums(
 	for i, field := range record {
 		// Skip over record entries corresponding to columns not in the target
 		// columns specified by the user.
-		if _, ok := conv.IsTargetCol[i]; !ok {
+		if !conv.TargetColOrds.Contains(i) {
 			continue
 		}
 
