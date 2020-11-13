@@ -30,8 +30,8 @@ func setupTestProxyWithCerts(t *testing.T, opts *Options) (addr string, done fun
 	// Created via:
 	const _ = `
 openssl genrsa -out testserver.key 2048
-# Enter * as Common Name below, rest can be empty.
-openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt -days 3650
+openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt \
+  -days 3650 -config testserver_config.cnf	
 `
 	cer, err := tls.LoadX509KeyPair("testserver.crt", "testserver.key")
 	require.NoError(t, err)
@@ -148,8 +148,6 @@ func TestLongDBName(t *testing.T) {
 
 func TestFailedConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	skip.WithIssue(t, 56377)
 
 	// TODO(asubiotto): consider using datadriven for these, especially if the
 	// proxy becomes more complex.
