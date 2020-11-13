@@ -108,10 +108,11 @@ func (ru %[1]s) GetInner() %[2]s {
 `)
 }
 
-func genSetInner(w io.Writer, unionName, variantName string, variants []variantInfo) {
+func genMustSetInner(w io.Writer, unionName, variantName string, variants []variantInfo) {
 	fmt.Fprintf(w, `
-// SetInner sets the %[2]s in the union.
-func (ru *%[1]s) SetInner(r %[2]s) bool {
+// MustSetInner sets the %[2]s in the union.
+func (ru *%[1]s) MustSetInner(r %[2]s) {
+	ru.Reset()
 	var union is%[1]s_Value
 	switch t := r.(type) {
 `, unionName, variantName)
@@ -123,10 +124,9 @@ func (ru *%[1]s) SetInner(r %[2]s) bool {
 	}
 
 	fmt.Fprint(w, `	default:
-		return false
+		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
-	return true
 }
 `)
 }
@@ -160,10 +160,10 @@ import (
 	genGetInner(f, "RequestUnion", "Request", reqVariants)
 	genGetInner(f, "ResponseUnion", "Response", resVariants)
 
-	// Generate SetInner methods.
-	genSetInner(f, "ErrorDetail", "error", errVariants)
-	genSetInner(f, "RequestUnion", "Request", reqVariants)
-	genSetInner(f, "ResponseUnion", "Response", resVariants)
+	// Generate MustSetInner methods.
+	genMustSetInner(f, "ErrorDetail", "error", errVariants)
+	genMustSetInner(f, "RequestUnion", "Request", reqVariants)
+	genMustSetInner(f, "ResponseUnion", "Response", resVariants)
 
 	fmt.Fprintf(f, `
 type reqCounts [%d]int32

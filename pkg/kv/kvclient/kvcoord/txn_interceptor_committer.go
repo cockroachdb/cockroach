@@ -163,7 +163,7 @@ func (tc *txnCommitter) SendLocked(
 			// Make a copy of the EndTxn, since we're going to change it below to
 			// disable the parallel commit.
 			etCpy := *et
-			ba.Requests[len(ba.Requests)-1].SetInner(&etCpy)
+			ba.Requests[len(ba.Requests)-1].MustSetInner(&etCpy)
 			et = &etCpy
 		}
 	}
