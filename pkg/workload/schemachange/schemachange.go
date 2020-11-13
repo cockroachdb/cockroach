@@ -224,7 +224,18 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
 	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
 
 	for i := 0; i < opsNum; i++ {
-		w.opGen.resetOpState()
+
+		// Terminating this loop early if there are expected commit errors prevents unexpected commit behavior from being
+		// hidden by subsequent operations. Consider the case where there are expected commit errors.
+		// It is possible that committing the transaction now will fail the workload because the error does not occur
+		// upon committing. If more op functions were to be called, then it is possible that a subsequent op function
+		// adds the same errors to the set. Due to the 2nd op, an expected commit error may occur, so the workload
+		// will not fail. To prevent the covering up of unexpected behavior as outlined above, no further ops
+		// should be generated if there are any errors in the expected commit errors set.
+		if !w.opGen.expectedCommitErrors.empty() {
+			break
+		}
+
 		op, noops, err := w.opGen.randOp(tx)
 		if err != nil {
 			return noops, errors.Mark(
