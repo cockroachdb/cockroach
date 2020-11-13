@@ -64,7 +64,7 @@ func newRowHelper(
 // encodeSecondaryIndexes. includeEmpty details whether the results should
 // include empty secondary index k/v pairs.
 func (rh *rowHelper) encodeIndexes(
-	colIDtoRowIndex map[descpb.ColumnID]int,
+	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes util.FastIntSet,
 	includeEmpty bool,
@@ -82,7 +82,7 @@ func (rh *rowHelper) encodeIndexes(
 
 // encodePrimaryIndex encodes the primary index key.
 func (rh *rowHelper) encodePrimaryIndex(
-	colIDtoRowIndex map[descpb.ColumnID]int, values []tree.Datum,
+	colIDtoRowIndex catalog.TableColMap, values []tree.Datum,
 ) (primaryIndexKey []byte, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
 		rh.primaryIndexKeyPrefix = rowenc.MakeIndexKeyPrefix(rh.Codec, rh.TableDesc,
@@ -105,7 +105,7 @@ func (rh *rowHelper) encodePrimaryIndex(
 // includeEmpty details whether the results should include empty secondary index
 // k/v pairs.
 func (rh *rowHelper) encodeSecondaryIndexes(
-	colIDtoRowIndex map[descpb.ColumnID]int,
+	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes util.FastIntSet,
 	includeEmpty bool,

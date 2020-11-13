@@ -159,9 +159,9 @@ func DecodePartitionTuple(
 	}
 
 	allDatums := append(prefixDatums, t.Datums...)
-	colMap := make(map[descpb.ColumnID]int, len(allDatums))
+	var colMap catalog.TableColMap
 	for i := range allDatums {
-		colMap[idxDesc.ColumnIDs[i]] = i
+		colMap.Set(idxDesc.ColumnIDs[i], i)
 	}
 
 	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, idxDesc.ID)

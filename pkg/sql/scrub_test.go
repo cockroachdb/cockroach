@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -62,9 +62,9 @@ INSERT INTO t."tEst" VALUES (10, 20);
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tEst")
 	secondaryIndex := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[descpb.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.Columns[0].ID, 0)
+	colIDtoRowIndex.Set(tableDesc.Columns[1].ID, 1)
 
 	// Construct the secondary index key that is currently in the
 	// database.
@@ -131,9 +131,9 @@ CREATE INDEX secondary ON t.test (v);
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndexDesc := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[descpb.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.Columns[0].ID, 0)
+	colIDtoRowIndex.Set(tableDesc.Columns[1].ID, 1)
 
 	// Construct datums and secondary k/v for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
@@ -225,10 +225,10 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndexDesc := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[descpb.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
-	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.Columns[0].ID, 0)
+	colIDtoRowIndex.Set(tableDesc.Columns[1].ID, 1)
+	colIDtoRowIndex.Set(tableDesc.Columns[2].ID, 2)
 
 	// Generate the existing secondary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(1337)}
@@ -344,9 +344,9 @@ INSERT INTO t.test VALUES (10, 2);
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
-	colIDtoRowIndex := make(map[descpb.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.Columns[0].ID, 0)
+	colIDtoRowIndex.Set(tableDesc.Columns[1].ID, 1)
 
 	// Create the primary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(2)}
@@ -447,9 +447,9 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
 	secondaryIndex := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[descpb.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.Columns[0].ID, 0)
+	colIDtoRowIndex.Set(tableDesc.Columns[1].ID, 1)
 
 	// Construct the secondary index key entry as it exists in the
 	// database.
@@ -585,9 +585,9 @@ INSERT INTO t.test VALUES (217, 314);
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
 
-	colIDtoRowIndex := make(map[descpb.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.Columns[0].ID, 0)
+	colIDtoRowIndex.Set(tableDesc.Columns[1].ID, 1)
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
@@ -667,10 +667,10 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 	// Construct datums for our row values (k, v, b).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
 
-	colIDtoRowIndex := make(map[descpb.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
-	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.Columns[0].ID, 0)
+	colIDtoRowIndex.Set(tableDesc.Columns[1].ID, 1)
+	colIDtoRowIndex.Set(tableDesc.Columns[2].ID, 2)
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
@@ -773,9 +773,9 @@ CREATE TABLE t.test (
 	// Construct datums for our row values (k, v1).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
 
-	colIDtoRowIndex := make(map[descpb.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.Columns[0].ID, 0)
+	colIDtoRowIndex.Set(tableDesc.Columns[1].ID, 1)
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
@@ -877,10 +877,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	// Construct datums for our row values (k, v1, v2).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
 
-	colIDtoRowIndex := make(map[descpb.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
-	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.Columns[0].ID, 0)
+	colIDtoRowIndex.Set(tableDesc.Columns[1].ID, 1)
+	colIDtoRowIndex.Set(tableDesc.Columns[2].ID, 2)
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
