@@ -1466,7 +1466,7 @@ func TestReplicaDrainLease(t *testing.T) {
 	rd := tc.LookupRangeOrFatal(t, rngKey)
 	r1, err := store1.GetReplica(rd.RangeID)
 	require.NoError(t, err)
-	status := r1.currentLeaseStatus(ctx)
+	status := r1.CurrentLeaseStatus(ctx)
 	require.True(t, status.Lease.OwnedBy(store1.StoreID()), "someone else got the lease: %s", status)
 	// We expect the lease to be valid, but don't check that because, under race, it might have
 	// expired already.
@@ -1479,7 +1479,7 @@ func TestReplicaDrainLease(t *testing.T) {
 
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
-		status := r1.currentLeaseStatus(ctx)
+		status := r1.CurrentLeaseStatus(ctx)
 		require.True(t, status.Lease.OwnedBy(store1.StoreID()), "someone else got the lease: %s", status)
 		if status.State == kvserverpb.LeaseState_VALID {
 			return errors.New("lease still valid")
@@ -7915,7 +7915,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 
 	tc.repl.mu.Lock()
-	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	origIndexes := make([]int, 0, num)
@@ -7935,7 +7935,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	tc.repl.mu.Lock()
 	atomic.StoreInt32(&dropAll, 0)
 	tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonTicks)
-	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	tc.repl.mu.Unlock()
@@ -8039,7 +8039,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 			t.Error(pErr)
 		}
 		r.mu.Lock()
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		r.mu.Unlock()
@@ -8055,7 +8055,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 		var reproposed []*ProposalData
 		r.mu.Lock() // avoid data race - proposals belong to the Replica
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		dropProposals.Lock()
@@ -8180,7 +8180,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	repl.mu.Lock()
-	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeader)
@@ -12495,7 +12495,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
@@ -12590,11 +12590,11 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)

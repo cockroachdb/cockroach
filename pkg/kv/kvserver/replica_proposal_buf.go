@@ -143,6 +143,14 @@ type propBuf struct {
 		// process of replication. Dropped proposals are still eligible to be
 		// reproposed due to ticks.
 		submitProposalFilter func(*ProposalData) (drop bool, err error)
+		// allowLeaseProposalWhenNotLeader, if set, makes the proposal buffer allow
+		// lease request proposals even when the replica inserting that proposal is
+		// not the Raft leader. This can be used in tests to allow a replica to
+		// acquire a lease without first moving the Raft leadership to it (e.g. it
+		// allows tests to expire leases by stopping the old leaseholder's liveness
+		// heartbeats and then expect other replicas to take the lease without
+		// worrying about Raft).
+		allowLeaseProposalWhenNotLeader bool
 	}
 }
 
@@ -156,8 +164,28 @@ type proposer interface {
 	leaseAppliedIndex() uint64
 	enqueueUpdateCheck()
 	// The following require the proposer to hold an exclusive lock.
-	withGroupLocked(func(*raft.RawNode) error) error
+	withGroupLocked(func(proposerRaft) error) error
 	registerProposalLocked(*ProposalData)
+	// rejectProposalWithRedirectLocked rejects a proposal and redirects the
+	// proposer to try it on another node. This is used to sometimes reject lease
+	// acquisitions when another replica is the leader; the intended consequence
+	// of the rejection is that the request that caused the lease acquisition
+	// attempt is tried on the leader, at which point it should result in a lease
+	// acquisition attempt by that node (or, perhaps by then the leader will have
+	// already gotten a lease and the request can be serviced directly).
+	rejectProposalWithRedirectLocked(
+		ctx context.Context,
+		prop *ProposalData,
+		redirectTo roachpb.ReplicaID,
+	)
+}
+
+// proposerRaft abstracts the propBuf's dependency on *raft.RawNode, to help
+// testing.
+type proposerRaft interface {
+	Step(raftpb.Message) error
+	BasicStatus() raft.BasicStatus
+	ProposeConfChange(raftpb.ConfChangeI) error
 }
 
 // Init initializes the proposal buffer and binds it to the provided proposer.
@@ -185,7 +213,7 @@ func (b *propBuf) LastAssignedLeaseIndexRLocked() uint64 {
 // It is also expected that the byte slice has sufficient capacity to marshal
 // the maximum lease index field into it. After adding the proposal to the
 // buffer, the assigned max lease index is returned.
-func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
+func (b *propBuf) Insert(ctx context.Context, p *ProposalData, data []byte) (uint64, error) {
 	// Request a new max lease applied index for any request that isn't itself
 	// a lease request. Lease requests don't need unique max lease index values
 	// because their max lease indexes are ignored. See checkForcedErr.
@@ -201,7 +229,7 @@ func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
 
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
-	res, err := b.handleCounterRequestRLocked(req, false /* wLocked */)
+	res, err := b.handleCounterRequestRLocked(ctx, req, false /* wLocked */)
 	if err != nil {
 		return 0, err
 	}
@@ -248,7 +276,7 @@ func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
 // ReinsertLocked inserts a command that has already passed through the proposal
 // buffer back into the buffer to be reproposed at a new Raft log index. Unlike
 // insert, it does not modify the command or assign a new maximum lease index.
-func (b *propBuf) ReinsertLocked(p *ProposalData) error {
+func (b *propBuf) ReinsertLocked(ctx context.Context, p *ProposalData) error {
 	// When re-inserting a command into the proposal buffer, the command never
 	// wants a new lease index. Simply add it back to the buffer and let it be
 	// reproposed.
@@ -256,7 +284,7 @@ func (b *propBuf) ReinsertLocked(p *ProposalData) error {
 
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
-	res, err := b.handleCounterRequestRLocked(req, true /* wLocked */)
+	res, err := b.handleCounterRequestRLocked(ctx, req, true /* wLocked */)
 	if err != nil {
 		return err
 	}
@@ -276,7 +304,7 @@ func (b *propBuf) ReinsertLocked(p *ProposalData) error {
 // held. It does not mandate which, but expects the caller to specify using
 // the wLocked argument.
 func (b *propBuf) handleCounterRequestRLocked(
-	req propBufCntReq, wLocked bool,
+	ctx context.Context, req propBufCntReq, wLocked bool,
 ) (propBufCntRes, error) {
 	// Repeatedly attempt to find an open index in the buffer's array.
 	for {
@@ -296,7 +324,7 @@ func (b *propBuf) handleCounterRequestRLocked(
 		} else if wLocked {
 			// The buffer is full and we're holding the exclusive lock. Flush
 			// the buffer before trying again.
-			if err := b.flushLocked(); err != nil {
+			if err := b.flushLocked(ctx); err != nil {
 				return 0, err
 			}
 		} else if idx == b.arr.len() {
@@ -304,7 +332,7 @@ func (b *propBuf) handleCounterRequestRLocked(
 			// potentially many requests holding the shared lock and trying to
 			// insert concurrently. Eagerly attempt to flush the buffer before
 			// trying again.
-			if err := b.flushRLocked(); err != nil {
+			if err := b.flushRLocked(ctx); err != nil {
 				return 0, err
 			}
 		} else {
@@ -330,7 +358,7 @@ func (b *propBuf) insertIntoArray(p *ProposalData, idx int) {
 	}
 }
 
-func (b *propBuf) flushRLocked() error {
+func (b *propBuf) flushRLocked(ctx context.Context) error {
 	// Upgrade the shared lock to an exclusive lock. After doing so, check again
 	// whether the proposer has been destroyed. If so, wake up other goroutines
 	// waiting for the flush.
@@ -342,12 +370,12 @@ func (b *propBuf) flushRLocked() error {
 		b.full.Broadcast()
 		return status.err
 	}
-	return b.flushLocked()
+	return b.flushLocked(ctx)
 }
 
-func (b *propBuf) flushLocked() error {
-	return b.p.withGroupLocked(func(raftGroup *raft.RawNode) error {
-		_, err := b.FlushLockedWithRaftGroup(raftGroup)
+func (b *propBuf) flushLocked(ctx context.Context) error {
+	return b.p.withGroupLocked(func(raftGroup proposerRaft) error {
+		_, err := b.FlushLockedWithRaftGroup(ctx, raftGroup)
 		return err
 	})
 }
@@ -360,7 +388,9 @@ func (b *propBuf) flushLocked() error {
 // proposed to the RawNode. This initiates Raft replication of the commands.
 //
 // Returns the number of proposals handed to the RawNode.
-func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) (int, error) {
+func (b *propBuf) FlushLockedWithRaftGroup(
+	ctx context.Context, raftGroup proposerRaft,
+) (int, error) {
 	// Before returning, make sure to forward the lease index base to at least
 	// the proposer's currently applied lease index. This ensures that if the
 	// lease applied index advances outside of this proposer's control (i.e.
@@ -397,6 +427,25 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) (int, error)
 	// and apply them.
 	buf := b.arr.asSlice()[:used]
 	ents := make([]raftpb.Entry, 0, used)
+
+	// Figure out leadership info. We'll use it to conditionally drop some
+	// requests.
+	var leaderKnown, iAmTheLeader bool
+	var leader roachpb.ReplicaID
+	if raftGroup != nil {
+		status := raftGroup.BasicStatus()
+		iAmTheLeader = status.RaftState == raft.StateLeader
+		leaderKnown = status.Lead != raft.None
+		if leaderKnown {
+			leader = roachpb.ReplicaID(status.Lead)
+			if !iAmTheLeader && leader == b.p.replicaID() {
+				log.Fatalf(ctx,
+					"inconsistent Raft state: state %s while the current replica is also the lead: %d",
+					status.RaftState, leader)
+			}
+		}
+	}
+
 	// Remember the first error that we see when proposing the batch. We don't
 	// immediately return this error because we want to finish clearing out the
 	// buffer and registering each of the proposals with the proposer, but we
@@ -409,6 +458,41 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) (int, error)
 			continue
 		}
 		buf[i] = nil // clear buffer
+
+		// Handle an edge case about lease acquisitions: we don't want to forward
+		// lease acquisitions to another node (which is what happens when we're not
+		// the leader) because:
+		// a) if there is a different leader, that leader should acquire the lease
+		// itself and thus avoid a change of leadership caused by the leaseholder
+		// and leader being different (Raft leadership follows the lease), and
+		// b) being a follower, it's possible that this replica is behind in
+		// applying the log. Thus, there might be another lease in place that this
+		// follower doesn't know about, in which case the lease we're proposing here
+		// would be rejected. Not only would proposing such a lease be wasted work,
+		// but we're trying to protect against pathological cases where it takes a
+		// long time for this follower to catch up (for example because it's waiting
+		// for a snapshot, and the snapshot is queued behind many other snapshots).
+		// In such a case, we don't want all requests arriving at this node to be
+		// blocked on this lease acquisition (which is very likely to eventually
+		// fail anyway).
+		//
+		// Thus, we do one of two things:
+		// - if the leader is known, we reject this proposal and make sure the
+		// request that needed the lease is redirected to the leaseholder;
+		// - if the leader is not known, we don't do anything special here to
+		// terminate the proposal, but we know that Raft will reject it with a
+		// ErrProposalDropped. We'll eventually re-propose it once a leader is
+		// known, at which point it will either go through or be rejected based on
+		// whether or not it is this replica that became the leader.
+		if !iAmTheLeader && p.Request.IsLeaseRequest() {
+			if leaderKnown && !b.testing.allowLeaseProposalWhenNotLeader {
+				log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
+					leader)
+				b.p.rejectProposalWithRedirectLocked(ctx, p, leader)
+				continue
+			}
+			// If the leader is not known, continue with the proposal as explained above.
+		}
 
 		// Raft processing bookkeeping.
 		b.p.registerProposalLocked(p)
@@ -496,7 +580,7 @@ func (b *propBuf) forwardLeaseIndexBase(v uint64) {
 	}
 }
 
-func proposeBatch(raftGroup *raft.RawNode, replID roachpb.ReplicaID, ents []raftpb.Entry) error {
+func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry) error {
 	if len(ents) == 0 {
 		return nil
 	}
@@ -524,9 +608,9 @@ func proposeBatch(raftGroup *raft.RawNode, replID roachpb.ReplicaID, ents []raft
 // into the proposals map so that they can all be manipulated in a single place.
 // The representative example of this is a caller that wants to flush the buffer
 // into the proposals map before canceling all proposals.
-func (b *propBuf) FlushLockedWithoutProposing() {
-	if _, err := b.FlushLockedWithRaftGroup(nil /* raftGroup */); err != nil {
-		log.Fatalf(context.Background(), "unexpected error: %+v", err)
+func (b *propBuf) FlushLockedWithoutProposing(ctx context.Context) {
+	if _, err := b.FlushLockedWithRaftGroup(ctx, nil /* raftGroup */); err != nil {
+		log.Fatalf(ctx, "unexpected error: %+v", err)
 	}
 }
 
@@ -620,7 +704,7 @@ func (rp *replicaProposer) enqueueUpdateCheck() {
 	rp.store.enqueueRaftUpdateCheck(rp.RangeID)
 }
 
-func (rp *replicaProposer) withGroupLocked(fn func(*raft.RawNode) error) error {
+func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {
 	// Pass true for mayCampaignOnWake because we're about to propose a command.
 	return (*Replica)(rp).withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		// We're proposing a command here so there is no need to wake the leader
@@ -635,4 +719,23 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	// decide if/when to re-propose it.
 	p.proposedAtTicks = rp.mu.ticks
 	rp.mu.proposals[p.idKey] = p
+}
+
+// rejectProposalWithRedirectLocked is part of the proposer interface.
+func (rp *replicaProposer) rejectProposalWithRedirectLocked(
+	ctx context.Context, prop *ProposalData, redirectTo roachpb.ReplicaID,
+) {
+	r := (*Replica)(rp)
+	rangeDesc := r.descRLocked()
+	storeID := r.store.StoreID()
+	leaderRep, _ /* ok */ := rangeDesc.GetReplicaDescriptorByID(redirectTo)
+	speculativeLease := &roachpb.Lease{
+		Replica: leaderRep,
+	}
+	log.VEventf(ctx, 2, "redirecting proposal to node %s; request: %s", leaderRep.NodeID, prop.Request)
+	r.cleanupFailedProposalLocked(prop)
+	prop.finishApplication(ctx, proposalResult{
+		Err: roachpb.NewError(newNotLeaseHolderError(
+			speculativeLease, storeID, rangeDesc, "refusing to acquire lease on follower")),
+	})
 }
