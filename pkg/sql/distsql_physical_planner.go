@@ -1298,25 +1298,33 @@ func (dsp *DistSQLPlanner) planTableReaders(
 
 	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdinalMap)
 	planToStreamColMap := make([]int, len(info.cols))
-	descColumnIDs := make([]descpb.ColumnID, 0, len(info.desc.Columns))
+	var descColumnIDs util.FastIntMap
+	colId := 0
 	for i := range info.desc.Columns {
-		descColumnIDs = append(descColumnIDs, info.desc.Columns[i].ID)
+		descColumnIDs.Set(colId, int(info.desc.Columns[i].ID))
+		colId++
 	}
 	if returnMutations {
 		for _, c := range info.desc.MutationColumns() {
-			descColumnIDs = append(descColumnIDs, c.ID)
+			descColumnIDs.Set(colId, int(c.ID))
+			colId++
 		}
 	}
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
-			descColumnIDs = append(descColumnIDs, colinfo.AllSystemColumnDescs[i].ID)
+			descColumnIDs.Set(colId, int(colinfo.AllSystemColumnDescs[i].ID))
+			colId++
 		}
 	}
 
 	for i := range planToStreamColMap {
 		planToStreamColMap[i] = -1
 		for j, c := range outCols {
-			if descColumnIDs[c] == info.cols[i].ID {
+			id, ok := descColumnIDs.Get(int(c))
+			if !ok {
+				return errors.AssertionFailedf("programming error during physical planning %s %s", planToStreamColMap, descColumnIDs)
+			}
+			if id == int(info.cols[i].ID) {
 				planToStreamColMap[i] = j
 				break
 			}
