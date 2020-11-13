@@ -19,16 +19,15 @@ import (
 	"fmt"
 	"hash/crc32"
 	"sort"
-	"strconv"
 	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -103,7 +102,7 @@ type routerOutput struct {
 	// TODO(radu): add padding of size sys.CacheLineSize to ensure there is no
 	// false-sharing?
 
-	stats RouterOutputStats
+	stats execstatspb.ComponentStats
 
 	// memoryMonitor and diskMonitor are mu.rowContainer's monitors.
 	memoryMonitor, diskMonitor *mon.BytesMonitor
@@ -313,6 +312,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
 				span.SetTag(execinfrapb.StreamIDTagKey, ro.streamID)
+				ro.stats.Inputs = make([]execstatspb.InputStats, 1)
 			}
 
 			drain := false
@@ -360,7 +360,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 						}
 						<-rb.semaphore
 						if rb.statsCollectionEnabled {
-							ro.stats.NumRows += int64(len(rows))
+							ro.stats.Inputs[0].NumTuples.Add(int64(len(rows)))
 						}
 						ro.mu.Lock()
 						ro.mu.streamStatus = streamStatus
@@ -371,8 +371,8 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 				// No rows or metadata buffered; see if the producer is done.
 				if ro.mu.producerDone {
 					if rb.statsCollectionEnabled {
-						ro.stats.MaxAllocatedMem = ro.memoryMonitor.MaximumBytes()
-						ro.stats.MaxAllocatedDisk = ro.diskMonitor.MaximumBytes()
+						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes()))
+						ro.stats.Exec.MaxAllocatedDisk.Set(uint64(ro.diskMonitor.MaximumBytes()))
 						span.SetSpanStats(&ro.stats)
 						span.Finish()
 						if trace := execinfra.GetTraceData(ctx); trace != nil {
@@ -767,34 +767,4 @@ func (rr *rangeRouter) spanForData(data []byte) int {
 		return -1
 	}
 	return int(rr.spans[i].Stream)
-}
-
-const routerOutputTagPrefix = "routeroutput."
-
-// Stats implements the SpanStats interface.
-func (ros *RouterOutputStats) Stats() map[string]string {
-	statsMap := make(map[string]string)
-	statsMap[routerOutputTagPrefix+"rows_routed"] = strconv.FormatInt(ros.NumRows, 10)
-	statsMap[routerOutputTagPrefix+rowexec.MaxMemoryTagSuffix] = strconv.FormatInt(ros.MaxAllocatedMem, 10)
-	statsMap[routerOutputTagPrefix+rowexec.MaxDiskTagSuffix] = strconv.FormatInt(ros.MaxAllocatedDisk, 10)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (ros *RouterOutputStats) StatsForQueryPlan() []string {
-	stats := []string{
-		fmt.Sprintf("rows routed: %d", ros.NumRows),
-	}
-
-	if ros.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %d", rowexec.MaxMemoryQueryPlanSuffix, ros.MaxAllocatedMem))
-	}
-
-	if ros.MaxAllocatedDisk != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %d", rowexec.MaxDiskQueryPlanSuffix, ros.MaxAllocatedDisk))
-	}
-
-	return stats
 }

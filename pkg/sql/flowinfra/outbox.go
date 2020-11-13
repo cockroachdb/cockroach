@@ -12,7 +12,6 @@ package flowinfra
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -20,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -65,7 +64,7 @@ type Outbox struct {
 	err error
 
 	statsCollectionEnabled bool
-	stats                  OutboxStats
+	stats                  execstatspb.ComponentStats
 }
 
 var _ execinfra.RowReceiver = &Outbox{}
@@ -157,9 +156,9 @@ func (m *Outbox) flush(ctx context.Context) error {
 			// Some fields in the msg have variable sizes across different runs (e.g.
 			// metadata). To keep a useful bytes value for tests, we only count the
 			// encoded row message size.
-			m.stats.BytesSent += int64(len(msg.Data.RawBytes))
+			m.stats.NetTx.BytesSent.Add(int64(len(msg.Data.RawBytes)))
 		} else {
-			m.stats.BytesSent += int64(msg.Size())
+			m.stats.NetTx.BytesSent.Add(int64(msg.Size()))
 		}
 	}
 
@@ -456,18 +455,4 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 // Err returns the error (if any occurred) while Outbox was running.
 func (m *Outbox) Err() error {
 	return m.err
-}
-
-const outboxTagPrefix = "outbox."
-
-// Stats implements the SpanStats interface.
-func (os *OutboxStats) Stats() map[string]string {
-	statsMap := make(map[string]string)
-	statsMap[outboxTagPrefix+"bytes_sent"] = humanizeutil.IBytes(os.BytesSent)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (os *OutboxStats) StatsForQueryPlan() []string {
-	return []string{fmt.Sprintf("bytes sent: %s", humanizeutil.IBytes(os.BytesSent))}
 }

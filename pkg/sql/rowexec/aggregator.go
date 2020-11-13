@@ -12,16 +12,15 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
@@ -97,7 +96,7 @@ func (ag *aggregatorBase) init(
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
 	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		input = newInputStatCollector(input)
-		ag.FinishTrace = ag.outputStatsToTrace
+		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
 	ag.input = input
 	ag.isScalar = spec.IsScalar()
@@ -153,41 +152,17 @@ func (ag *aggregatorBase) init(
 	)
 }
 
-var _ execinfrapb.DistSQLSpanStats = &AggregatorStats{}
-
-const aggregatorTagPrefix = "aggregator."
-
-// Stats implements the SpanStats interface.
-func (as *AggregatorStats) Stats() map[string]string {
-	inputStatsMap := as.InputStats.Stats(aggregatorTagPrefix)
-	inputStatsMap[aggregatorTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(as.MaxAllocatedMem)
-	return inputStatsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (as *AggregatorStats) StatsForQueryPlan() []string {
-	stats := as.InputStats.StatsForQueryPlan("" /* prefix */)
-
-	if as.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(as.MaxAllocatedMem)))
-	}
-
-	return stats
-}
-
-func (ag *aggregatorBase) outputStatsToTrace() {
-	is, ok := getInputStats(ag.FlowCtx, ag.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (ag *aggregatorBase) execStatsForTrace() *execstatspb.ComponentStats {
+	is, ok := getInputStats(ag.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(ag.Ctx); sp != nil {
-		sp.SetSpanStats(
-			&AggregatorStats{
-				InputStats:      is,
-				MaxAllocatedMem: ag.MemMonitor.MaximumBytes(),
-			},
-		)
+	return &execstatspb.ComponentStats{
+		Inputs: []execstatspb.InputStats{is},
+		Exec: execstatspb.ExecStats{
+			MaxAllocatedMem: execstatspb.MakeIntValue(uint64(ag.MemMonitor.MaximumBytes())),
+		},
 	}
 }
 
