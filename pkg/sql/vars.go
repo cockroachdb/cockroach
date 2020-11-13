@@ -1234,6 +1234,7 @@ func makeCompatBoolVar(varName string, displayValue, anyValAllowed bool) session
 			return err
 		},
 		GlobalDefault: func(sv *settings.Values) string { return displayValStr },
+		GetStringVal:  makePostgresBoolGetStringValFn(varName),
 	}
 }
 
