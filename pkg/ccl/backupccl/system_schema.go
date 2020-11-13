@@ -8,7 +8,19 @@
 
 package backupccl
 
-import "github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+import (
+	"context"
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
+)
 
 // clusterBackupInclusion is an enum that specifies whether a system table
 // should be included in a cluster backup.
@@ -35,6 +47,8 @@ const (
 //    cluster so there is no need to rewrite system table data.
 type systemBackupConfiguration struct {
 	includeInClusterBackup clusterBackupInclusion
+	filterRows             func(ctx context.Context, db *kv.DB, executor *sql.InternalExecutor,
+		tempTableDescIDs map[descpb.ID]struct{}) error
 }
 
 // systemTableBackupConfiguration is a map from every systemTable present in the
@@ -71,6 +85,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.ScheduledJobsTable.Name: {
 		includeInClusterBackup: optInToClusterBackup,
+		filterRows:             filterJobsReferencingTempObjects,
 	},
 	systemschema.TableStatisticsTable.Name: {
 		// Table statistics are backed up in the backup descriptor for now.
@@ -143,4 +158,75 @@ func getSystemTablesToIncludeInClusterBackup() map[string]struct{} {
 	}
 
 	return systemTablesToInclude
+}
+
+func filterRowsFromSystemTables(
+	ctx context.Context,
+	db *kv.DB,
+	executor *sql.InternalExecutor,
+	tempTableDescIDs map[descpb.ID]struct{},
+) error {
+	for _, systemBackupConfig := range systemTableBackupConfiguration {
+		if systemBackupConfig.includeInClusterBackup == optInToClusterBackup &&
+			systemBackupConfig.filterRows != nil {
+			err := systemBackupConfig.filterRows(ctx, db, executor, tempTableDescIDs)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func filterJobsReferencingTempObjects(
+	ctx context.Context,
+	db *kv.DB,
+	executor *sql.InternalExecutor,
+	tempTableDescIDs map[descpb.ID]struct{},
+) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		stmt := "SELECT id, payload FROM %s.%s"
+		var err error
+		var rows []tree.Datums
+		rows, err = executor.Query(ctx, "restore-system-jobs-filter-temp", txn,
+			fmt.Sprintf(stmt, restoreTempSystemDB, systemschema.JobsTable.Name))
+		if err != nil {
+			return err
+		}
+
+		var payload *jobspb.Payload
+		var jobsToDrop []int64
+		for _, row := range rows {
+			if payload, err = jobs.UnmarshalPayload(row[1]); err != nil {
+				return err
+			}
+			// Check the descriptor ids for the existence of any temporary objects.
+			for _, descID := range payload.DescriptorIDs {
+				// If the job references a temporary object then we must not restore
+				// this row of the system.Jobs table.
+				if _, ok := tempTableDescIDs[descID]; ok {
+					jobID, ok := row[0].(*tree.DInt)
+					if !ok {
+						return errors.AssertionFailedf("expected int jobid but got %T", jobID)
+					}
+					jobsToDrop = append(jobsToDrop, int64(*jobID))
+				}
+			}
+		}
+
+		// Delete the identified rows from the jobs table being restored.
+		deleteStmt := "DELETE FROM %s.%s WHERE id = $1"
+		for _, id := range jobsToDrop {
+			_, err := executor.Exec(ctx, "restore-system-jobs-delete-temp", txn,
+				fmt.Sprintf(deleteStmt, restoreTempSystemDB, systemschema.JobsTable.Name), id)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }

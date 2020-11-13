@@ -771,6 +771,10 @@ func fullClusterTargets(
 				fullClusterDBs = append(fullClusterDBs, dbDesc)
 			}
 		case catalog.TableDescriptor:
+			// Skip temporary tables and sequences.
+			if desc.TableDesc().Temporary {
+				continue
+			}
 			if desc.GetParentID() == keys.SystemDatabaseID {
 				// Add only the system tables that we plan to include in a full cluster
 				// backup.
@@ -864,7 +868,7 @@ func selectTargets(
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfo, error) {
-	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
+	allDescs, _, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
 		return fullClusterTargetsRestore(allDescs, lastBackupManifest)

@@ -656,11 +656,11 @@ func loadBackupSQLDescs(
 	p sql.JobExecContext,
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
-) ([]BackupManifest, BackupManifest, []catalog.Descriptor, error) {
+) ([]BackupManifest, BackupManifest, []catalog.Descriptor, map[descpb.ID]struct{}, error) {
 	backupManifests, err := loadBackupManifests(ctx, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
 	if err != nil {
-		return nil, BackupManifest{}, nil, err
+		return nil, BackupManifest{}, nil, nil, err
 	}
 
 	// Upgrade the table descriptors to use the new FK representation.
@@ -668,10 +668,11 @@ func loadBackupSQLDescs(
 	// writing old-style descs in RestoreDetails (unless a job persists across
 	// an upgrade?).
 	if err := maybeUpgradeTableDescsInBackupManifests(ctx, backupManifests, true); err != nil {
-		return nil, BackupManifest{}, nil, err
+		return nil, BackupManifest{}, nil, nil, err
 	}
 
-	allDescs, latestBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
+	allDescs, tempTableDescIDs, latestBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests,
+		details.EndTime)
 
 	var sqlDescs []catalog.Descriptor
 	for _, desc := range allDescs {
@@ -680,7 +681,7 @@ func loadBackupSQLDescs(
 			sqlDescs = append(sqlDescs, desc)
 		}
 	}
-	return backupManifests, latestBackupManifest, sqlDescs, nil
+	return backupManifests, latestBackupManifest, sqlDescs, tempTableDescIDs, nil
 }
 
 // restoreResumer should only store a reference to the job it's running. State
@@ -1102,7 +1103,7 @@ func (r *restoreResumer) Resume(
 	r.versionAtLeast20_2 = p.ExecCfg().Settings.Version.IsActive(
 		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
 
-	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
+	backupManifests, latestBackupManifest, sqlDescs, tempTableDescIDs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,
 	)
 	if err != nil {
@@ -1241,7 +1242,8 @@ func (r *restoreResumer) Resume(
 	// restores were a special case, but really we should be making only the
 	// temporary system tables public before we restore all the system table data.
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, tables); err != nil {
+		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, tables,
+			tempTableDescIDs); err != nil {
 			return err
 		}
 	}
@@ -1829,11 +1831,15 @@ func (r *restoreResumer) restoreSystemTables(
 	db *kv.DB,
 	restoreDetails jobspb.RestoreDetails,
 	tables []catalog.TableDescriptor,
+	tempTableDescIDs map[descpb.ID]struct{},
 ) error {
 	tempSystemDBID := getTempSystemDBID(restoreDetails)
 
 	executor := r.execCfg.InternalExecutor
-	var err error
+	err := filterRowsFromSystemTables(ctx, db, executor, tempTableDescIDs)
+	if err != nil {
+		return errors.Wrap(err, "failed when filtering rows from the system tables")
+	}
 
 	// Iterate through all the tables that we're restoring, and if it was restored
 	// to the temporary system DB then copy it's data over to the real system

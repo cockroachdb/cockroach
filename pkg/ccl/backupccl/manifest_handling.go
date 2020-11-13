@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -828,18 +829,25 @@ func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) 
 
 func loadSQLDescsFromBackupsAtTime(
 	backupManifests []BackupManifest, asOf hlc.Timestamp,
-) ([]catalog.Descriptor, BackupManifest) {
+) ([]catalog.Descriptor, map[descpb.ID]struct{}, BackupManifest) {
 	lastBackupManifest := backupManifests[len(backupManifests)-1]
 
+	tempTableDescIDs := make(map[descpb.ID]struct{})
 	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
 		ret := make([]catalog.Descriptor, 0, len(raw))
 		for i := range raw {
-			ret = append(ret, catalogkv.UnwrapDescriptorRaw(context.TODO(), &raw[i]))
+			rawDesc := catalogkv.UnwrapDescriptorRaw(context.TODO(), &raw[i])
+			tableDesc, isTable := rawDesc.(*tabledesc.Mutable)
+			if isTable && tableDesc.IsTemporary() {
+				tempTableDescIDs[tableDesc.GetID()] = struct{}{}
+				continue
+			}
+			ret = append(ret, rawDesc)
 		}
 		return ret
 	}
 	if asOf.IsEmpty() {
-		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		return unwrapDescriptors(lastBackupManifest.Descriptors), tempTableDescIDs, lastBackupManifest
 	}
 
 	for _, b := range backupManifests {
@@ -849,7 +857,7 @@ func loadSQLDescsFromBackupsAtTime(
 		lastBackupManifest = b
 	}
 	if len(lastBackupManifest.DescriptorChanges) == 0 {
-		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		return unwrapDescriptors(lastBackupManifest.Descriptors), tempTableDescIDs, lastBackupManifest
 	}
 
 	byID := make(map[descpb.ID]*descpb.Descriptor, len(lastBackupManifest.Descriptors))
@@ -868,18 +876,24 @@ func loadSQLDescsFromBackupsAtTime(
 	for _, raw := range byID {
 		// A revision may have been captured before it was in a DB that is
 		// backed up -- if the DB is missing, filter the object.
-		desc := catalogkv.UnwrapDescriptorRaw(context.TODO(), raw)
+		rawDesc := catalogkv.UnwrapDescriptorRaw(context.TODO(), raw)
 		var isObject bool
-		switch desc.(type) {
-		case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
+		switch desc := rawDesc.(type) {
+		case catalog.TableDescriptor:
+			isObject = true
+			if desc.IsTemporary() {
+				tempTableDescIDs[desc.GetID()] = struct{}{}
+				continue
+			}
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
 			isObject = true
 		}
-		if isObject && byID[desc.GetParentID()] == nil {
+		if isObject && byID[rawDesc.GetParentID()] == nil {
 			continue
 		}
-		allDescs = append(allDescs, desc)
+		allDescs = append(allDescs, rawDesc)
 	}
-	return allDescs, lastBackupManifest
+	return allDescs, tempTableDescIDs, lastBackupManifest
 }
 
 // sanitizeLocalityKV returns a sanitized version of the input string where all
