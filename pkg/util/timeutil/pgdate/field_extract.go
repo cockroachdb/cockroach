@@ -884,18 +884,22 @@ func (fe *fieldExtract) validate() error {
 	}
 
 	if year, ok := fe.Get(fieldYear); ok {
-		if year == 0 {
-			return outOfRangeError("year", year)
-		}
+		// Note that here we allow for year to be 0 (which means 1 BC) which is
+		// a deviation from Postgres. The issue is that we support two notations
+		// (numbers or numbers with AD/BC suffix) whereas Postgres supports only
+		// the latter.
+
 		// Update for BC dates.
-		if era, ok := fe.Get(fieldEra); ok && era < 0 {
-			// No year 0
+		if era, ok := fe.Get(fieldEra); ok {
+			// AD/BC notation supports only positive years.
 			if year <= 0 {
-				return inputErrorf("no year 0 in AD/BC notation")
+				return inputErrorf("only positive years in AD/BC notation")
 			}
-			// Normalize to a negative year
-			if err := fe.Reset(fieldYear, 1-year); err != nil {
-				return err
+			if era < 0 {
+				// Normalize to a negative year.
+				if err := fe.Reset(fieldYear, 1-year); err != nil {
+					return err
+				}
 			}
 		} else if fe.tweakYear {
 			if year < 0 {
