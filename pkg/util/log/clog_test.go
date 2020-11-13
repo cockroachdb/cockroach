@@ -70,25 +70,25 @@ func (f *flushBuffer) Sync() error {
 // While the output is captured, a test can use contents() below
 // to retrieve the captured output so far.
 func capture() func() {
-	debugLog.mu.Lock()
-	oldFile := debugLog.mu.file
-	debugLog.mu.file = new(flushBuffer)
-	debugLog.mu.Unlock()
+	debugLog.fileSink.mu.Lock()
+	oldFile := debugLog.fileSink.mu.file
+	debugLog.fileSink.mu.file = new(flushBuffer)
+	debugLog.fileSink.mu.Unlock()
 	return func() {
-		debugLog.mu.Lock()
-		debugLog.mu.file = oldFile
-		debugLog.mu.Unlock()
+		debugLog.fileSink.mu.Lock()
+		debugLog.fileSink.mu.file = oldFile
+		debugLog.fileSink.mu.Unlock()
 	}
 }
 
 // resetCaptured erases the logging output captured so far.
 func resetCaptured() {
-	debugLog.mu.file.(*flushBuffer).Buffer.Reset()
+	debugLog.fileSink.mu.file.(*flushBuffer).Buffer.Reset()
 }
 
 // contents returns the specified log value as a string.
 func contents() string {
-	return debugLog.mu.file.(*flushBuffer).Buffer.String()
+	return debugLog.fileSink.mu.file.(*flushBuffer).Buffer.String()
 }
 
 // contains reports whether the string is contained in the log.
@@ -432,7 +432,7 @@ func TestListLogFiles(t *testing.T) {
 
 	Info(context.Background(), "x")
 
-	sb, ok := debugLog.mu.file.(*syncBuffer)
+	sb, ok := debugLog.fileSink.mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
@@ -460,7 +460,7 @@ func TestGetLogReader(t *testing.T) {
 	defer s.Close(t)
 	setFlags()
 	Info(context.Background(), "x")
-	info, ok := debugLog.mu.file.(*syncBuffer)
+	info, ok := debugLog.fileSink.mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
@@ -475,8 +475,8 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, isSet := debugLog.logDir.get()
-	if !isSet {
+	dir := debugLog.fileSink.mu.logDir
+	if dir == "" {
 		t.Fatal(errDirectoryNotSet)
 	}
 	otherFile, err := os.Create(filepath.Join(dir, "other.txt"))
@@ -553,11 +553,11 @@ func TestRollover(t *testing.T) {
 		err = e
 	})
 
-	defer func(previous int64) { debugLog.logFileMaxSize = previous }(debugLog.logFileMaxSize)
-	debugLog.logFileMaxSize = 2048
+	defer func(previous int64) { debugLog.fileSink.logFileMaxSize = previous }(debugLog.fileSink.logFileMaxSize)
+	debugLog.fileSink.logFileMaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
-	info, ok := debugLog.mu.file.(*syncBuffer)
+	info, ok := debugLog.fileSink.mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatal("info wasn't created")
 	}
@@ -565,7 +565,7 @@ func TestRollover(t *testing.T) {
 		t.Fatalf("info has initial error: %v", err)
 	}
 	fname0 := info.file.Name()
-	Infof(context.Background(), "%s", strings.Repeat("x", int(debugLog.logFileMaxSize))) // force a rollover
+	Infof(context.Background(), "%s", strings.Repeat("x", int(debugLog.fileSink.logFileMaxSize))) // force a rollover
 	if err != nil {
 		t.Fatalf("info has error after big write: %v", err)
 	}
@@ -581,7 +581,7 @@ func TestRollover(t *testing.T) {
 	if fname0 == fname1 {
 		t.Errorf("info.f.Name did not change: %v", fname0)
 	}
-	if info.nbytes >= debugLog.logFileMaxSize {
+	if info.nbytes >= debugLog.fileSink.logFileMaxSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
 	}
 }
@@ -649,7 +649,7 @@ func TestRedirectStderr(t *testing.T) {
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
 
-	contents, err := ioutil.ReadFile(stderrLog.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(stderrLog.fileSink.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -663,15 +663,15 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	defer func(save Severity) { debugLog.fileThreshold = save }(debugLog.fileThreshold)
-	debugLog.fileThreshold = severity.ERROR
+	defer func(save Severity) { debugLog.fileSink.fileThreshold = save }(debugLog.fileSink.fileThreshold)
+	debugLog.fileSink.fileThreshold = severity.ERROR
 
 	Infof(context.Background(), "test1")
 	Errorf(context.Background(), "test2")
 
 	Flush()
 
-	contents, err := ioutil.ReadFile(debugLog.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(debugLog.fileSink.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -699,15 +699,15 @@ func TestExitOnFullDisk(t *testing.T) {
 		exited.Done()
 	})
 
-	l := &loggerT{}
-	l.mu.file = &syncBuffer{
-		logger: l,
-		Writer: bufio.NewWriterSize(&outOfSpaceWriter{}, 1),
+	l := &loggerT{fileSink: &fileSink{}}
+	l.fileSink.mu.file = &syncBuffer{
+		fileSink: l.fileSink,
+		Writer:   bufio.NewWriterSize(&outOfSpaceWriter{}, 1),
 	}
 
-	l.mu.Lock()
+	l.outputMu.Lock()
 	l.exitLocked(fmt.Errorf("out of space"), exit.UnspecifiedError())
-	l.mu.Unlock()
+	l.outputMu.Unlock()
 
 	exited.Wait()
 }
