@@ -76,7 +76,7 @@ func wrapRowSources(
 				nil, /* output */
 				nil, /* metadataSourcesQueue */
 				nil, /* toClose */
-				nil, /* outputStatsToTrace */
+				nil, /* execStatsToTrace */
 				nil, /* cancelFlow */
 			)
 			if err != nil {

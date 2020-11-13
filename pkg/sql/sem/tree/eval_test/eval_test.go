@@ -193,7 +193,7 @@ func TestEval(t *testing.T) {
 				nil, /* output */
 				result.MetadataSources,
 				nil, /* toClose */
-				nil, /* outputStatsToTrace */
+				nil, /* execStatsToTrace */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)

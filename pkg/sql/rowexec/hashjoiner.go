@@ -12,15 +12,14 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -146,7 +145,7 @@ func newHashJoiner(
 	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		h.leftSource = newInputStatCollector(h.leftSource)
 		h.rightSource = newInputStatCollector(h.rightSource)
-		h.FinishTrace = h.outputStatsToTrace
+		h.ExecStatsForTrace = h.execStatsForTrace
 	}
 
 	return h, h.hashTable.Init(
@@ -556,62 +555,22 @@ func (h *hashJoiner) shouldEmitUnmatched(
 	return h.renderUnmatchedRow(row, side), true
 }
 
-var _ execinfrapb.DistSQLSpanStats = &HashJoinerStats{}
-
-const hashJoinerTagPrefix = "hashjoiner."
-
-// Stats implements the SpanStats interface.
-func (hjs *HashJoinerStats) Stats() map[string]string {
-	// statsMap starts off as the left input stats map.
-	statsMap := hjs.LeftInputStats.Stats(hashJoinerTagPrefix + "left.")
-	rightInputStatsMap := hjs.RightInputStats.Stats(hashJoinerTagPrefix + "right.")
-	// Merge the two input maps.
-	for k, v := range rightInputStatsMap {
-		statsMap[k] = v
-	}
-	statsMap[hashJoinerTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedMem)
-	statsMap[hashJoinerTagPrefix+MaxDiskTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedDisk)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (hjs *HashJoinerStats) StatsForQueryPlan() []string {
-	stats := hjs.LeftInputStats.StatsForQueryPlan("left ")
-	stats = append(stats, hjs.RightInputStats.StatsForQueryPlan("right ")...)
-
-	if hjs.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedMem)))
-	}
-
-	if hjs.MaxAllocatedDisk != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedDisk)))
-	}
-
-	return stats
-}
-
-// outputStatsToTrace outputs the collected hashJoiner stats to the trace. Will
-// fail silently if the hashJoiner is not collecting stats.
-func (h *hashJoiner) outputStatsToTrace() {
-	lis, ok := getInputStats(h.FlowCtx, h.leftSource)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (h *hashJoiner) execStatsForTrace() *execstatspb.ComponentStats {
+	lis, ok := getInputStats(h.leftSource)
 	if !ok {
-		return
+		return nil
 	}
-	ris, ok := getInputStats(h.FlowCtx, h.rightSource)
+	ris, ok := getInputStats(h.rightSource)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(h.Ctx); sp != nil {
-		sp.SetSpanStats(
-			&HashJoinerStats{
-				LeftInputStats:   lis,
-				RightInputStats:  ris,
-				MaxAllocatedMem:  h.MemMonitor.MaximumBytes(),
-				MaxAllocatedDisk: h.diskMonitor.MaximumBytes(),
-			},
-		)
+	return &execstatspb.ComponentStats{
+		Inputs: []execstatspb.InputStats{lis, ris},
+		Exec: execstatspb.ExecStats{
+			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(h.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(h.diskMonitor.MaximumBytes())),
+		},
 	}
 }
 

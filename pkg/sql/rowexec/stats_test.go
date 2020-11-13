@@ -30,7 +30,7 @@ func TestInputStatCollector(t *testing.T) {
 	)
 	for row, meta := isc.Next(); row != nil || meta != nil; row, meta = isc.Next() {
 	}
-	if isc.NumRows != numRows {
-		t.Fatalf("counted %d rows but expected %d", isc.NumRows, numRows)
+	if isc.stats.NumTuples.Value() != numRows {
+		t.Fatalf("counted %s rows but expected %d", isc.stats.NumTuples, numRows)
 	}
 }
