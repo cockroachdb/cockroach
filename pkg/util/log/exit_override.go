@@ -12,7 +12,6 @@ package log
 
 import (
 	"context"
-	"io"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -54,9 +53,9 @@ func ResetExitFunc() {
 // writing to stderr. It flushes the logs and exits the program; there's no
 // point in hanging around.
 //
-// l.mu is held; logging.mu is not held.
+// l.outputMu is held; l.fileSink.mu is not held; logging.mu is not held.
 func (l *loggerT) exitLocked(err error) {
-	l.mu.AssertHeld()
+	l.outputMu.AssertHeld()
 
 	l.reportErrorEverywhereLocked(context.Background(), err)
 
@@ -64,11 +63,7 @@ func (l *loggerT) exitLocked(err error) {
 	f := logging.mu.exitOverride.f
 	logging.mu.Unlock()
 	if f != nil {
-		// Avoid conflicting lock order between l.mu and locks in f.
-		l.mu.Unlock()
 		f(2, err)
-		// Avoid double unlock on l.mu.
-		l.mu.Lock()
 	} else {
 		os.Exit(2)
 	}
@@ -76,10 +71,12 @@ func (l *loggerT) exitLocked(err error) {
 
 // reportErrorEverywhereLocked writes the error details to both the
 // process' original stderr and the log file if configured.
+//
+// This assumes l.outputMu is held, but l.fileSink.mu is not held.
 func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// Make a valid log entry for this error.
 	entry := MakeEntry(
-		ctx, severity.ERROR, &l.logCounter, 1 /* depth */, l.redactableLogs.Get(),
+		ctx, severity.ERROR, &l.logCounter, 2 /* depth */, l.redactableLogs.Get(),
 		"logging error: %v", err)
 
 	// Format the entry for output below. Note how this formatting is
@@ -94,22 +91,12 @@ func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// Either stderr or our log file is broken. Try writing the error to both
 	// streams in the hope that one still works or else the user will have no idea
 	// why we crashed.
-	outputs := make([]io.Writer, 2)
-	outputs[0] = OrigStderr
-	if f, ok := l.mu.file.(*syncBuffer); ok {
-		// Don't call syncBuffer's Write method, because it can call back into
-		// exitLocked. Go directly to syncBuffer's underlying writer.
-		outputs[1] = f.Writer
-	} else {
-		outputs[1] = l.mu.file
+	//
+	// Note that we're already in error. If an additional error is encountered
+	// here, we can't do anything but raise our hands in the air.
+	_, _ = OrigStderr.Write(buf.Bytes())
+
+	if fileSink := l.getFileSink(); fileSink != nil {
+		fileSink.emergencyOutput(buf.Bytes())
 	}
-	for _, w := range outputs {
-		if w == nil {
-			continue
-		}
-		// We're already in error. If an additional error is encountered
-		// here, we can't do anything but raise our hands in the air.
-		_, _ = w.Write(buf.Bytes())
-	}
-	l.flushAndSyncLocked(true /*doSync*/)
 }
