@@ -49,7 +49,7 @@ func TestSecondaryLog(t *testing.T) {
 
 	// Check that the messages indeed made it to different files.
 
-	contents, err := ioutil.ReadFile(debugLog.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(debugLog.fileSink.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestSecondaryLog(t *testing.T) {
 		t.Errorf("secondary log spilled into debug log\n%s", contents)
 	}
 
-	contents, err = ioutil.ReadFile(l.logger.mu.file.(*syncBuffer).file.Name())
+	contents, err = ioutil.ReadFile(l.logger.fileSink.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	fmt.Fprint(os.Stderr, stderrText)
 
 	// Check the stderr log file: we want our stderr text there.
-	contents, err := ioutil.ReadFile(stderrLog.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(stderrLog.fileSink.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	}
 
 	// Check the secondary log file: we don't want our stderr text there.
-	contents2, err := ioutil.ReadFile(l.logger.mu.file.(*syncBuffer).file.Name())
+	contents2, err := ioutil.ReadFile(l.logger.fileSink.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 		t.Fatalf("error in ListLogFiles: %v", err)
 	}
 
-	expectedName := filepath.Base(l.logger.mu.file.(*syncBuffer).file.Name())
+	expectedName := filepath.Base(l.logger.fileSink.mu.file.(*syncBuffer).file.Name())
 	foundExpected := false
 	for i := range results {
 		if results[i].Name == expectedName {

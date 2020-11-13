@@ -19,10 +19,6 @@ import (
 	"sync/atomic"
 )
 
-func init() {
-	debugLog.gcNotify = make(chan struct{}, 1)
-}
-
 // StartGCDaemon starts the log file GC -- this must be called after
 // command-line parsing has completed so that no data is lost when the
 // user configures larger max sizes than the defaults.
@@ -34,11 +30,11 @@ func init() {
 // secondary loggers are only allocated after command line parsing
 // has completed too.
 func StartGCDaemon(ctx context.Context) {
-	go debugLog.gcDaemon(ctx)
+	go debugLog.fileSink.gcDaemon(ctx)
 }
 
 // gcDaemon runs the GC loop for the given logger.
-func (l *loggerT) gcDaemon(ctx context.Context) {
+func (l *fileSink) gcDaemon(ctx context.Context) {
 	l.gcOldFiles()
 	for {
 		select {
@@ -59,18 +55,17 @@ func (l *loggerT) gcDaemon(ctx context.Context) {
 
 // gcOldFiles removes the "old" files that do not match
 // the configured size and number threshold.
-func (l *loggerT) gcOldFiles() {
-	dir, isSet := l.logDir.get()
-	if !isSet {
-		// No log directory configured. Nothing to do.
+func (l *fileSink) gcOldFiles() {
+	// This only lists the log files for the current logger (sharing the
+	// prefix).
+	dir, allFiles, err := l.listLogFiles()
+	if err != nil {
+		fmt.Fprintf(OrigStderr, "unable to GC log files: %s\n", err)
 		return
 	}
 
-	// This only lists the log files for the current logger (sharing the
-	// prefix).
-	allFiles, err := l.listLogFiles()
-	if err != nil {
-		fmt.Fprintf(OrigStderr, "unable to GC log files: %s\n", err)
+	if len(allFiles) == 0 {
+		// Nothing to do.
 		return
 	}
 

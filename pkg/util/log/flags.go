@@ -70,6 +70,15 @@ type config struct {
 	redactableLogsRequested bool
 }
 
+var debugLog *loggerT
+
+// stderrLog is the logger where writes performed directly
+// to the stderr file descriptor (such as that performed
+// by the go runtime) *may* be redirected.
+// NB: whether they are actually redirected is determined
+// by stderrLog.redirectInternalStderrWrites().
+var stderrLog *loggerT
+
 func init() {
 	// Default stderrThreshold and fileThreshold to log everything
 	// both to the output file and to the process' external stderr
@@ -82,8 +91,17 @@ func init() {
 	// Default combined size of a log file group.
 	logging.logFilesCombinedMaxSize = logging.logFileMaxSize * 10 // 100MiB
 
-	// Also copy the defaults to debugLog.
-	initDebugLogFromDefaultConfig()
+	debugLog = &loggerT{}
+	debugLog.fileSink = newFileSink(
+		"", /* dir */
+		"", /* fileNamePrefix */
+		logging.fileThreshold,
+		logging.logFileMaxSize,
+		logging.logFilesCombinedMaxSize,
+		debugLog.getStartLines)
+	registry.put(debugLog)
+
+	stderrLog = debugLog
 
 	logflags.InitFlags(
 		&logging.logDir,
@@ -108,14 +126,15 @@ func init() {
 // during SetupRedactionAndStderrRedirects() after the custom
 // logging configuration has been selected.
 func initDebugLogFromDefaultConfig() {
-	debugLog.mu.Lock()
-	defer debugLog.mu.Unlock()
-	debugLog.prefix = program
-	_ = debugLog.logDir.Set(logging.logDir.String())
-	debugLog.logFileMaxSize = logging.logFileMaxSize
-	debugLog.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
+	debugLog.fileSink.mu.Lock()
+	defer debugLog.fileSink.mu.Unlock()
+	debugLog.fileSink.prefix = program
+	debugLog.fileSink.mu.logDir = logging.logDir.String()
+	debugLog.fileSink.enabled.Set(debugLog.fileSink.mu.logDir != "")
+	debugLog.fileSink.logFileMaxSize = logging.logFileMaxSize
+	debugLog.fileSink.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
+	debugLog.fileSink.fileThreshold = logging.fileThreshold
 	debugLog.redactableLogs.Set(logging.redactableLogs)
-	debugLog.fileThreshold = logging.fileThreshold
 }
 
 // IsActive returns true iff the main logger already has some events
@@ -192,7 +211,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		secLogger.Logf(ctx, "stderr capture started")
 
 		// Now tell this logger to capture internal stderr writes.
-		if err := secLogger.logger.takeOverInternalStderr(); err != nil {
+		if err := secLogger.logger.fileSink.takeOverInternalStderr(&secLogger.logger); err != nil {
 			// Oof, it turns out we can't use this logger after all. Give up
 			// on it.
 			cancel()
@@ -208,7 +227,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		// The cleanup fn is for use in tests.
 		cleanup := func() {
 			// Relinquish the stderr redirect.
-			if err := secLogger.logger.relinquishInternalStderr(); err != nil {
+			if err := secLogger.logger.fileSink.relinquishInternalStderr(); err != nil {
 				// This should not fail. If it does, some caller messed up by
 				// switching over stderr redirection to a different logger
 				// without our involvement. That's invalid API usage.

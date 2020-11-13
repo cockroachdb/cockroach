@@ -156,7 +156,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 			Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
 
 			// Retrieve the log writer and log location for this test.
-			info, ok := debugLog.mu.file.(*syncBuffer)
+			info, ok := debugLog.fileSink.mu.file.(*syncBuffer)
 			if !ok {
 				t.Fatalf("buffer wasn't created")
 			}

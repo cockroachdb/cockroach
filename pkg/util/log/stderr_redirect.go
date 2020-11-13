@@ -65,11 +65,11 @@ var osStderrMu syncutil.Mutex
 // taken over in this way. It also errors if the target logger has no
 // valid output directory and no output file has been created (or
 // could be created).
-func (l *loggerT) takeOverInternalStderr() error {
+func (l *fileSink) takeOverInternalStderr(logger *loggerT) error {
 	takeOverStderrMu.Lock()
 	defer takeOverStderrMu.Unlock()
 
-	if anyLoggerHasInternalStderrOwnership() {
+	if anySinkHasInternalStderrOwnership() {
 		return errors.AssertionFailedf(
 			"can't take over stderr; first takeover:\n%s",
 			takeOverStderrMu.previousStderrTakeover)
@@ -105,7 +105,7 @@ func (l *loggerT) takeOverInternalStderr() error {
 // relinquishInternalStderr relinquishes a takeover by
 // takeOverInternalStderr(). It returns an error if the
 // logger did not take over internal stderr writes already.
-func (l *loggerT) relinquishInternalStderr() error {
+func (l *fileSink) relinquishInternalStderr() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.mu.redirectInternalStderrWrites {
@@ -114,7 +114,7 @@ func (l *loggerT) relinquishInternalStderr() error {
 		takeOverStderrMu.Lock()
 		defer takeOverStderrMu.Unlock()
 		var extra string
-		if anyLoggerHasInternalStderrOwnership() {
+		if anySinkHasInternalStderrOwnership() {
 			extra = fmt.Sprintf("; previous take over:\n%s", takeOverStderrMu.previousStderrTakeover)
 		}
 		return errors.AssertionFailedf(basemsg, extra)
@@ -133,14 +133,16 @@ func (l *loggerT) relinquishInternalStderr() error {
 	return nil
 }
 
-// anyLoggerHasInternalStderrOwnership returns true iff any of the
-// loggers currently has redirectInternalStderrWrites set.
+// anySinkHasInternalStderrOwnership returns true iff any of the
+// sinks currently has redirectInternalStderrWrites set.
 //
 // Used by takeOverInternalStderr() to enforce its invariant.
-func anyLoggerHasInternalStderrOwnership() bool {
+func anySinkHasInternalStderrOwnership() bool {
 	hasOwnership := false
-	_ = registry.iterLocked(func(l *loggerT) error {
-		hasOwnership = hasOwnership || l.mu.redirectInternalStderrWrites
+	_ = registry.iter(func(l *loggerT) error {
+		l.fileSink.mu.Lock()
+		defer l.fileSink.mu.Unlock()
+		hasOwnership = hasOwnership || l.fileSink.mu.redirectInternalStderrWrites
 		return nil
 	})
 	return hasOwnership

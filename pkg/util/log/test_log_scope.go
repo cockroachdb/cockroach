@@ -158,8 +158,10 @@ func (l *TestLogScope) Rotate(t tShim) {
 	// Ensure remaining logs are written.
 	Flush()
 
-	if err := registry.iterLocked(func(l *loggerT) error {
-		return l.closeFileLocked()
+	if err := registry.iter(func(l *loggerT) error {
+		l.fileSink.mu.Lock()
+		defer l.fileSink.mu.Unlock()
+		return l.fileSink.closeFileLocked()
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +240,9 @@ func calledDuringPanic() bool {
 // for use in tests.
 func dirTestOverride(expected, newDir string) error {
 	if err := registry.iter(func(l *loggerT) error {
-		return l.dirTestOverride(expected, newDir)
+		l.outputMu.Lock()
+		defer l.outputMu.Unlock()
+		return l.fileSink.dirTestOverride(expected, newDir)
 	}); err != nil {
 		return err
 	}
@@ -248,20 +252,22 @@ func dirTestOverride(expected, newDir string) error {
 	return nil
 }
 
-func (l *loggerT) dirTestOverride(expected, newDir string) error {
+func (l *fileSink) dirTestOverride(expected, newDir string) error {
+	if l == nil {
+		return nil
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.logDir.Lock()
 	// The following check is intended to catch concurrent uses of
 	// Scope() or TestLogScope.Close(), which would be invalid.
-	if l.logDir.name != expected {
-		l.logDir.Unlock()
+	if l.mu.logDir != expected {
 		return errors.Errorf("unexpected logDir setting: set to %q, expected %q",
-			l.logDir.name, expected)
+			l.mu.logDir, expected)
 	}
-	l.logDir.name = newDir
-	l.logDir.Unlock()
+	l.mu.logDir = newDir
+	l.enabled.Set(l.mu.logDir != "")
 
 	// When we change the directory we close the current logging
 	// output, so that a rotation to the new directory is forced on

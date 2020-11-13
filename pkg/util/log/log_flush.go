@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 )
 
@@ -27,13 +26,13 @@ type flushSyncWriter interface {
 	io.Writer
 }
 
-// Flush explicitly flushes all pending log I/O.
+// Flush explicitly flushes all pending log file I/O.
 // See also flushDaemon() that manages background (asynchronous)
 // flushes, and signalFlusher() that manages flushes in reaction to a
 // user signal.
 func Flush() {
 	_ = registry.iter(func(l *loggerT) error {
-		l.lockAndFlushAndSync(true /*doSync*/)
+		l.fileSink.lockAndFlushAndSync(true /*doSync*/)
 		return nil
 	})
 }
@@ -85,7 +84,7 @@ func flushDaemon() {
 		if !disableDaemons {
 			// Flush the loggers.
 			_ = registry.iter(func(l *loggerT) error {
-				l.lockAndFlushAndSync(doSync)
+				l.fileSink.lockAndFlushAndSync(doSync)
 				return nil
 			})
 		}
@@ -102,13 +101,6 @@ func signalFlusher() {
 	}
 }
 
-// lockAndFlushAndSync is like flushAndSync but locks l.mu first.
-func (l *loggerT) lockAndFlushAndSync(doSync bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.flushAndSyncLocked(doSync)
-}
-
 // StartSync configures all loggers to start synchronizing writes.
 // This is used e.g. in `cockroach start` when an error occurs,
 // to ensure that all log writes from the point the error
@@ -118,36 +110,4 @@ func StartSync() {
 	logging.syncWrites.Set(true)
 	// There may be something in the buffers already; flush it.
 	Flush()
-}
-
-// flushAndSync flushes the current log and, if doSync is set,
-// attempts to sync its data to disk.
-//
-// l.mu is held.
-func (l *loggerT) flushAndSyncLocked(doSync bool) {
-	if l.mu.file == nil {
-		return
-	}
-
-	// If we can't sync within this duration, exit the process.
-	t := time.AfterFunc(maxSyncDuration, func() {
-		// NB: the disk-stall-detected roachtest matches on this message.
-		Shoutf(context.Background(), severity.FATAL,
-			"disk stall detected: unable to sync log files within %s", maxSyncDuration,
-		)
-	})
-	defer t.Stop()
-	// If we can't sync within this duration, print a warning to the log and to
-	// stderr.
-	t2 := time.AfterFunc(syncWarnDuration, func() {
-		Shoutf(context.Background(), severity.WARNING,
-			"disk slowness detected: unable to sync log files within %s", syncWarnDuration,
-		)
-	})
-	defer t2.Stop()
-
-	_ = l.mu.file.Flush() // ignore error
-	if doSync {
-		_ = l.mu.file.Sync() // ignore error
-	}
 }
