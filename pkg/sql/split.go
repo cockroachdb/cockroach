@@ -70,7 +70,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 
 func (n *splitNode) Values() tree.Datums {
 	splitEnforcedUntil := tree.DNull
-	if (n.run.lastExpirationTime != hlc.Timestamp{}) {
+	if !n.run.lastExpirationTime.IsEmpty() {
 		splitEnforcedUntil = tree.TimestampToInexactDTimestamp(n.run.lastExpirationTime)
 	}
 	return tree.Datums{

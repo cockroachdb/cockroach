@@ -32,7 +32,7 @@ import (
 // timestamp is specified, nowFn is used to create and set one.
 func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 	if txn := ba.Txn; txn != nil {
-		if ba.Timestamp != (hlc.Timestamp{}) {
+		if !ba.Timestamp.IsEmpty() {
 			return errors.New("transactional request must not set batch timestamp")
 		}
 
@@ -47,7 +47,7 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		ba.Timestamp = txn.ReadTimestamp
 	} else {
 		// When not transactional, allow empty timestamp and use nowFn instead
-		if ba.Timestamp == (hlc.Timestamp{}) {
+		if ba.Timestamp.IsEmpty() {
 			ba.Timestamp = nowFn()
 		}
 	}

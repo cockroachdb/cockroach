@@ -574,7 +574,7 @@ func (ds *DistSender) initAndVerifyBatch(
 
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
-	if ba.ReadConsistency != roachpb.CONSISTENT && ba.Timestamp == (hlc.Timestamp{}) {
+	if ba.ReadConsistency != roachpb.CONSISTENT && ba.Timestamp.IsEmpty() {
 		ba.Timestamp = ds.clock.Now()
 	}
 
@@ -1954,10 +1954,10 @@ func (ds *DistSender) sendToReplicas(
 			// If the reply contains a timestamp, update the local HLC with it.
 			if br.Error != nil {
 				log.VErrEventf(ctx, 2, "%v", br.Error)
-				if br.Error.Now != (hlc.Timestamp{}) {
+				if !br.Error.Now.IsEmpty() {
 					ds.clock.Update(br.Error.Now)
 				}
-			} else if br.Now != (hlc.Timestamp{}) {
+			} else if !br.Now.IsEmpty() {
 				ds.clock.Update(br.Now)
 			}
 

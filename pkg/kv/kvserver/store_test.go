@@ -1231,7 +1231,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				if pErr == nil {
 					t.Fatal("expected an error")
 				}
-				if pErr.Now == (hlc.Timestamp{}) {
+				if pErr.Now.IsEmpty() {
 					t.Fatal("timestamp not annotated on error")
 				}
 			}},
@@ -1240,7 +1240,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				if pErr != nil {
 					t.Fatal(pErr)
 				}
-				if pReply.Now == (hlc.Timestamp{}) {
+				if pReply.Now.IsEmpty() {
 					t.Fatal("timestamp not annotated on batch response")
 				}
 			}},

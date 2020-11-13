@@ -348,7 +348,7 @@ func (r *registration) maybeRunCatchupScan() error {
 				// immediately after) the provisional key.
 				catchupIter.SeekGE(storage.MVCCKey{
 					Key:       unsafeKey.Key,
-					Timestamp: hlc.Timestamp(meta.Timestamp).Prev(),
+					Timestamp: meta.Timestamp.ToTimestamp().Prev(),
 				})
 				continue
 			}

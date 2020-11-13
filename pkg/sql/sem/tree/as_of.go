@@ -132,7 +132,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 		return ts, convErr
 	}
 	zero := hlc.Timestamp{}
-	if ts == zero {
+	if ts.EqOrdering(zero) {
 		return ts, errors.Errorf("zero timestamp is invalid")
 	} else if ts.Less(zero) {
 		return ts, errors.Errorf("timestamp before 1970-01-01T00:00:00Z is invalid")

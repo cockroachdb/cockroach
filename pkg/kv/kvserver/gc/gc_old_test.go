@@ -101,7 +101,7 @@ func runGCOld(
 				if meta.Txn != nil {
 					// Keep track of intent to resolve if older than the intent
 					// expiration threshold.
-					if hlc.Timestamp(meta.Timestamp).Less(intentExp) {
+					if meta.Timestamp.ToTimestamp().Less(intentExp) {
 						txnID := meta.Txn.ID
 						if _, ok := txnMap[txnID]; !ok {
 							txnMap[txnID] = &roachpb.Transaction{
@@ -125,7 +125,7 @@ func runGCOld(
 					startIdx = 2
 				}
 				// See if any values may be GC'd.
-				if idx, gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); gcTS != (hlc.Timestamp{}) {
+				if idx, gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.IsEmpty() {
 					// Batch keys after the total size of version keys exceeds
 					// the threshold limit. This avoids sending potentially large
 					// GC requests through Raft. Iterate through the keys in reverse

@@ -75,8 +75,7 @@ func MVCCKeyCompare(a, b []byte) int {
 	bEnd := len(b) - 1
 	if aEnd < 0 || bEnd < 0 {
 		// This should never happen unless there is some sort of corruption of
-		// the keys. This is a little bizarre, but the behavior exactly matches
-		// engine/db.cc:DBComparator.
+		// the keys.
 		return bytes.Compare(a, b)
 	}
 
@@ -85,8 +84,7 @@ func MVCCKeyCompare(a, b []byte) int {
 	bSep := bEnd - int(b[bEnd])
 	if aSep < 0 || bSep < 0 {
 		// This should never happen unless there is some sort of corruption of
-		// the keys. This is a little bizarre, but the behavior exactly matches
-		// engine/db.cc:DBComparator.
+		// the keys.
 		return bytes.Compare(a, b)
 	}
 
@@ -254,7 +252,7 @@ func (t *pebbleTimeBoundPropCollector) Finish(userProps map[string]string) error
 			return nil //nolint:returnerrcheck
 		}
 		if meta.Txn != nil {
-			ts := encodeTimestamp(hlc.Timestamp(meta.Timestamp))
+			ts := encodeTimestamp(meta.Timestamp.ToTimestamp())
 			t.updateBounds(ts)
 		}
 	}
@@ -1249,7 +1247,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		panic("using a closed pebbleReadOnly")
 	}
 
-	if opts.MinTimestampHint != (hlc.Timestamp{}) {
+	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
 		return newPebbleIterator(p.parent.db, opts)
 	}

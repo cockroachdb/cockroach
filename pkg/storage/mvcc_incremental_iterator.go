@@ -282,7 +282,7 @@ func (i *MVCCIncrementalIterator) advance() {
 			// They key is an MVCC value and note an intent.
 			// Intents are handled next.
 			i.meta.Reset()
-			i.meta.Timestamp = hlc.LegacyTimestamp(unsafeMetaKey.Timestamp)
+			i.meta.Timestamp = unsafeMetaKey.Timestamp.ToLegacyTimestamp()
 		} else {
 			// The key is a metakey (an intent), this is used later to see if the
 			// timestamp of this intent is within the incremental iterator's time
@@ -303,7 +303,7 @@ func (i *MVCCIncrementalIterator) advance() {
 			return
 		}
 
-		metaTimestamp := hlc.Timestamp(i.meta.Timestamp)
+		metaTimestamp := i.meta.Timestamp.ToTimestamp()
 		if i.meta.Txn != nil {
 			if i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime) {
 				i.err = &roachpb.WriteIntentError{

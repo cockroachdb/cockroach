@@ -25,7 +25,6 @@ import (
 // code out from abstract interfaces -- See #30114 and #30001.
 
 // SplitMVCCKey returns the key and timestamp components of an encoded MVCC key.
-// This decoding must match engine/db.cc:SplitKey().
 func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 	if len(mvccKey) == 0 {
 		return nil, nil, false
@@ -43,8 +42,7 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 	return key, ts, true
 }
 
-// DecodeKey decodes an key/timestamp from its serialized representation. This
-// decoding must match libroach/encoding.cc:DecodeKey().
+// DecodeKey decodes an key/timestamp from its serialized representation.
 func DecodeKey(encodedKey []byte) (key []byte, timestamp hlc.Timestamp, _ error) {
 	key, ts, ok := SplitMVCCKey(encodedKey)
 	if !ok {
@@ -58,6 +56,10 @@ func DecodeKey(encodedKey []byte) (key []byte, timestamp hlc.Timestamp, _ error)
 	case 12:
 		timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
 		timestamp.Logical = int32(binary.BigEndian.Uint32(ts[8:12]))
+	case 13:
+		timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
+		timestamp.Logical = int32(binary.BigEndian.Uint32(ts[8:12]))
+		timestamp.Flags = uint32(ts[12])
 	default:
 		return nil, timestamp, errors.Errorf(
 			"invalid encoded mvcc key: %x bad timestamp %x", encodedKey, ts)

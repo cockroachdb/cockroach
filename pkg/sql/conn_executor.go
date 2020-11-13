@@ -2018,10 +2018,10 @@ func (ex *connExecutor) setTransactionModes(
 			"unknown isolation level: %s", errors.Safe(modes.Isolation))
 	}
 	rwMode := modes.ReadWriteMode
-	if modes.AsOf.Expr != nil && (asOfTs == hlc.Timestamp{}) {
+	if modes.AsOf.Expr != nil && asOfTs.IsEmpty() {
 		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
-	if (asOfTs != hlc.Timestamp{}) {
+	if !asOfTs.IsEmpty() {
 		ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs)
 		ex.state.sqlTimestamp = asOfTs.GoTime()
 		if rwMode == tree.UnspecifiedReadWriteMode {

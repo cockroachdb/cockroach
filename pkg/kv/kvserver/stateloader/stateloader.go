@@ -575,7 +575,7 @@ func (rsl StateLoader) SetRaftTruncatedState(
 	if (*truncState == roachpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
-	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
+	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
@@ -605,7 +605,7 @@ func (rsl StateLoader) LoadHardState(
 func (rsl StateLoader) SetHardState(
 	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
 ) error {
-	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
+	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,

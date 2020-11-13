@@ -54,7 +54,7 @@ func NewFakeNodeLiveness(nodeCount int) *FakeNodeLiveness {
 		nodeID := roachpb.NodeID(i + 1)
 		nl.mu.livenessMap[nodeID] = &livenesspb.Liveness{
 			Epoch:      1,
-			Expiration: hlc.LegacyTimestamp(hlc.MaxTimestamp),
+			Expiration: hlc.MaxTimestamp.ToLegacyTimestamp(),
 			NodeID:     nodeID,
 		}
 	}
@@ -113,7 +113,7 @@ func (nl *FakeNodeLiveness) FakeIncrementEpoch(id roachpb.NodeID) {
 func (nl *FakeNodeLiveness) FakeSetExpiration(id roachpb.NodeID, ts hlc.Timestamp) {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
-	nl.mu.livenessMap[id].Expiration = hlc.LegacyTimestamp(ts)
+	nl.mu.livenessMap[id].Expiration = ts.ToLegacyTimestamp()
 }
 
 // ResetConstructors resets the registered Resumer constructors.

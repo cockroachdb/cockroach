@@ -172,7 +172,7 @@ func setStickyBit(desc *roachpb.RangeDescriptor, expiration hlc.Timestamp) {
 	// byte representation of setting the stickyBit to nil is different than
 	// setting it to hlc.Timestamp{}. This check ensures that CPuts would not
 	// fail on older versions.
-	if (expiration != hlc.Timestamp{}) {
+	if !expiration.IsEmpty() {
 		desc.StickyBit = &expiration
 	}
 }
@@ -462,7 +462,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 	// mixed version clusters that don't support StickyBit, all range descriptor
 	// sticky bits are guaranteed to be nil, so we can skip checking the cluster
 	// version.
-	if (desc.GetStickyBit() == hlc.Timestamp{}) {
+	if desc.GetStickyBit().IsEmpty() {
 		return reply, nil
 	}
 

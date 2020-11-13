@@ -726,7 +726,7 @@ func (r *Replica) evaluateProposal(
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
-	if ba.Timestamp == (hlc.Timestamp{}) {
+	if ba.Timestamp.IsEmpty() {
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 

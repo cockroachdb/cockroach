@@ -821,6 +821,8 @@ func (p *sklPage) ratchetMaxTimestamp(ts hlc.Timestamp) {
 		new++
 	}
 
+	// TODO(nvanbenschoten): propagate the timestamp synthetic bit through the
+	// page's max time.
 	for {
 		old := atomic.LoadInt64(&p.maxWallTime)
 		if new <= old {
@@ -1135,12 +1137,12 @@ func decodeValueSet(b []byte, meta uint16) (keyVal, gapVal cacheValue) {
 }
 
 func encodeValueSet(b []byte, keyVal, gapVal cacheValue) (ret []byte, meta uint16) {
-	if keyVal.ts.WallTime != 0 || keyVal.ts.Logical != 0 {
+	if !keyVal.ts.IsEmpty() {
 		b = encodeValue(b, keyVal)
 		meta |= hasKey
 	}
 
-	if gapVal.ts.WallTime != 0 || gapVal.ts.Logical != 0 {
+	if !gapVal.ts.IsEmpty() {
 		b = encodeValue(b, gapVal)
 		meta |= hasGap
 	}
@@ -1150,6 +1152,7 @@ func encodeValueSet(b []byte, keyVal, gapVal cacheValue) (ret []byte, meta uint1
 }
 
 func decodeValue(b []byte) (ret []byte, val cacheValue) {
+	// TODO(nvanbenschoten): decode the timestamp synthetic bit.
 	val.ts.WallTime = int64(binary.BigEndian.Uint64(b))
 	val.ts.Logical = int32(binary.BigEndian.Uint32(b[8:]))
 	var err error
@@ -1161,6 +1164,7 @@ func decodeValue(b []byte) (ret []byte, val cacheValue) {
 }
 
 func encodeValue(b []byte, val cacheValue) []byte {
+	// TODO(nvanbenschoten): encode the timestamp synthetic bit.
 	l := len(b)
 	b = b[:l+encodedValSize]
 	binary.BigEndian.PutUint64(b[l:], uint64(val.ts.WallTime))
