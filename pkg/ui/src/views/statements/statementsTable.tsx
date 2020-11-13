@@ -22,6 +22,7 @@ import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnos
 import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
 import styles from "./statementsTable.module.styl";
 import { StatementTableTitle, StatementTableCell, NodeNames } from "./statementsTableContent";
+import { getDiagnosticsStatus } from "src/views/statements/diagnostics";
 
 const cx = classNames.bind(styles);
 const longToInt = (d: number | Long) => FixLong(d).toInt();
@@ -78,7 +79,7 @@ export function makeStatementsColumns(
       cell: StatementTableCell.diagnostics(activateDiagnosticsRef),
       sort: (stmt) => {
         if (stmt.diagnosticsReport) {
-          return stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY";
+          return getDiagnosticsStatus(stmt.diagnosticsReport);
         }
         return null;
       },
