@@ -278,6 +278,7 @@ test           pg_catalog          pg_language                        public   S
 test           pg_catalog          pg_locks                           public   SELECT
 test           pg_catalog          pg_matviews                        public   SELECT
 test           pg_catalog          pg_namespace                       public   SELECT
+test           pg_catalog          pg_opclass                         public   SELECT
 test           pg_catalog          pg_operator                        public   SELECT
 test           pg_catalog          pg_prepared_statements             public   SELECT
 test           pg_catalog          pg_prepared_xacts                  public   SELECT

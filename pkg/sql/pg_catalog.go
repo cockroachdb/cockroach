@@ -235,6 +235,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogLocksTableID:               pgCatalogLocksTable,
 		catconstants.PgCatalogMatViewsTableID:            pgCatalogMatViewsTable,
 		catconstants.PgCatalogNamespaceTableID:           pgCatalogNamespaceTable,
+		catconstants.PgCatalogOpclassTableID:             pgCatalogOpclassTable,
 		catconstants.PgCatalogOperatorTableID:            pgCatalogOperatorTable,
 		catconstants.PgCatalogPreparedStatementsTableID:  pgCatalogPreparedStatementsTable,
 		catconstants.PgCatalogPreparedXactsTableID:       pgCatalogPreparedXactsTable,
@@ -1650,6 +1651,15 @@ var (
 	// Avoid unused warning for constants.
 	_ = postfixKind
 )
+
+var pgCatalogOpclassTable = virtualSchemaTable{
+	comment: `opclass (empty - Operator classes not supported yet)
+https://www.postgresql.org/docs/12/catalog-pg-opclass.html`,
+	schema: vtable.PGCatalogOpclass,
+	populate: func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
 
 var pgCatalogOperatorTable = virtualSchemaTable{
 	comment: `operators (incomplete)
