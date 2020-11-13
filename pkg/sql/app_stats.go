@@ -601,7 +601,7 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 
 	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
 		virtual, err := vt.getVirtualTableEntry(tn)
-		if err != nil || virtual.desc == nil {
+		if err != nil || virtual == nil {
 			ctx.WriteByte('_')
 			return
 		}

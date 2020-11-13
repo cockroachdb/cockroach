@@ -201,7 +201,7 @@ type vTableLookupJoinNode struct {
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
 	// indexes only support a single indexed column currently.
 	eqCol             int
-	virtualTableEntry virtualDefEntry
+	virtualTableEntry *virtualDefEntry
 
 	joinType descpb.JoinType
 
