@@ -9,7 +9,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/execstats/execstatspb",
-        "//pkg/sql/flowinfra",
         "//pkg/util/tracing/tracingpb",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/gogo/protobuf/types",

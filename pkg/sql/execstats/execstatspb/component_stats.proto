@@ -29,6 +29,18 @@ message ComponentStats {
   KVStats kv = 4 [(gogoproto.customname) = "KV", (gogoproto.nullable) = false];
   ExecStats exec = 5 [(gogoproto.nullable) = false];
   OutputStats output = 6 [(gogoproto.nullable) = false];
+
+  // Stats for the inputs of an operator (only in the row execution engine).
+  repeated InputStats inputs = 7 [(gogoproto.nullable) = false];
+}
+
+// InputStats contains statistics about the rows received as an input to a
+// processor. Currently only used in the row execution engine.
+message InputStats {
+  uint64 num_tuples = 1 [(gogoproto.customtype) = "IntValue", (gogoproto.nullable) = false];
+  // Cumulated time spent waiting for rows from the input operator.
+  google.protobuf.Duration wait_time = 2 [(gogoproto.nullable) = false,
+                                          (gogoproto.stdduration) = true];
 }
 
 // NetworkRxStats contains statistics for components that receive row data

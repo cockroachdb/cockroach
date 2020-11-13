@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -22,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -161,7 +160,7 @@ func newTableReader(
 
 	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		tr.fetcher = newRowFetcherStatCollector(&fetcher)
-		tr.FinishTrace = tr.outputStatsToTrace
+		tr.ExecStatsForTrace = tr.execStatsForTrace
 	} else {
 		tr.fetcher = &fetcher
 	}
@@ -272,37 +271,18 @@ func (tr *tableReader) ConsumerClosed() {
 	tr.close()
 }
 
-var _ execinfrapb.DistSQLSpanStats = &TableReaderStats{}
-
-const tableReaderTagPrefix = "tablereader."
-
-// Stats implements the SpanStats interface.
-func (trs *TableReaderStats) Stats() map[string]string {
-	inputStatsMap := trs.InputStats.Stats(tableReaderTagPrefix)
-	inputStatsMap[tableReaderTagPrefix+bytesReadTagSuffix] = humanizeutil.IBytes(trs.BytesRead)
-	return inputStatsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (trs *TableReaderStats) StatsForQueryPlan() []string {
-	return append(
-		trs.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", bytesReadQueryPlanSuffix, humanizeutil.IBytes(trs.BytesRead)),
-	)
-}
-
-// outputStatsToTrace outputs the collected tableReader stats to the trace. Will
-// fail silently if the tableReader is not collecting stats.
-func (tr *tableReader) outputStatsToTrace() {
-	is, ok := getFetcherInputStats(tr.FlowCtx, tr.fetcher)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (tr *tableReader) execStatsForTrace() *execstatspb.ComponentStats {
+	is, ok := getFetcherInputStats(tr.fetcher)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(tr.Ctx); sp != nil {
-		sp.SetSpanStats(&TableReaderStats{
-			InputStats: is,
-			BytesRead:  tr.GetBytesRead(),
-		})
+	return &execstatspb.ComponentStats{
+		KV: execstatspb.KVStats{
+			TuplesRead: is.NumTuples,
+			BytesRead:  execstatspb.MakeIntValue(uint64(tr.GetBytesRead())),
+			KVTime:     is.WaitTime,
+		},
 	}
 }
 
