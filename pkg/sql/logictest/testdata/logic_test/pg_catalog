@@ -46,6 +46,7 @@ pg_catalog  pg_language              table  NULL  NULL
 pg_catalog  pg_locks                 table  NULL  NULL
 pg_catalog  pg_matviews              table  NULL  NULL
 pg_catalog  pg_namespace             table  NULL  NULL
+pg_catalog  pg_opclass               table  NULL  NULL
 pg_catalog  pg_operator              table  NULL  NULL
 pg_catalog  pg_prepared_statements   table  NULL  NULL
 pg_catalog  pg_prepared_xacts        table  NULL  NULL
@@ -123,6 +124,7 @@ pg_catalog  pg_language              table  NULL  NULL
 pg_catalog  pg_locks                 table  NULL  NULL
 pg_catalog  pg_matviews              table  NULL  NULL
 pg_catalog  pg_namespace             table  NULL  NULL
+pg_catalog  pg_opclass               table  NULL  NULL
 pg_catalog  pg_operator              table  NULL  NULL
 pg_catalog  pg_prepared_statements   table  NULL  NULL
 pg_catalog  pg_prepared_xacts        table  NULL  NULL
@@ -1726,31 +1728,32 @@ objoid      classoid    objsubid  description
 4294967200  4294967219  0         locks held by active processes (empty - feature does not exist)
 4294967199  4294967219  0         available materialized views (empty - feature does not exist)
 4294967198  4294967219  0         available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
-4294967197  4294967219  0         operators (incomplete)
-4294967196  4294967219  0         prepared statements
-4294967195  4294967219  0         prepared transactions (empty - feature does not exist)
-4294967194  4294967219  0         built-in functions (incomplete)
-4294967193  4294967219  0         range types (empty - feature does not exist)
-4294967192  4294967219  0         rewrite rules (empty - feature does not exist)
-4294967191  4294967219  0         database roles
-4294967178  4294967219  0         security labels (empty - feature does not exist)
-4294967190  4294967219  0         security labels (empty)
-4294967189  4294967219  0         sequences (see also information_schema.sequences)
-4294967188  4294967219  0         session variables (incomplete)
-4294967187  4294967219  0         shared dependencies (empty - not implemented)
+4294967197  4294967219  0         opclass (empty - Operator classes not supported yet)
+4294967196  4294967219  0         operators (incomplete)
+4294967195  4294967219  0         prepared statements
+4294967194  4294967219  0         prepared transactions (empty - feature does not exist)
+4294967193  4294967219  0         built-in functions (incomplete)
+4294967192  4294967219  0         range types (empty - feature does not exist)
+4294967191  4294967219  0         rewrite rules (empty - feature does not exist)
+4294967190  4294967219  0         database roles
+4294967177  4294967219  0         security labels (empty - feature does not exist)
+4294967189  4294967219  0         security labels (empty)
+4294967188  4294967219  0         sequences (see also information_schema.sequences)
+4294967187  4294967219  0         session variables (incomplete)
+4294967186  4294967219  0         shared dependencies (empty - not implemented)
 4294967211  4294967219  0         shared object comments
-4294967177  4294967219  0         shared security labels (empty - feature not supported)
-4294967179  4294967219  0         backend access statistics (empty - monitoring works differently in CockroachDB)
-4294967184  4294967219  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
-4294967183  4294967219  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
-4294967182  4294967219  0         triggers (empty - feature does not exist)
-4294967181  4294967219  0         scalar types (incomplete)
-4294967186  4294967219  0         database users
-4294967185  4294967219  0         local to remote user mapping (empty - feature does not exist)
-4294967180  4294967219  0         view definitions (incomplete - see also information_schema.views)
-4294967175  4294967219  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
-4294967174  4294967219  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
-4294967173  4294967219  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
+4294967176  4294967219  0         shared security labels (empty - feature not supported)
+4294967178  4294967219  0         backend access statistics (empty - monitoring works differently in CockroachDB)
+4294967183  4294967219  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
+4294967182  4294967219  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
+4294967181  4294967219  0         triggers (empty - feature does not exist)
+4294967180  4294967219  0         scalar types (incomplete)
+4294967185  4294967219  0         database users
+4294967184  4294967219  0         local to remote user mapping (empty - feature does not exist)
+4294967179  4294967219  0         view definitions (incomplete - see also information_schema.views)
+4294967174  4294967219  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
+4294967173  4294967219  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
+4294967172  4294967219  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
 
 ## pg_catalog.pg_shdescription
 
