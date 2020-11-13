@@ -113,8 +113,8 @@ SELECT 'epoch'::date, 'infinity'::date, '-infinity'::date
 
 # Date edge cases.
 
-statement error year value 0 is out of range
-SELECT '0000-01-01'::date
+statement error only positive years are permitted in AD/BC notation
+SELECT '0000-01-01 BC'::date
 
 query TTTTT
 SELECT '4714-11-24 BC'::date, '5874897-12-31'::date, '2000-01-01'::date, '0001-01-01'::date, '0001-12-13 BC'::date
