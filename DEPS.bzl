@@ -329,8 +329,8 @@ def go_deps():
         name = "com_github_certifi_gocertifi",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/certifi/gocertifi",
-        sum = "h1:JLaf/iINcLyjwbtTsCJjc6rtlASgHeIJPrB6QmwURnA=",
-        version = "v0.0.0-20200211180108-c7c1fbc02894",
+        sum = "h1:xvUo53O5MRZhVMJAxWCJcS5HHrqAiAG9SJ1LpMu6aAI=",
+        version = "v0.0.0-20191021191039-0944d244cd40",
     )
     go_repository(
         name = "com_github_client9_misspell",
@@ -441,8 +441,8 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sum = "h1:QFs0nqYhzdJeEvEIITMhH1UZN4CyZfPn16BCeW9TZEE=",
-        version = "v0.0.0-20201110222031-01067adc85a5",
+        sum = "h1:SyU+66SkkE5wFIfUTFm8B4RKdbSrbkA5cTufPb2oyiQ=",
+        version = "v0.0.0-20201113231719-11399317ed18",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
