@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -464,7 +465,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 
 	evalCtx := flowCtx.NewEvalCtx()
 	var predicates map[descpb.IndexID]tree.TypedExpr
-	var predicateRefColIDs schemaexpr.TableColSet
+	var predicateRefColIDs catalog.TableColSet
 
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
