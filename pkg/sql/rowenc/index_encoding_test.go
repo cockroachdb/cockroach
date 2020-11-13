@@ -51,17 +51,17 @@ type indexKeyTest struct {
 	secondaryValues      []tree.Datum // len must be at least secondaryInterleaveComponents+1
 }
 
-func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, map[descpb.ColumnID]int) {
+func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, catalog.TableColMap) {
 	primaryColumnIDs := make([]descpb.ColumnID, len(test.primaryValues))
 	secondaryColumnIDs := make([]descpb.ColumnID, len(test.secondaryValues))
 	columns := make([]descpb.ColumnDescriptor, len(test.primaryValues)+len(test.secondaryValues))
-	colMap := make(map[descpb.ColumnID]int, len(test.secondaryValues))
+	var colMap catalog.TableColMap
 	secondaryType := descpb.IndexDescriptor_FORWARD
 	for i := range columns {
 		columns[i] = descpb.ColumnDescriptor{
 			ID: descpb.ColumnID(i + 1),
 		}
-		colMap[columns[i].ID] = i
+		colMap.Set(columns[i].ID, i)
 		if i < len(test.primaryValues) {
 			columns[i].Type = test.primaryValues[i].ResolvedType()
 			primaryColumnIDs[i] = columns[i].ID
@@ -252,7 +252,7 @@ func TestIndexKey(t *testing.T) {
 			}
 
 			for j, value := range values {
-				testValue := testValues[colMap[index.ColumnIDs[j]]]
+				testValue := testValues[colMap.GetDefault(index.ColumnIDs[j])]
 				if value.Compare(evalCtx, testValue) != 0 {
 					t.Fatalf("%d: value %d got %q but expected %q", i, j, value, testValue)
 				}
@@ -1263,12 +1263,12 @@ func ExtractIndexKey(
 	}
 
 	// Encode the index key from its components.
-	colMap := make(map[descpb.ColumnID]int)
+	var colMap catalog.TableColMap
 	for i, columnID := range index.ColumnIDs {
-		colMap[columnID] = i
+		colMap.Set(columnID, i)
 	}
 	for i, columnID := range index.ExtraColumnIDs {
-		colMap[columnID] = i + len(index.ColumnIDs)
+		colMap.Set(columnID, i+len(index.ColumnIDs))
 	}
 	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
 

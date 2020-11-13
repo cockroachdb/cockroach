@@ -533,7 +533,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 	dbDesc *dbdesc.Immutable,
 	index *descpb.IndexDescriptor,
 	indexKeyDatums []tree.Datum,
-	columnIdxMap map[descpb.ColumnID]int,
+	columnIdxMap catalog.TableColMap,
 	idxConstraint *constraint.Constraint,
 	columns colinfo.ResultColumns,
 ) func(pusher rowPusher) error {
@@ -543,7 +543,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 		addRowIfPassesFilter := func(idxConstraint *constraint.Constraint) func(datums ...tree.Datum) error {
 			return func(datums ...tree.Datum) error {
 				for i, id := range index.ColumnIDs {
-					indexKeyDatums[i] = datums[columnIdxMap[id]]
+					indexKeyDatums[i] = datums[columnIdxMap.GetDefault(id)]
 				}
 				// Construct a single key span out of the current row, so that
 				// we can test it for containment within the constraint span of the

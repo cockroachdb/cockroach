@@ -8,6 +8,7 @@ go_library(
         "desc_getter.go",
         "descriptor.go",
         "errors.go",
+        "table_col_map.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog",
     visibility = ["//visibility:public"],
