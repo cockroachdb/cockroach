@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -207,7 +208,7 @@ type DatumRowConverter struct {
 	// Tracks which column indices in the set of visible columns are part of the
 	// user specified target columns. This can be used before populating Datums
 	// to filter out unwanted column data.
-	IsTargetCol map[int]struct{}
+	targetColIDs catalog.TableColSet
 
 	// The rest of these are derived from tableDesc, just cached here.
 	ri                    Inserter
@@ -266,17 +267,8 @@ func NewDatumRowConverter(
 		targetColDescriptors = tableDesc.VisibleColumns()
 	}
 
-	isTargetColID := make(map[descpb.ColumnID]struct{})
 	for _, col := range targetColDescriptors {
-		isTargetColID[col.ID] = struct{}{}
-	}
-
-	c.IsTargetCol = make(map[int]struct{})
-	for i, col := range targetColDescriptors {
-		if _, ok := isTargetColID[col.ID]; !ok {
-			continue
-		}
-		c.IsTargetCol[i] = struct{}{}
+		c.targetColIDs.Add(col.ID)
 	}
 
 	var txCtx transform.ExprTransformContext
@@ -319,10 +311,6 @@ func NewDatumRowConverter(
 	// In addition, check for non-targeted columns with non-null DEFAULT expressions.
 	// If the DEFAULT expression is immutable, we can store it in the cache so that it
 	// doesn't have to be reevaluated for every row.
-	isTargetCol := func(col *descpb.ColumnDescriptor) bool {
-		_, ok := isTargetColID[col.ID]
-		return ok
-	}
 	annot := make(tree.Annotations, 1)
 	annot.Set(cellInfoAddr, &cellInfoAnnotation{uniqueRowIDInstance: 0})
 	c.EvalCtx.Annotations = &annot
@@ -352,11 +340,11 @@ func NewDatumRowConverter(
 					}
 				}
 			}
-			if !isTargetCol(col) {
+			if !c.targetColIDs.Contains(col.ID) {
 				c.Datums = append(c.Datums, nil)
 			}
 		}
-		if col.IsComputed() && !isTargetCol(col) {
+		if col.IsComputed() && !c.targetColIDs.Contains(col.ID) {
 			c.Datums = append(c.Datums, nil)
 		}
 	}
@@ -400,10 +388,6 @@ const rowIDBits = 64 - builtins.NodeIDBits
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
 func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
-	isTargetCol := func(i int) bool {
-		_, ok := c.IsTargetCol[i]
-		return ok
-	}
 	getCellInfoAnnotation(c.EvalCtx.Annotations).Reset(sourceID, rowIndex)
 	for i := range c.cols {
 		col := &c.cols[i]
@@ -415,7 +399,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			// TODO (anzoteh96): Optimize this part of code when there's no expression
 			// involving random(), gen_random_uuid(), or anything like that.
 			datum, err := c.defaultCache[i].Eval(c.EvalCtx)
-			if !isTargetCol(i) {
+			if !c.targetColIDs.Contains(col.ID) {
 				if err != nil {
 					return errors.Wrapf(
 						err, "error evaluating default expression %q", *col.DefaultExpr)

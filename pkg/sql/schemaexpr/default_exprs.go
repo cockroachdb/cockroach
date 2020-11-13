@@ -90,9 +90,9 @@ func ProcessColumnSet(
 	tableDesc catalog.TableDescriptor,
 	inSet func(*descpb.ColumnDescriptor) bool,
 ) []descpb.ColumnDescriptor {
-	colIDSet := make(map[descpb.ColumnID]struct{}, len(cols))
+	var colIDSet catalog.TableColSet
 	for i := range cols {
-		colIDSet[cols[i].ID] = struct{}{}
+		colIDSet.Add(cols[i].ID)
 	}
 
 	// Add all public or columns in DELETE_AND_WRITE_ONLY state
@@ -101,8 +101,8 @@ func ProcessColumnSet(
 	for i := range writable {
 		col := &writable[i]
 		if inSet(col) {
-			if _, ok := colIDSet[col.ID]; !ok {
-				colIDSet[col.ID] = struct{}{}
+			if !colIDSet.Contains(col.ID) {
+				colIDSet.Add(col.ID)
 				cols = append(cols, *col)
 			}
 		}

@@ -985,9 +985,9 @@ func EncodePrimaryIndex(
 		return nil, err
 	}
 	// This information should be precomputed on the table descriptor.
-	indexedColumns := map[descpb.ColumnID]struct{}{}
+	var indexedColumns catalog.TableColSet
 	for _, colID := range index.ColumnIDs {
-		indexedColumns[colID] = struct{}{}
+		indexedColumns.Add(colID)
 	}
 	var entryValue []byte
 	indexEntries := make([]IndexEntry, 0, tableDesc.NumFamilies())
@@ -1023,7 +1023,7 @@ func EncodePrimaryIndex(
 		}
 
 		for _, colID := range family.ColumnIDs {
-			if _, ok := indexedColumns[colID]; !ok {
+			if !indexedColumns.Contains(colID) {
 				columnsToEncode = append(columnsToEncode, valueEncodedColumn{id: colID})
 				continue
 			}

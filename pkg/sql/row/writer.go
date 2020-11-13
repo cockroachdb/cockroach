@@ -173,7 +173,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			if skip, err := helper.skipColumnInPK(colID, family.ID, values[idx]); err != nil {
+			if skip, err := helper.skipColumnInPK(colID, values[idx]); err != nil {
 				return nil, err
 			} else if skip {
 				continue
