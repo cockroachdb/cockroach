@@ -219,6 +219,9 @@ func (e *internalError) Error() string {
 }
 
 // ErrorDetailInterface is an interface for each error detail.
+// These must not be implemented by anything other than our protobuf-backed error details
+// as we rely on a 1:1 correspondence between the interface and what can be stored via
+// `Error.SetDetail`.
 type ErrorDetailInterface interface {
 	error
 	protoutil.Message
@@ -307,12 +310,7 @@ func (e *Error) SetDetail(detail ErrorDetailInterface) {
 	} else {
 		e.TransactionRestart = TransactionRestart_NONE
 	}
-	// If the specific error type exists in the detail union, set it.
-	if !e.Detail.SetInner(detail) {
-		if e.TransactionRestart != TransactionRestart_NONE {
-			panic(errors.AssertionFailedf("transactionRestartError %T must be an ErrorDetail", detail))
-		}
-	}
+	e.Detail.MustSetInner(detail)
 	e.checkTxnStatusValid()
 }
 

@@ -5125,10 +5125,10 @@ show_ranges_stmt:
 // %Help: SHOW REGIONS - shows regions
 // %Category: DDL
 // %Text:
-// SHOW REGIONS
-// SHOW REGIONS FOR DATABASE <database>
+// SHOW REGIONS FROM CLUSTER
+// SHOW REGIONS FROM DATABASE <database>
 show_regions_stmt:
-  SHOW REGIONS
+  SHOW REGIONS FROM CLUSTER
   {
     $$.val = &tree.ShowRegions{}
   }
@@ -5138,6 +5138,7 @@ show_regions_stmt:
       Database: tree.Name($5),
     }
   }
+| SHOW REGIONS error // SHOW HELP: SHOW REGIONS
 
 show_locality_stmt:
   SHOW LOCALITY
