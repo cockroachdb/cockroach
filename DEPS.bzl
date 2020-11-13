@@ -5,8 +5,9 @@ def go_deps():
         name = "co_honnef_go_tools",
         build_file_proto_mode = "disable_global",
         importpath = "honnef.co/go/tools",
-        sum = "h1:3JgtbtFHMiCmsznwGVTUWbgGov+pVqnlf1dEJTNAXeM=",
-        version = "v0.0.1-2019.2.3",
+        replace = "honnef.co/go/tools",
+        sum = "h1:RFEMAhc9/Ej5KcaFZooS1PGYAhVl+CUxVj2gyKYGxKQ=",
+        version = "v0.0.0-20190530104931-1f0868a609b7",
     )
     go_repository(
         name = "com_github_abourget_teamcity",
