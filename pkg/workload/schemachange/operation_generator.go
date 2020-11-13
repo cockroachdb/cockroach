@@ -46,7 +46,6 @@ type operationGenerator struct {
 	params               *operationGeneratorParams
 	expectedExecErrors   errorCodeSet
 	expectedCommitErrors errorCodeSet
-
 	// opsInTxn is a list of previous ops in the current transaction implemented
 	// as a map for fast lookups.
 	opsInTxn map[opType]bool
@@ -198,6 +197,7 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 	var log strings.Builder
 	for {
 		op := opType(og.params.ops.Int())
+		og.resetOpState()
 		stmt, err := opFuncs[op](og, tx)
 		// TODO(spaskob): use more fine-grained error reporting.
 		if stmt == "" || errors.Is(err, pgx.ErrNoRows) {
@@ -210,6 +210,10 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 			if _, previous := og.opsInTxn[insertRow]; previous {
 				og.expectedExecErrors.add(pgcode.FeatureNotSupported)
 			}
+
+			og.opsInTxn[op] = true
+
+			return stmt, log.String(), err
 		}
 
 		og.opsInTxn[op] = true
