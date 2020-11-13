@@ -47,6 +47,13 @@ type operationGenerator struct {
 	expectedExecErrors   errorCodeSet
 	expectedCommitErrors errorCodeSet
 
+	// This stores expected commit errors while an op statement
+	// is still being constructed. It is possible that one of the functions in opFuncs
+	// fails. In this case, the candidateExpectedCommitErrors will be discarded. If the
+	// function succeeds and the op statement is constructed, then candidateExpectedCommitErrors
+	// are added to expectedCommitErrors.
+	candidateExpectedCommitErrors errorCodeSet
+
 	// opsInTxn is a list of previous ops in the current transaction implemented
 	// as a map for fast lookups.
 	opsInTxn map[opType]bool
@@ -54,16 +61,18 @@ type operationGenerator struct {
 
 func makeOperationGenerator(params *operationGeneratorParams) *operationGenerator {
 	return &operationGenerator{
-		params:               params,
-		expectedExecErrors:   makeExpectedErrorSet(),
-		expectedCommitErrors: makeExpectedErrorSet(),
-		opsInTxn:             map[opType]bool{},
+		params:                        params,
+		expectedExecErrors:            makeExpectedErrorSet(),
+		expectedCommitErrors:          makeExpectedErrorSet(),
+		candidateExpectedCommitErrors: makeExpectedErrorSet(),
+		opsInTxn:                      map[opType]bool{},
 	}
 }
 
 // Reset internal state used per operation within a transaction
 func (og *operationGenerator) resetOpState() {
 	og.expectedExecErrors.reset()
+	og.candidateExpectedCommitErrors.reset()
 }
 
 // Reset internal state used per transaction
@@ -198,6 +207,7 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 	var log strings.Builder
 	for {
 		op := opType(og.params.ops.Int())
+		og.resetOpState()
 		stmt, err := opFuncs[op](og, tx)
 		// TODO(spaskob): use more fine-grained error reporting.
 		if stmt == "" || errors.Is(err, pgx.ErrNoRows) {
@@ -211,6 +221,9 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 				og.expectedExecErrors.add(pgcode.FeatureNotSupported)
 			}
 		}
+
+		// Add candidateExpectedCommitErrors to expectedCommitErrors
+		og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
 
 		og.opsInTxn[op] = true
 		return stmt, log.String(), err
@@ -945,7 +958,7 @@ func (og *operationGenerator) dropConstraint(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 	if constraintIsPrimary {
-		og.expectedCommitErrors.add(pgcode.FeatureNotSupported)
+		og.candidateExpectedCommitErrors.add(pgcode.FeatureNotSupported)
 	}
 
 	// DROP INDEX CASCADE is preferred for dropping unique constraints, and
@@ -1401,7 +1414,7 @@ func (og *operationGenerator) setColumnNotNull(tx *pgx.Tx) (string, error) {
 			return "", err
 		}
 		if colContainsNull {
-			og.expectedCommitErrors.add(pgcode.CheckViolation)
+			og.candidateExpectedCommitErrors.add(pgcode.CheckViolation)
 		}
 	}
 

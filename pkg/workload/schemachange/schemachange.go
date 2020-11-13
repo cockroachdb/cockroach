@@ -224,7 +224,6 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
 	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
 
 	for i := 0; i < opsNum; i++ {
-		w.opGen.resetOpState()
 		op, noops, err := w.opGen.randOp(tx)
 		if err != nil {
 			return noops, errors.Mark(
