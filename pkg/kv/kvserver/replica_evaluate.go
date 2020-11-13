@@ -246,10 +246,14 @@ func evaluateBatch(
 
 		// If an EndTxn wants to restart because of a write too old, we
 		// might have a better error to return to the client.
-		retErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError)
-		if ok && retErr.Reason == roachpb.RETRY_WRITE_TOO_OLD &&
+		if retErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); ok &&
+			retErr.Reason == roachpb.RETRY_WRITE_TOO_OLD &&
 			args.Method() == roachpb.EndTxn && writeTooOldState.err != nil {
-			pErr.SetDetail(writeTooOldState.err)
+			// TODO(tbg): this is the only real caller of this method. In 21.2,
+			// we should be able to simply replace EncodedError. Or even better,
+			// we stop manually crafting and mutating errors in the way this code
+			// does.
+			pErr.DeprecatedSetDetail(writeTooOldState.err)
 			// Don't defer this error. We could perhaps rely on the client observing
 			// the WriteTooOld flag and retry the batch, but we choose not too.
 			writeTooOldState.cantDeferWTOE = true
