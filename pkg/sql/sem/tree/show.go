@@ -285,10 +285,12 @@ type ShowRegions struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRegions) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW REGIONS")
+	ctx.WriteString("SHOW REGIONS ")
 	if node.Database != "" {
-		ctx.WriteString(" FROM DATABASE ")
+		ctx.WriteString("FROM DATABASE ")
 		node.Database.Format(ctx)
+	} else {
+		ctx.WriteString("FROM CLUSTER")
 	}
 }
 
