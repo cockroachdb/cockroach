@@ -26,8 +26,8 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/confchange"
-	"go.etcd.io/etcd/raft/tracker"
+	"go.etcd.io/etcd/raft/v3/confchange"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 // TestAtomicReplicationChange is a simple smoke test for atomic membership

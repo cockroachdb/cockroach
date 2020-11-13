@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 func verifyHash(b []byte, expectedSum uint64) error {
@@ -78,10 +78,12 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			type expectedHardState struct {
-				Term             uint64
-				Vote             uint64
-				Commit           uint64
-				XXX_unrecognized []byte
+				Term                 uint64
+				Vote                 uint64
+				Commit               uint64
+				XXX_NoUnkeyedLiteral struct{}
+				XXX_unrecognized     []byte
+				XXX_sizecache        int32
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
 			// and the expected sums should be updated.

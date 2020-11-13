@@ -197,7 +197,7 @@ go_library(
         "//vendor/github.com/spf13/cobra",
         "//vendor/github.com/spf13/cobra/doc",
         "//vendor/github.com/spf13/pflag",
-        "//vendor/go.etcd.io/etcd/raft/raftpb",
+        "//vendor/go.etcd.io/etcd/raft/v3/raftpb",
         "//vendor/golang.org/x/sync/errgroup",
         "//vendor/golang.org/x/time/rate",
         "//vendor/google.golang.org/grpc",
