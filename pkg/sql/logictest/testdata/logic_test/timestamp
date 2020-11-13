@@ -54,3 +54,42 @@ query TT
 SELECT TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40-05' AT TIME ZONE 'MST', timezone(TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40-05', 'MST')
 ----
 2001-02-16 18:38:40 +0000 +0000  2001-02-16 18:38:40 +0000 +0000
+
+statement ok
+DROP TABLE example
+
+statement ok
+SET TIME ZONE 0
+
+subtest regression_46973
+
+statement ok
+CREATE TABLE regression_46973(c0 TIMESTAMP UNIQUE, c1 TIMESTAMPTZ UNIQUE)
+
+statement ok
+INSERT INTO regression_46973 VALUES ('1970-01-01 00:00:00', '1970-01-01 00:00:00')
+
+statement error "292277026596-12-04T15:30:08Z" exceeds supported timestamp bounds
+SELECT * FROM regression_46973 WHERE (-9223372036854775808)::TIMESTAMP!=regression_46973.c0
+
+statement error "292277026596-12-04T15:30:08Z" exceeds supported timestamp bounds
+SELECT * FROM regression_46973 WHERE (-9223372036854775808)::TIMESTAMPTZ!=regression_46973.c1
+
+statement error "294277-01-01T00:00:00Z" exceeds supported timestamp bounds
+SELECT '294276-12-31 23:59:59.999999'::TIMESTAMP(0)
+
+statement ok
+DROP TABLE regression_46973
+
+subtest regression_extract_epoch_timestamptz
+
+query R
+set time zone 'Europe/Berlin'; select extract(epoch from TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00')
+----
+1.28910594e+09
+
+query R
+set time zone 'UTC'; select extract(epoch from TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00')
+----
+1.28910594e+09
+>>>>>>> 6e6e36356f (Revert "sql: age returns normalized intervals")
