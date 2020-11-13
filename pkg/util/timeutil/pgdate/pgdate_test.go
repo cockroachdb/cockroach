@@ -65,8 +65,8 @@ func TestParseDate(t *testing.T) {
 			err: "date is out of range",
 		},
 		{
-			s:   "0000-01-01",
-			err: "year value 0 is out of range",
+			s:   "0000-01-01 AD",
+			err: "only positive years are permitted in AD/BC notation",
 		},
 	} {
 		t.Run(tc.s, func(t *testing.T) {

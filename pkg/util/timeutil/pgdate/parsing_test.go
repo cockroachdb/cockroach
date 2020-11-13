@@ -397,6 +397,14 @@ var dateTestData = []timeData{
 		s:   "121212",
 		exp: time.Date(2012, 12, 12, 0, 0, 0, 0, time.UTC),
 	},
+	{
+		s:   "-0001-02-15",
+		exp: time.Date(-1, 2, 15, 0, 0, 0, 0, time.UTC),
+	},
+	{
+		s:   "0000-02-15",
+		exp: time.Date(0, 2, 15, 0, 0, 0, 0, time.UTC),
+	},
 }
 
 var timeTestData = []timeData{
