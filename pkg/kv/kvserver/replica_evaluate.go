@@ -164,7 +164,13 @@ func evaluateBatch(
 
 	// NB: Don't mutate BatchRequest directly.
 	baReqs := ba.Requests
+
+	// baHeader is the header passed to evaluate each command in the batch.
+	// After each command, it is updated with the result and used again for
+	// the next batch. At the end of evaluation, it is used to populate the
+	// response header (timestamp, txn, etc).
 	baHeader := ba.Header
+
 	br := ba.CreateReply()
 
 	// Optimize any contiguous sequences of put and conditional put ops.
@@ -222,6 +228,9 @@ func evaluateBatch(
 		cantDeferWTOE bool
 	}
 
+	// TODO(tbg): if we introduced an "executor" helper here that could carry state
+	// across the slots in the batch while we execute them, this code could come
+	// out a lot less ad-hoc.
 	for index, union := range baReqs {
 		// Execute the command.
 		args := union.GetInner()
@@ -234,47 +243,74 @@ func evaluateBatch(
 			baHeader.Txn.Sequence = args.Header().Sequence
 		}
 
-		// Note that responses are populated even when an error is returned.
-		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
+		// If a unittest filter was installed, check for an injected error; otherwise, continue.
+		if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
+			filterArgs := kvserverbase.FilterArgs{
+				Ctx:   ctx,
+				CmdID: idKey,
+				Index: index,
+				Sid:   rec.StoreID(),
+				Req:   args,
+				Hdr:   baHeader,
+			}
+			if pErr := filter(filterArgs); pErr != nil {
+				if pErr.GetTxn() == nil {
+					pErr.SetTxn(baHeader.Txn)
+				}
+				log.Infof(ctx, "test injecting error: %s", pErr)
+				return nil, result.Result{}, pErr
+			}
+		}
+
 		reply := br.Responses[index].GetInner()
 
-		var curResult result.Result
-		var pErr *roachpb.Error
-
-		curResult, pErr = evaluateCommand(
+		// Note that `reply` is populated even when an error is returned: it
+		// may carry a response transaction and in the case of WriteTooOldError
+		// (which is sometimes deferred) it is fully populated.
+		curResult, err := evaluateCommand(
 			ctx, idKey, index, readWriter, rec, ms, baHeader, args, reply)
 
-		// If an EndTxn wants to restart because of a write too old, we
-		// might have a better error to return to the client.
-		if retErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); ok &&
-			retErr.Reason == roachpb.RETRY_WRITE_TOO_OLD &&
-			args.Method() == roachpb.EndTxn && writeTooOldState.err != nil {
-			// TODO(tbg): this is the only real caller of this method. In 21.2,
-			// we should be able to simply replace EncodedError. Or even better,
-			// we stop manually crafting and mutating errors in the way this code
-			// does.
-			pErr.DeprecatedSetDetail(writeTooOldState.err)
-			// Don't defer this error. We could perhaps rely on the client observing
-			// the WriteTooOld flag and retry the batch, but we choose not too.
-			writeTooOldState.cantDeferWTOE = true
+		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
+			filterArgs := kvserverbase.FilterArgs{
+				Ctx:   ctx,
+				CmdID: idKey,
+				Index: index,
+				Sid:   rec.StoreID(),
+				Req:   args,
+				Hdr:   baHeader,
+				Err:   err,
+			}
+			if pErr := filter(filterArgs); pErr != nil {
+				if pErr.GetTxn() == nil {
+					pErr.SetTxn(baHeader.Txn)
+				}
+				log.Infof(ctx, "test injecting error: %s", pErr)
+				return nil, result.Result{}, pErr
+			}
 		}
 
-		if err := mergedResult.MergeAndDestroy(curResult); err != nil {
-			// TODO(tschottdorf): see whether we really need to pass nontrivial
-			// Result up on error and if so, formalize that.
-			log.Fatalf(
-				ctx,
-				"unable to absorb Result: %s\ndiff(new, old): %s",
-				err, pretty.Diff(curResult, mergedResult),
-			)
+		// If this request is transactional, we now have potentially two
+		// transactions floating around: the one on baHeader.Txn (always
+		// there in a txn) and possibly a newer version in `reply.Header().Txn`.
+		// Absorb the update into baHeader.Txn and write back a nil Transaction
+		// to the header to ensure that there is only one version going forward.
+		if headerCopy := reply.Header(); baHeader.Txn != nil && headerCopy.Txn != nil {
+			baHeader.Txn.Update(headerCopy.Txn)
+			headerCopy.Txn = nil
+			reply.SetHeader(headerCopy)
 		}
 
-		if pErr != nil {
-			// Initialize the error index.
-			pErr.SetErrorIndex(int32(index))
-
-			switch tErr := pErr.GetDetail().(type) {
-			case *roachpb.WriteTooOldError:
+		if err != nil {
+			// If an EndTxn wants to restart because of a write too old, we
+			// might have a better error to return to the client.
+			if retErr := (*roachpb.TransactionRetryError)(nil); errors.As(err, &retErr) &&
+				retErr.Reason == roachpb.RETRY_WRITE_TOO_OLD &&
+				args.Method() == roachpb.EndTxn && writeTooOldState.err != nil {
+				err = writeTooOldState.err
+				// Don't defer this error. We could perhaps rely on the client observing
+				// the WriteTooOld flag and retry the batch, but we choose not too.
+				writeTooOldState.cantDeferWTOE = true
+			} else if wtoErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &wtoErr) {
 				// We got a WriteTooOldError. We continue on to run all
 				// commands in the batch in order to determine the highest
 				// timestamp for more efficient retries. If the batch is
@@ -284,9 +320,9 @@ func evaluateBatch(
 				// succeeding when it will be retried are increased.
 				if writeTooOldState.err != nil {
 					writeTooOldState.err.ActualTimestamp.Forward(
-						tErr.ActualTimestamp)
+						wtoErr.ActualTimestamp)
 				} else {
-					writeTooOldState.err = tErr
+					writeTooOldState.err = wtoErr
 				}
 
 				// For read-write requests that observe key-value state, we don't have
@@ -321,8 +357,8 @@ func evaluateBatch(
 
 				if baHeader.Txn != nil {
 					log.VEventf(ctx, 2, "setting WriteTooOld because of key: %s. wts: %s -> %s",
-						args.Header().Key, baHeader.Txn.WriteTimestamp, tErr.ActualTimestamp)
-					baHeader.Txn.WriteTimestamp.Forward(tErr.ActualTimestamp)
+						args.Header().Key, baHeader.Txn.WriteTimestamp, wtoErr.ActualTimestamp)
+					baHeader.Txn.WriteTimestamp.Forward(wtoErr.ActualTimestamp)
 					baHeader.Txn.WriteTooOld = true
 				} else {
 					// For non-transactional requests, there's nowhere to defer the error
@@ -331,12 +367,29 @@ func evaluateBatch(
 					writeTooOldState.cantDeferWTOE = true
 				}
 
-				// Clear pErr; we're done processing the WTOE for now and we'll return
+				// Clear error; we're done processing the WTOE for now and we'll return
 				// to considering it below after we've evaluated all requests.
-				pErr = nil
-			default:
-				return nil, mergedResult, pErr
+				err = nil
 			}
+		}
+
+		// Even on error, we need to propagate the result of evaluation.
+		//
+		// TODO(tbg): find out if that's true and why and improve the comment.
+		if err := mergedResult.MergeAndDestroy(curResult); err != nil {
+			log.Fatalf(
+				ctx,
+				"unable to absorb Result: %s\ndiff(new, old): %s",
+				err, pretty.Diff(curResult, mergedResult),
+			)
+		}
+
+		if err != nil {
+			pErr := roachpb.NewErrorWithTxn(err, baHeader.Txn)
+			// Initialize the error index.
+			pErr.SetErrorIndex(int32(index))
+
+			return nil, mergedResult, pErr
 		}
 
 		// If the last request was carried out with a limit, subtract the number
@@ -383,25 +436,22 @@ func evaluateBatch(
 				baHeader.TargetBytes = -1
 			}
 		}
-
-		// If transactional, we use ba.Txn for each individual command and
-		// accumulate updates to it. Once accumulated, we then remove the Txn
-		// from each individual response.
-		// TODO(spencer,tschottdorf): need copy-on-write behavior for the
-		//   updated batch transaction / timestamp.
-		if baHeader.Txn != nil {
-			if header := reply.Header(); header.Txn != nil {
-				baHeader.Txn.Update(header.Txn)
-				header.Txn = nil
-				reply.SetHeader(header)
-			}
-		}
 	}
 
-	// If there's a write too old error that we can't defer, return it.
+	// If we made it here, there was no error during evaluation, with the exception of
+	// a deferred WTOE. If it can't be deferred - return it now; otherwise it is swallowed.
+	// Note that we don't attach an Index to the returned Error.
+	//
+	// TODO(tbg): we could attach the index of the first WriteTooOldError seen, but does
+	// that buy us anything?
 	if writeTooOldState.cantDeferWTOE {
+		// NB: we can't do any error wrapping here yet due to compatibility with 20.2 nodes;
+		// there needs to be an ErrorDetail here.
 		return nil, mergedResult, roachpb.NewErrorWithTxn(writeTooOldState.err, baHeader.Txn)
 	}
+
+	// The batch evaluation will not return an error (i.e. either everything went fine or
+	// we're deferring a WriteTooOldError by having bumped baHeader.Txn.Timestamp).
 
 	// Update the batch response timestamp field to the timestamp at which the
 	// batch's reads were evaluated.
@@ -437,26 +487,7 @@ func evaluateCommand(
 	h roachpb.Header,
 	args roachpb.Request,
 	reply roachpb.Response,
-) (result.Result, *roachpb.Error) {
-	// If a unittest filter was installed, check for an injected error; otherwise, continue.
-	if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
-		filterArgs := kvserverbase.FilterArgs{
-			Ctx:   ctx,
-			CmdID: raftCmdID,
-			Index: index,
-			Sid:   rec.StoreID(),
-			Req:   args,
-			Hdr:   h,
-		}
-		if pErr := filter(filterArgs); pErr != nil {
-			if pErr.GetTxn() == nil {
-				pErr.SetTxn(h.Txn)
-			}
-			log.Infof(ctx, "test injecting error: %s", pErr)
-			return result.Result{}, pErr
-		}
-	}
-
+) (result.Result, error) {
 	var err error
 	var pd result.Result
 
@@ -474,53 +505,13 @@ func evaluateCommand(
 			pd, err = cmd.EvalRO(ctx, readWriter, cArgs, reply)
 		}
 	} else {
-		err = errors.Errorf("unrecognized command %s", args.Method())
+		return result.Result{}, errors.Errorf("unrecognized command %s", args.Method())
 	}
-
-	// TODO(peter): We'd like to assert that the hlc clock is always updated
-	// correctly, but various tests insert versioned data without going through
-	// the proper channels. See TestPushTxnUpgradeExistingTxn for an example.
-	//
-	// if header.Txn != nil && h.Timestamp.LessEq(header.Txn.Timestamp) {
-	// 	if now := r.store.Clock().Now(); now.Less(header.Txn.Timestamp) {
-	// 		log.Fatalf(ctx, "hlc clock not updated: %s < %s", now, header.Txn.Timestamp)
-	// 	}
-	// }
 
 	if log.V(2) {
 		log.Infof(ctx, "evaluated %s command %+v: %+v, err=%v", args.Method(), args, reply, err)
 	}
-
-	if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
-		filterArgs := kvserverbase.FilterArgs{
-			Ctx:   ctx,
-			CmdID: raftCmdID,
-			Index: index,
-			Sid:   rec.StoreID(),
-			Req:   args,
-			Hdr:   h,
-			Err:   err,
-		}
-		if pErr := filter(filterArgs); pErr != nil {
-			if pErr.GetTxn() == nil {
-				pErr.SetTxn(h.Txn)
-			}
-			log.Infof(ctx, "test injecting error: %s", pErr)
-			return result.Result{}, pErr
-		}
-	}
-
-	// Create a roachpb.Error by initializing txn from the request/response header.
-	var pErr *roachpb.Error
-	if err != nil {
-		txn := reply.Header().Txn
-		if txn == nil {
-			txn = h.Txn
-		}
-		pErr = roachpb.NewErrorWithTxn(err, txn)
-	}
-
-	return pd, pErr
+	return pd, err
 }
 
 // canDoServersideRetry looks at the error produced by evaluating ba (or the
