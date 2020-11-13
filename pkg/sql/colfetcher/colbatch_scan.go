@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -176,7 +177,7 @@ func NewColBatchScan(
 	}
 	for i := range sysColDescs {
 		typs = append(typs, sysColDescs[i].Type)
-		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+		columnIdxMap.Set(sysColDescs[i].ID, columnIdxMap.Len())
 	}
 
 	semaCtx := tree.MakeSemaContext()
@@ -230,7 +231,7 @@ func initCRowFetcher(
 	fetcher *cFetcher,
 	desc *tabledesc.Immutable,
 	indexIdx int,
-	colIdxMap map[descpb.ColumnID]int,
+	colIdxMap catalog.TableColMap,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	scanVisibility execinfrapb.ScanVisibility,

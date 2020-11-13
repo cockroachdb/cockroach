@@ -103,7 +103,7 @@ func newTableReader(
 	}
 	for i := range sysColDescs {
 		resultTypes = append(resultTypes, sysColDescs[i].Type)
-		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+		columnIdxMap.Set(sysColDescs[i].ID, columnIdxMap.Len())
 	}
 
 	tr.ignoreMisplannedRanges = flowCtx.Local

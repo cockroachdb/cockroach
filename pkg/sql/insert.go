@@ -110,7 +110,7 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 	colIDToRetIndex := r.ti.tableDesc().ColumnIdxMap()
 	r.rowIdxToTabColIdx = make([]int, len(r.insertCols))
 	for i, col := range r.insertCols {
-		if idx, ok := colIDToRetIndex[col.ID]; !ok {
+		if idx, ok := colIDToRetIndex.Get(col.ID); !ok {
 			// Column must be write only and not public.
 			r.rowIdxToTabColIdx[i] = -1
 		} else {

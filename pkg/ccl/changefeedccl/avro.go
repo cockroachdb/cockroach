@@ -401,7 +401,7 @@ func indexToAvroSchema(
 	}
 	colIdxByID := tableDesc.ColumnIdxMap()
 	for _, colID := range indexDesc.ColumnIDs {
-		colIdx, ok := colIdxByID[colID]
+		colIdx, ok := colIdxByID.Get(colID)
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}

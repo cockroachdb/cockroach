@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -76,7 +77,7 @@ type joinReader struct {
 
 	desc             tabledesc.Immutable
 	index            *descpb.IndexDescriptor
-	colIdxMap        map[descpb.ColumnID]int
+	colIdxMap        catalog.TableColMap
 	maintainOrdering bool
 
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
@@ -222,7 +223,7 @@ func newJoinReader(
 	}
 	for i := range sysColDescs {
 		columnTypes = append(columnTypes, sysColDescs[i].Type)
-		jr.colIdxMap[sysColDescs[i].ID] = len(jr.colIdxMap)
+		jr.colIdxMap.Set(sysColDescs[i].ID, jr.colIdxMap.Len())
 	}
 
 	var leftTypes []*types.T
@@ -274,7 +275,11 @@ func newJoinReader(
 	}
 
 	neededRightCols := jr.neededRightCols()
-	if isSecondary && !neededRightCols.SubsetOf(getIndexColSet(jr.index, jr.colIdxMap)) {
+	set, err := getIndexColSet(jr.index, jr.colIdxMap)
+	if err != nil {
+		return nil, err
+	}
+	if isSecondary && !neededRightCols.SubsetOf(set) {
 		return nil, errors.Errorf("joinreader index does not cover all columns")
 	}
 
@@ -388,19 +393,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 
 // getIndexColSet returns a set of all column indices for the given index.
 func getIndexColSet(
-	index *descpb.IndexDescriptor, colIdxMap map[descpb.ColumnID]int,
-) util.FastIntSet {
+	index *descpb.IndexDescriptor, colIdxMap catalog.TableColMap,
+) (util.FastIntSet, error) {
 	cols := util.MakeFastIntSet()
 	err := index.RunOverAllColumns(func(id descpb.ColumnID) error {
-		cols.Add(colIdxMap[id])
+		cols.Add(colIdxMap.GetDefault(id))
 		return nil
 	})
-	if err != nil {
-		// This path should never be hit since the column function never returns an
-		// error.
-		panic(err)
-	}
-	return cols
+	return cols, err
 }
 
 // SetBatchSizeBytes sets the desired batch size. It should only be used in tests.

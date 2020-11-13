@@ -12,7 +12,7 @@ package row
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 )
@@ -20,7 +20,7 @@ import (
 // FKCheckSpan returns a span that can be scanned to ascertain existence of a
 // specific row in a given index.
 func FKCheckSpan(
-	s *span.Builder, values []tree.Datum, colMap map[descpb.ColumnID]int, numCols int,
+	s *span.Builder, values []tree.Datum, colMap catalog.TableColMap, numCols int,
 ) (roachpb.Span, error) {
 	span, containsNull, err := s.SpanFromDatumRow(values, numCols, colMap)
 	if err != nil {

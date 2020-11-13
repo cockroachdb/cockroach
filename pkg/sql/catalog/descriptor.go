@@ -130,12 +130,12 @@ type TableDescriptor interface {
 	FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error)
 	FindActiveColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)
 	FindColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)
-	ColumnIdxMap() map[descpb.ColumnID]int
+	ColumnIdxMap() TableColMap
 	GetColumnAtIdx(idx int) *descpb.ColumnDescriptor
 	AllNonDropColumns() []descpb.ColumnDescriptor
 	VisibleColumns() []descpb.ColumnDescriptor
 	ColumnsWithMutations(includeMutations bool) []descpb.ColumnDescriptor
-	ColumnIdxMapWithMutations(includeMutations bool) map[descpb.ColumnID]int
+	ColumnIdxMapWithMutations(includeMutations bool) TableColMap
 	DeletableColumns() []descpb.ColumnDescriptor
 
 	GetFamilies() []descpb.ColumnFamilyDescriptor

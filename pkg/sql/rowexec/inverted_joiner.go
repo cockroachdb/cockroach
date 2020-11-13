@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -65,7 +66,7 @@ type invertedJoiner struct {
 	diskMonitor  *mon.BytesMonitor
 	desc         tabledesc.Immutable
 	// The map from ColumnIDs in the table to the column position.
-	colIdxMap map[descpb.ColumnID]int
+	colIdxMap catalog.TableColMap
 	index     *descpb.IndexDescriptor
 	// The ColumnID of the inverted column. Confusingly, this is also the id of
 	// the table column that was indexed.
@@ -192,7 +193,7 @@ func newInvertedJoiner(
 	ij.keyRowToTableRowMap = make([]int, len(indexColumnIDs)-1)
 	for i := 1; i < len(indexColumnIDs); i++ {
 		keyRowIdx := i - 1
-		tableRowIdx := ij.colIdxMap[indexColumnIDs[i]]
+		tableRowIdx := ij.colIdxMap.GetDefault(indexColumnIDs[i])
 		ij.tableRowToKeyRowMap[tableRowIdx] = keyRowIdx
 		ij.keyRowToTableRowMap[keyRowIdx] = tableRowIdx
 		ij.keyTypes[keyRowIdx] = ij.desc.Columns[tableRowIdx].Type
@@ -270,7 +271,7 @@ func newInvertedJoiner(
 	// such workloads actually occur in practice.
 	allIndexCols := util.MakeFastIntSet()
 	for _, colID := range indexColumnIDs {
-		allIndexCols.Add(ij.colIdxMap[colID])
+		allIndexCols.Add(ij.colIdxMap.GetDefault(colID))
 	}
 	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
 	// and so do not need to see in-progress schema changes.
@@ -459,7 +460,8 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			// Done with this input batch.
 			break
 		}
-		encInvertedVal := scannedRow[ij.colIdxMap[ij.invertedColID]].EncodedBytes()
+		idx := ij.colIdxMap.GetDefault(ij.invertedColID)
+		encInvertedVal := scannedRow[idx].EncodedBytes()
 		shouldAdd, err := ij.batchedExprEval.prepareAddIndexRow(encInvertedVal)
 		if err != nil {
 			ij.MoveToDraining(err)
