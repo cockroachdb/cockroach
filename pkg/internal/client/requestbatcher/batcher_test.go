@@ -548,10 +548,12 @@ func TestMaxKeysPerBatchReq(t *testing.T) {
 
 func TestPanicWithNilSender(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
 	defer func() {
 		if r := recover(); r == nil {
 			t.Fatalf("failed to panic with a nil Sender")
 		}
 	}()
-	New(Config{Stopper: stop.NewStopper()})
+	New(Config{Stopper: stopper})
 }

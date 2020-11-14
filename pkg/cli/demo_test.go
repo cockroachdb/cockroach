@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -65,27 +66,31 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
-		demoCtxTemp := demoCtx
-		demoCtx.sqlPoolMemorySize = tc.sqlPoolMemorySize
-		demoCtx.cacheSize = tc.cacheSize
+	for i, tc := range testCases {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			demoCtxTemp := demoCtx
+			demoCtx.sqlPoolMemorySize = tc.sqlPoolMemorySize
+			demoCtx.cacheSize = tc.cacheSize
 
-		actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "")
+			actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "")
+			stopper := actual.Stopper
+			defer stopper.Stop(context.Background())
 
-		assert.Len(t, actual.StoreSpecs, 1)
-		assert.Equal(
-			t,
-			fmt.Sprintf("demo-node%d", tc.nodeID),
-			actual.StoreSpecs[0].StickyInMemoryEngineID,
-		)
+			assert.Len(t, actual.StoreSpecs, 1)
+			assert.Equal(
+				t,
+				fmt.Sprintf("demo-node%d", tc.nodeID),
+				actual.StoreSpecs[0].StickyInMemoryEngineID,
+			)
 
-		// We cannot compare these.
-		actual.Stopper = nil
-		actual.StoreSpecs = nil
+			// We cannot compare these.
+			actual.Stopper = nil
+			actual.StoreSpecs = nil
 
-		assert.Equal(t, tc.expected, actual)
+			assert.Equal(t, tc.expected, actual)
 
-		// Restore demoCtx state after each test.
-		demoCtx = demoCtxTemp
+			// Restore demoCtx state after each test.
+			demoCtx = demoCtxTemp
+		})
 	}
 }
