@@ -14,6 +14,7 @@ go_library(
         "file_log_gc.go",
         "file_sync_buffer.go",
         "flags.go",
+        "format_crdb_v1.go",
         "get_stacks.go",
         "intercept.go",
         "log.go",
