@@ -78,6 +78,9 @@ type fileSink struct {
 	// producers and the file sink.
 	fileThreshold Severity
 
+	// formatter for entries.
+	formatter logFormatter
+
 	// notify GC daemon that a new log file was created.
 	gcNotify chan struct{}
 
@@ -137,6 +140,7 @@ func newFileSink(
 	f := &fileSink{
 		prefix:                  prefix,
 		fileThreshold:           fileThreshold,
+		formatter:               formatCrdbV1WithCounter{},
 		logFileMaxSize:          fileMaxSize,
 		logFilesCombinedMaxSize: combinedMaxSize,
 		gcNotify:                make(chan struct{}, 1),
