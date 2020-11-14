@@ -417,7 +417,6 @@ func (c *CustomFuncs) constructContinuationColumnForPairedJoin() opt.ColumnID {
 // with inverted indexes. Similar to GenerateLookupJoins, there are two cases
 // depending on whether or not the index is covering. See the comment above
 // GenerateLookupJoins for details.
-// TODO(rytaft): add support for JSON and array inverted indexes.
 func (c *CustomFuncs) GenerateInvertedJoins(
 	grp memo.RelExpr,
 	joinType opt.Operator,
@@ -426,7 +425,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if joinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
+	if joinPrivate.Flags.Has(memo.DisallowInvertedJoinIntoRight) {
 		return
 	}
 
@@ -437,15 +436,17 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, on memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		// Check whether the filter can constrain the index.
-		invertedExpr := invertedidx.TryJoinGeoIndex(
+		invertedExpr := invertedidx.TryJoinInvertedIndex(
 			c.e.evalCtx.Context, c.e.f, on, scanPrivate.Table, index, inputCols,
 		)
 		if invertedExpr == nil {
 			return
 		}
 
-		// Geospatial lookup joins are not covering, so we must wrap them in an
-		// index join.
+		// All geospatial and JSON inverted joins that are currently supported are
+		// not covering, so we must wrap them in an index join.
+		// TODO(rytaft): Avoid adding an index join if possible for Array inverted
+		//  joins.
 		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
