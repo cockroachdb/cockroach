@@ -445,9 +445,10 @@ const (
 
 // JoinTableExpr.Hint
 const (
-	AstHash   = "HASH"
-	AstLookup = "LOOKUP"
-	AstMerge  = "MERGE"
+	AstHash     = "HASH"
+	AstLookup   = "LOOKUP"
+	AstMerge    = "MERGE"
+	AstInverted = "INVERTED"
 )
 
 // Format implements the NodeFormatter interface.

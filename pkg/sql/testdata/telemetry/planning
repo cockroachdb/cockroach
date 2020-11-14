@@ -4,6 +4,10 @@ exec
 CREATE TABLE x (a INT PRIMARY KEY)
 ----
 
+exec
+CREATE TABLE y (a INT PRIMARY KEY, b JSONB, INVERTED INDEX (b))
+----
+
 # Tests for EXPLAIN counters.
 
 feature-allowlist
@@ -63,6 +67,11 @@ feature-usage
 SELECT a FROM (VALUES (1)) AS b(y) INNER LOOKUP JOIN x ON y = a
 ----
 sql.plan.hints.lookup-join
+
+feature-usage
+SELECT a FROM (VALUES ('{"a": "b"}'::jsonb)) AS a(z) INNER INVERTED JOIN y ON b @> z
+----
+sql.plan.hints.inverted-join
 
 feature-usage
 SELECT * FROM x@primary

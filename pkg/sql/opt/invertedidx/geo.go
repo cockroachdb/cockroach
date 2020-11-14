@@ -65,57 +65,6 @@ type getSpanExprForGeoIndexFn func(
 	context.Context, tree.Datum, []tree.Datum, geoindex.RelationshipType, *geoindex.Config,
 ) *invertedexpr.SpanExpression
 
-// TryJoinGeoIndex tries to create an inverted join with the given input and
-// geospatial index from the specified filters. If a join is created, the
-// inverted join condition is returned. If no join can be created, then
-// TryJoinGeoIndex returns nil.
-func TryJoinGeoIndex(
-	ctx context.Context,
-	factory *norm.Factory,
-	filters memo.FiltersExpr,
-	tabID opt.TableID,
-	index cat.Index,
-	inputCols opt.ColSet,
-) opt.ScalarExpr {
-	config := index.GeoConfig()
-	var getSpanExpr getSpanExprForGeoIndexFn
-	if geoindex.IsGeographyConfig(config) {
-		getSpanExpr = getSpanExprForGeographyIndex
-	} else if geoindex.IsGeometryConfig(config) {
-		getSpanExpr = getSpanExprForGeometryIndex
-	} else {
-		return nil
-	}
-
-	var invertedExpr opt.ScalarExpr
-	for i := range filters {
-		invertedExprLocal := joinGeoIndex(
-			ctx, factory, filters[i].Condition, tabID, index, inputCols, getSpanExpr,
-		)
-		if invertedExprLocal == nil {
-			continue
-		}
-		if invertedExpr == nil {
-			invertedExpr = invertedExprLocal
-		} else {
-			invertedExpr = factory.ConstructAnd(invertedExpr, invertedExprLocal)
-		}
-	}
-
-	if invertedExpr == nil {
-		return nil
-	}
-
-	// The resulting expression must contain at least one column from the input.
-	var p props.Shared
-	memo.BuildSharedProps(invertedExpr, &p)
-	if !p.OuterCols.Intersects(inputCols) {
-		return nil
-	}
-
-	return invertedExpr
-}
-
 // TryConstrainGeoIndex tries to derive an inverted index constraint for the
 // given geospatial index from the specified filters. If a constraint is
 // derived, it is returned with ok=true. If no constraint can be derived,
@@ -333,40 +282,23 @@ func getSpanExprForGeometryIndex(
 	return spanExpr
 }
 
-// joinGeoIndex extracts a scalar expression from the given filter condition,
-// where the scalar expression represents a join condition between the given
-// input columns and geospatial index. Returns nil if no join condition could
-// be extracted.
-func joinGeoIndex(
-	ctx context.Context,
-	factory *norm.Factory,
-	filterCond opt.ScalarExpr,
-	tabID opt.TableID,
-	index cat.Index,
-	inputCols opt.ColSet,
-	getSpanExpr getSpanExprForGeoIndexFn,
+type geoJoinPlanner struct {
+	factory     *norm.Factory
+	tabID       opt.TableID
+	index       cat.Index
+	inputCols   opt.ColSet
+	getSpanExpr getSpanExprForGeoIndexFn
+}
+
+var _ invertedJoinPlanner = &geoJoinPlanner{}
+
+// extractInvertedJoinConditionFromLeaf is part of the invertedJoinPlanner
+// interface.
+func (g *geoJoinPlanner) extractInvertedJoinConditionFromLeaf(
+	ctx context.Context, expr opt.ScalarExpr,
 ) opt.ScalarExpr {
 	var args memo.ScalarListExpr
-	switch t := filterCond.(type) {
-	case *memo.AndExpr:
-		leftExpr := joinGeoIndex(ctx, factory, t.Left, tabID, index, inputCols, getSpanExpr)
-		rightExpr := joinGeoIndex(ctx, factory, t.Right, tabID, index, inputCols, getSpanExpr)
-		if leftExpr == nil {
-			return rightExpr
-		}
-		if rightExpr == nil {
-			return leftExpr
-		}
-		return factory.ConstructAnd(leftExpr, rightExpr)
-
-	case *memo.OrExpr:
-		leftExpr := joinGeoIndex(ctx, factory, t.Left, tabID, index, inputCols, getSpanExpr)
-		rightExpr := joinGeoIndex(ctx, factory, t.Right, tabID, index, inputCols, getSpanExpr)
-		if leftExpr == nil || rightExpr == nil {
-			return nil
-		}
-		return factory.ConstructOr(leftExpr, rightExpr)
-
+	switch t := expr.(type) {
 	case *memo.FunctionExpr:
 		args = t.Args
 
@@ -377,7 +309,7 @@ func joinGeoIndex(
 		// Cast the arguments to type Geometry if they are type Box2d.
 		for i := 0; i < len(args); i++ {
 			if args[i].DataType().Family() == types.Box2DFamily {
-				args[i] = factory.ConstructCast(args[i], types.Geometry)
+				args[i] = g.factory.ConstructCast(args[i], types.Geometry)
 			}
 		}
 
@@ -394,21 +326,17 @@ func joinGeoIndex(
 	//   g1 && g2 -> ST_Intersects(g2, g1)
 	//   g1 ~ g2 -> ST_CoveredBy(g2, g1)
 	//
-	// See joinGeoIndexFromExpr for more details.
-	fn := joinGeoIndexFromExpr(
-		factory, filterCond, args, false /* commuteArgs */, inputCols, tabID, index,
-	)
+	// See extractGeoJoinCondition for more details.
+	fn := g.extractGeoJoinCondition(expr, args, false /* commuteArgs */)
 	if fn == nil {
-		fn = joinGeoIndexFromExpr(
-			factory, filterCond, args, true /* commuteArgs */, inputCols, tabID, index,
-		)
+		fn = g.extractGeoJoinCondition(expr, args, true /* commuteArgs */)
 	}
 	return fn
 }
 
-// joinGeoIndexFromExpr tries to extract an inverted join condition from the
+// extractGeoJoinCondition tries to extract an inverted join condition from the
 // given expression, which should be either a function or comparison operation.
-// If commuteArgs is true, joinGeoIndexFromExpr tries to extract an inverted
+// If commuteArgs is true, extractGeoJoinCondition tries to extract an inverted
 // join condition from an equivalent version of the given expression in which
 // the first two arguments are swapped.
 //
@@ -425,16 +353,10 @@ func joinGeoIndex(
 // See geoindex.CommuteRelationshipMap for the full list of mappings.
 //
 // Returns nil if a join condition was not successfully extracted.
-func joinGeoIndexFromExpr(
-	factory *norm.Factory,
-	expr opt.ScalarExpr,
-	args memo.ScalarListExpr,
-	commuteArgs bool,
-	inputCols opt.ColSet,
-	tabID opt.TableID,
-	index cat.Index,
+func (g *geoJoinPlanner) extractGeoJoinCondition(
+	expr opt.ScalarExpr, args memo.ScalarListExpr, commuteArgs bool,
 ) opt.ScalarExpr {
-	rel, arg1, _, _, ok := extractInfoFromExpr(expr, args, commuteArgs, tabID, index)
+	rel, arg1, _, _, ok := extractInfoFromExpr(expr, args, commuteArgs, g.tabID, g.index)
 	if !ok {
 		return nil
 	}
@@ -443,14 +365,14 @@ func joinGeoIndexFromExpr(
 	var p props.Shared
 	memo.BuildSharedProps(arg1, &p)
 	if !p.OuterCols.Empty() {
-		if !p.OuterCols.SubsetOf(inputCols) {
+		if !p.OuterCols.SubsetOf(g.inputCols) {
 			return nil
 		}
 	} else if !memo.CanExtractConstDatum(arg1) {
 		return nil
 	}
 
-	return makeExprFromRelationshipAndParams(factory, expr, args, commuteArgs, rel)
+	return makeExprFromRelationshipAndParams(g.factory, expr, args, commuteArgs, rel)
 }
 
 // constructFunction finds a function overload matching the given name and
@@ -909,42 +831,19 @@ func NewGeoDatumsToInvertedExpr(
 		panic(errors.AssertionFailedf("not a geography or geometry index"))
 	}
 
-	// getInvertedExpr takes a TypedExpr tree consisting of And, Or and Func
-	// expressions, and constructs a new TypedExpr tree consisting of And, Or and
-	// geoInvertedExpr expressions. The geoInvertedExpr serves to improve the
-	// performance of geoDatumsToInvertedExpr.Convert by reducing the amount of
-	// computation needed to convert an input row to a SpanExpression. It does
-	// this by caching the geospatial relationship of each function, and pre-
-	// computing and caching the SpanExpressions for any functions that have a
-	// constant as the non-indexed argument.
-	var getInvertedExpr func(expr tree.TypedExpr) (tree.TypedExpr, error)
+	// getInvertedExprLeaf takes a TypedExpr consisting of a FuncExpr and
+	// constructs a new TypedExpr consisting of a geoInvertedExpr expression.
+	// The geoInvertedExpr serves to improve the performance of
+	// geoDatumsToInvertedExpr.Convert by reducing the amount of computation
+	// needed to convert an input row to a SpanExpression. It does this by
+	// caching the geospatial relationship of each function, and pre-computing
+	// and caching the SpanExpressions for any functions that have a constant as
+	// the non-indexed argument.
 	funcExprCount := 0
 	var preFilterRelationship geoindex.RelationshipType
 	var additionalPreFilterParams []tree.Datum
-	getInvertedExpr = func(expr tree.TypedExpr) (tree.TypedExpr, error) {
+	getInvertedExprLeaf := func(expr tree.TypedExpr) (tree.TypedExpr, error) {
 		switch t := expr.(type) {
-		case *tree.AndExpr:
-			leftExpr, err := getInvertedExpr(t.TypedLeft())
-			if err != nil {
-				return nil, err
-			}
-			rightExpr, err := getInvertedExpr(t.TypedRight())
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewTypedAndExpr(leftExpr, rightExpr), nil
-
-		case *tree.OrExpr:
-			leftExpr, err := getInvertedExpr(t.TypedLeft())
-			if err != nil {
-				return nil, err
-			}
-			rightExpr, err := getInvertedExpr(t.TypedRight())
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewTypedOrExpr(leftExpr, rightExpr), nil
-
 		case *tree.FuncExpr:
 			funcExprCount++
 			name := t.Func.FunctionReference.String()
@@ -959,7 +858,7 @@ func NewGeoDatumsToInvertedExpr(
 
 			// We know that the non-index param is the first param, because the
 			// optimizer already commuted the arguments of any functions where that
-			// was not the case. See joinGeoIndexFromExpr for details.
+			// was not the case. See extractGeoJoinCondition for details.
 			nonIndexParam := t.Exprs[0].(tree.TypedExpr)
 
 			var additionalParams []tree.Datum
@@ -996,7 +895,7 @@ func NewGeoDatumsToInvertedExpr(
 	}
 
 	var err error
-	g.invertedExpr, err = getInvertedExpr(expr)
+	g.invertedExpr, err = getInvertedExpr(expr, getInvertedExprLeaf)
 	if err != nil {
 		return nil, err
 	}
@@ -1015,40 +914,8 @@ func (g *geoDatumsToInvertedExpr) Convert(
 	defer g.evalCtx.PopIVarContainer()
 
 	var preFilterState interface{}
-	var evalInvertedExpr func(expr tree.TypedExpr) (invertedexpr.InvertedExpression, error)
-	evalInvertedExpr = func(expr tree.TypedExpr) (invertedexpr.InvertedExpression, error) {
+	evalInvertedExprLeaf := func(expr tree.TypedExpr) (invertedexpr.InvertedExpression, error) {
 		switch t := expr.(type) {
-		case *tree.AndExpr:
-			leftExpr, err := evalInvertedExpr(t.TypedLeft())
-			if err != nil {
-				return nil, err
-			}
-			rightExpr, err := evalInvertedExpr(t.TypedRight())
-			if err != nil {
-				return nil, err
-			}
-			if leftExpr == nil || rightExpr == nil {
-				return nil, nil
-			}
-			return invertedexpr.And(leftExpr, rightExpr), nil
-
-		case *tree.OrExpr:
-			leftExpr, err := evalInvertedExpr(t.TypedLeft())
-			if err != nil {
-				return nil, err
-			}
-			rightExpr, err := evalInvertedExpr(t.TypedRight())
-			if err != nil {
-				return nil, err
-			}
-			if leftExpr == nil {
-				return rightExpr, nil
-			}
-			if rightExpr == nil {
-				return leftExpr, nil
-			}
-			return invertedexpr.Or(leftExpr, rightExpr), nil
-
 		case *geoInvertedExpr:
 			if t.spanExpr != nil {
 				// We call Copy so the caller can modify the returned expression.
@@ -1071,7 +938,7 @@ func (g *geoDatumsToInvertedExpr) Convert(
 		}
 	}
 
-	invertedExpr, err := evalInvertedExpr(g.invertedExpr)
+	invertedExpr, err := evalInvertedExpr(g.invertedExpr, evalInvertedExprLeaf)
 	if err != nil {
 		return nil, nil, err
 	}

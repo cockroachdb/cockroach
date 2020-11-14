@@ -8694,7 +8694,7 @@ opt_index_flags:
 //   '{' IGNORE_FOREIGN_KEYS [, ...] '}'
 //
 // Join types:
-//   { INNER | { LEFT | RIGHT | FULL } [OUTER] } [ { HASH | MERGE | LOOKUP } ]
+//   { INNER | { LEFT | RIGHT | FULL } [OUTER] } [ { HASH | MERGE | LOOKUP | INVERTED } ]
 //
 // %SeeAlso: WEBDOCS/table-expressions.html
 table_ref:
@@ -8953,6 +8953,9 @@ join_outer:
 //  - LOOKUP forces a lookup join into the right side; the right side must be
 //    a table with a suitable index. `LOOKUP` can only be used with INNER and
 //    LEFT joins (though this is not enforced by the syntax).
+//  - INVERTED forces an inverted join into the right side; the right side must
+//    be a table with a suitable inverted index. `INVERTED` can only be used
+//    with INNER and LEFT joins (though this is not enforced by the syntax).
 //  - If it is not possible to use the algorithm in the hint, an error is
 //    returned.
 //  - When a join hint is specified, the two tables will not be reordered
@@ -8969,6 +8972,10 @@ opt_join_hint:
 | LOOKUP
   {
     $$ = tree.AstLookup
+  }
+| INVERTED
+  {
+    $$ = tree.AstInverted
   }
 | /* EMPTY */
   {

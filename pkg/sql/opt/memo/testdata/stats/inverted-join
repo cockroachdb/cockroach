@@ -76,3 +76,142 @@ project
       │    └── filters (true)
       └── filters
            └── st_intersects(ltable.geom:2, rtable.geom:5) [type=bool, outer=(2,5), immutable, constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+
+exec-ddl
+CREATE TABLE json_arr1 (
+  k INT PRIMARY KEY,
+  j JSONB,
+  a STRING[],
+  INVERTED INDEX j_idx (j),
+  INVERTED INDEX a_idx (a)
+)
+----
+
+exec-ddl
+CREATE TABLE json_arr2 (
+  k INT PRIMARY KEY,
+  j JSONB,
+  a STRING[]
+)
+----
+
+exec-ddl
+ALTER TABLE json_arr1 INJECT STATISTICS '[
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE json_arr2 INJECT STATISTICS '[
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+----
+
+opt
+SELECT t1.k
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
+ON t1.j @> t2.j
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=100]
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t1.k:1(int!null) t1.j:2(jsonb) t2.j:8(jsonb)
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── stats: [rows=100]
+      ├── fd: (1)-->(2)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t1.k:1(int!null) t2.j:8(jsonb)
+      │    ├── inverted-expr
+      │    │    └── t1.j:2 @> t2.j:8 [type=bool]
+      │    ├── stats: [rows=100, distinct(1)=95.617925, null(1)=0]
+      │    ├── scan json_arr2 [as=t2]
+      │    │    ├── columns: t2.j:8(jsonb)
+      │    │    └── stats: [rows=10]
+      │    └── filters (true)
+      └── filters
+           └── t1.j:2 @> t2.j:8 [type=bool, outer=(2,8), immutable]
+
+# TODO(rytaft): The following two inverted joins have the same estimated row
+# count even though the first one has an extra conjunct in the inverted
+# expression. The first one should have a lower estimated row count.
+opt
+SELECT *
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
+ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
+----
+inner-join (lookup json_arr1 [as=t1])
+ ├── columns: k:1(int!null) j:2(jsonb) a:3(string[]!null) k:7(int!null) j:8(jsonb) a:9(string[])
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── stats: [rows=3.66666667]
+ ├── key: (1,7)
+ ├── fd: (1)-->(2,3), (7)-->(8,9)
+ ├── inner-join (inverted json_arr1@a_idx [as=t1])
+ │    ├── columns: t1.k:1(int!null) t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
+ │    ├── inverted-expr
+ │    │    └── (t1.a:3 @> t2.a:9) AND (t1.a:3 @> ARRAY['foo']) [type=bool]
+ │    ├── stats: [rows=33.3333333, distinct(1)=32.9461714, null(1)=0, distinct(7)=3.33318943, null(7)=0]
+ │    ├── key: (1,7)
+ │    ├── fd: (7)-->(8,9)
+ │    ├── scan json_arr2 [as=t2]
+ │    │    ├── columns: t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
+ │    │    ├── constraint: /7: [/6 - ]
+ │    │    ├── stats: [rows=3.33333333, distinct(7)=3.33333333, null(7)=0]
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8,9)
+ │    └── filters (true)
+ └── filters
+      ├── t1.a:3 @> t2.a:9 [type=bool, outer=(3,9), immutable]
+      └── t1.a:3 @> ARRAY['foo'] [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+opt
+SELECT t2.k
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
+ON t1.a @> t2.a AND t1.j @> t2.j AND t2.k > 5
+----
+project
+ ├── columns: k:7(int!null)
+ ├── immutable
+ ├── stats: [rows=33.3333333]
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t1.j:2(jsonb) t1.a:3(string[]) t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── stats: [rows=33.3333333]
+      ├── fd: (7)-->(8,9)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t1.k:1(int!null) t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
+      │    ├── inverted-expr
+      │    │    └── t1.j:2 @> t2.j:8 [type=bool]
+      │    ├── stats: [rows=33.3333333, distinct(7)=3.33318943, null(7)=0]
+      │    ├── key: (1,7)
+      │    ├── fd: (7)-->(8,9)
+      │    ├── scan json_arr2 [as=t2]
+      │    │    ├── columns: t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
+      │    │    ├── constraint: /7: [/6 - ]
+      │    │    ├── stats: [rows=3.33333333, distinct(7)=3.33333333, null(7)=0]
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8,9)
+      │    └── filters (true)
+      └── filters
+           ├── t1.a:3 @> t2.a:9 [type=bool, outer=(3,9), immutable]
+           └── t1.j:2 @> t2.j:8 [type=bool, outer=(2,8), immutable]
