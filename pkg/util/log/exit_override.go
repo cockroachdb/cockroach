@@ -79,24 +79,20 @@ func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 		ctx, severity.ERROR, &l.logCounter, 2 /* depth */, l.redactableLogs.Get(),
 		"logging error: %v", err)
 
-	// Format the entry for output below. Note how this formatting is
-	// done just once here for both the stderr and file outputs below,
-	// and thus misses out on TTY colors if configured. We afford this
-	// simplification because we only arrive here in case of
-	// likely-unrecoverable error, and there's not much incentive to be
-	// overly aesthetic in this case.
-	buf := logging.formatLogEntry(entry, nil /*stacks*/, nil /*color profile*/)
-	defer putBuffer(buf)
-
 	// Either stderr or our log file is broken. Try writing the error to both
 	// streams in the hope that one still works or else the user will have no idea
 	// why we crashed.
 	//
 	// Note that we're already in error. If an additional error is encountered
 	// here, we can't do anything but raise our hands in the air.
+
+	buf := logging.stderrFormatter.formatEntry(entry, nil /*stack*/)
 	_, _ = OrigStderr.Write(buf.Bytes())
+	putBuffer(buf)
 
 	if fileSink := l.getFileSink(); fileSink != nil {
+		buf := fileSink.formatter.formatEntry(entry, nil /*stack*/)
 		fileSink.emergencyOutput(buf.Bytes())
+		putBuffer(buf)
 	}
 }

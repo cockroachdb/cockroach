@@ -85,6 +85,7 @@ func init() {
 	// (OrigStderr).
 	logging.stderrThreshold = severity.INFO
 	logging.fileThreshold = severity.INFO
+	logging.stderrFormatter = formatCrdbV1TTYWithCounter{}
 
 	// Default maximum size of individual log files.
 	logging.logFileMaxSize = 10 << 20 // 10MiB

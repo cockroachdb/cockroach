@@ -243,7 +243,7 @@ func (l *fileSink) initializeNewOutputFile(
 	if l.getStartLines != nil {
 		messages := l.getStartLines(now)
 		for _, entry := range messages {
-			buf := logging.formatLogEntry(entry, nil, nil)
+			buf := l.formatter.formatEntry(entry, nil)
 			var n int
 			n, err = file.Write(buf.Bytes())
 			putBuffer(buf)

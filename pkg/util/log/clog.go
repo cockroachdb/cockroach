@@ -47,6 +47,9 @@ type loggingT struct {
 	// facilities.
 	vmoduleConfig vmoduleConfig
 
+	// formatter for stderr entries.
+	stderrFormatter logFormatter
+
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
 	// mu should be held only for short periods of time and
@@ -269,11 +272,11 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	// not eliminate the event.
 
 	if entry.Severity >= logging.stderrThreshold.Get() {
-		stderrBuf = logging.processForStderr(entry, stacks)
+		stderrBuf = logging.stderrFormatter.formatEntry(entry, stacks)
 	}
 
 	if fileSink != nil && entry.Severity >= fileSink.fileThreshold {
-		fileBuf = logging.processForFile(entry, stacks)
+		fileBuf = fileSink.formatter.formatEntry(entry, stacks)
 	}
 
 	// If any of the sinks is active, it is now time to send it out.

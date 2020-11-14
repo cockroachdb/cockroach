@@ -26,10 +26,53 @@ import (
 
 // FormatEntry writes the log entry to the specified writer.
 func FormatEntry(e logpb.Entry, w io.Writer) error {
-	buf := logging.formatLogEntry(e, nil, nil)
+	var f formatCrdbV1WithCounter
+	buf := f.formatEntry(e, nil)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
+}
+
+// formatCrdbV1 is the canonical log format, without
+// a counter column.
+type formatCrdbV1 struct{}
+
+func (formatCrdbV1) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
+	return formatLogEntryInternal(entry, false /*showCounter*/, nil, stacks)
+}
+
+// formatCrdbV1WithCounter is the canonical log format including a
+// counter column.
+type formatCrdbV1WithCounter struct{}
+
+func (formatCrdbV1WithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
+	return formatLogEntryInternal(entry, true /*showCounter*/, nil, stacks)
+}
+
+// formatCrdbV1TTY is like formatCrdbV1 and includes VT color codes if
+// the stderr output is a TTY and -nocolor is not passed on the
+// command line.
+type formatCrdbV1TTY struct{}
+
+func (formatCrdbV1TTY) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
+	cp := ttycolor.StderrProfile
+	if logging.noColor {
+		cp = nil
+	}
+	return formatLogEntryInternal(entry, false /*showCounter*/, cp, stacks)
+}
+
+// formatCrdbV1ColorWithCounter is like formatCrdbV1WithCounter and
+// includes VT color codes if the stderr output is a TTY and -nocolor
+// is not passed on the command line.
+type formatCrdbV1TTYWithCounter struct{}
+
+func (formatCrdbV1TTYWithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
+	cp := ttycolor.StderrProfile
+	if logging.noColor {
+		cp = nil
+	}
+	return formatLogEntryInternal(entry, true /*showCounter*/, cp, stacks)
 }
 
 // formatEntryInternal renders a log entry.
@@ -49,13 +92,11 @@ func FormatEntry(e logpb.Entry, w io.Writer) error {
 // 	file             The file name
 // 	line             The line number
 // 	tags             The context tags
-// 	counter          The log entry counter, if non-zero
+// 	counter          The log entry counter, if enabled and non-zero
 // 	msg              The user-supplied message
-func (l *loggingT) formatLogEntryInternal(entry logpb.Entry, cp ttycolor.Profile) *buffer {
-	if l.noColor {
-		cp = nil
-	}
-
+func formatLogEntryInternal(
+	entry logpb.Entry, showCounter bool, cp ttycolor.Profile, stacks []byte,
+) *buffer {
 	buf := getBuffer()
 	if entry.Line < 0 {
 		entry.Line = 0 // not a real line number, but acceptable to someDigits
@@ -147,8 +188,8 @@ func (l *loggingT) formatLogEntryInternal(entry logpb.Entry, cp ttycolor.Profile
 		buf.Write(cp[ttycolor.Reset])
 	}
 
-	// Display the counter if set.
-	if entry.Counter > 0 {
+	// Display the counter if set and enabled.
+	if showCounter && entry.Counter > 0 {
 		n = buf.someDigits(0, int(entry.Counter))
 		tmp[n] = ' '
 		n++
@@ -157,6 +198,19 @@ func (l *loggingT) formatLogEntryInternal(entry logpb.Entry, cp ttycolor.Profile
 
 	// Display the message.
 	buf.WriteString(entry.Message)
+
+	// Ensure there is a final newline.
+	if buf.Bytes()[buf.Len()-1] != '\n' {
+		_ = buf.WriteByte('\n')
+	}
+
+	// If there are stack traces, print them.
+	// Note that stacks are assumed to always contain
+	// a final newline already.
+	if len(stacks) > 0 {
+		buf.Write(stacks)
+	}
+
 	return buf
 }
 
