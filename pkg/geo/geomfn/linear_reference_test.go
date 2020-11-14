@@ -104,4 +104,18 @@ func TestLineInterpolatePoints(t *testing.T) {
 				})
 		}
 	}
+
+	t.Run("too many points when repeat=true", func(t *testing.T) {
+		g := geo.MustParseGeometry("LINESTRING(0 0, 100 100)")
+		_, err := LineInterpolatePoints(g, 0.000001, true)
+		require.EqualError(
+			t,
+			err,
+			fmt.Sprintf(
+				"attempting to interpolate into too many points; requires 1000000 points, max %d",
+				geo.MaxAllowedSplitPoints,
+			),
+		)
+	})
+
 }
