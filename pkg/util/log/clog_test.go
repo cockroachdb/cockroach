@@ -145,7 +145,6 @@ func TestStandardLog(t *testing.T) {
 	}
 }
 
-// Verify that a log can be fetched in JSON format.
 func TestEntryDecoder(t *testing.T) {
 	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, msg string) string {
 		entry := logpb.Entry{
@@ -156,7 +155,8 @@ func TestEntryDecoder(t *testing.T) {
 			Line:      int64(line),
 			Message:   msg,
 		}
-		buf := logging.formatLogEntry(entry, nil /* stacks */, nil /* color profile */)
+		var f formatCrdbV1
+		buf := f.formatEntry(entry, nil /* stacks */)
 		defer putBuffer(buf)
 		return buf.String()
 	}
@@ -719,8 +719,9 @@ func BenchmarkHeader(b *testing.B) {
 		File:      "file.go",
 		Line:      100,
 	}
+	var f formatCrdbV1
 	for i := 0; i < b.N; i++ {
-		buf := logging.formatLogEntryInternal(entry, nil /* profile */)
+		buf := f.formatEntry(entry, nil /* stacks */)
 		putBuffer(buf)
 	}
 }

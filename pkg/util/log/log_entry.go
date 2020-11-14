@@ -24,34 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
-	"github.com/cockroachdb/ttycolor"
 	"github.com/petermattis/goid"
 )
 
-// formatLogEntry formats an logpb.Entry into a newly allocated *buffer.
-// The caller is responsible for calling putBuffer() afterwards.
-func (l *loggingT) formatLogEntry(entry logpb.Entry, stacks []byte, cp ttycolor.Profile) *buffer {
-	buf := l.formatLogEntryInternal(entry, cp)
-	if buf.Bytes()[buf.Len()-1] != '\n' {
-		_ = buf.WriteByte('\n')
-	}
-	if len(stacks) > 0 {
-		buf.Write(stacks)
-	}
-	return buf
-}
-
 const severityChar = "IWEF"
-
-// processForStderr formats a log entry for output to standard error.
-func (l *loggingT) processForStderr(entry logpb.Entry, stacks []byte) *buffer {
-	return l.formatLogEntry(entry, stacks, ttycolor.StderrProfile)
-}
-
-// processForFile formats a log entry for output to a file.
-func (l *loggingT) processForFile(entry logpb.Entry, stacks []byte) *buffer {
-	return l.formatLogEntry(entry, stacks, nil)
-}
 
 // makeStartLine creates a log entry suitable for the start of a logging
 // output using the canonical logging format.
