@@ -113,6 +113,13 @@ func ParseBufferParams(s string, distance float64) (BufferParams, float64, error
 
 // Buffer buffers a given Geometry by the supplied parameters.
 func Buffer(g geo.Geometry, params BufferParams, distance float64) (geo.Geometry, error) {
+	if params.p.QuadrantSegments > geo.MaxAllowedSplitPoints {
+		return geo.Geometry{}, errors.Newf(
+			"attempting to split buffered geometry into too many quadrant segments; requested %d quadrant segments, max %d",
+			params.p.QuadrantSegments,
+			geo.MaxAllowedSplitPoints,
+		)
+	}
 	bufferedGeom, err := geos.Buffer(g.EWKB(), params.p, distance)
 	if err != nil {
 		return geo.Geometry{}, err

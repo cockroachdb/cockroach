@@ -43,11 +43,11 @@ func Segmentize(geography geo.Geography, segmentMaxLength float64) (geo.Geograph
 		// Convert segmentMaxLength to Angle with respect to earth sphere as
 		// further calculation is done considering segmentMaxLength as Angle.
 		segmentMaxAngle := segmentMaxLength / spheroid.SphereRadius
-		segGeometry, err := geosegmentize.SegmentizeGeom(geometry, segmentMaxAngle, segmentizeCoords)
+		ret, err := geosegmentize.Segmentize(geometry, segmentMaxAngle, segmentizeCoords)
 		if err != nil {
 			return geo.Geography{}, err
 		}
-		return geo.MakeGeographyFromGeomT(segGeometry)
+		return geo.MakeGeographyFromGeomT(ret)
 	}
 }
 
@@ -78,13 +78,13 @@ func segmentizeCoords(a geom.Coord, b geom.Coord, segmentMaxAngle float64) ([]fl
 	// numberOfSegmentsToCreate = 2^(ceil(log2(segmentMaxLength/distanceBetweenPoints))).
 	numberOfSegmentsToCreate := int(math.Pow(2, math.Ceil(math.Log2(chordAngleBetweenPoints/segmentMaxAngle))))
 	numPoints := 2 * (1 + numberOfSegmentsToCreate)
-	if numPoints > geosegmentize.MaxPoints {
+	if numPoints > geo.MaxAllowedSplitPoints {
 		return nil, errors.Newf(
 			"attempting to segmentize into too many coordinates; need %d points between %v and %v, max %d",
 			numPoints,
 			a,
 			b,
-			geosegmentize.MaxPoints,
+			geo.MaxAllowedSplitPoints,
 		)
 	}
 	allSegmentizedCoordinates := make([]float64, 0, numPoints)

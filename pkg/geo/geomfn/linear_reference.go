@@ -37,6 +37,13 @@ func LineInterpolatePoints(g geo.Geometry, fraction float64, repeat bool) (geo.G
 		lengthOfLineString := geomRepr.Length()
 		if repeat && fraction <= 0.5 && fraction != 0 {
 			numberOfInterpolatedPoints := int(1 / fraction)
+			if numberOfInterpolatedPoints > geo.MaxAllowedSplitPoints {
+				return geo.Geometry{}, errors.Newf(
+					"attempting to interpolate into too many points; requires %d points, max %d",
+					numberOfInterpolatedPoints,
+					geo.MaxAllowedSplitPoints,
+				)
+			}
 			interpolatedPoints := geom.NewMultiPoint(geom.XY).SetSRID(geomRepr.SRID())
 			for pointInserted := 1; pointInserted <= numberOfInterpolatedPoints; pointInserted++ {
 				pointEWKB, err := geos.InterpolateLine(g.EWKB(), float64(pointInserted)*fraction*lengthOfLineString)
