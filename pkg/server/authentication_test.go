@@ -205,7 +205,7 @@ func TestVerifyPassword(t *testing.T) {
 	}
 
 	//location is used for timezone testing.
-	shanghaiLoc, err := time.LoadLocation("Asia/Shanghai")
+	shanghaiLoc, err := timeutil.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		t.Fatal(err)
 	}
