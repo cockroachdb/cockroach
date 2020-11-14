@@ -269,10 +269,6 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	}
 	defer c.cleanup(ctx)
 
-	if err := checkTzDatabaseAvailability(ctx); err != nil {
-		return err
-	}
-
 	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
 	if err != nil {
 		log.Infof(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)

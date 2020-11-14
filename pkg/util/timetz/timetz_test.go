@@ -83,7 +83,7 @@ func TestTimeTZ(t *testing.T) {
 	require.False(t, depOnCtx)
 
 	// No daylight savings in Hawaii!
-	hawaiiZone, err := time.LoadLocation("Pacific/Honolulu")
+	hawaiiZone, err := timeutil.LoadLocation("Pacific/Honolulu")
 	require.NoError(t, err)
 	hawaiiTime := MakeTimeTZFromLocation(timeofday.New(1, 14, 15, 0), hawaiiZone)
 
