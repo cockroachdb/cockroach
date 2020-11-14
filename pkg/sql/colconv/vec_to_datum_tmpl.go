@@ -77,7 +77,7 @@ func NewVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *VecToDatumC
 // Release is part of the execinfra.Releasable interface.
 func (c *VecToDatumConverter) Release() {
 	c.convertedVecs = c.convertedVecs[:0]
-	c.vecIdxsToConvert = nil
+	c.vecIdxsToConvert = c.vecIdxsToConvert[:0]
 	vecToDatumConverterPool.Put(c)
 }
 
