@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
 
@@ -90,15 +91,11 @@ func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// e.g. to the OPS channel, if we are reporting an error while writing
 	// to a non-OPS channel.
 
-	if stderrSink := l.stderrSink; stderrSink != nil {
-		buf := stderrSink.formatter.formatEntry(entry, nil /*stack*/)
-		_ = stderrSink.output(buf.Bytes())
-		putBuffer(buf)
-	}
-
-	if fileSink := l.getFileSink(); fileSink != nil {
-		buf := fileSink.formatter.formatEntry(entry, nil /*stack*/)
-		fileSink.emergencyOutput(buf.Bytes())
-		putBuffer(buf)
+	for _, s := range l.sinks {
+		if s.activeAtSeverity(logpb.Severity_NONE) {
+			buf := s.getFormatter().formatEntry(entry, nil /*stack*/)
+			s.emergencyOutput(buf.Bytes())
+			putBuffer(buf)
+		}
 	}
 }

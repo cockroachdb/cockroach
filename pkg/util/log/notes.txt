@@ -1,0 +1,98 @@
+RecoverAndReportPanic
+-> ReportPanic, panic()
+- called by
+  - cli.Main
+  - cli.initCPUProfile in profiler goroutine
+  - cli.runStart in server start goroutine
+
+RecoverAndReportNonfatalPanic
+-> ReportPanic(), conditional panic()
+- called by
+  - server.(*Server).PeriodicallyCheckForUpdates in check loop
+
+ReportPanic
+-> Shout, SendCrashReport
+- called by
+  - RecoverAndReportPanic
+  - RecoverAndReportNonfatalPanic
+  - stopper.(*Stopper).Recover
+  - sql.(*connExecutor).closeWrapper
+    safeErr := log.Safe("while executing stmt %s", anonStmt).WithCause(panicObj)
+    ReportPanic(safeErr)
+
+XXX replace by "log.AssertionFailed"
+- ReportOrPanic
+-> conditional panic() or Warningf, SendCrashReport
+- called by
+  - execinfra.(*rowSourceBase).consumerClosed()  (w/ error-like)
+  - mon.(*BytesMonitor).doStop() (w/ error-like)
+  - mon.(*BytesMonitor).releaseBytes() (w/ error-like)
+  - changefeedccl.(*changeFrontier).noteResolvedSpan() (w/ error-like)
+  - jobs.(*Registry).maybeAdoptJob() (w/ error-like)
+  - sql.(*LeaseManager).watchForRangefeedUpdates() (w/ error-like)
+
+SetupCrashReporter
+-> raven.SetDSN, .SetRelease, .SetEnvironment, .SetTagsContext
+- called by
+  - cli.Main (with cobra cmdName)
+
+XXX replace by errors.Redact
+Redact
+-> recursion
+called by
+  - sql.(SensitiveInfo).GetScrubbedCopy()
+  - ReportablesToSafeError
+
+XXX replace by errors redact
+ReportablesToSafeError
+-> &safeError with strings.Join(";", redact(...))
+- called by
+  - SendCrashReport
+  - sql.TestAnonymizeStatementsForReporting
+  - kvserver.TestWrapNumbersAsSafe
+
+XXX unexport
+SendCrashReport
+-> ShouldSendReport, ReportablesToSafeError, raven.NewException, SendReport
+- called by
+  - ReportPanic
+  - ReportOrPanic
+  - addStructured(FATAL)
+
+XXX unexport
+setting: PanicOnAssertions
+- called by
+  - RecoverAndReportPanic
+  - ReportOrPanic
+
+setting: DiagnosticsReportingEnabled
+- called by
+  - server.(*adminServer).Cluster
+  - server. update loop
+
+setting: CrashReports
+- called by
+  ShouldSendReport
+  main_test.go
+
+ShouldSendReport
+-> setting read DiagnosticsReportingEnabled, CrashReports
+- called by
+  - SendCrashReport
+  - errorutil.SendReport
+  - sqltelemetry.RecordError
+
+SendReport
+
+XXX move to log? Use singleton settings?
+errorutil.SendReport
+-> log.ShouldSendReport, errors.BuildSentryReport, log.SendReport
+called by
+
+sqltelemetry.RecordError
+-> log.ShouldSendReport, errors.BuildSentryReport, log.SendtryReport
+called by
+
+ReportOrPanic
+
+RegisterTagFn

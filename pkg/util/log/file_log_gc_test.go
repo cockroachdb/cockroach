@@ -83,8 +83,13 @@ func testLogGC(
 	// temporary directory, preventing further investigation.
 	logFn(context.Background(), "0")
 
+	fileSink := logger.getFileSink()
+	if fileSink == nil {
+		t.Fatal("no file sink")
+	}
+
 	// Check that the file was created.
-	origDir, allFilesOriginal, err := logger.fileSink.listLogFiles()
+	origDir, allFilesOriginal, err := fileSink.listLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +100,7 @@ func testLogGC(
 	// Check that the file exists, and also measure its size.
 	// We'll use this as base value for the maximum combined size
 	// below, to force GC.
-	dir := logger.fileSink.mu.logDir
+	dir := fileSink.mu.logDir
 	if dir == "" {
 		t.Fatal(errDirectoryNotSet)
 	}
@@ -115,12 +120,12 @@ func testLogGC(
 	// We want to create multiple log files below. For this we need to
 	// override the size/number limits first to the values suitable for
 	// the test.
-	defer func(previous int64) { logger.fileSink.logFileMaxSize = previous }(logger.fileSink.logFileMaxSize)
-	logger.fileSink.logFileMaxSize = 1 // ensure rotation on every log write
+	defer func(previous int64) { fileSink.logFileMaxSize = previous }(fileSink.logFileMaxSize)
+	fileSink.logFileMaxSize = 1 // ensure rotation on every log write
 	defer func(previous int64) {
-		atomic.StoreInt64(&logger.fileSink.logFilesCombinedMaxSize, previous)
-	}(logger.fileSink.logFilesCombinedMaxSize)
-	atomic.StoreInt64(&logger.fileSink.logFilesCombinedMaxSize, maxTotalLogFileSize)
+		atomic.StoreInt64(&fileSink.logFilesCombinedMaxSize, previous)
+	}(fileSink.logFilesCombinedMaxSize)
+	atomic.StoreInt64(&fileSink.logFilesCombinedMaxSize, maxTotalLogFileSize)
 
 	// Create the number of expected log files.
 	for i := 1; i < newLogFiles; i++ {
@@ -128,7 +133,7 @@ func testLogGC(
 		Flush()
 	}
 
-	_, allFilesBefore, err := logger.fileSink.listLogFiles()
+	_, allFilesBefore, err := fileSink.listLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +151,7 @@ func testLogGC(
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		logger.fileSink.gcDaemon(ctx)
+		fileSink.gcDaemon(ctx)
 		close(done)
 	}()
 
@@ -155,7 +160,7 @@ func testLogGC(
 	Flush()
 
 	succeedsSoon(t, func() error {
-		_, allFilesAfter, err := logger.fileSink.listLogFiles()
+		_, allFilesAfter, err := fileSink.listLogFiles()
 		if err != nil {
 			return err
 		}

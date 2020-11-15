@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -43,13 +44,14 @@ import (
 // For background about why this function exists, see:
 // https://github.com/cockroachdb/cockroach/issues/36861#issuecomment-483589446
 func TemporarilyDisableFileGCForMainLogger() (cleanup func()) {
-	if debugLog.fileSink == nil {
+	fileSink := debugLog.getFileSink()
+	if fileSink == nil || !fileSink.enabled.Get() {
 		return func() {}
 	}
-	oldLogLimit := atomic.LoadInt64(&debugLog.fileSink.logFilesCombinedMaxSize)
-	atomic.CompareAndSwapInt64(&debugLog.fileSink.logFilesCombinedMaxSize, oldLogLimit, math.MaxInt64)
+	oldLogLimit := atomic.LoadInt64(&fileSink.logFilesCombinedMaxSize)
+	atomic.CompareAndSwapInt64(&fileSink.logFilesCombinedMaxSize, oldLogLimit, math.MaxInt64)
 	return func() {
-		atomic.CompareAndSwapInt64(&debugLog.fileSink.logFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
+		atomic.CompareAndSwapInt64(&fileSink.logFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
 	}
 }
 
@@ -64,6 +66,13 @@ type fileSink struct {
 	// name prefix for log files.
 	prefix string
 
+	// syncWrites if true calls file.Flush and file.Sync on every log
+	// write. This can be set per-logger e.g. for audit logging.
+	//
+	// Note that synchronization for all log files simultaneously can
+	// also be configured via logging.syncWrites, see SetSync().
+	syncWrites bool
+
 	// logFileMaxSize is the maximum size of a log file in bytes.
 	logFileMaxSize int64
 
@@ -73,10 +82,10 @@ type fileSink struct {
 	// temporarily be up to logFileMaxSize larger.
 	logFilesCombinedMaxSize int64
 
-	// Level beyond which entries submitted to this logger are written
+	// Level beyond which entries submitted to this sink are written
 	// to the output file. This acts as a filter between the log entry
 	// producers and the file sink.
-	fileThreshold Severity
+	threshold Severity
 
 	// formatter for entries.
 	formatter logFormatter
@@ -129,6 +138,7 @@ type fileSink struct {
 // newFileSink creates a new file sink.
 func newFileSink(
 	dir, fileNamePrefix string,
+	forceSyncWrites bool,
 	fileThreshold Severity,
 	fileMaxSize, combinedMaxSize int64,
 	getStartLines func(time.Time) []logpb.Entry,
@@ -139,8 +149,9 @@ func newFileSink(
 	}
 	f := &fileSink{
 		prefix:                  prefix,
-		fileThreshold:           fileThreshold,
+		threshold:               fileThreshold,
 		formatter:               formatCrdbV1WithCounter{},
+		syncWrites:              forceSyncWrites,
 		logFileMaxSize:          fileMaxSize,
 		logFilesCombinedMaxSize: combinedMaxSize,
 		gcNotify:                make(chan struct{}, 1),
@@ -151,8 +162,38 @@ func newFileSink(
 	return f
 }
 
-// output emits some bytes from a log entry to the file sink.
-func (l *fileSink) output(syncWrites, doFlush bool, b []byte) error {
+// activeAtSeverity implements the logSink interface.
+func (l *fileSink) activeAtSeverity(sev logpb.Severity) bool {
+	return l.enabled.Get() && sev >= l.threshold
+}
+
+// attachHints implements the logSink interface.
+func (l *fileSink) attachHints(stacks []byte) []byte {
+	// The Fatal output will be copied across multiple sinks, so it may
+	// show up to a (human) observer through a different channel than a
+	// file in the log directory. So remind the operator where to look
+	// for more details.
+	l.mu.Lock()
+	stacks = append(stacks, []byte(fmt.Sprintf(
+		"\nFor more context, check log files in: %s\n", l.mu.logDir))...)
+	l.mu.Unlock()
+	return stacks
+}
+
+// getFormatter implements the logSink interface.
+func (l *fileSink) getFormatter() logFormatter {
+	return l.formatter
+}
+
+// output implements the logSink interface.
+func (l *fileSink) output(extraSync bool, b []byte) error {
+	if !l.enabled.Get() {
+		// NB: we need to check filesink.enabled a second time here in
+		// case a test Scope() has disabled it asynchronously while
+		// (*loggerT).outputLogEntry() was not holding outputMu.
+		return nil
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -160,18 +201,22 @@ func (l *fileSink) output(syncWrites, doFlush bool, b []byte) error {
 		return err
 	}
 
-	if err := l.writeToFileLocked(syncWrites, b); err != nil {
+	if err := l.writeToFileLocked(b); err != nil {
 		return err
 	}
 
-	if doFlush {
+	if extraSync || l.syncWrites || logging.syncWrites.Get() {
 		l.flushAndSyncLocked(true /*doSync*/)
 	}
 	return nil
 }
 
-// emergencyOutput attempts to emit some bytes to the current log
-// file. Errors are ignored.
+// exitCode implements the logSink interface.
+func (l *fileSink) exitCode() exit.Code {
+	return exit.LoggingFileUnavailable()
+}
+
+// emergencyOutput implements the logSink interface.
 func (l *fileSink) emergencyOutput(b []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -180,11 +225,14 @@ func (l *fileSink) emergencyOutput(b []byte) {
 		return //nolint:returnerrcheck
 	}
 
-	if err := l.writeToFileLocked(true /*doSync*/, b); err != nil {
+	if err := l.writeToFileLocked(b); err != nil {
 		return //nolint:returnerrcheck
 	}
 
-	l.flushAndSyncLocked(true /*doSync*/)
+	// During an emergency, we flush to get the data out to the OS, but
+	// we don't care as much about persistence. In fact, trying too hard
+	// to sync may cause additional stoppage.
+	l.flushAndSyncLocked(false /*doSync*/)
 }
 
 // lockAndFlushAndSync is like flushAndSync but locks l.mu first.

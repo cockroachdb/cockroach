@@ -55,29 +55,28 @@ func NewSecondaryLogger(
 	}
 	l := &SecondaryLogger{
 		logger: loggerT{
-			stderrSink: &logging.stderrSink,
 			logCounter: EntryCounter{EnableMsgCount: enableMsgCount},
-			syncWrites: forceSyncWrites,
 		},
 	}
-	l.logger.fileSink = newFileSink(
+	fileSink := newFileSink(
 		dir,
 		fileNamePrefix,
+		forceSyncWrites,
 		severity.INFO,
 		logging.logFileMaxSize,
 		logging.logFilesCombinedMaxSize,
 		l.logger.getStartLines,
 	)
-
+	l.logger.sinks = []logSink{&logging.stderrSink, fileSink}
 	l.logger.redactableLogs.Set(logging.redactableLogs)
 
 	// Ensure the registry knows about this logger.
-	allFileSinks.put(l.logger.fileSink)
+	allFileSinks.put(fileSink)
 	allLoggers.put(&l.logger)
 
 	if enableGc {
 		// Start the log file GC for the secondary logger.
-		go l.logger.fileSink.gcDaemon(ctx)
+		go fileSink.gcDaemon(ctx)
 	}
 
 	return l
@@ -85,8 +84,8 @@ func NewSecondaryLogger(
 
 // Close implements the stopper.Closer interface.
 func (l *SecondaryLogger) Close() {
-	if l.logger.fileSink != nil {
-		allFileSinks.del(l.logger.fileSink)
+	if fileSink := l.logger.getFileSink(); fileSink != nil {
+		allFileSinks.del(fileSink)
 	}
 	allLoggers.del(&l.logger)
 }

@@ -30,7 +30,9 @@ import (
 // secondary loggers are only allocated after command line parsing
 // has completed too.
 func StartGCDaemon(ctx context.Context) {
-	go debugLog.fileSink.gcDaemon(ctx)
+	if fileSink := debugLog.getFileSink(); fileSink != nil {
+		go fileSink.gcDaemon(ctx)
+	}
 }
 
 // gcDaemon runs the GC loop for the given logger.

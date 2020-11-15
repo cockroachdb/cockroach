@@ -83,16 +83,17 @@ func init() {
 	logging.logFilesCombinedMaxSize = logging.logFileMaxSize * 10 // 100MiB
 
 	debugLog = &loggerT{}
-	debugLog.stderrSink = &logging.stderrSink
-	debugLog.fileSink = newFileSink(
-		"", /* dir */
-		"", /* fileNamePrefix */
+	debugFileSink := newFileSink(
+		"",    /* dir */
+		"",    /* fileNamePrefix */
+		false, /* forceSyncWrites */
 		logging.fileThreshold,
 		logging.logFileMaxSize,
 		logging.logFilesCombinedMaxSize,
 		debugLog.getStartLines)
+	debugLog.sinks = []logSink{&logging.stderrSink, debugFileSink}
 	allLoggers.put(debugLog)
-	allFileSinks.put(debugLog.fileSink)
+	allFileSinks.put(debugFileSink)
 
 	stderrLog = debugLog
 
@@ -119,14 +120,16 @@ func init() {
 // during SetupRedactionAndStderrRedirects() after the custom
 // logging configuration has been selected.
 func initDebugLogFromDefaultConfig() {
-	debugLog.fileSink.mu.Lock()
-	defer debugLog.fileSink.mu.Unlock()
-	debugLog.fileSink.prefix = program
-	debugLog.fileSink.mu.logDir = logging.logDir.String()
-	debugLog.fileSink.enabled.Set(debugLog.fileSink.mu.logDir != "")
-	debugLog.fileSink.logFileMaxSize = logging.logFileMaxSize
-	debugLog.fileSink.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
-	debugLog.fileSink.fileThreshold = logging.fileThreshold
+	if fileSink := debugLog.getFileSink(); fileSink != nil {
+		fileSink.mu.Lock()
+		defer fileSink.mu.Unlock()
+		fileSink.prefix = program
+		fileSink.mu.logDir = logging.logDir.String()
+		fileSink.enabled.Set(fileSink.mu.logDir != "")
+		fileSink.logFileMaxSize = logging.logFileMaxSize
+		fileSink.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
+		fileSink.threshold = logging.fileThreshold
+	}
 	debugLog.redactableLogs.Set(logging.redactableLogs)
 }
 
@@ -204,7 +207,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		secLogger.Logf(ctx, "stderr capture started")
 
 		// Now tell this logger to capture internal stderr writes.
-		if err := secLogger.logger.fileSink.takeOverInternalStderr(&secLogger.logger); err != nil {
+		if err := secLogger.logger.getFileSink().takeOverInternalStderr(&secLogger.logger); err != nil {
 			// Oof, it turns out we can't use this logger after all. Give up
 			// on it.
 			cancel()
@@ -220,7 +223,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		// The cleanup fn is for use in tests.
 		cleanup := func() {
 			// Relinquish the stderr redirect.
-			if err := secLogger.logger.fileSink.relinquishInternalStderr(); err != nil {
+			if err := secLogger.logger.getFileSink().relinquishInternalStderr(); err != nil {
 				// This should not fail. If it does, some caller messed up by
 				// switching over stderr redirection to a different logger
 				// without our involvement. That's invalid API usage.

@@ -10,6 +10,11 @@
 
 package log
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+)
+
 // Type of a stderr copy sink.
 type stderrSink struct {
 	// the --no-color flag. When set it disables escapes code on the
@@ -23,9 +28,33 @@ type stderrSink struct {
 	formatter logFormatter
 }
 
-// output writes the provided entry and potential stack
-// trace(s) to the process' external stderr stream.
-func (l *stderrSink) output(b []byte) error {
+// activeAtSeverity implements the logSink interface.
+func (l *stderrSink) activeAtSeverity(sev logpb.Severity) bool {
+	return sev >= l.threshold.Get()
+}
+
+// attachHints implements the logSink interface.
+func (l *stderrSink) attachHints(stacks []byte) []byte {
+	return stacks
+}
+
+// getFormatter implements the logSink interface.
+func (l *stderrSink) getFormatter() logFormatter {
+	return l.formatter
+}
+
+// output implements the logSink interface.
+func (l *stderrSink) output(_ bool, b []byte) error {
 	_, err := OrigStderr.Write(b)
 	return err
+}
+
+// exitCode implements the logSink interface.
+func (l *stderrSink) exitCode() exit.Code {
+	return exit.LoggingStderrUnavailable()
+}
+
+// emergencyOutput implements the logSink interface.
+func (l *stderrSink) emergencyOutput(b []byte) {
+	_, _ = OrigStderr.Write(b)
 }
