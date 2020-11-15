@@ -38,3 +38,27 @@ statement ok
 CREATE TABLE n (k INT PRIMARY KEY, a INT, geom GEOMETRY);
 CREATE INVERTED INDEX n ON n (a, geom);
 
+statement
+CREATE TABLE s (
+  k INT PRIMARY KEY,
+  a INT,
+  geom GEOMETRY,
+  INVERTED INDEX (a, geom) WITH (geometry_min_x=0),
+  FAMILY (k),
+  FAMILY (a),
+  FAMILY (geom)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE s]
+----
+CREATE TABLE public.s (
+   k INT8 NOT NULL,
+   a INT8 NULL,
+   geom GEOMETRY NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   INVERTED INDEX s_a_geom_idx (a, geom) WITH (geometry_min_x=0),
+   FAMILY fam_0_k (k),
+   FAMILY fam_1_a (a),
+   FAMILY fam_2_geom (geom)
+)
