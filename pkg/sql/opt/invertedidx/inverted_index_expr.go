@@ -262,6 +262,7 @@ func constrainPrefixColumns(
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 	filters memo.FiltersExpr,
+	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
 ) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
@@ -287,7 +288,7 @@ func constrainPrefixColumns(
 
 	var ic idxconstraint.Instance
 	ic.Init(
-		filters, nil, /* optionalFilters */
+		filters, optionalFilters,
 		prefixColumns, notNullCols, tabMeta.ComputedCols,
 		false /* isInverted */, evalCtx, factory,
 	)
