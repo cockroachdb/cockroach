@@ -160,13 +160,14 @@ func (l *fileSink) listLogFiles() (string, []logpb.FileInfo, error) {
 //
 // TODO(knz): make this work for secondary loggers too.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
-	if debugLog.fileSink == nil {
+	fileSink := debugLog.getFileSink()
+	if fileSink == nil || !fileSink.enabled.Get() {
 		return nil, errNoFileLogging
 	}
 
-	debugLog.fileSink.mu.Lock()
-	dir := debugLog.fileSink.mu.logDir
-	debugLog.fileSink.mu.Unlock()
+	fileSink.mu.Lock()
+	dir := fileSink.mu.logDir
+	fileSink.mu.Unlock()
 	if dir == "" {
 		return nil, errDirectoryNotSet
 	}
