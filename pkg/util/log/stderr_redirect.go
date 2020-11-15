@@ -41,7 +41,7 @@ var OrigStderr = func() *os.File {
 //
 // This is also the logic used by Shout calls.
 func LoggingToStderr(s Severity) bool {
-	return s >= logging.stderrThreshold
+	return s >= logging.stderrSink.threshold
 }
 
 // hijackStderr replaces stderr with the given file descriptor.

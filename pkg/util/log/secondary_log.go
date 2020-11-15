@@ -55,6 +55,7 @@ func NewSecondaryLogger(
 	}
 	l := &SecondaryLogger{
 		logger: loggerT{
+			stderrSink: &logging.stderrSink,
 			logCounter: EntryCounter{EnableMsgCount: enableMsgCount},
 			syncWrites: forceSyncWrites,
 		},

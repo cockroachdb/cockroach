@@ -56,7 +56,7 @@ type formatCrdbV1TTY struct{}
 
 func (formatCrdbV1TTY) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 	cp := ttycolor.StderrProfile
-	if logging.noColor {
+	if logging.stderrSink.noColor {
 		cp = nil
 	}
 	return formatLogEntryInternal(entry, false /*showCounter*/, cp, stacks)
@@ -69,7 +69,7 @@ type formatCrdbV1TTYWithCounter struct{}
 
 func (formatCrdbV1TTYWithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 	cp := ttycolor.StderrProfile
-	if logging.noColor {
+	if logging.stderrSink.noColor {
 		cp = nil
 	}
 	return formatLogEntryInternal(entry, true /*showCounter*/, cp, stacks)

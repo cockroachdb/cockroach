@@ -102,7 +102,7 @@ func setFlags() {
 	ResetExitFunc()
 	// Make all logged errors go to the external stderr, in addition to
 	// the log file.
-	logging.stderrThreshold = severity.ERROR
+	logging.stderrSink.threshold = severity.ERROR
 }
 
 // Test that Info works as advertised.
@@ -597,7 +597,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold = severity.NONE
+	logging.stderrSink.threshold = severity.NONE
 	SetExitFunc(false /* hideStack */, func(exit.Code) {})
 
 	defer setFlags()
@@ -635,7 +635,7 @@ func TestRedirectStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold = severity.NONE
+	logging.stderrSink.threshold = severity.NONE
 
 	Infof(context.Background(), "test")
 

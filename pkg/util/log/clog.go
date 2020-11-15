@@ -47,8 +47,8 @@ type loggingT struct {
 	// facilities.
 	vmoduleConfig vmoduleConfig
 
-	// formatter for stderr entries.
-	stderrFormatter logFormatter
+	// The common stderr sink.
+	stderrSink stderrSink
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
@@ -87,6 +87,9 @@ func init() {
 
 // loggerT represents the logging source for a given log channel.
 type loggerT struct {
+	// stderrSink is the stderr copy for this channel.
+	stderrSink *stderrSink
+
 	// fileSink is the file sink for this channel.
 	//
 	// TODO(knz): Although the logging logic below is a-OK
@@ -271,8 +274,8 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	// We only do the work if the sink is active and the filtering does
 	// not eliminate the event.
 
-	if entry.Severity >= logging.stderrThreshold.Get() {
-		stderrBuf = logging.stderrFormatter.formatEntry(entry, stacks)
+	if l.stderrSink != nil && entry.Severity >= l.stderrSink.threshold.Get() {
+		stderrBuf = l.stderrSink.formatter.formatEntry(entry, stacks)
 	}
 
 	if fileSink != nil && entry.Severity >= fileSink.fileThreshold {
@@ -290,7 +293,7 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 		defer l.outputMu.Unlock()
 
 		if stderrBuf != nil {
-			if err := l.outputToStderr(stderrBuf.Bytes()); err != nil {
+			if err := l.stderrSink.output(stderrBuf.Bytes()); err != nil {
 				// The external stderr log is unavailable.  However, stderr was
 				// chosen by the stderrThreshold configuration, so abandoning
 				// the stderr write would be a contract violation.
@@ -360,13 +363,6 @@ func setActive() {
 		logging.mu.active = true
 		logging.mu.firstUseStack = string(debug.Stack())
 	}
-}
-
-// outputToStderr writes the provided entry and potential stack
-// trace(s) to the process' external stderr stream.
-func (l *loggerT) outputToStderr(b []byte) error {
-	_, err := OrigStderr.Write(b)
-	return err
 }
 
 const fatalErrorPostamble = `

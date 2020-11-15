@@ -30,6 +30,7 @@ go_library(
         "stderr_redirect.go",
         "stderr_redirect_unix.go",
         "stderr_redirect_windows.go",
+        "stderr_sink.go",
         "structured.go",
         "test_log_scope.go",
         "trace.go",
