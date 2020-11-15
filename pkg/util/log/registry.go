@@ -19,7 +19,7 @@ type loggerRegistry struct {
 	}
 }
 
-var registry = loggerRegistry{}
+var allLoggers = loggerRegistry{}
 
 // len returns the number of known loggers.
 func (r *loggerRegistry) len() int {
@@ -60,6 +60,51 @@ func (r *loggerRegistry) del(l *loggerT) {
 			continue
 		}
 		r.mu.loggers = append(r.mu.loggers[:i], r.mu.loggers[i+1:]...)
+		return
+	}
+}
+
+type fileSinkRegistry struct {
+	mu struct {
+		syncutil.Mutex
+		sinks []*fileSink
+	}
+}
+
+var allFileSinks = fileSinkRegistry{}
+
+// iterate iterates over all the file sinks and stops at the first
+// error encountered.
+func (r *fileSinkRegistry) iter(fn func(l *fileSink) error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, l := range r.mu.sinks {
+		if err := fn(l); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// put adds a logger into the registry.
+func (r *fileSinkRegistry) put(l *fileSink) {
+	r.mu.Lock()
+	r.mu.sinks = append(r.mu.sinks, l)
+	r.mu.Unlock()
+}
+
+// del removes one logger from the registry.
+func (r *fileSinkRegistry) del(l *fileSink) {
+	// Make the registry forget about this logger. This avoids
+	// stacking many secondary loggers together when there are
+	// subsequent tests starting servers in the same package.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, thatSink := range r.mu.sinks {
+		if thatSink != l {
+			continue
+		}
+		r.mu.sinks = append(r.mu.sinks[:i], r.mu.sinks[i+1:]...)
 		return
 	}
 }

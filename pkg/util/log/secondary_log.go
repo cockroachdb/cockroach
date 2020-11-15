@@ -72,7 +72,8 @@ func NewSecondaryLogger(
 	l.logger.redactableLogs.Set(logging.redactableLogs)
 
 	// Ensure the registry knows about this logger.
-	registry.put(&l.logger)
+	allFileSinks.put(l.logger.fileSink)
+	allLoggers.put(&l.logger)
 
 	if enableGc {
 		// Start the log file GC for the secondary logger.
@@ -83,7 +84,12 @@ func NewSecondaryLogger(
 }
 
 // Close implements the stopper.Closer interface.
-func (l *SecondaryLogger) Close() { registry.del(&l.logger) }
+func (l *SecondaryLogger) Close() {
+	if l.logger.fileSink != nil {
+		allFileSinks.del(l.logger.fileSink)
+	}
+	allLoggers.del(&l.logger)
+}
 
 func (l *SecondaryLogger) output(
 	ctx context.Context, depth int, sev Severity, format string, args ...interface{},
