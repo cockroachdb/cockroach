@@ -91,7 +91,8 @@ func init() {
 		logging.logFileMaxSize,
 		logging.logFilesCombinedMaxSize,
 		debugLog.getStartLines)
-	registry.put(debugLog)
+	allLoggers.put(debugLog)
+	allFileSinks.put(debugLog.fileSink)
 
 	stderrLog = debugLog
 

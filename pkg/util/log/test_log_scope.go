@@ -99,7 +99,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// Refuse to work "under" secondary loggers (saving+restoring
 	// state for secondary loggers is not implemented yet).
 	func() {
-		if registry.len() > 1 {
+		if allLoggers.len() > 1 {
 			t.Fatal("can't use TestLogScope with secondary loggers active")
 		}
 	}()
@@ -158,10 +158,10 @@ func (l *TestLogScope) Rotate(t tShim) {
 	// Ensure remaining logs are written.
 	Flush()
 
-	if err := registry.iter(func(l *loggerT) error {
-		l.fileSink.mu.Lock()
-		defer l.fileSink.mu.Unlock()
-		return l.fileSink.closeFileLocked()
+	if err := allFileSinks.iter(func(l *fileSink) error {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		return l.closeFileLocked()
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,10 @@ func calledDuringPanic() bool {
 // dirTestOverride sets the default value for the logging output directory
 // for use in tests.
 func dirTestOverride(expected, newDir string) error {
-	if err := registry.iter(func(l *loggerT) error {
+	if err := allLoggers.iter(func(l *loggerT) error {
+		if l.fileSink == nil {
+			return nil
+		}
 		l.outputMu.Lock()
 		defer l.outputMu.Unlock()
 		return l.fileSink.dirTestOverride(expected, newDir)
