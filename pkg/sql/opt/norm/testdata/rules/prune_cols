@@ -55,6 +55,20 @@ CREATE TABLE partial_indexes (
 )
 ----
 
+exec-ddl
+CREATE TABLE multi_col_inv_idx (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    j JSON,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c),
+    FAMILY (j),
+    INVERTED INDEX (b, c, j)
+)
+----
+
 # --------------------------------------------------
 # PruneProjectCols
 # --------------------------------------------------
@@ -2046,6 +2060,37 @@ project
            │    └── fd: (7)-->(8-10)
            └── projections
                 └── c:9 + 1 [as=c_new:13, outer=(9), immutable]
+
+# Do not prune columns that are required for encoding a multi-column inverted
+# index.
+norm expect-not=PruneMutationFetchCols
+UPDATE multi_col_inv_idx SET j = '[1]' WHERE a = 1
+----
+update multi_col_inv_idx
+ ├── columns: <none>
+ ├── fetch columns: a:7 b:8 c:9 j:10
+ ├── update-mapping:
+ │    └── j_new:13 => j:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: j_new:13!null a:7!null b:8 c:9 j:10
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7-10,13)
+      ├── select
+      │    ├── columns: a:7!null b:8 c:9 j:10
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-10)
+      │    ├── scan multi_col_inv_idx
+      │    │    ├── columns: a:7!null b:8 c:9 j:10
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8-10)
+      │    └── filters
+      │         └── a:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      └── projections
+           └── '[1]' [as=j_new:13]
 
 # Prune unused upsert columns.
 norm expect=PruneMutationInputCols
