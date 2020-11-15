@@ -86,9 +86,15 @@ func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// Note that we're already in error. If an additional error is encountered
 	// here, we can't do anything but raise our hands in the air.
 
-	buf := logging.stderrFormatter.formatEntry(entry, nil /*stack*/)
-	_, _ = OrigStderr.Write(buf.Bytes())
-	putBuffer(buf)
+	// TODO(knz): we may want to push this information to more channels,
+	// e.g. to the OPS channel, if we are reporting an error while writing
+	// to a non-OPS channel.
+
+	if stderrSink := l.stderrSink; stderrSink != nil {
+		buf := stderrSink.formatter.formatEntry(entry, nil /*stack*/)
+		_ = stderrSink.output(buf.Bytes())
+		putBuffer(buf)
+	}
 
 	if fileSink := l.getFileSink(); fileSink != nil {
 		buf := fileSink.formatter.formatEntry(entry, nil /*stack*/)
