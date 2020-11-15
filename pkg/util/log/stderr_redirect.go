@@ -139,10 +139,10 @@ func (l *fileSink) relinquishInternalStderr() error {
 // Used by takeOverInternalStderr() to enforce its invariant.
 func anySinkHasInternalStderrOwnership() bool {
 	hasOwnership := false
-	_ = registry.iter(func(l *loggerT) error {
-		l.fileSink.mu.Lock()
-		defer l.fileSink.mu.Unlock()
-		hasOwnership = hasOwnership || l.fileSink.mu.redirectInternalStderrWrites
+	_ = allFileSinks.iter(func(l *fileSink) error {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		hasOwnership = hasOwnership || l.mu.redirectInternalStderrWrites
 		return nil
 	})
 	return hasOwnership
