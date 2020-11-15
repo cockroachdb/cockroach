@@ -22,19 +22,9 @@ import (
 )
 
 type config struct {
-	// the --no-color flag. When set it disables escapes code on the
-	// stderr copy.
-	noColor bool
-
 	// showLogs reflects the use of -show-logs on the command line and is
 	// used for testing.
 	showLogs bool
-
-	// Level at or beyond which entries submitted to any logger are
-	// written to the process' external standard error stream
-	// (OrigStderr).  This acts as a filter between the log entry
-	// producers and the stderr sink.
-	stderrThreshold Severity
 
 	// syncWrites can be set asynchronously to force all file output to
 	// synchronize to disk. This is set via SetSync() and used e.g. in
@@ -83,9 +73,9 @@ func init() {
 	// Default stderrThreshold and fileThreshold to log everything
 	// both to the output file and to the process' external stderr
 	// (OrigStderr).
-	logging.stderrThreshold = severity.INFO
 	logging.fileThreshold = severity.INFO
-	logging.stderrFormatter = formatCrdbV1TTYWithCounter{}
+	logging.stderrSink.threshold = severity.INFO
+	logging.stderrSink.formatter = formatCrdbV1TTYWithCounter{}
 
 	// Default maximum size of individual log files.
 	logging.logFileMaxSize = 10 << 20 // 10MiB
@@ -93,6 +83,7 @@ func init() {
 	logging.logFilesCombinedMaxSize = logging.logFileMaxSize * 10 // 100MiB
 
 	debugLog = &loggerT{}
+	debugLog.stderrSink = &logging.stderrSink
 	debugLog.fileSink = newFileSink(
 		"", /* dir */
 		"", /* fileNamePrefix */
@@ -107,7 +98,7 @@ func init() {
 	logflags.InitFlags(
 		&logging.logDir,
 		&logging.showLogs,
-		&logging.noColor,
+		&logging.stderrSink.noColor,
 		&logging.redactableLogsRequested,
 		&logging.vmoduleConfig.mu.vmodule,
 		&logging.logFileMaxSize,
@@ -115,7 +106,7 @@ func init() {
 	)
 	// We define these flags here because they have the type Severity
 	// which we can't pass to logflags without creating an import cycle.
-	flag.Var(&logging.stderrThreshold, logflags.LogToStderrName,
+	flag.Var(&logging.stderrSink.threshold, logflags.LogToStderrName,
 		"logs at or above this threshold go to stderr")
 	flag.Var(&logging.fileThreshold, logflags.LogFileVerbosityThresholdName,
 		"minimum verbosity of messages written to the log file")
@@ -258,7 +249,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 	// If redaction is requested and we have a chance to produce some
 	// log entries on stderr, that's a configuration we cannot support
 	// safely. Reject it.
-	if logging.redactableLogsRequested && logging.stderrThreshold != severity.NONE {
+	if logging.redactableLogsRequested && logging.stderrSink.threshold != severity.NONE {
 		return nil, errors.WithHintf(
 			errors.New("cannot enable redactable logging without a logging directory"),
 			"You can pass --%s to set up a logging directory explicitly.", cliflags.LogDir.Name)
