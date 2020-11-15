@@ -73,6 +73,7 @@ func TryConstrainGeoIndex(
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 	filters memo.FiltersExpr,
+	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
 ) (
@@ -84,7 +85,7 @@ func TryConstrainGeoIndex(
 ) {
 	// Attempt to constrain the prefix columns, if there are any. If they cannot
 	// be constrained to single values, the index cannot be used.
-	constraint, filters, ok = constrainPrefixColumns(evalCtx, factory, filters, tabID, index)
+	constraint, filters, ok = constrainPrefixColumns(evalCtx, factory, filters, optionalFilters, tabID, index)
 	if !ok {
 		return nil, nil, nil, nil, false
 	}
