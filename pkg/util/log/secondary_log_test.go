@@ -80,7 +80,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold = severity.NONE
+	logging.stderrSink.threshold = severity.NONE
 
 	// Take over stderr.
 	TestingResetActive()
