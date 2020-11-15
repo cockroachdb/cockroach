@@ -27,6 +27,7 @@ go_library(
         "redact.go",
         "registry.go",
         "secondary_log.go",
+        "sinks.go",
         "stderr_redirect.go",
         "stderr_redirect_unix.go",
         "stderr_redirect_windows.go",

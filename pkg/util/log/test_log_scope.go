@@ -240,12 +240,13 @@ func calledDuringPanic() bool {
 // for use in tests.
 func dirTestOverride(expected, newDir string) error {
 	if err := allLoggers.iter(func(l *loggerT) error {
-		if l.fileSink == nil {
+		fileSink := l.getFileSink()
+		if fileSink == nil {
 			return nil
 		}
 		l.outputMu.Lock()
 		defer l.outputMu.Unlock()
-		return l.fileSink.dirTestOverride(expected, newDir)
+		return fileSink.dirTestOverride(expected, newDir)
 	}); err != nil {
 		return err
 	}

@@ -31,6 +31,32 @@ func getBuffer() *buffer {
 	return b
 }
 
+const stdNumSinksPerChannel = 5
+
+// getBufferSlice returns a new ready-to-use slice of buffers.
+func getBufferSlice(numBuffers int) []*buffer {
+	if numBuffers > stdNumSinksPerChannel {
+		return make([]*buffer, numBuffers)
+	}
+	b := logging.bufSlicePool.Get().([]*buffer)
+	return b[:numBuffers]
+}
+
+// newBufferSlice is the constructor for the sync.Pool.
+func newBufferSlice() interface{} { return make([]*buffer, stdNumSinksPerChannel) }
+
+// putSlice returns a buffer slice to the free list.
+// It also releases the buffers if there are any remaining.
+func putBufferSlice(bs []*buffer) {
+	for i := range bs {
+		putBuffer(bs[i])
+		bs[i] = nil
+	}
+	if cap(bs) == stdNumSinksPerChannel {
+		logging.bufSlicePool.Put(bs[:stdNumSinksPerChannel])
+	}
+}
+
 // putBuffer returns a buffer to the free list.
 func putBuffer(b *buffer) {
 	if b == nil {
