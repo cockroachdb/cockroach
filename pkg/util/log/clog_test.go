@@ -70,25 +70,26 @@ func (f *flushBuffer) Sync() error {
 // While the output is captured, a test can use contents() below
 // to retrieve the captured output so far.
 func capture() func() {
-	debugLog.fileSink.mu.Lock()
-	oldFile := debugLog.fileSink.mu.file
-	debugLog.fileSink.mu.file = new(flushBuffer)
-	debugLog.fileSink.mu.Unlock()
+	fileSink := debugLog.getFileSink()
+	fileSink.mu.Lock()
+	oldFile := fileSink.mu.file
+	fileSink.mu.file = new(flushBuffer)
+	fileSink.mu.Unlock()
 	return func() {
-		debugLog.fileSink.mu.Lock()
-		debugLog.fileSink.mu.file = oldFile
-		debugLog.fileSink.mu.Unlock()
+		fileSink.mu.Lock()
+		fileSink.mu.file = oldFile
+		fileSink.mu.Unlock()
 	}
 }
 
 // resetCaptured erases the logging output captured so far.
 func resetCaptured() {
-	debugLog.fileSink.mu.file.(*flushBuffer).Buffer.Reset()
+	debugLog.getFileSink().mu.file.(*flushBuffer).Buffer.Reset()
 }
 
 // contents returns the specified log value as a string.
 func contents() string {
-	return debugLog.fileSink.mu.file.(*flushBuffer).Buffer.String()
+	return debugLog.getFileSink().mu.file.(*flushBuffer).Buffer.String()
 }
 
 // contains reports whether the string is contained in the log.
@@ -432,7 +433,7 @@ func TestListLogFiles(t *testing.T) {
 
 	Info(context.Background(), "x")
 
-	sb, ok := debugLog.fileSink.mu.file.(*syncBuffer)
+	sb, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
@@ -460,7 +461,7 @@ func TestGetLogReader(t *testing.T) {
 	defer s.Close(t)
 	setFlags()
 	Info(context.Background(), "x")
-	info, ok := debugLog.fileSink.mu.file.(*syncBuffer)
+	info, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
@@ -475,7 +476,7 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir := debugLog.fileSink.mu.logDir
+	dir := debugLog.getFileSink().mu.logDir
 	if dir == "" {
 		t.Fatal(errDirectoryNotSet)
 	}
@@ -553,11 +554,12 @@ func TestRollover(t *testing.T) {
 		err = e
 	})
 
-	defer func(previous int64) { debugLog.fileSink.logFileMaxSize = previous }(debugLog.fileSink.logFileMaxSize)
-	debugLog.fileSink.logFileMaxSize = 2048
+	debugFileSink := debugLog.getFileSink()
+	defer func(previous int64) { debugFileSink.logFileMaxSize = previous }(debugFileSink.logFileMaxSize)
+	debugFileSink.logFileMaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
-	info, ok := debugLog.fileSink.mu.file.(*syncBuffer)
+	info, ok := debugFileSink.mu.file.(*syncBuffer)
 	if !ok {
 		t.Fatal("info wasn't created")
 	}
@@ -565,7 +567,7 @@ func TestRollover(t *testing.T) {
 		t.Fatalf("info has initial error: %v", err)
 	}
 	fname0 := info.file.Name()
-	Infof(context.Background(), "%s", strings.Repeat("x", int(debugLog.fileSink.logFileMaxSize))) // force a rollover
+	Infof(context.Background(), "%s", strings.Repeat("x", int(debugFileSink.logFileMaxSize))) // force a rollover
 	if err != nil {
 		t.Fatalf("info has error after big write: %v", err)
 	}
@@ -581,7 +583,7 @@ func TestRollover(t *testing.T) {
 	if fname0 == fname1 {
 		t.Errorf("info.f.Name did not change: %v", fname0)
 	}
-	if info.nbytes >= debugLog.fileSink.logFileMaxSize {
+	if info.nbytes >= debugFileSink.logFileMaxSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
 	}
 }
@@ -649,7 +651,7 @@ func TestRedirectStderr(t *testing.T) {
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
 
-	contents, err := ioutil.ReadFile(stderrLog.fileSink.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(stderrLog.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -663,15 +665,16 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	defer func(save Severity) { debugLog.fileSink.fileThreshold = save }(debugLog.fileSink.fileThreshold)
-	debugLog.fileSink.fileThreshold = severity.ERROR
+	debugFileSink := debugLog.getFileSink()
+	defer func(save Severity) { debugFileSink.threshold = save }(debugFileSink.threshold)
+	debugFileSink.threshold = severity.ERROR
 
 	Infof(context.Background(), "test1")
 	Errorf(context.Background(), "test2")
 
 	Flush()
 
-	contents, err := ioutil.ReadFile(debugLog.fileSink.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(debugFileSink.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -699,9 +702,10 @@ func TestExitOnFullDisk(t *testing.T) {
 		exited.Done()
 	})
 
-	l := &loggerT{fileSink: &fileSink{}}
-	l.fileSink.mu.file = &syncBuffer{
-		fileSink: l.fileSink,
+	fs := &fileSink{}
+	l := &loggerT{sinks: []logSink{fs}}
+	fs.mu.file = &syncBuffer{
+		fileSink: fs,
 		Writer:   bufio.NewWriterSize(&outOfSpaceWriter{}, 1),
 	}
 
