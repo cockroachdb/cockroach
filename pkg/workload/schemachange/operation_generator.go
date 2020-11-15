@@ -45,6 +45,10 @@ type operationGenerator struct {
 	screenForExecErrors  bool
 	expectedExecErrors   errorCodeSet
 	expectedCommitErrors errorCodeSet
+
+	// opsInTxn is a list of previous ops in the current transaction implemented
+	// as a map for fast lookups.
+	opsInTxn map[opType]bool
 }
 
 func makeOperationGenerator(params *operationGeneratorParams) *operationGenerator {
@@ -52,6 +56,7 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 		params:               params,
 		expectedExecErrors:   makeExpectedErrorSet(),
 		expectedCommitErrors: makeExpectedErrorSet(),
+		opsInTxn:             map[opType]bool{},
 	}
 }
 
@@ -64,6 +69,10 @@ func (og *operationGenerator) resetOpState() {
 // Reset internal state used per transaction
 func (og *operationGenerator) resetTxnState() {
 	og.expectedCommitErrors.reset()
+
+	for k := range og.opsInTxn {
+		delete(og.opsInTxn, k)
+	}
 }
 
 //go:generate stringer -type=opType
@@ -72,10 +81,22 @@ type opType int
 // opsWithErrorScreening stores ops which currently check for exec
 // errors and update expectedExecErrors in the op generator state
 var opsWithExecErrorScreening = map[opType]bool{
-	addColumn:     true,
+	addColumn: true,
+
 	createTable:   true,
 	createTableAs: true,
 	createView:    true,
+	createEnum:    true,
+	createSchema:  true,
+
+	dropColumn:        true,
+	dropColumnDefault: true,
+	dropColumnNotNull: true,
+	dropSchema:        true,
+
+	renameColumn: true,
+	renameTable:  true,
+	renameView:   true,
 }
 
 func opScreensForExecErrors(op opType) bool {
@@ -214,7 +235,16 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 
 		if opScreensForExecErrors(op) {
 			og.screenForExecErrors = true
+
+			// Screen for schema change after write in the same transaction.
+			if op != insertRow {
+				if _, previous := og.opsInTxn[insertRow]; previous {
+					og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+				}
+			}
 		}
+
+		og.opsInTxn[op] = true
 		return stmt, log.String(), err
 	}
 }
@@ -360,6 +390,17 @@ func (og *operationGenerator) createEnum(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	typ, err := typName.ToUnresolvedObjectName(tree.NoAnnotation)
+	if err != nil {
+		return "", err
+	}
+	typeExists, err := typeExists(tx, typ)
+	if err != nil {
+		return "", err
+	}
+	if typeExists {
+		og.expectedExecErrors.add(pgcode.DuplicateObject)
+	}
 	stmt := rowenc.RandCreateType(og.params.rng, typName.String(), "asdf")
 	return tree.Serialize(stmt), nil
 }
@@ -370,9 +411,14 @@ func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
 	sourceTableNames := make([]tree.TableExpr, numSourceTables)
 	sourceTableExistence := make([]bool, numSourceTables)
 
+	// uniqueTableNames and duplicateSourceTables are used to track unique
+	// tables. If there are any duplicates, then a pgcode.DuplicateAlias error
+	// is expected on execution.
 	uniqueTableNames := map[string]bool{}
 	duplicateSourceTables := false
 
+	// Collect a random set of size numSourceTables that contains tables and views
+	// from which to use columns.
 	for i := 0; i < numSourceTables; i++ {
 		var tableName *tree.TableName
 		var err error
@@ -413,10 +459,17 @@ func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
 		From: tree.From{Tables: sourceTableNames},
 	}
 
+	// uniqueColumnNames and duplicateColumns are used to track unique
+	// columns. If there are any duplicates, then a pgcode.DuplicateColumn error
+	// is expected on execution.
+	uniqueColumnNames := map[string]bool{}
+	duplicateColumns := false
 	for i := 0; i < numSourceTables; i++ {
 		tableName := sourceTableNames[i]
 		tableExists := sourceTableExistence[i]
 
+		// If the table does not exist, columns cannot be fetched from it. For this reason, the placeholder
+		// "IrrelevantColumnName" is used, and a pgcode.UndefinedTable error is expected on execution.
 		if tableExists {
 			columnNamesForTable, err := og.tableColumnsShuffled(tx, tableName.(*tree.TableName).String())
 			if err != nil {
@@ -424,11 +477,18 @@ func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
 			}
 			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
 
-			for i := range columnNamesForTable {
+			for j := range columnNamesForTable {
 				colItem := tree.ColumnItem{
-					ColumnName: tree.Name(columnNamesForTable[i]),
+					TableName:  tableName.(*tree.TableName).ToUnresolvedObjectName(),
+					ColumnName: tree.Name(columnNamesForTable[j]),
 				}
 				selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
+
+				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists {
+					duplicateColumns = true
+				} else {
+					uniqueColumnNames[columnNamesForTable[j]] = true
+				}
 			}
 		} else {
 			og.expectedExecErrors.add(pgcode.UndefinedTable)
@@ -457,6 +517,7 @@ func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
 		{code: pgcode.DuplicateRelation, condition: tableExists},
 		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
+		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`CREATE TABLE %s AS %s`,
@@ -470,9 +531,14 @@ func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
 	sourceTableNames := make([]tree.TableExpr, numSourceTables)
 	sourceTableExistence := make([]bool, numSourceTables)
 
+	// uniqueTableNames and duplicateSourceTables are used to track unique
+	// tables. If there are any duplicates, then a pgcode.DuplicateColumn error
+	// is expected on execution.
 	uniqueTableNames := map[string]bool{}
 	duplicateSourceTables := false
 
+	// Collect a random set of size numSourceTables that contains tables and views
+	// from which to use columns.
 	for i := 0; i < numSourceTables; i++ {
 		var tableName *tree.TableName
 		var err error
@@ -513,10 +579,17 @@ func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
 		From: tree.From{Tables: sourceTableNames},
 	}
 
+	// uniqueColumnNames and duplicateColumns are used to track unique
+	// columns. If there are any duplicates, then a pgcode.DuplicateColumn error
+	// is expected on execution.
+	uniqueColumnNames := map[string]bool{}
+	duplicateColumns := false
 	for i := 0; i < numSourceTables; i++ {
 		tableName := sourceTableNames[i]
 		tableExists := sourceTableExistence[i]
 
+		// If the table does not exist, columns cannot be fetched from it. For this reason, the placeholder
+		// "IrrelevantColumnName" is used, and a pgcode.UndefinedTable error is expected on execution.
 		if tableExists {
 			columnNamesForTable, err := og.tableColumnsShuffled(tx, tableName.(*tree.TableName).String())
 			if err != nil {
@@ -524,11 +597,18 @@ func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
 			}
 			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
 
-			for i := range columnNamesForTable {
+			for j := range columnNamesForTable {
 				colItem := tree.ColumnItem{
-					ColumnName: tree.Name(columnNamesForTable[i]),
+					TableName:  tableName.(*tree.TableName).ToUnresolvedObjectName(),
+					ColumnName: tree.Name(columnNamesForTable[j]),
 				}
 				selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
+
+				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists {
+					duplicateColumns = true
+				} else {
+					uniqueColumnNames[columnNamesForTable[j]] = true
+				}
 			}
 		} else {
 			og.expectedExecErrors.add(pgcode.UndefinedTable)
@@ -557,6 +637,7 @@ func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
 		{code: pgcode.DuplicateRelation, condition: viewExists},
 		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
+		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`CREATE VIEW %s AS %s`,
@@ -569,10 +650,38 @@ func (og *operationGenerator) dropColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "IrrelevantColumnName"`, tableName), nil
+	}
+
 	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
+	columnExists, err := columnExistsOnTable(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	colIsPrimaryKey, err := colIsPrimaryKey(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	columnIsDependedOn, err := columnIsDependedOn(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{code: pgcode.UndefinedColumn, condition: !columnExists},
+		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
+		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
+	}.add(og.expectedExecErrors)
+
 	return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName), nil
 }
 
@@ -581,9 +690,24 @@ func (og *operationGenerator) dropColumnDefault(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "IrrelevantColumnName" DROP DEFAULT`, tableName), nil
+	}
 	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
+	}
+	columnExists, err := columnExistsOnTable(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	if !columnExists {
+		og.expectedExecErrors.add(pgcode.UndefinedColumn)
 	}
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName), nil
 }
@@ -593,9 +717,33 @@ func (og *operationGenerator) dropColumnNotNull(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "IrrelevantColumnName" DROP NOT NULL`, tableName), nil
+	}
 	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
+	}
+	columnExists, err := columnExistsOnTable(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	colIsPrimaryKey, err := colIsPrimaryKey(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{pgcode.UndefinedColumn, !columnExists},
+		{pgcode.InvalidTableDefinition, colIsPrimaryKey},
+	}.add(og.expectedExecErrors)
+	if !columnExists {
+		og.expectedExecErrors.add(pgcode.UndefinedColumn)
 	}
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
 }
@@ -669,6 +817,16 @@ func (og *operationGenerator) renameColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	srcTableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !srcTableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "IrrelevantColumnName" TO "OtherIrrelevantName"`,
+			tableName), nil
+	}
+
 	srcColumnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
@@ -678,6 +836,25 @@ func (og *operationGenerator) renameColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	srcColumnExists, err := columnExistsOnTable(tx, tableName, srcColumnName)
+	if err != nil {
+		return "", err
+	}
+	destColumnExists, err := columnExistsOnTable(tx, tableName, destColumnName)
+	if err != nil {
+		return "", err
+	}
+	columnIsDependedOn, err := columnIsDependedOn(tx, tableName, srcColumnName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{pgcode.UndefinedColumn, !srcColumnExists},
+		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
+		{pgcode.DependentObjectsStillExist, columnIsDependedOn},
+	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "%s" TO "%s"`,
 		tableName, srcColumnName, destColumnName), nil
@@ -733,6 +910,35 @@ func (og *operationGenerator) renameTable(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	srcTableExists, err := tableExists(tx, srcTableName)
+	if err != nil {
+		return "", err
+	}
+
+	destSchemaExists, err := schemaExists(tx, destTableName.Schema())
+	if err != nil {
+		return "", err
+	}
+
+	destTableExists, err := tableExists(tx, destTableName)
+	if err != nil {
+		return "", err
+	}
+
+	srcTableHasDependencies, err := tableHasDependencies(tx, srcTableName)
+	if err != nil {
+		return "", err
+	}
+
+	srcEqualsDest := destTableName.String() == srcTableName.String()
+	codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !srcTableExists},
+		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destTableExists},
+		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
+		{code: pgcode.InvalidName, condition: srcTableName.Schema() != destTableName.Schema()},
+	}.add(og.expectedExecErrors)
+
 	return fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, srcTableName, destTableName), nil
 }
 
@@ -751,6 +957,35 @@ func (og *operationGenerator) renameView(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	srcViewExists, err := viewExists(tx, srcViewName)
+	if err != nil {
+		return "", err
+	}
+
+	destSchemaExists, err := schemaExists(tx, destViewName.Schema())
+	if err != nil {
+		return "", err
+	}
+
+	destViewExists, err := viewExists(tx, destViewName)
+	if err != nil {
+		return "", err
+	}
+
+	srcTableHasDependencies, err := tableHasDependencies(tx, srcViewName)
+	if err != nil {
+		return "", err
+	}
+
+	srcEqualsDest := destViewName.String() == srcViewName.String()
+	codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !srcViewExists},
+		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destViewExists},
+		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
+		{code: pgcode.InvalidName, condition: srcViewName.Schema() != destViewName.Schema()},
+	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName), nil
 }
@@ -914,6 +1149,7 @@ func (og *operationGenerator) randColumn(
 	q := fmt.Sprintf(`
   SELECT column_name
     FROM [SHOW COLUMNS FROM %s]
+   WHERE column_name != 'rowid'
 ORDER BY random()
    LIMIT 1;
 `, tableName.String())
@@ -1198,9 +1434,18 @@ func (og *operationGenerator) createSchema(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	ifNotExists := og.randIntn(2) == 0
+
+	schemaExists, err := schemaExists(tx, schemaName)
+	if err != nil {
+		return "", err
+	}
+	if schemaExists && !ifNotExists {
+		og.expectedExecErrors.add(pgcode.DuplicateSchema)
+	}
 
 	// TODO(jayshrivastava): Support authorization
-	stmt := rowenc.MakeSchemaName(og.randIntn(2) == 0, schemaName, security.RootUserName())
+	stmt := rowenc.MakeSchemaName(ifNotExists, schemaName, security.RootUserName())
 	return tree.Serialize(stmt), nil
 }
 
@@ -1229,6 +1474,16 @@ func (og *operationGenerator) dropSchema(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	schemaExists, err := schemaExists(tx, schemaName)
+	if err != nil {
+		return "", err
+	}
+	codesWithConditions{
+		{pgcode.UndefinedSchema, !schemaExists},
+		{pgcode.InvalidSchemaName, schemaName == tree.PublicSchema},
+	}.add(og.expectedExecErrors)
+
 	return fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName), nil
 }
 
