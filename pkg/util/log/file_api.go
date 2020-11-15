@@ -97,24 +97,19 @@ func ListLogFiles() (logFiles []logpb.FileInfo, err error) {
 		return nil, nil
 	}
 
-	err = registry.iter(func(l *loggerT) error {
-		if l.fileSink == nil {
-			// No logging to files: nothing to do.
-			return nil
-		}
-
+	err = allFileSinks.iter(func(l *fileSink) error {
 		// For now, only gather logs from the main log directory.
 		// This is because the other APIs don't yet understand
 		// secondary log directories, and we don't want
 		// to list a file that cannot be retrieved.
-		l.fileSink.mu.Lock()
-		thisLogDir := l.fileSink.mu.logDir
-		l.fileSink.mu.Unlock()
+		l.mu.Lock()
+		thisLogDir := l.mu.logDir
+		l.mu.Unlock()
 		if thisLogDir == "" || thisLogDir != mainDir {
 			return nil
 		}
 
-		_, thisLoggerFiles, err := l.fileSink.listLogFiles()
+		_, thisLoggerFiles, err := l.listLogFiles()
 		if err != nil {
 			return err
 		}
