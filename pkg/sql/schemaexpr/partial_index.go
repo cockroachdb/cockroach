@@ -171,12 +171,9 @@ func FormatIndexForDisplay(
 		}
 
 		if index.GeoConfig.S2Geometry != nil {
-			if len(index.ColumnIDs) != 1 {
-				return "", errors.Newf("unexpected number of columns for GEOMETRY index: %v", index.ColumnIDs)
-			}
-			col, err := table.FindColumnByID(index.ColumnIDs[0])
+			col, err := table.FindColumnByID(index.InvertedColumnID())
 			if err != nil {
-				return "", errors.Wrapf(err, "expected column %q to exist in table", index.ColumnNames[0])
+				return "", errors.Wrapf(err, "expected column %q to exist in table", index.InvertedColumnName())
 			}
 			defaultConfig, err := geoindex.GeometryIndexConfigForSRID(col.Type.GeoSRIDOrZero())
 			if err != nil {
