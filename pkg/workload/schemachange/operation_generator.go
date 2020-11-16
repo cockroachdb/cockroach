@@ -96,6 +96,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	dropColumn:        true,
 	dropColumnDefault: true,
 	dropColumnNotNull: true,
+	dropColumnStored:  true,
 	dropConstraint:    true,
 	dropIndex:         true,
 	dropSequence:      true,
@@ -932,11 +933,34 @@ func (og *operationGenerator) dropColumnStored(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName DROP STORED`, tableName), nil
+	}
 
 	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
+	columnExists, err := columnExistsOnTable(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+
+	columnIsComputed, err := columnIsComputed(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{code: pgcode.InvalidColumnDefinition, condition: !columnIsComputed},
+		{code: pgcode.UndefinedColumn, condition: !columnExists},
+	}.add(og.expectedExecErrors)
+
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName), nil
 }
 
