@@ -829,7 +829,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 		},
 		&BinOp{
@@ -838,7 +838,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 		},
 		&BinOp{
@@ -848,8 +848,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// These two quantities aren't directly comparable. Convert the
 				// TimestampTZ to a timestamp first.
-				nanos := left.(*DTimestamp).Sub(right.(*DTimestampTZ).stripTimeZone(ctx).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
+				stripped := right.(*DTimestampTZ).stripTimeZone(ctx)
+				nanos := left.(*DTimestamp).Sub(stripped.Time).Nanoseconds()
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 		},
 		&BinOp{
@@ -859,8 +860,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// These two quantities aren't directly comparable. Convert the
 				// TimestampTZ to a timestamp first.
-				nanos := left.(*DTimestampTZ).stripTimeZone(ctx).Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
+				stripped := left.(*DTimestampTZ).stripTimeZone(ctx)
+				nanos := stripped.Sub(right.(*DTimestamp).Time).Nanoseconds()
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 		},
 		&BinOp{
@@ -1641,21 +1643,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 	},
-}
-
-// timestampMinusBinOp is the implementation of the subtraction
-// between types.TimestampTZ operands.
-var timestampMinusBinOp *BinOp
-
-// TimestampDifference computes the interval difference between two
-// TimestampTZ datums. The result is a DInterval. The caller must
-// ensure that the arguments are of the proper Datum type.
-func TimestampDifference(ctx *EvalContext, start, end Datum) (Datum, error) {
-	return timestampMinusBinOp.Fn(ctx, start, end)
-}
-
-func init() {
-	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(types.TimestampTZ, types.TimestampTZ)
 }
 
 // CmpOp is a comparison operator.

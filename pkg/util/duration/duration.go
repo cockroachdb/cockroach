@@ -26,6 +26,11 @@ import (
 
 const (
 	daysInMonth   = 30
+	secsPerMinute = 60
+	minsPerHour   = 60
+	hoursPerDay   = 24
+	monthsPerYear = 12
+
 	nanosInDay    = 24 * int64(time.Hour) // Try as I might, couldn't do this without the cast.
 	nanosInMonth  = daysInMonth * nanosInDay
 	nanosInSecond = 1000 * 1000 * 1000
@@ -79,6 +84,115 @@ func MakeDuration(nanos, days, months int64) Duration {
 		Days:   days,
 		nanos:  rounded(nanos),
 	}
+}
+
+// MakeDurationJustifyHours returns a duration where hours are moved
+// to days if the number of hours exceeds 24.
+func MakeDurationJustifyHours(nanos, days, months int64) Duration {
+	const nanosPerDay = int64(HoursPerDay * time.Hour)
+	extraDays := nanos / nanosPerDay
+	days += extraDays
+	nanos -= extraDays * nanosPerDay
+	return Duration{
+		Months: months,
+		Days:   days,
+		nanos:  rounded(nanos),
+	}
+}
+
+// Age returns a Duration rounded to the nearest microsecond
+// from the time difference of (lhs - rhs).
+//
+// Note that we cannot use time.Time's sub, as time.Duration does not give
+// an accurate picture of day/month differences.
+//
+// This is lifted from Postgres' timestamptz_age. The following comment applies:
+// Note that this does not result in an accurate absolute time span
+// since year and month are out of context once the arithmetic
+// is done.
+func Age(lhs, rhs time.Time) Duration {
+	// Strictly compare only UTC time.
+	lhs = lhs.UTC()
+	rhs = rhs.UTC()
+
+	years := int64(lhs.Year() - rhs.Year())
+	months := int64(lhs.Month() - rhs.Month())
+	days := int64(lhs.Day() - rhs.Day())
+	hours := int64(lhs.Hour() - rhs.Hour())
+	minutes := int64(lhs.Minute() - rhs.Minute())
+	seconds := int64(lhs.Second() - rhs.Second())
+	nanos := int64(lhs.Nanosecond() - rhs.Nanosecond())
+
+	flip := func() {
+		years = -years
+		months = -months
+		days = -days
+		hours = -hours
+		minutes = -minutes
+		seconds = -seconds
+		nanos = -nanos
+	}
+
+	// Flip signs so we're always operating from a positive.
+	if rhs.After(lhs) {
+		flip()
+	}
+
+	// For each field that is now negative, promote them to positive.
+	// We could probably use smarter math here, but to keep things simple and postgres-esque,
+	// we'll do the the same way postgres does. We do not expect these overflow values
+	// to be too large from the math above anyway.
+	for nanos < 0 {
+		nanos += int64(time.Second)
+		seconds--
+	}
+	for seconds < 0 {
+		seconds += secsPerMinute
+		minutes--
+	}
+	for minutes < 0 {
+		minutes += minsPerHour
+		hours--
+	}
+	for hours < 0 {
+		hours += hoursPerDay
+		days--
+	}
+	for days < 0 {
+		// Get days in month preceding the current month of whichever is greater.
+		if rhs.After(lhs) {
+			days += daysInCurrentMonth(lhs)
+		} else {
+			days += daysInCurrentMonth(rhs)
+		}
+		months--
+	}
+	for months < 0 {
+		months += monthsPerYear
+		years--
+	}
+
+	// Revert the sign back.
+	if rhs.After(lhs) {
+		flip()
+	}
+
+	return Duration{
+		Months: years*MonthsPerYear + months,
+		Days:   days,
+		nanos: rounded(
+			nanos +
+				int64(time.Second)*seconds +
+				int64(time.Minute)*minutes +
+				int64(time.Hour)*hours,
+		),
+	}
+}
+
+func daysInCurrentMonth(t time.Time) int64 {
+	// Take the first day of the month, add a month and subtract a day.
+	// This returns the last day of the month, which the number of days in the month.
+	return int64(time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, -1).Day())
 }
 
 // DecodeDuration returns a Duration without rounding nanos.
