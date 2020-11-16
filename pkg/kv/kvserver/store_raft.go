@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	crdberrors "github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -253,7 +252,7 @@ func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
 	if snapHeader.IsPreemptive() {
-		return roachpb.NewError(crdberrors.AssertionFailedf(`expected a raft or learner snapshot`))
+		return roachpb.NewError(errors.AssertionFailedf(`expected a raft or learner snapshot`))
 	}
 
 	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(

@@ -449,6 +449,7 @@ func (rb *routerBase) updateStreamState(
 func (rb *routerBase) fwdMetadata(meta *execinfrapb.ProducerMetadata) {
 	if meta == nil {
 		log.Fatalf(context.TODO(), "asked to fwd empty metadata")
+		return
 	}
 
 	rb.semaphore <- struct{}{}

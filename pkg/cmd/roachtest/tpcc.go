@@ -341,7 +341,7 @@ func registerTPCC(r *testRegistry) {
 				// bottleneck on initialization which is significantly slower than import.
 				Warehouses:     500,
 				Duration:       time.Minute * 15,
-				ExtraSetupArgs: fmt.Sprintf("--interleaved=true"),
+				ExtraSetupArgs: "--interleaved=true",
 				SetupType:      usingInit,
 			})
 		},
