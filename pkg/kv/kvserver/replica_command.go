@@ -2232,26 +2232,19 @@ func (s *Store) AdminRelocateRange(
 			if len(ops) > 2 {
 				log.Fatalf(ctx, "received more than 2 ops: %+v", ops)
 			}
-			opss := [][]roachpb.ReplicationChange{ops}
-			success := true
-			for _, ops := range opss {
-				newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, rangeDesc, ops)
-				if err != nil {
-					returnErr := errors.Wrapf(err, "while carrying out changes %v", ops)
-					if !canRetry(err) {
-						return returnErr
-					}
-					if every.ShouldLog() {
-						log.Infof(ctx, "%v", returnErr)
-					}
-					success = false
-					break
+			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, rangeDesc, ops)
+			if err != nil {
+				returnErr := errors.Wrapf(err, "while carrying out changes %v", ops)
+				if !canRetry(err) {
+					return returnErr
 				}
-				rangeDesc = *newDesc
+				if every.ShouldLog() {
+					log.Infof(ctx, "%v [will retry]", returnErr)
+				}
+				continue
 			}
-			if success {
-				break
-			}
+			rangeDesc = *newDesc
+			break
 		}
 	}
 
