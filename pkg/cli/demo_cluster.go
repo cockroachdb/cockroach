@@ -54,6 +54,9 @@ type transientCluster struct {
 	s          *server.TestServer
 	servers    []*server.TestServer
 
+	httpFirstPort int
+	sqlFirstPort  int
+
 	adminPassword string
 	adminUser     security.SQLUsername
 }
@@ -103,6 +106,9 @@ func (c *transientCluster) checkConfigAndSetupLogging(
 		}
 	}
 
+	c.httpFirstPort = demoCtx.httpPort
+	c.sqlFirstPort = demoCtx.sqlPort
+
 	return nil
 }
 
@@ -127,7 +133,11 @@ func (c *transientCluster) start(
 			joinAddr = c.s.ServingRPCAddr()
 		}
 		nodeID := roachpb.NodeID(i + 1)
-		args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir)
+		args := testServerArgsForTransientCluster(
+			c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir,
+			c.sqlFirstPort,
+			c.httpFirstPort,
+		)
 		if i == 0 {
 			// The first node also auto-inits the cluster.
 			args.NoAutoInitializeCluster = false
@@ -302,16 +312,25 @@ func (c *transientCluster) start(
 // testServerArgsForTransientCluster creates the test arguments for
 // a necessary server in the demo cluster.
 func testServerArgsForTransientCluster(
-	sock unixSocketDetails, nodeID roachpb.NodeID, joinAddr string, demoDir string,
+	sock unixSocketDetails,
+	nodeID roachpb.NodeID,
+	joinAddr string,
+	demoDir string,
+	sqlBasePort, httpBasePort int,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
 	storeSpec := base.DefaultTestStoreSpec
 	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
 
+	sqlPort := sqlBasePort + int(nodeID) - 1
+	httpPort := httpBasePort + int(nodeID) - 1
+
 	args := base.TestServerArgs{
 		SocketFile:              sock.filename(),
 		PartOfCluster:           true,
 		Stopper:                 stop.NewStopper(),
+		SQLAddr:                 fmt.Sprintf(":%d", sqlPort),
+		HTTPAddr:                fmt.Sprintf(":%d", httpPort),
 		JoinAddr:                joinAddr,
 		DisableTLSForHTTP:       true,
 		StoreSpecs:              []base.StoreSpec{storeSpec},
@@ -470,7 +489,8 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	}
 
 	// TODO(#42243): re-compute the latency mapping.
-	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir)
+	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir,
+		c.sqlFirstPort, c.httpFirstPort)
 	serv := server.TestServerFactory.New(args).(*server.TestServer)
 
 	// We want to only return after the server is ready.
@@ -783,10 +803,9 @@ func (c *transientCluster) sockForServer(nodeID roachpb.NodeID) unixSocketDetail
 	if !c.useSockets {
 		return unixSocketDetails{}
 	}
-	defaultPort, _ := strconv.Atoi(base.DefaultPort)
 	return unixSocketDetails{
 		socketDir:  c.demoDir,
-		portNumber: defaultPort + int(nodeID) - 1,
+		portNumber: c.sqlFirstPort + int(nodeID) - 1,
 		username:   c.adminUser,
 		password:   c.adminPassword,
 	}

@@ -14,6 +14,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -536,6 +537,8 @@ var demoCtx struct {
 	simulateLatency           bool
 	transientCluster          *transientCluster
 	insecure                  bool
+	sqlPort                   int
+	httpPort                  int
 }
 
 // setDemoContextDefaults set the default values in demoCtx.  This
@@ -554,6 +557,8 @@ func setDemoContextDefaults() {
 	demoCtx.disableLicenseAcquisition = false
 	demoCtx.transientCluster = nil
 	demoCtx.insecure = false
+	demoCtx.sqlPort, _ = strconv.Atoi(base.DefaultPort)
+	demoCtx.httpPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'
