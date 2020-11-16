@@ -65,12 +65,13 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	maxSyncDurationFatalOnExceededDefault,
 )
 
-// MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
-func MVCCKeyCompare(a, b []byte) int {
+// EngineKeyCompare compares cockroach keys, including the version (which
+// could be MVCC timestamps).
+func EngineKeyCompare(a, b []byte) int {
 	// NB: For performance, this routine manually splits the key into the
-	// user-key and timestamp components rather than using SplitMVCCKey. Don't
-	// try this at home kids: use SplitMVCCKey.
-
+	// user-key and version components rather than using DecodeEngineKey. In
+	// most situations, use DecodeEngineKey or GetKeyPartFromEngineKey or
+	// SplitMVCCKey instead of doing this.
 	aEnd := len(a) - 1
 	bEnd := len(b) - 1
 	if aEnd < 0 || bEnd < 0 {
@@ -79,7 +80,7 @@ func MVCCKeyCompare(a, b []byte) int {
 		return bytes.Compare(a, b)
 	}
 
-	// Compute the index of the separator between the key and the timestamp.
+	// Compute the index of the separator between the key and the version.
 	aSep := aEnd - int(a[aEnd])
 	bSep := bEnd - int(b[bEnd])
 	if aSep < 0 || bSep < 0 {
@@ -93,7 +94,9 @@ func MVCCKeyCompare(a, b []byte) int {
 		return c
 	}
 
-	// Compare the timestamp part of the key.
+	// Compare the version part of the key. Note that when the version is a
+	// timestamp, the timestamp encoding causes byte comparison to be equivalent
+	// to timestamp comparison.
 	aTS := a[aSep:aEnd]
 	bTS := b[bSep:bEnd]
 	if len(aTS) == 0 {
@@ -107,13 +110,13 @@ func MVCCKeyCompare(a, b []byte) int {
 	return bytes.Compare(bTS, aTS)
 }
 
-// MVCCComparer is a pebble.Comparer object that implements MVCC-specific
+// EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
-var MVCCComparer = &pebble.Comparer{
-	Compare: MVCCKeyCompare,
+var EngineComparer = &pebble.Comparer{
+	Compare: EngineKeyCompare,
 
 	AbbreviatedKey: func(k []byte) uint64 {
-		key, _, ok := enginepb.SplitMVCCKey(k)
+		key, ok := GetKeyPartFromEngineKey(k)
 		if !ok {
 			return 0
 		}
@@ -121,19 +124,26 @@ var MVCCComparer = &pebble.Comparer{
 	},
 
 	FormatKey: func(k []byte) fmt.Formatter {
-		decoded, err := DecodeMVCCKey(k)
-		if err != nil {
-			return mvccKeyFormatter{err: err}
+		decoded, ok := DecodeEngineKey(k)
+		if !ok {
+			return mvccKeyFormatter{err: errors.Errorf("invalid encoded engine key: %x", k)}
 		}
-		return mvccKeyFormatter{key: decoded}
+		if decoded.IsMVCCKey() {
+			mvccKey, err := decoded.ToMVCCKey()
+			if err != nil {
+				return mvccKeyFormatter{err: err}
+			}
+			return mvccKeyFormatter{key: mvccKey}
+		}
+		return EngineKeyFormatter{key: decoded}
 	},
 
 	Separator: func(dst, a, b []byte) []byte {
-		aKey, _, ok := enginepb.SplitMVCCKey(a)
+		aKey, ok := GetKeyPartFromEngineKey(a)
 		if !ok {
 			return append(dst, a...)
 		}
-		bKey, _, ok := enginepb.SplitMVCCKey(b)
+		bKey, ok := GetKeyPartFromEngineKey(b)
 		if !ok {
 			return append(dst, a...)
 		}
@@ -142,7 +152,7 @@ var MVCCComparer = &pebble.Comparer{
 			return append(dst, a...)
 		}
 		n := len(dst)
-		// MVCC key comparison uses bytes.Compare on the roachpb.Key, which is the same semantics as
+		// Engine key comparison uses bytes.Compare on the roachpb.Key, which is the same semantics as
 		// pebble.DefaultComparer, so reuse the latter's Separator implementation.
 		dst = pebble.DefaultComparer.Separator(dst, aKey, bKey)
 		// Did it pick a separator different than aKey -- if it did not we can't do better than a.
@@ -150,17 +160,17 @@ var MVCCComparer = &pebble.Comparer{
 		if bytes.Equal(aKey, buf) {
 			return append(dst[:n], a...)
 		}
-		// The separator is > aKey, so we only need to add the timestamp sentinel.
+		// The separator is > aKey, so we only need to add the sentinel.
 		return append(dst, 0)
 	},
 
 	Successor: func(dst, a []byte) []byte {
-		aKey, _, ok := enginepb.SplitMVCCKey(a)
+		aKey, ok := GetKeyPartFromEngineKey(a)
 		if !ok {
 			return append(dst, a...)
 		}
 		n := len(dst)
-		// MVCC key comparison uses bytes.Compare on the roachpb.Key, which is the same semantics as
+		// Engine key comparison uses bytes.Compare on the roachpb.Key, which is the same semantics as
 		// pebble.DefaultComparer, so reuse the latter's Successor implementation.
 		dst = pebble.DefaultComparer.Successor(dst, aKey)
 		// Did it pick a successor different than aKey -- if it did not we can't do better than a.
@@ -168,22 +178,22 @@ var MVCCComparer = &pebble.Comparer{
 		if bytes.Equal(aKey, buf) {
 			return append(dst[:n], a...)
 		}
-		// The successor is > aKey, so we only need to add the timestamp sentinel.
+		// The successor is > aKey, so we only need to add the sentinel.
 		return append(dst, 0)
 	},
 
 	Split: func(k []byte) int {
-		key, _, ok := enginepb.SplitMVCCKey(k)
+		key, ok := GetKeyPartFromEngineKey(k)
 		if !ok {
 			return len(k)
 		}
-		// This matches the behavior of libroach/KeyPrefix. RocksDB requires that
-		// keys generated via a SliceTransform be comparable with normal encoded
-		// MVCC keys. Encoded MVCC keys have a suffix indicating the number of
-		// bytes of timestamp data. MVCC keys without a timestamp have a suffix of
-		// 0. We're careful in EncodeKey to make sure that the user-key always has
-		// a trailing 0. If there is no timestamp this falls out naturally. If
-		// there is a timestamp we prepend a 0 to the encoded timestamp data.
+		// Pebble requires that keys generated via a split be comparable with
+		// normal encoded engine keys. Encoded engine keys have a suffix
+		// indicating the number of bytes of version data. Engine keys without a
+		// version have a suffix of 0. We're careful in EncodeKey to make sure
+		// that the user-key always has a trailing 0. If there is no version this
+		// falls out naturally. If there is a version we prepend a 0 to the
+		// encoded version data.
 		return len(key) + 1
 	},
 
@@ -226,13 +236,13 @@ type pebbleTimeBoundPropCollector struct {
 }
 
 func (t *pebbleTimeBoundPropCollector) Add(key pebble.InternalKey, value []byte) error {
-	_, ts, ok := enginepb.SplitMVCCKey(key.UserKey)
+	engineKey, ok := DecodeEngineKey(key.UserKey)
 	if !ok {
-		return errors.Errorf("failed to split MVCC key")
+		return errors.Errorf("failed to split engine key")
 	}
-	if len(ts) > 0 {
+	if engineKey.IsMVCCKey() && len(engineKey.Version) > 0 {
 		t.lastValue = t.lastValue[:0]
-		t.updateBounds(ts)
+		t.updateBounds(engineKey.Version)
 	} else {
 		t.lastValue = append(t.lastValue[:0], value...)
 	}
@@ -313,7 +323,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	}
 
 	opts := &pebble.Options{
-		Comparer:                    MVCCComparer,
+		Comparer:                    EngineComparer,
 		L0CompactionThreshold:       2,
 		L0StopWritesThreshold:       1000,
 		LBaseMaxBytes:               64 << 20, // 64 MB
