@@ -108,6 +108,11 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 	for i := range tc.mu.serverStoppers {
 		if tc.mu.serverStoppers[i] != nil {
 			tc.mu.serverStoppers[i].Stop(context.TODO())
+			// We need to check IsStopped() in addition to just waiting for
+			// Stop() above to complete, because if there was an asynchronous
+			// Drain request ongoing, Stop() would take a shortcut and not
+			// actually wait for the async stop to complete.
+			<-tc.mu.serverStoppers[i].IsStopped()
 			tc.mu.serverStoppers[i] = nil
 		}
 	}
@@ -119,6 +124,11 @@ func (tc *TestCluster) StopServer(idx int) {
 	defer tc.mu.Unlock()
 	if tc.mu.serverStoppers[idx] != nil {
 		tc.mu.serverStoppers[idx].Stop(context.TODO())
+		// We need to check IsStopped() in addition to just waiting for
+		// Stop() above to complete, because if there was an asynchronous
+		// Drain request ongoing, Stop() would take a shortcut and not
+		// actually wait for the async stop to complete.
+		<-tc.mu.serverStoppers[idx].IsStopped()
 		tc.mu.serverStoppers[idx] = nil
 	}
 }
@@ -198,6 +208,7 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 				// The Server becomes responsible for closing this.
 				listener, err := net.Listen("tcp", "127.0.0.1:0")
 				if err != nil {
+					tc.Stopper().Stop(context.Background())
 					t.Fatal(err)
 				}
 				firstListener = listener
@@ -212,6 +223,7 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 		}
 
 		if _, err := tc.AddServer(serverArgs); err != nil {
+			tc.Stopper().Stop(context.Background())
 			t.Fatal(err)
 		}
 	}
@@ -242,10 +254,10 @@ func (tc *TestCluster) Start(t testing.TB) {
 
 		if tc.clusterArgs.ParallelStart {
 			go func(i int) {
-				errCh <- tc.StartServer(tc.Server(i), tc.serverArgs[i])
+				errCh <- tc.startServer(i, tc.serverArgs[i])
 			}(i)
 		} else {
-			if err := tc.StartServer(tc.Server(i), tc.serverArgs[i]); err != nil {
+			if err := tc.startServer(i, tc.serverArgs[i]); err != nil {
 				t.Fatal(err)
 			}
 			// We want to wait for stores for each server in order to have predictable
@@ -340,12 +352,12 @@ func (tc *TestCluster) AddAndStartServer(t testing.TB, serverArgs base.TestServe
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
 		serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 	}
-	serv, err := tc.AddServer(serverArgs)
+	_, err := tc.AddServer(serverArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := tc.StartServer(serv, serverArgs); err != nil {
+	if err := tc.startServer(len(tc.Servers)-1, serverArgs); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -368,7 +380,6 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 	); err != nil {
 		return nil, err
 	}
-	serverArgs.Stopper = stop.NewStopper()
 	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
 		var stkCopy kvserver.StoreTestingKnobs
 		if stk := serverArgs.Knobs.Store; stk != nil {
@@ -401,14 +412,18 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 
 	tc.Servers = append(tc.Servers, s)
 	tc.serverArgs = append(tc.serverArgs, serverArgs)
+
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	thisStopper := s.Stopper()
+	tc.mu.serverStoppers = append(tc.mu.serverStoppers, thisStopper)
 	return s, nil
 }
 
-// StartServer is the companion method to AddServer, and is responsible for
+// startServer is the companion method to AddServer, and is responsible for
 // actually starting the server.
-func (tc *TestCluster) StartServer(
-	server serverutils.TestServerInterface, serverArgs base.TestServerArgs,
-) error {
+func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) error {
+	server := tc.Servers[idx]
 	if err := server.Start(); err != nil {
 		return err
 	}
@@ -418,11 +433,7 @@ func (tc *TestCluster) StartServer(
 		return err
 	}
 
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-
 	tc.Conns = append(tc.Conns, dbConn)
-	tc.mu.serverStoppers = append(tc.mu.serverStoppers, server.Stopper())
 	return nil
 }
 
