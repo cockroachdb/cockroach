@@ -798,10 +798,11 @@ func EncodeInvertedIndexKeys(
 // is (SQL) NULL, no inverted index keys will be produced, because inverted
 // indexes cannot and do not need to satisfy the predicate col IS NULL.
 //
-// This function does not return keys for empty arrays unless the version is at
-// least descpb.EmptyArraysInInvertedIndexesVersion. (Note that this only
-// applies to arrays, not JSONs. This function returns keys for all non-null
-// JSONs regardless of the version.)
+// This function does not return keys for empty arrays or for NULL array
+// elements unless the version is at least
+// descpb.EmptyArraysInInvertedIndexesVersion. (Note that this only applies
+// to arrays, not JSONs. This function returns keys for all non-null JSONs
+// regardless of the version.)
 func EncodeInvertedIndexTableKeys(
 	val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
 ) (key [][]byte, err error) {
@@ -873,8 +874,8 @@ func EncodeContainingInvertedIndexSpans(
 // the given input array, one per entry in the array. The input inKey is
 // prefixed to all returned keys.
 //
-// This function does not return keys for empty arrays unless the version is at
-// least descpb.EmptyArraysInInvertedIndexesVersion.
+// This function does not return keys for empty arrays or for NULL array elements
+// unless the version is at least descpb.EmptyArraysInInvertedIndexesVersion.
 func encodeArrayInvertedIndexTableKeys(
 	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
 ) (key [][]byte, err error) {
@@ -887,10 +888,9 @@ func encodeArrayInvertedIndexTableKeys(
 	outKeys := make([][]byte, 0, len(val.Array))
 	for i := range val.Array {
 		d := val.Array[i]
-		if d == tree.DNull {
-			// We don't need to make keys for NULL, since in SQL:
-			// SELECT ARRAY[1, NULL, 2] @> ARRAY[NULL]
-			// returns false.
+		if d == tree.DNull && version < descpb.EmptyArraysInInvertedIndexesVersion {
+			// Older versions did not include null elements, but we must include them
+			// going forward since `SELECT ARRAY[NULL] @> ARRAY[]` returns true.
 			continue
 		}
 		outKey := make([]byte, len(inKey))
@@ -916,6 +916,12 @@ func encodeContainingArrayInvertedIndexSpans(
 		// All arrays contain the empty array.
 		endKey := roachpb.Key(inKey).PrefixEnd()
 		return []roachpb.Spans{{roachpb.Span{Key: inKey, EndKey: endKey}}}, nil
+	}
+
+	if val.HasNulls {
+		// If there are any nulls, return empty spans. This is needed to ensure
+		// that `SELECT ARRAY[NULL, 2] @> ARRAY[NULL, 2]` is false.
+		return nil, nil
 	}
 
 	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, version)
