@@ -1,5 +1,7 @@
 # Build the test binary in a multistage build.
-FROM golang:1.13 AS builder
+# Note here we are using master's gss_compose tests to do this.
+# As master is on go 1.15, we have to use go 1.15 too.
+FROM golang:1.15 AS builder
 WORKDIR /workspace
 COPY . .
 RUN go get -d -t -tags gss_compose
