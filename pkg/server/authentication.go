@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -456,6 +457,101 @@ func newAuthenticationMuxAllowAnonymous(
 		allowAnonymous: true,
 	}
 }
+
+func newAutoLoginServer(s *authenticationServer) *autoLoginServer {
+	return &autoLoginServer{
+		server: s,
+	}
+}
+
+type autoLoginServer struct {
+	server *authenticationServer
+}
+
+func (a *autoLoginServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// TODO(knz): plumb some context here.
+	ctx := context.Background()
+
+	authHeaders := req.Header[`Authorization`]
+	// .Infof(ctx, "%s", fmt.Sprintf("%# v\n", pretty.Formatter(req.Header)))
+	if len(authHeaders) == 0 || !strings.HasPrefix(authHeaders[0], "Basic ") {
+		w.Header()["Content-Encoding"] = []string{"text/plain"}
+		w.Header()[`WWW-Authenticate`] = []string{`Basic realm="User Visible Realm", charset="UTF-8"`}
+		w.WriteHeader(401)
+		// TODO(knz): Maybe show a nicer landing page here?
+		w.Write([]byte("waiting for credentials"))
+		return
+	}
+
+	authHeader := authHeaders[0]
+	credentials := strings.TrimPrefix(authHeader, "Basic ")
+	scred, err := base64.StdEncoding.DecodeString(credentials)
+	if err != nil {
+		w.Header()[`WWW-Authenticate`] = []string{`Basic realm="User Visible Realm", charset="UTF-8"`}
+		w.WriteHeader(401)
+		w.Write([]byte("malformed base64"))
+		return
+	}
+
+	parts := strings.SplitN(string(scred), ":", 2)
+	if len(parts) < 2 {
+		w.Header()[`WWW-Authenticate`] = []string{`Basic realm="User Visible Realm", charset="UTF-8"`}
+		w.WriteHeader(401)
+		w.Write([]byte("malformed auth info"))
+		return
+	}
+	userInput, password := parts[0], parts[1]
+	if userInput == "" || password == "" {
+		w.Header()[`WWW-Authenticate`] = []string{`Basic realm="User Visible Realm", charset="UTF-8"`}
+		w.WriteHeader(401)
+		w.Write([]byte("no username or password was provided"))
+		return
+	}
+
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
+	username, _ := security.MakeSQLUsernameFromUserInput(userInput, security.UsernameValidation)
+
+	// Verify the provided username/password pair.
+	verified, expired, err := a.server.verifyPassword(ctx, username, password)
+	if err != nil {
+		log.Errorf(ctx, "%s", err)
+		w.WriteHeader(500)
+		w.Write([]byte("internal error"))
+		return
+	}
+	if expired {
+		w.Header()[`WWW-Authenticate`] = []string{`Basic realm="User Visible Realm", charset="UTF-8"`}
+		w.WriteHeader(401)
+		w.Write([]byte("password expired"))
+		return
+	}
+	if !verified {
+		w.Header()[`WWW-Authenticate`] = []string{`Basic realm="User Visible Realm", charset="UTF-8"`}
+		w.WriteHeader(401)
+		w.Write([]byte("password invalid"))
+		return
+	}
+
+	cookie, err := a.server.createSessionFor(ctx, username)
+	if err != nil {
+		log.Errorf(ctx, "%s", err)
+		w.WriteHeader(500)
+		w.Write([]byte("internal error"))
+		return
+	}
+
+	// Set the cookie header on the outgoing response.
+	w.Header()["Set-Cookie"] = []string{cookie.String()}
+	w.Header()["Location"] = []string{"/"}
+	w.WriteHeader(302)
+	w.Write([]byte("you can use the UI now"))
+}
+
+var _ http.Handler = (*autoLoginServer)(nil)
 
 func newAuthenticationMux(s *authenticationServer, inner http.Handler) *authenticationMux {
 	return &authenticationMux{

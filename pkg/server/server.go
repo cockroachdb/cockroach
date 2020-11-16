@@ -1647,6 +1647,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}),
 	)
 	s.mux.Handle("/", authenticatedUIHandler)
+	s.mux.Handle("/autologin", newAutoLoginServer(s.authentication))
 
 	// Register gRPC-gateway endpoints used by the admin UI.
 	var authHandler http.Handler = gwMux

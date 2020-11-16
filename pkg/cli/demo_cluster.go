@@ -845,8 +845,12 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 			// the demo.
 			fmt.Fprintf(w, "node %d:\n", nodeID)
 		}
-		// Print node ID and admin UI URL.
-		fmt.Fprintf(w, "  (console) %s\n", s.AdminURL())
+		// Print node ID and admin UI URL. Embed the autologin feature inside
+		// the URL.
+		serverURL := s.Cfg.AdminURL()
+		serverURL.User = url.UserPassword(c.adminUser.Normalized(), c.adminPassword)
+		serverURL.Path = "/autologin"
+		fmt.Fprintf(w, "  (console) %s\n", serverURL.String())
 		// Print unix socket if defined.
 		if c.useSockets {
 			sock := c.sockForServer(nodeID)
