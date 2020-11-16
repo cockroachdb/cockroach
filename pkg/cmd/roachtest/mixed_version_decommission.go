@@ -52,71 +52,45 @@ func runDecommissionMixedVersions(
 		waitForUpgradeStep(allNodes),
 		preventAutoUpgradeStep(h.nodeIDs[0]),
 
-		// We upgrade a subset of the cluster to v20.2.
+		// We upgrade a pinnedUpgrade and one other random node of the cluster to v20.2.
 		binaryUpgradeStep(c.Node(pinnedUpgrade), mainVersion),
 		binaryUpgradeStep(c.Node(h.getRandNodeOtherThan(pinnedUpgrade)), mainVersion),
 		checkAllMembership(pinnedUpgrade, "active"),
 
-		// 1. Partially decommission a random node from another random node. We
-		// use the v20.1 CLI to do so.
+		// Partially decommission a random node from another random node. We
+		// use the predecessor CLI to do so.
 		partialDecommissionStep(h.getRandNode(), h.getRandNode(), predecessorVersion),
 		checkOneDecommissioning(h.getRandNode()),
 		checkOneMembership(pinnedUpgrade, "decommissioning"),
 
-		// 2. Recommission all nodes, including the partially decommissioned
-		// one, from a random node. Use the v20.1 CLI to do so.
+		// Recommission all nodes, including the partially decommissioned
+		// one, from a random node. Use the predecessor CLI to do so.
 		recommissionAllStep(h.getRandNode(), predecessorVersion),
 		checkNoDecommissioning(h.getRandNode()),
 		checkAllMembership(pinnedUpgrade, "active"),
-		//
-		// 3. Attempt to fully decommission a from a random node, again using
-		// the v20.1 CLI.
-		fullyDecommissionStep(h.getRandNode(), h.getRandNode(), predecessorVersion),
-		checkOneDecommissioning(h.getRandNode()),
-		checkOneMembership(pinnedUpgrade, "decommissioning"),
 
 		// Roll back, which should to be fine because the cluster upgrade was
 		// not finalized.
 		binaryUpgradeStep(allNodes, predecessorVersion),
-		checkOneDecommissioning(h.getRandNode()),
-
-		// Repeat similar recommission/decommission cycles as above. We can no
-		// longer assert against the `membership` column as none of the servers
-		// are running v20.2.
-		recommissionAllStep(h.getRandNode(), predecessorVersion),
-		checkNoDecommissioning(h.getRandNode()),
-
-		partialDecommissionStep(h.getRandNode(), h.getRandNode(), predecessorVersion),
-		checkOneDecommissioning(h.getRandNode()),
 
 		// Roll all nodes forward, and finalize upgrade.
 		binaryUpgradeStep(allNodes, mainVersion),
 		allowAutoUpgradeStep(1),
 		waitForUpgradeStep(allNodes),
 
-		checkOneMembership(h.getRandNode(), "decommissioning"),
-
-		// Use the v20.2 CLI here on forth. Lets start with recommissioning all
-		// the nodes in the cluster.
-		recommissionAllStep(h.getRandNode(), mainVersion),
-		checkNoDecommissioning(h.getRandNode()),
-		checkAllMembership(h.getRandNode(), "active"),
-
-		// We partially decommission a random node.
-		partialDecommissionStep(h.getRandNode(), h.getRandNode(), mainVersion),
-		checkOneDecommissioning(h.getRandNode()),
-		checkOneMembership(h.getRandNode(), "decommissioning"),
-
-		// We check that recommissioning is still functional.
-		recommissionAllStep(h.getRandNode(), mainVersion),
-		checkNoDecommissioning(h.getRandNode()),
-		checkAllMembership(h.getRandNode(), "active"),
-
-		// We fully decommission a random node. We need to use the v20.2 CLI to
-		// do so.
-		fullyDecommissionStep(h.getRandNode(), h.getRandNode(), mainVersion),
-		checkOneDecommissioning(h.getRandNode()),
-		checkOneMembership(h.getRandNode(), "decommissioned"),
+		// Fully decommission a random node. Note that we can no longer use the
+		// predecessor cli, as the cluster has upgraded and won't allow connections
+		// from the predecessor version binary.
+		//
+		// Note also that this has to remain the last step unless we want this test to
+		// handle the fact that the decommissioned node will no longer be able
+		// to communicate with the cluster (i.e. most commands against it will fail).
+		// This is also why we're making sure to avoid decommissioning pinnedUpgrade
+		// itself, as we use it to check the membership after.
+		//
+		// NB: we avoid runNode == targetNode here to temporarily avoid #56718.
+		fullyDecommissionStep(h.getRandNodeOtherThan(pinnedUpgrade), pinnedUpgrade, ""),
+		checkOneMembership(pinnedUpgrade, "decommissioned"),
 	)
 
 	u.run(ctx, t)
