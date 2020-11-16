@@ -9,9 +9,9 @@ go_library(
         "//pkg/geo/geoindex",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/schemaexpr",
+        "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/sem/tree",
-        "//vendor/github.com/pkg/errors",
+        "//vendor/github.com/cockroachdb/errors",
     ],
 )
 
