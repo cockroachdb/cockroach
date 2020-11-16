@@ -33,26 +33,9 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
-	VersionAtomicChangeReplicasTrigger
-	VersionAtomicChangeReplicas
-	VersionPartitionedBackup
-	Version19_2
-	VersionStart20_1
 	VersionContainsEstimatesCounter
-	VersionChangeReplicasDemotion
-	VersionSecondaryIndexColumnFamilies
 	VersionNamespaceTableWithSchemas
-	VersionProtectedTimestamps
-	VersionPrimaryKeyChanges
 	VersionAuthLocalAndTrustRejectMethods
-	VersionPrimaryKeyColumnsOutOfFamilyZero
-	VersionNoExplicitForeignKeyIndexIDs
-	VersionHashShardedIndexes
-	VersionCreateRolePrivilege
-	VersionStatementDiagnosticsSystemTables
-	VersionSchemaChangeJob
-	VersionSavepoints
-	Version20_1
 	VersionStart20_2
 	VersionGeospatialType
 	VersionEnums
@@ -105,40 +88,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 1},
 	},
 	{
-		// VersionAtomicChangeReplicasTrigger is https://github.com/cockroachdb/cockroach/pull/39485.
-		//
-		// It enables use of updated fields in ChangeReplicasTrigger that will
-		// support atomic replication changes.
-		Key:     VersionAtomicChangeReplicasTrigger,
-		Version: roachpb.Version{Major: 19, Minor: 1, Internal: 8},
-	},
-	{
-		// VersionAtomicChangeReplicas is https://github.com/cockroachdb/cockroach/pull/39936.
-		//
-		// It provides an implementation of (*Replica).ChangeReplicas that uses
-		// atomic replication changes. The corresponding cluster setting
-		// 'kv.atomic_replication_changes.enabled' provides a killswitch (i.e.
-		// no atomic replication changes will be scheduled when it is set to
-		// 'false').
-		Key:     VersionAtomicChangeReplicas,
-		Version: roachpb.Version{Major: 19, Minor: 1, Internal: 9},
-	},
-	{
-		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
-		Key:     VersionPartitionedBackup,
-		Version: roachpb.Version{Major: 19, Minor: 1, Internal: 11},
-	},
-	{
-		// Version19_2 is CockroachDB v19.2. It's used for all v19.2.x patch releases.
-		Key:     Version19_2,
-		Version: roachpb.Version{Major: 19, Minor: 2},
-	},
-	{
-		// VersionStart20_1 demarcates work towards CockroachDB v20.1.
-		Key:     VersionStart20_1,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 1},
-	},
-	{
 		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
 		//
 		// MVCCStats.ContainsEstimates has been migrated from boolean to a
@@ -158,47 +107,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 2},
 	},
 	{
-		// VersionChangeReplicasDemotion enables the use of voter demotions
-		// during replication changes that remove (one or more) voters.
-		// When this version is active, voters that are being removed transition
-		// first into VOTER_DEMOTING (a joint configuration) and from there to
-		// LEARNER, before they are actually removed. This added intermediate
-		// step avoids losing quorum when the leaseholder crashes at an
-		// inopportune moment.
-		//
-		// For example, without this version active, with nodes n1-n4 and a
-		// range initially replicated on n1, n3, and n4, a rebalance operation
-		// that wants to swap n1 for n2 first transitions into the joint
-		// configuration `(n1 n3 n4) && (n2 n3 n4)`, that is, n2 is
-		// VOTER_OUTGOING. After this is committed and applied (say by
-		// everyone), the configuration entry for the final configuration
-		// `(n2 n3 n4)` is distributed:
-		//
-		//- the leader is n3
-		//- conf entry reaches n1, n2, n3 (so it is committed under the joint config)
-		//- n1 applies conf change and immediately disappears (via replicaGC,
-		//  since it's not a part of the latest config)
-		//- n3 crashes
-		//
-		// At this point, the remaining replicas n4 and n2 form a quorum of the
-		// latest committed configuration, but both still have the joint
-		// configuration active, which cannot reach quorum any more.
-		// The intermediate learner step added by this version makes sure that
-		// n1 is still available at this point to help n2 win an election, and
-		// due to the invariant that replicas never have more than one unappliable
-		// configuration change in their logs, the group won't lose availability
-		// when the leader instead crashes while removing the learner.
-		Key:     VersionChangeReplicasDemotion,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 3},
-	},
-	{
-		// VersionSecondaryIndexColumnFamilies is https://github.com/cockroachdb/cockroach/pull/42073.
-		//
-		// It allows secondary indexes to respect table level column family definitions.
-		Key:     VersionSecondaryIndexColumnFamilies,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 4},
-	},
-	{
 		// VersionNamespaceTableWithSchemas is https://github.com/cockroachdb/cockroach/pull/41977
 		//
 		// It represents the migration to a new system.namespace table that has an
@@ -206,23 +114,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// no longer in the system config range -- implying it is no longer gossiped.
 		Key:     VersionNamespaceTableWithSchemas,
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 5},
-	},
-	{
-		// VersionProtectedTimestamps introduces the system tables for the protected
-		// timestamps subsystem.
-		//
-		// In this version and later the system.protected_ts_meta and
-		// system.protected_ts_records tables are part of the system bootstap
-		// schema.
-		Key:     VersionProtectedTimestamps,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 6},
-	},
-	{
-		// VersionPrimaryKeyChanges is https://github.com/cockroachdb/cockroach/pull/42462
-		//
-		// It allows online primary key changes of tables.
-		Key:     VersionPrimaryKeyChanges,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 7},
 	},
 	{
 		// VersionAuthLocalAndTrustRejectMethods introduces the HBA rule
@@ -234,68 +125,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// this would block any new SQL client.
 		Key:     VersionAuthLocalAndTrustRejectMethods,
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 8},
-	},
-	{
-		// VersionPrimaryKeyColumnsOutOfFamilyZero allows for primary key columns
-		// to exist in column families other than 0, in order to prepare for
-		// primary key changes that move primary key columns to different families.
-		Key:     VersionPrimaryKeyColumnsOutOfFamilyZero,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 9},
-	},
-	{
-		// VersionNoExplicitForeignKeyIndexIDs is https://github.com/cockroachdb/cockroach/pull/43332.
-		//
-		// It represents the migration away from using explicit index IDs in foreign
-		// key constraints, and instead allows all places that need these IDs to select
-		// an appropriate index to uphold the foreign key relationship.
-		Key:     VersionNoExplicitForeignKeyIndexIDs,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 11},
-	},
-	{
-		// VersionHashShardedIndexes is https://github.com/cockroachdb/cockroach/pull/42922
-		//
-		// It allows the creation of "hash sharded indexes", which construct a hidden
-		// shard column, computed from the set of index columns, and prefix the index's
-		// ranges with said shard column.
-		Key:     VersionHashShardedIndexes,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 12},
-	},
-	{
-		// VersionCreateRolePrivilege is https://github.com/cockroachdb/cockroach/pull/44232.
-		//
-		// It represents adding role management via CREATEROLE privilege.
-		// Added new column in system.users table to track hasCreateRole.
-		Key:     VersionCreateRolePrivilege,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 13},
-	},
-	{
-		// VersionStatementDiagnosticsSystemTables introduces the system tables for
-		// storing statement information (like traces, bundles).
-		// In this version and later the system.statement_diagnostics_requests,
-		// system.statement_diagnostics and system.statement_bundle_chunks tables
-		// are part of the system bootstap schema.
-		Key:     VersionStatementDiagnosticsSystemTables,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 14},
-	},
-	{
-		// VersionSchemaChangeJob is https://github.com/cockroachdb/cockroach/pull/45870.
-		//
-		// From this version on, schema changes are run as jobs instead of being
-		// scheduled by the SchemaChangeManager.
-		Key:     VersionSchemaChangeJob,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 15},
-	},
-	{
-		// VersionSavepoints enables the use of SQL savepoints, whereby
-		// the ignored seqnum list can become populated in transaction
-		// records.
-		Key:     VersionSavepoints,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 16},
-	},
-	{
-		// Version20_1 is CockroachDB v20.1. It's used for all v20.1.x patch releases.
-		Key:     Version20_1,
-		Version: roachpb.Version{Major: 20, Minor: 1},
 	},
 	{
 		// VersionStart20_2 demarcates work towards CockroachDB v20.2.

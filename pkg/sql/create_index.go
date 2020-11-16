@@ -277,9 +277,6 @@ func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemLi
 // and expects to see its own writes.
 func (n *createIndexNode) ReadingOwnWrites() {}
 
-var invalidClusterForShardedIndexError = pgerror.Newf(pgcode.FeatureNotSupported,
-	"hash sharded indexes can only be created on a cluster that has fully migrated to version 20.1")
-
 var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
 	"hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable")
 
@@ -294,10 +291,6 @@ func setupShardedIndex(
 	indexDesc *descpb.IndexDescriptor,
 	isNewTable bool,
 ) (shard *descpb.ColumnDescriptor, newColumn bool, err error) {
-	st := evalCtx.Settings
-	if !st.Version.IsActive(ctx, clusterversion.VersionHashShardedIndexes) {
-		return nil, false, invalidClusterForShardedIndexError
-	}
 	if !shardedIndexEnabled {
 		return nil, false, hashShardedIndexesDisabledError
 	}
@@ -409,12 +402,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 	}
 
-	// If all nodes in the cluster know how to handle secondary indexes with column families,
-	// write the new version into the index descriptor.
-	encodingVersion := descpb.BaseIndexFormatVersion
-	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionSecondaryIndexColumnFamilies) {
-		encodingVersion = descpb.SecondaryIndexFamilyFormatVersion
-	}
+	encodingVersion := descpb.SecondaryIndexFamilyFormatVersion
 	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionEmptyArraysInInvertedIndexes) {
 		encodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
 	}
