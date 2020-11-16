@@ -107,11 +107,11 @@ func runTC(queueBuild func(string, map[string]string)) {
 			maxRuns, maxTime, maxFails, parallelism)
 		queueBuild("Cockroach_Nightlies_Stress", opts)
 
-		// Run race build. Reduce the parallelism to avoid overloading the machine.
-		parallelism /= 2
+		// Run race build. With run with -p 1 to avoid overloading the machine.
+		noParallelism := 1
 		opts["env.GOFLAGS"] = fmt.Sprintf("-race -parallel=%d", parallelism)
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
-			maxRuns, maxTime, maxFails, parallelism)
+			maxRuns, maxTime, maxFails, noParallelism)
 		queueBuild("Cockroach_Nightlies_Stress", opts)
 	}
 }
