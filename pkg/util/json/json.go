@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/unique"
+	uniq "github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,8 +91,11 @@ type JSON interface {
 	//
 	// Returns tight=true if the returned spans are tight and cannot produce
 	// false positives. Otherwise, returns tight=false.
+	//
+	// Returns unique=true if the spans are guaranteed not to produce duplicate
+	// primary keys. Otherwise, returns unique=false.
 	encodeContainingInvertedIndexSpans(b []byte, isRoot, isObjectValue bool) (
-		_ []roachpb.Spans, tight bool, err error,
+		_ []roachpb.Spans, tight, unique bool, err error,
 	)
 
 	// numInvertedIndexEntries returns the number of entries that will be
@@ -765,9 +768,12 @@ func EncodeInvertedIndexKeys(b []byte, json JSON) ([][]byte, error) {
 //
 // Returns tight=true if the returned spans are tight and cannot produce false
 // positives. Otherwise, returns tight=false.
+//
+// Returns unique=true if the spans are guaranteed not to produce duplicate
+// primary keys. Otherwise, returns unique=false.
 func EncodeContainingInvertedIndexSpans(
 	b []byte, json JSON,
-) (spans []roachpb.Spans, tight bool, err error) {
+) (spans []roachpb.Spans, tight, unique bool, err error) {
 	return json.encodeContainingInvertedIndexSpans(
 		encoding.EncodeJSONAscending(b), true /* isRoot */, false, /* isObjectValue */
 	)
@@ -780,7 +786,7 @@ func (j jsonNull) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 func (j jsonNull) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) ([]roachpb.Spans, bool, error) {
+) ([]roachpb.Spans, bool, bool, error) {
 	return encodeContainingInvertedIndexSpansFromLeaf(j, b, isRoot, isObjectValue)
 }
 
@@ -791,7 +797,7 @@ func (jsonTrue) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 func (j jsonTrue) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) ([]roachpb.Spans, bool, error) {
+) ([]roachpb.Spans, bool, bool, error) {
 	return encodeContainingInvertedIndexSpansFromLeaf(j, b, isRoot, isObjectValue)
 }
 
@@ -802,7 +808,7 @@ func (jsonFalse) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 func (j jsonFalse) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) ([]roachpb.Spans, bool, error) {
+) ([]roachpb.Spans, bool, bool, error) {
 	return encodeContainingInvertedIndexSpansFromLeaf(j, b, isRoot, isObjectValue)
 }
 
@@ -813,7 +819,7 @@ func (j jsonString) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 func (j jsonString) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) ([]roachpb.Spans, bool, error) {
+) ([]roachpb.Spans, bool, bool, error) {
 	return encodeContainingInvertedIndexSpansFromLeaf(j, b, isRoot, isObjectValue)
 }
 
@@ -825,7 +831,7 @@ func (j jsonNumber) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 func (j jsonNumber) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) ([]roachpb.Spans, bool, error) {
+) ([]roachpb.Spans, bool, bool, error) {
 	return encodeContainingInvertedIndexSpansFromLeaf(j, b, isRoot, isObjectValue)
 }
 
@@ -849,29 +855,30 @@ func (j jsonArray) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// to emit duplicate keys from this method, as it's more expensive to
 	// deduplicate keys via KV (which will actually write the keys) than to do
 	// it now (just an in-memory sort and distinct).
-	outKeys = unique.UniquifyByteSlices(outKeys)
+	outKeys = uniq.UniquifyByteSlices(outKeys)
 	return outKeys, nil
 }
 
 func (j jsonArray) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) (spans []roachpb.Spans, tight bool, _ error) {
+) (spans []roachpb.Spans, tight, unique bool, err error) {
 	// Checking for an empty array.
 	if len(j) == 0 {
 		return encodeContainingInvertedIndexSpansFromLeaf(j, b, isRoot, isObjectValue)
 	}
 
 	prefix := encoding.EncodeArrayAscending(b)
-	tight = true
+	tight, unique = true, true
 	for i := range j {
-		children, childTight, err := j[i].encodeContainingInvertedIndexSpans(
+		children, childTight, childUnique, err := j[i].encodeContainingInvertedIndexSpans(
 			prefix[:len(prefix):len(prefix)], false /* isRoot */, false, /* isObjectValue */
 		)
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 		spans = append(spans, children...)
 		tight = tight && childTight
+		unique = unique && childUnique
 	}
 
 	// If this array is not at the root and has more than one element,
@@ -889,8 +896,15 @@ func (j jsonArray) encodeContainingInvertedIndexSpans(
 	// to emit duplicate spans from this method, as it's more expensive to
 	// deduplicate spans via KV (which will actually write the keys) than to do
 	// it now (just an in-memory sort and distinct).
-	spans = unique.SortAndUniquifySpanSets(spans)
-	return spans, tight, nil
+	spans = uniq.SortAndUniquifySpanSets(spans)
+
+	// We cannot guarantee that there will be no duplicate primary keys if there
+	// is more than one element.
+	if j.Len() > 1 && len(spans) > 1 {
+		unique = false
+	}
+
+	return spans, tight, unique, nil
 }
 
 func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
@@ -923,27 +937,28 @@ func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 func (j jsonObject) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) (spans []roachpb.Spans, tight bool, _ error) {
+) (spans []roachpb.Spans, tight, unique bool, err error) {
 	if len(j) == 0 {
 		return encodeContainingInvertedIndexSpansFromLeaf(j, b, isRoot, isObjectValue)
 	}
 
-	tight = true
+	tight, unique = true, true
 	for i := range j {
 		// We're trying to see if this is the end of the JSON path. If it is, then
 		// we don't want to add an extra separator.
 		end := isEnd(j[i].v)
 
 		prefix := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(j[i].k), end)
-		children, childTight, err := j[i].v.encodeContainingInvertedIndexSpans(
+		children, childTight, childUnique, err := j[i].v.encodeContainingInvertedIndexSpans(
 			prefix, false /* isRoot */, true, /* isObjectValue */
 		)
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 
 		spans = append(spans, children...)
 		tight = tight && childTight
+		unique = unique && childUnique
 	}
 
 	// If this object is not at the root and has more than one element,
@@ -958,7 +973,13 @@ func (j jsonObject) encodeContainingInvertedIndexSpans(
 	if !isRoot && j.Len() > 1 {
 		tight = false
 	}
-	return spans, tight, nil
+
+	// We cannot guarantee that there will be no duplicates if there is more than
+	// one element.
+	if j.Len() > 1 {
+		unique = false
+	}
+	return spans, tight, unique, nil
 
 }
 
@@ -996,19 +1017,22 @@ func isEnd(json JSON) bool {
 //
 // Returns tight=true if the returned spans are tight and cannot produce
 // false positives. Otherwise, returns tight=false.
+//
+// Returns unique=true if the spans are guaranteed not to produce duplicate
+// primary keys. Otherwise, returns unique=false.
 func encodeContainingInvertedIndexSpansFromLeaf(
 	j JSON, b []byte, isRoot, isObjectValue bool,
-) (_ []roachpb.Spans, tight bool, err error) {
+) (_ []roachpb.Spans, tight, unique bool, err error) {
 	keys, err := j.encodeInvertedIndexKeys(b)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 
 	var spans roachpb.Spans
 	prefix := b[:len(b):len(b)]
 	if isObjectValue {
 		if isRoot {
-			return nil, false, errors.AssertionFailedf(
+			return nil, false, false, errors.AssertionFailedf(
 				"isObjectValue and isRoot should not both be true",
 			)
 		}
@@ -1028,7 +1052,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 	switch t := j.(type) {
 	case jsonArray:
 		if t.Len() != 0 {
-			return nil, false, errors.AssertionFailedf(
+			return nil, false, false, errors.AssertionFailedf(
 				"encodeContainingInvertedIndexSpansFromLeaf called on a non-empty jsonArray",
 			)
 		}
@@ -1046,7 +1070,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 
 	case jsonObject:
 		if t.Len() != 0 {
-			return nil, false, errors.AssertionFailedf(
+			return nil, false, false, errors.AssertionFailedf(
 				"encodeContainingInvertedIndexSpansFromLeaf called on a non-empty jsonObject",
 			)
 		}
@@ -1084,10 +1108,22 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 			jArr := arr.Build()
 			arrKeys, err := jArr.encodeInvertedIndexKeys(prefix)
 			if err != nil {
-				return nil, false, err
+				return nil, false, false, err
 			}
 			keys = append(keys, arrKeys...)
+
+			// Even though we now have two spans, we can guarantee no duplicates
+			// because in JSON something can either be an array or a scalar -- not
+			// both. So the spans are guaranteed not to overlap when mapped onto the
+			// primary key space. Therefore there won't be any duplicate primary keys
+			// when we retrieve rows for both sets, and setting unique to true
+			// below is valid.
 		}
+
+		// We can guarantee that there will be no duplicate primary keys produced
+		// for paths ending in a scalar, regardless of whether or not this is the
+		// root.
+		unique = true
 	}
 
 	for _, key := range keys {
@@ -1095,7 +1131,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 		spans = append(spans, roachpb.Span{Key: key, EndKey: endKey})
 	}
 
-	return []roachpb.Spans{spans}, true, nil
+	return []roachpb.Spans{spans}, true, unique, nil
 }
 
 // NumInvertedIndexEntries returns the number of inverted index entries that
