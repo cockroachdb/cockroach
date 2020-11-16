@@ -3401,6 +3401,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 		startWithSingleRange: true,
 	}
 	mtc.Start(t, 1)
+	defer mtc.Stop()
 	store := mtc.Store(0)
 	stopper := mtc.engineStoppers[0]
 

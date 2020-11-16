@@ -112,8 +112,6 @@ func AfterTest(t testing.TB) func() {
 			return
 		}
 
-		// TODO(tbg): make this call 't.Error' instead of 't.Logf' once there is
-		// enough Stopper discipline.
 		PrintLeakedStoppers(t)
 
 		// Loop, waiting for goroutines to shut down.

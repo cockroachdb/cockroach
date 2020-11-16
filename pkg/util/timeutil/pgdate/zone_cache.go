@@ -15,11 +15,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // zoneCache stores the results of resolving time.Location instances.
 //
-// time.LoadLocation does not perform caching internally and requires
+// timeutil.LoadLocation does not perform caching internally and requires
 // many disk accesses to locate the named zoneinfo file.
 //
 // We also save time.FixedZone calls to avoid needing to regenerate
@@ -46,7 +47,7 @@ type zoneCacheEntry struct {
 	err error
 }
 
-// LoadLocation wraps time.LoadLocation which does not perform
+// LoadLocation wraps timeutil.LoadLocation which does not perform
 // caching internally and which requires many disk accesses to
 // locate the named zoneinfo file.
 func (z *zoneCache) LoadLocation(zone string) (*time.Location, error) {
@@ -55,7 +56,7 @@ func (z *zoneCache) LoadLocation(zone string) (*time.Location, error) {
 	z.mu.Unlock()
 
 	if !ok {
-		loc, err := time.LoadLocation(zone)
+		loc, err := timeutil.LoadLocation(zone)
 
 		entry = &zoneCacheEntry{loc: loc, err: err}
 		z.mu.Lock()

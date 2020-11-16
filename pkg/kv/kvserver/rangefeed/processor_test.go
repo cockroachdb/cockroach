@@ -432,7 +432,9 @@ func TestNilProcessor(t *testing.T) {
 
 	// The following should panic because they are not safe
 	// to call on a nil Processor.
-	require.Panics(t, func() { p.Start(stop.NewStopper(), nil) })
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	require.Panics(t, func() { p.Start(stopper, nil) })
 	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, false, nil, nil) })
 }
 
