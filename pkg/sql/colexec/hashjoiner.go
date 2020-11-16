@@ -316,7 +316,7 @@ func (hj *hashJoiner) build(ctx context.Context) {
 	// same and visited slices for the prober.
 	if !hj.spec.rightDistinct && hj.spec.joinType != descpb.LeftAntiJoin && hj.spec.joinType != descpb.ExceptAllJoin {
 		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
-		// they have separate collectAnti* methods.
+		// they have separate collectLeftAnti method.
 		hj.ht.same = maybeAllocateUint64Array(hj.ht.same, hj.ht.vals.Length()+1)
 	}
 	if !hj.spec.rightDistinct || hj.spec.joinType.IsSetOpJoin() {
@@ -632,11 +632,9 @@ func (hj *hashJoiner) reset(ctx context.Context) {
 	}
 	hj.state = hjBuilding
 	hj.ht.reset(ctx)
-	copy(hj.probeState.buildIdx[:coldata.BatchSize()], zeroIntColumn)
-	copy(hj.probeState.probeIdx[:coldata.BatchSize()], zeroIntColumn)
-	if hj.spec.left.outer {
-		copy(hj.probeState.probeRowUnmatched[:coldata.BatchSize()], zeroBoolColumn)
-	}
+	// Note that we don't zero out hj.probeState.buildIdx,
+	// hj.probeState.probeIdx, and hj.probeState.probeRowUnmatched because the
+	// values in these slices are always set in collecting methods.
 	// hj.probeState.buildRowMatched is reset after building the hash table is
 	// complete in build() method.
 	hj.emittingRightState.rowIdx = 0
