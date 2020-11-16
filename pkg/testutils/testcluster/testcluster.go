@@ -108,11 +108,6 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 	for i := range tc.mu.serverStoppers {
 		if tc.mu.serverStoppers[i] != nil {
 			tc.mu.serverStoppers[i].Stop(context.TODO())
-			// We need to check IsStopped() in addition to just waiting for
-			// Stop() above to complete, because if there was an asynchronous
-			// Drain request ongoing, Stop() would take a shortcut and not
-			// actually wait for the async stop to complete.
-			<-tc.mu.serverStoppers[i].IsStopped()
 			tc.mu.serverStoppers[i] = nil
 		}
 	}
@@ -124,11 +119,6 @@ func (tc *TestCluster) StopServer(idx int) {
 	defer tc.mu.Unlock()
 	if tc.mu.serverStoppers[idx] != nil {
 		tc.mu.serverStoppers[idx].Stop(context.TODO())
-		// We need to check IsStopped() in addition to just waiting for
-		// Stop() above to complete, because if there was an asynchronous
-		// Drain request ongoing, Stop() would take a shortcut and not
-		// actually wait for the async stop to complete.
-		<-tc.mu.serverStoppers[idx].IsStopped()
 		tc.mu.serverStoppers[idx] = nil
 	}
 }
