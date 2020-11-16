@@ -403,13 +403,6 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	// registered.
 	reportConfiguration(ctx)
 
-	// Until/unless CockroachDB embeds its own tz database, we want
-	// an early sanity check. It's better to inform the user early
-	// than to get surprising errors during SQL queries.
-	if err := checkTzDatabaseAvailability(ctx); err != nil {
-		return errors.Wrap(err, "failed to initialize node")
-	}
-
 	// ReadyFn will be called when the server has started listening on
 	// its network sockets, but perhaps before it has done bootstrapping
 	// and thus before Start() completes.
@@ -921,35 +914,6 @@ func clientFlagsRPC() string {
 		flags = append(flags, "--certs-dir="+startCtx.serverSSLCertsDir)
 	}
 	return strings.Join(flags, " ")
-}
-
-func checkTzDatabaseAvailability(ctx context.Context) error {
-	if _, err := timeutil.LoadLocation("America/New_York"); err != nil {
-		log.Errorf(ctx, "timeutil.LoadLocation: %v", err)
-		reportedErr := errors.WithHint(
-			errors.WithIssueLink(
-				errors.New("unable to load named timezones"),
-				errors.IssueLink{IssueURL: unimplemented.MakeURL(36864)}),
-			"Check that the time zone database is installed on your system, or\n"+
-				"set the ZONEINFO environment variable to a Go time zone .zip archive.")
-
-		if envutil.EnvOrDefaultBool("COCKROACH_INCONSISTENT_TIME_ZONES", false) {
-			// The user tells us they really know what they want.
-			reportedErr := &formattedError{err: reportedErr}
-			log.Shoutf(ctx, log.Severity_WARNING, "%v", reportedErr)
-		} else {
-			// Prevent a successful start.
-			//
-			// In the past, we were simply using log.Shout to emit an error,
-			// informing the user that startup could continue with degraded
-			// behavior.  However, usage demonstrated that users typically do
-			// not see the error and instead run into silently incorrect SQL
-			// results. To avoid this situation altogether, it's better to
-			// stop early.
-			return reportedErr
-		}
-	}
-	return nil
 }
 
 func reportConfiguration(ctx context.Context) {

@@ -123,6 +123,7 @@ func setupTwoNodeTest() (_ *TestContainer, _ *TestContainer, shutdown func()) {
 			defer wg.Done()
 			c2.Stopper.Stop(context.Background())
 		}()
+		wg.Wait()
 	}
 }
 

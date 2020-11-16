@@ -346,6 +346,7 @@ func TestStopperRunTaskPanic(t *testing.T) {
 	s := stop.NewStopper(stop.OnPanic(func(v interface{}) {
 		ch <- v
 	}))
+	defer s.Stop(context.Background())
 	// If RunTask were not panic-safe, Stop() would deadlock.
 	type testFn func()
 	explode := func(context.Context) { panic(ch) }
