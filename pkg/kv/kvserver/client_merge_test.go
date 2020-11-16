@@ -1983,7 +1983,7 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 
 	const acceptableMergeErr = `unexpected value: raw_bytes|ranges not collocated` +
 		`|cannot merge range with non-voter replicas`
-	if mergeErr == nil && testutils.IsError(addErr, `descriptor changed: \[expected\]`) {
+	if mergeErr == nil && kvserver.IsRetriableReplicationChangeError(addErr) {
 		// Merge won the race, no add happened.
 		require.Len(t, afterDesc.Replicas().Voters(), 1)
 		require.Equal(t, origDesc.EndKey, afterDesc.EndKey)
@@ -2030,7 +2030,7 @@ func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 
 	_, err := tc.Server(0).DB().AdminChangeReplicas(
 		ctx, scratchStartKey, origDesc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)))
-	if !testutils.IsError(err, `descriptor changed`) {
+	if !kvserver.IsRetriableReplicationChangeError(err) {
 		t.Fatalf(`expected "descriptor changed" error got: %+v`, err)
 	}
 }

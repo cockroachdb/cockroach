@@ -14,6 +14,7 @@ go_library(
         "gc_queue.go",
         "lease_history.go",
         "log.go",
+        "markers.go",
         "merge_queue.go",
         "metrics.go",
         "queue.go",

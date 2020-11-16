@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -328,39 +329,14 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			v.failIfError(op, t.Result)
 		}
 	case *ChangeReplicasOperation:
-		if resultIsError(t.Result, `unable to add replica .* which is already present in`) {
-			// Generator created this operations based on data about a range's
-			// replicas that is now stale (because it raced with some other operation
-			// created by that Generator): a replica is being added and in the
-			// meantime, some other operation added the same replica.
-		} else if resultIsError(t.Result, `unable to add replica .* which is already present as a learner`) {
-			// Generator created this operations based on data about a range's
-			// replicas that is now stale (because it raced with some other operation
-			// created by that Generator): a replica is being added and in the
-			// meantime, some other operation started (but did not finish) adding the
-			// same replica.
-		} else if resultIsError(t.Result, `descriptor changed`) {
-			// Race between two operations being executed concurrently. Applier grabs
-			// a range descriptor and then calls AdminChangeReplicas with it, but the
-			// descriptor is changed by some other operation in between.
-		} else if resultIsError(t.Result, `received invalid ChangeReplicasTrigger .* to remove self \(leaseholder\)`) {
-			// Removing the leaseholder is invalid for technical reasons, but
-			// Generator intentiontally does not try to avoid this so that this edge
-			// case is exercised.
-		} else if resultIsError(t.Result, `removing .* which is not in`) {
-			// Generator created this operations based on data about a range's
-			// replicas that is now stale (because it raced with some other operation
-			// created by that Generator): a replica is being removed and in the
-			// meantime, some other operation removed the same replica.
-		} else if resultIsError(t.Result, `remote failed to apply snapshot for reason failed to apply snapshot: raft group deleted`) {
-			// Probably should be transparently retried.
-		} else if resultIsError(t.Result, `remote failed to apply snapshot for reason failed to apply snapshot: .* cannot add placeholder, have an existing placeholder`) {
-			// Probably should be transparently retried.
-		} else if resultIsError(t.Result, `cannot apply snapshot: snapshot intersects existing range`) {
-			// Probably should be transparently retried.
-		} else if resultIsError(t.Result, `snapshot of type LEARNER was sent to .* which did not contain it as a replica`) {
-			// Probably should be transparently retried.
-		} else {
+		var ignore bool
+		if t.Result.Type == ResultType_Error {
+			ctx := context.Background()
+			err := errors.DecodeError(ctx, *t.Result.Err)
+			ignore = kvserver.IsRetriableReplicationChangeError(err) ||
+				kvserver.IsIllegalReplicationChangeError(err)
+		}
+		if !ignore {
 			v.failIfError(op, t.Result)
 		}
 	case *BatchOperation:

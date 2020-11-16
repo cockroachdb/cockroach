@@ -19,6 +19,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/util/bufalloc",
