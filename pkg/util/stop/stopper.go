@@ -475,6 +475,8 @@ func (s *Stopper) Stop(ctx context.Context) {
 	s.mu.Unlock()
 
 	if stopCalled {
+		// Wait for the concurrent Stop() to complete.
+		<-s.stopped
 		return
 	}
 
