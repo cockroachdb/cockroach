@@ -144,6 +144,27 @@ func alterColumnTypeGeneral(
 	cmds tree.AlterTableCmds,
 	tn *tree.TableName,
 ) error {
+	// alterColumnTypeGeneralOld is temporarily disabled until #54844 is disabled.
+	// This keeps static lint from failing.
+	_ = alterColumnTypeGeneralOld
+	return unimplemented.NewWithIssuef(
+		54844,
+		"ALTER COLUMN TYPE from %v to %v is prohibited until v21.1",
+		col.Type,
+		toType,
+	)
+}
+
+func alterColumnTypeGeneralOld(
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	col *descpb.ColumnDescriptor,
+	toType *types.T,
+	using tree.Expr,
+	params runParams,
+	cmds tree.AlterTableCmds,
+	tn *tree.TableName,
+) error {
 	// Make sure that all nodes in the cluster are able to perform
 	// general alter column type conversions.
 	if !params.p.ExecCfg().Settings.Version.IsActive(
