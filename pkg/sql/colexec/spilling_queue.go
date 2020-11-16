@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -82,13 +83,25 @@ func newSpillingQueue(
 	if memoryLimit < 0 {
 		memoryLimit = 0
 	}
-	itemsLen := memoryLimit / int64(colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
+	perItemMem := int64(colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
+	// Account for the size of items slice.
+	perItemMem += int64(unsafe.Sizeof(coldata.Batch(nil)))
+	itemsLen := memoryLimit / perItemMem
 	if itemsLen == 0 {
 		// Make items at least of length 1. Even though batches will spill to disk
 		// directly (this can only happen with a very low memory limit), it's nice
 		// to have at least one item in order to be able to deserialize from disk
 		// into this slice.
 		itemsLen = 1
+	}
+	// maxInMemoryNumBatches specifies the maximum number of items that we want
+	// to keep in memory. The reasoning for putting such limit in place is that
+	// in some configurations (when we randomize coldata.BatchSize() to be very
+	// small), we might estimate that we can keep millions of batches, so we'll
+	// allocate a huge slice below, yet we're unlikely to use it all up.
+	const maxInMemoryNumBatches = 65536
+	if itemsLen > maxInMemoryNumBatches {
+		itemsLen = maxInMemoryNumBatches
 	}
 	return &spillingQueue{
 		unlimitedAllocator: unlimitedAllocator,
