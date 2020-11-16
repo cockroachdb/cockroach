@@ -214,13 +214,12 @@ func TestBytesRefImpl(t *testing.T) {
 
 		// Make a pair of sources to copy/append from. Use the destination variables
 		// with a certain probability.
-		sourceN := n
 		flatSource := flat
 		referenceSource := reference
 		selfReferencingSources := true
 		if rng.Float64() < 0.5 {
 			selfReferencingSources = false
-			sourceN = 1 + rng.Intn(maxLength)
+			sourceN := 1 + rng.Intn(maxLength)
 			flatSource = NewBytes(sourceN)
 			referenceSource = make([][]byte, sourceN)
 			for i := 0; i < sourceN; i++ {

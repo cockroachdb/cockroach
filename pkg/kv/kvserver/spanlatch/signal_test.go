@@ -153,8 +153,8 @@ func BenchmarkReadClosedChan(b *testing.B) {
 func BenchmarkSingleSelectClosedChan(b *testing.B) {
 	c := make(chan struct{})
 	close(c)
-	//lint:ignore S1000 we don't want this simplified
 	for i := 0; i < b.N; i++ {
+		//lint:ignore S1000 we don't want this simplified
 		select {
 		case <-c:
 		}

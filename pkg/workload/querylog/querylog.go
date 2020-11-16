@@ -989,7 +989,7 @@ func printPlaceholder(i interface{}) string {
 		timestamp = timestamp[:idx+5]
 		return fmt.Sprintf("'%s':::TIMESTAMP", timestamp)
 	case nil:
-		return fmt.Sprintf("NULL")
+		return "NULL"
 	default:
 		panic(errors.AssertionFailedf("unsupported type: %T", i))
 	}

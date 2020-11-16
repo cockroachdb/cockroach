@@ -1176,7 +1176,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			sanitizedEncryptionOption = fmt.Sprintf("kms='%s'", sanitizedURI)
 		} else {
 			encryptionOption = "encryption_passphrase='abcdefg'"
-			sanitizedEncryptionOption = fmt.Sprintf("encryption_passphrase='redacted'")
+			sanitizedEncryptionOption = "encryption_passphrase='redacted'"
 		}
 
 		t.Run(tc.name, func(t *testing.T) {

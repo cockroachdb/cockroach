@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	crdberrors "github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 )
@@ -174,7 +173,7 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 		}
 	}
 	if msstw.keyRanges[msstw.currRange].Start.Key.Compare(key.Key) > 0 {
-		return crdberrors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
+		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
 	}
 	if err := msstw.currSST.PutEngineKey(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
@@ -244,7 +243,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// All operations in the batch are guaranteed to be puts.
 			for batchReader.Next() {
 				if batchReader.BatchType() != storage.BatchTypeValue {
-					return noSnap, crdberrors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
+					return noSnap, errors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
 				}
 				key, err := batchReader.EngineKey()
 				if err != nil {
@@ -571,7 +570,7 @@ func (s *Store) canApplySnapshotLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
 	if snapHeader.IsPreemptive() {
-		return nil, crdberrors.AssertionFailedf(`expected a raft or learner snapshot`)
+		return nil, errors.AssertionFailedf(`expected a raft or learner snapshot`)
 	}
 
 	// TODO(tbg): see the comment on desc.Generation for what seems to be a much
@@ -704,7 +703,7 @@ func (s *Store) shouldAcceptSnapshotData(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) error {
 	if snapHeader.IsPreemptive() {
-		return crdberrors.AssertionFailedf(`expected a raft or learner snapshot`)
+		return errors.AssertionFailedf(`expected a raft or learner snapshot`)
 	}
 	pErr := s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest,
 		func(ctx context.Context, r *Replica) *roachpb.Error {
@@ -733,13 +732,13 @@ func (s *Store) receiveSnapshot(
 	}
 
 	if header.IsPreemptive() {
-		return crdberrors.AssertionFailedf(`expected a raft or learner snapshot`)
+		return errors.AssertionFailedf(`expected a raft or learner snapshot`)
 	}
 
 	// Defensive check that any snapshot contains this store in the	descriptor.
 	storeID := s.StoreID()
 	if _, ok := header.State.Desc.GetReplicaDescriptor(storeID); !ok {
-		return crdberrors.AssertionFailedf(
+		return errors.AssertionFailedf(
 			`snapshot of type %s was sent to s%d which did not contain it as a replica: %s`,
 			header.Type, storeID, header.State.Desc.Replicas())
 	}

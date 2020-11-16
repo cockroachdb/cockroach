@@ -299,7 +299,7 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		fmt.Sprintf("--http-port=%d", cfg.HTTPPort),
 		fmt.Sprintf("--store=%s", cfg.DataDir),
 		fmt.Sprintf("--listening-url-file=%s", n.listeningURLFile()),
-		fmt.Sprintf("--cache=256MiB"),
+		"--cache=256MiB",
 	}
 
 	if n.Cfg.LogDir != "" {
