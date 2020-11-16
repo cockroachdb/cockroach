@@ -2,7 +2,7 @@
 FROM golang:1.15 AS builder
 WORKDIR /workspace
 COPY . .
-RUN go get -d -t -tags gss_compose
+RUN go get -d -t -tags gss_compose @release-20.2
 RUN go test -v -c -tags gss_compose -o gss.test
 
 # Copy the test binary to an image with psql and krb installed.
