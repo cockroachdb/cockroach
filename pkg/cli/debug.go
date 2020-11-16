@@ -1212,7 +1212,8 @@ func init() {
 
 	// Note: we hook up FormatValue here in order to avoid a circular dependency
 	// between kvserver and storage.
-	storage.MVCCComparer.FormatValue = func(key, value []byte) fmt.Formatter {
+	// TODO(sumeer): fix this to also format EngineKey KVs.
+	storage.EngineComparer.FormatValue = func(key, value []byte) fmt.Formatter {
 		decoded, err := storage.DecodeMVCCKey(key)
 		if err != nil {
 			return mvccValueFormatter{err: err}
@@ -1224,7 +1225,7 @@ func init() {
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
 	pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
-		tool.DefaultComparer(storage.MVCCComparer))
+		tool.DefaultComparer(storage.EngineComparer))
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 
