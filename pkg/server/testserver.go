@@ -204,6 +204,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SQLAddr != "" {
 		cfg.SQLAddr = params.SQLAddr
 		cfg.SQLAdvertiseAddr = params.SQLAddr
+		cfg.SplitListenSQL = true
 	}
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
