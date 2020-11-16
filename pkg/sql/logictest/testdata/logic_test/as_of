@@ -75,3 +75,8 @@ SELECT * FROM t AS OF SYSTEM TIME '0'
 # Verify we can explain a statement that has AS OF.
 statement ok
 EXPLAIN SELECT * FROM t AS OF SYSTEM TIME '-1us'
+
+# Regression test for out of bounds error during the type-checking of AOST with
+# a placeholder (#56488).
+statement error pq: no value provided for placeholder: \$1
+SELECT * FROM t AS OF SYSTEM TIME $1
