@@ -100,12 +100,15 @@ type PlaceholderTypesInfo struct {
 
 // Type returns the known type of a placeholder. If there is no known type yet
 // but there is a type hint, returns the type hint.
-func (p *PlaceholderTypesInfo) Type(idx PlaceholderIdx) (_ *types.T, ok bool) {
+func (p *PlaceholderTypesInfo) Type(idx PlaceholderIdx) (*types.T, bool, error) {
+	if len(p.Types) <= int(idx) {
+		return nil, false, makeNoValueProvidedForPlaceholderErr(idx)
+	}
 	t := p.Types[idx]
-	if t == nil && len(p.TypeHints) >= int(idx) {
+	if t == nil && len(p.TypeHints) > int(idx) {
 		t = p.TypeHints[idx]
 	}
-	return t, (t != nil)
+	return t, t != nil, nil
 }
 
 // ValueType returns the type of the value that must be supplied for a placeholder.
@@ -202,7 +205,7 @@ func (p *PlaceholderInfo) Value(idx PlaceholderIdx) (TypedExpr, bool) {
 // whether the placeholder's type remains unset in the PlaceholderInfo.
 func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
 	if t, ok := StripParens(expr).(*Placeholder); ok {
-		_, res := p.Type(t.Idx)
+		_, res, _ := p.Type(t.Idx)
 		return !res
 	}
 	return false
