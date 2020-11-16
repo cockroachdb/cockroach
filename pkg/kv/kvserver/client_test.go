@@ -790,6 +790,10 @@ func (m *multiTestContext) makeStoreConfig(i int) kvserver.StoreConfig {
 	cfg.TestingKnobs.DisableMergeQueue = true
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
+	// The mtc does not populate the allocator's store pool well and so
+	// the check never sees any live replicas.
+	cfg.TestingKnobs.AllowDangerousReplicationChanges = true
+
 	return cfg
 }
 
@@ -1242,10 +1246,7 @@ func (m *multiTestContext) changeReplicas(
 			continue
 		}
 
-		// We can't use storage.IsSnapshotError() because the original error object
-		// is lost. We could make a this into a roachpb.Error but it seems overkill
-		// for this one usage.
-		if testutils.IsError(err, "snapshot failed: .*|descriptor changed") {
+		if kvserver.IsRetriableReplicationChangeError(err) {
 			log.Infof(ctx, "%v", err)
 			continue
 		}
