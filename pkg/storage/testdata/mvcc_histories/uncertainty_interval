@@ -84,16 +84,17 @@ scan t=txn2 k=k1
 scan: "k1"-"k1\x00" -> <no data>
 error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 0.000000005,0 encountered previous write with future timestamp 0.000000010,0 within uncertainty interval `t <= 0.000000010,0`; observed timestamps: []
 
-# TODO(nvanbenschoten): These cases are buggy. They should return a
-# ReadWithinUncertaintyIntervalError, but they currently don't.
+run error
+get t=txn2 k=k2
+----
+get: "k2" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 0.000000005,0 encountered previous write with future timestamp 0.000000010,0 within uncertainty interval `t <= 0.000000010,0`; observed timestamps: []
 
-# run error
-# get t=txn2 k=k2
-# ----
-
-# run error
-# scan t=txn2 k=k2
-# ----
+run error
+scan t=txn2 k=k2
+----
+scan: "k2"-"k2\x00" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 0.000000005,0 encountered previous write with future timestamp 0.000000010,0 within uncertainty interval `t <= 0.000000010,0`; observed timestamps: []
 
 
 run ok
@@ -114,16 +115,17 @@ scan t=txn3 k=k1
 scan: "k1"-"k1\x00" -> <no data>
 error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 0.000000005,0 encountered previous write with future timestamp 0.000000010,0 within uncertainty interval `t <= 0.000000015,0`; observed timestamps: []
 
-# TODO(nvanbenschoten): These cases are buggy. They should return a
-# ReadWithinUncertaintyIntervalError, but they currently don't.
+run error
+get t=txn3 k=k2
+----
+get: "k2" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 0.000000005,0 encountered previous write with future timestamp 0.000000010,0 within uncertainty interval `t <= 0.000000015,0`; observed timestamps: []
 
-# run error
-# get t=txn3 k=k2
-# ----
-
-# run error
-# scan t=txn3 k=k2
-# ----
+run error
+scan t=txn3 k=k2
+----
+scan: "k2"-"k2\x00" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 0.000000005,0 encountered previous write with future timestamp 0.000000010,0 within uncertainty interval `t <= 0.000000015,0`; observed timestamps: []
 
 
 run ok
