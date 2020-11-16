@@ -57,6 +57,11 @@ type intentInterleavingIter struct {
 	// store it here to avoid repeatedly calling UnsafeKey() since it repeats
 	// key parsing.
 	iterKey MVCCKey
+	// Cache the itable lookups for speed.
+	iterNextFunc      func()
+	iterPrevFunc      func()
+	iterValidFunc     func() (bool, error)
+	iterUnsafeKeyFunc func() MVCCKey
 
 	// intentIter is for iterating over separated intents, so that
 	// intentInterleavingIter can make them look as if they were interleaved.
@@ -68,6 +73,10 @@ type intentInterleavingIter struct {
 	// at a valid position in the case of prefix iteration, but the
 	// state of the intentKey overrides that state.
 	intentKey roachpb.Key
+	// Cache the itable lookups for speed.
+	intentIterNextFunc      func() (bool, error)
+	intentIterPrevFunc      func() (bool, error)
+	intentIterUnsafeKeyFunc func() (EngineKey, error)
 
 	// - cmp output of (intentKey, current iter key) when both are valid.
 	//   This does not take timestamps into consideration. So if intentIter
@@ -117,11 +126,18 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	// for prefix iteration.
 	iter := reader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	return &intentInterleavingIter{
-		prefix:        opts.Prefix,
-		iter:          iter,
-		intentIter:    intentIter,
-		hasUpperBound: opts.UpperBound != nil,
-		intentKeyBuf:  intentKeyBuf,
+		prefix:                  opts.Prefix,
+		iter:                    iter,
+		iterNextFunc:            iter.Next,
+		iterPrevFunc:            iter.Prev,
+		iterValidFunc:           iter.Valid,
+		iterUnsafeKeyFunc:       iter.UnsafeKey,
+		intentIter:              intentIter,
+		intentIterNextFunc:      intentIter.NextEngineKey,
+		intentIterPrevFunc:      intentIter.PrevEngineKey,
+		intentIterUnsafeKeyFunc: intentIter.UnsafeEngineKey,
+		hasUpperBound:           opts.UpperBound != nil,
+		intentKeyBuf:            intentKeyBuf,
 	}
 }
 
@@ -170,7 +186,7 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 
 func (i *intentInterleavingIter) computePos() {
 	var err error
-	i.iterValid, err = i.iter.Valid()
+	i.iterValid, err = i.iterValidFunc()
 	if err != nil || (!i.iterValid && i.intentKey == nil) {
 		i.err = err
 		i.valid = false
@@ -181,7 +197,7 @@ func (i *intentInterleavingIter) computePos() {
 		i.intentCmp = -i.dir
 		return
 	}
-	i.iterKey = i.iter.UnsafeKey()
+	i.iterKey = i.iterUnsafeKeyFunc()
 	if i.intentKey == nil {
 		i.intentCmp = i.dir
 	} else {
@@ -198,7 +214,7 @@ func (i *intentInterleavingIter) tryDecodeLockKey(valid bool) error {
 		i.intentKey = nil
 		return nil
 	}
-	engineKey, err := i.intentIter.UnsafeEngineKey()
+	engineKey, err := i.intentIterUnsafeKeyFunc()
 	if err != nil {
 		i.err = err
 		i.valid = false
@@ -228,7 +244,7 @@ func (i *intentInterleavingIter) Next() {
 			// Both iterators are exhausted, since intentKey is synchronized with
 			// intentIter for non-prefix iteration, so step both forward.
 			i.valid = true
-			valid, err := i.intentIter.NextEngineKey()
+			valid, err := i.intentIterNextFunc()
 			if err != nil {
 				i.err = err
 				i.valid = false
@@ -237,7 +253,7 @@ func (i *intentInterleavingIter) Next() {
 			if err := i.tryDecodeLockKey(valid); err != nil {
 				return
 			}
-			i.iter.Next()
+			i.iterNextFunc()
 			i.computePos()
 			return
 		}
@@ -252,10 +268,10 @@ func (i *intentInterleavingIter) Next() {
 			// code) violates the invariant that the iter is pointing to the
 			// provisional value, but it does care that iter is pointing to some
 			// version of that key.
-			i.iter.Next()
+			i.iterNextFunc()
 			i.intentCmp = 0
 			var err error
-			if i.iterValid, err = i.iter.Valid(); err != nil || !i.iterValid {
+			if i.iterValid, err = i.iterValidFunc(); err != nil || !i.iterValid {
 				if err == nil {
 					err = errors.Errorf("intent has no provisional value")
 				}
@@ -263,7 +279,7 @@ func (i *intentInterleavingIter) Next() {
 				i.valid = false
 				return
 			}
-			i.iterKey = i.iter.UnsafeKey()
+			i.iterKey = i.iterUnsafeKeyFunc()
 			if util.RaceEnabled {
 				cmp := i.intentKey.Compare(i.iterKey.Key)
 				if cmp != 0 {
@@ -279,7 +295,7 @@ func (i *intentInterleavingIter) Next() {
 			// could also be positioned at an intent. We are assuming that there
 			// isn't a bug (external to this code) that has caused two intents to be
 			// present for the same key.
-			valid, err := i.intentIter.NextEngineKey()
+			valid, err := i.intentIterNextFunc()
 			if err != nil {
 				i.err = err
 				i.valid = false
@@ -313,7 +329,7 @@ func (i *intentInterleavingIter) Next() {
 			i.valid = false
 			return
 		}
-		valid, err := i.intentIter.NextEngineKey()
+		valid, err := i.intentIterNextFunc()
 		if err != nil {
 			i.err = err
 			i.valid = false
@@ -340,7 +356,7 @@ func (i *intentInterleavingIter) Next() {
 		// Common case:
 		// The iterator is positioned at iter. It could be a value or an intent,
 		// though usually it will be a value.
-		i.iter.Next()
+		i.iterNextFunc()
 		i.computePos()
 	}
 }
@@ -364,7 +380,7 @@ func (i *intentInterleavingIter) NextKey() {
 			i.valid = false
 			return
 		}
-		valid, err := i.intentIter.NextEngineKey()
+		valid, err := i.intentIterNextFunc()
 		if err != nil {
 			i.err = err
 			i.valid = false
@@ -488,7 +504,7 @@ func (i *intentInterleavingIter) Prev() {
 		if !i.valid {
 			// Both iterators are exhausted, so step both backward.
 			i.valid = true
-			valid, err := i.intentIter.PrevEngineKey()
+			valid, err := i.intentIterPrevFunc()
 			if err != nil {
 				i.err = err
 				i.valid = false
@@ -497,7 +513,7 @@ func (i *intentInterleavingIter) Prev() {
 			if err := i.tryDecodeLockKey(valid); err != nil {
 				return
 			}
-			i.iter.Prev()
+			i.iterPrevFunc()
 			i.computePos()
 			return
 		}
@@ -516,17 +532,17 @@ func (i *intentInterleavingIter) Prev() {
 				i.valid = false
 				return
 			}
-			i.iter.Prev()
+			i.iterPrevFunc()
 			i.intentCmp = +1
 			var err error
-			i.iterValid, err = i.iter.Valid()
+			i.iterValid, err = i.iterValidFunc()
 			if err != nil {
 				i.err = err
 				i.valid = false
 				return
 			}
 			if i.iterValid {
-				i.iterKey = i.iter.UnsafeKey()
+				i.iterKey = i.iterUnsafeKeyFunc()
 			}
 			if util.RaceEnabled && i.iterValid {
 				cmp := i.intentKey.Compare(i.iterKey.Key)
@@ -540,7 +556,7 @@ func (i *intentInterleavingIter) Prev() {
 			// The intentIter is after the iter. We don't know whether the iter key
 			// has an intent. Note that the iter could itself be positioned at an
 			// intent.
-			valid, err := i.intentIter.PrevEngineKey()
+			valid, err := i.intentIterPrevFunc()
 			if err != nil {
 				i.err = err
 				i.valid = false
@@ -564,7 +580,7 @@ func (i *intentInterleavingIter) Prev() {
 		// exhausted or positioned at a versioned value of a preceding key.
 		// Stepping intentIter backward will ensure that intentKey is <= the key
 		// of iter (when neither is exhausted).
-		intentIterValid, err := i.intentIter.PrevEngineKey()
+		intentIterValid, err := i.intentIterPrevFunc()
 		if err != nil {
 			i.err = err
 			i.valid = false
@@ -595,7 +611,7 @@ func (i *intentInterleavingIter) Prev() {
 		// Common case:
 		// The iterator is positioned at iter. It could be a value or an intent,
 		// though usually it will be a value.
-		i.iter.Prev()
+		i.iterPrevFunc()
 		i.computePos()
 	}
 }
@@ -604,7 +620,7 @@ func (i *intentInterleavingIter) UnsafeRawKey() []byte {
 	if i.isCurAtIntentIter() {
 		// TODO(sumeer): this is inefficient, but the users of UnsafeRawKey are
 		// incorrect, so this method will go away.
-		key, err := i.intentIter.UnsafeEngineKey()
+		key, err := i.intentIterUnsafeKeyFunc()
 		if err != nil {
 			// Should be able to parse it again.
 			panic(err)
