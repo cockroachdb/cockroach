@@ -306,7 +306,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			}
 		}
 		// Limit the transaction's maximum timestamp using observed timestamps.
-		observedts.LimitTxnMaxTimestamp(ctx, ba, status)
+		ba.Txn = observedts.LimitTxnMaxTimestamp(ctx, ba.Txn, status)
 
 		// Determine the maximal set of key spans that the batch will operate
 		// on. We only need to do this once and we make sure to do so after we

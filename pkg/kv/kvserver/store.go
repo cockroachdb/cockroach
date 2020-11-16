@@ -2260,6 +2260,9 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 // ClusterID accessor.
 func (s *Store) ClusterID() uuid.UUID { return s.Ident.ClusterID }
 
+// NodeID accessor.
+func (s *Store) NodeID() roachpb.NodeID { return s.Ident.NodeID }
+
 // StoreID accessor.
 func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }
 

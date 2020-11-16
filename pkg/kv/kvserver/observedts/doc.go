@@ -16,7 +16,11 @@ package observedts
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// D1 | A transaction's "max timestamp" is the upper bound of its uncertainty
+// D1 ————————————————————————————————————————————————
+//
+// Transaction.MaxTimestamp
+//
+// A transaction's "max timestamp" is the upper bound of its uncertainty
 // interval. The value is set to the transaction's initial timestamp + the
 // cluster's maximum clock skew. Assuming maximum clock skew bounds are
 // respected, this maximum timestamp places an upper bound on the commit
@@ -24,8 +28,12 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 // transaction.
 var D1 = roachpb.Transaction{}.MaxTimestamp
 
-// D2 | While reading, if a transaction encounters a value above its read
-// timestamp but equal to or below its max timestamp, it triggers a read within
+// D2 ————————————————————————————————————————————————
+//
+// ReadWithinUncertaintyIntervalError
+//
+// While reading, if a transaction encounters a value above its read timestamp
+// but equal to or below its max timestamp, it triggers a read within
 // uncertainty interval error.
 //
 // This error forces the transaction to increase its read timestamp, either
@@ -36,7 +44,11 @@ var D1 = roachpb.Transaction{}.MaxTimestamp
 // linearizability and avoid stale reads.
 var D2 = roachpb.ReadWithinUncertaintyIntervalError{}
 
-// D3 | An observed timestamp is a combination of a NodeID and a Timestamp. The
+// D3 ————————————————————————————————————————————————
+//
+// ObservedTimestamp
+//
+// An observed timestamp is a combination of a NodeID and a Timestamp. The
 // timestamp is said to have been "observed" because it was pulled from the
 // corresponding node's HLC clock.
 //
@@ -46,16 +58,23 @@ var D2 = roachpb.ReadWithinUncertaintyIntervalError{}
 // given a smaller value.
 var D3 = roachpb.ObservedTimestamp{}
 
-// D4 | A transaction collects observed timestamps as it visits nodes in the
-// cluster when performing reads and writes.
+// D4 ————————————————————————————————————————————————
+//
+// Transaction.UpdateObservedTimestamp
+//
+// A transaction collects observed timestamps as it visits nodes in the cluster
+// when performing reads and writes.
 var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 
-// D5 | The observed timestamps are collected in a list on the transaction
-// proto. The purpose of this list is to avoid uncertainty related restarts
-// which normally occur when reading a value in the near future as per the
-// max_timestamp field.
+// D5 ————————————————————————————————————————————————
 //
-// ### Meaning:
+// Transaction.ObservedTimestamps
+//
+// The observed timestamps are collected in a list on the transaction proto. The
+// purpose of this list is to avoid uncertainty related restarts which normally
+// occur when reading a value in the near future as per the max_timestamp field.
+//
+// Meaning
 //
 // Morally speaking, having an entry for a node in this list means that this
 // node has been visited before, and that no more uncertainty restarts are
@@ -73,7 +92,7 @@ var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 // timestamp that is at least high as our entry in the list for node A, so no
 // future operation on node A will be uncertain.
 //
-// ### Correctness:
+// Correctness
 //
 // Thus, expressed properly, we can say that when a node has been read from
 // successfully before by a transaction, uncertainty for values written by a
@@ -90,26 +109,26 @@ var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 //    purposes of uncertainty.
 //
 // There are two invariants necessary for this property to hold:
-// 1. a leaseholder's clock must always be equal to or greater than the timestamp
-//    of all writes that it has served. This is trivial to enforce for
-//    non-transactional writes. It is more complicated for transactional writes
-//    which may move their commit timestamp forward over their lifetime before
-//    committing, even after writing intents on remote Ranges. To accommodate
-//    this situation, transactions ensure that at the time of their commit, any
-//    leaseholder for a Range that contains one of its intent has an HLC clock
-//    with an equal or greater timestamp than the transaction's commit timestamp.
-//    TODO(nvanbenschoten): This is violated by txn refreshes. See #36431.
-// 2. a leaseholder's clock must always be equal to or greater than the timestamp
-//    of all writes that previous leaseholders for its Range have served. We
-//    enforce that when a Replica acquires a lease it bumps its node's clock to a
-//    time higher than the previous leaseholder's clock when it stopped serving
-//    writes. This is accomplished cooperatively for lease transfers and through
-//    a statis period before lease expiration for lease acquisitions. It then
-//    follows by induction that, in conjunction with the previous invariant, this
-//    invariant holds for all leaseholders, given that a Range's initial
-//    leaseholder assumes responsibility for an empty range with no writes.
+//  1. a leaseholder's clock must always be equal to or greater than the timestamp
+//     of all writes that it has served. This is trivial to enforce for
+//     non-transactional writes. It is more complicated for transactional writes
+//     which may move their commit timestamp forward over their lifetime before
+//     committing, even after writing intents on remote Ranges. To accommodate
+//     this situation, transactions ensure that at the time of their commit, any
+//     leaseholder for a Range that contains one of its intent has an HLC clock
+//     with an equal or greater timestamp than the transaction's commit timestamp.
+//     TODO(nvanbenschoten): This is violated by txn refreshes. See #36431.
+//  2. a leaseholder's clock must always be equal to or greater than the timestamp
+//     of all writes that previous leaseholders for its Range have served. We
+//     enforce that when a Replica acquires a lease it bumps its node's clock to a
+//     time higher than the previous leaseholder's clock when it stopped serving
+//     writes. This is accomplished cooperatively for lease transfers and through
+//     a statis period before lease expiration for lease acquisitions. It then
+//     follows by induction that, in conjunction with the previous invariant, this
+//     invariant holds for all leaseholders, given that a Range's initial
+//     leaseholder assumes responsibility for an empty range with no writes.
 //
-// ### Usage:
+// Usage
 //
 // The property ensures that when this list holds a corresponding entry for the
 // node who owns the lease that the current request is executing under, we can
@@ -133,14 +152,34 @@ var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 // the list. In particular, if `read_timestamp` is taken from that node's clock,
 // we may add that to the list, which eliminates read uncertainty for reads on
 // that node.
+//
+// Follower Reads
+//
+// If the replica serving a transaction's read is not the leaseholder for its
+// range, an observed timestamp pulled from the follower node's clock has no
+// meaning for the purpose of reducing the transaction's uncertainty interval.
+// This is because there is no guarantee that at the time of acquiring the
+// observed timestamp from the follower node, the leaseholder hadn't already
+// served writes at higher timestamps than the follower node's clock reflected.
+//
+// However, if the transaction performing a follower read happens to have an
+// observed timestamp from the current leaseholder, this timestamp can be used
+// to reduce the transaction's uncertainty interval. Even though the read is
+// being served from a different replica in the range, the observed timestamp
+// still places a bound on the values in the range that may have been written
+// before the transaction began.
 var D5 = roachpb.Transaction{}.ObservedTimestamps
 
-// D6 | Observed timestamps allow transactions to avoid uncertainty related
-// restarts because they allow transactions to bound their "effective max
-// timestamp" when reading on a node which they have previously collected an
-// observed timestamp from. Similarly, observed timestamps can also assist a
-// transaction even on its first visit to a node in cases where it gets stuck
-// waiting on locks for long periods of time.
+// D6 ————————————————————————————————————————————————
+//
+// LimitTxnMaxTimestamp
+//
+// Observed timestamps allow transactions to avoid uncertainty related restarts
+// because they allow transactions to bound their "effective max timestamp" when
+// reading on a node which they have previously collected an observed timestamp
+// from. Similarly, observed timestamps can also assist a transaction even on
+// its first visit to a node in cases where it gets stuck waiting on locks for
+// long periods of time.
 var D6 = LimitTxnMaxTimestamp
 
 // Ignore unused warnings.
