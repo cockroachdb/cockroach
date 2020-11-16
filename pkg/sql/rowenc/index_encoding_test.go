@@ -425,6 +425,12 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		{`{1, 2}`, `{1, 2, 1}`, true},
 		{`{1, 2, 3}`, `{1, 2, 4}`, false},
 		{`{1, 2, 3}`, `{}`, true},
+		{`{}`, `{NULL}`, false},
+		{`{NULL}`, `{}`, true},
+		{`{NULL}`, `{NULL}`, false},
+		{`{2, NULL}`, `{2, NULL}`, false},
+		{`{2, NULL}`, `{2}`, true},
+		{`{2, NULL}`, `{NULL}`, false},
 	}
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -449,7 +455,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		// inner loop (any span in the slice can contain any of the keys), and an
 		// intersection on the outer loop (all of the span slices must contain at
 		// least one key).
-		actual := true
+		actual := len(spansSlice) > 0
 		for _, spans := range spansSlice {
 			found := false
 			for _, span := range spans {
