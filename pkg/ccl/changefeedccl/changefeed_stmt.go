@@ -659,6 +659,7 @@ func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, planHookState in
 	) {
 		telemetry.Count(`changefeed.enterprise.cancel`)
 	} else {
+		phs.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
 		telemetry.Count(`changefeed.enterprise.fail`)
 	}
 	return nil
