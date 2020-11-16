@@ -114,7 +114,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 				switch parts[0] {
 				case "put":
 					if len(parts) != 3 {
-						return fmt.Sprintf("put <key> <value>\n")
+						return "put <key> <value>\n"
 					}
 					err := batch.Put([]byte(strings.TrimSpace(parts[1])), []byte(strings.TrimSpace(parts[2])))
 					if err != nil {
@@ -144,7 +144,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 
 				case "seek":
 					if len(parts) != 2 {
-						return fmt.Sprintf("seek <key>\n")
+						return "seek <key>\n"
 					}
 					iter.SeekGE([]byte(strings.TrimSpace(parts[1])))
 				default:

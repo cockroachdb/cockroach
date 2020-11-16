@@ -479,7 +479,7 @@ func (t sqlTxnShim) Rollback(context.Context) error {
 
 func (t sqlTxnShim) Exec(_ context.Context, query string, values ...interface{}) error {
 	if len(values) != 0 {
-		panic(fmt.Sprintf("sqlTxnShim.ExecContext must not be called with values"))
+		panic("sqlTxnShim.ExecContext must not be called with values")
 	}
 	return t.conn.Exec(query, nil)
 }

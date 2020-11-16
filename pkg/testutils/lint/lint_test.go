@@ -1633,7 +1633,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			fmt.Sprintf(`panic\(.*\)`),
+			`panic\(.*\)`,
 			"--",
 			// NOTE: if you're adding a new package to the list here because it
 			// uses "panic-catch" error propagation mechanism of the vectorized
@@ -1682,7 +1682,7 @@ func TestLint(t *testing.T) {
 			// - coldata.NewMemColumn
 			// - coldata.Batch.AppendCol
 			// TODO(yuzefovich): prohibit call to coldata.NewMemBatchNoCols.
-			fmt.Sprintf(`(coldata\.NewMem(Batch|BatchWithCapacity|Column)|\.AppendCol)\(`),
+			`(coldata\.NewMem(Batch|BatchWithCapacity|Column)|\.AppendCol)\(`,
 			"--",
 			// TODO(yuzefovich): prohibit calling coldata.* methods from other
 			// sql/col* packages.
@@ -1721,7 +1721,7 @@ func TestLint(t *testing.T) {
 			// We prohibit usage of colmem.Allocator.NewMemBatchWithMaxCapacity
 			// in order to remind us to think whether we want the dynamic batch
 			// size behavior or not.
-			fmt.Sprintf(`\.NewMemBatchWithMaxCapacity\(`),
+			`\.NewMemBatchWithMaxCapacity\(`,
 			"--",
 			"sql/col*",
 			":!sql/col*_test.go",
@@ -1756,7 +1756,7 @@ func TestLint(t *testing.T) {
 			"-nE",
 			// We prohibit usage of Allocator.MaybeAppendColumn outside of
 			// vectorTypeEnforcer and batchSchemaPrefixEnforcer.
-			fmt.Sprintf(`(MaybeAppendColumn)\(`),
+			`(MaybeAppendColumn)\(`,
 			"--",
 			"sql/col*",
 			":!sql/colexec/operator.go",
@@ -1793,7 +1793,7 @@ func TestLint(t *testing.T) {
 			"-nE",
 			// We prohibit appending to the type schema and require allocating
 			// a new slice. See the comment in execplan.go file.
-			fmt.Sprintf(`(yps|ypes) = append\(`),
+			`(yps|ypes) = append\(`,
 			"--",
 			"sql/colexec/execplan.go",
 		)
@@ -1839,7 +1839,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			fmt.Sprintf(`\[\]types.T`),
+			`\[\]types.T`,
 			"--",
 		)
 		if err != nil {

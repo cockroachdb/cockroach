@@ -213,9 +213,9 @@ func restoreMidSchemaChange(
 		require.NoError(t, err)
 
 		sqlDB.Exec(t, "USE defaultdb")
-		restoreQuery := fmt.Sprintf("RESTORE defaultdb.* from $1")
+		restoreQuery := "RESTORE defaultdb.* from $1"
 		if isClusterRestore {
-			restoreQuery = fmt.Sprintf("RESTORE from $1")
+			restoreQuery = "RESTORE from $1"
 		}
 		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", LocalFoo))
 		sqlDB.Exec(t, restoreQuery, LocalFoo)

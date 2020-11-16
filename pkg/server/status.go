@@ -69,7 +69,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 const (
@@ -103,7 +102,7 @@ var (
 
 	// Error used to convey that remote debugging is needs to be enabled for an
 	// endpoint to be usable.
-	remoteDebuggingErr = grpcstatus.Error(
+	remoteDebuggingErr = status.Error(
 		codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
 
 	// Counter to count accesses to the prometheus vars endpoint /_status/vars .
@@ -166,7 +165,7 @@ func (b *baseStatusServer) getLocalSessions(
 
 		// Non-superusers are not allowed to query sessions others than their own.
 		if sessionUser != reqUsername {
-			return nil, grpcstatus.Errorf(
+			return nil, status.Errorf(
 				codes.PermissionDenied,
 				"client user %q does not have permission to view sessions from user %q",
 				sessionUser, reqUsername)
@@ -427,7 +426,7 @@ func (s *statusServer) Gossip(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if local {
@@ -453,7 +452,7 @@ func (s *statusServer) EngineStats(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -500,7 +499,7 @@ func (s *statusServer) Allocator(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -564,7 +563,7 @@ func (s *statusServer) Allocator(
 		return nil
 	})
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	return output, nil
 }
@@ -650,7 +649,7 @@ func (s *statusServer) AllocatorRange(
 					return nil
 				})
 			}); err != nil {
-			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 	}
 
@@ -669,7 +668,7 @@ func (s *statusServer) AllocatorRange(
 				}, nil
 			}
 		case <-ctx.Done():
-			return nil, grpcstatus.Errorf(codes.DeadlineExceeded, "request timed out")
+			return nil, status.Errorf(codes.DeadlineExceeded, "request timed out")
 		}
 	}
 
@@ -684,7 +683,7 @@ func (s *statusServer) AllocatorRange(
 			}
 			fmt.Fprintf(&buf, "n%d: %s", nodeID, err)
 		}
-		return nil, grpcstatus.Errorf(codes.Internal, buf.String())
+		return nil, status.Errorf(codes.Internal, buf.String())
 	}
 	return &serverpb.AllocatorRangeResponse{}, nil
 }
@@ -702,7 +701,7 @@ func (s *statusServer) Certificates(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if s.cfg.Insecure {
@@ -822,7 +821,7 @@ func (s *statusServer) Details(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -865,7 +864,7 @@ func (s *statusServer) GetFiles(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -884,19 +883,19 @@ func (s *statusServer) GetFiles(
 	case serverpb.FileType_GOROUTINES: // Requesting for saved Goroutine dumps.
 		dir = s.admin.server.cfg.GoroutineDumpDirName
 	default:
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown file type: %s", req.Type)
+		return nil, status.Errorf(codes.InvalidArgument, "unknown file type: %s", req.Type)
 	}
 	if dir == "" {
-		return nil, grpcstatus.Errorf(codes.Unimplemented, "dump directory not configured: %s", req.Type)
+		return nil, status.Errorf(codes.Unimplemented, "dump directory not configured: %s", req.Type)
 	}
 	var resp serverpb.GetFilesResponse
 	for _, pattern := range req.Patterns {
 		if err := checkFilePattern(pattern); err != nil {
-			return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		filepaths, err := filepath.Glob(filepath.Join(dir, pattern))
 		if err != nil {
-			return nil, grpcstatus.Errorf(codes.InvalidArgument, "bad pattern: %s", pattern)
+			return nil, status.Errorf(codes.InvalidArgument, "bad pattern: %s", pattern)
 		}
 
 		for _, path := range filepaths {
@@ -905,7 +904,7 @@ func (s *statusServer) GetFiles(
 			if !req.ListOnly {
 				contents, err = ioutil.ReadFile(path)
 				if err != nil {
-					return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+					return nil, status.Errorf(codes.Internal, err.Error())
 				}
 			}
 			resp.Files = append(resp.Files,
@@ -937,7 +936,7 @@ func (s *statusServer) LogFilesList(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -971,7 +970,7 @@ func (s *statusServer) LogFile(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -1064,7 +1063,7 @@ func (s *statusServer) Logs(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -1082,30 +1081,30 @@ func (s *statusServer) Logs(
 		req.StartTime,
 		timeutil.Now().AddDate(0, 0, -1).UnixNano())
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "StartTime could not be parsed: %s", err)
+		return nil, status.Errorf(codes.InvalidArgument, "StartTime could not be parsed: %s", err)
 	}
 
 	endTimestamp, err := parseInt64WithDefault(req.EndTime, timeutil.Now().UnixNano())
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "EndTime could not be parsed: %s", err)
+		return nil, status.Errorf(codes.InvalidArgument, "EndTime could not be parsed: %s", err)
 	}
 
 	if startTimestamp > endTimestamp {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "StartTime: %d should not be greater than endtime: %d", startTimestamp, endTimestamp)
+		return nil, status.Errorf(codes.InvalidArgument, "StartTime: %d should not be greater than endtime: %d", startTimestamp, endTimestamp)
 	}
 
 	maxEntries, err := parseInt64WithDefault(req.Max, defaultMaxLogEntries)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "Max could not be parsed: %s", err)
+		return nil, status.Errorf(codes.InvalidArgument, "Max could not be parsed: %s", err)
 	}
 	if maxEntries < 1 {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "Max: %d should be set to a value greater than 0", maxEntries)
+		return nil, status.Errorf(codes.InvalidArgument, "Max: %d should be set to a value greater than 0", maxEntries)
 	}
 
 	var regex *regexp.Regexp
 	if len(req.Pattern) > 0 {
 		if regex, err = regexp.Compile(req.Pattern); err != nil {
-			return nil, grpcstatus.Errorf(codes.InvalidArgument, "regex pattern could not be compiled: %s", err)
+			return nil, status.Errorf(codes.InvalidArgument, "regex pattern could not be compiled: %s", err)
 		}
 	}
 
@@ -1145,7 +1144,7 @@ func (s *statusServer) Stacks(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -1173,7 +1172,7 @@ func (s *statusServer) Stacks(
 	case serverpb.StacksType_THREAD_STACKS:
 		return &serverpb.JSONResponse{Data: []byte(storage.ThreadStacks())}, nil
 	default:
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
+		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
 	}
 }
 
@@ -1193,7 +1192,7 @@ func (s *statusServer) Profile(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -1208,11 +1207,11 @@ func (s *statusServer) Profile(
 	case serverpb.ProfileRequest_HEAP:
 		p := pprof.Lookup("heap")
 		if p == nil {
-			return nil, grpcstatus.Errorf(codes.InvalidArgument, "unable to find profile: heap")
+			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: heap")
 		}
 		var buf bytes.Buffer
 		if err := p.WriteTo(&buf, 0); err != nil {
-			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	case serverpb.ProfileRequest_CPU:
@@ -1237,7 +1236,7 @@ func (s *statusServer) Profile(
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	default:
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown profile: %s", req.Type)
+		return nil, status.Errorf(codes.InvalidArgument, "unknown profile: %s", req.Type)
 	}
 }
 
@@ -1260,7 +1259,7 @@ func (s *statusServer) Nodes(
 	b.Scan(startKey, endKey)
 	if err := s.db.Run(ctx, b); err != nil {
 		log.Errorf(ctx, "%v", err)
-		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	rows := b.Results[0].Rows
 
@@ -1270,7 +1269,7 @@ func (s *statusServer) Nodes(
 	for i, row := range rows {
 		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
 			log.Errorf(ctx, "%v", err)
-			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 	}
 
@@ -1321,7 +1320,7 @@ func (s *statusServer) Node(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	key := keys.NodeStatusKey(nodeID)
@@ -1329,14 +1328,14 @@ func (s *statusServer) Node(
 	b.Get(key)
 	if err := s.db.Run(ctx, b); err != nil {
 		log.Errorf(ctx, "%v", err)
-		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 
 	var nodeStatus statuspb.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
 		err = errors.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
 		log.Errorf(ctx, "%v", err)
-		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	return &nodeStatus, nil
 }
@@ -1349,7 +1348,7 @@ func (s *statusServer) Metrics(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -1514,7 +1513,7 @@ func (s *statusServer) Ranges(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -1659,7 +1658,7 @@ func (s *statusServer) Ranges(
 		return nil
 	})
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	return &output, nil
 }
@@ -1951,7 +1950,7 @@ func (s *statusServer) CancelSession(
 ) (*serverpb.CancelSessionResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -1981,7 +1980,7 @@ func (s *statusServer) CancelQuery(
 ) (*serverpb.CancelQueryResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		// This request needs to be forwarded to another node.
@@ -2025,7 +2024,7 @@ func (s *statusServer) SpanStats(
 
 	nodeID, local, err := s.parseNodeID(req.NodeID)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -2062,7 +2061,7 @@ func (s *statusServer) Diagnostics(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -2089,7 +2088,7 @@ func (s *statusServer) Stores(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -2239,7 +2238,7 @@ func (s *statusServer) JobRegistryStatus(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)

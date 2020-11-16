@@ -2556,8 +2556,12 @@ func getDiskUsageInBytes(
 		// TODO(bdarnell): Refactor this stack to not combine stdout and
 		// stderr so we don't need to do this (and the Warning check
 		// below).
-		out, err = c.RunWithBuffer(ctx, logger, c.Node(nodeIdx),
-			fmt.Sprint("du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'"))
+		out, err = c.RunWithBuffer(
+			ctx,
+			logger,
+			c.Node(nodeIdx),
+			"du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'",
+		)
 		if err != nil {
 			if ctx.Err() != nil {
 				return 0, ctx.Err()

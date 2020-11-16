@@ -76,7 +76,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 
 	t.Run("cancel", func(t *testing.T) {
 		// Test that CREATE STATISTICS can be canceled.
-		query := fmt.Sprintf(`CREATE STATISTICS s1 FROM d.t`)
+		query := `CREATE STATISTICS s1 FROM d.t`
 
 		if _, err := jobutils.RunJob(
 			t, sqlDB, &allowRequest, []string{"cancel"}, query,
@@ -92,7 +92,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 
 	t.Run("pause", func(t *testing.T) {
 		// Test that CREATE STATISTICS can be paused and resumed.
-		query := fmt.Sprintf(`CREATE STATISTICS s2 FROM d.t`)
+		query := `CREATE STATISTICS s2 FROM d.t`
 
 		jobID, err := jobutils.RunJob(
 			t, sqlDB, &allowRequest, []string{"PAUSE"}, query,

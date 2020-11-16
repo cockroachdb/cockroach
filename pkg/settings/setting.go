@@ -278,7 +278,7 @@ func (i *common) setSlotIdx(slotIdx int) {
 		panic(fmt.Sprintf("Invalid slot index %d", slotIdx))
 	}
 	if slotIdx > MaxSettings {
-		panic(fmt.Sprintf("too many settings; increase MaxSettings"))
+		panic("too many settings; increase MaxSettings")
 	}
 	i.slotIdx = slotIdx
 }
