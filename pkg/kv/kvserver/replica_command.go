@@ -1661,6 +1661,41 @@ func execChangeReplicasTxn(
 		}
 		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
 
+		for maxAttempts, i := 10, 0; i < maxAttempts; i++ {
+			if knobs := store.TestingKnobs(); knobs != nil && knobs.AllowDangerousReplicationChanges {
+				break
+			}
+			// Run (and retry for a bit) a sanity check that the configuration
+			// resulting from this change is able to meet quorum. It's
+			// important to do this at this low layer as there are multiple
+			// entry points that are not generally too careful. For example,
+			// before the below check existed, the store rebalancer could
+			// carry out operations that would lead to a loss of quorum.
+			//
+			// See:
+			// https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
+			replicas := crt.Desc.Replicas()
+			liveReplicas, _ := store.allocator.storePool.liveAndDeadReplicas(replicas.All())
+			if !crt.Desc.Replicas().CanMakeProgress(
+				func(rDesc roachpb.ReplicaDescriptor) bool {
+					for _, inner := range liveReplicas {
+						if inner.ReplicaID == rDesc.ReplicaID {
+							return true
+						}
+					}
+					return false
+				}) {
+				// NB: we use newQuorumError which is recognized by the replicate queue.
+				err := newQuorumError("range %s cannot make progress with proposed changes add=%v del=%v "+
+					"based on live replicas %v", crt.Desc, crt.Added(), crt.Removed(), liveReplicas)
+				if i == maxAttempts-1 {
+					return err
+				}
+				log.Infof(ctx, "%s; retrying", err)
+				time.Sleep(time.Second)
+			}
+		}
+
 		{
 			b := txn.NewBatch()
 

@@ -790,6 +790,10 @@ func (m *multiTestContext) makeStoreConfig(i int) kvserver.StoreConfig {
 	cfg.TestingKnobs.DisableMergeQueue = true
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
+	// The mtc does not populate the allocator's store pool well and so
+	// the check never sees any live replicas.
+	cfg.TestingKnobs.AllowDangerousReplicationChanges = true
+
 	return cfg
 }
 

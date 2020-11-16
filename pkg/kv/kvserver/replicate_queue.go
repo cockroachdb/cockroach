@@ -322,23 +322,10 @@ func (rq *replicateQueue) processOneChange(
 	// quorum.
 	voterReplicas := desc.Replicas().Voters()
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(voterReplicas)
-	{
-		unavailable := !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
-			for _, inner := range liveVoterReplicas {
-				if inner.ReplicaID == rDesc.ReplicaID {
-					return true
-				}
-			}
-			return false
-		})
-		if unavailable {
-			return false, newQuorumError(
-				"range requires a replication change, but live replicas %v don't constitute a quorum for %v:",
-				liveVoterReplicas,
-				desc.Replicas().All(),
-			)
-		}
-	}
+
+	// NB: the replication layer ensures that the below operations don't cause
+	// unavailability; see:
+	_ = execChangeReplicasTxn
 
 	action, _ := rq.allocator.ComputeAction(ctx, zone, desc)
 	log.VEventf(ctx, 1, "next replica action: %s", action)
