@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -131,8 +132,8 @@ func isErrSimilar(expected *regexp.Regexp, actual error) bool {
 func TestHLCPhysicalClockJump(t *testing.T) {
 	var fatal bool
 	defer log.ResetExitFunc()
-	log.SetExitFunc(true /* hideStack */, func(r int) {
-		if r != 0 {
+	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
+		if r == exit.FatalError() {
 			fatal = true
 		}
 	})
@@ -387,9 +388,9 @@ func TestHLCMonotonicityCheck(t *testing.T) {
 func TestHLCEnforceWallTimeWithinBoundsInNow(t *testing.T) {
 	var fatal bool
 	defer log.ResetExitFunc()
-	log.SetExitFunc(true /* hideStack */, func(r int) {
+	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
 		defer log.Flush()
-		if r != 0 {
+		if r == exit.FatalError() {
 			fatal = true
 		}
 	})
@@ -436,9 +437,9 @@ func TestHLCEnforceWallTimeWithinBoundsInNow(t *testing.T) {
 func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 	var fatal bool
 	defer log.ResetExitFunc()
-	log.SetExitFunc(true /* hideStack */, func(r int) {
+	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
 		defer log.Flush()
-		if r != 0 {
+		if r == exit.FatalError() {
 			fatal = true
 		}
 	})

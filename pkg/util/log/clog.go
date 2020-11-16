@@ -16,12 +16,12 @@ package log
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
 )
@@ -58,8 +58,8 @@ type loggingT struct {
 
 		// exitOverride is used when shutting down logging.
 		exitOverride struct {
-			f         func(int, error) // overrides os.Exit when non-nil; testing only
-			hideStack bool             // hides stack trace; only in effect when f is not nil
+			f         func(exit.Code, error) // overrides exit.WithCode when non-nil; testing only
+			hideStack bool                   // hides stack trace; only in effect when f is not nil
 		}
 
 		// the Cluster ID is reported on every new log file so as to ease the correlation
@@ -267,7 +267,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 		//
 		// https://github.com/cockroachdb/cockroach/issues/23119
 		fatalTrigger = make(chan struct{})
-		exitFunc := func(x int, _ error) { os.Exit(x) }
+		exitFunc := func(x exit.Code, _ error) { exit.WithCode(x) }
 		logging.mu.Lock()
 		if logging.mu.exitOverride.f != nil {
 			if logging.mu.exitOverride.hideStack {
@@ -288,7 +288,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 			case <-time.After(10 * time.Second):
 			case <-fatalTrigger:
 			}
-			exitFunc(255, nil) // C++ uses -1, which is silly because it's anded with 255 anyway.
+			exitFunc(exit.FatalError(), nil)
 			close(exitCalled)
 		}()
 	}
@@ -303,7 +303,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 			// here. Note that exitLocked() shouts the error to both stderr
 			// and the log file, so even though stderr is not available any
 			// more, we'll keep a trace of the error in the file.
-			l.exitLocked(err)
+			l.exitLocked(err, exit.LoggingStderrUnavailable())
 			l.mu.Unlock() // unreachable except in tests
 			return        // unreachable except in tests
 		}
@@ -314,7 +314,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 			// here. Note that exitLocked() shouts the error to both stderr
 			// and the log file, so even though the file is not available
 			// any more, we'll likely keep a trace of the error in stderr.
-			l.exitLocked(err)
+			l.exitLocked(err, exit.LoggingFileUnavailable())
 			l.mu.Unlock() // unreachable except in tests
 			return        // unreachable except in tests
 		}
@@ -323,7 +323,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 		data := buf.Bytes()
 
 		if err := l.writeToFileLocked(data); err != nil {
-			l.exitLocked(err)
+			l.exitLocked(err, exit.LoggingFileUnavailable())
 			l.mu.Unlock()  // unreachable except in tests
 			putBuffer(buf) // unreachable except in tests
 			return         // unreachable except in tests
@@ -340,7 +340,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 		// anonymous function func() { <-exitCalled } is deferred
 		// above. That function ensures that outputLogEntry() will wait
 		// until the exit function has been called. If the exit function
-		// is os.Exit, it will never return, outputLogEntry()'s defer will
+		// is exit.WithCode, it will never return, outputLogEntry()'s defer will
 		// never complete and all is well. If the exit function was
 		// overridden, then the client that has overridden the exit
 		// function is expecting log.Fatal to return and all is well too.

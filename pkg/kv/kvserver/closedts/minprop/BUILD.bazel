@@ -26,6 +26,7 @@ go_test(
     ],
     embed = [":minprop"],
     deps = [
+        "//pkg/cli/exit",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/roachpb",
         "//pkg/util/hlc",

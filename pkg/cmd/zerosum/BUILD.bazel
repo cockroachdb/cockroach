@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/acceptance/localcluster",
+        "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/util/encoding",
         "//pkg/util/log",

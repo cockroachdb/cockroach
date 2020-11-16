@@ -47,6 +47,7 @@ go_test(
     embed = [":sqlmigrations"],
     deps = [
         "//pkg/base",
+        "//pkg/cli/exit",
         "//pkg/gossip",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
