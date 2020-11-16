@@ -33,7 +33,6 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
-	VersionAtomicChangeReplicasTrigger
 	VersionPartitionedBackup
 	Version19_2
 	VersionStart20_1
@@ -102,14 +101,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch releases.
 		Key:     Version19_1,
 		Version: roachpb.Version{Major: 19, Minor: 1},
-	},
-	{
-		// VersionAtomicChangeReplicasTrigger is https://github.com/cockroachdb/cockroach/pull/39485.
-		//
-		// It enables use of updated fields in ChangeReplicasTrigger that will
-		// support atomic replication changes.
-		Key:     VersionAtomicChangeReplicasTrigger,
-		Version: roachpb.Version{Major: 19, Minor: 1, Internal: 8},
 	},
 	{
 		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
