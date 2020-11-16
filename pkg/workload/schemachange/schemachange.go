@@ -44,7 +44,6 @@ import (
 // - reference sequences in column defaults
 // - create foreign keys
 // - support `ADD CONSTRAINT`
-// - support `SET COLUMN DEFAULT`
 //
 // TODO(spaskob): introspect errors returned from the workload and determine
 // whether they're expected or unexpected. Flag `tolerate-errors` should be

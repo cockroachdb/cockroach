@@ -108,6 +108,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 	renameTable:    true,
 	renameView:     true,
 
+	setColumnDefault: true,
 	setColumnNotNull: true,
 
 	insertRow: true,
@@ -224,7 +225,7 @@ var opWeights = []int{
 	renameSequence:    1,
 	renameTable:       1,
 	renameView:        1,
-	setColumnDefault:  0, // TODO(spaskob): unimplemented
+	setColumnDefault:  1,
 	setColumnNotNull:  1,
 	setColumnType:     1,
 	insertRow:         1,
@@ -1305,8 +1306,66 @@ func (og *operationGenerator) renameView(tx *pgx.Tx) (string, error) {
 }
 
 func (og *operationGenerator) setColumnDefault(tx *pgx.Tx) (string, error) {
-	// TODO(peter): unimplemented
-	return "", nil
+
+	tableName, err := og.randTable(tx, og.pctExisting(true), "")
+	if err != nil {
+		return "", err
+	}
+
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DEFAULT "IrrelevantValue"`,
+			tableName), nil
+	}
+
+	column, err := og.randColumnWithMeta(tx, *tableName, og.pctExisting(true))
+	if err != nil {
+		return "", err
+	}
+	columnExists, err := columnExistsOnTable(tx, tableName, column.name)
+	if err != nil {
+		return "", err
+	}
+	if !columnExists {
+		og.expectedExecErrors.add(pgcode.UndefinedColumn)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT "IrrelevantValue"`,
+			tableName, column.name), nil
+	}
+
+	datumTyp := column.typ
+	// Optionally change the incorrect type to potentially create errors.
+	if og.produceError() {
+		newTypeName, err := og.randType(tx, og.pctExisting(true))
+		if err != nil {
+			return "", err
+		}
+
+		typeExists, err := typeExists(tx, newTypeName)
+		if err != nil {
+			return "", err
+		}
+		if !typeExists {
+			og.expectedExecErrors.add(pgcode.UndefinedObject)
+			return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`, tableName, column.name, newTypeName.String()), nil
+		}
+
+		datumTyp, err = og.typeFromTypeName(tx, newTypeName.String())
+		if err != nil {
+			return "", err
+		}
+	}
+
+	defaultDatum := rowenc.RandDatum(og.params.rng, datumTyp, column.nullable)
+
+	if (!datumTyp.Equivalent(column.typ)) && defaultDatum != tree.DNull {
+		og.expectedExecErrors.add(pgcode.DatatypeMismatch)
+	}
+
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName, column.name, tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)), nil
 }
 
 func (og *operationGenerator) setColumnNotNull(tx *pgx.Tx) (string, error) {
@@ -1529,6 +1588,42 @@ ORDER BY random()
 		return "", err
 	}
 	return name, nil
+}
+
+// randColumnWithMeta is implemented in the same way as randColumn with the exception that
+// it will return a column struct, which includes type and nullability information, instead of
+// a column name string.
+func (og *operationGenerator) randColumnWithMeta(
+	tx *pgx.Tx, tableName tree.TableName, pctExisting int,
+) (column, error) {
+	if og.randIntn(100) >= pctExisting {
+		// We make a unique name for all columns by prefixing them with the table
+		// index to make it easier to reference columns from different tables.
+		return column{
+			name: fmt.Sprintf("col%s_%d",
+				strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNum()),
+		}, nil
+	}
+	q := fmt.Sprintf(`
+ SELECT column_name, data_type, is_nullable
+   FROM [SHOW COLUMNS FROM %s]
+  WHERE column_name != 'rowid'
+ORDER BY random()
+  LIMIT 1;
+`, tableName.String())
+	var col column
+	var typ string
+	if err := tx.QueryRow(q).Scan(&col.name, &typ, &col.nullable); err != nil {
+		return column{}, err
+	}
+
+	var err error
+	col.typ, err = og.typeFromTypeName(tx, typ)
+	if err != nil {
+		return column{}, err
+	}
+
+	return col, nil
 }
 
 func (og *operationGenerator) randConstraint(tx *pgx.Tx, tableName string) (string, error) {
