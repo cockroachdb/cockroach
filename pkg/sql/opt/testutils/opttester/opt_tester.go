@@ -150,10 +150,6 @@ type Flags struct {
 	// to pass.
 	UnexpectedRules RuleSet
 
-	// ExpectedMatchOnlyRules is a set of exploration rules which must match but
-	// not generate new expressions for the test to pass.
-	ExpectedMatchOnlyRules RuleSet
-
 	// ColStats is a list of ColSets for which a column statistic is requested.
 	ColStats []opt.ColSet
 
