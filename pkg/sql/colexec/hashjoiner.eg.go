@@ -30,15 +30,16 @@ func collectProbeOuter_false(
 				return nResults
 			}
 
-			hj.probeState.probeRowUnmatched[nResults] = currentID == 0
-			if currentID > 0 {
-				hj.probeState.buildIdx[nResults] = int(currentID - 1)
-			} else {
-				// If currentID == 0, then probeRowUnmatched will have been set - and
-				// we set the corresponding buildIdx to zero so that (as long as the
-				// build hash table has at least one row) we can copy the values vector
-				// without paying attention to probeRowUnmatched.
+			rowUnmatched := currentID == 0
+			hj.probeState.probeRowUnmatched[nResults] = rowUnmatched
+			if rowUnmatched {
+				// The row is unmatched, and we set the corresponding buildIdx
+				// to zero so that (as long as the build hash table has at least
+				// one row) we can copy the values vector without paying
+				// attention to probeRowUnmatched.
 				hj.probeState.buildIdx[nResults] = 0
+			} else {
+				hj.probeState.buildIdx[nResults] = int(currentID - 1)
 			}
 			{
 				var __retval_0 int
@@ -76,15 +77,16 @@ func collectProbeOuter_true(
 				return nResults
 			}
 
-			hj.probeState.probeRowUnmatched[nResults] = currentID == 0
-			if currentID > 0 {
-				hj.probeState.buildIdx[nResults] = int(currentID - 1)
-			} else {
-				// If currentID == 0, then probeRowUnmatched will have been set - and
-				// we set the corresponding buildIdx to zero so that (as long as the
-				// build hash table has at least one row) we can copy the values vector
-				// without paying attention to probeRowUnmatched.
+			rowUnmatched := currentID == 0
+			hj.probeState.probeRowUnmatched[nResults] = rowUnmatched
+			if rowUnmatched {
+				// The row is unmatched, and we set the corresponding buildIdx
+				// to zero so that (as long as the build hash table has at least
+				// one row) we can copy the values vector without paying
+				// attention to probeRowUnmatched.
 				hj.probeState.buildIdx[nResults] = 0
+			} else {
+				hj.probeState.buildIdx[nResults] = int(currentID - 1)
 			}
 			{
 				var __retval_0 int
@@ -255,7 +257,13 @@ func distinctCollectProbeOuter_false(hj *hashJoiner, batchSize int, sel []int) {
 		id := hj.ht.probeScratch.groupID[i]
 		rowUnmatched := id == 0
 		hj.probeState.probeRowUnmatched[i] = rowUnmatched
-		if !rowUnmatched {
+		if rowUnmatched {
+			// The row is unmatched, and we set the corresponding buildIdx
+			// to zero so that (as long as the build hash table has at least
+			// one row) we can copy the values vector without paying
+			// attention to probeRowUnmatched.
+			hj.probeState.buildIdx[i] = 0
+		} else {
 			hj.probeState.buildIdx[i] = int(id - 1)
 		}
 		{
@@ -282,7 +290,13 @@ func distinctCollectProbeOuter_true(hj *hashJoiner, batchSize int, sel []int) {
 		id := hj.ht.probeScratch.groupID[i]
 		rowUnmatched := id == 0
 		hj.probeState.probeRowUnmatched[i] = rowUnmatched
-		if !rowUnmatched {
+		if rowUnmatched {
+			// The row is unmatched, and we set the corresponding buildIdx
+			// to zero so that (as long as the build hash table has at least
+			// one row) we can copy the values vector without paying
+			// attention to probeRowUnmatched.
+			hj.probeState.buildIdx[i] = 0
+		} else {
 			hj.probeState.buildIdx[i] = int(id - 1)
 		}
 		{
