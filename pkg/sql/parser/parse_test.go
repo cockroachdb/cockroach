@@ -339,7 +339,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b STRING COLLATE de)`},
 		{`CREATE TABLE a (b STRING(3) COLLATE de)`},
 		{`CREATE TABLE a (b STRING[] COLLATE de)`},
-		{`CREATE TABLE a (b STRING(3)[] COLLATE de)`},
+		{`CREATE TABLE a (b STRING(3)[] COLLATE en_US)`},
 
 		{`CREATE TABLE a (LIKE b)`},
 		{`CREATE TABLE a (LIKE b, c INT8)`},
@@ -2756,6 +2756,10 @@ SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS,
 		{`REVOKE ALL PRIVILEGES ON SCHEMA foo FROM root`, `REVOKE ALL ON SCHEMA foo FROM root`},
 		{`REVOKE ALL PRIVILEGES ON SCHEMA foo.bar FROM root`, `REVOKE ALL ON SCHEMA foo.bar FROM root`},
 		{`REVOKE ALL PRIVILEGES ON SCHEMA a.b, c.d FROM root`, `REVOKE ALL ON SCHEMA a.b, c.d FROM root`},
+
+		// Check rules for normalizing collation names.
+		{`CREATE TABLE a (b STRING COLLATE "en-us")`, `CREATE TABLE a (b STRING COLLATE en_US)`},
+		{`CREATE TABLE a (b STRING COLLATE en_us)`, `CREATE TABLE a (b STRING COLLATE en_US)`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {

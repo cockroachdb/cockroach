@@ -1290,7 +1290,7 @@ func (d *DCollatedString) Compare(ctx *EvalContext, other Datum) int {
 		return 1
 	}
 	v, ok := UnwrapDatum(ctx, other).(*DCollatedString)
-	if !ok || d.Locale != v.Locale {
+	if !ok || !d.ResolvedType().Equivalent(other.ResolvedType()) {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	return bytes.Compare(d.Key, v.Key)
