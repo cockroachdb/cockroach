@@ -444,3 +444,16 @@ func constraintIsUnique(
 	       );
 	`, tableName.String(), constraintName))
 }
+
+func columnIsComputed(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+	return scanBool(tx, `
+     SELECT (
+			 SELECT is_generated
+				 FROM information_schema.columns
+				WHERE table_schema = $1
+				  AND table_name = $2
+				  AND column_name = $3
+            )
+	         = 'YES'
+`, tableName.Schema(), tableName.Object(), columnName)
+}
