@@ -23,11 +23,9 @@ import (
 
 func registerAllocator(r *testRegistry) {
 	runAllocator := func(ctx context.Context, t *test, c *cluster, start int, maxStdDev float64) {
-		const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
 
-		// Start the first `start` nodes and restore the fixture
+		// Start the first `start` nodes and restore a tpch fixture.
 		args := startArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		c.Start(ctx, t, c.Range(1, start), args)
 		db := c.Conn(ctx, 1)
@@ -36,7 +34,9 @@ func registerAllocator(r *testRegistry) {
 		m := newMonitor(ctx, c, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
-			if _, err := db.Exec(`RESTORE DATABASE tpch FROM $1`, fixturePath); err != nil {
+			if err := c.RunE(
+				ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10",
+			); err != nil {
 				t.Fatal(err)
 			}
 			return nil
@@ -46,13 +46,13 @@ func registerAllocator(r *testRegistry) {
 		// Start the remaining nodes to kick off upreplication/rebalancing.
 		c.Start(ctx, t, c.Range(start+1, c.spec.NodeCount), args)
 
-		c.Run(ctx, c.Node(1), `./workload init kv --drop`)
+		c.Run(ctx, c.Node(1), `./cockroach workload init kv --drop`)
 		for node := 1; node <= c.spec.NodeCount; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
 			// but we can't put it in monitor as-is because the test deadlocks.
 			go func() {
-				const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=127`
+				const cmd = `./cockroach workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=127`
 				l, err := t.l.ChildLogger(fmt.Sprintf(`kv-%d`, node))
 				if err != nil {
 					t.Fatal(err)
@@ -181,7 +181,8 @@ func allocatorStats(db *gosql.DB) (s replicationStats, err error) {
 	// NB: These are the storage.RangeLogEventType enum, but it's intentionally
 	// not used to avoid pulling in the dep.
 	eventTypes := []interface{}{
-		`split`, `add`, `remove`,
+		// NB: these come from storagepb.RangeLogEventType.
+		`split`, `add_voter`, `remove_voter`,
 	}
 
 	q := `SELECT extract_duration(seconds FROM now()-timestamp), "rangeID", "storeID", "eventType"` +
