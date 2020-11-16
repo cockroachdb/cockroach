@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "observedts",
@@ -12,5 +12,18 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
         "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "observedts_test",
+    srcs = ["limit_test.go"],
+    embed = [":observedts"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/stretchr/testify/require",
     ],
 )
