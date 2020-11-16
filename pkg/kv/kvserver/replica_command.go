@@ -963,35 +963,6 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	// We execute the change serially if we're not allowed to run atomic
-	// replication changes or if that was explicitly disabled.
-	st := r.ClusterSettings()
-	unroll := !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicas) ||
-		!UseAtomicReplicationChanges.Get(&st.SV)
-
-	if unroll {
-		// Legacy behavior.
-		for i := range chgs {
-			var err error
-			desc, err = r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs[i:i+1])
-			if err != nil {
-				return nil, err
-			}
-		}
-		return desc, nil
-	}
-	// Atomic replication change.
-	return r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs)
-}
-
-func (r *Replica) changeReplicasImpl(
-	ctx context.Context,
-	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
-	reason kvserverpb.RangeLogEventReason,
-	details string,
-	chgs roachpb.ReplicationChanges,
-) (updatedDesc *roachpb.RangeDescriptor, _ error) {
 	var err error
 	// If in a joint config, clean up. The assumption here is that the caller
 	// of ChangeReplicas didn't even realize that they were holding on to a

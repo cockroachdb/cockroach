@@ -34,7 +34,6 @@ const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
 	VersionAtomicChangeReplicasTrigger
-	VersionAtomicChangeReplicas
 	VersionPartitionedBackup
 	Version19_2
 	VersionStart20_1
@@ -111,17 +110,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// support atomic replication changes.
 		Key:     VersionAtomicChangeReplicasTrigger,
 		Version: roachpb.Version{Major: 19, Minor: 1, Internal: 8},
-	},
-	{
-		// VersionAtomicChangeReplicas is https://github.com/cockroachdb/cockroach/pull/39936.
-		//
-		// It provides an implementation of (*Replica).ChangeReplicas that uses
-		// atomic replication changes. The corresponding cluster setting
-		// 'kv.atomic_replication_changes.enabled' provides a killswitch (i.e.
-		// no atomic replication changes will be scheduled when it is set to
-		// 'false').
-		Key:     VersionAtomicChangeReplicas,
-		Version: roachpb.Version{Major: 19, Minor: 1, Internal: 9},
 	},
 	{
 		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
