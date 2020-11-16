@@ -365,7 +365,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// intent (i.e. we're reading transactionally) we want to read
 		// the intent regardless of our read timestamp and fall into
 		// case 8 below.
-		return p.seekVersion(p.ts, false)
+		return p.seekVersion(maxVisibleTS, p.checkUncertainty)
 	}
 
 	if p.inconsistent {
