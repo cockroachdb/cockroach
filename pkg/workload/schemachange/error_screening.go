@@ -55,16 +55,17 @@ func columnExistsOnTable(tx *pgx.Tx, tableName *tree.TableName, columnName strin
    )`, tableName.Schema(), tableName.Object(), columnName)
 }
 
-func typeExists(tx *pgx.Tx, typ tree.ResolvableTypeReference) (bool, error) {
-	if !strings.Contains(typ.SQLString(), "enum") {
+func typeExists(tx *pgx.Tx, typ *tree.TypeName) (bool, error) {
+	if !strings.Contains(typ.Object(), "enum") {
 		return true, nil
 	}
 
 	return scanBool(tx, `SELECT EXISTS (
-	SELECT typname
-		FROM pg_catalog.pg_type
-   WHERE typname = $1
-	)`, typ.SQLString())
+	SELECT ns.nspname, t.typname
+  FROM pg_catalog.pg_namespace AS ns
+  JOIN pg_catalog.pg_type AS t ON t.typnamespace = ns.oid
+ WHERE ns.nspname = $1 AND t.typname = $2
+	)`, typ.Schema(), typ.Object())
 }
 
 func tableHasRows(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {

@@ -12,6 +12,7 @@ package schemachange
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -31,23 +32,29 @@ type txTypeResolver struct {
 func (t txTypeResolver) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	rows, err := t.tx.Query(`
-  SELECT enumlabel, enumsortorder
+	schemaClause := ""
+	if name.HasExplicitSchema() {
+		schemaClause = fmt.Sprintf("AND nspname = '%s'", name.Schema())
+	}
+	rows, err := t.tx.Query(fmt.Sprintf(`
+  SELECT enumlabel, enumsortorder, pgt.oid::int
     FROM pg_enum AS pge, pg_type AS pgt, pg_namespace AS pgn
    WHERE (pgt.typnamespace = pgn.oid AND pgt.oid = pge.enumtypid)
          AND typcategory = 'E'
          AND typname = $1
-ORDER BY enumsortorder`, name.Object())
+				 %s
+ORDER BY enumsortorder`, schemaClause), name.Object())
 	if err != nil {
 		return nil, err
 	}
 	var logicalReps []string
 	var physicalReps [][]byte
 	var readOnly []bool
+	var objectID oid.Oid
 	for rows.Next() {
 		var logicalRep string
 		var order int64
-		if err := rows.Scan(&logicalRep, &order); err != nil {
+		if err := rows.Scan(&logicalRep, &order, &objectID); err != nil {
 			return nil, err
 		}
 		logicalReps = append(logicalReps, logicalRep)
@@ -60,9 +67,14 @@ ORDER BY enumsortorder`, name.Object())
 	// TODO(ajwerner): Fill in some more fields here to generate better errors
 	// down the line.
 	n := types.UserDefinedTypeName{Name: name.Object()}
+	if name.HasExplicitSchema() {
+		n.Schema = name.Schema()
+		n.ExplicitSchema = true
+	}
 	return &types.T{
 		InternalType: types.InternalType{
 			Family: types.EnumFamily,
+			Oid:    objectID,
 		},
 		TypeMeta: types.UserDefinedTypeMetadata{
 			Name: &n,

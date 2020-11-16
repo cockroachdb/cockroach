@@ -82,6 +82,17 @@ func MakeUnqualifiedTypeName(typ Name) TypeName {
 	}}
 }
 
+// MakeSchemaQualifiedTypeName returns a new type name.
+func MakeSchemaQualifiedTypeName(schema, typ string) TypeName {
+	return TypeName{objName{
+		ObjectNamePrefix: ObjectNamePrefix{
+			ExplicitSchema: true,
+			SchemaName:     Name(schema),
+		},
+		ObjectName: Name(typ),
+	}}
+}
+
 // MakeNewQualifiedTypeName creates a fully qualified type name.
 func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
 	return TypeName{objName{
