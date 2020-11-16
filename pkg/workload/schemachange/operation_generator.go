@@ -284,14 +284,14 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	typ, err := og.randType(tx, og.pctExisting(true))
+	typName, err := og.randType(tx, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
 
 	def := &tree.ColumnTableDef{
 		Name: tree.Name(columnName),
-		Type: typ,
+		Type: typName.ToUnresolvedObjectName(),
 	}
 	def.Nullable.Nullability = tree.Nullability(rand.Intn(1 + int(tree.SilentNull)))
 
@@ -299,7 +299,7 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	typeExists, err := typeExists(tx, typ)
+	typeExists, err := typeExists(tx, typName)
 	if err != nil {
 		return "", err
 	}
@@ -566,18 +566,20 @@ func (og *operationGenerator) createEnum(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	typ, err := typName.ToUnresolvedObjectName(tree.NoAnnotation)
+	schemaExists, err := schemaExists(tx, typName.Schema())
 	if err != nil {
 		return "", err
 	}
-	typeExists, err := typeExists(tx, typ)
+	typeExists, err := typeExists(tx, typName)
 	if err != nil {
 		return "", err
 	}
-	if typeExists {
-		og.expectedExecErrors.add(pgcode.DuplicateObject)
-	}
-	stmt := rowenc.RandCreateType(og.params.rng, typName.String(), "asdf")
+	codesWithConditions{
+		{code: pgcode.DuplicateObject, condition: typeExists},
+		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
+	}.add(og.expectedExecErrors)
+	stmt := rowenc.RandCreateType(og.params.rng, typName.Object(), "asdf")
+	stmt.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
 	return tree.Serialize(stmt), nil
 }
 
@@ -1491,15 +1493,7 @@ func (og *operationGenerator) getTableColumns(
 	}
 	for i := range ret {
 		c := &ret[i]
-		stmt, err := parser.ParseOne(fmt.Sprintf("SELECT 'otan wuz here'::%s", typNames[i]))
-		if err != nil {
-			return nil, err
-		}
-		c.typ, err = tree.ResolveType(
-			context.Background(),
-			stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.CastExpr).Type,
-			&txTypeResolver{tx: tx},
-		)
+		c.typ, err = og.typeFromTypeName(tx, typNames[i])
 		if err != nil {
 			return nil, err
 		}
@@ -1647,15 +1641,16 @@ func (og *operationGenerator) randSequence(
 
 }
 
-func (og *operationGenerator) randEnum(tx *pgx.Tx, pctExisting int) (tree.UnresolvedName, error) {
+func (og *operationGenerator) randEnum(tx *pgx.Tx, pctExisting int) (*tree.TypeName, error) {
 	if og.randIntn(100) >= pctExisting {
 		// Most of the time, this case is for creating enums, so it
 		// is preferable that the schema exists
 		randSchema, err := og.randSchema(tx, og.pctExisting(true))
 		if err != nil {
-			return tree.MakeUnresolvedName(), err
+			return nil, err
 		}
-		return tree.MakeUnresolvedName(randSchema, fmt.Sprintf("enum%d", og.newUniqueSeqNum())), nil
+		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("enum%d", og.newUniqueSeqNum()))
+		return &typeName, nil
 	}
 	const q = `
   SELECT schema, name
@@ -1667,9 +1662,10 @@ ORDER BY random()
 	var schemaName string
 	var typName string
 	if err := tx.QueryRow(q).Scan(&schemaName, &typName); err != nil {
-		return tree.MakeUnresolvedName(), err
+		return nil, err
 	}
-	return tree.MakeUnresolvedName(schemaName, typName), nil
+	typeName := tree.MakeSchemaQualifiedTypeName(schemaName, typName)
+	return &typeName, nil
 }
 
 // randTable returns a schema name along with a table name
@@ -1847,18 +1843,18 @@ FROM [SHOW COLUMNS FROM %s];
 	return columnNames, nil
 }
 
-func (og *operationGenerator) randType(
-	tx *pgx.Tx, enumPctExisting int,
-) (tree.ResolvableTypeReference, error) {
+func (og *operationGenerator) randType(tx *pgx.Tx, enumPctExisting int) (*tree.TypeName, error) {
 	if og.randIntn(100) <= og.params.enumPct {
 		// TODO(ajwerner): Support arrays of enums.
 		typName, err := og.randEnum(tx, enumPctExisting)
 		if err != nil {
 			return nil, err
 		}
-		return typName.ToUnresolvedObjectName(tree.NoAnnotation)
+		return typName, err
 	}
-	return rowenc.RandSortingType(og.params.rng), nil
+	typ := rowenc.RandSortingType(og.params.rng)
+	typeName := tree.MakeUnqualifiedTypeName(tree.Name(typ.SQLString()))
+	return &typeName, nil
 }
 
 func (og *operationGenerator) createSchema(tx *pgx.Tx) (string, error) {
@@ -1946,4 +1942,22 @@ func (og *operationGenerator) randIntn(topBound int) int {
 
 func (og *operationGenerator) newUniqueSeqNum() int64 {
 	return atomic.AddInt64(og.params.seqNum, 1)
+}
+
+// typeFromTypeName resolves a type string to a types.T struct so that it can be
+// compared with other types.
+func (og *operationGenerator) typeFromTypeName(tx *pgx.Tx, typeName string) (*types.T, error) {
+	stmt, err := parser.ParseOne(fmt.Sprintf("SELECT 'placeholder'::%s", typeName))
+	if err != nil {
+		return nil, err
+	}
+	typ, err := tree.ResolveType(
+		context.Background(),
+		stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.CastExpr).Type,
+		&txTypeResolver{tx: tx},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return typ, nil
 }
