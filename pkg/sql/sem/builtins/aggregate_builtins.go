@@ -1015,7 +1015,7 @@ func makeVarianceBuiltin() builtinDefinition {
 
 // builtinMustNotRun panics and indicates that a builtin cannot be run.
 func builtinMustNotRun(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
-	panic(fmt.Sprint("builtin must be overridden and cannot be run directly"))
+	panic("builtin must be overridden and cannot be run directly")
 }
 
 var _ tree.AggregateFunc = &arrayAggregate{}
@@ -3681,7 +3681,7 @@ func (a *percentileDiscAggregate) Result() (tree.Datum, error) {
 		}
 		return res, nil
 	}
-	panic(fmt.Sprint("input must either be a single fraction, or an array of fractions"))
+	panic("input must either be a single fraction, or an array of fractions")
 }
 
 // Reset implements tree.AggregateFunc interface.
@@ -3810,7 +3810,7 @@ func (a *percentileContAggregate) Result() (tree.Datum, error) {
 		}
 		return res, nil
 	}
-	panic(fmt.Sprint("input must either be a single fraction, or an array of fractions"))
+	panic("input must either be a single fraction, or an array of fractions")
 }
 
 // Reset implements tree.AggregateFunc interface.

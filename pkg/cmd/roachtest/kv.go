@@ -167,7 +167,7 @@ func registerKV(r *testRegistry) {
 			nameParts = append(nameParts, fmt.Sprintf("splt=%d", computeNumSplits(opts)))
 		}
 		if opts.sequential {
-			nameParts = append(nameParts, fmt.Sprintf("seq"))
+			nameParts = append(nameParts, "seq")
 		}
 
 		minVersion := "v2.0.0"
@@ -585,7 +585,7 @@ func registerKVRangeLookups(r *testRegistry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
-			cmd := fmt.Sprintf("./workload init kv --splits=1000 {pgurl:1}")
+			cmd := "./workload init kv --splits=1000 {pgurl:1}"
 			if err := c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
 				return err
 			}

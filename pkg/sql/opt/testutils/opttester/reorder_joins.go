@@ -65,9 +65,9 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 			ot.builder.WriteString(separator("-"))
 			ot.builder.WriteString(fmt.Sprintf("----Join Tree #%v----\n", treeNum))
 			ot.builder.WriteString(o.FormatExpr(join, memo.ExprFmtHideAll))
-			ot.builder.WriteString(fmt.Sprintf("\n----Vertexes----\n"))
+			ot.builder.WriteString("\n----Vertexes----\n")
 			ot.builder.WriteString(outputVertexes(vertexes, names, o))
-			ot.builder.WriteString(fmt.Sprintf("----Edges----\n"))
+			ot.builder.WriteString("----Edges----\n")
 			for i := range edges {
 				ot.builder.WriteString(outputEdge(edges[i], edgeOps[i], o))
 			}

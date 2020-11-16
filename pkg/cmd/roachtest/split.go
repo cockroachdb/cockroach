@@ -198,7 +198,7 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 			params.concurrency, params.readPercent, params.spanPercent, extraFlags, c.spec.NodeCount,
 			params.waitDuration.String()))
 
-		t.Status(fmt.Sprintf("waiting for splits"))
+		t.Status("waiting for splits")
 		if rc := rangeCount(); rc < params.minimumRanges || rc > params.maximumRanges {
 			return errors.Errorf("kv.kv has %d ranges, expected between %d and %d splits",
 				rc, params.minimumRanges, params.maximumRanges)

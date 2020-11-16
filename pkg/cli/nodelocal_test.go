@@ -33,7 +33,7 @@ func Example_nodelocal() {
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/file2.csv", file))
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/file1.csv", file))
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/../../file1.csv", file))
-	c.Run(fmt.Sprintf("nodelocal upload notexist.csv /test/file1.csv"))
+	c.Run("nodelocal upload notexist.csv /test/file1.csv")
 
 	// Output:
 	// nodelocal upload test.csv /test/file1.csv

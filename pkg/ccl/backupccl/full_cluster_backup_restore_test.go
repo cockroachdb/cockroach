@@ -185,7 +185,7 @@ CREATE TABLE data2.foo (a int);
 			switch table {
 			case systemschema.TableStatisticsTable.Name:
 				// createdAt and statisticsID are re-generated on RESTORE.
-				query := fmt.Sprintf("SELECT \"tableID\", name, \"columnIDs\", \"rowCount\" FROM system.table_statistics")
+				query := `SELECT "tableID", name, "columnIDs", "rowCount" FROM system.table_statistics`
 				verificationQueries[i] = query
 			case systemschema.SettingsTable.Name:
 				// We don't include the cluster version.
@@ -299,7 +299,7 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	defer cleanupEmptyCluster()
 
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
-	sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach1"))
+	sqlDB.Exec(t, "CREATE USER maxroach1")
 
 	sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2`, incrementalBackupLocation, LocalFoo)
 	sqlDBRestore.Exec(t, `RESTORE FROM $1, $2`, LocalFoo, incrementalBackupLocation)

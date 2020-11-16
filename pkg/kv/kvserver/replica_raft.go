@@ -996,9 +996,13 @@ func (r *Replica) refreshProposalsLocked(
 			if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
 				r.cleanupFailedProposalLocked(p)
 				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-				p.finishApplication(ctx, proposalResult{Err: roachpb.NewError(
-					roachpb.NewAmbiguousResultError(
-						fmt.Sprintf("unable to determine whether command was applied via snapshot")))})
+				p.finishApplication(ctx, proposalResult{
+					Err: roachpb.NewError(
+						roachpb.NewAmbiguousResultError(
+							"unable to determine whether command was applied via snapshot",
+						),
+					),
+				})
 			}
 			continue
 

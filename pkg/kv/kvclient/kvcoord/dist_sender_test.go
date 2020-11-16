@@ -392,7 +392,7 @@ func TestSendRPCOrder(t *testing.T) {
 				// The local node needs to get its attributes during sendRPC.
 				nd := &roachpb.NodeDescriptor{
 					NodeID:  6,
-					Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:6")),
+					Address: util.MakeUnresolvedAddr("tcp", "invalid.invalid:6"),
 					Locality: roachpb.Locality{
 						Tiers: tc.tiers,
 					},

@@ -98,7 +98,7 @@ func (x sqlClosedTimestampTargetInterval) Set(ctx context.Context, d time.Durati
 func (x sqlClosedTimestampTargetInterval) ResetToDefault(ctx context.Context) error {
 	var err error
 	for i, sqlDB := range x.sqlDBs {
-		q := fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration TO DEFAULT`)
+		q := `SET CLUSTER SETTING kv.closed_timestamp.target_duration TO DEFAULT`
 		if _, err = sqlDB.Exec(q); err == nil {
 			return nil
 		}

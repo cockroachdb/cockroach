@@ -249,7 +249,7 @@ func (a *allocSim) rangeInfo() allocStats {
 				return
 			}
 			resp, err := status.Metrics(context.Background(), &serverpb.MetricsRequest{
-				NodeId: fmt.Sprintf("local"),
+				NodeId: "local",
 			})
 			if err != nil {
 				log.Fatalf(context.Background(), "%v", err)

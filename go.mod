@@ -166,7 +166,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	gotest.tools v2.2.0+incompatible // indirect
-	honnef.co/go/tools v0.0.1-2019.2.3
+	honnef.co/go/tools v0.0.1-2020.1.6
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
@@ -190,6 +190,3 @@ replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.
 //
 // While this is necessary, make sure that the require block above does not diverge.
 replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560
-
-// Pin go tools to the version which does not have a flaky unused linter.
-replace honnef.co/go/tools => honnef.co/go/tools v0.0.0-20190530104931-1f0868a609b7

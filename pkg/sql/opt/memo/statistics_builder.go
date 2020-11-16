@@ -765,12 +765,10 @@ func (sb *statisticsBuilder) constrainScan(
 		// Add any not-null columns from this constraint.
 		notNullCols.UnionWith(constraint.ExtractNotNullCols(sb.evalCtx))
 	}
-	if pred != nil {
-		// Add any not-null columns from the predicate constraints.
-		for i := range pred {
-			if c := pred[i].ScalarProps().Constraints; c != nil {
-				notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
-			}
+	// Add any not-null columns from the predicate constraints.
+	for i := range pred {
+		if c := pred[i].ScalarProps().Constraints; c != nil {
+			notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
 		}
 	}
 	sb.updateNullCountsFromNotNullCols(notNullCols, s)
@@ -848,11 +846,9 @@ func (sb *statisticsBuilder) invertedConstrainScan(
 	// determine not-null columns from the constraint. However, the partial
 	// index predicate may guarantee that non-indexed columns are not-null.
 	notNullCols := relProps.NotNullCols.Copy()
-	if pred != nil {
-		for i := range pred {
-			if c := pred[i].ScalarProps().Constraints; c != nil {
-				notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
-			}
+	for i := range pred {
+		if c := pred[i].ScalarProps().Constraints; c != nil {
+			notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
 		}
 	}
 	sb.updateNullCountsFromNotNullCols(notNullCols, s)
