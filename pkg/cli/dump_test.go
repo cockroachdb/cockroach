@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -211,7 +212,10 @@ func TestDumpRandom(t *testing.T) {
 			u uuid,
 			ip inet,
 			j json,
-			PRIMARY KEY (rowid, i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip)
+			single_bit bit,
+			var_bits varbit,
+			ba varbit[],
+			PRIMARY KEY (rowid, i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip, single_bit, var_bits)
 		);
 		SET extra_float_digits = 3;
 	`, nil); err != nil {
@@ -272,6 +276,10 @@ func TestDumpRandom(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			singleBit := bitarray.Rand(rnd, 1)
+			varBits := bitarray.Rand(rnd, uint(rnd.Intn(128)) /* bit length*/).String()
+			// Constructing arrays of this format cannot have bitarrays of len 0.
+			varbitArray := fmt.Sprintf("{%s,%s}", varBits+"1", varBits+"0")
 
 			vals := []driver.Value{
 				_i,
@@ -291,15 +299,18 @@ func TestDumpRandom(t *testing.T) {
 				[]byte(u.String()),
 				[]byte(ip.String()),
 				[]byte(j.String()),
+				[]byte(singleBit.String()),
+				[]byte(varBits),
+				[]byte(varbitArray),
 			}
-			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)", vals); err != nil {
+			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)", vals); err != nil {
 				t.Fatal(err)
 			}
 			generatedRows = append(generatedRows, vals[1:])
 		}
 
 		check := func(table string) {
-			q := fmt.Sprintf("SELECT i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip, j FROM %s ORDER BY rowid", table)
+			q := fmt.Sprintf("SELECT i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip, j, single_bit, var_bits, ba FROM %s ORDER BY rowid", table)
 			nrows, err := conn.Query(q, nil)
 			if err != nil {
 				t.Fatal(err)
