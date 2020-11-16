@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -1223,16 +1222,11 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	// If all nodes in the cluster know how to handle secondary indexes with column families,
-	// write the new version into new index descriptors.
-	indexEncodingVersion := descpb.BaseIndexFormatVersion
+	indexEncodingVersion := descpb.SecondaryIndexFamilyFormatVersion
 	// We can't use st.Version.IsActive because this method is used during
 	// server setup before the cluster version has been initialized.
 	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if version != (clusterversion.ClusterVersion{}) {
-		if version.IsActive(clusterversion.VersionSecondaryIndexColumnFamilies) {
-			indexEncodingVersion = descpb.SecondaryIndexFamilyFormatVersion
-		}
 		if version.IsActive(clusterversion.VersionEmptyArraysInInvertedIndexes) {
 			indexEncodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
 		}
@@ -1266,18 +1260,6 @@ func NewTableDesc(
 				)
 			}
 			if d.PrimaryKey.Sharded {
-				// This function can sometimes be called when `st` is nil,
-				// and also before the version has been initialized. We only
-				// allow hash sharded indexes to be created if we know for
-				// certain that it supported by the cluster.
-				if st == nil {
-					return nil, invalidClusterForShardedIndexError
-				}
-				if version == (clusterversion.ClusterVersion{}) ||
-					!version.IsActive(clusterversion.VersionHashShardedIndexes) {
-					return nil, invalidClusterForShardedIndexError
-				}
-
 				if !sessionData.HashShardedIndexesEnabled {
 					return nil, hashShardedIndexesDisabledError
 				}
@@ -1589,23 +1571,6 @@ func NewTableDesc(
 
 	if err := desc.AllocateIDs(ctx); err != nil {
 		return nil, err
-	}
-
-	// If any nodes are not at version VersionPrimaryKeyColumnsOutOfFamilyZero, then return an error
-	// if a primary key column is not in column family 0.
-	if st != nil {
-		if version := st.Version.ActiveVersionOrEmpty(ctx); version != (clusterversion.ClusterVersion{}) &&
-			!version.IsActive(clusterversion.VersionPrimaryKeyColumnsOutOfFamilyZero) {
-			var colsInFamZero util.FastIntSet
-			for _, colID := range desc.Families[0].ColumnIDs {
-				colsInFamZero.Add(int(colID))
-			}
-			for _, colID := range desc.PrimaryIndex.ColumnIDs {
-				if !colsInFamZero.Contains(int(colID)) {
-					return nil, errors.Errorf("primary key column %d is not in column family 0", colID)
-				}
-			}
-		}
 	}
 
 	for i := range desc.Indexes {
