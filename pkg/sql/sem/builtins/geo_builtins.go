@@ -5705,7 +5705,7 @@ func returnCompatibilityFixedStringBuiltin(ret string) builtinDefinition {
 				return tree.NewDString(ret), nil
 			},
 			Info: infoBuilder{
-				info: fmt.Sprintf("Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits."),
+				info: "Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},

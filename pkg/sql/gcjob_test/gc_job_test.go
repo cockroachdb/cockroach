@@ -164,7 +164,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			jobRecord := jobs.Record{
-				Description:   fmt.Sprintf("GC test"),
+				Description:   "GC test",
 				Username:      security.TestUserName(),
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
@@ -174,7 +174,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			// The job record that will be used to lookup this job.
 			lookupJR := jobs.Record{
-				Description:   fmt.Sprintf("GC test"),
+				Description:   "GC test",
 				Username:      security.TestUserName(),
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,

@@ -11,7 +11,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"strings"
 	"text/template"
@@ -28,14 +27,10 @@ type rankTmplInfo struct {
 // is used by the template.
 func (r rankTmplInfo) UpdateRank() string {
 	if r.Dense {
-		return fmt.Sprintf(
-			`r.rank++`,
-		)
+		return `r.rank++`
 	}
-	return fmt.Sprintf(
-		`r.rank += r.rankIncrement
-r.rankIncrement = 1`,
-	)
+	return `r.rank += r.rankIncrement
+r.rankIncrement = 1`
 }
 
 // UpdateRankIncrement is used to encompass the different logic between
@@ -45,9 +40,7 @@ func (r rankTmplInfo) UpdateRankIncrement() string {
 	if r.Dense {
 		return ``
 	}
-	return fmt.Sprintf(
-		`r.rankIncrement++`,
-	)
+	return `r.rankIncrement++`
 }
 
 // Avoid unused warnings. These methods are used in the template.

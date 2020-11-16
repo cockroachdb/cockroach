@@ -482,7 +482,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 
 func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("cdc/tpcc-1000"),
+		Name:    "cdc/tpcc-1000",
 		Owner:   OwnerCDC,
 		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -496,7 +496,7 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("cdc/initial-scan"),
+		Name:    "cdc/initial-scan",
 		Owner:   OwnerCDC,
 		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -525,7 +525,7 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("cdc/sink-chaos"),
+		Name:    "cdc/sink-chaos",
 		Owner:   `cdc`,
 		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -540,7 +540,7 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("cdc/crdb-chaos"),
+		Name:    "cdc/crdb-chaos",
 		Owner:   `cdc`,
 		Skip:    "#37716",
 		Cluster: makeClusterSpec(4, cpu(16)),
@@ -560,7 +560,7 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("cdc/ledger"),
+		Name:  "cdc/ledger",
 		Owner: `cdc`,
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside

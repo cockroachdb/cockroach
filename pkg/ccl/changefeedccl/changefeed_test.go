@@ -59,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	crdberrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -2557,7 +2556,7 @@ func TestChangefeedProtectedTimestampsVerificationFails(t *testing.T) {
 				if err == nil {
 					return errors.Errorf("expected record to be removed")
 				}
-				if crdberrors.Is(err, protectedts.ErrNotExists) {
+				if errors.Is(err, protectedts.ErrNotExists) {
 					return nil
 				}
 				return err

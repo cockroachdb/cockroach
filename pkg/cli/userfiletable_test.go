@@ -46,7 +46,7 @@ func Example_userfile_upload() {
 	c.Run(fmt.Sprintf("userfile upload %s /test/../../file1.csv", file))
 	c.Run(fmt.Sprintf("userfile upload %s /test/./file1.csv", file))
 	c.Run(fmt.Sprintf("userfile upload %s test/file1.csv", file))
-	c.Run(fmt.Sprintf("userfile upload notexist.csv /test/file1.csv"))
+	c.Run("userfile upload notexist.csv /test/file1.csv")
 	c.Run(fmt.Sprintf("userfile upload %s /test/À.csv", file))
 	// Test fully qualified URI specifying db.schema.tablename_prefix.
 	c.Run(fmt.Sprintf("userfile upload %s userfile://defaultdb.public.foo/test/file1.csv", file))

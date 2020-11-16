@@ -949,17 +949,15 @@ func (a *aggregateFuncHolder) isDistinct(
 	if err != nil {
 		return false, err
 	}
-	if otherArgs != nil {
-		for _, arg := range otherArgs {
-			// Note that we don't need to explicitly unset ed because encoded
-			// field is never set during fingerprinting - we'll compute the
-			// encoding and return it without updating the EncDatum; therefore,
-			// simply setting Datum field to the argument is sufficient.
-			ed.Datum = arg
-			encoded, err = ed.Fingerprint(ctx, arg.ResolvedType(), alloc, encoded, nil /* acc */)
-			if err != nil {
-				return false, err
-			}
+	for _, arg := range otherArgs {
+		// Note that we don't need to explicitly unset ed because encoded
+		// field is never set during fingerprinting - we'll compute the
+		// encoding and return it without updating the EncDatum; therefore,
+		// simply setting Datum field to the argument is sufficient.
+		ed.Datum = arg
+		encoded, err = ed.Fingerprint(ctx, arg.ResolvedType(), alloc, encoded, nil /* acc */)
+		if err != nil {
+			return false, err
 		}
 	}
 

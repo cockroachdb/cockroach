@@ -55,7 +55,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			strings.Join(defaultLocations, ",")))
 	flags.StringVar(&o.vnetName, ProviderName+"-vnet-name", "common",
 		"The name of the VNet to use")
-	flags.StringVar(&o.zone, ProviderName+"-availability-zone", "", fmt.Sprintf("Availability Zone to create VMs in"))
+	flags.StringVar(&o.zone, ProviderName+"-availability-zone", "", "Availability Zone to create VMs in")
 	flags.StringVar(&o.networkDiskType, ProviderName+"-network-disk-type", "premium-disk",
 		"type of network disk [premium-disk, ultra-disk]. only used if local-ssd is false")
 	flags.Int32Var(&o.networkDiskSize, ProviderName+"-volume-size", 500,

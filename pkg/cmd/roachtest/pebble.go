@@ -94,7 +94,7 @@ func registerPebble(r *testRegistry) {
 				t.Fatal(err)
 			}
 
-			runCmd(fmt.Sprintf("rm -fr *.prof"))
+			runCmd("rm -fr *.prof")
 		}
 	}
 

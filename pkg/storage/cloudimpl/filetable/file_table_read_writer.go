@@ -804,8 +804,8 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 func (f *FileToTableSystem) revokeOtherUserTablePrivileges(
 	ctx context.Context, txn *kv.Txn, ie *sql.InternalExecutor,
 ) error {
-	getUsersQuery := fmt.Sprintf(`SELECT username FROM system.
-users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = $1`)
+	getUsersQuery := `SELECT username FROM system.
+users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = $1`
 	rows, err := ie.QueryEx(
 		ctx, "get-users", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},

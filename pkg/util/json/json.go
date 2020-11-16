@@ -1764,18 +1764,12 @@ func (j jsonArray) Concat(other JSON) (JSON, error) {
 		}
 		right := decoded.(jsonArray)
 		result := make(jsonArray, len(left)+len(right))
-		for i := range left {
-			result[i] = left[i]
-		}
-		for i := range right {
-			result[len(left)+i] = right[i]
-		}
+		copy(result, left)
+		copy(result[len(left):], right)
 		return result, nil
 	default:
 		result := make(jsonArray, len(left)+1)
-		for i := range left {
-			result[i] = left[i]
-		}
+		copy(result, left)
 		result[len(left)] = other
 		return result, nil
 	}
@@ -2083,9 +2077,7 @@ func (j jsonArray) doRemovePath(path []string) (JSON, bool, error) {
 	}
 
 	result := make(jsonArray, len(j))
-	for i := range j {
-		result[i] = j[i]
-	}
+	copy(result, j)
 	result[idx] = newVal
 
 	return result, true, nil
@@ -2112,9 +2104,7 @@ func (j jsonObject) doRemovePath(path []string) (JSON, bool, error) {
 	}
 
 	result := make(jsonObject, len(j))
-	for i := range j {
-		result[i] = j[i]
-	}
+	copy(result, j)
 	result[idx].v = newVal
 
 	return result, true, nil

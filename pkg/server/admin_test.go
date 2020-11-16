@@ -660,8 +660,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 				fmt.Sprintf("CREATE DATABASE %s", escDBName),
 				fmt.Sprintf("CREATE SCHEMA %s", schemaName),
 				fmt.Sprintf(`CREATE TABLE %s.%s (%s)`, escDBName, tblName, tableSchema),
-				fmt.Sprintf("CREATE USER readonly"),
-				fmt.Sprintf("CREATE USER app"),
+				"CREATE USER readonly",
+				"CREATE USER app",
 				fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, tblName),
 				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, tblName),
 			}
@@ -980,7 +980,7 @@ func TestAdminAPIEvents(t *testing.T) {
 				url += fmt.Sprintf("&limit=%d", tc.limit)
 			}
 			if tc.unredacted {
-				url += fmt.Sprintf("&unredacted_events=true")
+				url += "&unredacted_events=true"
 			}
 		}
 
