@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -1351,59 +1352,65 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		contains string
 		expected bool
 		tight    bool
+		unique   bool
 	}{
 		// This test uses EncodeInvertedIndexKeys and
 		// EncodeContainingInvertedIndexSpans to determine whether the first JSON
 		// value contains the second. If the first value contains the second,
 		// expected is true. Otherwise expected is false. If the spans produced for
 		// contains are tight, tight is true. Otherwise tight is false.
-		{`{}`, `{}`, true, true},
-		{`[]`, `[]`, true, true},
-		{`[]`, `{}`, false, true},
-		{`"a"`, `"a"`, true, true},
-		{`null`, `{}`, false, true},
-		{`{}`, `true`, false, true},
-		{`[[], {}]`, `[]`, true, true},
-		{`[[], {}]`, `{}`, false, true}, // Surprising, but matches Postgres' behavior.
-		{`[{"a": "a"}, {"a": "a"}]`, `[]`, true, true},
-		{`[[[["a"]]], [[["a"]]]]`, `[]`, true, true},
-		{`{}`, `{"a": {}}`, false, true},
-		{`{"a": 123.123}`, `{}`, true, true},
-		{`{"a": [{}]}`, `{"a": []}`, true, true},
-		{`{"a": [{}]}`, `{"a": {}}`, false, true},
-		{`{"a": [1]}`, `{"a": []}`, true, true},
-		{`{"a": {"b": "c"}}`, `{"a": {}}`, true, true},
-		{`{"a": {}}`, `{"a": {"b": true}}`, false, true},
-		{`[1, 2, 3, 4, "foo"]`, `[1, 2]`, true, true},
-		{`[1, 2, 3, 4, "foo"]`, `[1, "bar"]`, false, true},
-		{`{"a": {"b": [1]}}`, `{"a": {"b": [1]}}`, true, true},
-		{`{"a": {"b": [1, [2]]}}`, `{"a": {"b": [1]}}`, true, true},
-		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true, true},
-		{`{"a": {"b": false}}`, `{"a": {"b": true}}`, false, true},
-		{`[{"a": {"b": [1, [2]]}}, "d"]`, `[{"a": {"b": [[2]]}}, "d"]`, true, true},
-		{`["a", "a"]`, `"a"`, true, true},
-		{`[1, 2, 3, 1]`, `1`, true, true},
-		{`[true, false, null, 1.23, "a"]`, `"b"`, false, true},
-		{`{"a": {"b": "c", "d": "e"}, "f": "g"}`, `{"a": {"b": "c"}}`, true, true},
-		{`{"\u0000\u0001": "b"}`, `{}`, true, true},
-		{`{"\u0000\u0001": {"\u0000\u0001": "b"}}`, `{"\u0000\u0001": {}}`, true, true},
-		{`[[1], false, null]`, `[null, []]`, true, true},
-		{`[[[], {}], false, null]`, `[null, []]`, true, true},
-		{`[false, null]`, `[null, []]`, false, true},
-		{`[[], null]`, `[null, []]`, true, true},
-		{`[{"a": []}, null]`, `[null, []]`, false, true},
-		{`[{"a": [[]]}, null]`, `[null, []]`, false, true},
-		{`[{"foo": {"bar": "foobar"}}, true]`, `[true, {}]`, true, true},
-		{`[{"b": null}, {"bar": "c"}]`, `[{"b": {}}]`, false, true},
-		{`[[[[{}], [], false], false], [{}]]`, `[[[[]]]]`, true, true},
-		{`[[[[{}], [], false], false], [{}]]`, `[false]`, false, true},
-		{`[[{"a": {}, "c": "foo"}, {}], [false]]`, `[[false, {}]]`, false, false},
-		{`[[1], [2]]`, `[[1, 2]]`, false, false},
-		{`[[1, 2]]`, `[[1], [2]]`, true, true},
-		{`{"bar": [["c"]]}`, `{"bar": []}`, true, true},
-		{`{"c": [{"a": "b"}, []]}`, `{"c": [{}]}`, true, true},
-		{`[{"bar": {"foo": {}}}, {"a": []}]`, `[{}, {"a": [], "bar": {}}, {}]`, false, false},
-		{`[{"bar": [1]},{"bar": [2]}]`, `[{"bar": [1, 2]}]`, false, false},
+		//
+		// If EncodeContainingInvertedIndexSpans produces spans that are guaranteed not to
+		// contain duplicate primary keys, unique is true. Otherwise it is false.
+		{`{}`, `{}`, true, true, false},
+		{`[]`, `[]`, true, true, false},
+		{`[]`, `{}`, false, true, false},
+		{`"a"`, `"a"`, true, true, true},
+		{`null`, `{}`, false, true, false},
+		{`{}`, `true`, false, true, true},
+		{`[[], {}]`, `[]`, true, true, false},
+		{`[[], {}]`, `{}`, false, true, false}, // Surprising, but matches Postgres' behavior.
+		{`[{"a": "a"}, {"a": "a"}]`, `[]`, true, true, false},
+		{`[[[["a"]]], [[["a"]]]]`, `[]`, true, true, false},
+		{`{}`, `{"a": {}}`, false, true, false},
+		{`{"a": 123.123}`, `{}`, true, true, false},
+		{`{"a": [{}]}`, `{"a": []}`, true, true, false},
+		{`{"a": [{}]}`, `{"a": {}}`, false, true, false},
+		{`{"a": [1]}`, `{"a": []}`, true, true, false},
+		{`{"a": {"b": "c"}}`, `{"a": {}}`, true, true, false},
+		{`{"a": {}}`, `{"a": {"b": true}}`, false, true, true},
+		{`[1, 2, 3, 4, "foo"]`, `[1, 2]`, true, true, false},
+		{`[1, 2, 3, 4, "foo"]`, `[1, "bar"]`, false, true, false},
+		{`{"a": {"b": [1]}}`, `{"a": {"b": [1]}}`, true, true, true},
+		{`{"a": {"b": [1, [2]]}}`, `{"a": {"b": [1]}}`, true, true, true},
+		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true, true, false},
+		{`{"a": {"b": false}}`, `{"a": {"b": true}}`, false, true, true},
+		{`[{"a": {"b": [1, [2]]}}, "d"]`, `[{"a": {"b": [[2]]}}, "d"]`, true, true, false},
+		{`["a", "a"]`, `"a"`, true, true, true},
+		{`[1, 2, 3, 1]`, `1`, true, true, true},
+		{`[1, 2, 3, 1]`, `[1, 1]`, true, true, true},
+		{`[true, false, null, 1.23, "a"]`, `"b"`, false, true, true},
+		{`{"a": {"b": "c", "d": "e"}, "f": "g"}`, `{"a": {"b": "c"}}`, true, true, true},
+		{`{"\u0000\u0001": "b"}`, `{}`, true, true, false},
+		{`{"\u0000\u0001": {"\u0000\u0001": "b"}}`, `{"\u0000\u0001": {}}`, true, true, false},
+		{`[[1], false, null]`, `[null, []]`, true, true, false},
+		{`[[[], {}], false, null]`, `[null, []]`, true, true, false},
+		{`[false, null]`, `[null, []]`, false, true, false},
+		{`[[], null]`, `[null, []]`, true, true, false},
+		{`[{"a": []}, null]`, `[null, []]`, false, true, false},
+		{`[{"a": [[]]}, null]`, `[null, []]`, false, true, false},
+		{`[{"foo": {"bar": "foobar"}}, true]`, `[true, {}]`, true, true, false},
+		{`[{"b": null}, {"bar": "c"}]`, `[{"b": {}}]`, false, true, false},
+		{`[[[[{}], [], false], false], [{}]]`, `[[[[]]]]`, true, true, false},
+		{`[[[[{}], [], false], false], [{}]]`, `[false]`, false, true, true},
+		{`[[{"a": {}, "c": "foo"}, {}], [false]]`, `[[false, {}]]`, false, false, false},
+		{`[[1], [2]]`, `[[1, 2]]`, false, false, false},
+		{`[[1, 2]]`, `[[1], [2]]`, true, true, false},
+		{`{"bar": [["c"]]}`, `{"bar": []}`, true, true, false},
+		{`{"c": [{"a": "b"}, []]}`, `{"c": [{}]}`, true, true, false},
+		{`[{"bar": {"foo": {}}}, {"a": []}]`, `[{}, {"a": [], "bar": {}}, {}]`, false, false, false},
+		{`[{"bar": [1]},{"bar": [2]}]`, `[{"bar": [1, 2]}]`, false, false, false},
+		{`[[1], [2]]`, `[[1, 1]]`, true, true, true},
 	}
 
 	// runTest checks that evaluating `left @> right` using keys from
@@ -1411,12 +1418,16 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 	// produces the expected result.
 	// returns tight=true if the spans from EncodeContainingInvertedIndexSpans
 	// were tight, and tight=false otherwise.
-	runTest := func(left, right JSON, expected bool) (tight bool) {
+	runTest := func(left, right JSON, expected, expectUnique bool) (tight bool) {
 		keys, err := EncodeInvertedIndexKeys(nil, left)
 		require.NoError(t, err)
 
-		spansSlice, tight, err := EncodeContainingInvertedIndexSpans(nil, right)
+		spansSlice, tight, unique, err := EncodeContainingInvertedIndexSpans(nil, right)
 		require.NoError(t, err)
+
+		if unique != expectUnique {
+			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, unique)
+		}
 
 		// The spans returned by EncodeContainingInvertedIndexSpans represent the intersection
 		// of unions. So the below logic is performing a union on the inner loop
@@ -1472,7 +1483,7 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		}
 
 		// Now check that we get the same result with the inverted index spans.
-		tight := runTest(value, contains, c.expected)
+		tight := runTest(value, contains, c.expected, c.unique)
 
 		// And check that the tightness matches the expected value.
 		if tight != c.tight {
@@ -1496,8 +1507,28 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		res, err := Contains(left, right)
 		require.NoError(t, err)
 
+		// The spans will not produce duplicate primary keys if there is exactly one
+		// path ending in a scalar (i.e., not an empty object or array) after
+		// de-duplication.
+		paths, err := AllPaths(right)
+		require.NoError(t, err)
+		hasContainerLeaf := false
+		hasMultiplePaths := false
+		for i := range paths {
+			hasContainerLeaf, err = paths[i].HasContainerLeaf()
+			require.NoError(t, err)
+			if hasContainerLeaf {
+				break
+			}
+			if i > 0 && !reflect.DeepEqual(paths[i], paths[0]) {
+				hasMultiplePaths = true
+				break
+			}
+		}
+		expectUnique := !hasMultiplePaths && !hasContainerLeaf
+
 		// Now check that we get the same result with the inverted index spans.
-		runTest(left, right, res)
+		runTest(left, right, res, expectUnique)
 	}
 }
 
