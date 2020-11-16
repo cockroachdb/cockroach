@@ -846,25 +846,28 @@ func EncodeInvertedIndexTableKeys(
 //
 // Returns tight=true if the returned spans are tight and cannot produce false
 // positives. Otherwise, returns tight=false.
+//
+// Returns noDuplicates=true if the spans are guaranteed not to produce
+// duplicate primary keys. Otherwise, returns noDuplicates=false.
 func EncodeContainingInvertedIndexSpans(
 	evalCtx *tree.EvalContext, val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spans []roachpb.Spans, tight bool, err error) {
+) (spans []roachpb.Spans, tight, noDuplicates bool, err error) {
 	if val == tree.DNull {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 	datum := tree.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
 		return json.EncodeContainingInvertedIndexSpans(inKey, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
-		spans, err := encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), inKey, version)
+		spans, noDuplicates, err := encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), inKey, version)
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 		// Spans for array inverted indexes are always tight.
-		return spans, true, err
+		return spans, true /* tight */, noDuplicates, err
 	}
-	return nil, false, errors.AssertionFailedf(
+	return nil, false, false, errors.AssertionFailedf(
 		"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
 	)
 }
@@ -909,25 +912,29 @@ func encodeArrayInvertedIndexTableKeys(
 // scanned in the inverted index to evaluate a contains (@>) predicate with
 // the given array, one slice of spans per entry in the array. The input
 // inKey is prefixed to all returned keys.
+//
+// Returns noDuplicates=true if the spans are guaranteed not to produce
+// duplicate primary keys. Otherwise, returns noDuplicates=false.
 func encodeContainingArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spans []roachpb.Spans, err error) {
+) (spans []roachpb.Spans, noDuplicates bool, err error) {
 	if val.Array.Len() == 0 {
 		// All arrays contain the empty array.
 		endKey := roachpb.Key(inKey).PrefixEnd()
-		return []roachpb.Spans{{roachpb.Span{Key: inKey, EndKey: endKey}}}, nil
+		return []roachpb.Spans{{roachpb.Span{Key: inKey, EndKey: endKey}}}, false, nil
 	}
 
 	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, version)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	spans = make([]roachpb.Spans, len(keys))
 	for i, key := range keys {
 		endKey := roachpb.Key(key).PrefixEnd()
 		spans[i] = roachpb.Spans{{Key: key, EndKey: endKey}}
 	}
-	return spans, nil
+	noDuplicates = len(keys) == 1
+	return spans, noDuplicates, nil
 }
 
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys

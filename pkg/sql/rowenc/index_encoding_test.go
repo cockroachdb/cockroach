@@ -407,24 +407,28 @@ func TestInvertedIndexKey(t *testing.T) {
 
 func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	testCases := []struct {
-		value    string
-		contains string
-		expected bool
+		value        string
+		contains     string
+		expected     bool
+		noDuplicates bool
 	}{
 		// This test uses EncodeInvertedIndexTableKeys and EncodeContainingInvertedIndexSpans
 		// to determine whether the first Array value contains the second. If the first
 		// value contains the second, expected is true. Otherwise it is false.
-		{`{}`, `{}`, true},
-		{`{}`, `{1}`, false},
-		{`{1}`, `{}`, true},
-		{`{1}`, `{1}`, true},
-		{`{1}`, `{1, 2}`, false},
-		{`{1, 2}`, `{1}`, true},
-		{`{1, 2}`, `{2}`, true},
-		{`{1, 2}`, `{1, 2}`, true},
-		{`{1, 2}`, `{1, 2, 1}`, true},
-		{`{1, 2, 3}`, `{1, 2, 4}`, false},
-		{`{1, 2, 3}`, `{}`, true},
+		//
+		// If EncodeContainingInvertedIndexSpans produces spans that are guaranteed not to
+		// contain duplicate primary keys, noDuplicates is true. Otherwise it is false.
+		{`{}`, `{}`, true, false},
+		{`{}`, `{1}`, false, true},
+		{`{1}`, `{}`, true, false},
+		{`{1}`, `{1}`, true, true},
+		{`{1}`, `{1, 2}`, false, false},
+		{`{1, 2}`, `{1}`, true, true},
+		{`{1, 2}`, `{2}`, true, true},
+		{`{1, 2}`, `{1, 2}`, true, false},
+		{`{1, 2}`, `{1, 2, 1}`, true, false},
+		{`{1, 2, 3}`, `{1, 2, 4}`, false, false},
+		{`{1, 2, 3}`, `{}`, true, false},
 	}
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -437,12 +441,20 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	}
 
 	version := descpb.EmptyArraysInInvertedIndexesVersion
-	runTest := func(left, right tree.Datum, expected bool) {
+	runTest := func(left, right tree.Datum, expected, expectNoDuplicates bool) {
 		keys, err := EncodeInvertedIndexTableKeys(left, nil, version)
 		require.NoError(t, err)
 
-		spansSlice, _, err := EncodeContainingInvertedIndexSpans(&evalCtx, right, nil, version)
+		spansSlice, _, noDuplicates, err := EncodeContainingInvertedIndexSpans(&evalCtx, right, nil, version)
 		require.NoError(t, err)
+
+		if noDuplicates != expectNoDuplicates {
+			if expectNoDuplicates {
+				t.Errorf("expected spans for %s not to have duplicates, but they did", right)
+			} else {
+				t.Errorf("expected spans for %s to have duplicates, but they did not", right)
+			}
+		}
 
 		// The spans returned by EncodeContainingInvertedIndexSpans represent the
 		// intersection of unions. So the below logic is performing a union on the
@@ -491,7 +503,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		}
 
 		// Now check that we get the same result with the inverted index spans.
-		runTest(value, contains, c.expected)
+		runTest(value, contains, c.expected, c.noDuplicates)
 	}
 
 	// Run a set of randomly generated test cases.
@@ -506,8 +518,10 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		res, err := tree.ArrayContains(&evalCtx, left.(*tree.DArray), right.(*tree.DArray))
 		require.NoError(t, err)
 
+		expectNoDuplicates := (right.(*tree.DArray)).Len() == 1
+
 		// Now check that we get the same result with the inverted index spans.
-		runTest(left, right, bool(*res))
+		runTest(left, right, bool(*res), expectNoDuplicates)
 	}
 }
 
