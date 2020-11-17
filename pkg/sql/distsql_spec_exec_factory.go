@@ -29,8 +29,6 @@ import (
 )
 
 type distSQLSpecExecFactory struct {
-	planner *planner
-	dsp     *DistSQLPlanner
 	// planContexts is a utility struct that stores already instantiated
 	// planning contexts. It should not be accessed directly, use getPlanCtx()
 	// instead. The struct allows for lazy instantiation of the planning
@@ -43,9 +41,11 @@ type distSQLSpecExecFactory struct {
 		// localPlanCtx stores the local planning context of the gateway.
 		localPlanCtx *PlanningCtx
 	}
-	singleTenant  bool
+	planner       *planner
+	dsp           *DistSQLPlanner
 	planningMode  distSQLPlanningMode
 	gatewayNodeID roachpb.NodeID
+	singleTenant  bool
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}

@@ -110,35 +110,30 @@ func (s *SessionData) GetLocation() *time.Location {
 // execution on the gateway node and don't need to be propagated to the remote
 // nodes.
 type LocalOnlySessionData struct {
-	// DefaultTxnPriority indicates the default priority of newly created
-	// transactions.
-	// NOTE: we'd prefer to use tree.UserPriority here, but doing so would
-	// introduce a package dependency cycle.
-	DefaultTxnPriority int
-	// DefaultReadOnly indicates the default read-only status of newly created
-	// transactions.
-	DefaultReadOnly bool
-	// DistSQLMode indicates whether to run queries using the distributed
-	// execution engine.
-	DistSQLMode DistSQLExecMode
+	// SaveTablesPrefix indicates that a table should be created with the
+	// given prefix for the output of each subexpression in a query. If
+	// SaveTablesPrefix is empty, no tables are created.
+	SaveTablesPrefix string
+	// RemoteAddr is used to generate logging events.
+	RemoteAddr net.Addr
+	// VectorizeRowCountThreshold indicates the row count above which the
+	// vectorized execution engine will be used if possible.
+	VectorizeRowCountThreshold uint64
 	// ExperimentalDistSQLPlanningMode indicates whether the experimental
 	// DistSQL planning driven by the optimizer is enabled.
 	ExperimentalDistSQLPlanningMode ExperimentalDistSQLPlanningMode
-	// PartiallyDistributedPlansDisabled indicates whether the partially
-	// distributed plans produced by distSQLSpecExecFactory are disabled. It
-	// should be set to 'true' only in tests that verify that the old and the
-	// new factories return exactly the same physical plans.
-	// TODO(yuzefovich): remove it when deleting old sql.execFactory.
-	PartiallyDistributedPlansDisabled bool
+	// DistSQLMode indicates whether to run queries using the distributed
+	// execution engine.
+	DistSQLMode DistSQLExecMode
 	// OptimizerFKCascadesLimit is the maximum number of cascading operations that
 	// are run for a single query.
 	OptimizerFKCascadesLimit int
-	// OptimizerUseHistograms indicates whether we should use histograms for
-	// cardinality estimation in the optimizer.
-	OptimizerUseHistograms bool
-	// OptimizerUseMultiColStats indicates whether we should use multi-column
-	// statistics for cardinality estimation in the optimizer.
-	OptimizerUseMultiColStats bool
+	// ResultsBufferSize specifies the size at which the pgwire results buffer
+	// will self-flush.
+	ResultsBufferSize int64
+	// NoticeDisplaySeverity indicates the level of Severity to send notices for the given
+	// session.
+	NoticeDisplaySeverity pgnotice.DisplaySeverity
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// DatabaseIDToTempSchemaID stores the temp schema ID for every database that
@@ -155,42 +150,50 @@ type LocalOnlySessionData struct {
 	// idle in a transaction before the session is canceled.
 	// If set to 0, there is no timeout.
 	IdleInTransactionSessionTimeout time.Duration
+	// ReorderJoinsLimit indicates the number of joins at which the optimizer should
+	// stop attempting to reorder.
+	ReorderJoinsLimit int
+	// DefaultTxnPriority indicates the default priority of newly created
+	// transactions.
+	// NOTE: we'd prefer to use tree.UserPriority here, but doing so would
+	// introduce a package dependency cycle.
+	DefaultTxnPriority int
+	// DefaultReadOnly indicates the default read-only status of newly created
+	// transactions.
+	DefaultReadOnly bool
+	// PartiallyDistributedPlansDisabled indicates whether the partially
+	// distributed plans produced by distSQLSpecExecFactory are disabled. It
+	// should be set to 'true' only in tests that verify that the old and the
+	// new factories return exactly the same physical plans.
+	// TODO(yuzefovich): remove it when deleting old sql.execFactory.
+	PartiallyDistributedPlansDisabled bool
+	// OptimizerUseHistograms indicates whether we should use histograms for
+	// cardinality estimation in the optimizer.
+	OptimizerUseHistograms bool
+	// OptimizerUseMultiColStats indicates whether we should use multi-column
+	// statistics for cardinality estimation in the optimizer.
+	OptimizerUseMultiColStats bool
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool
 	// PreferLookupJoinsForFKs causes foreign key operations to prefer lookup
 	// joins.
 	PreferLookupJoinsForFKs bool
-	// RemoteAddr is used to generate logging events.
-	RemoteAddr net.Addr
 	// ZigzagJoinEnabled indicates whether the optimizer should try and plan a
 	// zigzag join.
 	ZigzagJoinEnabled bool
-	// ReorderJoinsLimit indicates the number of joins at which the optimizer should
-	// stop attempting to reorder.
-	ReorderJoinsLimit int
 	// RequireExplicitPrimaryKeys indicates whether CREATE TABLE statements should
 	// error out if no primary key is provided.
 	RequireExplicitPrimaryKeys bool
-	// VectorizeRowCountThreshold indicates the row count above which the
-	// vectorized execution engine will be used if possible.
-	VectorizeRowCountThreshold uint64
 	// ForceSavepointRestart overrides the default SAVEPOINT behavior
 	// for compatibility with certain ORMs. When this flag is set,
 	// the savepoint name will no longer be compared against the magic
 	// identifier `cockroach_restart` in order use a restartable
 	// transaction.
 	ForceSavepointRestart bool
-	// ResultsBufferSize specifies the size at which the pgwire results buffer
-	// will self-flush.
-	ResultsBufferSize int64
 	// AllowPrepareAsOptPlan must be set to allow use of
 	//   PREPARE name AS OPT PLAN '...'
 	AllowPrepareAsOptPlan bool
-	// SaveTablesPrefix indicates that a table should be created with the
-	// given prefix for the output of each subexpression in a query. If
-	// SaveTablesPrefix is empty, no tables are created.
-	SaveTablesPrefix string
 	// TempTablesEnabled indicates whether temporary tables can be created or not.
 	TempTablesEnabled bool
 	// HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
@@ -204,9 +207,6 @@ type LocalOnlySessionData struct {
 	// InsertFastPath is true if the fast path for insert (with VALUES input) may
 	// be used.
 	InsertFastPath bool
-	// NoticeDisplaySeverity indicates the level of Severity to send notices for the given
-	// session.
-	NoticeDisplaySeverity pgnotice.DisplaySeverity
 	// AlterColumnTypeGeneralEnabled is true if ALTER TABLE ... ALTER COLUMN ...
 	// TYPE x may be used for general conversions requiring online schema change/
 	AlterColumnTypeGeneralEnabled bool

@@ -582,35 +582,38 @@ const (
 // a single query.
 type PlanningCtx struct {
 	ctx             context.Context
-	ExtendedEvalCtx *extendedEvalContext
 	spanIter        physicalplan.SpanResolverIterator
+	ExtendedEvalCtx *extendedEvalContext
 	// NodesStatuses contains info for all NodeIDs that are referenced by any
 	// PhysicalPlan we generate with this context.
 	NodeStatuses map[roachpb.NodeID]NodeStatus
 
-	flowID uuid.UUID
+	// If set, the flows for the physical plan will be passed to this function.
+	// The flows are not safe for use past the lifetime of the saveFlows function.
+	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
 
-	// isLocal is set to true if we're planning this query on a single node.
-	isLocal bool
-	planner *planner
-	// ignoreClose, when set to true, will prevent the closing of the planner's
-	// current plan. Only the top-level query needs to close it, but everything
-	// else (like sub- and postqueries, or EXPLAIN ANALYZE) should set this to
-	// true to avoid double closes of the planNode tree.
-	ignoreClose bool
-	stmtType    tree.StatementType
 	// planDepth is set to the current depth of the planNode tree. It's used to
 	// keep track of whether it's valid to run a root node in a special fast path
 	// mode.
 	planDepth int
 
+	stmtType tree.StatementType
+	planner  *planner
+	flowID   uuid.UUID
+
+	// isLocal is set to true if we're planning this query on a single node.
+	isLocal bool
+
+	// ignoreClose, when set to true, will prevent the closing of the planner's
+	// current plan. Only the top-level query needs to close it, but everything
+	// else (like sub- and postqueries, or EXPLAIN ANALYZE) should set this to
+	// true to avoid double closes of the planNode tree.
+	ignoreClose bool
+
 	// noEvalSubqueries indicates that the plan expects any subqueries to not
 	// be replaced by evaluation. Should only be set by EXPLAIN.
 	noEvalSubqueries bool
 
-	// If set, the flows for the physical plan will be passed to this function.
-	// The flows are not safe for use past the lifetime of the saveFlows function.
-	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
 	// If set, the result of flowSpecsToDiagram will show the types of each stream.
 	saveDiagramShowInputTypes bool
 }

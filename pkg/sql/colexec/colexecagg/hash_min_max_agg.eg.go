@@ -92,16 +92,16 @@ func newMaxHashAggAlloc(
 }
 
 type minBoolHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Bools
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg bool
-	// col points to the output vector we are updating.
-	col coldata.Bools
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -238,16 +238,16 @@ func (a *minBoolHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minBytesHashAgg struct {
+	// col points to the output vector we are updating.
+	col *coldata.Bytes
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg []byte
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -374,16 +374,16 @@ func (a *minBytesHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minDecimalHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Decimals
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg apd.Decimal
-	// col points to the output vector we are updating.
-	col coldata.Decimals
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -504,16 +504,16 @@ func (a *minDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minInt16HashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Int16s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int16
-	// col points to the output vector we are updating.
-	col coldata.Int16s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -656,16 +656,16 @@ func (a *minInt16HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minInt32HashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Int32s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int32
-	// col points to the output vector we are updating.
-	col coldata.Int32s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -808,16 +808,16 @@ func (a *minInt32HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minInt64HashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Int64s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col coldata.Int64s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -960,16 +960,16 @@ func (a *minInt64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minFloat64HashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Float64s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg float64
-	// col points to the output vector we are updating.
-	col coldata.Float64s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1128,16 +1128,16 @@ func (a *minFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minTimestampHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Times
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg time.Time
-	// col points to the output vector we are updating.
-	col coldata.Times
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1272,16 +1272,16 @@ func (a *minTimestampHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minIntervalHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Durations
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg duration.Duration
-	// col points to the output vector we are updating.
-	col coldata.Durations
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1402,16 +1402,16 @@ func (a *minIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type minDatumHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.DatumVec
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg interface{}
-	// col points to the output vector we are updating.
-	col coldata.DatumVec
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1550,16 +1550,16 @@ func (a *minDatumHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxBoolHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Bools
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg bool
-	// col points to the output vector we are updating.
-	col coldata.Bools
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1696,16 +1696,16 @@ func (a *maxBoolHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxBytesHashAgg struct {
+	// col points to the output vector we are updating.
+	col *coldata.Bytes
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg []byte
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1832,16 +1832,16 @@ func (a *maxBytesHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxDecimalHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Decimals
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg apd.Decimal
-	// col points to the output vector we are updating.
-	col coldata.Decimals
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1962,16 +1962,16 @@ func (a *maxDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxInt16HashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Int16s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int16
-	// col points to the output vector we are updating.
-	col coldata.Int16s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2114,16 +2114,16 @@ func (a *maxInt16HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxInt32HashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Int32s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int32
-	// col points to the output vector we are updating.
-	col coldata.Int32s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2266,16 +2266,16 @@ func (a *maxInt32HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxInt64HashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Int64s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col coldata.Int64s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2418,16 +2418,16 @@ func (a *maxInt64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxFloat64HashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Float64s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg float64
-	// col points to the output vector we are updating.
-	col coldata.Float64s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2586,16 +2586,16 @@ func (a *maxFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxTimestampHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Times
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg time.Time
-	// col points to the output vector we are updating.
-	col coldata.Times
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2730,16 +2730,16 @@ func (a *maxTimestampHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxIntervalHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.Durations
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg duration.Duration
-	// col points to the output vector we are updating.
-	col coldata.Durations
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2860,16 +2860,16 @@ func (a *maxIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 }
 
 type maxDatumHashAgg struct {
+	// col points to the output vector we are updating.
+	col coldata.DatumVec
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	hashAggregateFuncBase
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg interface{}
-	// col points to the output vector we are updating.
-	col coldata.DatumVec
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool

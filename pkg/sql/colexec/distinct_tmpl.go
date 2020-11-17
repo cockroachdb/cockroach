@@ -182,22 +182,23 @@ func newPartitioner(t *types.T) (partitioner, error) {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinct_TYPEOp struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal _GOTYPE
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     _GOTYPE
 	lastValNull bool
 }
 
