@@ -1,3 +1,5 @@
+# LogicTest: !fakedist-spec-planning
+
 statement ok
 CREATE USER bar
 
