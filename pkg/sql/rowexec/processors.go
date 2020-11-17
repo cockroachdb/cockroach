@@ -303,14 +303,11 @@ func NewProcessor(
 		return newWindower(flowCtx, processorID, core.Windower, inputs[0], post, outputs[0])
 	}
 	if core.LocalPlanNode != nil {
-		numInputs := 0
-		if core.LocalPlanNode.NumInputs != nil {
-			numInputs = int(*core.LocalPlanNode.NumInputs)
-		}
+		numInputs := int(core.LocalPlanNode.NumInputs)
 		if err := checkNumInOut(inputs, outputs, numInputs, 1); err != nil {
 			return nil, err
 		}
-		processor := localProcessors[*core.LocalPlanNode.RowSourceIdx]
+		processor := localProcessors[core.LocalPlanNode.RowSourceIdx]
 		if err := processor.InitWithOutput(flowCtx, post, outputs[0]); err != nil {
 			return nil, err
 		}

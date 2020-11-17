@@ -57,18 +57,18 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	chunkSize int64,
 	spans []roachpb.Span,
 	readAsOf hlc.Timestamp,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, readAsOf)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
-	p := MakePhysicalPlan(planCtx, dsp.gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ib := &execinfrapb.BackfillerSpec{}
@@ -90,6 +90,6 @@ func (dsp *DistSQLPlanner) createBackfiller(
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
 	}
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 	return p, nil
 }
