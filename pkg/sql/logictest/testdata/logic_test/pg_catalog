@@ -2780,3 +2780,27 @@ SELECT oid FROM pg_type WHERE oid IN (19,20,24) ORDER BY oid
 
 statement ok
 SELECT * FROM pg_class WHERE oid = 10 OR oid BETWEEN 20 AND 30 OR oid = 40
+
+statement ok
+SET experimental_enable_temp_tables = 'on';
+
+statement ok
+CREATE TEMPORARY TABLE test_temp1 (id UUID PRIMARY KEY);
+CREATE UNLOGGED TABLE test_temp2 (id UUID PRIMARY KEY);
+CREATE TABLE test_temp3 (id UUID PRIMARY KEY);
+
+# we don't store UNLOGGED beyond the parser at the moment so we expect 'p' for test_temp2
+
+query T
+SELECT
+  relpersistence
+FROM
+  pg_catalog.pg_class
+WHERE
+  relname IN ('test_temp1', 'test_temp2', 'test_temp3')
+ORDER BY
+  relpersistence
+----
+p
+p
+t
