@@ -89,3 +89,21 @@ func (j JoinType) IsEmptyOutputWhenRightIsEmpty() bool {
 		return false
 	}
 }
+
+// IsLeftOuterOrFullOuter returns whether j is either LEFT OUTER or FULL OUTER
+// join type.
+func (j JoinType) IsLeftOuterOrFullOuter() bool {
+	return j == LeftOuterJoin || j == FullOuterJoin
+}
+
+// IsLeftAntiOrExceptAll returns whether j is either LEFT ANTI or EXCEPT ALL
+// join type.
+func (j JoinType) IsLeftAntiOrExceptAll() bool {
+	return j == LeftAntiJoin || j == ExceptAllJoin
+}
+
+// IsRightSemiOrRightAnti returns whether j is either RIGHT SEMI or RIGHT ANTI
+// join type.
+func (j JoinType) IsRightSemiOrRightAnti() bool {
+	return j == RightSemiJoin || j == RightAntiJoin
+}

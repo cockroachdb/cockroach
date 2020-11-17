@@ -1082,13 +1082,12 @@ func BenchmarkHashJoiner(b *testing.B) {
 										if fullOuter {
 											joinType = descpb.FullOuterJoin
 										}
-										hjSpec, err := MakeHashJoinerSpec(
+										hjSpec := MakeHashJoinerSpec(
 											joinType,
 											[]uint32{0, 1}, []uint32{2, 3},
 											sourceTypes, sourceTypes,
 											rightDistinct,
 										)
-										require.NoError(b, err)
 										hj := NewHashJoiner(
 											testAllocator, testAllocator, hjSpec,
 											leftSource, rightSource,
