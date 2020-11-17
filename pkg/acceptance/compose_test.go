@@ -16,21 +16,6 @@ import (
 	"testing"
 )
 
-func TestComposeGSS(t *testing.T) {
-	out, err := exec.Command(
-		"docker-compose",
-		"--no-ansi",
-		"-f", filepath.Join("compose", "gss", "docker-compose.yml"),
-		"up",
-		"--build",
-		"--exit-code-from", "psql",
-	).CombinedOutput()
-	if err != nil {
-		t.Log(string(out))
-		t.Fatal(err)
-	}
-}
-
 func TestComposeFlyway(t *testing.T) {
 	out, err := exec.Command(
 		"docker-compose",
