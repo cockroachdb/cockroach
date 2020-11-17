@@ -57,7 +57,7 @@ func MarshalNonLocal(sd *SessionData, proto *sessiondatapb.SessionData) {
 	proto.TemporarySchemaName = sd.SearchPath.GetTemporarySchemaName()
 	// Populate the sequences state.
 	latestValues, lastIncremented := sd.SequenceState.Export()
-	if len(latestValues) > 0 {
+	if latestValues != nil && len(latestValues) > 0 {
 		proto.SeqState.LastSeqIncremented = lastIncremented
 		for seqID, latestVal := range latestValues {
 			proto.SeqState.Seqs = append(proto.SeqState.Seqs,
