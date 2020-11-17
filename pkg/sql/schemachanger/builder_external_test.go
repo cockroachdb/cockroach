@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	schemachanger.BuilderMaker = func(s serverutils.TestServerInterface) (_ *schemachanger.Builder, cleanup func()) {
+	schemachanger.BuilderMaker = func(s serverutils.TestServerInterface) (_ *schemachanger.Builder, p interface{}, cleanup func()) {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		ip, cleanup := sql.NewInternalPlanner(
 			"foo",
@@ -31,6 +31,6 @@ func init() {
 		})
 		return schemachanger.NewBuilder(
 			planner, planner.SemaCtx(), planner.EvalContext(),
-		), cleanup
+		), planner, cleanup
 	}
 }

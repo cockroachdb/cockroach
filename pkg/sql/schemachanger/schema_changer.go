@@ -51,3 +51,24 @@ func (sc *SchemaChanger) Step(ctx context.Context) error {
 }
 
 // func (sc *SchemaChanger) alterTableCmd()
+
+type runDependencies interface {
+	withDescriptorMutationDeps(context.Context, func(ctx2 context.Context, deps depsForDescriptorMutation) error) error
+}
+
+func (sc *SchemaChanger) Run(ctx context.Context, deps runDependencies) error {
+	steps, err := compileStateToForwardSteps(ctx, sc.state)
+	if err != nil {
+		return err
+	}
+	for _, step := range steps {
+		switch t := step.(type) {
+		case descriptorMutationStep:
+			if err := deps.withDescriptorMutationDeps(ctx, t.run); err != nil {
+				return err
+			}
+		}
+		step.apply(ctx, sc)
+	}
+	return nil
+}

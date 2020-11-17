@@ -20,6 +20,8 @@ type Builder struct {
 	evalCtx *tree.EvalContext
 
 	sc schemaChangerState
+
+	modifiedDescriptors []catalog.MutableDescriptor
 }
 
 func NewBuilder(
@@ -138,6 +140,8 @@ func (b *Builder) alterTableAddColumn(
 	if err := table.AllocateIDs(ctx); err != nil {
 		return err
 	}
+	table.MaybeIncrementVersion()
+	b.modifiedDescriptors = append(b.modifiedDescriptors, table)
 
 	b.sc.elements = append(b.sc.elements, &addColumn{
 		statementID: statementID,
