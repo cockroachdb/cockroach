@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -783,34 +782,6 @@ func (p *PhysicalPlan) AddFilter(
 	return nil
 }
 
-// emptyPlan updates p in-place with a plan consisting of a single processor on
-// the gateway that generates no rows; the output stream has the same types as
-// p produces.
-func (p *PhysicalPlan) emptyPlan() {
-	s := execinfrapb.ValuesCoreSpec{
-		Columns: make([]execinfrapb.DatumInfo, len(p.GetResultTypes())),
-	}
-	for i, t := range p.GetResultTypes() {
-		s.Columns[i].Encoding = descpb.DatumEncoding_VALUE
-		s.Columns[i].Type = t
-	}
-
-	*p = PhysicalPlan{
-		Processors: []Processor{{
-			Node: p.GatewayNodeID,
-			Spec: execinfrapb.ProcessorSpec{
-				Core:        execinfrapb.ProcessorCoreUnion{Values: &s},
-				Output:      make([]execinfrapb.OutputRouterSpec, 1),
-				ResultTypes: p.GetResultTypes(),
-			},
-		}},
-		ResultRouters: []ProcessorIdx{0},
-		ResultColumns: p.ResultColumns,
-		GatewayNodeID: p.GatewayNodeID,
-		Distribution:  LocalPlan,
-	}
-}
-
 // AddLimit adds a limit and/or offset to the results of the current plan. If
 // there are multiple result streams, they are joined into a single processor
 // that is placed on the given node.
@@ -832,10 +803,6 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 	// instead of completely eliding the 0-limit plan.
 	limitZero := false
 	if count == 0 {
-		if len(p.LocalProcessors) == 0 {
-			p.emptyPlan()
-			return nil
-		}
 		count = 1
 		limitZero = true
 	}
@@ -846,36 +813,36 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 		// SELECT OFFSET 10+5 LIMIT min(1000, 20).
 		post := p.GetLastStagePost()
 		if offset != 0 {
-			if post.Limit > 0 && post.Limit <= uint64(offset) {
+			switch {
+			case post.Limit > 0 && post.Limit <= uint64(offset):
 				// The previous limit is not enough to reach the offset; we know there
 				// will be no results. For example:
 				//   SELECT * FROM (SELECT * FROM .. LIMIT 5) OFFSET 10
-				// TODO(radu): perform this optimization while propagating filters
-				// instead of having to detect it here.
-				if len(p.LocalProcessors) == 0 {
-					// Even though we know there will be no results, we don't elide the
-					// plan if there are local processors. See comment above limitZero
-					// for why.
-					p.emptyPlan()
-					return nil
-				}
 				count = 1
 				limitZero = true
-			}
-			// If we're collapsing an offset into a stage that already has a limit,
-			// we have to be careful, since offsets always are applied first, before
-			// limits. So, if the last stage already has a limit, we subtract the
-			// offset from that limit to preserve correctness.
-			//
-			// As an example, consider the requirement of applying an offset of 3 on
-			// top of a limit of 10. In this case, we need to emit 7 result rows. But
-			// just propagating the offset blindly would produce 10 result rows, an
-			// incorrect result.
-			post.Offset += uint64(offset)
-			if post.Limit > 0 {
-				// Note that this can't fall below 0 - we would have already caught this
-				// case above and returned an empty plan.
-				post.Limit -= uint64(offset)
+
+			case post.Offset > math.MaxUint64-uint64(offset):
+				// The sum of the offsets would overflow. There is no way we'll ever
+				// generate enough rows.
+				count = 1
+				limitZero = true
+
+			default:
+				// If we're collapsing an offset into a stage that already has a limit,
+				// we have to be careful, since offsets always are applied first, before
+				// limits. So, if the last stage already has a limit, we subtract the
+				// offset from that limit to preserve correctness.
+				//
+				// As an example, consider the requirement of applying an offset of 3 on
+				// top of a limit of 10. In this case, we need to emit 7 result rows. But
+				// just propagating the offset blindly would produce 10 result rows, an
+				// incorrect result.
+				post.Offset += uint64(offset)
+				if post.Limit > 0 {
+					// Note that this can't fall below 1 - we would have already caught this
+					// case above.
+					post.Limit -= uint64(offset)
+				}
 			}
 		}
 		if count != math.MaxInt64 && (post.Limit == 0 || post.Limit > uint64(count)) {

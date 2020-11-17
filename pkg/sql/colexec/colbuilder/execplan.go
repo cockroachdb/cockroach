@@ -410,7 +410,7 @@ func (r opResult) createDiskBackedSort(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen),
 		)
-	} else if post.Limit != 0 && post.Filter.Empty() && int(post.Limit+post.Offset) > 0 {
+	} else if post.Limit != 0 && post.Filter.Empty() && sumFitsInInt(post.Limit, post.Offset) {
 		// There is a limit specified with no post-process filter, so we know
 		// exactly how many rows the sorter should output. The last part of the
 		// condition is making sure there is no overflow when converting from
@@ -418,6 +418,9 @@ func (r opResult) createDiskBackedSort(
 		//
 		// Choose a top K sorter, which uses a heap to avoid storing more rows
 		// than necessary.
+		//
+		// TODO(radu): we should not choose this processor when K is very large - it
+		// is slower unless we get significantly more rows than the limit.
 		sorterMemMonitorName = fmt.Sprintf("%stopk-sort-%d", memMonitorNamePrefix, processorID)
 		var topKSorterMemAccount *mon.BoundAccount
 		if useStreamingMemAccountForBuffering {
@@ -1335,10 +1338,10 @@ func (r *postProcessResult) planPostProcessSpec(
 		r.ColumnTypes = newTypes
 	}
 	if post.Offset != 0 {
-		r.Op = colexec.NewOffsetOp(r.Op, int(post.Offset))
+		r.Op = colexec.NewOffsetOp(r.Op, post.Offset)
 	}
 	if post.Limit != 0 {
-		r.Op = colexec.NewLimitOp(r.Op, int(post.Limit))
+		r.Op = colexec.NewLimitOp(r.Op, post.Limit)
 	}
 	return nil
 }
@@ -2158,4 +2161,11 @@ func tupleContainsTuples(tuple *tree.DTuple) bool {
 		}
 	}
 	return false
+}
+
+const maxInt = uint64(int((^uint(0)) >> 1))
+
+// sumFitsInInt returns true if a+b fits in an int.
+func sumFitsInInt(a, b uint64) bool {
+	return b <= maxInt && a <= maxInt-b
 }
