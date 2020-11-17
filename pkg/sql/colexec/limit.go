@@ -22,10 +22,10 @@ import (
 type limitOp struct {
 	oneInputCloserHelper
 
-	limit int
+	limit uint64
 
 	// seen is the number of tuples seen so far.
-	seen int
+	seen uint64
 	// done is true if the limit has been reached.
 	done bool
 }
@@ -34,7 +34,7 @@ var _ colexecbase.Operator = &limitOp{}
 var _ closableOperator = &limitOp{}
 
 // NewLimitOp returns a new limit operator with the given limit.
-func NewLimitOp(input colexecbase.Operator, limit int) colexecbase.Operator {
+func NewLimitOp(input colexecbase.Operator, limit uint64) colexecbase.Operator {
 	c := &limitOp{
 		oneInputCloserHelper: makeOneInputCloserHelper(input),
 		limit:                limit,
@@ -55,10 +55,10 @@ func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 	if length == 0 {
 		return bat
 	}
-	newSeen := c.seen + length
+	newSeen := c.seen + uint64(length)
 	if newSeen >= c.limit {
 		c.done = true
-		bat.SetLength(c.limit - c.seen)
+		bat.SetLength(int(c.limit - c.seen))
 		return bat
 	}
 	c.seen = newSeen
