@@ -1326,7 +1326,9 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExp
 	// when there are no available values for the placeholders yet, because
 	// during Execute all placeholders are replaced from the AST before type
 	// checking.
-	if typ, ok := ctx.Placeholders.Type(expr.Idx); ok {
+	if typ, ok, err := ctx.Placeholders.Type(expr.Idx); err != nil {
+		return expr, err
+	} else if ok {
 		if !desired.Equivalent(typ) {
 			// This indicates there's a conflict between what the type system thinks
 			// the type for this position should be, and the actual type of the
