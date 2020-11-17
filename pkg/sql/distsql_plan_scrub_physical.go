@@ -29,15 +29,15 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	desc descpb.TableDescriptor,
 	indexDesc descpb.IndexDescriptor,
 	readAsOf hlc.Timestamp,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	spec, _, err := initTableReaderSpec(n, planCtx, nil /* indexVarMap */)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	spanPartitions, err := dsp.PartitionSpans(planCtx, n.spans)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
@@ -53,10 +53,10 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 		corePlacement[i].Core.TableReader = tr
 	}
 
-	p := MakePhysicalPlan(planCtx, dsp.gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, rowexec.ScrubTypes, execinfrapb.Ordering{})
 	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(rowexec.ScrubTypes)))
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 	return p, nil
 }

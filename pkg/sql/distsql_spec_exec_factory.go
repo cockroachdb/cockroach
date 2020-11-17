@@ -31,18 +31,8 @@ import (
 type distSQLSpecExecFactory struct {
 	planner *planner
 	dsp     *DistSQLPlanner
-	// planContexts is a utility struct that stores already instantiated
-	// planning contexts. It should not be accessed directly, use getPlanCtx()
-	// instead. The struct allows for lazy instantiation of the planning
-	// contexts which are then reused between different calls to Construct*
-	// methods. We need to keep both because every stage of processors can
-	// either be distributed or local regardless of the distribution of the
-	// previous stages.
-	planContexts struct {
-		distPlanCtx *PlanningCtx
-		// localPlanCtx stores the local planning context of the gateway.
-		localPlanCtx *PlanningCtx
-	}
+	// planCtx should not be used directly - getPlanCtx() should be used instead.
+	planCtx       *PlanningCtx
 	singleTenant  bool
 	planningMode  distSQLPlanningMode
 	gatewayNodeID roachpb.NodeID
@@ -65,32 +55,30 @@ const (
 )
 
 func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exec.Factory {
-	return &distSQLSpecExecFactory{
+	e := &distSQLSpecExecFactory{
 		planner:       p,
 		dsp:           p.extendedEvalCtx.DistSQLPlanner,
 		singleTenant:  p.execCfg.Codec.ForSystemTenant(),
 		planningMode:  planningMode,
 		gatewayNodeID: p.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
 	}
+	distribute := e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning
+	evalCtx := p.ExtendedEvalContext()
+	e.planCtx = e.dsp.NewPlanningCtx(
+		evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute,
+	)
+	return e
 }
 
 func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *PlanningCtx {
 	distribute := false
 	if e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning {
-		distribute = shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
+		distribute = shouldDistributeGivenRecAndMode(
+			recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode,
+		)
 	}
-	if distribute {
-		if e.planContexts.distPlanCtx == nil {
-			evalCtx := e.planner.ExtendedEvalContext()
-			e.planContexts.distPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute)
-		}
-		return e.planContexts.distPlanCtx
-	}
-	if e.planContexts.localPlanCtx == nil {
-		evalCtx := e.planner.ExtendedEvalContext()
-		e.planContexts.localPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute)
-	}
-	return e.planContexts.localPlanCtx
+	e.planCtx.isLocal = !distribute
+	return e.planCtx
 }
 
 // TODO(yuzefovich): consider adding machinery that would confirm that
@@ -104,9 +92,9 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 ) (exec.Node, error) {
 	if (len(cols) == 0 && len(rows) == 1) || len(rows) == 0 {
 		planCtx := e.getPlanCtx(canDistribute)
-		physPlan, err := e.dsp.createValuesPlan(
-			planCtx, getTypesFromResultColumns(cols), len(rows), nil, /* rawBytes */
-		)
+		colTypes := getTypesFromResultColumns(cols)
+		spec := e.dsp.createValuesSpec(planCtx, colTypes, len(rows), nil /* rawBytes */)
+		physPlan, err := e.dsp.createValuesPlan(planCtx, spec, colTypes)
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +131,13 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 	} else {
 		// We can create a spec for the values processor, so we don't create a
 		// valuesNode.
-		physPlan, err = e.dsp.createPhysPlanForTuples(planCtx, rows, cols)
+		colTypes := getTypesFromResultColumns(cols)
+		var spec *execinfrapb.ValuesCoreSpec
+		spec, err = e.dsp.createValuesSpecFromTuples(planCtx, rows, colTypes)
+		if err != nil {
+			return nil, err
+		}
+		physPlan, err = e.dsp.createValuesPlan(planCtx, spec, colTypes)
 	}
 	if err != nil {
 		return nil, err
@@ -180,7 +174,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// TODO(yuzefovich): pay attention to the soft limits.
 	recommendation := canDistribute
 	planCtx := e.getPlanCtx(recommendation)
-	p := MakePhysicalPlan(planCtx, e.gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 
 	// Phase 1: set up all necessary infrastructure for table reader planning
 	// below. This phase is equivalent to what execFactory.ConstructScan does.
@@ -269,7 +263,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 
 	err = e.dsp.planTableReaders(
 		e.getPlanCtx(recommendation),
-		&p,
+		p,
 		&tableReaderPlanningInfo{
 			spec:                  trSpec,
 			post:                  post,
@@ -286,7 +280,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		},
 	)
 
-	return makePlanMaybePhysical(&p, nil /* planNodesToClose */), err
+	return makePlanMaybePhysical(p, nil /* planNodesToClose */), err
 }
 
 // checkExprsAndMaybeMergeLastStage is a helper method that returns a
@@ -728,6 +722,15 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 func (e *distSQLSpecExecFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
 ) (exec.Plan, error) {
+	if len(subqueries) != 0 {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: subqueries")
+	}
+	if len(cascades) != 0 {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: cascades")
+	}
+	if len(checks) != 0 {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: checks")
+	}
 	return constructPlan(e.planner, root, subqueries, cascades, checks)
 }
 
@@ -740,6 +743,16 @@ func (e *distSQLSpecExecFactory) ConstructExplainOpt(
 func (e *distSQLSpecExecFactory) ConstructExplain(
 	options *tree.ExplainOptions, analyze bool, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
+	// We cannot create the explained plan in the same PlanInfrastructure with the
+	// "outer" plan. Create a new PlanningCtx for the rest of the plan.
+	// TODO(radu): this is a hack and won't work if the result of the explain
+	// feeds into a join or union (on the right-hand side). Move to a model like
+	// ConstructExplainPlan, where we can build the inner plan using a separate
+	// factory instance.
+	planCtxCopy := *e.planCtx
+	planCtxCopy.infra = physicalplan.MakePhysicalInfrastructure(e.planCtx.infra.FlowID, e.planCtx.infra.GatewayNodeID)
+	e.planCtx = &planCtxCopy
+
 	// TODO(yuzefovich): make sure to return the same nice error in some
 	// variants of EXPLAIN when subqueries are present as we do in the old path.
 	// TODO(yuzefovich): make sure that local plan nodes that create

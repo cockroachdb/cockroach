@@ -101,11 +101,7 @@ func distRestore(
 		return nil
 	}
 
-	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
-	if err != nil {
-		return err
-	}
-	p := sql.MakePhysicalPlan(planCtx, gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 
 	// Plan SplitAndScatter in a round-robin fashion.
 	splitAndScatterStageID := p.NewStageOnNodes(nodes)
@@ -203,7 +199,7 @@ func distRestore(
 		}
 	}
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
@@ -228,7 +224,7 @@ func distRestore(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
+	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 	return rowResultWriter.Err()
 }
 

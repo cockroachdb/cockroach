@@ -157,7 +157,7 @@ func distChangefeedFlow(
 		UserProto:    execCtx.User().EncodeProto(),
 	}
 
-	p := sql.MakePhysicalPlan(planCtx, gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
 	p.AddSingleGroupStage(
 		gatewayNodeID,
@@ -167,7 +167,7 @@ func distChangefeedFlow(
 	)
 
 	p.PlanToStreamColMap = []int{1, 2, 3}
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	resultRows := makeChangefeedResultWriter(resultsCh)
 	recv := sql.MakeDistSQLReceiver(
@@ -195,7 +195,7 @@ func distChangefeedFlow(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, finishedSetupFn)()
+	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)()
 	return resultRows.Err()
 }
 
