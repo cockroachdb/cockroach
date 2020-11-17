@@ -2780,3 +2780,26 @@ SELECT oid FROM pg_type WHERE oid IN (19,20,24) ORDER BY oid
 
 statement ok
 SELECT * FROM pg_class WHERE oid = 10 OR oid BETWEEN 20 AND 30 OR oid = 40
+
+statement ok
+SET experimental_enable_temp_tables = 'on';
+
+statement ok
+CREATE TEMPORARY TABLE test_temp1 (id UUID PRIMARY KEY);
+CREATE TEMPORARY TABLE test_temp2 (id UUID PRIMARY KEY);
+CREATE TEMPORARY TABLE test_temp3 (id UUID PRIMARY KEY);
+CREATE TEMPORARY TABLE test_temp4 (id UUID PRIMARY KEY);
+
+query T
+SELECT relname FROM pg_catalog.pg_class WHERE relpersistence = 't'
+----
+test_temp1
+test_temp2
+test_temp3
+test_temp4
+
+statement ok
+DROP TABLE test_temp1;
+DROP TABLE test_temp2;
+DROP TABLE test_temp3;
+DROP TABLE test_temp4;
