@@ -299,6 +299,7 @@ func (ifr *invertedFilterer) execStatsForTrace() *execstatspb.ComponentStats {
 			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(ifr.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(ifr.diskMonitor.MaximumBytes())),
 		},
+		Output: ifr.Out.Stats(),
 	}
 }
 
