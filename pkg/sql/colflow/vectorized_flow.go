@@ -553,6 +553,7 @@ func newVectorizedFlowCreator(
 		flowID:                         flowID,
 		exprHelper:                     creator.exprHelper,
 		typeResolver:                   typeResolver,
+		procIdxQueue:                   creator.procIdxQueue,
 		leaves:                         creator.leaves,
 		monitors:                       creator.monitors,
 		accounts:                       creator.accounts,
