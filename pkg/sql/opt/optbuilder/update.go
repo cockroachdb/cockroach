@@ -341,6 +341,8 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 			private.PassthroughCols = append(private.PassthroughCols, col.id)
 		}
 	}
-	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, mb.checks, private)
+	mb.outScope.expr = mb.b.factory.ConstructUpdate(
+		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
+	)
 	mb.buildReturning(returning)
 }
