@@ -135,8 +135,10 @@ func TestStopperMultipleStopees(t *testing.T) {
 
 func TestStopperStartFinishTasks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := stop.NewStopper()
+
 	ctx := context.Background()
+	s := stop.NewStopper()
+	defer s.Stop(ctx)
 
 	if err := s.RunTask(ctx, "test", func(ctx context.Context) {
 		go s.Stop(ctx)

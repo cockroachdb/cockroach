@@ -480,8 +480,11 @@ func (s *Stopper) Stop(ctx context.Context) {
 		return
 	}
 
-	defer s.Recover(ctx)
-	defer unregister(s)
+	defer func() {
+		s.Recover(ctx)
+		unregister(s)
+		close(s.stopped)
+	}()
 
 	if log.V(1) {
 		file, line, _ := caller.Lookup(1)
@@ -495,7 +498,6 @@ func (s *Stopper) Stop(ctx context.Context) {
 	if r := recover(); r != nil {
 		go s.Quiesce(ctx)
 		close(s.stopper)
-		close(s.stopped)
 		s.mu.Lock()
 		for _, c := range s.mu.closers {
 			go c.Close()
@@ -518,7 +520,6 @@ func (s *Stopper) Stop(ctx context.Context) {
 	for _, c := range s.mu.closers {
 		c.Close()
 	}
-	close(s.stopped)
 }
 
 // ShouldQuiesce returns a channel which will be closed when Stop() has been
