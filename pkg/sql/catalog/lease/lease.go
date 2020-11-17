@@ -527,14 +527,6 @@ func (l *descriptorSet) findVersion(version descpb.DescriptorVersion) *descripto
 }
 
 type descriptorState struct {
-	id      descpb.ID
-	stopper *stop.Stopper
-
-	// renewalInProgress is an atomic indicator for when a renewal for a
-	// lease has begun. This is atomic to prevent multiple routines from
-	// entering renewal initialization.
-	renewalInProgress int32
-
 	mu struct {
 		syncutil.Mutex
 
@@ -559,6 +551,14 @@ type descriptorState struct {
 		// ignored.
 		acquisitionsInProgress int
 	}
+
+	stopper *stop.Stopper
+	id      descpb.ID
+
+	// renewalInProgress is an atomic indicator for when a renewal for a
+	// lease has begun. This is atomic to prevent multiple routines from
+	// entering renewal initialization.
+	renewalInProgress int32
 }
 
 // ensureVersion ensures that the latest version >= minVersion. It will
