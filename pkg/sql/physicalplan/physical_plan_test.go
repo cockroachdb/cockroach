@@ -311,9 +311,11 @@ func TestProjectionAndRendering(t *testing.T) {
 
 	for testIdx, tc := range testCases {
 		p := PhysicalPlan{
-			Processors: []Processor{
-				{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
-				{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
+			PhysicalInfrastructure: &PhysicalInfrastructure{
+				Processors: []Processor{
+					{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
+					{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
+				},
 			},
 			ResultRouters: []ProcessorIdx{0, 1},
 			Distribution:  LocalPlan,

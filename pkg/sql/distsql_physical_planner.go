@@ -588,7 +588,7 @@ type PlanningCtx struct {
 	// PhysicalPlan we generate with this context.
 	NodeStatuses map[roachpb.NodeID]NodeStatus
 
-	flowID uuid.UUID
+	infra physicalplan.PhysicalInfrastructure
 
 	// isLocal is set to true if we're planning this query on a single node.
 	isLocal bool
@@ -616,6 +616,17 @@ type PlanningCtx struct {
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
+
+// NewPhysicalPlan creates an empty PhysicalPlan, backed by the
+// PlanInfrastructure in the planning context.
+//
+// Note that any processors created in the physical plan cannot be discarded;
+// they have to be part of the final plan.
+func (p *PlanningCtx) NewPhysicalPlan() *PhysicalPlan {
+	return &PhysicalPlan{
+		PhysicalPlan: physicalplan.MakePhysicalPlan(&p.infra),
+	}
+}
 
 // EvalContext returns the associated EvalContext, or nil if there isn't one.
 func (p *PlanningCtx) EvalContext() *tree.EvalContext {
@@ -706,18 +717,6 @@ type PhysicalPlan struct {
 	// DistSQLReceiver gets rows of the desired schema from the output
 	// processor.
 	PlanToStreamColMap []int
-}
-
-// MakePhysicalPlan returns a new PhysicalPlan.
-func MakePhysicalPlan(planCtx *PlanningCtx, gatewayNodeID roachpb.NodeID) PhysicalPlan {
-	return PhysicalPlan{
-		PhysicalPlan: physicalplan.MakePhysicalPlan(planCtx.flowID, gatewayNodeID),
-	}
-}
-
-func (dsp *DistSQLPlanner) newPhysicalPlan(planCtx *PlanningCtx) *PhysicalPlan {
-	p := MakePhysicalPlan(planCtx, dsp.gatewayNodeID)
-	return &p
 }
 
 // makePlanToStreamColMap initializes a new PhysicalPlan.PlanToStreamColMap. The
@@ -1168,7 +1167,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		return nil, err
 	}
 
-	p := dsp.newPhysicalPlan(planCtx)
+	p := planCtx.NewPhysicalPlan()
 	err = dsp.planTableReaders(
 		planCtx,
 		p,
@@ -2224,7 +2223,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	planCtx *PlanningCtx, n *zigzagJoinNode,
 ) (plan *PhysicalPlan, err error) {
-	plan = dsp.newPhysicalPlan(planCtx)
+	plan = planCtx.NewPhysicalPlan()
 
 	tables := make([]descpb.TableDescriptor, len(n.sides))
 	indexOrdinals := make([]uint32, len(n.sides))
@@ -2521,11 +2520,13 @@ func (dsp *DistSQLPlanner) planJoiners(
 	//
 	//  - The routers of the joiner processors are the result routers of the plan.
 
-	p := dsp.newPhysicalPlan(planCtx)
-	leftRouters, rightRouters := physicalplan.MergePlans(
+	p := planCtx.NewPhysicalPlan()
+	physicalplan.MergePlans(
 		&p.PhysicalPlan, &info.leftPlan.PhysicalPlan, &info.rightPlan.PhysicalPlan,
 		info.leftPlanDistribution, info.rightPlanDistribution,
 	)
+	leftRouters := info.leftPlan.ResultRouters
+	rightRouters := info.rightPlan.ResultRouters
 
 	// Nodes where we will run the join processors.
 	var nodes []roachpb.NodeID
@@ -2729,7 +2730,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	// continue the DistSQL planning recursion on that planNode.
 	seenTop := false
 	nParents := uint32(0)
-	p := dsp.newPhysicalPlan(planCtx)
+	p := planCtx.NewPhysicalPlan()
 	// This will be set to first DistSQL-enabled planNode we find, if any. We'll
 	// modify its parent later to connect its source to the DistSQL-planned
 	// subtree.
@@ -2788,9 +2789,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	}
 	wrapper.firstNotWrapped = firstNotWrapped
 
-	idx := uint32(len(p.LocalProcessors))
-	p.LocalProcessors = append(p.LocalProcessors, wrapper)
-	p.LocalProcessorIndexes = append(p.LocalProcessorIndexes, &idx)
+	localProcIdx := p.AddLocalProcessor(wrapper)
 	var input []execinfrapb.InputSyncSpec
 	if firstNotWrapped != nil {
 		// We found a DistSQL-plannable subtree - create an input spec for it.
@@ -2805,9 +2804,9 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 		Spec: execinfrapb.ProcessorSpec{
 			Input: input,
 			Core: execinfrapb.ProcessorCoreUnion{LocalPlanNode: &execinfrapb.LocalPlanNodeSpec{
-				RowSourceIdx: &idx,
-				NumInputs:    &nParents,
-				Name:         &name,
+				RowSourceIdx: uint32(localProcIdx),
+				NumInputs:    nParents,
+				Name:         name,
 			}},
 			Post: execinfrapb.PostProcessSpec{},
 			Output: []execinfrapb.OutputRouterSpec{{
@@ -2864,9 +2863,9 @@ func (dsp *DistSQLPlanner) createValuesSpec(
 func (dsp *DistSQLPlanner) createValuesPlan(
 	planCtx *PlanningCtx, spec *execinfrapb.ValuesCoreSpec, resultTypes []*types.T,
 ) (*PhysicalPlan, error) {
-	p := dsp.newPhysicalPlan(planCtx)
+	p := planCtx.NewPhysicalPlan()
 
-	p.Processors = []physicalplan.Processor{{
+	pIdx := p.AddProcessor(physicalplan.Processor{
 		// TODO: find a better node to place processor at
 		Node: dsp.gatewayNodeID,
 		Spec: execinfrapb.ProcessorSpec{
@@ -2874,8 +2873,8 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 			Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
 			ResultTypes: resultTypes,
 		},
-	}}
-	p.ResultRouters = []physicalplan.ProcessorIdx{0}
+	})
+	p.ResultRouters = []physicalplan.ProcessorIdx{pIdx}
 	p.Distribution = physicalplan.LocalPlan
 	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(resultTypes)))
 
@@ -3228,7 +3227,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		}
 	}
 
-	p := dsp.newPhysicalPlan(planCtx)
+	p := planCtx.NewPhysicalPlan()
 	p.SetRowEstimates(&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
 
 	// Merge the plans' PlanToStreamColMap, which we know are equivalent.
@@ -3251,7 +3250,9 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	var mergeOrdering execinfrapb.Ordering
 
 	// Merge processors, streams, result routers, and stage counter.
-	leftRouters, rightRouters := physicalplan.MergePlans(
+	leftRouters := leftPlan.ResultRouters
+	rightRouters := rightPlan.ResultRouters
+	physicalplan.MergePlans(
 		&p.PhysicalPlan, &leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
 		// In the old execFactory we can only have either local or fully
 		// distributed plans, so checking the last stage is sufficient to get
@@ -3552,7 +3553,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	planCtx := &PlanningCtx{
 		ctx:             ctx,
 		ExtendedEvalCtx: evalCtx,
-		flowID:          uuid.FastMakeV4(),
+		infra:           physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewayNodeID),
 		isLocal:         !distribute,
 		planner:         planner,
 	}
@@ -3605,7 +3606,7 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 		)
 	}
 
-	// Set up the endpoints for p.streams.
+	// Set up the endpoints for plan.Streams.
 	plan.PopulateEndpoints()
 
 	// Set up the endpoint for the final result.

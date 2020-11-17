@@ -171,12 +171,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 						if len(spec.Processors) == 1 &&
 							spec.Processors[0].Core.LocalPlanNode != nil {
 							rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
-							if rsidx != nil {
-								lp := localState.LocalProcs[*rsidx]
-								if z, ok := lp.(colflow.VectorizeAlwaysException); ok {
-									if z.IsException() {
-										returnVectorizationSetupError = false
-									}
+							lp := localState.LocalProcs[rsidx]
+							if z, ok := lp.(colflow.VectorizeAlwaysException); ok {
+								if z.IsException() {
+									returnVectorizationSetupError = false
 								}
 							}
 						}

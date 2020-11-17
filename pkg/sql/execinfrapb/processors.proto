@@ -134,9 +134,9 @@ message NoopCoreSpec {
 // planNodes. See LocalProcessors and LocalProcessorIndexes on
 // distsqlplan.PhysicalPlan.
 message LocalPlanNodeSpec {
-  optional uint32 RowSourceIdx = 1;
-  optional uint32 NumInputs = 2;
-  optional string Name = 3;
+  optional uint32 RowSourceIdx = 1 [(gogoproto.nullable) = false];
+  optional uint32 NumInputs = 2 [(gogoproto.nullable) = false];
+  optional string Name = 3 [(gogoproto.nullable) = false];
 }
 
 message MetadataTestSenderSpec {

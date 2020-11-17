@@ -174,7 +174,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// TODO(yuzefovich): pay attention to the soft limits.
 	recommendation := canDistribute
 	planCtx := e.getPlanCtx(recommendation)
-	p := MakePhysicalPlan(planCtx, e.gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 
 	// Phase 1: set up all necessary infrastructure for table reader planning
 	// below. This phase is equivalent to what execFactory.ConstructScan does.
@@ -263,7 +263,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 
 	err = e.dsp.planTableReaders(
 		e.getPlanCtx(recommendation),
-		&p,
+		p,
 		&tableReaderPlanningInfo{
 			spec:                  trSpec,
 			post:                  post,
@@ -280,7 +280,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		},
 	)
 
-	return makePlanMaybePhysical(&p, nil /* planNodesToClose */), err
+	return makePlanMaybePhysical(p, nil /* planNodesToClose */), err
 }
 
 // checkExprsAndMaybeMergeLastStage is a helper method that returns a
@@ -722,6 +722,15 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 func (e *distSQLSpecExecFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
 ) (exec.Plan, error) {
+	if len(subqueries) != 0 {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: subqueries")
+	}
+	if len(cascades) != 0 {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: cascades")
+	}
+	if len(checks) != 0 {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: checks")
+	}
 	return constructPlan(e.planner, root, subqueries, cascades, checks)
 }
 
@@ -734,6 +743,16 @@ func (e *distSQLSpecExecFactory) ConstructExplainOpt(
 func (e *distSQLSpecExecFactory) ConstructExplain(
 	options *tree.ExplainOptions, analyze bool, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
+	// We cannot create the explained plan in the same PlanInfrastructure with the
+	// "outer" plan. Create a new PlanningCtx for the rest of the plan.
+	// TODO(radu): this is a hack and won't work if the result of the explain
+	// feeds into a join or union (on the right-hand side). Move to a model like
+	// ConstructExplainPlan, where we can build the inner plan using a separate
+	// factory instance.
+	planCtxCopy := *e.planCtx
+	planCtxCopy.infra = physicalplan.MakePhysicalInfrastructure(e.planCtx.infra.FlowID, e.planCtx.infra.GatewayNodeID)
+	e.planCtx = &planCtxCopy
+
 	// TODO(yuzefovich): make sure to return the same nice error in some
 	// variants of EXPLAIN when subqueries are present as we do in the old path.
 	// TODO(yuzefovich): make sure that local plan nodes that create
