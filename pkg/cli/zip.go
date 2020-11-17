@@ -645,7 +645,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 						func(ctx context.Context) error {
 							entries, err = status.LogFile(
 								ctx, &serverpb.LogFileRequest{
-									NodeId: id, File: file.Name, Redact: zipCtx.redactLogs, KeepRedactable: true,
+									NodeId: id, File: file.Name, Redact: zipCtx.redactLogs,
 								})
 							return err
 						}); err != nil {

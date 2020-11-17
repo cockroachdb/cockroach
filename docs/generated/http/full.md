@@ -1300,7 +1300,6 @@ information about the resources on a node used by that table.
 | node_id | [string](#cockroach.server.serverpb.LogFileRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. |
 | file | [string](#cockroach.server.serverpb.LogFileRequest-string) |  |  |
 | redact | [bool](#cockroach.server.serverpb.LogFileRequest-bool) |  | redact, if true, requests redaction of sensitive data away from the retrieved log entries. Only admin users can send a request with redact = false. |
-| keep_redactable | [bool](#cockroach.server.serverpb.LogFileRequest-bool) |  | keep_redactable, if true, requests that retrieved entries preserve the redaction markers if any were present in the log files. If false, redaction markers are stripped away. Note that redact = false && redactable = false implies "flat" entries with all sensitive information enclosed and no markers; this is suitable for backward-compatibility with RPC clients from prior the introduction of redactable logs. |
 
 
 
@@ -1343,7 +1342,6 @@ information about the resources on a node used by that table.
 | max | [string](#cockroach.server.serverpb.LogsRequest-string) |  |  |
 | pattern | [string](#cockroach.server.serverpb.LogsRequest-string) |  |  |
 | redact | [bool](#cockroach.server.serverpb.LogsRequest-bool) |  | redact, if true, requests redaction of sensitive data away from the retrieved log entries. Only admin users can send a request with redact = false. |
-| keep_redactable | [bool](#cockroach.server.serverpb.LogsRequest-bool) |  | keep_redactable, if true, requests that retrieved entries preserve the redaction markers if any were present in the log files. If false, redaction markers are stripped away. Note that redact = false && redactable = false implies "flat" entries with all sensitive information enclosed and no markers; this is suitable for backward-compatibility with RPC clients from prior the introduction of redactable logs. |
 
 
 
