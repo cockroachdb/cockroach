@@ -43,10 +43,9 @@ type Materializer struct {
 	// row is the memory used for the output row.
 	row sqlbase.EncDatumRow
 
-	// Fields to store the returned results of next() to be passed through an
+	// outputRow stores the returned results of next() to be passed through an
 	// adapter.
-	outputRow      sqlbase.EncDatumRow
-	outputMetadata *execinfrapb.ProducerMetadata
+	outputRow sqlbase.EncDatumRow
 
 	// cancelFlow will return a function to cancel the context of the flow. It is
 	// a function in order to be lazily evaluated, since the context cancellation
@@ -150,48 +149,54 @@ func (m *Materializer) Start(ctx context.Context) context.Context {
 // use only. The purpose of having this function is to not create an anonymous
 // function on every call to Next().
 func (m *Materializer) nextAdapter() {
-	m.outputRow, m.outputMetadata = m.next()
+	m.outputRow = m.next()
 }
 
 // next is the logic of Next() extracted in a separate method to be used by an
-// adapter to be able to wrap the latter with a catcher.
-func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if m.State == execinfra.StateRunning {
-		if m.batch == nil || m.curIdx >= m.batch.Length() {
-			// Get a fresh batch.
-			m.batch = m.input.Next(m.Ctx)
+// adapter to be able to wrap the latter with a catcher. nil is returned when
+// a zero-length batch is encountered.
+func (m *Materializer) next() sqlbase.EncDatumRow {
+	if m.batch == nil || m.curIdx >= m.batch.Length() {
+		// Get a fresh batch.
+		m.batch = m.input.Next(m.Ctx)
 
-			if m.batch.Length() == 0 {
-				m.MoveToDraining(nil /* err */)
-				return nil, m.DrainHelper()
-			}
-			m.curIdx = 0
+		if m.batch.Length() == 0 {
+			return nil
 		}
-		sel := m.batch.Selection()
-
-		rowIdx := m.curIdx
-		if sel != nil {
-			rowIdx = sel[m.curIdx]
-		}
-		m.curIdx++
-
-		typs := m.OutputTypes()
-		for colIdx := 0; colIdx < len(typs); colIdx++ {
-			col := m.batch.ColVec(colIdx)
-			m.row[colIdx].Datum = PhysicalTypeColElemToDatum(col, rowIdx, &m.da, &typs[colIdx])
-		}
-		return m.ProcessRowHelper(m.row), nil
+		m.curIdx = 0
 	}
-	return nil, m.DrainHelper()
+	sel := m.batch.Selection()
+
+	rowIdx := m.curIdx
+	if sel != nil {
+		rowIdx = sel[m.curIdx]
+	}
+	m.curIdx++
+
+	typs := m.OutputTypes()
+	for colIdx := 0; colIdx < len(typs); colIdx++ {
+		col := m.batch.ColVec(colIdx)
+		m.row[colIdx].Datum = PhysicalTypeColElemToDatum(col, rowIdx, &m.da, &typs[colIdx])
+	}
+	return m.ProcessRowHelper(m.row)
 }
 
 // Next is part of the execinfra.RowSource interface.
 func (m *Materializer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if err := execerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
-		m.MoveToDraining(err)
-		return nil, m.DrainHelper()
+	for m.State == execinfra.StateRunning {
+		if err := execerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
+			m.MoveToDraining(err)
+			continue
+		}
+		if m.outputRow == nil {
+			// Zero-length batch was encountered, move to draining.
+			m.MoveToDraining(nil /* err */)
+			continue
+		}
+		return m.outputRow, nil
 	}
-	return m.outputRow, m.outputMetadata
+	// Forward any metadata.
+	return nil, m.DrainHelper()
 }
 
 // InternalClose helps implement the execinfra.RowSource interface.
