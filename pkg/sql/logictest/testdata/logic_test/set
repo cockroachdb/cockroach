@@ -341,3 +341,12 @@ SET enable_zigzag_join = on;
 SET enable_zigzag_join = off;
 SET enable_zigzag_join = true;
 SET enable_zigzag_join = false
+
+statement ok
+SET standard_conforming_strings=true
+
+statement ok
+SET standard_conforming_strings='true'
+
+statement ok
+SET standard_conforming_strings='on'
