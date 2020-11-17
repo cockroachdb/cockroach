@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -58,6 +59,18 @@ func pauseNodeLivenessHeartbeatLoops(mtc *multiTestContext) func() {
 	var enableFns []func()
 	for _, nl := range mtc.nodeLivenesses {
 		enableFns = append(enableFns, nl.PauseHeartbeatLoopForTest())
+	}
+	return func() {
+		for _, fn := range enableFns {
+			fn()
+		}
+	}
+}
+
+func pauseNodeLivenessHeartbeatLoopsTC(tc *testcluster.TestCluster) func() {
+	var enableFns []func()
+	for _, server := range tc.Servers {
+		enableFns = append(enableFns, server.NodeLiveness().(*liveness.NodeLiveness).PauseHeartbeatLoopForTest())
 	}
 	return func() {
 		for _, fn := range enableFns {

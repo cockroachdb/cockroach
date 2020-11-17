@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -1098,7 +1099,7 @@ func (tc *TestCluster) Restart() error {
 // RestartServer uses the cached ServerArgs to restart a Server specified by
 // the passed index.
 func (tc *TestCluster) RestartServer(idx int) error {
-	if !tc.serverStopped(idx) {
+	if !tc.ServerStopped(idx) {
 		return errors.Errorf("server %d must be stopped before attempting to restart", idx)
 	}
 	serverArgs := tc.serverArgs[idx]
@@ -1116,7 +1117,7 @@ func (tc *TestCluster) RestartServer(idx int) error {
 		serverArgs.Addr = ""
 		// Try and point the server to a live server in the cluster to join.
 		for i := range tc.Servers {
-			if !tc.serverStopped(i) {
+			if !tc.ServerStopped(i) {
 				serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
 			}
 		}
@@ -1151,12 +1152,51 @@ func (tc *TestCluster) RestartServer(idx int) error {
 	return nil
 }
 
-// serverStopped determines if a server has been explicitly
+// ServerStopped determines if a server has been explicitly
 // stopped by StopServer(s).
-func (tc *TestCluster) serverStopped(idx int) bool {
+func (tc *TestCluster) ServerStopped(idx int) bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.serverStoppers[idx] == nil
+}
+
+// GetRaftLeader returns the replica that is the current raft leader for the
+// specified key.
+func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.Replica {
+	t.Helper()
+	var raftLeaderRepl *kvserver.Replica
+	testutils.SucceedsSoon(t, func() error {
+		var latestTerm uint64
+		for i := range tc.Servers {
+			err := tc.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
+				repl := store.LookupReplica(key)
+				if repl == nil {
+					// Replica does not exist on this store or there is no raft
+					// status yet.
+					return nil
+				}
+				raftStatus := repl.RaftStatus()
+				if raftStatus.Term > latestTerm || (raftLeaderRepl == nil && raftStatus.Term == latestTerm) {
+					// If we find any newer term, it means any previous election is
+					// invalid.
+					raftLeaderRepl = nil
+					latestTerm = raftStatus.Term
+					if raftStatus.RaftState == raft.StateLeader {
+						raftLeaderRepl = repl
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if latestTerm == 0 || raftLeaderRepl == nil {
+			return errors.Errorf("could not find a raft leader for key %s", key)
+		}
+		return nil
+	})
+	return raftLeaderRepl
 }
 
 type testClusterFactoryImpl struct{}
