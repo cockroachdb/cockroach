@@ -37,7 +37,7 @@ import (
 //
 // The input files use the following DSL:
 //
-// txn_begin      t=<name> [ts=<int>[,<int>]]
+// txn_begin      t=<name> [ts=<int>[,<int>]] [maxTs=<int>[,<int>]]
 // txn_remove     t=<name>
 // txn_restart    t=<name>
 // txn_update     t=<name> t2=<name>
@@ -407,11 +407,12 @@ func cmdTxnBegin(e *evalCtx) error {
 	var txnName string
 	e.scanArg("t", &txnName)
 	ts := e.getTs(nil)
+	maxTs := e.getTsWithName(nil, "maxTs")
 	key := roachpb.KeyMin
 	if e.hasArg("k") {
 		key = e.getKey()
 	}
-	txn, err := e.newTxn(txnName, ts, key)
+	txn, err := e.newTxn(txnName, ts, maxTs, key)
 	e.results.txn = txn
 	return err
 }
@@ -793,15 +794,19 @@ func (e *evalCtx) getResolve() (bool, roachpb.TransactionStatus) {
 }
 
 func (e *evalCtx) getTs(txn *roachpb.Transaction) hlc.Timestamp {
+	return e.getTsWithName(txn, "ts")
+}
+
+func (e *evalCtx) getTsWithName(txn *roachpb.Transaction, name string) hlc.Timestamp {
 	var ts hlc.Timestamp
 	if txn != nil {
 		ts = txn.ReadTimestamp
 	}
-	if !e.hasArg("ts") {
+	if !e.hasArg(name) {
 		return ts
 	}
 	var tsS string
-	e.scanArg("ts", &tsS)
+	e.scanArg(name, &tsS)
 	parts := strings.Split(tsS, ",")
 
 	// Find the wall time part.
@@ -915,7 +920,7 @@ func (e *evalCtx) getKeyRange() (sk, ek roachpb.Key) {
 }
 
 func (e *evalCtx) newTxn(
-	txnName string, ts hlc.Timestamp, key roachpb.Key,
+	txnName string, ts, maxTs hlc.Timestamp, key roachpb.Key,
 ) (*roachpb.Transaction, error) {
 	if _, ok := e.txns[txnName]; ok {
 		e.Fatalf("txn %s already open", txnName)
@@ -929,6 +934,7 @@ func (e *evalCtx) newTxn(
 		},
 		Name:          txnName,
 		ReadTimestamp: ts,
+		MaxTimestamp:  maxTs,
 		Status:        roachpb.PENDING,
 	}
 	e.txnCounter = e.txnCounter.Add(1)
