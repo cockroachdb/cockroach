@@ -15,10 +15,9 @@ go_library(
         "select_name_resolution.go",
         "table_col_set.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemaexpr",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo/geoindex",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
