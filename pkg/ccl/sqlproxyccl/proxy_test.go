@@ -66,8 +66,8 @@ openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt \
 
 func testingTenantIDFromDatabaseForAddr(
 	addr string, validTenant string,
-) func(map[string]string, string) (config *BackendConfig, clientErr error) {
-	return func(p map[string]string, _ string) (config *BackendConfig, clientErr error) {
+) func(map[string]string, net.Conn) (config *BackendConfig, clientErr error) {
+	return func(p map[string]string, _ net.Conn) (config *BackendConfig, clientErr error) {
 		const dbKey = "database"
 		db, ok := p[dbKey]
 		if !ok {
@@ -135,7 +135,7 @@ func TestLongDBName(t *testing.T) {
 	var m map[string]string
 	opts := Options{
 		BackendConfigFromParams: func(
-			mm map[string]string, _ string) (config *BackendConfig, clientErr error) {
+			mm map[string]string, _ net.Conn) (config *BackendConfig, clientErr error) {
 			m = mm
 			return nil, errors.New("boom")
 		},
@@ -225,7 +225,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 
 	var connSuccess bool
 	opts := Options{
-		BackendConfigFromParams: func(params map[string]string, _ string) (*BackendConfig, error) {
+		BackendConfigFromParams: func(params map[string]string, _ net.Conn) (*BackendConfig, error) {
 			return &BackendConfig{
 				OutgoingAddress:     tc.Server(0).ServingSQLAddr(),
 				TLSConf:             outgoingTLSConfig,
@@ -263,7 +263,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	outgoingTLSConfig.InsecureSkipVerify = true
 
 	opts := Options{
-		BackendConfigFromParams: func(params map[string]string, _ string) (*BackendConfig, error) {
+		BackendConfigFromParams: func(params map[string]string, _ net.Conn) (*BackendConfig, error) {
 			return &BackendConfig{
 				OutgoingAddress: tc.Server(0).ServingSQLAddr(),
 				TLSConf:         outgoingTLSConfig,
@@ -311,7 +311,7 @@ func TestProxyRefuseConn(t *testing.T) {
 
 	ac := makeAssertCtx()
 	opts := Options{
-		BackendConfigFromParams: func(params map[string]string, _ string) (*BackendConfig, error) {
+		BackendConfigFromParams: func(params map[string]string, _ net.Conn) (*BackendConfig, error) {
 			return &BackendConfig{
 				OutgoingAddress: tc.Server(0).ServingSQLAddr(),
 				TLSConf:         outgoingTLSConfig,
