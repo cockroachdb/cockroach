@@ -236,7 +236,16 @@ func (b *stmtBundleBuilder) addStatement() {
 	cfg.Simplify = true
 	cfg.Align = tree.PrettyNoAlign
 	cfg.JSONFmt = true
-	output := cfg.Pretty(b.plan.stmt.AST)
+	var output string
+	// If we hit an early error, stmt or stmt.AST might not be initialized yet.
+	switch {
+	case b.plan.stmt == nil:
+		output = "No Statement."
+	case b.plan.stmt.AST == nil:
+		output = "No AST."
+	default:
+		output = cfg.Pretty(b.plan.stmt.AST)
+	}
 
 	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
 		var buf bytes.Buffer
