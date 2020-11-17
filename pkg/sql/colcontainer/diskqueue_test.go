@@ -97,7 +97,7 @@ func TestDiskQueue(t *testing.T) {
 					require.NoError(t, err)
 
 					// Verify that a directory was created.
-					directories, err := queueCfg.FS.List(queueCfg.GetPath(ctx))
+					directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
 					require.NoError(t, err)
 					require.Equal(t, 1, len(directories))
 
@@ -158,7 +158,7 @@ func TestDiskQueue(t *testing.T) {
 					require.NoError(t, q.Close(ctx))
 
 					// Verify no directories are left over.
-					directories, err = queueCfg.FS.List(queueCfg.GetPath(ctx))
+					directories, err = queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
 					require.NoError(t, err)
 					require.Equal(t, 0, len(directories))
 				})
