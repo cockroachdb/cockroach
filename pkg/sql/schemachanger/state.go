@@ -65,7 +65,7 @@ type elemState int
 
 const (
 	elemDeleteOnly elemState = iota
-	elemWriteAndDeleteOnly
+	elemDeleteAndWriteOnly
 	elemBackfilled
 	elemPublic
 	elemRemoved
@@ -76,13 +76,13 @@ func compileStateToForwardSteps(ctx context.Context, st schemaChangerState) ([]s
 
 	// elem: addColumn{state: elemDeleteOnly}
 	// ops:
-	//  - addColumnChangeStateOp{nextState: elemWriteAndDeleteOnly}
+	//  - addColumnChangeStateOp{nextState: elemDeleteAndWriteOnly}
 	//  - columnBackfillOp
 	//  - addColumnChangeStateOp{nextState: elemPublic}
 
 	// elem: addUniqueIndex{state: addIndexDeleteOnly}
 	// ops:
-	//  - addIndexChangeStateOp{nextState: elemWriteAndDeleteOnly}
+	//  - addIndexChangeStateOp{nextState: elemDeleteAndWriteOnly}
 	//  - indexBackfillOp
 	//  - addIndexChangeStateOp{nextState: elemAdded}
 	//  - uniqueIndexValidateOp
@@ -97,7 +97,26 @@ func compileStateToForwardSteps(ctx context.Context, st schemaChangerState) ([]s
 		}
 	}
 	// Combine elemOps
-	panic("unimplemented")
+	// panic("unimplemented")
+	var result []step
+	if len(elemOps) != 1 {
+		panic("unimplemented")
+	}
+	var ops []op
+	for _, ops = range elemOps {
+		break
+	}
+	for _, op := range ops {
+		switch t := op.(type) {
+		case descriptorMutationOp:
+			result = append(result, descriptorMutationOps{t})
+		case validationOp:
+			result = append(result, validationOps{t})
+		case backfillOp:
+			result = append(result, backfillOps{t})
+		}
+	}
+	return result, nil
 }
 
 func compileOps(e element) ([]op, error) {
@@ -121,9 +140,9 @@ func compileAddColumnOps(e *addColumn) ([]op, error) {
 	}
 	switch e.state {
 	case elemDeleteOnly:
-		ops = append(ops, descChange(elemWriteAndDeleteOnly))
+		ops = append(ops, descChange(elemDeleteAndWriteOnly))
 		fallthrough
-	case elemWriteAndDeleteOnly:
+	case elemDeleteAndWriteOnly:
 		ops = append(ops, &columnBackfillOp{
 			tableID:            e.tableID,
 			storedColumnsToAdd: []descpb.ColumnID{e.columnID},
