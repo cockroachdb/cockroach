@@ -25,7 +25,7 @@ func TestOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tcs := []struct {
-		offset   int
+		offset   uint64
 		tuples   []tuple
 		expected []tuple
 	}{

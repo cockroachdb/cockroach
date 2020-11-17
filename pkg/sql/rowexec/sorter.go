@@ -186,14 +186,9 @@ func newSorter(
 	if post.Limit != 0 && post.Filter.Empty() {
 		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
 		// will discard the first Offset ones.
-		// LIMIT and OFFSET should each never be greater than math.MaxInt64, the
-		// parser ensures this.
-		if post.Limit > math.MaxInt64 || post.Offset > math.MaxInt64 {
-			return nil, errors.AssertionFailedf(
-				"error creating sorter: limit %d offset %d too large",
-				errors.Safe(post.Limit), errors.Safe(post.Offset))
+		if post.Limit <= math.MaxUint64-post.Offset {
+			count = post.Limit + post.Offset
 		}
-		count = post.Limit + post.Offset
 	}
 
 	// Choose the optimal processor.

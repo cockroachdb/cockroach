@@ -20,7 +20,6 @@ go_library(
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
