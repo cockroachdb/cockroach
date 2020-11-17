@@ -785,7 +785,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		f.Buffer.WriteString(": ")
 	}
 	switch scalar.Op() {
-	case opt.ProjectionsOp, opt.AggregationsOp, opt.FKChecksOp, opt.KVOptionsOp:
+	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp:
 		// Omit empty lists (except filters).
 		if scalar.ChildCount() == 0 {
 			return
@@ -912,7 +912,8 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 	typ := scalar.DataType()
 	if typ == nil {
-		if scalar.Op() == opt.FKChecksItemOp || scalar.Op() == opt.KVOptionsItemOp {
+		if scalar.Op() == opt.UniqueChecksItemOp || scalar.Op() == opt.FKChecksItemOp ||
+			scalar.Op() == opt.KVOptionsItemOp {
 			// These are not true scalars and have no properties.
 			return nil
 		}
@@ -998,6 +999,19 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 
 	case *KVOptionsItem:
 		fmt.Fprintf(f.Buffer, " %s", t.Key)
+
+	case *UniqueChecksItem:
+		tab := f.Memo.metadata.TableMeta(t.Table)
+		constraint := tab.Table.Unique(t.CheckOrdinal)
+		fmt.Fprintf(f.Buffer, ": %s(", tab.Alias.ObjectName)
+		for i := 0; i < constraint.ColumnCount(); i++ {
+			if i > 0 {
+				f.Buffer.WriteByte(',')
+			}
+			col := tab.Table.Column(constraint.ColumnOrdinal(tab.Table, i))
+			f.Buffer.WriteString(string(col.ColName()))
+		}
+		f.Buffer.WriteByte(')')
 
 	case *FKChecksItem:
 		origin := f.Memo.metadata.TableMeta(t.OriginTable)
