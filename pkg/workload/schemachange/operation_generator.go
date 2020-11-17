@@ -111,6 +111,7 @@ var opsWithExecErrorScreening = map[opType]bool{
 
 	setColumnDefault: true,
 	setColumnNotNull: true,
+	setColumnType:    true,
 
 	insertRow: true,
 }
@@ -1437,16 +1438,64 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	columnName, err := og.randColumn(tx, *tableName, og.pctExisting(true))
+
+	tableExists, err := tableExists(tx, tableName)
 	if err != nil {
 		return "", err
 	}
-	typ, err := og.randType(tx, og.pctExisting(true))
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DATA TYPE IrrelevantDataType`, tableName), nil
+	}
+
+	column, err := og.randColumnWithMeta(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
+
+	columnExists, err := columnExistsOnTable(tx, tableName, column.name)
+	if err != nil {
+		return "", err
+	}
+	if !columnExists {
+		og.expectedExecErrors.add(pgcode.UndefinedColumn)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE IrrelevantTypeName`,
+			tableName, column.name), nil
+	}
+
+	newTypeName, err := og.randType(tx, og.pctExisting(true))
+	if err != nil {
+		return "", err
+	}
+	typeExists, err := typeExists(tx, newTypeName)
+	if err != nil {
+		return "", err
+	}
+	newType, err := og.typeFromTypeName(tx, newTypeName.String())
+	if err != nil {
+		return "", err
+	}
+
+	columnHasDependencies, err := columnIsDependedOn(tx, tableName, column.name)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{code: pgcode.UndefinedObject, condition: !typeExists},
+		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies},
+		// If the type of the column is not equivalent to the new type, then
+		// it is possible to see either a pgcode.CannotCoerce error or a pgcode.FeatureNotSupported
+		// error.
+		// pgcode.CannotCoerce represents an invalid type conversion (eg. array to enum),
+		// and pgcode.FeatureNotSupported represents a conversion which is only supported
+		// experimentally (eg.string to enum).
+		{code: pgcode.CannotCoerce, condition: !column.typ.Equivalent(newType)},
+		{code: pgcode.FeatureNotSupported, condition: !column.typ.Equivalent(newType)},
+	}.add(og.expectedExecErrors)
+
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
-		tableName, columnName, typ), nil
+		tableName, column.name, newTypeName), nil
 }
 
 func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
