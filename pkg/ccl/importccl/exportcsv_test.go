@@ -409,3 +409,26 @@ func TestExportVectorized(t *testing.T) {
 	sqlDB.Exec(t, `SET vectorize_row_count_threshold=0`)
 	sqlDB.Exec(t, `EXPORT INTO CSV 'http://0.1:37957/exp_1' FROM TABLE t`)
 }
+
+// TestExportFeatureFlag tests the feature flag logic that allows the EXPORT
+// command to be toggled off via cluster settings.
+func TestExportFeatureFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// Feature flag is off — test that EXPORT surfaces error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = FALSE`)
+	sqlDB.Exec(t, `CREATE TABLE feature_flag (a INT PRIMARY KEY)`)
+	sqlDB.ExpectErr(t, `EXPORT feature was disabled by the database administrator`,
+		`EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flag`)
+
+	// Feature flag is on — test that EXPORT does not error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = TRUE`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flag`)
+}
