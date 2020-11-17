@@ -13,7 +13,9 @@ package hlc
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"regexp"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -582,4 +584,51 @@ func TestLateStartForwardClockJump(t *testing.T) {
 	<-tickedCh
 	c.Now()
 
+}
+
+func BenchmarkUpdate(b *testing.B) {
+	b.StopTimer()
+
+	concurrency := 32    // number of concurrent updaters
+	updates := int(10e6) // total number of updates to perform
+	advanceChance := 0.2 // chance for each worker to advance time
+	advanceMax := 5      // max amount to advance time by per update
+
+	// We pre-generate random timestamps for each worker, to avoid it skewing
+	// the benchmark.
+	//
+	// This benchmark may not be entirely realistic, since each worker advances
+	// its own clock independent of other workers, which probably leads to
+	// having one front-runner. However, synchronizing them while running ends up
+	// benchmarking the contention of the benchmark synchronization rather than
+	// the HLC.
+	r := rand.New(rand.NewSource(34704832098))
+	timestamps := make([][]Timestamp, concurrency)
+	for w := 0; w < concurrency; w++ {
+		timestamps[w] = make([]Timestamp, updates/concurrency)
+		wallTime := 0
+		for i := 0; i < updates/concurrency; i++ {
+			if r.Float64() < advanceChance {
+				wallTime += r.Intn(advanceMax + 1)
+			}
+			timestamps[w][i] = Timestamp{WallTime: int64(wallTime)}
+		}
+	}
+
+	b.StartTimer()
+	for n := 0; n < b.N; n++ {
+		clock := NewClock(func() int64 { return 0 }, time.Second)
+		wg := sync.WaitGroup{}
+		for w := 0; w < concurrency; w++ {
+			w := w // make sure we don't close over the loop variable
+			wg.Add(1)
+			go func() {
+				for _, timestamp := range timestamps[w] {
+					clock.Update(timestamp)
+				}
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+	}
 }

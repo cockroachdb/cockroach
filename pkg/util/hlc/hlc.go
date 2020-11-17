@@ -73,6 +73,11 @@ type Clock struct {
 
 	mu struct {
 		syncutil.Mutex
+
+		// timestamp is the current HLC time. The timestamp.WallTime field must
+		// be updated atomically, even though it is protected by a mutex - this
+		// enables a fast path for reading the wall time without grabbing the
+		// lock.
 		timestamp Timestamp
 
 		// isMonitoringForwardClockJumps is a flag to ensure that only one jump monitoring
@@ -287,7 +292,7 @@ func (c *Clock) Now() Timestamp {
 		c.mu.timestamp.Logical++
 	} else {
 		// Use the physical clock, and reset the logical one.
-		c.mu.timestamp.WallTime = physicalClock
+		atomic.StoreInt64(&c.mu.timestamp.WallTime, physicalClock)
 		c.mu.timestamp.Logical = 0
 	}
 
@@ -330,6 +335,14 @@ func (c *Clock) PhysicalTime() time.Time {
 // update in case the remote timestamp is too far into the future, use
 // UpdateAndCheckMaxOffset() instead.
 func (c *Clock) Update(rt Timestamp) {
+
+	// Fast path to avoid grabbing the mutex if the remote time is behind. This
+	// requires c.mu.timestamp.WallTime to be written atomically, even though
+	// the writer has to hold the mutex lock as well.
+	if rt.WallTime < atomic.LoadInt64(&c.mu.timestamp.WallTime) {
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -337,7 +350,7 @@ func (c *Clock) Update(rt Timestamp) {
 	if rt.WallTime > c.mu.timestamp.WallTime {
 		// The remote clock is ahead of ours, and we update
 		// our own logical clock with theirs.
-		c.mu.timestamp.WallTime = rt.WallTime
+		atomic.StoreInt64(&c.mu.timestamp.WallTime, rt.WallTime)
 		c.mu.timestamp.Logical = rt.Logical
 	} else if rt.WallTime == c.mu.timestamp.WallTime {
 		// Both wall times are equal, and the larger logical
