@@ -294,10 +294,6 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 		log.Errorf(ctx, "failed to gossip cluster ID: %+v", err)
 	}
 
-	if r.store.cfg.TestingKnobs.DisablePeriodicGossips {
-		return nil
-	}
-
 	hasLease, pErr := r.getLeaseForGossip(ctx)
 	if pErr != nil {
 		return pErr
