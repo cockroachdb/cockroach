@@ -176,6 +176,16 @@ func (desc *IndexDescriptor) HasOldStoredColumns() bool {
 	return len(desc.ExtraColumnIDs) > 0 && len(desc.StoreColumnIDs) < len(desc.StoreColumnNames)
 }
 
+// InvertedColumnID returns the ColumnID of the inverted column of the inverted
+// index. This is always the last column in ColumnIDs. Panics if the index is
+// not inverted.
+func (desc *IndexDescriptor) InvertedColumnID() ColumnID {
+	if desc.Type != IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	return desc.ColumnIDs[len(desc.ColumnIDs)-1]
+}
+
 // InvertedColumnName returns the name of the inverted column of the inverted
 // index. This is always the last column in ColumnNames. Panics if the index is
 // not inverted.

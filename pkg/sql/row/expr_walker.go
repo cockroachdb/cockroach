@@ -14,7 +14,7 @@ import (
 	"context"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
