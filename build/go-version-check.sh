@@ -7,7 +7,7 @@
 
 required_version_major=1
 minimum_version_minor=15
-minimum_version_15_patch=3
+minimum_version_15_patch=5
 
 go=${1-go}
 
