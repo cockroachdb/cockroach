@@ -112,7 +112,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			StatName:            s.name,
 		}
 		for i, colID := range s.columns {
-			colIdx, ok := scan.colIdxMap[colID]
+			colIdx, ok := scan.colIdxMap.Get(colID)
 			if !ok {
 				panic("necessary column not scanned")
 			}

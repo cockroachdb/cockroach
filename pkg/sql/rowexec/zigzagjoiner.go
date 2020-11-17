@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -430,7 +431,7 @@ func (z *zigzagJoiner) setupInfo(
 	columnTypes := info.table.ColumnTypes()
 	colIdxMap := info.table.ColumnIdxMap()
 	for i, columnID := range columnIDs {
-		info.indexTypes[i] = columnTypes[colIdxMap[columnID]]
+		info.indexTypes[i] = columnTypes[colIdxMap.GetDefault(columnID)]
 	}
 
 	// Add the outputted columns.
@@ -443,7 +444,7 @@ func (z *zigzagJoiner) setupInfo(
 
 	// Add the fixed columns.
 	for i := 0; i < len(info.fixedValues); i++ {
-		neededCols.Add(colIdxMap[columnIDs[i]])
+		neededCols.Add(colIdxMap.GetDefault(columnIDs[i]))
 	}
 
 	// Add the equality columns.
@@ -560,7 +561,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 	// EncodeInvertedIndexKeys to generate the prefix. The rest of the
 	// index key containing the remaining neededDatums can be generated
 	// and appended using EncodeColumns.
-	colMap := make(map[descpb.ColumnID]int)
+	var colMap catalog.TableColMap
 	decodedDatums := make([]tree.Datum, len(datums))
 
 	// Ensure all EncDatums have been decoded.
@@ -572,11 +573,11 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 
 		decodedDatums[i] = encDatum.Datum
 		if i < len(info.index.ColumnIDs) {
-			colMap[info.index.ColumnIDs[i]] = i
+			colMap.Set(info.index.ColumnIDs[i], i)
 		} else {
 			// This column's value will be encoded in the second part (i.e.
 			// EncodeColumns).
-			colMap[info.index.ExtraColumnIDs[i-len(info.index.ColumnIDs)]] = i
+			colMap.Set(info.index.ExtraColumnIDs[i-len(info.index.ColumnIDs)], i)
 		}
 	}
 

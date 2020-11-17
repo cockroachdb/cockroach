@@ -43,6 +43,8 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				PartOfCluster:           true,
 				JoinAddr:                "127.0.0.1",
 				DisableTLSForHTTP:       true,
+				SQLAddr:                 ":1234",
+				HTTPAddr:                ":4567",
 				SQLMemoryPoolSize:       2 << 10,
 				CacheSize:               1 << 10,
 				NoAutoInitializeCluster: true,
@@ -57,6 +59,8 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			expected: base.TestServerArgs{
 				PartOfCluster:           true,
 				JoinAddr:                "127.0.0.1",
+				SQLAddr:                 ":1236",
+				HTTPAddr:                ":4569",
 				DisableTLSForHTTP:       true,
 				SQLMemoryPoolSize:       4 << 10,
 				CacheSize:               4 << 10,
@@ -72,7 +76,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			demoCtx.sqlPoolMemorySize = tc.sqlPoolMemorySize
 			demoCtx.cacheSize = tc.cacheSize
 
-			actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "")
+			actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "", 1234, 4567)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 

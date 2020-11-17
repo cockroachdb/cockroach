@@ -262,6 +262,8 @@ eexpect "syntax error"
 eexpect ":/# "
 end_test
 
+stop_server $argv
+
 start_test "Check that client-side options can be overridden with set"
 
 # First establish a baseline with all the defaults.
@@ -299,5 +301,3 @@ end_test
 
 send "exit 0\r"
 eexpect eof
-
-stop_server $argv

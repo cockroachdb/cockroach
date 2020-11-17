@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -90,11 +91,11 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	childDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `child`)
 	var args []row.FetcherTableArgs
 	for _, desc := range []*tabledesc.Immutable{parentDesc, childDesc} {
-		colIdxMap := make(map[descpb.ColumnID]int)
+		var colIdxMap catalog.TableColMap
 		var valNeededForCol util.FastIntSet
 		for colIdx := range desc.Columns {
 			id := desc.Columns[colIdx].ID
-			colIdxMap[id] = colIdx
+			colIdxMap.Set(id, colIdx)
 			valNeededForCol.Add(colIdx)
 		}
 		args = append(args, row.FetcherTableArgs{

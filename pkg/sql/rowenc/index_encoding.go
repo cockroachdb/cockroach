@@ -63,7 +63,7 @@ func MakeIndexKeyPrefix(
 func EncodeIndexKey(
 	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
@@ -84,7 +84,7 @@ func EncodePartialIndexSpan(
 	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	numCols int,
-	colMap map[descpb.ColumnID]int,
+	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (span roachpb.Span, containsNull bool, err error) {
@@ -113,7 +113,7 @@ func EncodePartialIndexKey(
 	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	numCols int,
-	colMap map[descpb.ColumnID]int,
+	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
@@ -258,15 +258,15 @@ func NeededColumnFamilyIDs(
 	var compositeCols util.FastIntSet
 	var extraCols util.FastIntSet
 	for _, columnID := range index.ColumnIDs {
-		columnOrdinal := colIdxMap[columnID]
+		columnOrdinal := colIdxMap.GetDefault(columnID)
 		indexedCols.Add(columnOrdinal)
 	}
 	for _, columnID := range index.CompositeColumnIDs {
-		columnOrdinal := colIdxMap[columnID]
+		columnOrdinal := colIdxMap.GetDefault(columnID)
 		compositeCols.Add(columnOrdinal)
 	}
 	for _, columnID := range index.ExtraColumnIDs {
-		columnOrdinal := colIdxMap[columnID]
+		columnOrdinal := colIdxMap.GetDefault(columnID)
 		extraCols.Add(columnOrdinal)
 	}
 
@@ -338,7 +338,7 @@ func NeededColumnFamilyIDs(
 				// Nothing left to check.
 				break
 			}
-			columnOrdinal := colIdxMap[columnID]
+			columnOrdinal := colIdxMap.GetDefault(columnID)
 			if nc.Contains(columnOrdinal) {
 				needed = true
 			}
@@ -482,9 +482,9 @@ func makeKeyFromEncDatums(
 // findColumnValue returns the value corresponding to the column. If
 // the column isn't present return a NULL value.
 func findColumnValue(
-	column descpb.ColumnID, colMap map[descpb.ColumnID]int, values []tree.Datum,
+	column descpb.ColumnID, colMap catalog.TableColMap, values []tree.Datum,
 ) tree.Datum {
-	if i, ok := colMap[column]; ok {
+	if i, ok := colMap.Get(column); ok {
 		// TODO(pmattis): Need to convert the values[i] value to the type
 		// expected by the column.
 		return values[i]
@@ -753,10 +753,7 @@ func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 // concatenating keyPrefix with the encodings of the column in the
 // index.
 func EncodeInvertedIndexKeys(
-	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
-	values []tree.Datum,
-	keyPrefix []byte,
+	index *descpb.IndexDescriptor, colMap catalog.TableColMap, values []tree.Datum, keyPrefix []byte,
 ) (key [][]byte, err error) {
 	numColumns := len(index.ColumnIDs)
 
@@ -779,7 +776,7 @@ func EncodeInvertedIndexKeys(
 	}
 
 	var val tree.Datum
-	if i, ok := colMap[index.ColumnIDs[numColumns-1]]; ok {
+	if i, ok := colMap.Get(index.ColumnIDs[numColumns-1]); ok {
 		val = values[i]
 	} else {
 		val = tree.DNull
@@ -798,10 +795,11 @@ func EncodeInvertedIndexKeys(
 // is (SQL) NULL, no inverted index keys will be produced, because inverted
 // indexes cannot and do not need to satisfy the predicate col IS NULL.
 //
-// This function does not return keys for empty arrays unless the version is at
-// least descpb.EmptyArraysInInvertedIndexesVersion. (Note that this only
-// applies to arrays, not JSONs. This function returns keys for all non-null
-// JSONs regardless of the version.)
+// This function does not return keys for empty arrays or for NULL array
+// elements unless the version is at least
+// descpb.EmptyArraysInInvertedIndexesVersion. (Note that this only applies
+// to arrays, not JSONs. This function returns keys for all non-null JSONs
+// regardless of the version.)
 func EncodeInvertedIndexTableKeys(
 	val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
 ) (key [][]byte, err error) {
@@ -873,8 +871,8 @@ func EncodeContainingInvertedIndexSpans(
 // the given input array, one per entry in the array. The input inKey is
 // prefixed to all returned keys.
 //
-// This function does not return keys for empty arrays unless the version is at
-// least descpb.EmptyArraysInInvertedIndexesVersion.
+// This function does not return keys for empty arrays or for NULL array elements
+// unless the version is at least descpb.EmptyArraysInInvertedIndexesVersion.
 func encodeArrayInvertedIndexTableKeys(
 	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
 ) (key [][]byte, err error) {
@@ -887,10 +885,9 @@ func encodeArrayInvertedIndexTableKeys(
 	outKeys := make([][]byte, 0, len(val.Array))
 	for i := range val.Array {
 		d := val.Array[i]
-		if d == tree.DNull {
-			// We don't need to make keys for NULL, since in SQL:
-			// SELECT ARRAY[1, NULL, 2] @> ARRAY[NULL]
-			// returns false.
+		if d == tree.DNull && version < descpb.EmptyArraysInInvertedIndexesVersion {
+			// Older versions did not include null elements, but we must include them
+			// going forward since `SELECT ARRAY[NULL] @> ARRAY[]` returns true.
 			continue
 		}
 		outKey := make([]byte, len(inKey))
@@ -916,6 +913,12 @@ func encodeContainingArrayInvertedIndexSpans(
 		// All arrays contain the empty array.
 		endKey := roachpb.Key(inKey).PrefixEnd()
 		return []roachpb.Spans{{roachpb.Span{Key: inKey, EndKey: endKey}}}, nil
+	}
+
+	if val.HasNulls {
+		// If there are any nulls, return empty spans. This is needed to ensure
+		// that `SELECT ARRAY[NULL, 2] @> ARRAY[NULL, 2]` is false.
+		return nil, nil
 	}
 
 	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, version)
@@ -990,7 +993,7 @@ func EncodePrimaryIndex(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap catalog.TableColMap,
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
@@ -1042,7 +1045,7 @@ func EncodePrimaryIndex(
 				columnsToEncode = append(columnsToEncode, valueEncodedColumn{id: colID})
 				continue
 			}
-			if cdatum, ok := values[colMap[colID]].(tree.CompositeDatum); ok {
+			if cdatum, ok := values[colMap.GetDefault(colID)].(tree.CompositeDatum); ok {
 				if cdatum.IsComposite() {
 					columnsToEncode = append(columnsToEncode, valueEncodedColumn{id: colID, isComposite: true})
 					continue
@@ -1077,7 +1080,7 @@ func EncodeSecondaryIndex(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	secondaryIndex *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap catalog.TableColMap,
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
@@ -1179,7 +1182,7 @@ func EncodeSecondaryIndex(
 func encodeSecondaryIndexWithFamilies(
 	familyMap map[descpb.FamilyID][]valueEncodedColumn,
 	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap catalog.TableColMap,
 	key []byte,
 	row []tree.Datum,
 	extraKeyCols []byte,
@@ -1259,7 +1262,7 @@ func encodeSecondaryIndexWithFamilies(
 // families were introduced onto secondary indexes.
 func encodeSecondaryIndexNoFamilies(
 	index *descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap catalog.TableColMap,
 	key []byte,
 	row []tree.Datum,
 	extraKeyCols []byte,
@@ -1308,7 +1311,7 @@ func encodeSecondaryIndexNoFamilies(
 // writeColumnValues writes the value encoded versions of the desired columns from the input
 // row of datums into the value byte slice.
 func writeColumnValues(
-	value []byte, colMap map[descpb.ColumnID]int, row []tree.Datum, columns []valueEncodedColumn,
+	value []byte, colMap catalog.TableColMap, row []tree.Datum, columns []valueEncodedColumn,
 ) ([]byte, error) {
 	var lastColID descpb.ColumnID
 	for _, col := range columns {
@@ -1339,7 +1342,7 @@ func EncodeSecondaryIndexes(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexes []*descpb.IndexDescriptor,
-	colMap map[descpb.ColumnID]int,
+	colMap catalog.TableColMap,
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 	includeEmpty bool,
@@ -1776,7 +1779,7 @@ func AdjustEndKeyForInterleave(
 func EncodeColumns(
 	columnIDs []descpb.ColumnID,
 	directions directions,
-	colMap map[descpb.ColumnID]int,
+	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {

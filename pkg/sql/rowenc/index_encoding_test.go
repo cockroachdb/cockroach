@@ -51,17 +51,17 @@ type indexKeyTest struct {
 	secondaryValues      []tree.Datum // len must be at least secondaryInterleaveComponents+1
 }
 
-func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, map[descpb.ColumnID]int) {
+func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, catalog.TableColMap) {
 	primaryColumnIDs := make([]descpb.ColumnID, len(test.primaryValues))
 	secondaryColumnIDs := make([]descpb.ColumnID, len(test.secondaryValues))
 	columns := make([]descpb.ColumnDescriptor, len(test.primaryValues)+len(test.secondaryValues))
-	colMap := make(map[descpb.ColumnID]int, len(test.secondaryValues))
+	var colMap catalog.TableColMap
 	secondaryType := descpb.IndexDescriptor_FORWARD
 	for i := range columns {
 		columns[i] = descpb.ColumnDescriptor{
 			ID: descpb.ColumnID(i + 1),
 		}
-		colMap[columns[i].ID] = i
+		colMap.Set(columns[i].ID, i)
 		if i < len(test.primaryValues) {
 			columns[i].Type = test.primaryValues[i].ResolvedType()
 			primaryColumnIDs[i] = columns[i].ID
@@ -252,7 +252,7 @@ func TestIndexKey(t *testing.T) {
 			}
 
 			for j, value := range values {
-				testValue := testValues[colMap[index.ColumnIDs[j]]]
+				testValue := testValues[colMap.GetDefault(index.ColumnIDs[j])]
 				if value.Compare(evalCtx, testValue) != 0 {
 					t.Fatalf("%d: value %d got %q but expected %q", i, j, value, testValue)
 				}
@@ -425,6 +425,12 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		{`{1, 2}`, `{1, 2, 1}`, true},
 		{`{1, 2, 3}`, `{1, 2, 4}`, false},
 		{`{1, 2, 3}`, `{}`, true},
+		{`{}`, `{NULL}`, false},
+		{`{NULL}`, `{}`, true},
+		{`{NULL}`, `{NULL}`, false},
+		{`{2, NULL}`, `{2, NULL}`, false},
+		{`{2, NULL}`, `{2}`, true},
+		{`{2, NULL}`, `{NULL}`, false},
 	}
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -449,7 +455,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		// inner loop (any span in the slice can contain any of the keys), and an
 		// intersection on the outer loop (all of the span slices must contain at
 		// least one key).
-		actual := true
+		actual := len(spansSlice) > 0
 		for _, spans := range spansSlice {
 			found := false
 			for _, span := range spans {
@@ -1263,12 +1269,12 @@ func ExtractIndexKey(
 	}
 
 	// Encode the index key from its components.
-	colMap := make(map[descpb.ColumnID]int)
+	var colMap catalog.TableColMap
 	for i, columnID := range index.ColumnIDs {
-		colMap[columnID] = i
+		colMap.Set(columnID, i)
 	}
 	for i, columnID := range index.ExtraColumnIDs {
-		colMap[columnID] = i + len(index.ColumnIDs)
+		colMap.Set(columnID, i+len(index.ColumnIDs))
 	}
 	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
 

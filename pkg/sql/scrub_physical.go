@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -66,10 +67,10 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 	// Collect all of the columns, their types, and their IDs.
 	var columnIDs []tree.ColumnID
-	colIDToIdx := make(map[descpb.ColumnID]int, len(o.tableDesc.Columns))
+	var colIDToIdx catalog.TableColMap
 	columns := make([]*descpb.ColumnDescriptor, len(columnIDs))
 	for i := range o.tableDesc.Columns {
-		colIDToIdx[o.tableDesc.Columns[i].ID] = i
+		colIDToIdx.Set(o.tableDesc.Columns[i].ID, i)
 	}
 
 	// Collect all of the columns being scanned.
@@ -90,7 +91,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 
 	for i := range columnIDs {
-		idx := colIDToIdx[descpb.ColumnID(columnIDs[i])]
+		idx := colIDToIdx.GetDefault(descpb.ColumnID(columnIDs[i]))
 		columns = append(columns, &o.tableDesc.Columns[idx])
 	}
 

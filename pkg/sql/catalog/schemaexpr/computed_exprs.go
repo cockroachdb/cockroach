@@ -11,6 +11,7 @@
 package schemaexpr
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -26,7 +27,7 @@ type RowIndexedVarContainer struct {
 	// original table, we need to store a mapping between them.
 
 	Cols    []descpb.ColumnDescriptor
-	Mapping map[descpb.ColumnID]int
+	Mapping catalog.TableColMap
 }
 
 var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
@@ -35,7 +36,7 @@ var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
 func (r *RowIndexedVarContainer) IndexedVarEval(
 	idx int, ctx *tree.EvalContext,
 ) (tree.Datum, error) {
-	rowIdx, ok := r.Mapping[r.Cols[idx].ID]
+	rowIdx, ok := r.Mapping.Get(r.Cols[idx].ID)
 	if !ok {
 		return tree.DNull, nil
 	}

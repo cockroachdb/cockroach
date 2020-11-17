@@ -605,7 +605,7 @@ type optTable struct {
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
-	colMap map[descpb.ColumnID]int
+	colMap catalog.TableColMap
 }
 
 var _ cat.Table = &optTable{}
@@ -693,9 +693,8 @@ func newOptTable(
 	}
 
 	// Create the table's column mapping from descpb.ColumnID to column ordinal.
-	ot.colMap = make(map[descpb.ColumnID]int, ot.ColumnCount())
 	for i := range ot.columns {
-		ot.colMap[descpb.ColumnID(ot.columns[i].ColID())] = i
+		ot.colMap.Set(descpb.ColumnID(ot.columns[i].ColID()), i)
 	}
 
 	// Build the indexes.
@@ -1054,7 +1053,7 @@ func (ot *optTable) Unique(i int) cat.UniqueConstraint {
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
-	col, ok := ot.colMap[colID]
+	col, ok := ot.colMap.Get(colID)
 	if ok {
 		return col, nil
 	}
@@ -1338,7 +1337,7 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 	os.columnOrdinals = make([]int, len(stat.ColumnIDs))
 	for i, c := range stat.ColumnIDs {
 		var ok bool
-		os.columnOrdinals[i], ok = tab.colMap[c]
+		os.columnOrdinals[i], ok = tab.colMap.Get(c)
 		if !ok {
 			// Column not in table (this is possible if the column was removed since
 			// the statistic was calculated).
@@ -1563,7 +1562,7 @@ type optVirtualTable struct {
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
-	colMap map[descpb.ColumnID]int
+	colMap catalog.TableColMap
 }
 
 var _ cat.Table = &optVirtualTable{}
@@ -1632,9 +1631,8 @@ func newOptVirtualTable(
 	}
 
 	// Create the table's column mapping from descpb.ColumnID to column ordinal.
-	ot.colMap = make(map[descpb.ColumnID]int, ot.ColumnCount())
 	for i := range ot.columns {
-		ot.colMap[descpb.ColumnID(ot.columns[i].ColID())] = i
+		ot.colMap.Set(descpb.ColumnID(ot.columns[i].ColID()), i)
 	}
 
 	ot.name.ExplicitSchema = true
@@ -1890,7 +1888,7 @@ func (oi *optVirtualIndex) NonInvertedPrefixColumnCount() int {
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optVirtualTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
-	col, ok := ot.colMap[colID]
+	col, ok := ot.colMap.Get(colID)
 	if ok {
 		return col, nil
 	}
