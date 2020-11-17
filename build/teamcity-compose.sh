@@ -24,7 +24,6 @@ tc_end_block "Compile compose tests"
 tc_start_block "Run compose tests"
 # NB: apply the same trick as teamcity-acceptance.sh
 run_json_test stdbuf -eL -oL go test \
-  -mod=vendor -json -v -timeout 30m \
-  -exec "../../build/teamcity-go-test-precompiled.sh ./pkg/compose/compose.test" ./pkg/compose \
-	-l "$TMPDIR"
+  -mod=vendor -json -v -timeout 30m -tags compose \
+  -exec "../../build/teamcity-go-test-precompiled.sh ./pkg/compose/compose.test -artifacts \"$TMPDIR\"" ./pkg/compose
 tc_end_block "Run compose tests"
