@@ -2138,6 +2138,41 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 	})
 }
 
+// TestImportFeatureFlag tests the feature flag logic that allows the IMPORT and
+// IMPORT INTO commands to be toggled off via cluster settings.
+func TestImportFeatureFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	const nodes = 1
+	numFiles := nodes + 2
+	rowsPerFile := 1000
+	rowsPerRaceFile := 16
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "csv")
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
+
+	// Feature flag is off — test that IMPORT and IMPORT INTO surface error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = FALSE`)
+	sqlDB.ExpectErr(t, `IMPORT feature was disabled by the database administrator`,
+		fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]))
+	sqlDB.Exec(t, `CREATE TABLE feature_flag (a INT8 PRIMARY KEY, b STRING)`)
+	sqlDB.ExpectErr(t, `IMPORT feature was disabled by the database administrator`,
+		fmt.Sprintf(`IMPORT INTO feature_flag (a, b) CSV DATA (%s)`, testFiles.files[0]))
+
+	// Feature flag is on — test that IMPORT and IMPORT INTO do not error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = TRUE`)
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
+		testFiles.files[0]))
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO feature_flag (a, b) CSV DATA (%s)`, testFiles.files[0]))
+}
+
 func TestImportObjectLevelRBAC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
