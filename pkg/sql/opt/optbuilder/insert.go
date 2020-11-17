@@ -652,10 +652,14 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// Add any partial index put boolean columns to the input.
 	mb.projectPartialIndexPutCols(preCheckScope)
 
+	mb.buildUniqueChecksForInsert()
+
 	mb.buildFKChecksForInsert()
 
 	private := mb.makeMutationPrivate(returning != nil)
-	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, mb.checks, private)
+	mb.outScope.expr = mb.b.factory.ConstructInsert(
+		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
+	)
 
 	mb.buildReturning(returning)
 }
@@ -1089,7 +1093,9 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	mb.buildFKChecksForUpsert()
 
 	private := mb.makeMutationPrivate(returning != nil)
-	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, mb.checks, private)
+	mb.outScope.expr = mb.b.factory.ConstructUpsert(
+		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
+	)
 
 	mb.buildReturning(returning)
 }
