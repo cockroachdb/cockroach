@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -172,8 +173,22 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 	// monorepos so steps like this are necessary for one package to
 	// depend on an unreleased package in the same repo.
 	// Also remove the invoke.log from a previous test, if any.
-	run(c, ctx, controller, "bash", "-e", "-c",
-		`"cd /mnt/data1/jepsen/jepsen && ~/lein install && rm -f /mnt/data1/jepsen/cockroachdb/invoke.log"`)
+	{
+		err := runE(c, ctx, controller, "bash", "-e", "-c",
+			`"cd /mnt/data1/jepsen/jepsen && ~/lein install && rm -f /mnt/data1/jepsen/cockroachdb/invoke.log"`)
+		if err != nil {
+			// Ignore an error like the following.
+			// Could not transfer artifact org.clojure:clojure:jar:1.9.0 from/to central (https://repo1.maven.org/maven2/): GET request of: org/clojure/clojure/1.9.0/clojure-1.9.0.jar from central failed
+			r := regexp.MustCompile("Could not transfer artifact|Failed to read artifact descriptor for")
+			match := r.FindStringSubmatch(GetStderr(err))
+			if match != nil {
+				t.logger().PrintfCtx(ctx, "failure installing deps (\"%s\")\nfull err: %+v",
+					match, err)
+				t.Skipf("failure installing deps (\"%s\"); in the past it's been transient", match)
+			}
+			t.Fatalf("error installing Jepsen deps: %+v", err)
+		}
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
