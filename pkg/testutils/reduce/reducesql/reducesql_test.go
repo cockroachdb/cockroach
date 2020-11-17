@@ -41,7 +41,11 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		args := base.TestServerArgs{
 			Insecure: true,
 		}
-		serv := server.TestServerFactory.New(args).(*server.TestServer)
+		s, err := server.TestServerFactory.New(args)
+		if err != nil {
+			panic(err)
+		}
+		serv := s.(*server.TestServer)
 		if err := serv.Start(); err != nil {
 			panic(err)
 		}

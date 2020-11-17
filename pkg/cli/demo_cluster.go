@@ -159,7 +159,11 @@ func (c *transientCluster) start(
 			}
 		}
 
-		serv := serverFactory.New(args).(*server.TestServer)
+		s, err := serverFactory.New(args)
+		if err != nil {
+			return err
+		}
+		serv := s.(*server.TestServer)
 		if i == 0 {
 			c.s = serv
 			// The first node connects its Settings instance to the `log`
@@ -491,8 +495,11 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	// TODO(#42243): re-compute the latency mapping.
 	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir,
 		c.sqlFirstPort, c.httpFirstPort)
-	serv := server.TestServerFactory.New(args).(*server.TestServer)
-
+	s, err := server.TestServerFactory.New(args)
+	if err != nil {
+		return err
+	}
+	serv := s.(*server.TestServer)
 	// We want to only return after the server is ready.
 	readyCh := make(chan struct{})
 	serv.Cfg.ReadyFn = func(bool) {
