@@ -514,7 +514,7 @@ ifdef target-is-windows
 DYN_EXT     := dll
 endif
 
-LIBGEOS     := $(DYN_LIB_DIR)/libgeos.$(DYN_EXT)
+LIBGEOS     := $(DYN_LIB_DIR)/libgeos.$(DYN_EXT) $(DYN_LIB_DIR)/libgeos_c.$(DYN_EXT)
 
 C_LIBS_COMMON = \
 	$(if $(use-stdmalloc),,$(LIBJEMALLOC)) \
@@ -761,6 +761,7 @@ endif
 
 libgeos_inner: $(GEOS_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $(GEOS_NATIVE_LIB_DIR)/libgeos.$(DYN_EXT) $(GEOS_SRC_DIR) || $(MAKE) --no-print-directory -C $(GEOS_DIR) geos_c
+	@uptodate $(GEOS_NATIVE_LIB_DIR)/libgeos_c.$(DYN_EXT) $(GEOS_SRC_DIR) || $(MAKE) --no-print-directory -C $(GEOS_DIR) geos_c
 	mkdir -p $(DYN_LIB_DIR)
 	rm -f $(DYN_LIB_DIR)/lib{geos,geos_c}.$(DYN_EXT)
 	cp -L $(GEOS_NATIVE_LIB_DIR)/lib{geos,geos_c}.$(DYN_EXT) $(DYN_LIB_DIR)
