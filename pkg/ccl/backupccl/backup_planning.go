@@ -509,10 +509,11 @@ func backupPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	// Check whether feature backup is enabled or not.
-	if !featureBackupEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return nil, nil, nil, false,
-			pgerror.Newf(pgcode.OperatorIntervention, "BACKUP feature was disabled by the database administrator")
+	if err := featureflag.CheckEnabled(featureBackupEnabled,
+		&p.ExecCfg().Settings.SV,
+		"BACKUP",
+	); err != nil {
+		return nil, nil, nil, false, err
 	}
 
 	var err error
@@ -604,7 +605,7 @@ func backupPlanHook(
 			return err
 		}
 		if len(to) > 1 {
-			if err := requireEnterprise("partitoned destinations"); err != nil {
+			if err := requireEnterprise("partitioned destinations"); err != nil {
 				return err
 			}
 		}

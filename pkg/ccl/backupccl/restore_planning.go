@@ -1184,10 +1184,11 @@ func restorePlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	// Check whether feature restore is enabled or not.
-	if !featureRestoreEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return nil, nil, nil, false,
-			pgerror.Newf(pgcode.OperatorIntervention, "RESTORE feature was disabled by the database administrator")
+	if err := featureflag.CheckEnabled(featureRestoreEnabled,
+		&p.ExecCfg().Settings.SV,
+		"RESTORE",
+	); err != nil {
+		return nil, nil, nil, false, err
 	}
 
 	fromFns := make([]func() ([]string, error), len(restoreStmt.From))

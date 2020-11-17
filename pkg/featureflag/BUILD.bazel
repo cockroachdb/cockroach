@@ -5,4 +5,9 @@ go_library(
     srcs = ["feature_flags.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/featureflag",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+    ],
 )
