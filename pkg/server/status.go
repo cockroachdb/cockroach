@@ -981,7 +981,7 @@ func (s *statusServer) LogFile(
 	}
 
 	// Determine how to redact.
-	inputEditMode := log.SelectEditMode(req.Redact, req.KeepRedactable)
+	inputEditMode := log.SelectEditMode(req.Redact, log.KeepRedactable)
 
 	// Ensure that the latest log entries are available in files.
 	log.Flush()
@@ -1004,13 +1004,6 @@ func (s *statusServer) LogFile(
 			return nil, err
 		}
 		resp.Entries = append(resp.Entries, entry)
-	}
-
-	// Erase the redactable bit if requested by client.
-	if !req.KeepRedactable {
-		for i := range resp.Entries {
-			resp.Entries[i].Redactable = false
-		}
 	}
 
 	return &resp, nil
@@ -1074,7 +1067,7 @@ func (s *statusServer) Logs(
 	}
 
 	// Determine how to redact.
-	inputEditMode := log.SelectEditMode(req.Redact, req.KeepRedactable)
+	inputEditMode := log.SelectEditMode(req.Redact, log.KeepRedactable)
 
 	// Select the time interval.
 	startTimestamp, err := parseInt64WithDefault(
@@ -1116,13 +1109,6 @@ func (s *statusServer) Logs(
 		startTimestamp, endTimestamp, int(maxEntries), regex, inputEditMode)
 	if err != nil {
 		return nil, err
-	}
-
-	// Erase the redactable bit if requested by client.
-	if !req.KeepRedactable {
-		for i := range entries {
-			entries[i].Redactable = false
-		}
 	}
 
 	return &serverpb.LogEntriesResponse{Entries: entries}, nil
