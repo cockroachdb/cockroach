@@ -206,8 +206,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
 
-	// Generate implicit filters from constraints and computed columns and add
-	// them to the list of explicit filters provided in the query.
+	// Generate implicit filters from constraints and computed columns as
+	// optional filters to help constrain an index scan.
 	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
 	computedColFilters := c.computedColFilters(scanPrivate.Table, explicitFilters, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
@@ -795,6 +795,12 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
 
+	// Generate implicit filters from constraints and computed columns as
+	// optional filters to help constrain an index scan.
+	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
+	computedColFilters := c.computedColFilters(scanPrivate.Table, filters, optionalFilters)
+	optionalFilters = append(optionalFilters, computedColFilters...)
+
 	// Iterate over all inverted indexes.
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
@@ -807,10 +813,8 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
-		// TODO(mgartner): Consider optional filters (like check constraints)
-		// that can help constrain the prefix columns.
 		spanExpr, constraint, remainingFilters, pfState, geoOk := invertedidx.TryConstrainGeoIndex(
-			c.e.evalCtx, c.e.f, filters, scanPrivate.Table, index,
+			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index,
 		)
 		if geoOk {
 			spansToRead = spanExpr.SpansToRead
