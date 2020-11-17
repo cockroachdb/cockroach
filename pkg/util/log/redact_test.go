@@ -52,12 +52,12 @@ func TestRedactedLogOutput(t *testing.T) {
 	resetCaptured()
 
 	Errorf(context.Background(), "test2 %v end", startRedactable+"hello"+endRedactable)
-	if !contains("test2 "+startRedactable+"hello"+endRedactable+" end", t) {
-		t.Errorf("expected unquoted markers, got %q", contents())
+	if !contains("test2 ?hello? end", t) {
+		t.Errorf("expected escaped markers, got %q", contents())
 	}
 
 	resetCaptured()
-	debugLog.redactableLogs.Set(true)
+	_ = TestingSetRedactable(true)
 	Errorf(context.Background(), "test3 %v end", "hello")
 	if !contains(redactableIndicator+" test3", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
@@ -119,35 +119,31 @@ func TestRedactTags(t *testing.T) {
 
 	for _, tc := range testData {
 		var buf strings.Builder
-		redactTags(tc.ctx, &buf)
+		renderTagsAsRedactable(tc.ctx, &buf)
 		assert.Equal(t, tc.expected, buf.String())
 	}
 }
 
 func TestRedactedDecodeFile(t *testing.T) {
 	testData := []struct {
-		redactableLogs bool
-		redactMode     EditSensitiveData
-		expRedactable  bool
-		expMessage     string
+		redactMode    EditSensitiveData
+		expRedactable bool
+		expMessage    string
 	}{
-		{false, WithMarkedSensitiveData, true, "‹marker: this is safe, stray marks ??, this is not safe›"},
-		{false, WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ‹›, this is not safe"},
-		{false, WithoutSensitiveData, true, "‹×›"},
-		{true, WithMarkedSensitiveData, true, "marker: this is safe, stray marks ??, ‹this is not safe›"},
-		{true, WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ??, this is not safe"},
-		{true, WithoutSensitiveData, true, "marker: this is safe, stray marks ??, ‹×›"},
+		{WithMarkedSensitiveData, true, "marker: this is safe, stray marks ??, ‹this is not safe›"},
+		{WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ??, this is not safe"},
+		{WithoutSensitiveData, true, "marker: this is safe, stray marks ??, ‹×›"},
 	}
 
 	for _, tc := range testData {
 		// Use a closure to force scope boundaries.
-		t.Run(fmt.Sprintf("%v/%v", tc.redactableLogs, tc.redactMode), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%v", tc.redactMode), func(t *testing.T) {
 			// Initialize the logging system for this test.
 			// The log file go to a different directory in each sub-test.
 			s := ScopeWithoutShowLogs(t)
 			defer s.Close(t)
 			setFlags()
-			defer TestingSetRedactable(tc.redactableLogs)()
+			defer TestingSetRedactable(true)()
 
 			// Force file re-initialization.
 			s.Rotate(t)

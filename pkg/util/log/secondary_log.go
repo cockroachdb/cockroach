@@ -67,8 +67,18 @@ func NewSecondaryLogger(
 		logging.logFilesCombinedMaxSize,
 		l.logger.getStartLines,
 	)
+	// TODO(knz): Make all this configurable.
+	// (As done in https://github.com/cockroachdb/cockroach/pull/51987.)
 	l.logger.sinks = []logSink{&logging.stderrSink, fileSink}
-	l.logger.redactableLogs.Set(logging.redactableLogs)
+	l.logger.sinkEditors = []redactEditor{
+		// stderr editor.
+		// We don't redact upfront, and we keep the redaction markers.
+		getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
+		// file editor.
+		// We don't redact upfront, and the "--redactable-logs" flag decides
+		// whether to keep the redaction markers in the output.
+		getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */)),
+	}
 
 	// Ensure the registry knows about this logger.
 	allFileSinks.put(fileSink)
@@ -94,7 +104,7 @@ func (l *SecondaryLogger) output(
 	ctx context.Context, depth int, sev Severity, format string, args ...interface{},
 ) {
 	entry := MakeEntry(
-		ctx, sev, &l.logger.logCounter, depth+1, l.logger.redactableLogs.Get(), format, args...)
+		ctx, sev, &l.logger.logCounter, depth+1, true /* redactable */, format, args...)
 	l.logger.outputLogEntry(entry)
 }
 

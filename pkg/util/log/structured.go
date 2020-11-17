@@ -27,7 +27,7 @@ import (
 func FormatWithContextTags(ctx context.Context, format string, args ...interface{}) string {
 	var buf strings.Builder
 	formatTags(ctx, true /* brackets */, &buf)
-	renderArgs(false, &buf, format, args...)
+	formatArgs(&buf, format, args...)
 	return buf.String()
 }
 
@@ -46,7 +46,7 @@ func addStructured(
 	}
 
 	entry := MakeEntry(
-		ctx, sev, &debugLog.logCounter, depth+1, debugLog.redactableLogs.Get(), format, args...)
+		ctx, sev, &debugLog.logCounter, depth+1, true /* redactable */, format, args...)
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
 		eventInternal(sp, el, (sev >= severity.ERROR), entry)
 	}
