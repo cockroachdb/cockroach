@@ -235,8 +235,12 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		// once the respective issues are fixed.
 		ignoreErr := false
 		if err := runE(c, ctx, controller,
-			`grep -E "(Oh jeez, I'm sorry, Jepsen broke. Here's why|Caused by)" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 `+
-				`| grep -e BrokenBarrierException -e InterruptedException -e com.jcraft.jsch.JSchException -e ArrayIndexOutOfBoundsException`+
+			`grep -E "(Oh jeez, I'm sorry, Jepsen broke. Here's why|Caused by)" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 | grep `+
+				`-e BrokenBarrierException `+
+				`-e InterruptedException `+
+				`-e com.jcraft.jsch.JSchException `+
+				`-e ArrayIndexOutOfBoundsException `+
+				`-e NullPointerException `+
 				// And one more ssh failure we've seen, apparently encountered when
 				// downloading logs.
 				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure" `+
