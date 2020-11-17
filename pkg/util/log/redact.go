@@ -38,6 +38,11 @@ const (
 	WithoutSensitiveData
 )
 
+// KeepRedactable can be used as an argument to SelectEditMode to indicate that
+// the logs should retain their sensitive data markers so that they can be
+// redacted later.
+const KeepRedactable = true
+
 // SelectEditMode returns an EditSensitiveData value that's suitable
 // for use with NewDecoder depending on client-side desired
 // "redact" and "keep redactable" flags.
