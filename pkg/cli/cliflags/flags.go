@@ -1058,6 +1058,20 @@ The line length where sqlfmt will try to wrap.`,
 		Description: `Align the output.`,
 	}
 
+	DemoSQLPort = FlagInfo{
+		Name: "sql-port",
+		Description: `First port number for SQL servers.
+There should be as many TCP ports available as the value of --nodes
+starting at the specified value.`,
+	}
+
+	DemoHTTPPort = FlagInfo{
+		Name: "http-port",
+		Description: `First port number for HTTP servers.
+There should be as many TCP ports available as the value of --nodes
+starting at the specified value.`,
+	}
+
 	DemoNodes = FlagInfo{
 		Name:        "nodes",
 		Description: `How many in-memory nodes to create for the demo.`,

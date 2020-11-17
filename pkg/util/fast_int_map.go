@@ -82,6 +82,16 @@ func (m FastIntMap) Get(key int) (value int, ok bool) {
 	return value, ok
 }
 
+// GetDefault returns the current value mapped to key, or 0 if the key is
+// unmapped.
+func (m FastIntMap) GetDefault(key int) (value int) {
+	value, ok := m.Get(key)
+	if !ok {
+		return 0
+	}
+	return value
+}
+
 // Len returns the number of keys in the map.
 func (m FastIntMap) Len() int {
 	if m.large != nil {

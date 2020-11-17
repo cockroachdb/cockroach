@@ -521,7 +521,9 @@ INSERT INTO array_tab VALUES
   (3, '{2}'),
   (4, '{1, 2}'),
   (5, '{1, 3}'),
-  (6, '{1, 2, 3, 4}')
+  (6, '{1, 2, 3, 4}'),
+  (7, ARRAY[NULL]::INT[]),
+  (8, NULL)
 
 # This query performs an inverted join.
 query ITIT
@@ -545,6 +547,7 @@ SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER 
 6  {1,2,3,4}  4  {1,2}
 6  {1,2,3,4}  5  {1,3}
 6  {1,2,3,4}  6  {1,2,3,4}
+7  {NULL}     1  {}
 
 # This query performs a cross join followed by a filter.
 query ITIT
@@ -568,6 +571,7 @@ SELECT * FROM array_tab@primary AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER 
 6  {1,2,3,4}  4  {1,2}
 6  {1,2,3,4}  5  {1,3}
 6  {1,2,3,4}  6  {1,2,3,4}
+7  {NULL}     1  {}
 
 # This query is checking that the results of the previous two queries are identical.
 # There should be no rows output.
@@ -646,6 +650,8 @@ ORDER BY a1.a, a2.a
 ----
 NULL  NULL       5  {1,3}
 NULL  NULL       6  {1,2,3,4}
+NULL  NULL       7  {NULL}
+NULL  NULL       8  NULL
 2     {1}        1  {}
 2     {1}        2  {1}
 4     {1,2}      1  {}
@@ -682,3 +688,5 @@ SELECT a2.* FROM array_tab@primary AS a2 WHERE NOT EXISTS (
 )
 ORDER BY a2.a
 ----
+7  {NULL}
+8  NULL

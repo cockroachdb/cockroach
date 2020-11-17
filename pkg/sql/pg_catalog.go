@@ -446,7 +446,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
 			for _, colID := range index.ColumnIDs {
 				idxID := h.IndexOid(table.GetID(), index.ID)
-				column := table.GetColumnAtIdx(columnIdxMap[colID])
+				column := table.GetColumnAtIdx(columnIdxMap.GetDefault(colID))
 				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
 					return err
 				}

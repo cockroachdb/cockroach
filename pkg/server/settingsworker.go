@@ -79,7 +79,7 @@ func (s *Server) refreshSettings() {
 				}
 				colID := lastColID + descpb.ColumnID(colIDDiff)
 				lastColID = colID
-				if idx, ok := colIdxMap[colID]; ok {
+				if idx, ok := colIdxMap.Get(colID); ok {
 					res, bytes, err = rowenc.DecodeTableValue(a, tbl.Columns[idx].Type, bytes)
 					if err != nil {
 						return err

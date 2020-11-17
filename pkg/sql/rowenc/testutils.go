@@ -1019,9 +1019,9 @@ func TestingMakePrimaryIndexKey(
 	}
 	// Create the ColumnID to index in datums slice map needed by
 	// MakeIndexKeyPrefix.
-	colIDToRowIndex := make(map[descpb.ColumnID]int)
+	var colIDToRowIndex catalog.TableColMap
 	for i := range vals {
-		colIDToRowIndex[index.ColumnIDs[i]] = i
+		colIDToRowIndex.Set(index.ColumnIDs[i], i)
 	}
 
 	keyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, index.ID)

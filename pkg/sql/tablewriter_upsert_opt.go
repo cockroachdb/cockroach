@@ -55,7 +55,7 @@ type optTableUpserter struct {
 	// A mapping of column IDs to the return index used to shape the resulting
 	// rows to those required by the returning clause. Only required if
 	// rowsNeeded is true.
-	colIDToReturnIndex map[descpb.ColumnID]int
+	colIDToReturnIndex catalog.TableColMap
 
 	// Do the result rows have a different order than insert rows. Only set if
 	// rowsNeeded is true.
@@ -116,10 +116,11 @@ func (tu *optTableUpserter) init(
 		// never return them back to the user.
 		tu.colIDToReturnIndex = tu.tableDesc().ColumnIdxMapWithMutations(false /* includeMutations */)
 
-		if len(tu.ri.InsertColIDtoRowIndex) == len(tu.colIDToReturnIndex) {
-			for colID, insertIndex := range tu.ri.InsertColIDtoRowIndex {
-				resultIndex, ok := tu.colIDToReturnIndex[colID]
-				if !ok || resultIndex != insertIndex {
+		if tu.ri.InsertColIDtoRowIndex.Len() == tu.colIDToReturnIndex.Len() {
+			for i := range tu.ri.InsertCols {
+				colID := tu.ri.InsertCols[i].ID
+				resultIndex, ok := tu.colIDToReturnIndex.Get(colID)
+				if !ok || resultIndex != tu.ri.InsertColIDtoRowIndex.GetDefault(colID) {
 					tu.insertReorderingRequired = true
 					break
 				}
@@ -139,11 +140,11 @@ func (tu *optTableUpserter) init(
 // 1) A row may not contain values for nullable columns, so insert those NULLs.
 // 2) Don't return values we wrote into non-public mutation columns.
 func (tu *optTableUpserter) makeResultFromRow(
-	row tree.Datums, colIDToRowIndex map[descpb.ColumnID]int,
+	row tree.Datums, colIDToRowIndex catalog.TableColMap,
 ) tree.Datums {
-	resultRow := make(tree.Datums, len(tu.colIDToReturnIndex))
-	for colID, returnIndex := range tu.colIDToReturnIndex {
-		rowIndex, ok := colIDToRowIndex[colID]
+	resultRow := make(tree.Datums, tu.colIDToReturnIndex.Len())
+	tu.colIDToReturnIndex.ForEach(func(colID descpb.ColumnID, returnIndex int) {
+		rowIndex, ok := colIDToRowIndex.Get(colID)
 		if ok {
 			resultRow[returnIndex] = row[rowIndex]
 		} else {
@@ -152,7 +153,7 @@ func (tu *optTableUpserter) makeResultFromRow(
 			// columns.
 			resultRow[returnIndex] = tree.DNull
 		}
-	}
+	})
 	return resultRow
 }
 
@@ -290,14 +291,14 @@ func (tu *optTableUpserter) updateConflictingRow(
 	tableRow := tu.makeResultFromRow(fetchRow, tu.ru.FetchColIDtoRowIndex)
 
 	// Make sure all the updated columns are present.
-	for colID, returnIndex := range tu.colIDToReturnIndex {
+	tu.colIDToReturnIndex.ForEach(func(colID descpb.ColumnID, returnIndex int) {
 		// If an update value for a given column exists, use that; else use the
 		// existing value of that column if it has been fetched.
-		rowIndex, ok := tu.ru.UpdateColIDtoRowIndex[colID]
+		rowIndex, ok := tu.ru.UpdateColIDtoRowIndex.Get(colID)
 		if ok {
 			tableRow[returnIndex] = updateValues[rowIndex]
 		}
-	}
+	})
 
 	// Map the upserted columns into the result row before adding it.
 	for tabIdx := range tableRow {

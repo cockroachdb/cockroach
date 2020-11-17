@@ -772,6 +772,9 @@ func init() {
 		// variables from startCtx, this is one case where we afford
 		// sharing a variable between both.
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
+
+		intFlag(f, &demoCtx.sqlPort, cliflags.DemoSQLPort)
+		intFlag(f, &demoCtx.httpPort, cliflags.DemoHTTPPort)
 	}
 
 	// statement-diag command.

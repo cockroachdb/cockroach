@@ -144,7 +144,7 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 	colIdxByID := row.tableDesc.ColumnIdxMap()
 	jsonEntries := make([]interface{}, len(row.tableDesc.GetPrimaryIndex().ColumnIDs))
 	for i, colID := range row.tableDesc.GetPrimaryIndex().ColumnIDs {
-		idx, ok := colIdxByID[colID]
+		idx, ok := colIdxByID.Get(colID)
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
