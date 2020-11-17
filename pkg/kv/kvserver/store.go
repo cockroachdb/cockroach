@@ -801,6 +801,16 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 	return 2 * (sc.RangeLeaseActiveDuration() + maxOffset).Nanoseconds()
 }
 
+// RaftElectionTimeoutTicks exposed for testing.
+func (s *Store) RaftElectionTimeoutTicks() int {
+	return s.cfg.RaftElectionTimeoutTicks
+}
+
+// CoalescedHeartbeatsInterval exposed for testing.
+func (s *Store) CoalescedHeartbeatsInterval() time.Duration {
+	return s.cfg.CoalescedHeartbeatsInterval
+}
+
 // NewStore returns a new instance of a store.
 func NewStore(
 	ctx context.Context, cfg StoreConfig, eng storage.Engine, nodeDesc *roachpb.NodeDescriptor,
@@ -1645,12 +1655,6 @@ func (s *Store) startGossip() {
 		// functions (e.g. MaybeGossipSystemConfig or MaybeGossipNodeLiveness).
 		_, pErr := repl.getLeaseForGossip(ctx)
 		return pErr.GoError()
-	}
-
-	if s.cfg.TestingKnobs.DisablePeriodicGossips {
-		wakeReplica = func(context.Context, *Replica) error {
-			return errPeriodicGossipsDisabled
-		}
 	}
 
 	gossipFns := []struct {

@@ -86,11 +86,6 @@ type StoreTestingKnobs struct {
 	// should get rid of such practices once we make TestServer take a
 	// ManualClock.
 	DisableMaxOffsetCheck bool
-	// DontPreventUseOfOldLeaseOnStart disables the initialization of
-	// replica.mu.minLeaseProposedTS on replica.Init(). This has the effect of
-	// allowing the replica to use the lease that it had in a previous life (in
-	// case the tests persisted the engine used in said previous life).
-	DontPreventUseOfOldLeaseOnStart bool
 	// DisableAutomaticLeaseRenewal enables turning off the background worker
 	// that attempts to automatically renew expiration-based leases.
 	DisableAutomaticLeaseRenewal bool
@@ -128,8 +123,6 @@ type StoreTestingKnobs struct {
 	DisableConsistencyQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
-	// DisablePeriodicGossips disables periodic gossiping.
-	DisablePeriodicGossips bool
 	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
 	// leadership when it diverges from the range's leaseholder.
 	DisableLeaderFollowsLeaseholder bool
