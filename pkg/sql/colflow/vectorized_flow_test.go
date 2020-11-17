@@ -336,12 +336,12 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		errCh := make(chan error)
 		go func() {
 			createTempDir(ctx)
-			errCh <- ngn.MkdirAll(filepath.Join(vf.getTempStoragePath(ctx), "async"))
+			errCh <- ngn.MkdirAll(filepath.Join(vf.GetPath(ctx), "async"))
 		}()
 		createTempDir(ctx)
 		// Both goroutines should be able to create their subdirectories within the
 		// flow's temporary directory.
-		require.NoError(t, ngn.MkdirAll(filepath.Join(vf.getTempStoragePath(ctx), "main_goroutine")))
+		require.NoError(t, ngn.MkdirAll(filepath.Join(vf.GetPath(ctx), "main_goroutine")))
 		require.NoError(t, <-errCh)
 		vf.Cleanup(ctx)
 		checkDirs(t, 0)

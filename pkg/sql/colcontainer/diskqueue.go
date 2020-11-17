@@ -270,14 +270,21 @@ const (
 	DiskQueueCacheModeClearAndReuseCache
 )
 
+// GetPather is an object that has a temporary directory.
+type GetPather interface {
+	// GetPath returns where this object's temporary directory is.
+	// Note that the directory is created lazily on the first call to GetPath.
+	GetPath(context.Context) string
+}
+
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
 type DiskQueueCfg struct {
 	// FS is the filesystem interface to use.
 	FS fs.FS
-	// GetPath returns where the temporary directory that will contain this
+	// GetPather returns where the temporary directory that will contain this
 	// DiskQueue's files has been created. The directory name will be a UUID.
 	// Note that the directory is created lazily on the first call to GetPath.
-	GetPath func(context.Context) string
+	GetPather GetPather
 	// CacheMode defines the way a DiskQueue should use its cache. Refer to the
 	// comment of DiskQueueCacheModes for more information.
 	CacheMode DiskQueueCacheMode
@@ -360,7 +367,7 @@ func newDiskQueue(
 	if d.cfg.CacheMode != DiskQueueCacheModeDefault {
 		d.writeBufferLimit = d.cfg.BufferSizeBytes / 2
 	}
-	if err := cfg.FS.MkdirAll(filepath.Join(cfg.GetPath(ctx), d.dirName)); err != nil {
+	if err := cfg.FS.MkdirAll(filepath.Join(cfg.GetPather.GetPath(ctx), d.dirName)); err != nil {
 		return nil, err
 	}
 	// rotateFile will create a new file to write to.
@@ -407,7 +414,7 @@ func (d *diskQueue) Close(ctx context.Context) error {
 	if err := d.CloseRead(); err != nil {
 		return err
 	}
-	if err := d.cfg.FS.RemoveAll(filepath.Join(d.cfg.GetPath(ctx), d.dirName)); err != nil {
+	if err := d.cfg.FS.RemoveAll(filepath.Join(d.cfg.GetPather.GetPath(ctx), d.dirName)); err != nil {
 		return err
 	}
 	totalSize := int64(0)
@@ -432,7 +439,7 @@ func (d *diskQueue) Close(ctx context.Context) error {
 // any file (i.e. during initialization). This will simply create the first file
 // to write to.
 func (d *diskQueue) rotateFile(ctx context.Context) error {
-	fName := filepath.Join(d.cfg.GetPath(ctx), d.dirName, strconv.Itoa(d.seqNo))
+	fName := filepath.Join(d.cfg.GetPather.GetPath(ctx), d.dirName, strconv.Itoa(d.seqNo))
 	f, err := d.cfg.FS.CreateWithSync(fName, bytesPerSync)
 	if err != nil {
 		return err
