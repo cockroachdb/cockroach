@@ -31,18 +31,8 @@ import (
 type distSQLSpecExecFactory struct {
 	planner *planner
 	dsp     *DistSQLPlanner
-	// planContexts is a utility struct that stores already instantiated
-	// planning contexts. It should not be accessed directly, use getPlanCtx()
-	// instead. The struct allows for lazy instantiation of the planning
-	// contexts which are then reused between different calls to Construct*
-	// methods. We need to keep both because every stage of processors can
-	// either be distributed or local regardless of the distribution of the
-	// previous stages.
-	planContexts struct {
-		distPlanCtx *PlanningCtx
-		// localPlanCtx stores the local planning context of the gateway.
-		localPlanCtx *PlanningCtx
-	}
+	// planCtx should not be used directly - getPlanCtx() should be used instead.
+	planCtx       *PlanningCtx
 	singleTenant  bool
 	planningMode  distSQLPlanningMode
 	gatewayNodeID roachpb.NodeID
@@ -65,32 +55,30 @@ const (
 )
 
 func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exec.Factory {
-	return &distSQLSpecExecFactory{
+	e := &distSQLSpecExecFactory{
 		planner:       p,
 		dsp:           p.extendedEvalCtx.DistSQLPlanner,
 		singleTenant:  p.execCfg.Codec.ForSystemTenant(),
 		planningMode:  planningMode,
 		gatewayNodeID: p.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
 	}
+	distribute := e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning
+	evalCtx := p.ExtendedEvalContext()
+	e.planCtx = e.dsp.NewPlanningCtx(
+		evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute,
+	)
+	return e
 }
 
 func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *PlanningCtx {
 	distribute := false
 	if e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning {
-		distribute = shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
+		distribute = shouldDistributeGivenRecAndMode(
+			recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode,
+		)
 	}
-	if distribute {
-		if e.planContexts.distPlanCtx == nil {
-			evalCtx := e.planner.ExtendedEvalContext()
-			e.planContexts.distPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute)
-		}
-		return e.planContexts.distPlanCtx
-	}
-	if e.planContexts.localPlanCtx == nil {
-		evalCtx := e.planner.ExtendedEvalContext()
-		e.planContexts.localPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute)
-	}
-	return e.planContexts.localPlanCtx
+	e.planCtx.isLocal = !distribute
+	return e.planCtx
 }
 
 // TODO(yuzefovich): consider adding machinery that would confirm that
