@@ -2527,25 +2527,35 @@ func (desc *Immutable) FindActiveColumnsByNames(
 	return cols, nil
 }
 
-// FindColumnByName finds the column with the specified name. It returns
-// an active column or a column from the mutation list. It returns true
-// if the column is being dropped.
-func (desc *Immutable) FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error) {
+// HasColumnWithName finds the column with the specified name. It returns
+// nil if there is no such column, and true if the column is being dropped.
+func (desc *Immutable) HasColumnWithName(name tree.Name) (*descpb.ColumnDescriptor, bool) {
 	for i := range desc.Columns {
 		c := &desc.Columns[i]
 		if c.Name == string(name) {
-			return c, false, nil
+			return c, false
 		}
 	}
 	for i := range desc.Mutations {
 		m := &desc.Mutations[i]
 		if c := m.GetColumn(); c != nil {
 			if c.Name == string(name) {
-				return c, m.Direction == descpb.DescriptorMutation_DROP, nil
+				return c, m.Direction == descpb.DescriptorMutation_DROP
 			}
 		}
 	}
-	return nil, false, colinfo.NewUndefinedColumnError(string(name))
+	return nil, false
+}
+
+// FindColumnByName finds the column with the specified name. It returns
+// an active column or a column from the mutation list. It returns true
+// if the column is being dropped.
+func (desc *Immutable) FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error) {
+	ret, ok := desc.HasColumnWithName(name)
+	if ret == nil {
+		return nil, false, colinfo.NewUndefinedColumnError(string(name))
+	}
+	return ret, ok, nil
 }
 
 // FindActiveOrNewColumnByName finds the column with the specified name.
