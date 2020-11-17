@@ -89,7 +89,7 @@ func TestExternalSort(t *testing.T) {
 						// flow this will happen in a downstream materializer/outbox,
 						// since there is no way to tell an operator that Next won't be
 						// called again.
-						if tc.k == 0 || tc.k >= len(tc.tuples) {
+						if tc.k == 0 || tc.k >= uint64(len(tc.tuples)) {
 							semsToCheck = append(semsToCheck, sem)
 						}
 						// TODO(asubiotto): Pass in the testing.T of the caller to this
@@ -317,7 +317,7 @@ func createDiskBackedSorter(
 	typs []*types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	matchLen int,
-	k int,
+	k uint64,
 	spillingCallbackFn func(),
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
@@ -334,7 +334,7 @@ func createDiskBackedSorter(
 			Sorter: sorterSpec,
 		},
 		Post: execinfrapb.PostProcessSpec{
-			Limit: uint64(k),
+			Limit: k,
 		},
 		ResultTypes: typs,
 	}

@@ -22,7 +22,7 @@ func TestLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tcs := []struct {
-		limit    int
+		limit    uint64
 		tuples   []tuple
 		expected []tuple
 	}{
