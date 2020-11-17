@@ -1860,6 +1860,32 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 	t.Run("enterprise", enterpriseTest(testFn))
 }
 
+// TestChangefeedFeatureFlag tests the feature flag logic that allows the
+// changefeed-related commands to be toggled on via cluster settings. Note that
+// test for when it is toggled off will be in TestChangefeedErrors.
+// TODO(angelaw): Not entirely sure this test is needed as it only checks
+// whether things work if the feature is toggled to true?
+func TestChangefeedFeatureFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = true`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+	}
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, sinklessTest(testFn))
+}
+
 func TestChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1880,6 +1906,16 @@ func TestChangefeedErrors(t *testing.T) {
 		`EXPERIMENTAL CHANGEFEED FOR rangefeed_off`,
 	)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+
+	// Feature flag for changefeeds is off — test that CREATE CHANGEFEED and
+	// EXPERIMENTAL CHANGEFEED FOR surface error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = false`)
+	sqlDB.ExpectErr(t, `CHANGEFEED feature was disabled by the database administrator`,
+		`CREATE CHANGEFEED FOR foo`)
+	sqlDB.ExpectErr(t, `CHANGEFEED feature was disabled by the database administrator`,
+		`EXPERIMENTAL CHANGEFEED FOR foo`)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = true`)
 
 	sqlDB.ExpectErr(
 		t, `unknown format: nope`,

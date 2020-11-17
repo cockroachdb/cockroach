@@ -1184,7 +1184,7 @@ func restorePlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	// Check whether feature restore is enabled or not.
+	// Check whether feature flag is enabled or not.
 	if !featureRestoreEnabled.Get(&p.ExecCfg().Settings.SV) {
 		return nil, nil, nil, false,
 			pgerror.Newf(pgcode.OperatorIntervention, "RESTORE feature was disabled by the database administrator")

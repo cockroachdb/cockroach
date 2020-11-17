@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -51,6 +53,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// featureChangefeedEnabled is used to enable and disable the CHANGEFEED feature.
+var featureChangefeedEnabled = settings.RegisterPublicBoolSetting(
+	"feature.changefeed.enabled",
+	"set to true to enable changefeeds, false to disable; default is true",
+	featureflag.FeatureFlagEnabledDefault)
+
 func init() {
 	sql.AddPlanHook(changefeedPlanHook)
 	jobs.RegisterConstructor(
@@ -70,6 +78,11 @@ func changefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
+	// Check whether feature flag is enabled or not.
+	if !featureChangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, nil, nil, false,
+			pgerror.Newf(pgcode.OperatorIntervention, "CHANGEFEED feature was disabled by the database administrator")
+	}
 	var sinkURIFn func() (string, error)
 	var header colinfo.ResultColumns
 	unspecifiedSink := changefeedStmt.SinkURI == nil

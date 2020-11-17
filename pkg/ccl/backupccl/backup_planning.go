@@ -509,7 +509,7 @@ func backupPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	// Check whether feature backup is enabled or not.
+	// Check whether feature flag is enabled or not.
 	if !featureBackupEnabled.Get(&p.ExecCfg().Settings.SV) {
 		return nil, nil, nil, false,
 			pgerror.Newf(pgcode.OperatorIntervention, "BACKUP feature was disabled by the database administrator")
