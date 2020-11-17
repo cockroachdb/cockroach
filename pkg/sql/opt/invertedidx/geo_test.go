@@ -491,7 +491,7 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 		// that is tested elsewhere. This is just testing that we are constraining
 		// the index when we expect to.
 		_, _, _, pfState, ok := invertedidx.TryConstrainGeoIndex(
-			evalCtx, &f, filters, tab, md.Table(tab).Index(tc.indexOrd),
+			evalCtx, &f, filters, nil /* optionalFilters */, tab, md.Table(tab).Index(tc.indexOrd),
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
