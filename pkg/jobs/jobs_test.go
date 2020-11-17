@@ -2387,3 +2387,191 @@ func TestStatusSafeFormatter(t *testing.T) {
 	expected := string(jobs.StatusCanceled)
 	require.Equal(t, expected, redacted)
 }
+
+func TestMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.TestingSetAdoptAndCancelIntervals(time.Millisecond, time.Millisecond)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	resuming := make(chan chan error, 1)
+	waitForErr := func(ctx context.Context) error {
+		errCh := make(chan error)
+		select {
+		case resuming <- errCh:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		select {
+		case err := <-errCh:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	int64EqSoon := func(t *testing.T, f func() int64, exp int64) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			if vv := f(); vv != exp {
+				return errors.Errorf("expected %d, got %d", exp, vv)
+			}
+			return nil
+		})
+	}
+	res := jobs.FakeResumer{
+		OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+			return waitForErr(ctx)
+		},
+		FailOrCancel: func(ctx context.Context) error {
+			return waitForErr(ctx)
+		},
+	}
+	jobs.RegisterConstructor(jobspb.TypeBackup, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return res
+	})
+	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return res
+	})
+	setup := func(t *testing.T) (s serverutils.TestServerInterface, r *jobs.Registry, cleanup func()) {
+		jobConstructorCleanup := jobs.ResetConstructors()
+		s, _, _ = serverutils.StartServer(t, base.TestServerArgs{})
+		r = s.JobRegistry().(*jobs.Registry)
+		return s, r, func() {
+			jobConstructorCleanup()
+			s.Stopper().Stop(ctx)
+		}
+	}
+
+	t.Run("success", func(t *testing.T) {
+		_, registry, cleanup := setup(t)
+		defer cleanup()
+		rec := jobs.Record{
+			DescriptorIDs: []descpb.ID{1},
+			Details:       jobspb.BackupDetails{},
+			Progress:      jobspb.BackupProgress{},
+		}
+		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, nil /* txn */)
+		require.NoError(t, err)
+		errCh := <-resuming
+		backupMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeBackup]
+		require.Equal(t, int64(1), backupMetrics.CurrentlyRunning.Value())
+		errCh <- nil
+		int64EqSoon(t, backupMetrics.ResumeCompleted.Count, 1)
+	})
+	t.Run("restart, pause, resume, then success", func(t *testing.T) {
+		_, registry, cleanup := setup(t)
+		defer cleanup()
+		rec := jobs.Record{
+			DescriptorIDs: []descpb.ID{1},
+			Details:       jobspb.ImportDetails{},
+			Progress:      jobspb.ImportProgress{},
+		}
+		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
+
+		j, err := registry.CreateAdoptableJobWithTxn(ctx, rec, nil /* txn */)
+		require.NoError(t, err)
+		{
+			// Fail the Resume with a retriable error.
+			errCh := <-resuming
+			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
+			errCh <- jobs.NewRetryJobError("")
+			int64EqSoon(t, importMetrics.ResumeRetryError.Count, 1)
+			// It will be retried.
+			int64EqSoon(t, importMetrics.CurrentlyRunning.Value, 1)
+		}
+		{
+			// We'll pause the job this time around and make sure it stops running.
+			<-resuming
+			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
+			require.NoError(t, registry.PauseRequested(ctx, nil, *j.ID()))
+			int64EqSoon(t, importMetrics.ResumeRetryError.Count, 2)
+			require.Equal(t, int64(0), importMetrics.ResumeFailed.Count())
+			require.Equal(t, int64(0), importMetrics.ResumeCompleted.Count())
+			require.Equal(t, int64(0), importMetrics.CurrentlyRunning.Value())
+		}
+		{
+			// Now resume the job and let it succeed.
+			require.NoError(t, registry.Unpause(ctx, nil, *j.ID()))
+			errCh := <-resuming
+			int64EqSoon(t, importMetrics.CurrentlyRunning.Value, 1)
+			errCh <- nil
+			int64EqSoon(t, importMetrics.ResumeCompleted.Count, 1)
+		}
+	})
+	t.Run("failure then restarts in revert", func(t *testing.T) {
+		_, registry, cleanup := setup(t)
+		defer cleanup()
+		rec := jobs.Record{
+			DescriptorIDs: []descpb.ID{1},
+			Details:       jobspb.ImportDetails{},
+			Progress:      jobspb.ImportProgress{},
+		}
+		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
+
+		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, nil /* txn */)
+		require.NoError(t, err)
+		{
+			// Fail the Resume with a permanent error.
+			errCh := <-resuming
+			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
+			errCh <- errors.Errorf("boom")
+			int64EqSoon(t, importMetrics.ResumeFailed.Count, 1)
+			require.Equal(t, int64(0), importMetrics.ResumeCompleted.Count())
+			require.Equal(t, int64(0), importMetrics.ResumeRetryError.Count())
+		}
+		{
+			// We'll inject retriable errors in OnFailOrCancel.
+			errCh := <-resuming
+			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
+			errCh <- jobs.NewRetryJobError("boom")
+			int64EqSoon(t, importMetrics.FailOrCancelRetryError.Count, 1)
+		}
+		{
+			errCh := <-resuming
+			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
+			errCh <- nil
+			int64EqSoon(t, importMetrics.FailOrCancelCompleted.Count, 1)
+		}
+	})
+	t.Run("fail, pause, resume, then success on failure", func(t *testing.T) {
+		_, registry, cleanup := setup(t)
+		defer cleanup()
+		rec := jobs.Record{
+			DescriptorIDs: []descpb.ID{1},
+			Details:       jobspb.ImportDetails{},
+			Progress:      jobspb.ImportProgress{},
+		}
+		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
+
+		j, err := registry.CreateAdoptableJobWithTxn(ctx, rec, nil /* txn */)
+		require.NoError(t, err)
+		{
+			// Fail the Resume with a retriable error.
+			errCh := <-resuming
+			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
+			errCh <- errors.New("boom")
+			int64EqSoon(t, importMetrics.ResumeFailed.Count, 1)
+			// It will be retried.
+			int64EqSoon(t, importMetrics.CurrentlyRunning.Value, 1)
+		}
+		{
+			// We'll pause the job this time around and make sure it stops running.
+			<-resuming
+			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
+			require.NoError(t, registry.PauseRequested(ctx, nil, *j.ID()))
+			int64EqSoon(t, importMetrics.FailOrCancelRetryError.Count, 1)
+			require.Equal(t, int64(1), importMetrics.ResumeFailed.Count())
+			require.Equal(t, int64(0), importMetrics.ResumeCompleted.Count())
+			require.Equal(t, int64(0), importMetrics.CurrentlyRunning.Value())
+		}
+		{
+			// Now resume the job and let it succeed.
+			require.NoError(t, registry.Unpause(ctx, nil, *j.ID()))
+			errCh := <-resuming
+			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
+			errCh <- nil
+			int64EqSoon(t, importMetrics.FailOrCancelCompleted.Count, 1)
+			int64EqSoon(t, importMetrics.FailOrCancelFailed.Count, 0)
+		}
+	})
+}
