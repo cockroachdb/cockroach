@@ -26,6 +26,7 @@ go_library(
         "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/logtags",
+        "//vendor/go.etcd.io/etcd/raft/v3:raft",
     ],
 )
 
