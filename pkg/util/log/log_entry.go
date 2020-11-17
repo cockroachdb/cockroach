@@ -35,9 +35,9 @@ func (l *loggerT) makeStartLine(format string, args ...interface{}) logpb.Entry 
 	entry := MakeEntry(
 		context.Background(),
 		severity.INFO,
-		nil, /* logCounter */
-		2,   /* depth */
-		l.redactableLogs.Get(),
+		nil,  /* logCounter */
+		2,    /* depth */
+		true, /* redactable */
 		format,
 		args...)
 	entry.Tags = "config"
@@ -99,7 +99,7 @@ func MakeEntry(
 	// Populate the tags.
 	var buf strings.Builder
 	if redactable {
-		redactTags(ctx, &buf)
+		renderTagsAsRedactable(ctx, &buf)
 	} else {
 		formatTags(ctx, false /* brackets */, &buf)
 	}
@@ -107,26 +107,32 @@ func MakeEntry(
 
 	// Populate the message.
 	buf.Reset()
-	renderArgs(redactable, &buf, format, args...)
+	if redactable {
+		renderArgsAsRedactable(&buf, format, args...)
+	} else {
+		formatArgs(&buf, format, args...)
+	}
 	res.Message = buf.String()
 
 	return
 }
 
-func renderArgs(redactable bool, buf *strings.Builder, format string, args ...interface{}) {
+func renderArgsAsRedactable(buf *strings.Builder, format string, args ...interface{}) {
 	if len(args) == 0 {
 		buf.WriteString(format)
 	} else if len(format) == 0 {
-		if redactable {
-			redact.Fprint(buf, args...)
-		} else {
-			fmt.Fprint(buf, args...)
-		}
+		redact.Fprint(buf, args...)
 	} else {
-		if redactable {
-			redact.Fprintf(buf, format, args...)
-		} else {
-			fmt.Fprintf(buf, format, args...)
-		}
+		redact.Fprintf(buf, format, args...)
+	}
+}
+
+func formatArgs(buf *strings.Builder, format string, args ...interface{}) {
+	if len(args) == 0 {
+		buf.WriteString(format)
+	} else if len(format) == 0 {
+		fmt.Fprint(buf, args...)
+	} else {
+		fmt.Fprintf(buf, format, args...)
 	}
 }
