@@ -20,6 +20,7 @@ go_library(
         "misc_statements.go",
         "mutation_builder.go",
         "mutation_builder_fk.go",
+        "mutation_builder_unique.go",
         "opaque.go",
         "orderby.go",
         "partial_index.go",
