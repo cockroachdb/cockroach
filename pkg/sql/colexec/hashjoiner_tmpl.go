@@ -30,7 +30,7 @@ func collectProbeOuter(
 		currentID := hj.ht.probeScratch.headID[i]
 
 		for {
-			if nResults >= coldata.BatchSize() {
+			if nResults == len(hj.probeState.buildIdx) {
 				hj.probeState.prevBatch = batch
 				hj.probeState.prevBatchResumeIdx = i
 				return nResults
@@ -71,7 +71,7 @@ func collectProbeNoOuter(
 	for i := hj.probeState.prevBatchResumeIdx; i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 		for currentID != 0 {
-			if nResults >= coldata.BatchSize() {
+			if nResults == len(hj.probeState.buildIdx) {
 				hj.probeState.prevBatch = batch
 				hj.probeState.prevBatchResumeIdx = i
 				return nResults
@@ -187,7 +187,7 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 		return 0
 	}
 
-	if hj.spec.left.outer {
+	if hj.spec.joinType == descpb.LeftOuterJoin || hj.spec.joinType == descpb.FullOuterJoin {
 		if sel != nil {
 			nResults = collectProbeOuter(hj, batchSize, nResults, batch, sel, true)
 		} else {
@@ -225,7 +225,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 		return 0
 	}
 
-	if hj.spec.left.outer {
+	if hj.spec.joinType == descpb.LeftOuterJoin || hj.spec.joinType == descpb.FullOuterJoin {
 		nResults = batchSize
 
 		if sel != nil {
