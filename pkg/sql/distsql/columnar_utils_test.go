@@ -175,7 +175,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		nil, /* output */
 		result.MetadataSources,
 		result.ToClose,
-		nil, /* outputStatsToTrace */
+		nil, /* execStatsForTrace */
 		nil, /* cancelFlow */
 	)
 	if err != nil {

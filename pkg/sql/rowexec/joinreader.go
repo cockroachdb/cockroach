@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -306,7 +307,7 @@ func newJoinReader(
 	if collectingStats {
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
-		jr.FinishTrace = jr.outputStatsToTrace
+		jr.ExecStatsForTrace = jr.execStatsForTrace
 	} else {
 		jr.fetcher = &fetcher
 	}
@@ -672,48 +673,25 @@ func (jr *joinReader) close() {
 	}
 }
 
-var _ execinfrapb.DistSQLSpanStats = &JoinReaderStats{}
-
-const joinReaderTagPrefix = "joinreader."
-
-// Stats implements the SpanStats interface.
-func (jrs *JoinReaderStats) Stats() map[string]string {
-	statsMap := jrs.InputStats.Stats(joinReaderTagPrefix)
-	toMerge := jrs.IndexLookupStats.Stats(joinReaderTagPrefix + "index.")
-	for k, v := range toMerge {
-		statsMap[k] = v
-	}
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (jrs *JoinReaderStats) StatsForQueryPlan() []string {
-	is := append(
-		jrs.InputStats.StatsForQueryPlan(""),
-		jrs.IndexLookupStats.StatsForQueryPlan("index ")...,
-	)
-	return is
-}
-
-// outputStatsToTrace outputs the collected joinReader stats to the trace. Will
+// execStatsForTrace outputs the collected joinReader stats to the trace. Will
 // fail silently if the joinReader is not collecting stats.
-func (jr *joinReader) outputStatsToTrace() {
-	is, ok := getInputStats(jr.FlowCtx, jr.input)
+func (jr *joinReader) execStatsForTrace() *execstatspb.ComponentStats {
+	is, ok := getInputStats(jr.input)
 	if !ok {
-		return
+		return nil
 	}
-	ils, ok := getFetcherInputStats(jr.FlowCtx, jr.fetcher)
+	fis, ok := getFetcherInputStats(jr.fetcher)
 	if !ok {
-		return
+		return nil
 	}
 
 	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
-	jrs := &JoinReaderStats{
-		InputStats:       is,
-		IndexLookupStats: ils,
-	}
-	if sp := tracing.SpanFromContext(jr.Ctx); sp != nil {
-		sp.SetSpanStats(jrs)
+	return &execstatspb.ComponentStats{
+		Inputs: []execstatspb.InputStats{is},
+		KV: execstatspb.KVStats{
+			TuplesRead: fis.NumTuples,
+			KVTime:     fis.WaitTime,
+		},
 	}
 }
 
