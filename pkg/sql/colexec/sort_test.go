@@ -171,7 +171,7 @@ func TestSortRandomized(t *testing.T) {
 				}
 				runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 					if topK {
-						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, k), nil
+						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, uint64(k)), nil
 					}
 					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols)
 				})
@@ -281,7 +281,7 @@ func TestAllSpooler(t *testing.T) {
 func BenchmarkSort(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
-	k := 128
+	k := uint64(128)
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
