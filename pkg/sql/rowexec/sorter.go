@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -56,7 +56,7 @@ func (s *sorterBase) init(
 	ctx := flowCtx.EvalCtx.Ctx()
 	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		input = newInputStatCollector(input)
-		s.FinishTrace = s.outputStatsToTrace
+		s.ExecStatsForTrace = s.execStatsForTrace
 	}
 
 	// Limit the memory use by creating a child monitor with a hard limit.
@@ -126,50 +126,18 @@ func (s *sorterBase) close() {
 	}
 }
 
-var _ execinfrapb.DistSQLSpanStats = &SorterStats{}
-
-const sorterTagPrefix = "sorter."
-
-// Stats implements the SpanStats interface.
-func (ss *SorterStats) Stats() map[string]string {
-	statsMap := ss.InputStats.Stats(sorterTagPrefix)
-	statsMap[sorterTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedMem)
-	statsMap[sorterTagPrefix+MaxDiskTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedDisk)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (ss *SorterStats) StatsForQueryPlan() []string {
-	stats := ss.InputStats.StatsForQueryPlan("" /* prefix */)
-
-	if ss.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedMem)))
-	}
-
-	if ss.MaxAllocatedDisk != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedDisk)))
-	}
-
-	return stats
-}
-
-// outputStatsToTrace outputs the collected sorter stats to the trace. Will fail
-// silently if stats are not being collected.
-func (s *sorterBase) outputStatsToTrace() {
-	is, ok := getInputStats(s.FlowCtx, s.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (s *sorterBase) execStatsForTrace() *execstatspb.ComponentStats {
+	is, ok := getInputStats(s.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(s.Ctx); sp != nil {
-		sp.SetSpanStats(
-			&SorterStats{
-				InputStats:       is,
-				MaxAllocatedMem:  s.MemMonitor.MaximumBytes(),
-				MaxAllocatedDisk: s.diskMonitor.MaximumBytes(),
-			},
-		)
+	return &execstatspb.ComponentStats{
+		Inputs: []execstatspb.InputStats{is},
+		Exec: execstatspb.ExecStats{
+			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(s.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(s.diskMonitor.MaximumBytes())),
+		},
 	}
 }
 

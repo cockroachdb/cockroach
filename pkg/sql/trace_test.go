@@ -106,7 +106,7 @@ func TestTrace(t *testing.T) {
 				// stat value is 0.
 				rows, err := sqlDB.Query(
 					"SELECT count(message) FROM crdb_internal.session_trace " +
-						"WHERE message LIKE '%cockroach.stat.tablereader.input.rows: 0%'",
+						"WHERE message LIKE '%cockroach.stat.kv.tuples.read: 0%'",
 				)
 				if err != nil {
 					t.Fatal(err)

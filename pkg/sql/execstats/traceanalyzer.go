@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -129,13 +128,21 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan) error {
 }
 
 func getNetworkBytesFromDistSQLSpanStats(dss execinfrapb.DistSQLSpanStats) (int64, error) {
-	switch v := dss.(type) {
-	case *flowinfra.OutboxStats:
-		return v.BytesSent, nil
-	case *execstatspb.ComponentStats:
+	v, ok := dss.(*execstatspb.ComponentStats)
+	if !ok {
+		return 0, errors.Errorf("could not get network bytes from %T", dss)
+	}
+	// We expect exactly one of BytesReceived and BytesSent to be set.
+	if v.NetRx.BytesReceived.HasValue() {
+		if v.NetTx.BytesSent.HasValue() {
+			return 0, errors.Errorf("could not get network bytes; both BytesReceived and BytesSent are set")
+		}
 		return int64(v.NetRx.BytesReceived.Value()), nil
 	}
-	return 0, errors.Errorf("could not get network bytes from %T", dss)
+	if v.NetTx.BytesSent.HasValue() {
+		return int64(v.NetTx.BytesSent.Value()), nil
+	}
+	return 0, errors.Errorf("could not get network bytes; neither BytesReceived and BytesSent is set")
 }
 
 // GetNetworkBytesSent returns the number of bytes sent over the network the

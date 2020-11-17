@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -438,12 +439,12 @@ func TestLimitScans(t *testing.T) {
 	for _, span := range spans {
 		if span.Operation == tableReaderProcName {
 			// Verify that stat collection lines up with results.
-			trs := TableReaderStats{}
-			if err := types.UnmarshalAny(span.Stats, &trs); err != nil {
+			stats := execstatspb.ComponentStats{}
+			if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
 				t.Fatal(err)
 			}
-			if trs.InputStats.NumRows != limit {
-				t.Fatalf("read %d rows, but stats only counted: %d", limit, trs.InputStats.NumRows)
+			if stats.KV.TuplesRead.Value() != limit {
+				t.Fatalf("read %d rows, but stats counted: %s", limit, stats.KV.TuplesRead)
 			}
 		}
 		for _, l := range span.Logs {

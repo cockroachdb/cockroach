@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -47,7 +48,7 @@ func newCountAggregator(
 
 	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		ag.input = newInputStatCollector(input)
-		ag.FinishTrace = ag.outputStatsToTrace
+		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
 
 	if err := ag.Init(
@@ -105,16 +106,13 @@ func (ag *countAggregator) ConsumerClosed() {
 	ag.InternalClose()
 }
 
-// outputStatsToTrace outputs the collected distinct stats to the trace. Will
-// fail silently if the Distinct processor is not collecting stats.
-func (ag *countAggregator) outputStatsToTrace() {
-	is, ok := getInputStats(ag.FlowCtx, ag.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (ag *countAggregator) execStatsForTrace() *execstatspb.ComponentStats {
+	is, ok := getInputStats(ag.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(ag.Ctx); sp != nil {
-		sp.SetSpanStats(
-			&AggregatorStats{InputStats: is},
-		)
+	return &execstatspb.ComponentStats{
+		Inputs: []execstatspb.InputStats{is},
 	}
 }
