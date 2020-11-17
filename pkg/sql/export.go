@@ -16,7 +16,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -79,10 +81,28 @@ const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
 const exportCompressionCodec = "gzip"
 
+// featureExportEnabled is used to enable and disable the EXPORT feature.
+var featureExportEnabled = settings.RegisterPublicBoolSetting(
+	"feature.export.enabled",
+	"set to true to enable exports, false to disable; default is true",
+	featureflag.FeatureFlagEnabledDefault)
+
 // ConstructExport is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExport(
 	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {
+	if !featureExportEnabled.Get(&ef.planner.ExecCfg().Settings.SV) {
+		return nil, pgerror.Newf(pgcode.OperatorIntervention,
+			"EXPORT feature was disabled by the database administrator")
+	}
+
+	if err := featureflag.CheckEnabled(featureExportEnabled,
+		&ef.planner.ExecCfg().Settings.SV,
+		"EXPORT",
+	); err != nil {
+		return nil, err
+	}
+
 	if !ef.planner.ExtendedEvalContext().TxnImplicit {
 		return nil, errors.Errorf("EXPORT cannot be used inside a transaction")
 	}

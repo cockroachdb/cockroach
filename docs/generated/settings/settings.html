@@ -14,6 +14,9 @@
 <tr><td><code>external.graphite.endpoint</code></td><td>string</td><td><code></code></td><td>if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port</td></tr>
 <tr><td><code>external.graphite.interval</code></td><td>duration</td><td><code>10s</code></td><td>the interval at which metrics are pushed to Graphite (if enabled)</td></tr>
 <tr><td><code>feature.backup.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable backups, false to disable; default is true</td></tr>
+<tr><td><code>feature.changefeed.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable changefeeds, false to disable; default is true</td></tr>
+<tr><td><code>feature.export.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable exports, false to disable; default is true</td></tr>
+<tr><td><code>feature.import.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable imports, false to disable; default is true</td></tr>
 <tr><td><code>feature.restore.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable restore, false to disable; default is true</td></tr>
 <tr><td><code>jobs.retention_time</code></td><td>duration</td><td><code>336h0m0s</code></td><td>the amount of time to retain records for completed jobs before</td></tr>
 <tr><td><code>kv.allocator.load_based_lease_rebalancing.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to enable rebalancing of range leases based on load and latency</td></tr>
