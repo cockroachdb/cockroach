@@ -571,6 +571,7 @@ func (h *hashJoiner) execStatsForTrace() *execstatspb.ComponentStats {
 			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(h.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(h.diskMonitor.MaximumBytes())),
 		},
+		Output: h.Out.Stats(),
 	}
 }
 

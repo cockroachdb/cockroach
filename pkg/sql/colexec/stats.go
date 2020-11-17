@@ -124,11 +124,15 @@ func (bic *batchInfoCollector) getElapsedTime() time.Duration {
 // (with 'idTagKey' distinguishing between the two). 'ioReader' is a component
 // (either an operator or a wrapped processor) that performs IO reads that is
 // present in the chain of operators rooted at 'op'.
+//
+// If omitNumTuples is set, the Output.NumTuples stat will not be set. This is
+// used for operators that wrap row processors which already emit the same stat.
 func NewVectorizedStatsCollector(
 	op colexecbase.Operator,
 	ioReader execinfra.IOReader,
 	id int32,
 	idTagKey string,
+	omitNumTuples bool,
 	inputWatch *timeutil.StopWatch,
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
@@ -139,6 +143,7 @@ func NewVectorizedStatsCollector(
 	return &vectorizedStatsCollectorImpl{
 		batchInfoCollector: makeBatchInfoCollector(op, id, inputWatch, inputStatsCollectors),
 		idTagKey:           idTagKey,
+		omitNumTuples:      omitNumTuples,
 		ioReader:           ioReader,
 		memMonitors:        memMonitors,
 		diskMonitors:       diskMonitors,
@@ -152,6 +157,8 @@ type vectorizedStatsCollectorImpl struct {
 
 	// idTagKey is the span tag key that will be set to ComponentID.
 	idTagKey string
+
+	omitNumTuples bool
 
 	ioReader     execinfra.IOReader
 	memMonitors  []*mon.BytesMonitor
@@ -199,7 +206,9 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execstatspb.ComponentStats {
 	}
 
 	s.Output.NumBatches.Set(numBatches)
-	s.Output.NumTuples.Set(numTuples)
+	if !vsc.omitNumTuples {
+		s.Output.NumTuples.Set(numTuples)
+	}
 	return s
 }
 

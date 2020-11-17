@@ -138,6 +138,7 @@ func (s *sorterBase) execStatsForTrace() *execstatspb.ComponentStats {
 			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(s.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(s.diskMonitor.MaximumBytes())),
 		},
+		Output: s.Out.Stats(),
 	}
 }
 
