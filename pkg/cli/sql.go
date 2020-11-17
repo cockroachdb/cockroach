@@ -79,6 +79,9 @@ Informational
   \du               list the users for all databases.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
 
+Formatting
+  \x [on|off]       toggle records display format.
+
 Operating System
   \! CMD            run an external command and print its results on standard output.
 
@@ -1160,6 +1163,28 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 		}
 		return c.invalidSyntax(errState, `%s. Try \? for help`, c.lastInputLine)
+
+	case `\x`:
+		format := tableDisplayRecords
+		switch len(cmd) {
+		case 1:
+			if cliCtx.tableDisplayFormat == tableDisplayRecords {
+				format = tableDisplayTable
+			}
+		case 2:
+			b, err := parseBool(cmd[1])
+			if err != nil {
+				return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+			} else if b {
+				format = tableDisplayRecords
+			} else {
+				format = tableDisplayTable
+			}
+		default:
+			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+		}
+		cliCtx.tableDisplayFormat = format
+		return loopState
 
 	case `\demo`:
 		return c.handleDemo(cmd[1:], loopState, errState)
