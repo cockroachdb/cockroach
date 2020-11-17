@@ -124,5 +124,6 @@ func (o *ordinalityProcessor) execStatsForTrace() *execstatspb.ComponentStats {
 	}
 	return &execstatspb.ComponentStats{
 		Inputs: []execstatspb.InputStats{is},
+		Output: o.Out.Stats(),
 	}
 }

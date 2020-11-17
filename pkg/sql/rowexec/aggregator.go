@@ -163,6 +163,7 @@ func (ag *aggregatorBase) execStatsForTrace() *execstatspb.ComponentStats {
 		Exec: execstatspb.ExecStats{
 			MaxAllocatedMem: execstatspb.MakeIntValue(uint64(ag.MemMonitor.MaximumBytes())),
 		},
+		Output: ag.Out.Stats(),
 	}
 }
 

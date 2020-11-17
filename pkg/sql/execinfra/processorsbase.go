@@ -341,6 +341,13 @@ func (h *ProcOutputHelper) consumerClosed() {
 	h.rowIdx = h.maxRowIdx
 }
 
+// Stats returns output statistics.
+func (h *ProcOutputHelper) Stats() execstatspb.OutputStats {
+	return execstatspb.OutputStats{
+		NumTuples: execstatspb.MakeIntValue(h.rowIdx),
+	}
+}
+
 // ProcessorConstructor is a function that creates a Processor. It is
 // abstracted away so that we could create mixed flows (i.e. a vectorized flow
 // with wrapped processors) without bringing a dependency on sql/rowexec

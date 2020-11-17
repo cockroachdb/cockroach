@@ -346,6 +346,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	inputs []colexecbase.Operator,
 	id int32,
 	idTagKey string,
+	omitNumTuples bool,
 	monitors []*mon.BytesMonitor,
 ) (colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
@@ -366,7 +367,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 		inputStatsCollectors[i] = sc
 	}
 	vsc := colexec.NewVectorizedStatsCollector(
-		op, ioReader, id, idTagKey, inputWatch,
+		op, ioReader, id, idTagKey, omitNumTuples, inputWatch,
 		memMonitors, diskMonitors, inputStatsCollectors,
 	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
@@ -772,7 +773,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				var err error
 				localOp, err = s.wrapWithVectorizedStatsCollectorBase(
 					op, nil /* ioReader */, nil, /* inputs */
-					int32(stream.StreamID), execinfrapb.StreamIDTagKey, mons,
+					int32(stream.StreamID), execinfrapb.StreamIDTagKey, false /* omitNumTuples */, mons,
 				)
 				if err != nil {
 					return err
@@ -911,7 +912,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			var err error
 			op, err = s.wrapWithVectorizedStatsCollectorBase(
 				op, nil /* ioReader */, statsInputsAsOps, -1, /* id */
-				"" /* idTagKey */, nil, /* monitors */
+				"" /* idTagKey */, false /* omitNumTuples */, nil, /* monitors */
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -1120,6 +1121,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
 			}
+			originalOp := result.Op
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
 				result.Op = colexec.NewInvariantsChecker(result.Op)
 			}
@@ -1147,9 +1149,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 			op := result.Op
 			if s.recordingStats {
+				// We prevent emitting the NumTuples stat from Columnarizers because the
+				// wrapped processor already emits the same stat.
+				_, isColumnarizer := originalOp.(*colexec.Columnarizer)
 				op, err = s.wrapWithVectorizedStatsCollectorBase(
 					op, result.IOReader, inputs, pspec.ProcessorID,
-					execinfrapb.ProcessorIDTagKey, result.OpMonitors,
+					execinfrapb.ProcessorIDTagKey, isColumnarizer, result.OpMonitors,
 				)
 				if err != nil {
 					return
