@@ -149,7 +149,7 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 			Certificates: []tls.Certificate{cer},
 		},
 		BackendConfigFromParams: func(
-			params map[string]string, ipAddress string,
+			params map[string]string, _ net.Conn,
 		) (config *sqlproxyccl.BackendConfig, clientErr error) {
 			const magic = "prancing-pony"
 			cfg := &sqlproxyccl.BackendConfig{
