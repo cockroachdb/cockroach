@@ -3468,6 +3468,153 @@ project
                 └── y:2
 
 # --------------------------------------------------
+# ConvertRegressionCountToCountRows
+# --------------------------------------------------
+
+# ScalarGroupBy cases.
+norm expect=ConvertRegressionCountToCountRows
+SELECT regr_count(z, x) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: regr_count:7!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scan xyzbs
+ └── aggregations
+      └── count-rows [as=regr_count:7]
+
+norm expect=ConvertRegressionCountToCountRows
+SELECT regr_count(1, 1) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: regr_count:8!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ ├── scan xyzbs
+ └── aggregations
+      └── count-rows [as=regr_count:8]
+
+norm expect=ConvertRegressionCountToCountRows
+SELECT regr_count(1 + z, x) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: regr_count:8!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ ├── scan xyzbs
+ └── aggregations
+      └── count-rows [as=regr_count:8]
+
+# GroupBy cases.
+norm expect=ConvertRegressionCountToCountRows
+SELECT regr_count(z, x) FROM xyzbs GROUP BY s
+----
+project
+ ├── columns: regr_count:7!null
+ └── group-by
+      ├── columns: s:5 regr_count:7!null
+      ├── grouping columns: s:5
+      ├── key: (5)
+      ├── fd: (5)-->(7)
+      ├── scan xyzbs
+      │    └── columns: s:5
+      └── aggregations
+           └── count-rows [as=regr_count:7]
+
+norm expect=ConvertRegressionCountToCountRows
+SELECT regr_count(1, 1) FROM xyzbs GROUP BY s
+----
+project
+ ├── columns: regr_count:8!null
+ └── group-by
+      ├── columns: s:5 regr_count:8!null
+      ├── grouping columns: s:5
+      ├── key: (5)
+      ├── fd: (5)-->(8)
+      ├── scan xyzbs
+      │    └── columns: s:5
+      └── aggregations
+           └── count-rows [as=regr_count:8]
+
+norm expect=ConvertRegressionCountToCountRows
+SELECT regr_count(1+z, x) FROM xyzbs GROUP BY s
+----
+project
+ ├── columns: regr_count:8!null
+ └── group-by
+      ├── columns: s:5 regr_count:8!null
+      ├── grouping columns: s:5
+      ├── key: (5)
+      ├── fd: (5)-->(8)
+      ├── scan xyzbs
+      │    └── columns: s:5
+      └── aggregations
+           └── count-rows [as=regr_count:8]
+
+# Case with multiple aggregate functions.
+# Expecting to activate on (z, x) but not (y, z), because y can be null.
+norm expect=ConvertRegressionCountToCountRows
+SELECT regr_count(y, z), corr(y, z), regr_count(z, x), sum(y) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: regr_count:7!null corr:8 regr_count:9!null sum:10
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7-10)
+ ├── scan xyzbs
+ │    └── columns: y:2 z:3!null
+ └── aggregations
+      ├── regression-count [as=regr_count:7, outer=(2,3)]
+      │    ├── y:2
+      │    └── z:3
+      ├── corr [as=corr:8, outer=(2,3)]
+      │    ├── y:2
+      │    └── z:3
+      ├── count-rows [as=regr_count:9]
+      └── sum [as=sum:10, outer=(2)]
+           └── y:2
+
+# No-op case because y can contain nulls.
+norm expect-not=ConvertRegressionCountToCountRows
+SELECT regr_count(y, z) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: regr_count:7!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scan xyzbs
+ │    └── columns: y:2 z:3!null
+ └── aggregations
+      └── regression-count [as=regr_count:7, outer=(2,3)]
+           ├── y:2
+           └── z:3
+
+# No-op case because the DISTINCT requires the regr_count input column, so the
+# regr_count can't be eliminated.
+norm expect-not=ConvertRegressionCountToCountRows
+SELECT regr_count(DISTINCT y, x) FROM xyzbs GROUP BY z
+----
+project
+ ├── columns: regr_count:7!null
+ └── group-by
+      ├── columns: z:3!null regr_count:7!null
+      ├── grouping columns: z:3!null
+      ├── key: (3)
+      ├── fd: (3)-->(7)
+      ├── scan xyzbs
+      │    ├── columns: x:1!null y:2 z:3!null
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── aggregations
+           └── regression-count [as=regr_count:7, outer=(1,2)]
+                ├── y:2
+                └── x:1
+
+# --------------------------------------------------
 # FoldGroupingOperators
 # --------------------------------------------------
 

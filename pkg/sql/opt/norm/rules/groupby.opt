@@ -401,6 +401,27 @@
     $groupingPrivate
 )
 
+# ConvertRegressionCountToCountRows replaces a RegressionCount operator
+# performed on a non-null expression with a CountRows operator. CountRows is
+# significantly faster to execute than RegressionCount.
+[ConvertRegressionCountToCountRows, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:*
+    $aggregations:[
+        ...
+        $item:(AggregationsItem (RegressionCount $arg:*)) &
+            (ExprIsNeverNull $arg (NotNullCols $input))
+        ...
+    ]
+    $groupingPrivate:*
+)
+=>
+((OpName)
+    $input
+    (ReplaceAggregationsItem $aggregations $item (CountRows))
+    $groupingPrivate
+)
+
 # FoldGroupingOperators folds two grouping operators into one equivalent
 # operator. As an example, the following pairs of queries are equivalent:
 #

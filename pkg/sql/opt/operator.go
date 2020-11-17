@@ -196,6 +196,7 @@ var AggregateOpReverseMap = map[Operator]string{
 	RegressionSXXOp:       "regr_sxx",
 	RegressionSXYOp:       "regr_sxy",
 	RegressionSYYOp:       "regr_syy",
+	RegressionCountOp:     "regr_count",
 	MaxOp:                 "max",
 	MinOp:                 "min",
 	SumIntOp:              "sum_int",
@@ -317,7 +318,8 @@ func AggregateIgnoresNulls(op Operator) bool {
 		StringAggOp, SumOp, SumIntOp, VarianceOp, XorAggOp, PercentileDiscOp,
 		PercentileContOp, STMakeLineOp, STCollectOp, STExtentOp, STUnionOp, StdDevPopOp,
 		VarPopOp, CovarPopOp, CovarSampOp, RegressionInterceptOp, RegressionR2Op,
-		RegressionSlopeOp, RegressionSXXOp, RegressionSXYOp, RegressionSYYOp:
+		RegressionSlopeOp, RegressionSXXOp, RegressionSXYOp, RegressionSYYOp,
+		RegressionCountOp:
 		return true
 
 	case ArrayAggOp, ConcatAggOp, ConstAggOp, CountRowsOp, FirstAggOp, JsonAggOp,
@@ -345,7 +347,7 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 		RegressionSlopeOp, RegressionSXXOp, RegressionSXYOp, RegressionSYYOp:
 		return true
 
-	case CountOp, CountRowsOp:
+	case CountOp, CountRowsOp, RegressionCountOp:
 		return false
 
 	default:
@@ -369,7 +371,8 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 		JsonAggOp, JsonbAggOp, MaxOp, MinOp, SqrDiffOp, STMakeLineOp,
 		StringAggOp, SumOp, SumIntOp, XorAggOp, PercentileDiscOp, PercentileContOp,
 		JsonObjectAggOp, JsonbObjectAggOp, StdDevPopOp, STCollectOp, STExtentOp, STUnionOp,
-		VarPopOp, CovarPopOp, RegressionSXXOp, RegressionSXYOp, RegressionSYYOp:
+		VarPopOp, CovarPopOp, RegressionSXXOp, RegressionSXYOp, RegressionSYYOp,
+		RegressionCountOp:
 		return true
 
 	case VarianceOp, StdDevOp, CorrOp, CovarSampOp, RegressionInterceptOp,
@@ -386,7 +389,7 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 // returns NULL, even if the input is empty, or one more more inputs are NULL.
 func AggregateIsNeverNull(op Operator) bool {
 	switch op {
-	case CountOp, CountRowsOp:
+	case CountOp, CountRowsOp, RegressionCountOp:
 		return true
 	}
 	return false
@@ -414,7 +417,7 @@ func AggregatesCanMerge(inner, outer Operator) bool {
 		MaxOp, MinOp, STMakeLineOp, STExtentOp, STUnionOp, SumOp, SumIntOp, XorAggOp:
 		return inner == outer
 
-	case CountOp, CountRowsOp:
+	case CountOp, CountRowsOp, RegressionCountOp:
 		// Only SumIntOp can be used here because SumOp outputs a decimal value,
 		// while CountOp and CountRowsOp both output int values.
 		return outer == SumIntOp
@@ -444,7 +447,7 @@ func AggregateIgnoresDuplicates(op Operator) bool {
 		StringAggOp, PercentileDiscOp, PercentileContOp, StdDevPopOp, STMakeLineOp,
 		VarPopOp, JsonObjectAggOp, JsonbObjectAggOp, STCollectOp, CovarPopOp,
 		CovarSampOp, RegressionInterceptOp, RegressionR2Op, RegressionSlopeOp,
-		RegressionSXXOp, RegressionSXYOp, RegressionSYYOp:
+		RegressionSXXOp, RegressionSXYOp, RegressionSYYOp, RegressionCountOp:
 		return false
 
 	default:
