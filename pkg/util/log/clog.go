@@ -89,12 +89,12 @@ func init() {
 
 // loggerT represents the logging source for a given log channel.
 type loggerT struct {
+	// sinks stores the destinations for log entries.
 	sinks []logSink
 
-	// whether or not to include redaction markers.
-	// This is atomic because tests using TestLogScope might
-	// override this asynchronously with log calls.
-	redactableLogs syncutil.AtomicBool
+	// sinkEditors represents, for each sink, the optional redaction
+	// step that occurs prior to emitting the log entry.
+	sinkEditors []redactEditor
 
 	// logCounter supports the generation of a per-entry log entry
 	// counter. This is needed in audit logs to hinder malicious
@@ -260,7 +260,8 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	someSinkActive := false
 	for i, s := range l.sinks {
 		if s.activeAtSeverity(entry.Severity) {
-			bufs.b[i] = s.getFormatter().formatEntry(entry, stacks)
+			editedEntry := maybeRedactEntry(entry, l.sinkEditors[i])
+			bufs.b[i] = s.getFormatter().formatEntry(editedEntry, stacks)
 			someSinkActive = true
 		}
 	}
