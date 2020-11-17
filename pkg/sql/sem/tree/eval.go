@@ -979,7 +979,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -989,7 +989,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -1005,7 +1005,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				nanos := left.(*DTimestamp).Sub(stripped.Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityStable,
 		},
@@ -1021,7 +1021,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				nanos := stripped.Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityStable,
 		},
@@ -1894,21 +1894,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Volatility: VolatilityImmutable,
 		},
 	},
-}
-
-// timestampMinusBinOp is the implementation of the subtraction
-// between types.TimestampTZ operands.
-var timestampMinusBinOp *BinOp
-
-// TimestampDifference computes the interval difference between two
-// TimestampTZ datums. The result is a DInterval. The caller must
-// ensure that the arguments are of the proper Datum type.
-func TimestampDifference(ctx *EvalContext, start, end Datum) (Datum, error) {
-	return timestampMinusBinOp.Fn(ctx, start, end)
-}
-
-func init() {
-	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(types.TimestampTZ, types.TimestampTZ)
 }
 
 // CmpOp is a comparison operator.
