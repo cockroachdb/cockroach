@@ -1,0 +1,12 @@
+# LogicTest: 5node-default-configs
+
+statement ok
+CREATE TABLE ts (a INT PRIMARY KEY, t TIMESTAMP);
+INSERT INTO ts SELECT i, '0001-01-01 00:00:00'::TIMESTAMP + i::INTERVAL FROM generate_series(1, 5) AS g(i);
+ALTER TABLE ts SPLIT AT select i FROM generate_series(2, 5) AS g(i);
+ALTER TABLE ts EXPERIMENTAL_RELOCATE SELECT ARRAY[i%5+1], i FROM generate_series(1, 5) AS g(i)
+
+# This query makes sure that we can successfully deserialize the timestamp with
+# year 0 on the remote nodes (#56554).
+statement ok
+SELECT t - (SELECT '0001-01-01 00:00:00'::TIMESTAMP - a::INTERVAL FROM ts ORDER BY a LIMIT 1) FROM ts
