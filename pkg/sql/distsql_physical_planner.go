@@ -2258,11 +2258,12 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	// The fixed values are represented as a Values node with one tuple.
 	for i := range n.sides {
 		fixedVals := n.sides[i].fixedVals
-		valuesPlan, err := dsp.createPhysPlanForTuples(planCtx, fixedVals.tuples, fixedVals.columns)
+		typs := getTypesFromResultColumns(fixedVals.columns)
+		valuesSpec, err := dsp.createValuesSpecFromTuples(planCtx, fixedVals.tuples, typs)
 		if err != nil {
 			return nil, err
 		}
-		zigzagJoinerSpec.FixedValues[i] = valuesPlan.PhysicalPlan.Processors[0].Spec.Core.Values
+		zigzagJoinerSpec.FixedValues[i] = valuesSpec
 	}
 
 	// The internal schema of the zigzag joiner is:
@@ -2667,7 +2668,13 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if mustWrapValuesNode(planCtx, n.specifiedInQuery) {
 			plan, err = dsp.wrapPlan(planCtx, n)
 		} else {
-			plan, err = dsp.createPhysPlanForTuples(planCtx, n.tuples, n.columns)
+			colTypes := getTypesFromResultColumns(n.columns)
+			var spec *execinfrapb.ValuesCoreSpec
+			spec, err = dsp.createValuesSpecFromTuples(planCtx, n.tuples, colTypes)
+			if err != nil {
+				return nil, err
+			}
+			plan, err = dsp.createValuesPlan(planCtx, spec, colTypes)
 		}
 
 	case *windowNode:
@@ -2831,14 +2838,13 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	return p, nil
 }
 
-// createValuesPlan creates a plan with a single Values processor
-// located on the gateway node and initialized with given numRows
-// and rawBytes that need to be precomputed beforehand.
-func (dsp *DistSQLPlanner) createValuesPlan(
+// createValuesSpec creates a ValuesCoreSpec with the given schema and encoded
+// data.
+func (dsp *DistSQLPlanner) createValuesSpec(
 	planCtx *PlanningCtx, resultTypes []*types.T, numRows int, rawBytes [][]byte,
-) (*PhysicalPlan, error) {
+) *execinfrapb.ValuesCoreSpec {
 	numColumns := len(resultTypes)
-	s := execinfrapb.ValuesCoreSpec{
+	s := &execinfrapb.ValuesCoreSpec{
 		Columns: make([]execinfrapb.DatumInfo, numColumns),
 	}
 
@@ -2850,33 +2856,38 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 	s.NumRows = uint64(numRows)
 	s.RawBytes = rawBytes
 
+	return s
+}
+
+// createValuesPlan creates a plan with a single Values processor
+// located on the gateway node.
+func (dsp *DistSQLPlanner) createValuesPlan(
+	planCtx *PlanningCtx, spec *execinfrapb.ValuesCoreSpec, resultTypes []*types.T,
+) (*PhysicalPlan, error) {
 	p := dsp.newPhysicalPlan(planCtx)
 
 	p.Processors = []physicalplan.Processor{{
 		// TODO: find a better node to place processor at
 		Node: dsp.gatewayNodeID,
 		Spec: execinfrapb.ProcessorSpec{
-			Core:        execinfrapb.ProcessorCoreUnion{Values: &s},
+			Core:        execinfrapb.ProcessorCoreUnion{Values: spec},
 			Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
 			ResultTypes: resultTypes,
 		},
 	}}
 	p.ResultRouters = []physicalplan.ProcessorIdx{0}
 	p.Distribution = physicalplan.LocalPlan
-	p.PlanToStreamColMap = identityMapInPlace(make([]int, numColumns))
+	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(resultTypes)))
 
 	return p, nil
 }
 
-// createPhysPlanForTuples creates a physical plan containing a values
-// processor that outputs evaluated tuples of typed expressions that have a
-// schema described by columns.
-// NOTE: all expressions in tuples are evaluated.
-func (dsp *DistSQLPlanner) createPhysPlanForTuples(
-	planCtx *PlanningCtx, tuples [][]tree.TypedExpr, columns colinfo.ResultColumns,
-) (*PhysicalPlan, error) {
+// createValuesSpecFromTuples creates a ValuesCoreSpec from the results of
+// evaluating the given tuples.
+func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
+	planCtx *PlanningCtx, tuples [][]tree.TypedExpr, resultTypes []*types.T,
+) (*execinfrapb.ValuesCoreSpec, error) {
 	var a rowenc.DatumAlloc
-	typs := getTypesFromResultColumns(columns)
 	evalCtx := &planCtx.ExtendedEvalCtx.EvalContext
 	numRows := len(tuples)
 	rawBytes := make([][]byte, numRows)
@@ -2887,15 +2898,16 @@ func (dsp *DistSQLPlanner) createPhysPlanForTuples(
 			if err != nil {
 				return nil, err
 			}
-			encDatum := rowenc.DatumToEncDatum(typs[colIdx], datum)
-			buf, err = encDatum.Encode(typs[colIdx], &a, descpb.DatumEncoding_VALUE, buf)
+			encDatum := rowenc.DatumToEncDatum(resultTypes[colIdx], datum)
+			buf, err = encDatum.Encode(resultTypes[colIdx], &a, descpb.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return nil, err
 			}
 		}
 		rawBytes[rowIdx] = buf
 	}
-	return dsp.createValuesPlan(planCtx, typs, numRows, rawBytes)
+	spec := dsp.createValuesSpec(planCtx, resultTypes, numRows, rawBytes)
+	return spec, nil
 }
 
 func (dsp *DistSQLPlanner) createPlanForUnary(
@@ -2906,7 +2918,8 @@ func (dsp *DistSQLPlanner) createPlanForUnary(
 		return nil, err
 	}
 
-	return dsp.createValuesPlan(planCtx, types, 1 /* numRows */, nil /* rawBytes */)
+	spec := dsp.createValuesSpec(planCtx, types, 1 /* numRows */, nil /* rawBytes */)
+	return dsp.createValuesPlan(planCtx, spec, types)
 }
 
 func (dsp *DistSQLPlanner) createPlanForZero(
@@ -2917,7 +2930,8 @@ func (dsp *DistSQLPlanner) createPlanForZero(
 		return nil, err
 	}
 
-	return dsp.createValuesPlan(planCtx, types, 0 /* numRows */, nil /* rawBytes */)
+	spec := dsp.createValuesSpec(planCtx, types, 0 /* numRows */, nil /* rawBytes */)
+	return dsp.createValuesPlan(planCtx, spec, types)
 }
 
 func createDistinctSpec(

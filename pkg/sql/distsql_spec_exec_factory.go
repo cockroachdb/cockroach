@@ -104,9 +104,9 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 ) (exec.Node, error) {
 	if (len(cols) == 0 && len(rows) == 1) || len(rows) == 0 {
 		planCtx := e.getPlanCtx(canDistribute)
-		physPlan, err := e.dsp.createValuesPlan(
-			planCtx, getTypesFromResultColumns(cols), len(rows), nil, /* rawBytes */
-		)
+		colTypes := getTypesFromResultColumns(cols)
+		spec := e.dsp.createValuesSpec(planCtx, colTypes, len(rows), nil /* rawBytes */)
+		physPlan, err := e.dsp.createValuesPlan(planCtx, spec, colTypes)
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +143,13 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 	} else {
 		// We can create a spec for the values processor, so we don't create a
 		// valuesNode.
-		physPlan, err = e.dsp.createPhysPlanForTuples(planCtx, rows, cols)
+		colTypes := getTypesFromResultColumns(cols)
+		var spec *execinfrapb.ValuesCoreSpec
+		spec, err = e.dsp.createValuesSpecFromTuples(planCtx, rows, colTypes)
+		if err != nil {
+			return nil, err
+		}
+		physPlan, err = e.dsp.createValuesPlan(planCtx, spec, colTypes)
 	}
 	if err != nil {
 		return nil, err
