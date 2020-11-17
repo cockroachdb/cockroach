@@ -225,7 +225,7 @@ type TestServerInterface interface {
 // service.
 type TestServerFactory interface {
 	// New instantiates a test server.
-	New(params base.TestServerArgs) interface{}
+	New(params base.TestServerArgs) (interface{}, error)
 }
 
 var srvFactoryImpl TestServerFactory
@@ -243,8 +243,11 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
-	server := NewServer(params)
-	if err := server.Start(); err != nil {
+	server, err := NewServer(params)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if err = server.Start(); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(t, server, params, server.Stopper())
@@ -252,13 +255,16 @@ func StartServer(
 }
 
 // NewServer creates a test server.
-func NewServer(params base.TestServerArgs) TestServerInterface {
+func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	if srvFactoryImpl == nil {
 		panic("TestServerFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")
 	}
-
-	return srvFactoryImpl.New(params).(TestServerInterface)
+	server, err := srvFactoryImpl.New(params)
+	if err != nil {
+		return nil, err
+	}
+	return server.(TestServerInterface), err
 }
 
 // OpenDBConnE is like OpenDBConn, but returns an error.
@@ -303,8 +309,11 @@ func OpenDBConn(
 // Generally StartServer() should be used. However this function can be used
 // directly when opening a connection to the server is not desired.
 func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
-	server := NewServer(args)
-	if err := server.Start(); err != nil {
+	server, err := NewServer(args)
+	if err != nil {
+		return nil, err
+	}
+	if err = server.Start(); err != nil {
 		return nil, err
 	}
 	return server, nil

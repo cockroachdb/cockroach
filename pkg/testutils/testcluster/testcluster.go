@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -121,6 +122,14 @@ func (tc *TestCluster) StopServer(idx int) {
 		tc.mu.serverStoppers[idx].Stop(context.TODO())
 		tc.mu.serverStoppers[idx] = nil
 	}
+}
+
+// ServerStopped determines if a server has been explicitly
+// stopped by stopServer(s).
+func (tc *TestCluster) ServerStopped(idx int) bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.serverStoppers[idx] == nil
 }
 
 // StartTestCluster creates and starts up a TestCluster made up of `nodes`
@@ -340,7 +349,7 @@ func checkServerArgsForCluster(
 // cluster's ReplicationMode.
 func (tc *TestCluster) AddAndStartServer(t testing.TB, serverArgs base.TestServerArgs) {
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
-		serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
+		serverArgs.JoinAddr = tc.GetFirstLiveServer().ServingRPCAddr()
 	}
 	_, err := tc.AddServer(serverArgs)
 	if err != nil {
@@ -398,16 +407,18 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
-	s := serverutils.NewServer(serverArgs).(*server.TestServer)
+	s, err := serverutils.NewServer(serverArgs)
+	if err != nil {
+		return nil, err
+	}
 
-	tc.Servers = append(tc.Servers, s)
+	tc.Servers = append(tc.Servers, s.(*server.TestServer))
 	tc.serverArgs = append(tc.serverArgs, serverArgs)
-
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	thisStopper := s.Stopper()
 	tc.mu.serverStoppers = append(tc.mu.serverStoppers, thisStopper)
-	return s, nil
+	return s.(*server.TestServer), nil
 }
 
 // startServer is the companion method to AddServer, and is responsible for
@@ -704,7 +715,7 @@ func (tc *TestCluster) RemoveNonVoters(
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 ) error {
-	err := tc.Servers[0].DB().AdminTransferLease(context.TODO(),
+	err := tc.GetFirstLiveServer().DB().AdminTransferLease(context.TODO(),
 		rangeDesc.StartKey.AsRawKey(), dest.StoreID)
 	if err != nil {
 		return errors.Wrapf(err, "%q: transfer lease unexpected error", rangeDesc.StartKey)
@@ -742,8 +753,8 @@ func (tc *TestCluster) FindRangeLease(
 	// Find the server indicated by the hint and send a LeaseInfoRequest through
 	// it.
 	var hintServer *server.TestServer
-	for _, s := range tc.Servers {
-		if s.GetNode().Descriptor.NodeID == hint.NodeID {
+	for i, s := range tc.Servers {
+		if s.GetNode().Descriptor.NodeID == hint.NodeID && !tc.ServerStopped(i) {
 			hintServer = s
 			break
 		}
@@ -989,8 +1000,11 @@ func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 // from all configured engines, filling in zeros when the value is not
 // found.
 func (tc *TestCluster) readIntFromStores(key roachpb.Key) []int64 {
-	results := make([]int64, 0, len(tc.Servers))
-	for _, server := range tc.Servers {
+	results := make([]int64, 0)
+	for i, server := range tc.Servers {
+		if tc.ServerStopped(i) {
+			continue
+		}
 		err := server.Stores().VisitStores(func(s *kvserver.Store) error {
 			val, _, err := storage.MVCCGet(context.Background(), s.Engine(), key,
 				server.Clock().Now(), storage.MVCCGetOptions{})
@@ -1016,7 +1030,8 @@ func (tc *TestCluster) readIntFromStores(key roachpb.Key) []int64 {
 
 // WaitForValues waits up to the given duration for the integer values
 // at the given key to match the expected slice (across all stores).
-// Fails the test if they do not match.
+// Fails the test if they do not match. This method ignores all the explicitly
+// stopped servers and will only return values for live ones.
 func (tc *TestCluster) WaitForValues(t testing.TB, key roachpb.Key, expected []int64) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
@@ -1036,6 +1051,72 @@ func (tc *TestCluster) GetFirstStoreFromServer(t testing.TB, server int) *kvserv
 		t.Fatal(pErr)
 	}
 	return store
+}
+
+// GetFirstLiveServer Returns the first server in the list that has not been
+// explicitly stopped. If all the servers are stopped, it returns the first one.
+func (tc *TestCluster) GetFirstLiveServer() *server.TestServer {
+	for i := range tc.Servers {
+		// Use the first non-stopped server to avoid a deadlock
+		if !tc.ServerStopped(i) {
+			return tc.Servers[i]
+		}
+	}
+	return tc.Servers[0]
+}
+
+// GetRaftLeader returns the replica that is the current raft leader for the
+// specified key.
+func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.Replica {
+	t.Helper()
+	var raftLeaderRepl *kvserver.Replica
+	testutils.SucceedsSoon(t, func() error {
+		var latestTerm uint64
+		for i := range tc.Servers {
+			err := tc.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
+				repl := store.LookupReplica(key)
+				if repl == nil {
+					// Replica does not exist on this store or there is no raft
+					// status yet.
+					return nil
+				}
+				raftStatus := repl.RaftStatus()
+				if raftStatus.Term > latestTerm || (raftLeaderRepl == nil && raftStatus.Term == latestTerm) {
+					// If we find any newer term, it means any previous election is
+					// invalid.
+					raftLeaderRepl = nil
+					latestTerm = raftStatus.Term
+					if raftStatus.RaftState == raft.StateLeader {
+						raftLeaderRepl = repl
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if latestTerm == 0 || raftLeaderRepl == nil {
+			return errors.Errorf("could not find a raft leader for key %s", key)
+		}
+		return nil
+	})
+	return raftLeaderRepl
+}
+
+// Restart stops and then starts all the servers in the cluster
+func (tc *TestCluster) Restart(t testing.TB, serverArgsPerNode map[int]base.TestServerArgs) {
+	for i := range tc.Servers {
+		tc.StopServer(i)
+	}
+	for _, args := range serverArgsPerNode {
+		for _, specs := range args.StoreSpecs {
+			if specs.StickyInMemoryEngineID == "" {
+				t.Fatalf("Restart can only be used when the servers were started with a sticky engine")
+			}
+		}
+		tc.AddAndStartServer(t, args)
+	}
 }
 
 type testClusterFactoryImpl struct{}
