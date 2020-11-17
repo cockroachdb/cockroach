@@ -423,6 +423,8 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 		return err
 	}
 
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
 	tc.Conns = append(tc.Conns, dbConn)
 	return nil
 }
