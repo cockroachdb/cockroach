@@ -48,14 +48,14 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a,+b
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: data@primary
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b)
           ordering: +a,+b
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: data@primary
           spans: FULL SCAN
 
@@ -139,13 +139,13 @@ vectorized: true
     │
     ├── • scan
     │     columns: (a, b)
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: data@primary
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (c, d)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: data@primary
           spans: FULL SCAN
 

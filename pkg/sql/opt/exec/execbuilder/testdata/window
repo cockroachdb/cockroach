@@ -63,21 +63,21 @@ vectorized: true
 ·
 • project
 │ columns: (ntile)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (ntile_1_arg1, ntile)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ window 0: ntile(ntile_1_arg1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     │
     └── • render
         │ columns: (ntile_1_arg1)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: 1
         │
         └── • scan
               columns: ()
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -89,22 +89,22 @@ vectorized: true
 ·
 • project
 │ columns: (nth_value)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (nth_value_1_arg1, nth_value_1_arg2, nth_value)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ window 0: nth_value(nth_value_1_arg1, nth_value_1_arg2) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     │
     └── • render
         │ columns: (nth_value_1_arg1, nth_value_1_arg2)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: 1
         │ render 1: 2
         │
         └── • scan
               columns: ()
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -139,22 +139,22 @@ vectorized: true
 └── • sort
     │ columns: (k int, stddev decimal, variance decimal)
     │ ordering: +variance,+k
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +variance,+k
     │
     └── • project
         │ columns: (k int, stddev decimal, variance decimal)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │
         └── • window
             │ columns: (k int, v int, d decimal, stddev decimal, variance decimal)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
             │ window 1: (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
             │
             └── • scan
                   columns: (k int, v int, d decimal)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: kv@primary
                   spans: FULL SCAN
 
@@ -170,26 +170,26 @@ vectorized: true
 └── • sort
     │ columns: (k int, stddev decimal, variance decimal)
     │ ordering: +variance,+k
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +variance,+k
     │
     └── • project
         │ columns: (k int, stddev decimal, variance decimal)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │
         └── • window
             │ columns: (k int, v int, d decimal, stddev decimal, variance decimal)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ window 0: (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
             │
             └── • window
                 │ columns: (k int, v int, d decimal, stddev decimal)
-                │ estimated row count: 1000 (missing stats)
+                │ estimated row count: 1,000 (missing stats)
                 │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
                 │
                 └── • scan
                       columns: (k int, v int, d decimal)
-                      estimated row count: 1000 (missing stats)
+                      estimated row count: 1,000 (missing stats)
                       table: kv@primary
                       spans: FULL SCAN
 
@@ -202,21 +202,21 @@ vectorized: true
 • sort
 │ columns: (k int, stddev decimal)
 │ ordering: +k
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ order: +k
 │
 └── • project
     │ columns: (k int, stddev decimal)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │
     └── • window
         │ columns: (k int, v int, d decimal, stddev decimal)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
         │
         └── • scan
               columns: (k int, v int, d decimal)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -232,29 +232,29 @@ vectorized: true
 └── • sort
     │ columns: ("?column?" decimal, k int, variance decimal)
     │ ordering: +variance,+k
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +variance,+k
     │
     └── • render
         │ columns: ("?column?" decimal, k int, variance decimal)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: ((k)[int] + (stddev)[decimal])[decimal]
         │ render 1: (k)[int]
         │ render 2: (variance)[decimal]
         │
         └── • window
             │ columns: (k int, v int, d decimal, stddev decimal, variance decimal)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ window 0: (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
             │
             └── • window
                 │ columns: (k int, v int, d decimal, stddev decimal)
-                │ estimated row count: 1000 (missing stats)
+                │ estimated row count: 1,000 (missing stats)
                 │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
                 │
                 └── • scan
                       columns: (k int, v int, d decimal)
-                      estimated row count: 1000 (missing stats)
+                      estimated row count: 1,000 (missing stats)
                       table: kv@primary
                       spans: FULL SCAN
 
@@ -270,35 +270,35 @@ vectorized: true
 └── • sort
     │ columns: ("?column?" decimal, max int, variance decimal)
     │ ordering: +variance
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +variance
     │
     └── • render
         │ columns: ("?column?" decimal, max int, variance decimal)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: ((max)[int] + (stddev)[decimal])[decimal]
         │ render 1: (max)[int]
         │ render 2: (variance)[decimal]
         │
         └── • window
             │ columns: (v int, d decimal, max int, stddev decimal, variance decimal)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ window 0: (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
             │
             └── • window
                 │ columns: (v int, d decimal, max int, stddev decimal)
-                │ estimated row count: 1000 (missing stats)
+                │ estimated row count: 1,000 (missing stats)
                 │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
                 │
                 └── • group
                     │ columns: (v int, d decimal, max int)
-                    │ estimated row count: 1000 (missing stats)
+                    │ estimated row count: 1,000 (missing stats)
                     │ aggregate 0: max(k)
                     │ group by: v, d
                     │
                     └── • scan
                           columns: (k int, v int, d decimal)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: kv@primary
                           spans: FULL SCAN
 
@@ -311,27 +311,27 @@ vectorized: true
 • sort
 │ columns: (max int, stddev decimal)
 │ ordering: +max
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ order: +max
 │
 └── • project
     │ columns: (max int, stddev decimal)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │
     └── • window
         │ columns: (v int, d decimal, max int, stddev decimal)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
         │
         └── • group
             │ columns: (v int, d decimal, max int)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ aggregate 0: max(k)
             │ group by: v, d
             │
             └── • scan
                   columns: (k int, v int, d decimal)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: kv@primary
                   spans: FULL SCAN
 
@@ -345,28 +345,28 @@ vectorized: true
 ·
 • project
 │ columns: (lag, lead)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1, lead)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ window 0: lead(lag_1_partition_1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     │
     └── • window
         │ columns: (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ window 0: lag(lag_1_arg1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
         │
         └── • render
             │ columns: (lag_1_arg1, lag_1_arg3, lag_1_partition_1)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ render 0: 1
             │ render 1: CAST(NULL AS INT8)
             │ render 2: 2
             │
             └── • scan
                   columns: ()
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: kv@primary
                   spans: FULL SCAN
 
@@ -381,17 +381,17 @@ vectorized: true
 • sort
 │ columns: (k, v, rank)
 │ ordering: +k
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ order: +k
 │
 └── • window
     │ columns: (k, v, rank)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ window 0: rank() OVER (ORDER BY k ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     │
     └── • scan
           columns: (k, v)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -406,16 +406,16 @@ vectorized: true
 ·
 • project
 │ columns: (avg)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     │
     └── • scan
           columns: (k)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -427,16 +427,16 @@ vectorized: true
 ·
 • project
 │ columns: (avg)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
     │
     └── • scan
           columns: (k)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -448,16 +448,16 @@ vectorized: true
 ·
 • project
 │ columns: (avg)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     │
     └── • scan
           columns: (k)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -484,11 +484,11 @@ vectorized: true
 ·
 • project
 │ columns: (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ window 0: avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
     │ window 1: avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     │ window 2: avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
@@ -496,7 +496,7 @@ vectorized: true
     │
     └── • window
         │ columns: (k, avg, avg, avg, avg, avg, avg, avg, avg)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
         │ window 1: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
         │ window 2: avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
@@ -508,7 +508,7 @@ vectorized: true
         │
         └── • scan
               columns: (k)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -532,16 +532,16 @@ vectorized: false
 │
 ├── • project
 │   │ columns: (avg)
-│   │ estimated row count: 1000 (missing stats)
+│   │ estimated row count: 1,000 (missing stats)
 │   │
 │   └── • window
 │       │ columns: (v, w, avg)
-│       │ estimated row count: 1000 (missing stats)
+│       │ estimated row count: 1,000 (missing stats)
 │       │ window 0: avg(v) OVER (PARTITION BY w ROWS BETWEEN @S1 PRECEDING AND 1 FOLLOWING)
 │       │
 │       └── • scan
 │             columns: (v, w)
-│             estimated row count: 1000 (missing stats)
+│             estimated row count: 1,000 (missing stats)
 │             table: kv@primary
 │             spans: FULL SCAN
 │
@@ -557,7 +557,7 @@ vectorized: false
         │
         └── • scan
               columns: ()
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -576,11 +576,11 @@ vectorized: true
 ·
 • project
 │ columns: (avg, avg, avg, avg)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg, avg, avg, avg)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW)
     │ window 1: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE GROUP)
     │ window 2: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE TIES)
@@ -588,6 +588,6 @@ vectorized: true
     │
     └── • scan
           columns: (k)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN

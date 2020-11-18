@@ -77,12 +77,12 @@ vectorized: true
 • project
 │ columns: (lk, rk1)
 │ ordering: +lk,+rk1
-│ estimated row count: 326700 (missing stats)
+│ estimated row count: 326,700 (missing stats)
 │
 └── • project
     │ columns: (lk, geom1, rk1, geom)
     │ ordering: +lk,+rk1
-    │ estimated row count: 326700 (missing stats)
+    │ estimated row count: 326,700 (missing stats)
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, rk1, rk2, geom)
@@ -95,12 +95,12 @@ vectorized: true
         └── • sort
             │ columns: (lk, geom1, rk1, rk2)
             │ ordering: +lk,+rk1
-            │ estimated row count: 10000 (missing stats)
+            │ estimated row count: 10,000 (missing stats)
             │ order: +lk,+rk1
             │
             └── • project
                 │ columns: (lk, geom1, rk1, rk2)
-                │ estimated row count: 10000 (missing stats)
+                │ estimated row count: 10,000 (missing stats)
                 │
                 └── • inverted join (inner)
                     │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
@@ -109,7 +109,7 @@ vectorized: true
                     │
                     └── • scan
                           columns: (lk, geom1)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: ltable@primary
                           spans: FULL SCAN
 
@@ -124,19 +124,19 @@ vectorized: true
 • sort
 │ columns: (lk, rk1)
 │ ordering: +lk,+rk1
-│ estimated row count: 9801 (missing stats)
+│ estimated row count: 9,801 (missing stats)
 │ order: +lk,+rk1
 │ already ordered: +lk
 │
 └── • project
     │ columns: (lk, rk1)
     │ ordering: +lk
-    │ estimated row count: 9801 (missing stats)
+    │ estimated row count: 9,801 (missing stats)
     │
     └── • project
         │ columns: (lk, geom1, rk1, geom)
         │ ordering: +lk
-        │ estimated row count: 9801 (missing stats)
+        │ estimated row count: 9,801 (missing stats)
         │
         └── • lookup join (inner)
             │ columns: (lk, geom1, rk1, rk2, geom)
@@ -149,7 +149,7 @@ vectorized: true
             └── • project
                 │ columns: (lk, geom1, rk1, rk2)
                 │ ordering: +lk
-                │ estimated row count: 10000 (missing stats)
+                │ estimated row count: 10,000 (missing stats)
                 │
                 └── • inverted join (inner)
                     │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
@@ -160,7 +160,7 @@ vectorized: true
                     └── • scan
                           columns: (lk, geom1)
                           ordering: +lk
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: ltable@primary
                           spans: FULL SCAN
 
@@ -175,11 +175,11 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1)
-│ estimated row count: 3267 (missing stats)
+│ estimated row count: 3,267 (missing stats)
 │
 └── • project
     │ columns: (lk, geom1, geom2, rk1, geom)
-    │ estimated row count: 3267 (missing stats)
+    │ estimated row count: 3,267 (missing stats)
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, geom2, rk1, rk2, geom)
@@ -190,7 +190,7 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom1, geom2, rk1, rk2)
-            │ estimated row count: 10000 (missing stats)
+            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (inner)
                 │ columns: (lk, geom1, geom2, rk1, rk2, geom_inverted_key)
@@ -199,7 +199,7 @@ vectorized: true
                 │
                 └── • scan
                       columns: (lk, geom1, geom2)
-                      estimated row count: 1000 (missing stats)
+                      estimated row count: 1,000 (missing stats)
                       table: ltable@primary
                       spans: FULL SCAN
 
@@ -229,7 +229,7 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom2, rk1, rk2, cont)
-            │ estimated row count: 10000 (missing stats)
+            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (inner)
                 │ columns: (lk, geom2, rk1, rk2, geom_inverted_key, cont)
@@ -238,7 +238,7 @@ vectorized: true
                 │
                 └── • scan
                       columns: (lk, geom2)
-                      estimated row count: 1000 (missing stats)
+                      estimated row count: 1,000 (missing stats)
                       table: ltable@primary
                       spans: FULL SCAN
 
@@ -252,11 +252,11 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1)
-│ estimated row count: 10000 (missing stats)
+│ estimated row count: 10,000 (missing stats)
 │
 └── • project
     │ columns: (lk, geom1, rk1, geom)
-    │ estimated row count: 10000 (missing stats)
+    │ estimated row count: 10,000 (missing stats)
     │
     └── • lookup join (left outer)
         │ columns: (lk, geom1, rk1, rk2, cont, geom)
@@ -267,7 +267,7 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2, cont)
-            │ estimated row count: 10000 (missing stats)
+            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (left outer)
                 │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
@@ -276,7 +276,7 @@ vectorized: true
                 │
                 └── • scan
                       columns: (lk, geom1)
-                      estimated row count: 1000 (missing stats)
+                      estimated row count: 1,000 (missing stats)
                       table: ltable@primary
                       spans: FULL SCAN
 
@@ -314,7 +314,7 @@ vectorized: false
 │           │
 │           └── • project
 │               │ columns: (lk, geom1, geom)
-│               │ estimated row count: 3333 (missing stats)
+│               │ estimated row count: 3,333 (missing stats)
 │               │
 │               └── • lookup join (left outer)
 │                   │ columns: (lk, geom1, rk1, rk2, cont, geom)
@@ -325,7 +325,7 @@ vectorized: false
 │                   │
 │                   └── • project
 │                       │ columns: (lk, geom1, rk1, rk2, cont)
-│                       │ estimated row count: 3333 (missing stats)
+│                       │ estimated row count: 3,333 (missing stats)
 │                       │
 │                       └── • inverted join (left outer)
 │                           │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
@@ -398,7 +398,7 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom2, rk1, rk2, cont)
-            │ estimated row count: 10000 (missing stats)
+            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (left outer)
                 │ columns: (lk, geom2, rk1, rk2, geom_inverted_key, cont)
@@ -407,7 +407,7 @@ vectorized: true
                 │
                 └── • scan
                       columns: (lk, geom2)
-                      estimated row count: 1000 (missing stats)
+                      estimated row count: 1,000 (missing stats)
                       table: ltable@primary
                       spans: FULL SCAN
 
@@ -431,7 +431,7 @@ vectorized: true
     │
     └── • project
         │ columns: (lk, geom1, rk1)
-        │ estimated row count: 1100 (missing stats)
+        │ estimated row count: 1,100 (missing stats)
         │
         └── • lookup join (anti)
             │ columns: (lk, geom1, rk1, rk2, cont)
@@ -442,7 +442,7 @@ vectorized: true
             │
             └── • project
                 │ columns: (lk, geom1, rk1, rk2, cont)
-                │ estimated row count: 1111 (missing stats)
+                │ estimated row count: 1,111 (missing stats)
                 │
                 └── • inverted join (left outer)
                     │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
@@ -452,7 +452,7 @@ vectorized: true
                     │
                     └── • scan
                           columns: (lk, geom1)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: ltable@primary
                           spans: FULL SCAN
 
@@ -469,11 +469,11 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1, rk2)
-│ estimated row count: 9801 (missing stats)
+│ estimated row count: 9,801 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (lk, geom1, rk1, rk2, geom)
-    │ estimated row count: 9801 (missing stats)
+    │ estimated row count: 9,801 (missing stats)
     │ table: rtable@primary
     │ equality: (rk1, rk2) = (rk1,rk2)
     │ equality cols are key
@@ -481,7 +481,7 @@ vectorized: true
     │
     └── • project
         │ columns: (lk, geom1, rk1, rk2)
-        │ estimated row count: 10000 (missing stats)
+        │ estimated row count: 10,000 (missing stats)
         │
         └── • inverted join (inner)
             │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
@@ -490,7 +490,7 @@ vectorized: true
             │
             └── • scan
                   columns: (lk, geom1)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: ltable@primary
                   spans: FULL SCAN
 
@@ -503,11 +503,11 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1, rk2)
-│ estimated row count: 9801 (missing stats)
+│ estimated row count: 9,801 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (lk, geom1, rk1, rk2, geom)
-    │ estimated row count: 9801 (missing stats)
+    │ estimated row count: 9,801 (missing stats)
     │ table: rtable@primary
     │ equality: (rk1, rk2) = (rk1,rk2)
     │ equality cols are key
@@ -515,7 +515,7 @@ vectorized: true
     │
     └── • project
         │ columns: (lk, geom1, rk1, rk2)
-        │ estimated row count: 10000 (missing stats)
+        │ estimated row count: 10,000 (missing stats)
         │
         └── • inverted join (inner)
             │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
@@ -524,7 +524,7 @@ vectorized: true
             │
             └── • scan
                   columns: (lk, geom1)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: ltable@primary
                   spans: FULL SCAN
 
@@ -537,11 +537,11 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1, rk2)
-│ estimated row count: 9801 (missing stats)
+│ estimated row count: 9,801 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (lk, geom1, rk1, rk2, geom)
-    │ estimated row count: 9801 (missing stats)
+    │ estimated row count: 9,801 (missing stats)
     │ table: rtable@primary
     │ equality: (rk1, rk2) = (rk1,rk2)
     │ equality cols are key
@@ -549,7 +549,7 @@ vectorized: true
     │
     └── • project
         │ columns: (lk, geom1, rk1, rk2)
-        │ estimated row count: 10000 (missing stats)
+        │ estimated row count: 10,000 (missing stats)
         │
         └── • inverted join (inner)
             │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
@@ -558,7 +558,7 @@ vectorized: true
             │
             └── • scan
                   columns: (lk, geom1)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: ltable@primary
                   spans: FULL SCAN
 
