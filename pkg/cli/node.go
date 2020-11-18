@@ -599,10 +599,15 @@ var drainNodeCmd = &cobra.Command{
 	Use:   "drain",
 	Short: "drain a node without shutting it down",
 	Long: `
-Prepare a server for shutting down. This stops accepting client
-connections, stops extant connections, and finally pushes range
-leases onto other nodes, subject to various timeout parameters
-configurable via cluster settings.`,
+Prepare a server so it becomes ready to be shut down safely.
+This causes the server to stop accepting client connections, stop
+extant connections, and finally push range leases onto other
+nodes, subject to various timeout parameters configurable via
+cluster settings.
+
+After a successful drain, the server process is still running;
+use a service manager or orchestrator to terminate the process
+gracefully using e.g. a unix signal.`,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runDrain),
 }
