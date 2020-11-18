@@ -255,9 +255,12 @@ func evalInvertedExpr(
 // prefix columns of the given index. If a constraint is successfully built, it
 // is returned along with remaining filters and ok=true. The function is only
 // successful if it can generate a constraint where all spans have the same
-// start and end keys for all non-inverted prefix columns. If the index is a
-// single-column inverted index, there are no prefix columns to constrain, and
-// ok=true is returned.
+// start and end keys for all non-inverted prefix columns. This is required for
+// building spans for scanning multi-column inverted indexes (see
+// span.Builder.SpansFromInvertedSpans).
+//
+// If the index is a single-column inverted index, there are no prefix columns
+// to constrain, and ok=true is returned.
 func constrainPrefixColumns(
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
@@ -291,11 +294,32 @@ func constrainPrefixColumns(
 		prefixColumns, notNullCols, tabMeta.ComputedCols,
 		false /* isInverted */, evalCtx, factory,
 	)
+
 	constraint = ic.Constraint()
 	if constraint.Prefix(evalCtx) < prefixColumnCount {
-		// If all spans do not have the same start and end keys for all columns,
-		// the index cannot be used.
-		return nil, nil, false
+		// In some cases, consolidation of a constraint may decrease its Prefix
+		// length. Therefore, if the Prefix of the consolidated constraint is
+		// less than the number of prefix columns, we try the unconsolidated
+		// constraint. This allows us the optimizer to plan multi-column
+		// inverted index scans in more cases.
+		//
+		// For example, the consolidated constraint for (x IN (1, 2, 3)) is:
+		//
+		//   /x: [/1 - /3]
+		//   Prefix: 0
+		//
+		// But the unconsolidated constraint for the same expression is:
+		//
+		//   /x: [/1 - /1] [/2 - /2] [/3 - /3]
+		//   Prefix: 1
+		//
+		constraint = ic.UnconsolidatedConstraint()
+		if constraint.Prefix(evalCtx) < prefixColumnCount {
+			// If the all of the unconsolidated constraint spans do not have the
+			// same start and end keys for all columns, the index cannot be
+			// used.
+			return nil, nil, false
+		}
 	}
 
 	// Make a copy of constraint so that the idxconstraint.Instance is not

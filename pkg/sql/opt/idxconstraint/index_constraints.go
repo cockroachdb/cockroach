@@ -1346,6 +1346,15 @@ func (ic *Instance) Constraint() *constraint.Constraint {
 	return &ic.consolidated
 }
 
+// UnconsolidatedConstraint returns the constraint created by Init before it was
+// consolidated. If Init wasn't called, the result is nil.
+func (ic *Instance) UnconsolidatedConstraint() *constraint.Constraint {
+	if !ic.initialized {
+		return nil
+	}
+	return &ic.constraint
+}
+
 // AllInvertedIndexConstraints returns all constraints that can be created on
 // the specified inverted index. Only works for inverted indexes.
 func (ic *Instance) AllInvertedIndexConstraints() ([]*constraint.Constraint, error) {
