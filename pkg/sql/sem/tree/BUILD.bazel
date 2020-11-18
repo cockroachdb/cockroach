@@ -162,6 +162,7 @@ go_test(
         "compare_test.go",
         "constant_eval_test.go",
         "constant_test.go",
+        "datum_integration_test.go",
         "datum_invariants_test.go",
         "datum_test.go",
         "eval_internal_test.go",
