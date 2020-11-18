@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -191,9 +190,6 @@ func (ih *instrumentationHelper) Finish(
 
 	if ih.outputMode == explainAnalyzePlanOutput && retErr == nil {
 		phaseTimes := &statsCollector.phaseTimes
-		if cfg.TestingKnobs.DeterministicExplainAnalyze {
-			phaseTimes = &deterministicPhaseTimes
-		}
 		retErr = ih.setExplainAnalyzePlanResult(ctx, res, phaseTimes)
 	}
 
@@ -338,14 +334,4 @@ func (ih *instrumentationHelper) setExplainAnalyzePlanResult(
 		}
 	}
 	return nil
-}
-
-var deterministicPhaseTimes = phaseTimes{
-	sessionQueryReceived:    time.Time{},
-	sessionStartParse:       time.Time{},
-	sessionEndParse:         time.Time{}.Add(1 * time.Microsecond),
-	plannerStartLogicalPlan: time.Time{}.Add(1 * time.Microsecond),
-	plannerEndLogicalPlan:   time.Time{}.Add(11 * time.Microsecond),
-	plannerStartExecStmt:    time.Time{}.Add(11 * time.Microsecond),
-	plannerEndExecStmt:      time.Time{}.Add(111 * time.Microsecond),
 }

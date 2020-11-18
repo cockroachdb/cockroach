@@ -314,23 +314,36 @@ func (ob *OutputBuilder) AddTopLevelField(key, value string) {
 // AddDistribution adds a top-level distribution field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddDistribution(value string) {
+	if ob.flags.MakeDeterministic {
+		value = "<hidden>"
+	}
 	ob.AddTopLevelField("distribution", value)
 }
 
 // AddVectorized adds a top-level vectorized field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddVectorized(value bool) {
-	ob.AddTopLevelField("vectorized", fmt.Sprintf("%t", value))
+	valueStr := fmt.Sprintf("%t", value)
+	if ob.flags.MakeDeterministic {
+		valueStr = "<hidden>"
+	}
+	ob.AddTopLevelField("vectorized", valueStr)
 }
 
 // AddPlanningTime adds a top-level planning time field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
+	if ob.flags.MakeDeterministic {
+		delta = 10 * time.Microsecond
+	}
 	ob.AddTopLevelField("planning time", delta.Round(time.Microsecond).String())
 }
 
 // AddExecutionTime adds a top-level execution time field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
+	if ob.flags.MakeDeterministic {
+		delta = 100 * time.Microsecond
+	}
 	ob.AddTopLevelField("execution time", delta.Round(time.Microsecond).String())
 }

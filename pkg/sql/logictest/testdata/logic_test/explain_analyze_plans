@@ -99,18 +99,3 @@ query T
 SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT k FROM kv WHERE k = 0];
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkE9r4zAQxe_7KYbZyy6oWL4KCklbl5q6SWqH_gs-KPaQGjuWKsmhIfi7F1uG0EOhx_ebN096c0L70aDALEqi6zV0poHbdPkAm-hllczjBcwX8-T1LYJ_N3G2zh6T_zBZa2-sD_B8F6UR1HAJPEeGrSppIfdkUWwwxJyhNqoga5UZ0Gk0xOUnCs6wanXnBpwzLJQhFCd0lWsIBa7ltqGUZEkm4MiwJCerZoytDzNtqr00R2SYadlaAQG_CHjwFxkuOydgFiLD-ydw1Z4EcDupTjdkwZAsBXDPtkd3RnCFDLfSFe9kQXVOD1mDcdo8o7xn6NX0f-vkjlCEPft9x5SsVq2lb_V-SuZ9zpDKHfk7WtWZglZGFeMzXi7HvRGUZJ2fhl7ErR_1ef_nKwAA__9iwp6v
-
-query T
-EXPLAIN ANALYZE (PLAN) SELECT k FROM kv WHERE k = 0
-----
-planning time: 10µs
-execution time: 100µs
-distribution: full
-vectorized: true
-·
-• scan
-  missing stats
-  table: kv@primary
-  spans: [/0 - /0]
-·
-WARNING: this statement is experimental!
