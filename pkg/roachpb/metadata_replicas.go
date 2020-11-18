@@ -61,9 +61,8 @@ type ReplicaDescriptors struct {
 // MakeReplicaDescriptors creates a ReplicaDescriptors wrapper from a raw slice
 // of individual descriptors.
 //
-// All construction of ReplicaDescriptors is required to go through this method
-// so we can guarantee sortedness, which is used to speed up accessor
-// operations.
+// All construction of ReplicaSet is required to go through this method so we
+// can guarantee sortedness, which is used to speed up accessor operations.
 //
 // The function accepts a pointer to a slice instead of a slice directly to
 // avoid an allocation when boxing the argument as a sort.Interface. This may
