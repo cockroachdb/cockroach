@@ -398,7 +398,11 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
-	s := serverutils.NewServer(serverArgs).(*server.TestServer)
+	srv, err := serverutils.NewServer(serverArgs)
+	if err != nil {
+		return nil, err
+	}
+	s := srv.(*server.TestServer)
 
 	tc.Servers = append(tc.Servers, s)
 	tc.serverArgs = append(tc.serverArgs, serverArgs)
