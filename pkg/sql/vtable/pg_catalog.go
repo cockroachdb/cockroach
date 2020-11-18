@@ -495,6 +495,21 @@ CREATE TABLE pg_catalog.pg_namespace (
 	nspacl STRING[]
 )`
 
+// PGCatalogOpclass describes the schema of the pg_catalog.pg_opclass table.
+// https://www.postgresql.org/docs/12/catalog-pg-opclass.html
+const PGCatalogOpclass = `
+CREATE TABLE pg_catalog.pg_opclass (
+	oid OID,
+	opcmethod OID,
+	opcname NAME,
+	opcnamespace OID,
+	opcowner OID,
+	opcfamily OID,
+	opcintype OID,
+	opcdefault BOOL,
+	opckeytype OID
+)`
+
 // PGCatalogOperator describes the schema of the pg_catalog.pg_operator table.
 // https://www.postgresql.org/docs/9.5/catalog-pg-operator.html,
 const PGCatalogOperator = `

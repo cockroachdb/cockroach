@@ -626,6 +626,7 @@ pg_language                        NULL
 pg_locks                           NULL
 pg_matviews                        NULL
 pg_namespace                       NULL
+pg_opclass                         NULL
 pg_operator                        NULL
 pg_prepared_statements             NULL
 pg_prepared_xacts                  NULL
