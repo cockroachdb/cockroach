@@ -326,15 +326,10 @@ func testServerArgsForTransientCluster(
 	storeSpec := base.DefaultTestStoreSpec
 	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
 
-	sqlPort := sqlBasePort + int(nodeID) - 1
-	httpPort := httpBasePort + int(nodeID) - 1
-
 	args := base.TestServerArgs{
 		SocketFile:              sock.filename(),
 		PartOfCluster:           true,
 		Stopper:                 stop.NewStopper(),
-		SQLAddr:                 fmt.Sprintf(":%d", sqlPort),
-		HTTPAddr:                fmt.Sprintf(":%d", httpPort),
 		JoinAddr:                joinAddr,
 		DisableTLSForHTTP:       true,
 		StoreSpecs:              []base.StoreSpec{storeSpec},
@@ -344,6 +339,15 @@ func testServerArgsForTransientCluster(
 		// This disables the tenant server. We could enable it but would have to
 		// generate the suitable certs at the caller who wishes to do so.
 		TenantAddr: new(string),
+	}
+
+	if !testingForceRandomizeDemoPorts {
+		// Unit tests can be run with multiple processes side-by-side with
+		// `make stress`. This is bound to not work with fixed ports.
+		sqlPort := sqlBasePort + int(nodeID) - 1
+		httpPort := httpBasePort + int(nodeID) - 1
+		args.SQLAddr = fmt.Sprintf(":%d", sqlPort)
+		args.HTTPAddr = fmt.Sprintf(":%d", httpPort)
 	}
 
 	if demoCtx.localities != nil {
@@ -358,6 +362,10 @@ func testServerArgsForTransientCluster(
 
 	return args
 }
+
+// testingForceRandomizeDemoPorts disables the fixed port allocation
+// for demo clusters, for use in tests.
+var testingForceRandomizeDemoPorts bool
 
 func (c *transientCluster) cleanup(ctx context.Context) {
 	if c.stopper != nil {
