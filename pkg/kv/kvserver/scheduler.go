@@ -268,8 +268,13 @@ func (s *raftScheduler) enqueueN(addState raftScheduleState, ids ...roachpb.Rang
 	// Enqueue the ids in chunks to avoid hold raftScheduler.mu for too long.
 	const enqueueChunkSize = 128
 
-	var count int
+	// Avoid locking for 0 new ranges.
+	if len(ids) == 0 {
+		return 0
+	}
+
 	s.mu.Lock()
+	var count int
 	for i, id := range ids {
 		count += s.enqueue1Locked(addState, id)
 		if (i+1)%enqueueChunkSize == 0 {
@@ -299,6 +304,10 @@ func (s *raftScheduler) EnqueueRaftRequest(id roachpb.RangeID) {
 	s.signal(s.enqueue1(stateRaftRequest, id))
 }
 
-func (s *raftScheduler) EnqueueRaftTick(ids ...roachpb.RangeID) {
+func (s *raftScheduler) EnqueueRaftRequests(ids ...roachpb.RangeID) {
+	s.signal(s.enqueueN(stateRaftRequest, ids...))
+}
+
+func (s *raftScheduler) EnqueueRaftTicks(ids ...roachpb.RangeID) {
 	s.signal(s.enqueueN(stateRaftTick, ids...))
 }
