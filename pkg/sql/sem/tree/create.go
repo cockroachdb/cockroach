@@ -45,7 +45,7 @@ type CreateDatabase struct {
 	CType           string
 	ConnectionLimit int32
 	Regions         NameList
-	Survive         Survive
+	SurvivalGoal    SurvivalGoal
 }
 
 // Format implements the NodeFormatter interface.
@@ -79,9 +79,9 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 		ctx.WriteString(" REGIONS = ")
 		node.Regions.Format(ctx)
 	}
-	if node.Survive != SurviveDefault {
+	if node.SurvivalGoal != SurvivalGoalDefault {
 		ctx.WriteString(" ")
-		node.Survive.Format(ctx)
+		node.SurvivalGoal.Format(ctx)
 	}
 }
 

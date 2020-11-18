@@ -195,12 +195,12 @@ func (*AlterDatabaseDropRegion) StatementTag() string { return "ALTER DATABASE D
 func (*AlterDatabaseDropRegion) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
-func (*AlterDatabaseSurvive) StatementType() StatementType { return DDL }
+func (*AlterDatabaseSurvivalGoal) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabaseSurvive) StatementTag() string { return "ALTER DATABASE SURVIVE" }
+func (*AlterDatabaseSurvivalGoal) StatementTag() string { return "ALTER DATABASE SURVIVE" }
 
-func (*AlterDatabaseSurvive) hiddenFromShowQueries() {}
+func (*AlterDatabaseSurvivalGoal) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*AlterIndex) StatementType() StatementType { return DDL }
@@ -1062,7 +1062,7 @@ func (n *AlterIndex) String() string                     { return AsString(n) }
 func (n *AlterDatabaseOwner) String() string             { return AsString(n) }
 func (n *AlterDatabaseAddRegion) String() string         { return AsString(n) }
 func (n *AlterDatabaseDropRegion) String() string        { return AsString(n) }
-func (n *AlterDatabaseSurvive) String() string           { return AsString(n) }
+func (n *AlterDatabaseSurvivalGoal) String() string      { return AsString(n) }
 func (n *AlterSchema) String() string                    { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }
 func (n *AlterTableCmds) String() string                 { return AsString(n) }

@@ -566,8 +566,8 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 func (u *sqlSymUnion) regionAffinity() tree.RegionalAffinity {
   return u.val.(tree.RegionalAffinity)
 }
-func (u *sqlSymUnion) survive() tree.Survive {
-  return u.val.(tree.Survive)
+func (u *sqlSymUnion) survivalGoal() tree.SurvivalGoal {
+  return u.val.(tree.SurvivalGoal)
 }
 func (u *sqlSymUnion) objectNamePrefix() tree.ObjectNamePrefix {
 	return u.val.(tree.ObjectNamePrefix)
@@ -596,7 +596,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ACCESS ACTION ADD ADMIN AFFINITY AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
+%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
 
 %token <str> BACKUP BACKUPS BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
@@ -957,7 +957,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.NameList> opt_regions_list
 %type <str> region_name
 %type <tree.NameList> region_name_list
-%type <tree.Survive> survive_clause opt_survive_clause
+%type <tree.SurvivalGoal> survive_clause opt_survive_clause
 %type <tree.RegionalAffinity> regional_affinity
 %type <int32> opt_connection_limit
 
@@ -1499,9 +1499,9 @@ alter_database_drop_region_stmt:
 alter_database_survive_stmt:
   ALTER DATABASE database_name survive_clause
   {
-    $$.val = &tree.AlterDatabaseSurvive{
+    $$.val = &tree.AlterDatabaseSurvivalGoal{
       Name: tree.Name($3),
-      Survive: $4.survive(),
+      SurvivalGoal: $4.survivalGoal(),
     }
   }
 
@@ -7554,7 +7554,7 @@ create_database_stmt:
       CType: $8,
       ConnectionLimit: $9.int32(),
       Regions: $10.nameList(),
-      Survive: $11.survive(),
+      SurvivalGoal: $11.survivalGoal(),
     }
   }
 | CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_regions_list opt_survive_clause
@@ -7568,7 +7568,7 @@ create_database_stmt:
       CType: $11,
       ConnectionLimit: $12.int32(),
       Regions: $13.nameList(),
-      Survive: $14.survive(),
+      SurvivalGoal: $14.survivalGoal(),
     }
   }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
@@ -7590,22 +7590,18 @@ region_or_regions:
 survive_clause:
   SURVIVE REGION FAILURE
   {
-    $$.val = tree.SurviveRegionFailure
+    $$.val = tree.SurvivalGoalRegionFailure
   }
-| SURVIVE AVAILABILITY ZONE FAILURE
+| SURVIVE ZONE FAILURE
   {
-    $$.val = tree.SurviveAvailabilityZoneFailure
-  }
-| SURVIVE DEFAULT
-  {
-    $$.val = tree.SurviveDefault
+    $$.val = tree.SurvivalGoalZoneFailure
   }
 
 opt_survive_clause:
   survive_clause
 | /* EMPTY */
   {
-    $$.val = tree.SurviveDefault
+    $$.val = tree.SurvivalGoalDefault
   }
 
 opt_template_clause:
@@ -11861,7 +11857,6 @@ unreserved_keyword:
 | AT
 | ATTRIBUTE
 | AUTOMATIC
-| AVAILABILITY
 | BACKUP
 | BACKUPS
 | BEFORE

@@ -112,9 +112,9 @@ func (p *planner) AlterDatabaseDropRegion(
 	return nil, unimplemented.New("alter database drop region", "implementation pending")
 }
 
-// AlterDatabaseSurvive transforms a tree.AlterDatabaseSurvive into a plan node.
-func (p *planner) AlterDatabaseSurvive(
-	ctx context.Context, n *tree.AlterDatabaseSurvive,
+// AlterDatabaseSurvivalGoal transforms a tree.AlterDatabaseSurvivalGoal into a plan node.
+func (p *planner) AlterDatabaseSurvivalGoal(
+	ctx context.Context, n *tree.AlterDatabaseSurvivalGoal,
 ) (planNode, error) {
 	return nil, unimplemented.New("alter database survive", "implementation pending")
 }
