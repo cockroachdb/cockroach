@@ -28,7 +28,9 @@ import (
 // spillingQueue is a Queue that uses a fixed-size in-memory circular buffer
 // and spills to disk if spillingQueue.items has no more slots available to hold
 // a reference to an enqueued batch or the allocator reports that more memory
-// than the caller-provided maxMemoryLimit is in use.
+// than the caller-provided maxMemoryLimit is in use. spillingQueue.items is
+// growing dynamically until the estimated maximum of slots available to the
+// queue based on the memory limit.
 // When spilling to disk, a DiskQueue will be created. When spilling batches to
 // disk, their memory will first be released using the allocator. When batches
 // are read from disk back into memory, that memory will be reclaimed.
@@ -45,6 +47,7 @@ type spillingQueue struct {
 
 	typs             []*types.T
 	items            []coldata.Batch
+	maxItemsLen      int
 	curHeadIdx       int
 	curTailIdx       int
 	numInMemoryItems int
@@ -63,6 +66,10 @@ type spillingQueue struct {
 
 	diskAcc *mon.BoundAccount
 }
+
+// spillingQueueInitialItemsLen is the initial capacity of the in-memory buffer
+// of the spilling queues (memory limit permitting).
+const spillingQueueInitialItemsLen = int64(64)
 
 // newSpillingQueue creates a new spillingQueue. An unlimited allocator must be
 // passed in. The spillingQueue will use this allocator to check whether memory
@@ -86,31 +93,26 @@ func newSpillingQueue(
 	perItemMem := int64(colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
 	// Account for the size of items slice.
 	perItemMem += int64(unsafe.Sizeof(coldata.Batch(nil)))
-	itemsLen := memoryLimit / perItemMem
-	if itemsLen == 0 {
+	maxItemsLen := memoryLimit / perItemMem
+	if maxItemsLen == 0 {
 		// Make items at least of length 1. Even though batches will spill to disk
 		// directly (this can only happen with a very low memory limit), it's nice
 		// to have at least one item in order to be able to deserialize from disk
 		// into this slice.
-		itemsLen = 1
+		maxItemsLen = 1
 	}
-	// maxInMemoryNumBatches specifies the maximum number of items that we want
-	// to keep in memory. The reasoning for putting such limit in place is that
-	// in some configurations (when we randomize coldata.BatchSize() to be very
-	// small), we might estimate that we can keep millions of batches, so we'll
-	// allocate a huge slice below, yet we're unlikely to use it all up.
-	const maxInMemoryNumBatches = 65536
-	if itemsLen > maxInMemoryNumBatches {
-		itemsLen = maxInMemoryNumBatches
+	itemsLen := spillingQueueInitialItemsLen
+	if itemsLen > maxItemsLen {
+		itemsLen = maxItemsLen
 	}
 	return &spillingQueue{
 		unlimitedAllocator: unlimitedAllocator,
 		maxMemoryLimit:     memoryLimit,
 		typs:               typs,
 		items:              make([]coldata.Batch, itemsLen),
+		maxItemsLen:        int(maxItemsLen),
 		diskQueueCfg:       cfg,
 		fdSemaphore:        fdSemaphore,
-		dequeueScratch:     unlimitedAllocator.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize()),
 		diskAcc:            diskAcc,
 	}
 }
@@ -142,7 +144,8 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 		return nil
 	}
 
-	if q.numOnDiskItems > 0 || q.unlimitedAllocator.Used() > q.maxMemoryLimit || q.numInMemoryItems == len(q.items) {
+	if q.numOnDiskItems > 0 || q.unlimitedAllocator.Used() > q.maxMemoryLimit ||
+		(q.numInMemoryItems == len(q.items) && q.numInMemoryItems == q.maxItemsLen) {
 		// In this case, there is not enough memory available to keep this batch in
 		// memory, or the in-memory circular buffer has no slots available (we do
 		// an initial estimate of how many batches would fit into the buffer, which
@@ -157,6 +160,26 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 		}
 		q.numOnDiskItems++
 		return nil
+	}
+
+	if q.numInMemoryItems == len(q.items) {
+		// We need to reallocate the items slice, and we still have the capacity
+		// for it (meaning q.numInMemoryItems < q.maxItemsLen).
+		newItemsLen := q.numInMemoryItems * 2
+		if newItemsLen > q.maxItemsLen {
+			newItemsLen = q.maxItemsLen
+		}
+		newItems := make([]coldata.Batch, newItemsLen)
+		if q.curHeadIdx < q.curTailIdx {
+			copy(newItems, q.items[q.curHeadIdx:q.curTailIdx])
+		} else {
+			copy(newItems, q.items[q.curHeadIdx:])
+			offset := q.numInMemoryItems - q.curHeadIdx
+			copy(newItems[offset:], q.items[:q.curTailIdx])
+		}
+		q.curHeadIdx = 0
+		q.curTailIdx = q.numInMemoryItems
+		q.items = newItems
 	}
 
 	q.items[q.curTailIdx] = batch
@@ -186,7 +209,11 @@ func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {
 		// the previous batches), but Dequeue calls are already amortized, so this
 		// is acceptable.
 		// Release a batch to make space for a new batch from disk.
-		q.unlimitedAllocator.ReleaseBatch(q.dequeueScratch)
+		if q.dequeueScratch != nil {
+			q.unlimitedAllocator.ReleaseBatch(q.dequeueScratch)
+		} else {
+			q.dequeueScratch = q.unlimitedAllocator.NewMemBatchWithFixedCapacity(q.typs, coldata.BatchSize())
+		}
 		ok, err := q.diskQueue.Dequeue(ctx, q.dequeueScratch)
 		if err != nil {
 			return nil, err
