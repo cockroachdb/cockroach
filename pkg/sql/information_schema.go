@@ -1125,7 +1125,7 @@ CREATE TABLE information_schema.schema_privileges (
 						privs = sc.Desc.GetPrivileges().Show(privilege.Schema)
 					} else {
 						// Other schemas inherit from the parent database.
-						privs = db.Privileges.Show(privilege.Schema)
+						privs = db.Privileges.Show(privilege.Database)
 					}
 					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(sc.Name)
