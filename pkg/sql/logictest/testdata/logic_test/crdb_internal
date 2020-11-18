@@ -16,6 +16,7 @@ SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  backward_dependencies        table  NULL  NULL  NULL
 crdb_internal  builtin_functions            table  NULL  NULL  NULL
+crdb_internal  cluster_database_privileges  table  NULL  NULL  NULL
 crdb_internal  cluster_queries              table  NULL  NULL  NULL
 crdb_internal  cluster_sessions             table  NULL  NULL  NULL
 crdb_internal  cluster_settings             table  NULL  NULL  NULL
@@ -696,3 +697,32 @@ node_id  application_name     key                   statement_ids               
 1        test_txn_statistics  7134109142904971730   {14727561584397653517}                                            1
 1        test_txn_statistics  7134109142904971742   {14727561584397653505}                                            1
 1        test_txn_statistics  10166963080898232577  {2484845987516053214}                                             1
+
+## crdb_internal.cluster_database_privileges
+subtest cluster_database_privileges
+
+statement ok
+CREATE DATABASE other_db; SET DATABASE = other_db
+
+query TTT colnames
+SELECT * FROM crdb_internal.cluster_database_privileges
+----
+database_name  grantee  privilege_type
+other_db       admin    ALL
+other_db       root     ALL
+
+statement ok
+GRANT SELECT ON DATABASE other_db TO testuser;
+GRANT DROP ON DATABASE other_db TO testuser
+
+query TTT colnames
+SELECT * FROM crdb_internal.cluster_database_privileges
+----
+database_name  grantee   privilege_type
+other_db       admin     ALL
+other_db       root      ALL
+other_db       testuser  DROP
+other_db       testuser  SELECT
+
+statement ok
+SET DATABASE = test

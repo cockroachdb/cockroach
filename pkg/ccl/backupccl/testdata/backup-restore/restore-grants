@@ -47,12 +47,18 @@ CREATE TABLE testdb.testtable_greeting_owner (a testdb.greeting_owner);
 
 # Check that the expected grants were given to user1.
 query-sql
-SELECT
-  database_name, schema_name, grantee, privilege_type
-FROM [SHOW GRANTS ON DATABASE testdb FOR user1]
-WHERE schema_name='public' OR schema_name='sc';
+SHOW GRANTS ON DATABASE testdb FOR user1;
+----
+testdb user1 ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA public FOR user1;
 ----
 testdb public user1 ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA sc FOR user1;
+----
 testdb sc user1 USAGE
 
 query-sql
@@ -66,12 +72,18 @@ SHOW GRANTS ON TABLE testdb.testtable_simple FOR user1;
 
 # Check that the expected grants were given to testuser.
 query-sql
-SELECT
-  database_name, schema_name, grantee, privilege_type
-FROM [SHOW GRANTS ON DATABASE testdb FOR testuser]
-WHERE schema_name='public' OR schema_name='sc';
+SHOW GRANTS ON DATABASE testdb FOR testuser;
+----
+testdb testuser ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA public FOR testuser;
 ----
 testdb public testuser ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA sc FOR testuser;
+----
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR testuser;
@@ -139,17 +151,26 @@ RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage FROM 'nodelocal://
 
 # Check that user1 doesn't have any privs, but testuser should be the owner.
 query-sql
-SELECT
-  database_name, schema_name, grantee, privilege_type
-FROM [SHOW GRANTS ON DATABASE testuser_db]
-WHERE schema_name='public' OR schema_name='sc';
+SHOW GRANTS ON DATABASE testuser_db;
 ----
-testuser_db public admin ALL
-testuser_db public root ALL
-testuser_db public testuser CREATE
-testuser_db sc admin ALL
-testuser_db sc root ALL
-testuser_db sc testuser CREATE
+testuser_db admin ALL
+testuser_db root ALL
+testuser_db testuser CREATE
+
+query-sql
+SHOW GRANTS ON SCHEMA public;
+----
+testdb public admin ALL
+testdb public root ALL
+testdb public testuser ALL
+testdb public user1 ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA sc;
+----
+testdb sc admin ALL
+testdb sc root ALL
+testdb sc user1 USAGE
 
 query-sql
 SHOW GRANTS ON testuser_db.sc.othertable
@@ -268,14 +289,19 @@ SHOW GRANTS ON testdb.sc.othertable FOR testuser;
 
 # Check that admin still has all the privs.
 query-sql
-SELECT
-  database_name, schema_name, grantee, privilege_type
-FROM [SHOW GRANTS ON DATABASE testdb FOR admin]
-WHERE schema_name='public' OR schema_name='sc';
+SHOW GRANTS ON DATABASE testdb FOR admin;
+----
+testdb admin ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.public FOR admin;
 ----
 testdb public admin ALL
-testdb sc admin ALL
 
+query-sql
+SHOW GRANTS ON SCHEMA testdb.sc FOR admin;
+----
+testdb sc admin ALL
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
@@ -354,12 +380,18 @@ SHOW GRANTS ON testdb.sc.othertable FOR testuser;
 
 # Admin should still have all privs.
 query-sql
-SELECT
-  database_name, schema_name, grantee, privilege_type
-FROM [SHOW GRANTS ON DATABASE testdb FOR admin]
-WHERE schema_name='public' OR schema_name='sc';
+SHOW GRANTS ON DATABASE testdb FOR admin;
+----
+testdb admin ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.public FOR admin;
 ----
 testdb public admin ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.sc FOR admin;
+----
 testdb sc admin ALL
 
 query-sql
@@ -394,12 +426,18 @@ RESTORE FROM 'nodelocal://0/test/';
 
 # Check userr1.
 query-sql
-SELECT
-  database_name, schema_name, grantee, privilege_type
-FROM [SHOW GRANTS ON DATABASE testdb FOR user1]
-WHERE schema_name='public' OR schema_name='sc';
+SHOW GRANTS ON DATABASE testdb FOR user1;
+----
+testdb user1 ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.public FOR user1;
 ----
 testdb public user1 ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.sc FOR user1;
+----
 testdb sc user1 USAGE
 
 query-sql
@@ -413,12 +451,18 @@ SHOW GRANTS ON TABLE testdb.testtable_simple FOR user1;
 
 # Check testuser.
 query-sql
-SELECT
-  database_name, schema_name, grantee, privilege_type
-FROM [SHOW GRANTS ON DATABASE testdb FOR testuser]
-WHERE schema_name='public' OR schema_name='sc';
+SHOW GRANTS ON DATABASE testdb FOR testuser;
+----
+testdb testuser ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.public FOR testuser;
 ----
 testdb public testuser ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.sc FOR testuser;
+----
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR testuser;
@@ -445,12 +489,18 @@ ALTER TYPE testdb.greeting_owner ADD VALUE 'new' BEFORE 'howdy';
 
 # Check admin.
 query-sql
-SELECT
-  database_name, schema_name, grantee, privilege_type
-FROM [SHOW GRANTS ON DATABASE testdb FOR admin]
-WHERE schema_name='public' OR schema_name='sc';
+SHOW GRANTS ON DATABASE testdb FOR admin;
+----
+testdb admin ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.public FOR admin;
 ----
 testdb public admin ALL
+
+query-sql
+SHOW GRANTS ON SCHEMA testdb.sc FOR admin;
+----
 testdb sc admin ALL
 
 query-sql
