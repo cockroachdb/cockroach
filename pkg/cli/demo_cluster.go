@@ -735,11 +735,15 @@ func (c *transientCluster) runWorkload(
 						panic(err)
 					}
 					if err := f(ctx); err != nil {
-						// Only log an error and return when the workload function throws
-						// an error, because errors these errors should be ignored, and
-						// should not interrupt the rest of the demo.
+						// Log an error without exiting the load generator when the workload
+						// function throws an error. A single error during the workload demo
+						// should not stop the demo.
 						log.Warningf(ctx, "error running workload query: %+v", err)
+					}
+					select {
+					case <-c.s.Stopper().ShouldStop():
 						return
+					default:
 					}
 				}
 			}
