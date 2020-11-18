@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -672,21 +673,21 @@ func (m *pgDumpReader) readFile(
 			var targetColMapIdx []int
 			if len(i.Columns) != 0 {
 				targetColMapIdx = make([]int, len(i.Columns))
-				conv.IsTargetCol = make(map[int]struct{}, len(i.Columns))
+				conv.TargetColOrds = util.FastIntSet{}
 				for j := range i.Columns {
 					colName := string(i.Columns[j])
 					idx, ok := m.colMap[conv][colName]
 					if !ok {
 						return errors.Newf("targeted column %q not found", colName)
 					}
-					conv.IsTargetCol[idx] = struct{}{}
+					conv.TargetColOrds.Add(idx)
 					targetColMapIdx[j] = idx
 				}
 				// For any missing columns, fill those to NULL.
 				// These will get filled in with the correct default / computed expression
 				// provided conv.IsTargetCol is not set for the given column index.
 				for idx := range conv.VisibleCols {
-					if _, ok := conv.IsTargetCol[idx]; !ok {
+					if !conv.TargetColOrds.Contains(idx) {
 						conv.Datums[idx] = tree.DNull
 					}
 				}
@@ -735,14 +736,14 @@ func (m *pgDumpReader) readFile(
 			var targetColMapIdx []int
 			if conv != nil {
 				targetColMapIdx = make([]int, len(i.Columns))
-				conv.IsTargetCol = make(map[int]struct{}, len(i.Columns))
+				conv.TargetColOrds = util.FastIntSet{}
 				for j := range i.Columns {
 					colName := string(i.Columns[j])
 					idx, ok := m.colMap[conv][colName]
 					if !ok {
 						return errors.Newf("targeted column %q not found", colName)
 					}
-					conv.IsTargetCol[idx] = struct{}{}
+					conv.TargetColOrds.Add(idx)
 					targetColMapIdx[j] = idx
 				}
 			}
@@ -768,7 +769,7 @@ func (m *pgDumpReader) readFile(
 				}
 				switch row := row.(type) {
 				case copyData:
-					if expected, got := len(conv.IsTargetCol), len(row); expected != got {
+					if expected, got := conv.TargetColOrds.Len(), len(row); expected != got {
 						return makeRowErr("", count, pgcode.Syntax,
 							"expected %d values, got %d", expected, got)
 					}

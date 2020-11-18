@@ -38,7 +38,7 @@ type rowHelper struct {
 
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
-	primaryIndexCols      map[descpb.ColumnID]struct{}
+	primaryIndexCols      catalog.TableColSet
 	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
 }
 
@@ -135,16 +135,13 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 // datums are considered too, so a composite datum in a PK will return false.
 // TODO(dan): This logic is common and being moved into TableDescriptor (see
 // #6233). Once it is, use the shared one.
-func (rh *rowHelper) skipColumnInPK(
-	colID descpb.ColumnID, family descpb.FamilyID, value tree.Datum,
-) (bool, error) {
-	if rh.primaryIndexCols == nil {
-		rh.primaryIndexCols = make(map[descpb.ColumnID]struct{})
+func (rh *rowHelper) skipColumnInPK(colID descpb.ColumnID, value tree.Datum) (bool, error) {
+	if rh.primaryIndexCols.Empty() {
 		for _, colID := range rh.TableDesc.GetPrimaryIndex().ColumnIDs {
-			rh.primaryIndexCols[colID] = struct{}{}
+			rh.primaryIndexCols.Add(colID)
 		}
 	}
-	if _, ok := rh.primaryIndexCols[colID]; !ok {
+	if !rh.primaryIndexCols.Contains(colID) {
 		return false, nil
 	}
 	if cdatum, ok := value.(tree.CompositeDatum); ok {

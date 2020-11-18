@@ -234,8 +234,8 @@ func (d *dummyColumn) ResolvedType() *types.T {
 // descriptor, replaceColumnVars errs with pgcode.UndefinedColumn.
 func replaceColumnVars(
 	desc catalog.TableDescriptor, rootExpr tree.Expr,
-) (tree.Expr, TableColSet, error) {
-	var colIDs TableColSet
+) (tree.Expr, catalog.TableColSet, error) {
+	var colIDs catalog.TableColSet
 
 	newExpr, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)
