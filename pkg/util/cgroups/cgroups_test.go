@@ -67,6 +67,15 @@ func TestCgroupsGetMemory(t *testing.T) {
 			limit: 2936016896,
 		},
 		{
+			name: "fetches the limit for cgroup v1 when the NS relative paths of mount and cgroup don't match",
+			paths: map[string]string{
+				"/proc/self/cgroup":                 v1CgroupWithMemoryControllerNS,
+				"/proc/self/mountinfo":              v1MountsWithMemControllerNS,
+				"/sys/fs/cgroup/memory/cgroup_test/memory.stat": v1MemoryStat,
+			},
+			limit: 2936016896,
+		},
+		{
 			name: "fails when the stat file is missing for cgroup v2",
 			paths: map[string]string{
 				"/proc/self/cgroup":    v2CgroupWithMemoryController,
@@ -534,4 +543,9 @@ total_inactive_file 1363746816
 total_active_file 308867072
 total_unevictable 0
 `
+
+	// Both /proc/<pid>/mountinfo and /proc/<pid>/cgroup will show the mount and the cgroup relative to the cgroup NS root
+	// This tests the case where the memory controller mount and the cgroup are not exactly the same (as is with k8s pods).
+	v1CgroupWithMemoryControllerNS = "12:memory:/cgroup_test"
+	v1MountsWithMemControllerNS = "50 35 0:44 / /sys/fs/cgroup/memory rw,nosuid,nodev,noexec,relatime shared:25 - cgroup cgroup rw,memory"
 )
