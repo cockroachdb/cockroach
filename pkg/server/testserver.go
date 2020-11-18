@@ -599,6 +599,9 @@ func (ts *TestServer) StartTenant(
 			ClusterSettingsUpdater: st.MakeUpdater(),
 		}
 	}
+	baseCfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		DeterministicExplainAnalyze: params.DeterministicExplainAnalyze,
+	}
 	stopper := params.Stopper
 	if stopper == nil {
 		stopper = ts.Stopper()

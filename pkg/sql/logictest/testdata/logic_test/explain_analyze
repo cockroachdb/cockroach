@@ -1,3 +1,22 @@
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v))
+
+query T
+EXPLAIN ANALYZE (PLAN) SELECT k FROM kv WHERE k = 0
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• scan
+  missing stats
+  table: kv@primary
+  spans: [/0 - /0]
+·
+WARNING: this statement is experimental!
+
+
 # Regression tests for weird explain analyze cases.
 
 statement ok
