@@ -307,8 +307,8 @@ func (ih *instrumentationHelper) planRowsForExplainAnalyze(phaseTimes *phaseTime
 		return nil
 	}
 	ob := explain.NewOutputBuilder(ih.explainFlags)
-	ob.AddField("planning time", phaseTimes.getPlanningLatency().Round(time.Microsecond).String())
-	ob.AddField("execution time", phaseTimes.getRunLatency().Round(time.Microsecond).String())
+	ob.AddPlanningTime(phaseTimes.getPlanningLatency())
+	ob.AddExecutionTime(phaseTimes.getRunLatency())
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
 		return []string{fmt.Sprintf("error emitting plan: %v", err)}
 	}
