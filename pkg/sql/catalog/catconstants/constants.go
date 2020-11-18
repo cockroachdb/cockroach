@@ -74,6 +74,7 @@ const (
 	CrdbInternalTransactionStatsTableID
 	CrdbInternalTxnStatsTableID
 	CrdbInternalZonesTableID
+	CrdbInternalClusterDatabasePrivilegesTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

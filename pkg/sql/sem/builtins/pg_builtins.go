@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -525,10 +526,8 @@ func evalPrivilegeCheck(
 			SELECT bool_or(privilege_type IN ('%s', '%s')) IS TRUE
 			FROM information_schema.%s WHERE grantee IN ($1, $2) AND %s`,
 			privilege.ALL, p, infoTable, pred)
-		// TODO(mberhault): "public" is a constant defined in sql/sqlbase, but importing that
-		// would cause a dependency cycle sqlbase -> sem/transform -> sem/builtins -> sqlbase
 		r, err := ctx.InternalExecutor.QueryRow(
-			ctx.Ctx(), "eval-privilege-check", ctx.Txn, query, "public", user,
+			ctx.Ctx(), "eval-privilege-check", ctx.Txn, query, security.PublicRole, user,
 		)
 		if err != nil {
 			return nil, err
@@ -1487,7 +1486,7 @@ SELECT description
 						return tree.DNull, nil
 					}
 					return evalPrivilegeCheck(ctx, "schema_privileges",
-						user, pred, privilege.SELECT, withGrantOpt)
+						user, pred, privilege.USAGE, withGrantOpt)
 				},
 			})
 		},

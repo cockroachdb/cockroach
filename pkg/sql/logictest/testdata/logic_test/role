@@ -667,22 +667,10 @@ user testuser
 query TTTT colnames
 SHOW GRANTS ON DATABASE db2
 ----
-database_name  schema_name         grantee   privilege_type
-db2            crdb_internal       admin     ALL
-db2            crdb_internal       newgroup  ALL
-db2            crdb_internal       root      ALL
-db2            information_schema  admin     ALL
-db2            information_schema  newgroup  ALL
-db2            information_schema  root      ALL
-db2            pg_catalog          admin     ALL
-db2            pg_catalog          newgroup  ALL
-db2            pg_catalog          root      ALL
-db2            pg_extension        admin     ALL
-db2            pg_extension        newgroup  ALL
-db2            pg_extension        root      ALL
-db2            public              admin     ALL
-db2            public              newgroup  ALL
-db2            public              root      ALL
+database_name  schema_name  grantee   privilege_type
+db2            public       admin     ALL
+db2            public       newgroup  ALL
+db2            public       root      ALL
 
 statement ok
 CREATE TABLE db2.foo (k int);

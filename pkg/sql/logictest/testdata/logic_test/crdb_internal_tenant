@@ -25,6 +25,7 @@ SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  backward_dependencies        table  NULL  NULL
 crdb_internal  builtin_functions            table  NULL  NULL
+crdb_internal  cluster_database_privileges  table  NULL  NULL
 crdb_internal  cluster_queries              table  NULL  NULL
 crdb_internal  cluster_sessions             table  NULL  NULL
 crdb_internal  cluster_settings             table  NULL  NULL
@@ -64,7 +65,6 @@ crdb_internal  table_indexes                table  NULL  NULL
 crdb_internal  table_row_statistics         table  NULL  NULL
 crdb_internal  tables                       table  NULL  NULL
 crdb_internal  zones                        table  NULL  NULL
-
 
 statement ok
 CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)

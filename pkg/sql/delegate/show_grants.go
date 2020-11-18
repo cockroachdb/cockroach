@@ -28,7 +28,13 @@ import (
 func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, error) {
 	var params []string
 
-	const dbOrSchemaPrivQuery = `
+	const dbPrivQuery = `
+SELECT database_name,
+       'public' AS schema_name,
+       grantee,
+       privilege_type
+  FROM "".crdb_internal.cluster_database_privileges`
+	const schemaPrivQuery = `
 SELECT table_catalog AS database_name,
        table_schema AS schema_name,
        grantee,
@@ -72,7 +78,7 @@ FROM "".information_schema.type_privileges`
 			params = append(params, lex.EscapeSQLString(db))
 		}
 
-		fmt.Fprint(&source, dbOrSchemaPrivQuery)
+		fmt.Fprint(&source, dbPrivQuery)
 		orderBy = "1,2,3,4"
 		if len(params) == 0 {
 			// There are no rows, but we can't simply return emptyNode{} because
@@ -99,7 +105,7 @@ FROM "".information_schema.type_privileges`
 		if currDB := d.evalCtx.SessionData.Database; currDB != "" {
 			dbNameClause = fmt.Sprintf("database_name = %s", lex.EscapeSQLString(currDB))
 		}
-		fmt.Fprint(&source, dbOrSchemaPrivQuery)
+		fmt.Fprint(&source, schemaPrivQuery)
 		orderBy = "1,2,3,4"
 		if len(params) == 0 {
 			cond.WriteString(fmt.Sprintf(`WHERE %s`, dbNameClause))
@@ -203,7 +209,11 @@ FROM "".information_schema.type_privileges`
 			source.WriteByte(')')
 			source.WriteString(` UNION ALL ` +
 				`SELECT database_name, schema_name, NULL::STRING AS relation_name, grantee, privilege_type FROM (`)
-			source.WriteString(dbOrSchemaPrivQuery)
+			source.WriteString(schemaPrivQuery)
+			source.WriteByte(')')
+			source.WriteString(` UNION ALL ` +
+				`SELECT database_name, NULL::STRING AS schema_name, NULL::STRING AS relation_name, grantee, privilege_type FROM (`)
+			source.WriteString(dbPrivQuery)
 			source.WriteByte(')')
 			source.WriteString(` UNION ALL ` +
 				`SELECT database_name, schema_name, type_name AS relation_name, grantee, privilege_type FROM (`)

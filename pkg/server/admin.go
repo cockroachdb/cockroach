@@ -277,7 +277,8 @@ func (s *adminServer) DatabaseDetails(
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-show-grants", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
-		fmt.Sprintf("SHOW GRANTS ON DATABASE %s", escDBName),
+		// We only want to show the grants on the database.
+		fmt.Sprintf("SELECT * FROM [SHOW GRANTS ON DATABASE %s] WHERE schema_name = 'public'", escDBName),
 	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
@@ -288,22 +289,12 @@ func (s *adminServer) DatabaseDetails(
 	var resp serverpb.DatabaseDetailsResponse
 	{
 		const (
-			schemaCol     = "schema_name"
 			userCol       = "grantee"
 			privilegesCol = "privilege_type"
 		)
 
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
-			var schemaName string
-			if err := scanner.Scan(row, schemaCol, &schemaName); err != nil {
-				return nil, err
-			}
-			if schemaName != tree.PublicSchema {
-				// We only want to list real tables.
-				continue
-			}
-
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant serverpb.DatabaseDetailsResponse_Grant
 			var privileges string
