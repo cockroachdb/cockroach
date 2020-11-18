@@ -31,9 +31,17 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := r.ex.Query(
 			ctx, "claim-jobs", txn, `
-UPDATE system.jobs SET claim_session_id = $1, claim_instance_id = $2
-WHERE claim_session_id IS NULL ORDER BY created DESC LIMIT $3 RETURNING id`,
-			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop,
+   UPDATE system.jobs
+      SET claim_session_id = $1, claim_instance_id = $2
+    WHERE claim_session_id IS NULL
+      AND status NOT IN ($3, $4, $5)
+ ORDER BY created DESC
+    LIMIT $6
+RETURNING id;`,
+			s.ID().UnsafeBytes(), r.ID(),
+			// Don't touch terminal jobs.
+			StatusSucceeded, StatusCanceled, StatusFailed,
+			maxAdoptionsPerLoop,
 		)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
