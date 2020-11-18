@@ -100,11 +100,10 @@ const (
 )
 
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
-	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
+	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.NumCPU(), 96))
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
-	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60,
-)
+	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterPublicByteSizeSetting(
@@ -2776,4 +2775,11 @@ func ReadClusterVersion(
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
