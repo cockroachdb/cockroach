@@ -310,15 +310,13 @@ var options = map[string]struct {
 		isBoolean:                 false,
 		validDuringMultilineEntry: false,
 		set: func(val string) error {
-			val = strings.ToLower(strings.TrimSpace(val))
-			switch val {
-			case "false", "0", "off":
-				sqlCtx.autoTrace = ""
-			case "true", "1":
-				val = "on"
-				fallthrough
-			default:
+			b, err := parseBool(val)
+			if err != nil {
 				sqlCtx.autoTrace = "on, " + val
+			} else if b {
+				sqlCtx.autoTrace = "on, on"
+			} else {
+				sqlCtx.autoTrace = ""
 			}
 			return nil
 		},
@@ -482,15 +480,12 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	var err error
 	if !opt.isBoolean {
 		err = opt.set(val)
+	} else if b, e := parseBool(val); e != nil {
+		return c.invalidOptSet(errState, args)
+	} else if b {
+		err = opt.set("true")
 	} else {
-		switch val {
-		case "true", "1", "on":
-			err = opt.set("true")
-		case "false", "0", "off":
-			err = opt.reset()
-		default:
-			return c.invalidOptSet(errState, args)
-		}
+		err = opt.reset()
 	}
 
 	if err != nil {

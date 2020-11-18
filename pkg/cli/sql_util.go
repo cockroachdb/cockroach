@@ -1165,3 +1165,15 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 
 	return fmt.Sprint(val)
 }
+
+// parseBool parses a boolean string for use in slash commands.
+func parseBool(s string) (bool, error) {
+	switch strings.TrimSpace(strings.ToLower(s)) {
+	case "true", "on", "yes", "1":
+		return true, nil
+	case "false", "off", "no", "0":
+		return false, nil
+	default:
+		return false, errors.Newf("invalid boolean value %q", s)
+	}
+}
