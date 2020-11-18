@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -127,16 +126,16 @@ func (s *sorterBase) close() {
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
-func (s *sorterBase) execStatsForTrace() *execstatspb.ComponentStats {
+func (s *sorterBase) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(s.input)
 	if !ok {
 		return nil
 	}
-	return &execstatspb.ComponentStats{
-		Inputs: []execstatspb.InputStats{is},
-		Exec: execstatspb.ExecStats{
-			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(s.MemMonitor.MaximumBytes())),
-			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(s.diskMonitor.MaximumBytes())),
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(s.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(s.diskMonitor.MaximumBytes())),
 		},
 		Output: s.Out.Stats(),
 	}

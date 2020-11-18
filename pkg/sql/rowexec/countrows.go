@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -107,13 +106,13 @@ func (ag *countAggregator) ConsumerClosed() {
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
-func (ag *countAggregator) execStatsForTrace() *execstatspb.ComponentStats {
+func (ag *countAggregator) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(ag.input)
 	if !ok {
 		return nil
 	}
-	return &execstatspb.ComponentStats{
-		Inputs: []execstatspb.InputStats{is},
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
 		Output: ag.Out.Stats(),
 	}
 }

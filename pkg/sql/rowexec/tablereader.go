@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -272,15 +271,15 @@ func (tr *tableReader) ConsumerClosed() {
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
-func (tr *tableReader) execStatsForTrace() *execstatspb.ComponentStats {
+func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getFetcherInputStats(tr.fetcher)
 	if !ok {
 		return nil
 	}
-	return &execstatspb.ComponentStats{
-		KV: execstatspb.KVStats{
+	return &execinfrapb.ComponentStats{
+		KV: execinfrapb.KVStats{
 			TuplesRead: is.NumTuples,
-			BytesRead:  execstatspb.MakeIntValue(uint64(tr.GetBytesRead())),
+			BytesRead:  execinfrapb.MakeIntValue(uint64(tr.GetBytesRead())),
 			KVTime:     is.WaitTime,
 		},
 		Output: tr.Out.Stats(),

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -288,16 +287,16 @@ func (ifr *invertedFilterer) close() {
 
 // execStatsForTrace outputs the collected invertedFilterer stats to the
 // trace. Will fail silently if the invertedFilterer is not collecting stats.
-func (ifr *invertedFilterer) execStatsForTrace() *execstatspb.ComponentStats {
+func (ifr *invertedFilterer) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(ifr.input)
 	if !ok {
 		return nil
 	}
-	return &execstatspb.ComponentStats{
-		Inputs: []execstatspb.InputStats{is},
-		Exec: execstatspb.ExecStats{
-			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(ifr.MemMonitor.MaximumBytes())),
-			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(ifr.diskMonitor.MaximumBytes())),
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(ifr.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(ifr.diskMonitor.MaximumBytes())),
 		},
 		Output: ifr.Out.Stats(),
 	}
