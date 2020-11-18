@@ -525,8 +525,7 @@ SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
 	numSnapsBefore := numRaftSnaps("before")
 
 	doSplit := func(ctx context.Context, _ int) error {
-		_, _, err := tc.SplitRange(
-			[]byte(fmt.Sprintf("key-%d", perm[atomic.AddInt32(&idx, 1)])))
+		_, _, err := tc.SplitRange([]byte(fmt.Sprintf("key-%d", perm[atomic.AddInt32(&idx, 1)])))
 		return err
 	}
 
