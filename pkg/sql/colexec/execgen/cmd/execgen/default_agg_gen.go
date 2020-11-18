@@ -21,6 +21,9 @@ func genDefaultAgg(inputFileContents string, wr io.Writer) error {
 	addTuple := makeFunctionRegex("_ADD_TUPLE", 4)
 	s := addTuple.ReplaceAllString(inputFileContents, `{{template "addTuple"}}`)
 
+	setResult := makeFunctionRegex("_SET_RESULT", 2)
+	s = setResult.ReplaceAllString(s, `{{template "setResult"}}`)
+
 	tmpl, err := template.New("default_agg").Parse(s)
 	if err != nil {
 		return err

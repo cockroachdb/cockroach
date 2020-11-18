@@ -63,12 +63,6 @@ func (a *countRowsHashAgg) Flush(outputIdx int) {
 	a.vec[outputIdx] = a.curAgg
 }
 
-func (a *countRowsHashAgg) HandleEmptyInputScalar() {
-	// COUNT aggregates are special because they return zero in case of an
-	// empty input in the scalar context.
-	a.vec[0] = 0
-}
-
 type countRowsHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []countRowsHashAgg
@@ -148,12 +142,6 @@ func (a *countHashAgg) Compute(
 
 func (a *countHashAgg) Flush(outputIdx int) {
 	a.vec[outputIdx] = a.curAgg
-}
-
-func (a *countHashAgg) HandleEmptyInputScalar() {
-	// COUNT aggregates are special because they return zero in case of an
-	// empty input in the scalar context.
-	a.vec[0] = 0
 }
 
 type countHashAggAlloc struct {
