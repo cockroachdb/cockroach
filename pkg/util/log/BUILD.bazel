@@ -142,6 +142,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/util",
+        "//pkg/util/fileutil",
         "//pkg/util/leaktest",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",

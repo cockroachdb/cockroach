@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -87,14 +88,23 @@ func init() {
 	logging.mu.fatalCh = make(chan struct{})
 }
 
+type sinkInfo struct {
+	// sink is where the log entries should be written.
+	sink logSink
+
+	// editor is the optional step that occurs prior to emitting the log
+	// entry.
+	editor redactEditor
+
+	// criticality indicates whether a failure to output some log
+	// entries should incur the process to terminate.
+	criticality bool
+}
+
 // loggerT represents the logging source for a given log channel.
 type loggerT struct {
-	// sinks stores the destinations for log entries.
-	sinks []logSink
-
-	// sinkEditors represents, for each sink, the optional redaction
-	// step that occurs prior to emitting the log entry.
-	sinkEditors []redactEditor
+	// sinkInfos stores the destinations for log entries.
+	sinkInfos []sinkInfo
 
 	// logCounter supports the generation of a per-entry log entry
 	// counter. This is needed in audit logs to hinder malicious
@@ -109,8 +119,8 @@ type loggerT struct {
 
 // getFileSink retrieves the file sink if defined.
 func (l *loggerT) getFileSink() *fileSink {
-	for _, s := range l.sinks {
-		if fs, ok := s.(*fileSink); ok {
+	for _, s := range l.sinkInfos {
+		if fs, ok := s.sink.(*fileSink); ok {
 			return fs
 		}
 	}
@@ -200,8 +210,8 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 			stacks = getStacks(true)
 		}
 
-		for _, s := range l.sinks {
-			stacks = s.attachHints(stacks)
+		for _, s := range l.sinkInfos {
+			stacks = s.sink.attachHints(stacks)
 		}
 
 		// Explain to the (human) user that we would like to hear from them.
@@ -250,7 +260,7 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	// We need different buffers because the different sinks use different formats.
 	// For example, the fluent sink needs JSON, and the file sink does not use
 	// the terminal escape codes that the stderr sink uses.
-	bufs := getBufferSlice(len(l.sinks))
+	bufs := getBufferSlice(len(l.sinkInfos))
 	defer putBufferSlice(bufs)
 
 	// The following code constructs / populates the formatted entries
@@ -258,10 +268,10 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	// We only do the work if the sink is active and the filtering does
 	// not eliminate the event.
 	someSinkActive := false
-	for i, s := range l.sinks {
-		if s.activeAtSeverity(entry.Severity) {
-			editedEntry := maybeRedactEntry(entry, l.sinkEditors[i])
-			bufs[i] = s.getFormatter().formatEntry(editedEntry, stacks)
+	for i, s := range l.sinkInfos {
+		if s.sink.activeAtSeverity(entry.Severity) {
+			editedEntry := maybeRedactEntry(entry, s.editor)
+			bufs[i] = s.sink.getFormatter().formatEntry(editedEntry, stacks)
 			someSinkActive = true
 		}
 	}
@@ -276,23 +286,39 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 		l.outputMu.Lock()
 		defer l.outputMu.Unlock()
 
-		for i, s := range l.sinks {
+		var outputErr error
+		var outputErrExitCode exit.Code
+		for i, s := range l.sinkInfos {
 			if bufs[i] == nil {
 				// The sink was not accepting entries at this level. Nothing to do.
 				continue
 			}
-			if err := s.output(extraSync, bufs[i].Bytes()); err != nil {
-				// The sink seems to be unavailable. However, the sink was
-				// active as per the threshold, so abandoning the write would
-				// be a contract violation.
-				//
-				// We definitely do not like to lose log entries, so we stop
-				// here. Note that exitLocked() shouts the error to all sinks,
-				// so even though this sink is not available any more, we'll
-				// keep a trace of the error in another sink.
-				l.exitLocked(err, s.exitCode())
-				return // unreachable except in tests
+			if err := s.sink.output(extraSync, bufs[i].Bytes()); err != nil {
+				if !s.criticality {
+					// An error on this sink is not critical. Just report
+					// the error and move on.
+					l.reportErrorEverywhereLocked(context.Background(), err)
+				} else {
+					// This error is critical. We'll have to terminate the
+					// process below.
+					if outputErr == nil {
+						outputErrExitCode = s.sink.exitCode()
+					}
+					outputErr = errors.CombineErrors(outputErr, err)
+				}
 			}
+		}
+		if outputErr != nil {
+			// Some sink was unavailable. However, the sink was active as
+			// per the threshold, so abandoning the write would be a
+			// contract violation.
+			//
+			// We definitely do not like to lose log entries, so we stop
+			// here. Note that exitLocked() shouts the error to all sinks,
+			// so even though this sink is not available any more, we'll
+			// keep a trace of the error in another sink.
+			l.exitLocked(outputErr, outputErrExitCode)
+			return // unreachable except in tests
 		}
 	}
 
