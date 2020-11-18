@@ -13,11 +13,13 @@ package explain
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 // OutputBuilder is used to build the output of an explain tree.
@@ -298,4 +300,50 @@ func (ob *OutputBuilder) BuildProtoTree() *roachpb.ExplainTreePlanNode {
 	}
 
 	return sentinel.Children[0]
+}
+
+// AddTopLevelField adds a top-level field. Cannot be called while inside a
+// node.
+func (ob *OutputBuilder) AddTopLevelField(key, value string) {
+	if ob.level != 0 {
+		panic(errors.AssertionFailedf("inside node"))
+	}
+	ob.AddField(key, value)
+}
+
+// AddDistribution adds a top-level distribution field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddDistribution(value string) {
+	if ob.flags.MakeDeterministic {
+		value = "<hidden>"
+	}
+	ob.AddTopLevelField("distribution", value)
+}
+
+// AddVectorized adds a top-level vectorized field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddVectorized(value bool) {
+	valueStr := fmt.Sprintf("%t", value)
+	if ob.flags.MakeDeterministic {
+		valueStr = "<hidden>"
+	}
+	ob.AddTopLevelField("vectorized", valueStr)
+}
+
+// AddPlanningTime adds a top-level planning time field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
+	if ob.flags.MakeDeterministic {
+		delta = 10 * time.Microsecond
+	}
+	ob.AddTopLevelField("planning time", delta.Round(time.Microsecond).String())
+}
+
+// AddExecutionTime adds a top-level execution time field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
+	if ob.flags.MakeDeterministic {
+		delta = 100 * time.Microsecond
+	}
+	ob.AddTopLevelField("execution time", delta.Round(time.Microsecond).String())
 }

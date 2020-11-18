@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -72,8 +71,8 @@ func emitExplain(
 	distribution physicalplan.PlanDistribution,
 	vectorized bool,
 ) error {
-	ob.AddField("distribution", distribution.String())
-	ob.AddField("vectorized", fmt.Sprintf("%t", vectorized))
+	ob.AddDistribution(distribution.String())
+	ob.AddVectorized(vectorized)
 	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
 		var tabDesc *tabledesc.Immutable
 		var idxDesc *descpb.IndexDescriptor
