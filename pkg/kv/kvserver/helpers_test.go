@@ -198,6 +198,11 @@ func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
 
+// RaftSchedulerPriorityID returns the Raft scheduler's prioritized range.
+func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
+	return s.scheduler.PriorityID()
+}
+
 // ClearClosedTimestampStorage clears the closed timestamp storage of all
 // knowledge about closed timestamps.
 func (s *Store) ClearClosedTimestampStorage() {
