@@ -45,8 +45,8 @@ func (b *Builder) buildMutationInput(
 	}
 
 	if p.WithID != 0 {
-		// The input might have extra columns that are used only by FK checks; make
-		// sure we don't project them away.
+		// The input might have extra columns that are used only by FK or unique
+		// checks; make sure we don't project them away.
 		cols := inputExpr.Relational().OutputCols.Copy()
 		for _, c := range colList {
 			cols.Remove(c)
@@ -101,7 +101,8 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		insertOrds,
 		returnOrds,
 		checkOrds,
-		b.allowAutoCommit && len(ins.Checks) == 0 && len(ins.FKCascades) == 0,
+		b.allowAutoCommit && len(ins.UniqueChecks) == 0 &&
+			len(ins.FKChecks) == 0 && len(ins.FKCascades) == 0,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -112,7 +113,9 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		ep.outputCols = mutationOutputColMap(ins)
 	}
 
-	if err := b.buildFKChecks(ins.Checks); err != nil {
+	// TODO(rytaft): build unique checks.
+
+	if err := b.buildFKChecks(ins.FKChecks); err != nil {
 		return execPlan{}, err
 	}
 
@@ -148,9 +151,9 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 
 	//  - there are no self-referencing foreign keys;
 	//  - all FK checks can be performed using direct lookups into unique indexes.
-	fkChecks := make([]exec.InsertFastPathFKCheck, len(ins.Checks))
-	for i := range ins.Checks {
-		c := &ins.Checks[i]
+	fkChecks := make([]exec.InsertFastPathFKCheck, len(ins.FKChecks))
+	for i := range ins.FKChecks {
+		c := &ins.FKChecks[i]
 		if md.Table(c.ReferencedTable).ID() == md.Table(ins.Table).ID() {
 			// Self-referencing FK.
 			return execPlan{}, false, nil
@@ -325,13 +328,16 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		returnColOrds,
 		checkOrds,
 		passthroughCols,
-		b.allowAutoCommit && len(upd.Checks) == 0 && len(upd.FKCascades) == 0,
+		b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
+			len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	if err := b.buildFKChecks(upd.Checks); err != nil {
+	// TODO(rytaft): build unique checks.
+
+	if err := b.buildFKChecks(upd.FKChecks); err != nil {
 		return execPlan{}, err
 	}
 
@@ -406,13 +412,16 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		updateColOrds,
 		returnColOrds,
 		checkOrds,
-		b.allowAutoCommit && len(ups.Checks) == 0 && len(ups.FKCascades) == 0,
+		b.allowAutoCommit && len(ups.UniqueChecks) == 0 &&
+			len(ups.FKChecks) == 0 && len(ups.FKCascades) == 0,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	if err := b.buildFKChecks(ups.Checks); err != nil {
+	// TODO(rytaft): build unique checks.
+
+	if err := b.buildFKChecks(ups.FKChecks); err != nil {
 		return execPlan{}, err
 	}
 
@@ -460,13 +469,13 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 		tab,
 		fetchColOrds,
 		returnColOrds,
-		b.allowAutoCommit && len(del.Checks) == 0 && len(del.FKCascades) == 0,
+		b.allowAutoCommit && len(del.FKChecks) == 0 && len(del.FKCascades) == 0,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	if err := b.buildFKChecks(del.Checks); err != nil {
+	if err := b.buildFKChecks(del.FKChecks); err != nil {
 		return execPlan{}, err
 	}
 
@@ -528,7 +537,7 @@ func (b *Builder) tryBuildDeleteRange(del *memo.DeleteExpr) (_ execPlan, ok bool
 	if err != nil {
 		return execPlan{}, false, err
 	}
-	if err := b.buildFKChecks(del.Checks); err != nil {
+	if err := b.buildFKChecks(del.FKChecks); err != nil {
 		return execPlan{}, false, err
 	}
 	if err := b.buildFKCascades(del.WithID, del.FKCascades); err != nil {
@@ -677,7 +686,7 @@ func (b *Builder) buildDeleteRange(
 					autoCommit = true
 				}
 			}
-			if len(del.Checks) > 0 || len(del.FKCascades) > 0 {
+			if len(del.FKChecks) > 0 || len(del.FKCascades) > 0 {
 				// Do not allow autocommit if we have checks or cascades. This does not
 				// apply for the interleaved case, where we decided that the delete
 				// range takes care of all the FKs as well.

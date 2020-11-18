@@ -645,6 +645,12 @@ func (h *hasher) HashFKChecksExpr(val FKChecksExpr) {
 	}
 }
 
+func (h *hasher) HashUniqueChecksExpr(val UniqueChecksExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].Check)
+	}
+}
+
 func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {
 	for i := range val {
 		h.HashString(val[i].Key)
@@ -1039,6 +1045,18 @@ func (h *hasher) IsZipExprEqual(l, r ZipExpr) bool {
 }
 
 func (h *hasher) IsFKChecksExprEqual(l, r FKChecksExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Check != r[i].Check {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsUniqueChecksExprEqual(l, r UniqueChecksExpr) bool {
 	if len(l) != len(r) {
 		return false
 	}

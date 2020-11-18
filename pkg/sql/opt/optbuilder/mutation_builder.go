@@ -150,8 +150,11 @@ type mutationBuilder struct {
 	// reuse.
 	parsedIndexExprs []tree.Expr
 
-	// checks contains foreign key check queries; see buildFK* methods.
-	checks memo.FKChecksExpr
+	// uniqueChecks contains unique check queries; see buildUnique* methods.
+	uniqueChecks memo.UniqueChecksExpr
+
+	// fkChecks contains foreign key check queries; see buildFK* methods.
+	fkChecks memo.FKChecksExpr
 
 	// cascades contains foreign key check cascades; see buildFK* methods.
 	cascades memo.FKCascades
@@ -167,6 +170,9 @@ type mutationBuilder struct {
 
 	// fkCheckHelper is used to prevent allocating the helper separately.
 	fkCheckHelper fkCheckHelper
+
+	// uniqueCheckHelper is used to prevent allocating the helper separately.
+	uniqueCheckHelper uniqueCheckHelper
 }
 
 func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
@@ -893,7 +899,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	}
 
 	// If we didn't actually plan any checks or cascades, don't buffer the input.
-	if len(mb.checks) > 0 || len(mb.cascades) > 0 {
+	if len(mb.uniqueChecks) > 0 || len(mb.fkChecks) > 0 || len(mb.cascades) > 0 {
 		private.WithID = mb.withID
 	}
 
@@ -1143,4 +1149,62 @@ func partialIndexCount(tab cat.Table) int {
 		}
 	}
 	return count
+}
+
+type checkInputScanType uint8
+
+const (
+	checkInputScanNewVals checkInputScanType = iota
+	checkInputScanFetchedVals
+)
+
+// makeCheckInputScan constructs a WithScan that iterates over the input to the
+// mutation operator. Used in expressions that generate rows for checking for FK
+// and uniqueness violations.
+//
+// The WithScan expression will scan either the new values or the fetched values
+// for the given table ordinals (which correspond to FK or unique columns).
+//
+// Returns the output columns from the WithScan, which map 1-to-1 to
+// tabOrdinals. Also returns the subset of these columns that can be assumed
+// to be not null (either because they are not null in the mutation input or
+// because they are non-nullable table columns).
+//
+func (mb *mutationBuilder) makeCheckInputScan(
+	typ checkInputScanType, tabOrdinals []int,
+) (scan memo.RelExpr, outCols opt.ColList, notNullOutCols opt.ColSet) {
+	// inputCols are the column IDs from the mutation input that we are scanning.
+	inputCols := make(opt.ColList, len(tabOrdinals))
+	// outCols will store the newly synthesized output columns for WithScan.
+	outCols = make(opt.ColList, len(inputCols))
+	for i, tabOrd := range tabOrdinals {
+		if typ == checkInputScanNewVals {
+			inputCols[i] = mb.mapToReturnColID(tabOrd)
+		} else {
+			inputCols[i] = mb.fetchColIDs[tabOrd]
+		}
+		if inputCols[i] == 0 {
+			panic(errors.AssertionFailedf("no value for FK column (tabOrd=%d)", tabOrd))
+		}
+
+		// Synthesize new column.
+		c := mb.b.factory.Metadata().ColumnMeta(inputCols[i])
+		outCols[i] = mb.md.AddColumn(c.Alias, c.Type)
+
+		// If a table column is not nullable, NULLs cannot be inserted (the
+		// mutation will fail). So for the purposes of checks, we can treat
+		// these columns as not null.
+		if mb.outScope.expr.Relational().NotNullCols.Contains(inputCols[i]) ||
+			!mb.tab.Column(tabOrd).IsNullable() {
+			notNullOutCols.Add(outCols[i])
+		}
+	}
+
+	scan = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
+		With:    mb.withID,
+		InCols:  inputCols,
+		OutCols: outCols,
+		ID:      mb.b.factory.Metadata().NextUniqueID(),
+	})
+	return scan, outCols, notNullOutCols
 }
