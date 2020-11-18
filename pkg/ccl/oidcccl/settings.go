@@ -33,11 +33,11 @@ const (
 	OIDCAutoLoginSettingName      = baseOIDCSettingName + "autologin"
 )
 
-// OIDCEnabled enables or disabled OIDC login for the Admin UI
+// OIDCEnabled enables or disabled OIDC login for the DB Console
 var OIDCEnabled = func() *settings.BoolSetting {
 	s := settings.RegisterPublicBoolSetting(
 		OIDCEnabledSettingName,
-		"enables or disabled OIDC login for the Admin UI (this feature is experimental)",
+		"enables or disabled OIDC login for the DB Console (this feature is experimental)",
 		false,
 	)
 	s.SetReportable(true)
@@ -155,23 +155,22 @@ var OIDCPrincipalRegex = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCButtonText is a string to display on the button in the Admin UI to login with OIDC
+// OIDCButtonText is a string to display on the button in the DB Console to login with OIDC
 var OIDCButtonText = func() *settings.StringSetting {
 	s := settings.RegisterPublicStringSetting(
 		OIDCButtonTextSettingName,
-		"text to show on button on Admin UI login page to login with your OIDC provider "+
+		"text to show on button on DB Console login page to login with your OIDC provider "+
 			"(only shown if OIDC is enabled) (this feature is experimental)",
 		"Login with your OIDC provider",
 	)
 	return s
 }()
 
-// OIDCAutoLogin is a boolean that enables automatic redirection to OIDC auth in the Admin
-// UI.
+// OIDCAutoLogin is a boolean that enables automatic redirection to OIDC auth in the DB Console
 var OIDCAutoLogin = func() *settings.BoolSetting {
 	s := settings.RegisterPublicBoolSetting(
 		OIDCAutoLoginSettingName,
-		"if true, logged-out visitors to the Admin UI will be "+
+		"if true, logged-out visitors to the DB Console will be "+
 			"automatically redirected to the OIDC login endpoint (this feature is experimental)",
 		false,
 	)
