@@ -86,9 +86,12 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	})
 	testServer.Stopper().Stop(context.Background())
 
-	srv, ok := serverutils.NewServer(serverArgs).(*TestServer)
+	s, err := serverutils.NewServer(serverArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv = s.(*TestServer)
 	defer srv.Stopper().Stop(context.Background())
-	require.True(t, ok)
 
 	s := srv.Server
 	var initServer *initServer

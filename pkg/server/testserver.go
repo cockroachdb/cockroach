@@ -1288,7 +1288,7 @@ type testServerFactoryImpl struct{}
 var TestServerFactory = testServerFactoryImpl{}
 
 // New is part of TestServerFactory interface.
-func (testServerFactoryImpl) New(params base.TestServerArgs) interface{} {
+func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error) {
 	cfg := makeTestConfigFromParams(params)
 	ts := &TestServer{Cfg: &cfg, params: params}
 
@@ -1303,13 +1303,15 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) interface{} {
 	// Needs to be called before NewServer to ensure resolvers are initialized.
 	ctx := context.Background()
 	if err := ts.Cfg.InitNode(ctx); err != nil {
-		return err
+		params.Stopper.Stop(ctx)
+		return nil, err
 	}
 
 	var err error
 	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
-		return err
+		params.Stopper.Stop(ctx)
+		return nil, err
 	}
 
 	// Create a breaker which never trips and never backs off to avoid
@@ -1323,5 +1325,5 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) interface{} {
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.Server.cfg
 
-	return ts
+	return ts, nil
 }
