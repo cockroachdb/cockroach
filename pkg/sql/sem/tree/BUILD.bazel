@@ -76,7 +76,7 @@ go_library(
         "split.go",
         "statementtype_string.go",
         "stmt.go",
-        "survive.go",
+        "survival_goal.go",
         "table_name.go",
         "table_pattern.go",
         "table_ref.go",
