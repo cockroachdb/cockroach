@@ -409,16 +409,16 @@ func (cl candidateList) removeCandidate(c candidate) candidateList {
 // stores that meet the criteria are included in the list.
 func allocateCandidates(
 	ctx context.Context,
-	sl StoreList,
+	candidateStores StoreList,
 	constraints constraint.AnalyzedConstraints,
-	existing []roachpb.ReplicaDescriptor,
+	existingReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
 	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
-	for _, s := range sl.stores {
-		if nodeHasReplica(s.Node.NodeID, existing) {
+	for _, s := range candidateStores.stores {
+		if nodeHasReplica(s.Node.NodeID, existingReplicas) {
 			continue
 		}
 		if !isNodeValidForRoutineReplicaTransfer(ctx, s.Node.NodeID) {
@@ -433,14 +433,14 @@ func allocateCandidates(
 			continue
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
-		balanceScore := balanceScore(sl, s.Capacity, options)
+		balanceScore := balanceScore(candidateStores, s.Capacity, options)
 		var convergesScore int
 		if options.qpsRebalanceThreshold > 0 {
-			if s.Capacity.QueriesPerSecond < underfullThreshold(sl.candidateQueriesPerSecond.mean, options.qpsRebalanceThreshold) {
+			if s.Capacity.QueriesPerSecond < underfullThreshold(candidateStores.candidateQueriesPerSecond.mean, options.qpsRebalanceThreshold) {
 				convergesScore = 1
-			} else if s.Capacity.QueriesPerSecond < sl.candidateQueriesPerSecond.mean {
+			} else if s.Capacity.QueriesPerSecond < candidateStores.candidateQueriesPerSecond.mean {
 				convergesScore = 0
-			} else if s.Capacity.QueriesPerSecond < overfullThreshold(sl.candidateQueriesPerSecond.mean, options.qpsRebalanceThreshold) {
+			} else if s.Capacity.QueriesPerSecond < overfullThreshold(candidateStores.candidateQueriesPerSecond.mean, options.qpsRebalanceThreshold) {
 				convergesScore = -1
 			} else {
 				convergesScore = -2
