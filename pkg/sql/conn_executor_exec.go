@@ -350,6 +350,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		} else {
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
 			flags := explain.MakeFlags(&e.ExplainOptions)
+			flags.MakeDeterministic = ex.server.cfg.TestingKnobs.DeterministicExplainAnalyze
 			ih.SetOutputMode(explainAnalyzePlanOutput, flags)
 		}
 		// Strip off the explain node to execute the inner statement.
