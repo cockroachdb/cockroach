@@ -143,6 +143,7 @@ go_library(
         "rename_index.go",
         "rename_table.go",
         "render.go",
+        "repair.go",
         "reparent_database.go",
         "resolver.go",
         "revert.go",

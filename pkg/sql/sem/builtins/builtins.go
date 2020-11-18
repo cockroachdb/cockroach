@@ -108,6 +108,7 @@ const (
 	categorySpatial        = "Spatial"
 	categoryString         = "String and byte"
 	categorySystemInfo     = "System info"
+	categorySystemRepair   = "System repair"
 )
 
 func categorizeType(t *types.T) string {
@@ -4285,6 +4286,139 @@ may increase either contention or retry errors, or both.`,
 					ret.Array = append(ret.Array, tree.NewDString(string(key)))
 				}
 				return ret, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_upsert_descriptor": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"desc", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+					[]byte(*args[1].(*tree.DBytes))); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_delete_descriptor": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_upsert_namespace_entry": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+				{"force", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // descID
+					bool(*args[4].(*tree.DBool)),     // force
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // descID
+					false,                            // force
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_delete_namespace_entry": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // descID
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: tree.VolatilityVolatile,
