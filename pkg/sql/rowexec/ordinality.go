@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -117,13 +116,13 @@ func (o *ordinalityProcessor) ConsumerClosed() {
 
 // execStatsForTrace outputs the collected distinct stats to the trace. Will
 // fail silently if the Distinct processor is not collecting stats.
-func (o *ordinalityProcessor) execStatsForTrace() *execstatspb.ComponentStats {
+func (o *ordinalityProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(o.input)
 	if !ok {
 		return nil
 	}
-	return &execstatspb.ComponentStats{
-		Inputs: []execstatspb.InputStats{is},
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
 		Output: o.Out.Stats(),
 	}
 }

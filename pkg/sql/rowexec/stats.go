@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,7 +30,7 @@ import (
 // inputStatCollector wraps an execinfra.RowSource and collects stats from it.
 type inputStatCollector struct {
 	execinfra.RowSource
-	stats execstatspb.InputStats
+	stats execinfrapb.InputStats
 }
 
 var _ execinfra.RowSource = &inputStatCollector{}
@@ -79,7 +78,7 @@ func (isc *inputStatCollector) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 type rowFetcherStatCollector struct {
 	*row.Fetcher
 	// stats contains the collected stats.
-	stats              execstatspb.InputStats
+	stats              execinfrapb.InputStats
 	startScanStallTime time.Duration
 }
 
@@ -142,10 +141,10 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 // getInputStats is a utility function to check whether the given input is
 // collecting stats, returning true and the stats if so. If false is returned,
 // the input is not collecting stats.
-func getInputStats(input execinfra.RowSource) (execstatspb.InputStats, bool) {
+func getInputStats(input execinfra.RowSource) (execinfrapb.InputStats, bool) {
 	isc, ok := input.(*inputStatCollector)
 	if !ok {
-		return execstatspb.InputStats{}, false
+		return execinfrapb.InputStats{}, false
 	}
 	return isc.stats, true
 }
@@ -153,10 +152,10 @@ func getInputStats(input execinfra.RowSource) (execstatspb.InputStats, bool) {
 // getFetcherInputStats is a utility function to check whether the given input
 // is collecting row fetcher stats, returning true and the stats if so. If
 // false is returned, the input is not collecting row fetcher stats.
-func getFetcherInputStats(f rowFetcher) (execstatspb.InputStats, bool) {
+func getFetcherInputStats(f rowFetcher) (execinfrapb.InputStats, bool) {
 	rfsc, ok := f.(*rowFetcherStatCollector)
 	if !ok {
-		return execstatspb.InputStats{}, false
+		return execinfrapb.InputStats{}, false
 	}
 	// Add row fetcher start scan stall time to Next() stall time.
 	rfsc.stats.WaitTime += rfsc.startScanStallTime

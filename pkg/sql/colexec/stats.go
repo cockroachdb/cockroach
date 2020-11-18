@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -166,10 +165,10 @@ type vectorizedStatsCollectorImpl struct {
 }
 
 // finish returns the collected stats.
-func (vsc *vectorizedStatsCollectorImpl) finish() *execstatspb.ComponentStats {
+func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := vsc.batchInfoCollector.finish()
 
-	s := &execstatspb.ComponentStats{ComponentID: vsc.operatorID}
+	s := &execinfrapb.ComponentStats{ComponentID: vsc.operatorID}
 
 	for _, memMon := range vsc.memMonitors {
 		s.Exec.MaxAllocatedMem.Add(memMon.MaximumBytes())
@@ -250,10 +249,10 @@ type networkVectorizedStatsCollectorImpl struct {
 }
 
 // finish returns the collected stats.
-func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execstatspb.ComponentStats {
+func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := nvsc.batchInfoCollector.finish()
 
-	s := &execstatspb.ComponentStats{ComponentID: nvsc.operatorID}
+	s := &execinfrapb.ComponentStats{ComponentID: nvsc.operatorID}
 
 	s.NetRx.Latency = nvsc.latency
 	s.NetRx.WaitTime = time
@@ -283,7 +282,7 @@ func createStatsSpan(
 	opName string,
 	flowID string,
 	idTagKey string,
-	stats *execstatspb.ComponentStats,
+	stats *execinfrapb.ComponentStats,
 ) {
 	// We're creating a new span for every component setting the appropriate
 	// tag so that it is displayed correctly on the flow diagram.

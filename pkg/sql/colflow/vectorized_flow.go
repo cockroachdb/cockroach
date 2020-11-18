@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -993,12 +992,12 @@ func (s *vectorizedFlowCreator) setupOutput(
 		s.leaves = append(s.leaves, outbox)
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 		// Make the materializer, which will write to the given receiver.
-		var outputStatsToTrace func() *execstatspb.ComponentStats
+		var outputStatsToTrace func() *execinfrapb.ComponentStats
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
 			// appended to.
 			vscq := append([]colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
-			outputStatsToTrace = func() *execstatspb.ComponentStats {
+			outputStatsToTrace = func() *execinfrapb.ComponentStats {
 				// TODO(radu): this is a sketchy way to use this infrastructure. We
 				// aren't actually returning any stats, but we are creating and closing
 				// child spans with stats.

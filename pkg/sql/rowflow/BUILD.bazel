@@ -14,7 +14,6 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
-        "//pkg/sql/execstats/execstatspb",
         "//pkg/sql/flowinfra",
         "//pkg/sql/rowcontainer",
         "//pkg/sql/rowenc",

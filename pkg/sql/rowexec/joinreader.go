@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -675,7 +674,7 @@ func (jr *joinReader) close() {
 
 // execStatsForTrace outputs the collected joinReader stats to the trace. Will
 // fail silently if the joinReader is not collecting stats.
-func (jr *joinReader) execStatsForTrace() *execstatspb.ComponentStats {
+func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(jr.input)
 	if !ok {
 		return nil
@@ -686,9 +685,9 @@ func (jr *joinReader) execStatsForTrace() *execstatspb.ComponentStats {
 	}
 
 	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
-	return &execstatspb.ComponentStats{
-		Inputs: []execstatspb.InputStats{is},
-		KV: execstatspb.KVStats{
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		KV: execinfrapb.KVStats{
 			TuplesRead: fis.NumTuples,
 			KVTime:     fis.WaitTime,
 		},

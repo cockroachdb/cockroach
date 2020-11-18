@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -170,7 +169,7 @@ func NewMaterializer(
 	output execinfra.RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexecbase.Closer,
-	execStatsForTrace func() *execstatspb.ComponentStats,
+	execStatsForTrace func() *execinfrapb.ComponentStats,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	vecIdxsToConvert := make([]int, len(typs))
