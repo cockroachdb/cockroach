@@ -692,6 +692,7 @@ func (jr *joinReader) execStatsForTrace() *execstatspb.ComponentStats {
 			TuplesRead: fis.NumTuples,
 			KVTime:     fis.WaitTime,
 		},
+		Output: jr.Out.Stats(),
 	}
 }
 

@@ -687,6 +687,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execstatspb.ComponentStats {
 			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(ij.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(ij.diskMonitor.MaximumBytes())),
 		},
+		Output: ij.Out.Stats(),
 	}
 }
 

@@ -288,6 +288,7 @@ func (m *mergeJoiner) execStatsForTrace() *execstatspb.ComponentStats {
 		Exec: execstatspb.ExecStats{
 			MaxAllocatedMem: execstatspb.MakeIntValue(uint64(m.MemMonitor.MaximumBytes())),
 		},
+		Output: m.Out.Stats(),
 	}
 }
 
