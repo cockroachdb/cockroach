@@ -255,9 +255,12 @@ func evalInvertedExpr(
 // prefix columns of the given index. If a constraint is successfully built, it
 // is returned along with remaining filters and ok=true. The function is only
 // successful if it can generate a constraint where all spans have the same
-// start and end keys for all non-inverted prefix columns. If the index is a
-// single-column inverted index, there are no prefix columns to constrain, and
-// ok=true is returned.
+// start and end keys for all non-inverted prefix columns. This is required for
+// building spans for scanning multi-column inverted indexes (see
+// span.Builder.SpansFromInvertedSpans).
+//
+// If the index is a single-column inverted index, there are no prefix columns
+// to constrain, and ok=true is returned.
 func constrainPrefixColumns(
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
@@ -286,16 +289,35 @@ func constrainPrefixColumns(
 		}
 	}
 
+	// Consolidation of a constraint converts contiguous spans into a single
+	// span. By definition, the consolidated span would have different start and
+	// end keys and could not be used for multi-column inverted index scans.
+	// Therefore, we only generate and check the unconsolidated constraint,
+	// allowing the optimizer to plan multi-column inverted index scans in more
+	// cases.
+	//
+	// For example, the consolidated constraint for (x IN (1, 2, 3)) is:
+	//
+	//   /x: [/1 - /3]
+	//   Prefix: 0
+	//
+	// The unconsolidated constraint for the same expression is:
+	//
+	//   /x: [/1 - /1] [/2 - /2] [/3 - /3]
+	//   Prefix: 1
+	//
 	var ic idxconstraint.Instance
 	ic.Init(
 		filters, optionalFilters,
 		prefixColumns, notNullCols, tabMeta.ComputedCols,
-		false /* isInverted */, evalCtx, factory,
+		false, /* isInverted */
+		false, /* consolidate */
+		evalCtx, factory,
 	)
-	constraint = ic.Constraint()
+	constraint = ic.UnconsolidatedConstraint()
 	if constraint.Prefix(evalCtx) < prefixColumnCount {
-		// If all spans do not have the same start and end keys for all columns,
-		// the index cannot be used.
+		// If all of the constraint spans do not have the same start and end keys
+		// for all columns, the index cannot be used.
 		return nil, nil, false
 	}
 
