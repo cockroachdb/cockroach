@@ -5,6 +5,8 @@ CREATE DATABASE d;
 CREATE TABLE d.t1 (a INT, b INT, PRIMARY KEY (a));
 CREATE INDEX b_idx ON d.t1(a, b) INTERLEAVE IN PARENT d.t1 (a);
 ----
+NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2
+HINT: See https://github.com/cockroachdb/cockroach/issues/52009 for more details.
 CREATE INDEX
 
 dump d t1
@@ -31,6 +33,8 @@ CREATE INDEX b_idx ON e.t2(a, b) INTERLEAVE IN PARENT e.t3 (a);
 INSERT INTO e.t2 VALUES (1, 2);
 INSERT INTO e.t3 VALUES (3, 4);
 ----
+NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2
+HINT: See https://github.com/cockroachdb/cockroach/issues/52009 for more details.
 INSERT 1
 
 dump e
@@ -67,6 +71,8 @@ CREATE DATABASE dd;
 CREATE TABLE dd.unique (a INT, b INT, PRIMARY KEY (a));
 CREATE INDEX "b_idx" ON dd.unique(a, b) INTERLEAVE IN PARENT dd.unique (a);
 ----
+NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2
+HINT: See https://github.com/cockroachdb/cockroach/issues/52009 for more details.
 CREATE INDEX
 
 dump dd unique
@@ -90,6 +96,8 @@ CREATE DATABASE ee;
 CREATE TABLE ee.a (i INT, j INT, PRIMARY KEY (i, j DESC));
 CREATE TABLE ee.d (x INT, y INT, z INT, PRIMARY KEY (x, y DESC, z DESC)) INTERLEAVE IN PARENT ee.a (x, y);
 ----
+NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2
+HINT: See https://github.com/cockroachdb/cockroach/issues/52009 for more details.
 CREATE TABLE
 
 dump ee a d

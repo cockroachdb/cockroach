@@ -30,6 +30,16 @@ import (
 func (p *planner) AlterPrimaryKey(
 	ctx context.Context, tableDesc *tabledesc.Mutable, alterPKNode *tree.AlterTableAlterPrimaryKey,
 ) error {
+	if alterPKNode.Interleave != nil {
+		p.BufferClientNotice(
+			ctx,
+			errors.WithHint(
+				pgnotice.Newf("interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2"),
+				"See https://github.com/cockroachdb/cockroach/issues/52009 for more details.",
+			),
+		)
+	}
+
 	if alterPKNode.Sharded != nil {
 		if !p.EvalContext().SessionData.HashShardedIndexesEnabled {
 			return hashShardedIndexesDisabledError

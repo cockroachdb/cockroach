@@ -443,3 +443,31 @@ SELECT
 ;
 ----
 0 0 0
+
+# test for #56579: ensure that deprecation notice is present
+
+subtest interleaved_deprecation_notice
+statement ok
+CREATE TABLE interleave_parent (x INT PRIMARY KEY);
+
+query T noticetrace
+CREATE TABLE interleave_create_notice (x INT, y INT, s STRING, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT interleave_parent(x);
+----
+NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2
+HINT: See https://github.com/cockroachdb/cockroach/issues/52009 for more details.
+
+query T noticetrace
+CREATE INDEX interleave_index ON interleave_create_notice (x, s) INTERLEAVE IN PARENT interleave_parent(x);
+----
+NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2
+HINT: See https://github.com/cockroachdb/cockroach/issues/52009 for more details.
+
+statement ok
+CREATE TABLE interleave_pk_notice (x INT NOT NULL, y INT);
+
+query T noticetrace
+ALTER TABLE interleave_pk_notice ALTER PRIMARY KEY USING COLUMNS (x) INTERLEAVE IN PARENT interleave_parent(x);
+----
+NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2
+HINT: See https://github.com/cockroachdb/cockroach/issues/52009 for more details.
+NOTICE: primary key changes are finalized asynchronously; further schema changes on this table may be restricted until the job completes

@@ -392,6 +392,16 @@ func (n *createIndexNode) startExec(params runParams) error {
 		)
 	}
 
+	if n.n.Interleave != nil {
+		params.p.BufferClientNotice(
+			params.ctx,
+			errors.WithHint(
+				pgnotice.Newf("interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2"),
+				"See https://github.com/cockroachdb/cockroach/issues/52009 for more details.",
+			),
+		)
+	}
+
 	indexDesc, err := MakeIndexDescriptor(params, n.n, n.tableDesc)
 	if err != nil {
 		return err
