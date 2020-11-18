@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -848,7 +849,7 @@ func TestDTimeTZ(t *testing.T) {
 	require.False(t, depOnCtx)
 
 	// No daylight savings in Hawaii!
-	hawaiiZone, err := time.LoadLocation("Pacific/Honolulu")
+	hawaiiZone, err := timeutil.LoadLocation("Pacific/Honolulu")
 	require.NoError(t, err)
 	hawaiiTime := tree.NewDTimeTZFromLocation(timeofday.New(1, 14, 15, 0), hawaiiZone)
 
