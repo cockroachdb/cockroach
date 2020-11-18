@@ -95,6 +95,15 @@ func (d ReplicaDescriptors) All() []ReplicaDescriptor {
 	return d.wrapped
 }
 
+func predVoterFull(rDesc ReplicaDescriptor) bool {
+	switch rDesc.GetType() {
+	case VOTER_FULL:
+		return true
+	default:
+	}
+	return false
+}
+
 func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
 	switch rDesc.GetType() {
 	case VOTER_FULL, VOTER_INCOMING:
@@ -110,6 +119,10 @@ func predLearner(rDesc ReplicaDescriptor) bool {
 
 func predNonVoter(rDesc ReplicaDescriptor) bool {
 	return rDesc.GetType() == NON_VOTER
+}
+
+func predVoterOrNonVoter(rDesc ReplicaDescriptor) bool {
+	return predVoterFull(rDesc) || predNonVoter(rDesc)
 }
 
 // Voters returns the current and future voter replicas in the set. This means
@@ -240,6 +253,12 @@ func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
 // of non-voting replicas.
 func (d ReplicaDescriptors) NonVoters() []ReplicaDescriptor {
 	return d.Filter(predNonVoter)
+}
+
+// VotersAndNonVoters returns the list of VOTER_FULL/NON_VOTER replicas in the
+// set.
+func (d ReplicaDescriptors) VotersAndNonVoters() []ReplicaDescriptor {
+	return d.Filter(predVoterOrNonVoter)
 }
 
 // Filter returns only the replica descriptors for which the supplied method

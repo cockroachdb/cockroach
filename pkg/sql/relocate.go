@@ -131,7 +131,9 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 	} else {
-		if err := params.p.ExecCfg().DB.AdminRelocateRange(params.ctx, rowKey, relocationTargets); err != nil {
+		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+			params.ctx, rowKey, relocationTargets, []roachpb.ReplicationTarget{},
+		); err != nil {
 			return false, err
 		}
 	}

@@ -287,40 +287,61 @@ func (mq *mergeQueue) process(
 		}
 	}
 	lhsReplicas, rhsReplicas := lhsDesc.Replicas().All(), rhsDesc.Replicas().All()
+	lhsNonVoters := lhsDesc.Replicas().NonVoters()
+	lhsVoters := lhsDesc.Replicas().Voters()
 
-	// Defensive sanity check that everything is now a voter.
+	// Defensive sanity check that the ranges involved only have either VOTER_FULL
+	// or NON_VOTER replicas.
 	for i := range lhsReplicas {
-		if lhsReplicas[i].GetType() != roachpb.VOTER_FULL {
-			return false, errors.Errorf(`cannot merge non-voter replicas on lhs: %v`, lhsReplicas)
+		if typ := lhsReplicas[i].GetType(); !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
+			return false,
+				errors.Errorf(
+					`cannot merge because lhs contains replicas that are neither NON_VOTER nor VOTER_FULL: %v`,
+					lhsReplicas,
+				)
 		}
 	}
 	for i := range rhsReplicas {
-		if rhsReplicas[i].GetType() != roachpb.VOTER_FULL {
-			return false, errors.Errorf(`cannot merge non-voter replicas on rhs: %v`, rhsReplicas)
+		if typ := rhsReplicas[i].GetType(); !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
+			return false,
+				errors.Errorf(
+					`cannot merge because rhs contains replicas that are neither NON_VOTER nor VOTER_FULL: %v`,
+					rhsReplicas,
+				)
 		}
 	}
 
 	if !replicaSetsEqual(lhsReplicas, rhsReplicas) {
-		var targets []roachpb.ReplicationTarget
-		for _, lhsReplDesc := range lhsReplicas {
-			targets = append(targets, roachpb.ReplicationTarget{
-				NodeID: lhsReplDesc.NodeID, StoreID: lhsReplDesc.StoreID,
+		var voterTargets []roachpb.ReplicationTarget
+		for _, lhsVoterDesc := range lhsVoters {
+			voterTargets = append(voterTargets, roachpb.ReplicationTarget{
+				NodeID: lhsVoterDesc.NodeID, StoreID: lhsVoterDesc.StoreID,
+			})
+		}
+		var nonVoterTargets []roachpb.ReplicationTarget
+		for _, lhsNonVoterDesc := range lhsNonVoters {
+			nonVoterTargets = append(nonVoterTargets, roachpb.ReplicationTarget{
+				NodeID: lhsNonVoterDesc.NodeID, StoreID: lhsNonVoterDesc.StoreID,
 			})
 		}
 		// AdminRelocateRange moves the lease to the first target in the list, so
 		// sort the existing leaseholder there to leave it unchanged.
 		lease, _ := lhsRepl.GetLease()
-		for i := range targets {
-			if targets[i].NodeID == lease.Replica.NodeID && targets[i].StoreID == lease.Replica.StoreID {
+		for i := range voterTargets {
+			if t := voterTargets[i]; t.NodeID == lease.Replica.NodeID && t.StoreID == lease.Replica.StoreID {
 				if i > 0 {
-					targets[0], targets[i] = targets[i], targets[0]
+					voterTargets[0], voterTargets[i] = voterTargets[i], voterTargets[0]
 				}
 				break
 			}
 		}
-		// TODO(benesch): RelocateRange can sometimes fail if it needs to move a replica
-		// from one store to another store on the same node.
-		if err := mq.store.DB().AdminRelocateRange(ctx, rhsDesc.StartKey, targets); err != nil {
+		// We only care about merging ranges that are aligned with regards to their
+		// zone config constraints. In practice, this means that we likely only care
+		// about aligning the individual replica sets of the Voters() and
+		// NonVoters().
+		if err := mq.store.DB().AdminRelocateRange(
+			ctx, rhsDesc.StartKey, voterTargets, nonVoterTargets,
+		); err != nil {
 			return false, err
 		}
 	}
