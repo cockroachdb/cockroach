@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -839,16 +838,16 @@ func CreateWindowerSpecFunc(funcStr string) (execinfrapb.WindowerSpec_Func, erro
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
-func (w *windower) execStatsForTrace() *execstatspb.ComponentStats {
+func (w *windower) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(w.input)
 	if !ok {
 		return nil
 	}
-	return &execstatspb.ComponentStats{
-		Inputs: []execstatspb.InputStats{is},
-		Exec: execstatspb.ExecStats{
-			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(w.MemMonitor.MaximumBytes())),
-			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(w.diskMonitor.MaximumBytes())),
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(w.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(w.diskMonitor.MaximumBytes())),
 		},
 		Output: w.Out.Stats(),
 	}

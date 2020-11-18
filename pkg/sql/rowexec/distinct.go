@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -345,15 +344,15 @@ func (d *distinct) ConsumerClosed() {
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
-func (d *distinct) execStatsForTrace() *execstatspb.ComponentStats {
+func (d *distinct) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(d.input)
 	if !ok {
 		return nil
 	}
-	return &execstatspb.ComponentStats{
-		Inputs: []execstatspb.InputStats{is},
-		Exec: execstatspb.ExecStats{
-			MaxAllocatedMem: execstatspb.MakeIntValue(uint64(d.MemMonitor.MaximumBytes())),
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem: execinfrapb.MakeIntValue(uint64(d.MemMonitor.MaximumBytes())),
 		},
 		Output: d.Out.Stats(),
 	}

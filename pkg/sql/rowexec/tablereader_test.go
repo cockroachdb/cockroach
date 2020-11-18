@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -439,7 +438,7 @@ func TestLimitScans(t *testing.T) {
 	for _, span := range spans {
 		if span.Operation == tableReaderProcName {
 			// Verify that stat collection lines up with results.
-			stats := execstatspb.ComponentStats{}
+			stats := execinfrapb.ComponentStats{}
 			if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
 				t.Fatal(err)
 			}

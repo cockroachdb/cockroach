@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -64,7 +63,7 @@ type Outbox struct {
 	err error
 
 	statsCollectionEnabled bool
-	stats                  execstatspb.ComponentStats
+	stats                  execinfrapb.ComponentStats
 }
 
 var _ execinfra.RowReceiver = &Outbox{}

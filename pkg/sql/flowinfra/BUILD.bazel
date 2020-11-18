@@ -24,7 +24,6 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
-        "//pkg/sql/execstats/execstatspb",
         "//pkg/sql/mutations",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
