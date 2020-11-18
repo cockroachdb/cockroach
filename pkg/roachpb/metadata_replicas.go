@@ -95,6 +95,15 @@ func (d ReplicaSet) Descriptors() []ReplicaDescriptor {
 	return d.wrapped
 }
 
+func predVoterFull(rDesc ReplicaDescriptor) bool {
+	switch rDesc.GetType() {
+	case VOTER_FULL:
+		return true
+	default:
+	}
+	return false
+}
+
 func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
 	switch rDesc.GetType() {
 	case VOTER_FULL, VOTER_INCOMING:
@@ -112,12 +121,15 @@ func predNonVoter(rDesc ReplicaDescriptor) bool {
 	return rDesc.GetType() == NON_VOTER
 }
 
-// VoterDescriptors returns the descriptors of current and future voter replicas
-// in the set. This means that during an atomic replication change, only the
-// replicas that will be voters once the change completes will be returned;
-// "outgoing" voters will not be returned even though they do in the current
-// state retain their voting rights. When no atomic membership change is
-// ongoing, this is simply the set of all non-learners.
+func predVoterOrNonVoter(rDesc ReplicaDescriptor) bool {
+	return predVoterFull(rDesc) || predNonVoter(rDesc)
+}
+
+// Voters returns a ReplicaSet of current and future voter replicas in `d`. This
+// means that during an atomic replication change, only the replicas that will
+// be voters once the change completes will be returned; "outgoing" voters will
+// not be returned even though they do in the current state retain their voting
+// rights.
 //
 // This may allocate, but it also may return the underlying slice as a
 // performance optimization, so it's not safe to modify the returned value.
@@ -125,11 +137,17 @@ func predNonVoter(rDesc ReplicaDescriptor) bool {
 // TODO(tbg): go through the callers and figure out the few which want a
 // different subset of voters. Consider renaming this method so that it's
 // more descriptive.
+func (d ReplicaSet) Voters() ReplicaSet {
+	return d.Filter(predVoterFullOrIncoming)
+}
+
+// VoterDescriptors returns the descriptors of current and future voter replicas
+// in the set.
 func (d ReplicaSet) VoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predVoterFullOrIncoming)
 }
 
-// LearnerDescriptors returns the learner replicas in the set. This may
+// Learners returns a ReplicaSet containing the learner replicas in `d`. This may
 // allocate, but it also may return the underlying slice as a performance
 // optimization, so it's not safe to modify the returned value.
 //
@@ -211,11 +229,17 @@ func (d ReplicaSet) VoterDescriptors() []ReplicaDescriptor {
 // However, it means a slow learner can slow down regular traffic.
 //
 // For some related mega-comments, see Replica.sendSnapshot.
+func (d ReplicaSet) Learners() ReplicaSet {
+	return d.Filter(predLearner)
+}
+
+// LearnerDescriptors returns a slice of ReplicaDescriptors corresponding to
+// learner replicas in `d`.
 func (d ReplicaSet) LearnerDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predLearner)
 }
 
-// NonVoterDescriptors returns the non-voting replica descriptors in the set.
+// NonVoters returns a ReplicaSet containing only the non-voters in `d`.
 // Non-voting replicas are treated differently from learner replicas.
 // Learners are a temporary internal state used to make atomic
 // replication changes less disruptive to the system. Even though learners and
@@ -238,12 +262,38 @@ func (d ReplicaSet) LearnerDescriptors() []ReplicaDescriptor {
 // TODO(aayush): Expand this documentation once `AdminRelocateRange` knows how
 // to deal with such replicas & range merges no longer block due to the presence
 // of non-voting replicas.
+func (d ReplicaSet) NonVoters() ReplicaSet {
+	return d.Filter(predNonVoter)
+}
+
+// NonVoterDescriptors returns the non-voting replica descriptors in the set.
 func (d ReplicaSet) NonVoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predNonVoter)
 }
 
-// FilterToDescriptors returns only the replica descriptors for which the supplied method
-// returns true. The memory returned may be shared with the receiver.
+// VotersAndNonVoters returns a ReplicaSet of VOTER_FULL/NON_VOTER replicas in
+// `d`. This set will not contain learners or, during an atomic replication
+// change, incoming or outgoing voters. Notably, this set must encapsulate all
+// replicas of a range for a range merge to proceed.
+func (d ReplicaSet) VotersAndNonVoters() ReplicaSet {
+	return d.Filter(predVoterOrNonVoter)
+}
+
+// VoterAndNonVoterDescriptors returns the descriptors of VOTER_FULL/NON_VOTER
+// replicas in the set.
+func (d ReplicaSet) VoterAndNonVoterDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predVoterOrNonVoter)
+}
+
+// Filter returns a ReplicaSet corresponding to the replicas for which the
+// supplied predicate returns true.
+func (d ReplicaSet) Filter(pred func(rDesc ReplicaDescriptor) bool) ReplicaSet {
+	return MakeReplicaSet(d.FilterToDescriptors(pred))
+}
+
+// FilterToDescriptors returns only the replica descriptors for which the
+// supplied method returns true. The memory returned may be shared with the
+// receiver.
 func (d ReplicaSet) FilterToDescriptors(
 	pred func(rDesc ReplicaDescriptor) bool,
 ) []ReplicaDescriptor {
@@ -280,6 +330,16 @@ func (d ReplicaSet) DeepCopy() ReplicaSet {
 	return ReplicaSet{
 		wrapped: append([]ReplicaDescriptor(nil), d.wrapped...),
 	}
+}
+
+// Contains returns true if the set contains rDesc.
+func (d ReplicaSet) Contains(rDesc ReplicaDescriptor) bool {
+	for _, repl := range d.Descriptors() {
+		if repl.StoreID == rDesc.StoreID && repl.NodeID == rDesc.NodeID {
+			return true
+		}
+	}
+	return false
 }
 
 // AddReplica adds the given replica to this set.
@@ -399,6 +459,15 @@ func (d ReplicaSet) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) 
 
 	n = len(votersNewGroup)
 	return len(liveVotersNewGroup) >= n/2+1
+}
+
+// ReplicationTargets returns a slice of ReplicationTargets corresponding to
+// each of the replicas in the set.
+func (d ReplicaSet) ReplicationTargets() (out []ReplicationTarget) {
+	for _, r := range d.Descriptors() {
+		out = append(out, ReplicationTarget{NodeID: r.NodeID, StoreID: r.StoreID})
+	}
+	return out
 }
 
 // IsAddition returns true if `c` refers to a replica addition operation.

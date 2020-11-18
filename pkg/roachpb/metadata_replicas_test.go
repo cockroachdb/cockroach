@@ -308,7 +308,7 @@ func TestReplicaDescriptorsCanMakeProgress(t *testing.T) {
 				rds = append(rds, rDesc.ReplicaDescriptor)
 			}
 
-			act := MakeReplicaDescriptors(rds).CanMakeProgress(func(rd ReplicaDescriptor) bool {
+			act := MakeReplicaSet(rds).CanMakeProgress(func(rd ReplicaDescriptor) bool {
 				for _, rdi := range test.rds {
 					if rdi.ReplicaID == rd.ReplicaID {
 						return rdi.live
@@ -346,7 +346,7 @@ func TestReplicaDescriptorsCanMakeProgressRandom(t *testing.T) {
 			liveness[i] = (livenessBits >> i & 1) == 0
 		}
 
-		rng := MakeReplicaDescriptors(rds)
+		rng := MakeReplicaSet(rds)
 
 		crdbCanMakeProgress := rng.CanMakeProgress(func(rd ReplicaDescriptor) bool {
 			return liveness[rd.ReplicaID-1]
