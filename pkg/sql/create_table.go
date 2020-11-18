@@ -220,6 +220,10 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	if n.n.Interleave != nil {
 		telemetry.Inc(sqltelemetry.CreateInterleavedTableCounter)
+		params.p.BufferClientNotice(
+			params.ctx,
+			pgnotice.Newf("interleaved tables are deprecated"),
+		)
 	}
 	if n.n.Persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
