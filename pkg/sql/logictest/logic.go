@@ -664,7 +664,7 @@ var logicTestConfigs = []testClusterConfig{
 		//  make test PKG=./pkg/ccl/logictestccl TESTS=TestBackupRestoreLogic//<test_name>
 		name:                     "3node-backup",
 		numNodes:                 3,
-		backupRestoreProbability: 0.01,
+		backupRestoreProbability: 0.0, // DONOTMERGE: Set this to non-0
 		isCCLConfig:              true,
 	},
 }
