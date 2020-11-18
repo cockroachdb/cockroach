@@ -6321,6 +6321,105 @@ func TestAddingTableResolution(t *testing.T) {
 	sqlRun.ExpectErr(t, `pq: relation "foo" does not exist`, `SHOW CREATE foo`)
 }
 
+// TestFailureToMarkCanceledReversalLeadsToCanceledStatus is a regression test
+// to ensure that when the job registry fails to mark a job as canceled but
+// after the mutation has been removed, that the OnFailOrCancel hook of the
+// schema change returns a nil error. In particular, this deals with the case
+// where the mutation corresponding to the job no longer exists on the
+// descriptor.
+func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	canProceed := make(chan struct{})
+	params, _ := tests.CreateTestServerParams()
+	jobCancellationsToFail := struct {
+		syncutil.Mutex
+		jobs map[int64]struct{}
+	}{
+		jobs: make(map[int64]struct{}),
+	}
+	withJobsToFail := func(f func(m map[int64]struct{})) {
+		jobCancellationsToFail.Lock()
+		defer jobCancellationsToFail.Unlock()
+		f(jobCancellationsToFail.jobs)
+	}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				<-canProceed
+				log.Infof(context.Background(), "went")
+				return nil
+			},
+		},
+		JobsTestingKnobs: &jobs.TestingKnobs{
+			BeforeUpdate: func(orig, updated jobs.JobMetadata) (err error) {
+				withJobsToFail(func(m map[int64]struct{}) {
+					log.Infof(context.Background(), "here %v %v", orig, m)
+					if _, ok := m[orig.ID]; ok && updated.Status == jobs.StatusCanceled {
+						delete(m, orig.ID)
+						err = errors.Errorf("boom")
+					}
+				})
+				return err
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (i INT PRIMARY KEY, j INT)`)
+	var schemaChangeWaitGroup sync.WaitGroup
+	var jobsErrGroup errgroup.Group
+	const numIndexes = 2                // number of indexes to add
+	jobIDs := make([]int64, numIndexes) // job IDs for the index additions
+	for i := 0; i < numIndexes; i++ {
+		idxName := "t_" + strconv.Itoa(i) + "_idx"
+		schemaChangeWaitGroup.Add(1)
+		i := i
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := sqlDB.Exec("CREATE INDEX " + idxName + " ON db.t (j)")
+			assert.Regexp(t, "job canceled by user", err)
+		}()
+		jobsErrGroup.Go(func() error {
+			return testutils.SucceedsSoonError(func() error {
+				return sqlDB.QueryRow(`
+SELECT job_id FROM crdb_internal.jobs 
+ WHERE description LIKE '%` + idxName + `%'`).Scan(&jobIDs[i])
+			})
+		})
+	}
+	require.NoError(t, jobsErrGroup.Wait())
+	withJobsToFail(func(m map[int64]struct{}) {
+		for _, id := range jobIDs {
+			m[id] = struct{}{}
+		}
+	})
+	for _, id := range jobIDs {
+		tdb.Exec(t, "CANCEL JOB $1", id)
+	}
+	close(canProceed)
+	schemaChangeWaitGroup.Wait()
+
+	// Verify that all the jobs reached the expected terminal state.
+	// Do this after the above change to ensure that all canceled states have
+	// been reached.
+	for _, id := range jobIDs {
+		var status jobs.Status
+		tdb.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", id).
+			Scan(&status)
+		require.Equal(t, jobs.StatusCanceled, status)
+	}
+	withJobsToFail(func(m map[int64]struct{}) {
+		require.Len(t, m, 0)
+	})
+}
+
 // TestCancelMultipleQueued tests that canceling schema changes when there are
 // multiple queued schema changes works as expected.
 func TestCancelMultipleQueued(t *testing.T) {
