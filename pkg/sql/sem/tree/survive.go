@@ -20,9 +20,9 @@ const (
 	// SurviveRegionFailure indicates a database being able to withstand
 	// an entire region failure.
 	SurviveRegionFailure
-	// SurviveAvailabilityZoneFailure indicates a database being able to
+	// SurviveyZoneFailure indicates a database being able to
 	// withstand a failure of an availibility zone.
-	SurviveAvailabilityZoneFailure
+	SurviveZoneFailure
 )
 
 // Format implements the NodeFormatter interface.
@@ -30,8 +30,8 @@ func (node *Survive) Format(ctx *FmtCtx) {
 	switch *node {
 	case SurviveRegionFailure:
 		ctx.WriteString("SURVIVE REGION FAILURE")
-	case SurviveAvailabilityZoneFailure:
-		ctx.WriteString("SURVIVE AVAILABILITY ZONE FAILURE")
+	case SurviveZoneFailure:
+		ctx.WriteString("SURVIVE ZONE FAILURE")
 	case SurviveDefault:
 		ctx.WriteString("SURVIVE DEFAULT")
 	}
