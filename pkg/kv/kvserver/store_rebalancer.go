@@ -291,7 +291,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 	replicasToMaybeRebalance = append(replicasToMaybeRebalance, hottestRanges...)
 
 	for localDesc.Capacity.QueriesPerSecond > qpsMaxThreshold {
-		replWithStats, targets := sr.chooseReplicaToRebalance(
+		replWithStats, voterTargets := sr.chooseReplicaToRebalance(
 			ctx,
 			&replicasToMaybeRebalance,
 			localDesc,
@@ -308,12 +308,13 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 		descBeforeRebalance := replWithStats.repl.Desc()
 		log.VEventf(ctx, 1, "rebalancing r%d (%.2f qps) from %v to %v to better balance load",
-			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas(), targets)
+			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas(), voterTargets)
 		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
-			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, targets)
+			// TODO(aayush): Fix when we can make decisions about rebalancing non-voting replicas.
+			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, voterTargets, []roachpb.ReplicationTarget{})
 		}); err != nil {
-			log.Errorf(ctx, "unable to relocate range to %v: %+v", targets, err)
+			log.Errorf(ctx, "unable to relocate range to %v: %+v", voterTargets, err)
 			continue
 		}
 		sr.metrics.RangeRebalanceCount.Inc(1)
@@ -333,8 +334,8 @@ func (sr *StoreRebalancer) rebalanceStore(
 		}
 		localDesc.Capacity.LeaseCount--
 		localDesc.Capacity.QueriesPerSecond -= replWithStats.qps
-		for i := range targets {
-			if storeDesc := storeMap[targets[i].StoreID]; storeDesc != nil {
+		for i := range voterTargets {
+			if storeDesc := storeMap[voterTargets[i].StoreID]; storeDesc != nil {
 				storeDesc.Capacity.RangeCount++
 				if i == 0 {
 					storeDesc.Capacity.LeaseCount++

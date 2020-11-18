@@ -685,7 +685,9 @@ func (b *Batch) adminChangeReplicas(
 
 // adminRelocateRange is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminRelocateRange(key interface{}, targets []roachpb.ReplicationTarget) {
+func (b *Batch) adminRelocateRange(
+	key interface{}, voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -695,7 +697,8 @@ func (b *Batch) adminRelocateRange(key interface{}, targets []roachpb.Replicatio
 		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
-		Targets: targets,
+		VoterTargets:    voterTargets,
+		NonVoterTargets: nonVoterTargets,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

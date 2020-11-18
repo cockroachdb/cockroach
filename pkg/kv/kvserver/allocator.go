@@ -494,17 +494,17 @@ func (a *Allocator) AllocateTarget(
 
 func (a *Allocator) allocateTargetFromList(
 	ctx context.Context,
-	sl StoreList,
+	candidateStores StoreList,
 	zone *zonepb.ZoneConfig,
-	candidateReplicas []roachpb.ReplicaDescriptor,
+	existingReplicas []roachpb.ReplicaDescriptor,
 	options scorerOptions,
 ) (*roachpb.StoreDescriptor, string) {
 	analyzedConstraints := constraint.AnalyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, candidateReplicas, zone)
+		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
 	candidates := allocateCandidates(
 		ctx,
-		sl, analyzedConstraints, candidateReplicas,
-		a.storePool.getLocalitiesByStore(candidateReplicas),
+		candidateStores, analyzedConstraints, existingReplicas,
+		a.storePool.getLocalitiesByStore(existingReplicas),
 		a.storePool.isNodeReadyForRoutineReplicaTransfer,
 		options,
 	)
@@ -559,17 +559,17 @@ func (a Allocator) RemoveTarget(
 	}
 
 	// Retrieve store descriptors for the provided candidates from the StorePool.
-	existingStoreIDs := make(roachpb.StoreIDSlice, len(candidates))
+	candidateStoreIDs := make(roachpb.StoreIDSlice, len(candidates))
 	for i, exist := range candidates {
-		existingStoreIDs[i] = exist.StoreID
+		candidateStoreIDs[i] = exist.StoreID
 	}
-	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, storeFilterNone)
+	candidateStoreList, _, _ := a.storePool.getStoreListFromIDs(candidateStoreIDs, storeFilterNone)
 
 	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
 	options := a.scorerOptions()
 	rankedCandidates := removeCandidates(
-		sl,
+		candidateStoreList,
 		analyzedConstraints,
 		a.storePool.getLocalitiesByStore(existingReplicas),
 		options,

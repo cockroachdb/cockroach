@@ -6413,7 +6413,7 @@ func TestReplicaSetsEqual(t *testing.T) {
 		{true, createReplicaSets([]roachpb.StoreID{1, 2, 3, 1, 2, 3}), createReplicaSets([]roachpb.StoreID{1, 1, 2, 2, 3, 3})},
 	}
 	for _, test := range testData {
-		if replicaSetsEqual(test.a, test.b) != test.expected {
+		if replicasCollocated(test.a, test.b) != test.expected {
 			t.Fatalf("unexpected replica intersection: %+v", test)
 		}
 	}

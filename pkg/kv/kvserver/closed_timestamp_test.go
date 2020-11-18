@@ -886,7 +886,8 @@ func setupClusterForClosedTSTestingWithSplitRanges(
 	dbName, tableName := "cttest", "kv"
 	tc, _, _ := setupClusterForClosedTSTesting(ctx, t, targetDuration, closeFraction,
 		clusterArgs, dbName, tableName)
-	leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, dbName, tableName)
+	leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, dbName, tableName,
+		hlc.Timestamp{} /* splitExpirationTime */)
 	return tc, leftDesc, rightDesc
 }
 
@@ -895,7 +896,7 @@ func setupClusterForClosedTSTestingWithSplitRanges(
 // the given table and performs splits on the table's range such that the 2
 // resulting ranges contain exactly one of the rows each.
 func splitDummyRangeInTestCluster(
-	t *testing.T, tc serverutils.TestClusterInterface, dbName, tableName string,
+	t *testing.T, tc serverutils.TestClusterInterface, dbName, tableName string, splitExpirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor) {
 	db0 := tc.ServerConn(0)
 	if _, err := db0.Exec(fmt.Sprintf(`INSERT INTO %s.%s VALUES(1, '%s')`,
@@ -927,7 +928,9 @@ func splitDummyRangeInTestCluster(
 	if err != nil {
 		t.Fatalf("failed to encode split key: %+v", err)
 	}
-	leftDesc, rightDesc := tcImpl.SplitRangeOrFatal(t, k)
+	leftDesc, rightDesc, err := tcImpl.SplitRangeWithExpiration(k, splitExpirationTime)
+	require.NoError(t, err)
+
 	if tc.ReplicationMode() != base.ReplicationManual {
 		if err := tcImpl.WaitForFullReplication(); err != nil {
 			t.Fatal(err)
