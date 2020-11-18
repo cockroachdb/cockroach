@@ -299,6 +299,10 @@ func (s *raftScheduler) EnqueueRaftRequest(id roachpb.RangeID) {
 	s.signal(s.enqueue1(stateRaftRequest, id))
 }
 
-func (s *raftScheduler) EnqueueRaftTick(ids ...roachpb.RangeID) {
+func (s *raftScheduler) EnqueueRaftRequests(ids ...roachpb.RangeID) {
+	s.signal(s.enqueueN(stateRaftRequest, ids...))
+}
+
+func (s *raftScheduler) EnqueueRaftTicks(ids ...roachpb.RangeID) {
 	s.signal(s.enqueueN(stateRaftTick, ids...))
 }
