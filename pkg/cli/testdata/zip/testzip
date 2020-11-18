@@ -10,6 +10,7 @@ requesting data for debug/events... writing: debug/events.json
 requesting data for debug/rangelog... writing: debug/rangelog.json
 requesting data for debug/settings... writing: debug/settings.json
 requesting data for debug/reports/problemranges... writing: debug/reports/problemranges.json
+retrieving SQL data for crdb_internal.cluster_database_privileges... writing: debug/crdb_internal.cluster_database_privileges.txt
 retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_internal.cluster_queries.txt
 retrieving SQL data for crdb_internal.cluster_sessions... writing: debug/crdb_internal.cluster_sessions.txt
 retrieving SQL data for crdb_internal.cluster_settings... writing: debug/crdb_internal.cluster_settings.txt

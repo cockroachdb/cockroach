@@ -61,6 +61,7 @@ requires the cluster to be live.
 
 // Tables containing cluster-wide info that are collected in a debug zip.
 var debugZipTablesPerCluster = []string{
+	"crdb_internal.cluster_database_privileges",
 	"crdb_internal.cluster_queries",
 	"crdb_internal.cluster_sessions",
 	"crdb_internal.cluster_settings",
