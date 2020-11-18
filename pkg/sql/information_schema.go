@@ -1151,7 +1151,7 @@ CREATE TABLE information_schema.schema_privileges (
 						privs = sc.Desc.GetPrivileges().Show(privilege.Schema)
 					} else {
 						// Other schemas inherit from the parent database.
-						privs = db.Privileges.Show(privilege.Schema)
+						privs = db.Privileges.Show(privilege.Database)
 					}
 					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(sc.Name)
@@ -1160,6 +1160,18 @@ CREATE TABLE information_schema.schema_privileges (
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
+							privKind := privilege.ByName[priv]
+							// Non-user defined schemas inherit privileges from the database,
+							// but the USAGE privilege is conferred by having SELECT privilege
+							// on the database. (There is no SELECT privilege on schemas.)
+							if sc.Kind != catalog.SchemaUserDefined {
+								if privKind == privilege.SELECT {
+									priv = privilege.USAGE.String()
+								} else if !privilege.SchemaPrivileges.Contains(privKind) {
+									continue
+								}
+							}
+
 							if err := addRow(
 								userNameStr,           // grantee
 								dbNameStr,             // table_catalog
