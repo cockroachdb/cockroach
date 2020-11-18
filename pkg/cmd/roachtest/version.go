@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
 )
@@ -56,14 +55,12 @@ func registerVersion(r *testRegistry) {
 		}
 
 		loadDuration := " --duration=" + (time.Duration(3*nodes+2)*stageDuration + buffer).String()
-
-		var deprecatedWorkloadsStr string
-		if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
-			deprecatedWorkloadsStr += " --deprecated-fk-indexes"
-		}
+		// Even though this is a 20.2 test, we need to support indexes for the 20.1
+		// node.
+		deprecatedWorkloadsStr := " --deprecated-fk-indexes"
 
 		workloads := []string{
-			"./workload run tpcc --tolerate-errors --wait=false --drop --init --warehouses=1 " + deprecatedWorkloadsStr + loadDuration + " {pgurl:1-%d}",
+			"./workload run tpcc --tolerate-errors --wait=false --drop --init --warehouses=1" + deprecatedWorkloadsStr + loadDuration + " {pgurl:1-%d}",
 			"./workload run kv --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
 		}
 
