@@ -82,7 +82,7 @@ func AnalyzeConstraints(
 // matches the conjunction if it matches all of them.
 func ConjunctionsCheck(store roachpb.StoreDescriptor, constraints []zonepb.Constraint) bool {
 	for _, constraint := range constraints {
-		// StoreSatisfiesConstraint returns whether a store matches the given constraint.
+		// StoreMatchesConstraint returns whether a store matches the given constraint.
 		hasConstraint := zonepb.StoreMatchesConstraint(store, constraint)
 		if (constraint.Type == zonepb.Constraint_REQUIRED && !hasConstraint) ||
 			(constraint.Type == zonepb.Constraint_PROHIBITED && hasConstraint) {
