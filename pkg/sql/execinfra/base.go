@@ -402,8 +402,6 @@ func (rb *rowSourceBase) consumerClosed(name string) {
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to
 // transfer rows between goroutines.
 type RowChannel struct {
-	rowSourceBase
-
 	types []*types.T
 
 	// The channel on which rows are delivered.
@@ -411,6 +409,8 @@ type RowChannel struct {
 
 	// dataChan is the same channel as C.
 	dataChan chan RowChannelMsg
+
+	rowSourceBase
 
 	// numSenders is an atomic counter that keeps track of how many senders have
 	// yet to call ProducerDone().

@@ -117,7 +117,12 @@ func newMax_AGGKINDAggAlloc(
 type _AGG_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
-	// {{else}}
+	// {{end}}
+	// col points to the output vector we are updating.
+	col _GOTYPESLICE
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
+	// {{if eq "_AGGKIND" "Hash"}}
 	hashAggregateFuncBase
 	// {{end}}
 	allocator *colmem.Allocator
@@ -125,10 +130,6 @@ type _AGG_TYPE_AGGKINDAgg struct {
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg _GOTYPE
-	// col points to the output vector we are updating.
-	col _GOTYPESLICE
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool

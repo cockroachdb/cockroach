@@ -93,15 +93,15 @@ func newMaxOrderedAggAlloc(
 
 type minBoolOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Bools
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg bool
-	// col points to the output vector we are updating.
-	col coldata.Bools
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -364,15 +364,15 @@ func (a *minBoolOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type minBytesOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col *coldata.Bytes
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg []byte
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -611,15 +611,15 @@ func (a *minBytesOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type minDecimalOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Decimals
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg apd.Decimal
-	// col points to the output vector we are updating.
-	col coldata.Decimals
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -850,15 +850,15 @@ func (a *minDecimalOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type minInt16OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Int16s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int16
-	// col points to the output vector we are updating.
-	col coldata.Int16s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1133,15 +1133,15 @@ func (a *minInt16OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type minInt32OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Int32s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int32
-	// col points to the output vector we are updating.
-	col coldata.Int32s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1416,15 +1416,15 @@ func (a *minInt32OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type minInt64OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Int64s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col coldata.Int64s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1699,15 +1699,15 @@ func (a *minInt64OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type minFloat64OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Float64s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg float64
-	// col points to the output vector we are updating.
-	col coldata.Float64s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2014,15 +2014,15 @@ func (a *minFloat64OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type minTimestampOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Times
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg time.Time
-	// col points to the output vector we are updating.
-	col coldata.Times
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2281,15 +2281,15 @@ func (a *minTimestampOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type minIntervalOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Durations
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg duration.Duration
-	// col points to the output vector we are updating.
-	col coldata.Durations
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2520,15 +2520,15 @@ func (a *minIntervalOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type minDatumOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.DatumVec
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg interface{}
-	// col points to the output vector we are updating.
-	col coldata.DatumVec
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2781,15 +2781,15 @@ func (a *minDatumOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxBoolOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Bools
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg bool
-	// col points to the output vector we are updating.
-	col coldata.Bools
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -3052,15 +3052,15 @@ func (a *maxBoolOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxBytesOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col *coldata.Bytes
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg []byte
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -3299,15 +3299,15 @@ func (a *maxBytesOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxDecimalOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Decimals
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg apd.Decimal
-	// col points to the output vector we are updating.
-	col coldata.Decimals
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -3538,15 +3538,15 @@ func (a *maxDecimalOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxInt16OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Int16s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int16
-	// col points to the output vector we are updating.
-	col coldata.Int16s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -3821,15 +3821,15 @@ func (a *maxInt16OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxInt32OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Int32s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int32
-	// col points to the output vector we are updating.
-	col coldata.Int32s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -4104,15 +4104,15 @@ func (a *maxInt32OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxInt64OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Int64s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col coldata.Int64s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -4387,15 +4387,15 @@ func (a *maxInt64OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxFloat64OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Float64s
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg float64
-	// col points to the output vector we are updating.
-	col coldata.Float64s
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -4702,15 +4702,15 @@ func (a *maxFloat64OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxTimestampOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Times
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg time.Time
-	// col points to the output vector we are updating.
-	col coldata.Times
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -4969,15 +4969,15 @@ func (a *maxTimestampOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxIntervalOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Durations
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg duration.Duration
-	// col points to the output vector we are updating.
-	col coldata.Durations
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -5208,15 +5208,15 @@ func (a *maxIntervalOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type maxDatumOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.DatumVec
+	// vec is the same as col before conversion from coldata.Vec.
+	vec       coldata.Vec
 	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg interface{}
-	// col points to the output vector we are updating.
-	col coldata.DatumVec
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool

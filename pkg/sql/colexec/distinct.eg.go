@@ -269,22 +269,23 @@ func newPartitioner(t *types.T) (partitioner, error) {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctBoolOp struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal bool
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     bool
 	lastValNull bool
 }
 
@@ -748,22 +749,23 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctBytesOp struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal []byte
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     []byte
 	lastValNull bool
 }
 
@@ -1165,22 +1167,23 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctDecimalOp struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal apd.Decimal
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     apd.Decimal
 	lastValNull bool
 }
 
@@ -1580,22 +1583,23 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctInt16Op struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal int16
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     int16
 	lastValNull bool
 }
 
@@ -2083,22 +2087,23 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctInt32Op struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal int32
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     int32
 	lastValNull bool
 }
 
@@ -2586,22 +2591,23 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctInt64Op struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal int64
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     int64
 	lastValNull bool
 }
 
@@ -3089,22 +3095,23 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctFloat64Op struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal float64
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     float64
 	lastValNull bool
 }
 
@@ -3656,22 +3663,23 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctTimestampOp struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal time.Time
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     time.Time
 	lastValNull bool
 }
 
@@ -4127,22 +4135,23 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctIntervalOp struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal duration.Duration
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     duration.Duration
 	lastValNull bool
 }
 
@@ -4542,22 +4551,23 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctDatumOp struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal interface{}
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     interface{}
 	lastValNull bool
 }
 

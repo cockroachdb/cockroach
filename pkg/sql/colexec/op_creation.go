@@ -42,6 +42,16 @@ type NewColOperatorArgs struct {
 	ExprHelper           *ExprHelper
 	Factory              coldata.ColumnFactory
 	TestingKnobs         struct {
+		// SpillingCallbackFn will be called when the spilling from an in-memory to
+		// disk-backed operator occurs. It should only be set in tests.
+		SpillingCallbackFn func()
+		// NumForcedRepartitions specifies a number of "repartitions" that a
+		// disk-backed operator should be forced to perform. "Repartition" can mean
+		// different things depending on the operator (for example, for hash joiner
+		// it is dividing original partition into multiple new partitions; for
+		// sorter it is merging already created partitions into new one before
+		// proceeding to the next partition from the input).
+		NumForcedRepartitions int
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be
 		// set to 'true' in tests. The idea behind this flag is reducing the number
@@ -50,19 +60,9 @@ type NewColOperatorArgs struct {
 		// infrastructure (and so that we could use testMemAccount defined in
 		// main_test.go).
 		UseStreamingMemAccountForBuffering bool
-		// SpillingCallbackFn will be called when the spilling from an in-memory to
-		// disk-backed operator occurs. It should only be set in tests.
-		SpillingCallbackFn func()
 		// DiskSpillingDisabled specifies whether only in-memory operators should
 		// be created.
 		DiskSpillingDisabled bool
-		// NumForcedRepartitions specifies a number of "repartitions" that a
-		// disk-backed operator should be forced to perform. "Repartition" can mean
-		// different things depending on the operator (for example, for hash joiner
-		// it is dividing original partition into multiple new partitions; for
-		// sorter it is merging already created partitions into new one before
-		// proceeding to the next partition from the input).
-		NumForcedRepartitions int
 		// DelegateFDAcquisitions should be observed by users of a
 		// PartitionedDiskQueue. During normal operations, these should acquire the
 		// maximum number of file descriptors they will use from FDSemaphore up

@@ -1957,24 +1957,25 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 // CmpOp is a comparison operator.
 type CmpOp struct {
+	types TypeList
+
 	LeftType  *types.T
 	RightType *types.T
+
+	// Datum return type is a union between *DBool and dNull.
+	Fn TwoArgFn
+
+	// counter, if non-nil, should be incremented every time the
+	// operator is type checked.
+	counter telemetry.Counter
 
 	// If NullableArgs is false, the operator returns NULL
 	// whenever either argument is NULL.
 	NullableArgs bool
 
-	// Datum return type is a union between *DBool and dNull.
-	Fn TwoArgFn
-
 	Volatility Volatility
 
-	types       TypeList
 	isPreferred bool
-
-	// counter, if non-nil, should be incremented every time the
-	// operator is type checked.
-	counter telemetry.Counter
 }
 
 func (op *CmpOp) params() TypeList {
