@@ -2143,7 +2143,6 @@ region_name ::=
 survive_clause ::=
 	'SURVIVE' 'REGION' 'FAILURE'
 	| 'SURVIVE' 'ZONE' 'FAILURE'
-	| 'SURVIVE' 'DEFAULT'
 
 role_option ::=
 	'CREATEROLE'
