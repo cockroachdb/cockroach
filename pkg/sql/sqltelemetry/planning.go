@@ -33,6 +33,10 @@ var SubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery")
 // correlated subquery has been processed during planning.
 var CorrelatedSubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery.correlated")
 
+// UniqueChecksUseCounter is to be incremented every time a mutation has
+// unique checks and the checks are planned by the optimizer.
+var UniqueChecksUseCounter = telemetry.GetCounterOnce("sql.plan.unique.checks")
+
 // ForeignKeyChecksUseCounter is to be incremented every time a mutation has
 // foreign key checks and the checks are planned by the optimizer.
 var ForeignKeyChecksUseCounter = telemetry.GetCounterOnce("sql.plan.fk.checks")

@@ -43,7 +43,7 @@ func (c *CustomFuncs) NeededExplainCols(private *memo.ExplainPrivate) opt.ColSet
 // referenced by it. Other rules filter the FetchCols, CheckCols, etc. and can
 // in turn trigger the PruneMutationInputCols rule.
 func (c *CustomFuncs) NeededMutationCols(
-	private *memo.MutationPrivate, checks memo.FKChecksExpr,
+	private *memo.MutationPrivate, uniqueChecks memo.UniqueChecksExpr, fkChecks memo.FKChecksExpr,
 ) opt.ColSet {
 	var cols opt.ColSet
 
@@ -69,8 +69,12 @@ func (c *CustomFuncs) NeededMutationCols(
 	}
 
 	if private.WithID != 0 {
-		for i := range checks {
-			withUses := memo.WithUses(checks[i].Check)
+		for i := range uniqueChecks {
+			withUses := memo.WithUses(uniqueChecks[i].Check)
+			cols.UnionWith(withUses[private.WithID].UsedCols)
+		}
+		for i := range fkChecks {
+			withUses := memo.WithUses(fkChecks[i].Check)
 			cols.UnionWith(withUses[private.WithID].UsedCols)
 		}
 	}
