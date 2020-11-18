@@ -3,9 +3,11 @@
 sql
 CREATE DATABASE d;
 CREATE TABLE d.t1 (a INT, b INT, PRIMARY KEY (a));
+SET client_min_messages = 'warning';
 CREATE INDEX b_idx ON d.t1(a, b) INTERLEAVE IN PARENT d.t1 (a);
+SET client_min_messages = 'notice';
 ----
-CREATE INDEX
+SET
 
 dump d t1
 ----
@@ -27,7 +29,9 @@ sql
 CREATE DATABASE e;
 CREATE TABLE e.t2 (a INT, b INT, PRIMARY KEY (a));
 CREATE TABLE e.t3 (a INT, b INT, PRIMARY KEY (a));
+SET client_min_messages = 'warning';
 CREATE INDEX b_idx ON e.t2(a, b) INTERLEAVE IN PARENT e.t3 (a);
+SET client_min_messages = 'notice';
 INSERT INTO e.t2 VALUES (1, 2);
 INSERT INTO e.t3 VALUES (3, 4);
 ----
@@ -65,9 +69,11 @@ CREATE INDEX b_idx ON public.t2 (a ASC, b ASC) INTERLEAVE IN PARENT public.t3 (a
 sql
 CREATE DATABASE dd;
 CREATE TABLE dd.unique (a INT, b INT, PRIMARY KEY (a));
+SET client_min_messages = 'warning';
 CREATE INDEX "b_idx" ON dd.unique(a, b) INTERLEAVE IN PARENT dd.unique (a);
+SET client_min_messages = 'notice';
 ----
-CREATE INDEX
+SET
 
 dump dd unique
 ----
@@ -88,9 +94,11 @@ CREATE INDEX b_idx ON public."unique" (a ASC, b ASC) INTERLEAVE IN PARENT public
 sql
 CREATE DATABASE ee;
 CREATE TABLE ee.a (i INT, j INT, PRIMARY KEY (i, j DESC));
+SET client_min_messages = 'warning';
 CREATE TABLE ee.d (x INT, y INT, z INT, PRIMARY KEY (x, y DESC, z DESC)) INTERLEAVE IN PARENT ee.a (x, y);
+SET client_min_messages = 'notice';
 ----
-CREATE TABLE
+SET
 
 dump ee a d
 ----

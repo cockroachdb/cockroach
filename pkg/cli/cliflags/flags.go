@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/docs"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/kr/text"
 )
 
@@ -653,7 +653,7 @@ is likely to cause the entire host server to become compromised.
 </PRE>
 To simply accept non-TLS connections for SQL clients while keeping
 the cluster secure, consider using --accept-sql-without-tls instead.
-Also see: ` + unimplemented.MakeURL(53404) + `
+Also see: ` + build.MakeIssueURL(53404) + `
 `,
 	}
 

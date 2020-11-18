@@ -15,5 +15,8 @@ go_test(
     name = "unimplemented_test",
     srcs = ["unimplemented_test.go"],
     embed = [":unimplemented"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = [
+        "//pkg/build",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
 )
