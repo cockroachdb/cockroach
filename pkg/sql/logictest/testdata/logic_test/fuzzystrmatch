@@ -1,0 +1,17 @@
+statement ok
+CREATE TABLE fuzzystrmatch_table(
+  id int primary key,
+  a text,
+  b text
+)
+
+statement ok
+INSERT INTO fuzzystrmatch_table VALUES
+  (1, 'apple', 'banana'),
+  (2, '', 'pear')
+
+query I
+SELECT levenshtein(a, b) FROM fuzzystrmatch_table
+----
+5
+4

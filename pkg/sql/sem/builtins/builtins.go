@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/leven"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -93,21 +94,22 @@ const maxAllocatedStringSize = 128 * 1024 * 1024
 const errInsufficientArgsFmtString = "unknown signature: %s()"
 
 const (
-	categoryArray          = "Array"
-	categoryComparison     = "Comparison"
-	categoryCompatibility  = "Compatibility"
-	categoryDateAndTime    = "Date and time"
-	categoryEnum           = "Enum"
-	categoryFullTextSearch = "Full Text Search"
-	categoryGenerator      = "Set-returning"
-	categoryTrigram        = "Trigrams"
-	categoryIDGeneration   = "ID generation"
-	categoryJSON           = "JSONB"
-	categoryMultiTenancy   = "Multi-tenancy"
-	categorySequences      = "Sequence"
-	categorySpatial        = "Spatial"
-	categoryString         = "String and byte"
-	categorySystemInfo     = "System info"
+	categoryArray               = "Array"
+	categoryComparison          = "Comparison"
+	categoryCompatibility       = "Compatibility"
+	categoryDateAndTime         = "Date and time"
+	categoryEnum                = "Enum"
+	categoryFullTextSearch      = "Full Text Search"
+	categoryGenerator           = "Set-returning"
+	categoryTrigram             = "Trigrams"
+	categoryFuzzyStringMatching = "Fuzzy String Matching"
+	categoryIDGeneration        = "ID generation"
+	categoryJSON                = "JSONB"
+	categoryMultiTenancy        = "Multi-tenancy"
+	categorySequences           = "Sequence"
+	categorySpatial             = "Spatial"
+	categoryString              = "String and byte"
+	categorySystemInfo          = "System info"
 )
 
 func categorizeType(t *types.T) string {
@@ -2937,6 +2939,25 @@ may increase either contention or retry errors, or both.`,
 	"tsvector_to_array":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
 	"tsvector_update_trigger":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
 	"tsvector_update_trigger_column": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
+
+	// Fuzzy String Matching
+	"soundex":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"difference": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"levenshtein": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"source", types.String}, {"target", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
+				source, target := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				ld := leven.Distance(source, target)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info:       "Calculates the Levenshtein distance between two strings",
+			Volatility: tree.VolatilityImmutable,
+		}),
+	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"metaphone":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"dmetaphone_alt":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
 
 	// Trigram functions.
 	"similarity":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
