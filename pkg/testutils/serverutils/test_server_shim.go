@@ -172,9 +172,7 @@ type TestServerInterface interface {
 	ClusterSettings() *cluster.Settings
 
 	// SplitRange splits the range containing splitKey.
-	SplitRange(
-		splitKey roachpb.Key,
-	) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
+	SplitRange(splitKey roachpb.Key, expirationTime hlc.Timestamp) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
 
 	// MergeRanges merges the range containing leftKey with the following adjacent
 	// range.

@@ -525,8 +525,7 @@ SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
 	numSnapsBefore := numRaftSnaps("before")
 
 	doSplit := func(ctx context.Context, _ int) error {
-		_, _, err := tc.SplitRange(
-			[]byte(fmt.Sprintf("key-%d", perm[atomic.AddInt32(&idx, 1)])))
+		_, _, err := tc.SplitRange([]byte(fmt.Sprintf("key-%d", perm[atomic.AddInt32(&idx, 1)])), hlc.MaxTimestamp)
 		return err
 	}
 
@@ -1675,7 +1674,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 
 	// Split the data range, mainly to avoid other splits getting in our way.
 	for _, k := range []roachpb.Key{leftKey, rightKey} {
-		if _, _, err := tc.SplitRange(k); err != nil {
+		if _, _, err := tc.SplitRange(k, hlc.MaxTimestamp); err != nil {
 			t.Fatal(errors.Wrapf(err, "split at %s", k))
 		}
 	}
@@ -1748,7 +1747,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	// In practice, this should only be possible if second-long delays occur
 	// just above this comment, and we assert against it below.
 	log.Infof(ctx, "splitting at %s", splitKey)
-	if _, _, err := tc.SplitRange(splitKey); err != nil {
+	if _, _, err := tc.SplitRange(splitKey, hlc.MaxTimestamp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1857,7 +1856,7 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 
 	// Split the data range, mainly to avoid other splits getting in our way.
 	for _, k := range []roachpb.Key{leftKey, rightKey} {
-		if _, _, err := tc.SplitRange(k); err != nil {
+		if _, _, err := tc.SplitRange(k, hlc.MaxTimestamp); err != nil {
 			t.Fatal(errors.Wrapf(err, "split at %s", k))
 		}
 	}
@@ -1868,7 +1867,7 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 	splitRes := make(chan error)
 	close(beginBlockingSplit)
 	go func() {
-		_, _, err := tc.SplitRange(splitKey)
+		_, _, err := tc.SplitRange(splitKey, hlc.MaxTimestamp)
 		splitRes <- err
 	}()
 	<-inFilter
@@ -3157,7 +3156,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	_, kRHS := k, k.Next()
 	// Remove the LHS on the isolated store, split the range, and re-add it.
 	tc.RemoveVotersOrFatal(t, k, tc.Target(1))
-	descLHS, descRHS := tc.SplitRangeOrFatal(t, kRHS)
+	descLHS, descRHS := tc.SplitRangeOrFatal(t, kRHS, hlc.MaxTimestamp)
 	withoutLearnerSnap(func() {
 		// NB: can't use AddVoters since that waits for the target to be up
 		// to date, which it won't in this case.

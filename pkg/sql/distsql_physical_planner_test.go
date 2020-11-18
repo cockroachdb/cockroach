@@ -77,7 +77,7 @@ func SplitTable(
 			t.Fatal(err)
 		}
 
-		_, rightRange, err := tc.Server(0).SplitRange(pik)
+		_, rightRange, err := tc.Server(0).SplitRange(pik, hlc.MaxTimestamp)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -171,7 +171,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 					panic(err)
 				}
 
-				if _, _, err := tc.Server(0).SplitRange(pik); err != nil {
+				if _, _, err := tc.Server(0).SplitRange(pik, hlc.MaxTimestamp); err != nil {
 					panic(err)
 				}
 			}

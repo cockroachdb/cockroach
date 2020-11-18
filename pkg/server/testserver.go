@@ -1088,7 +1088,7 @@ func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor,
 // splitKey must correspond to a SQL table key (it must end with a family ID /
 // col ID).
 func (ts *TestServer) SplitRange(
-	splitKey roachpb.Key,
+	splitKey roachpb.Key, expirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	ctx := context.Background()
 	splitRKey, err := keys.Addr(splitKey)
@@ -1100,7 +1100,7 @@ func (ts *TestServer) SplitRange(
 			Key: splitKey,
 		},
 		SplitKey:       splitKey,
-		ExpirationTime: hlc.MaxTimestamp,
+		ExpirationTime: expirationTime,
 	}
 	_, pErr := kv.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &splitReq)
 	if pErr != nil {
@@ -1265,7 +1265,7 @@ func (ts *TestServer) ForceTableGC(
 // which is idempotent).
 func (ts *TestServer) ScratchRangeEx() (roachpb.RangeDescriptor, error) {
 	scratchKey := keys.TableDataMax
-	_, rngDesc, err := ts.SplitRange(scratchKey)
+	_, rngDesc, err := ts.SplitRange(scratchKey, hlc.MaxTimestamp)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}

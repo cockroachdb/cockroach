@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	hlc2 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -138,7 +139,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	if _, _, err := s.SplitRange(roachpb.Key("b")); err != nil {
+	if _, _, err := s.SplitRange(roachpb.Key("b"), hlc2.MaxTimestamp); err != nil {
 		t.Fatal(err)
 	}
 

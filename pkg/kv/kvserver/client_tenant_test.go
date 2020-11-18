@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	hlc2 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -62,11 +63,11 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 	codec := keys.MakeSQLCodec(tenantID)
 
 	tenantPrefix := codec.TenantPrefix()
-	_, _, err = s.SplitRange(tenantPrefix)
+	_, _, err = s.SplitRange(tenantPrefix, hlc2.MaxTimestamp)
 	require.NoError(t, err)
 
 	splitKey := codec.TablePrefix(42)
-	_, _, err = s.SplitRange(splitKey)
+	_, _, err = s.SplitRange(splitKey, hlc2.MaxTimestamp)
 	require.NoError(t, err)
 
 	require.NoError(t, db.Put(ctx, codec.TablePrefix(41), "bazbax"))
@@ -163,7 +164,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	codec := keys.MakeSQLCodec(tenantID)
 
 	tenantPrefix := codec.TenantPrefix()
-	_, _, err := s.SplitRange(tenantPrefix)
+	_, _, err := s.SplitRange(tenantPrefix, hlc2.MaxTimestamp)
 	require.NoError(t, err)
 	tablePrefix := codec.TablePrefix(42)
 	tablePrefix = tablePrefix[:len(tablePrefix):len(tablePrefix)] // appends realloc

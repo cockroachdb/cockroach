@@ -1672,7 +1672,7 @@ func TestRangeInfoAfterSplit(t *testing.T) {
 	require.NotNil(t, r)
 	preSplitDesc := r.Desc()
 
-	lDesc, rDesc, err := s.SplitRange(key.Next())
+	lDesc, rDesc, err := s.SplitRange(key.Next(), hlc.MaxTimestamp)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -2430,7 +2430,7 @@ func TestReplicaTombstone(t *testing.T) {
 		require.NoError(t, tc.WaitForSplitAndInitialization(key))
 		tc.AddVotersOrFatal(t, key, tc.Target(1))
 		keyA := append(key[:len(key):len(key)], 'a')
-		_, desc, err := tc.SplitRange(keyA)
+		_, desc, err := tc.SplitRange(keyA, hlc.MaxTimestamp)
 		require.NoError(t, err)
 		require.NoError(t, tc.WaitForSplitAndInitialization(keyA))
 		tc.AddVotersOrFatal(t, key, tc.Target(3))
@@ -2605,7 +2605,7 @@ func TestReplicaTombstone(t *testing.T) {
 		require.NoError(t, tc.WaitForSplitAndInitialization(key))
 		tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 		keyA := append(key[:len(key):len(key)], 'a')
-		lhsDesc, rhsDesc, err := tc.SplitRange(keyA)
+		lhsDesc, rhsDesc, err := tc.SplitRange(keyA, hlc.MaxTimestamp)
 		require.NoError(t, err)
 		require.NoError(t, tc.WaitForSplitAndInitialization(key))
 		require.NoError(t, tc.WaitForSplitAndInitialization(keyA))
@@ -2854,7 +2854,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		// goroutine detects reading the nil descriptor.
 		rhs := append(lhs[:len(lhs):len(lhs)], 'a')
 		lhsDesc, rhsDesc := &roachpb.RangeDescriptor{}, &roachpb.RangeDescriptor{}
-		*lhsDesc, *rhsDesc, err = tc.SplitRange(rhs)
+		*lhsDesc, *rhsDesc, err = tc.SplitRange(rhs, hlc.MaxTimestamp)
 		require.NoError(t, err)
 
 		err = tc.WaitForSplitAndInitialization(rhs)
@@ -3170,7 +3170,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 	{
 		// Setup the initial state to be sure that we'll actually strictly enforce
 		// gc ttls.
-		tc.SplitRangeOrFatal(t, tableKey)
+		tc.SplitRangeOrFatal(t, tableKey, hlc.MaxTimestamp)
 		_, err := tc.AddVoters(tableKey, tc.Target(1), tc.Target(2))
 		require.NoError(t, err)
 		_, err = tc.AddVoters(keys.SystemConfigSpan.Key, tc.Target(1), tc.Target(2))
@@ -3493,7 +3493,7 @@ func TestTenantID(t *testing.T) {
 			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
 		}
 		// Ensure that a range with a tenant prefix has the proper tenant ID.
-		tc.SplitRangeOrFatal(t, tenant2Prefix)
+		tc.SplitRangeOrFatal(t, tenant2Prefix, hlc.MaxTimestamp)
 		{
 			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
 			ri := repl.State()

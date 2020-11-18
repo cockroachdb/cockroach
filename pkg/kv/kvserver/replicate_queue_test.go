@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	hlc2 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -93,7 +94,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 				// We don't do this for i=0 since that range stays at five replicas.
 				return errors.Errorf("still downreplicating: %s", &desc)
 			}
-			_, rightDesc, err := tc.SplitRange(splitKey)
+			_, rightDesc, err := tc.SplitRange(splitKey, hlc2.MaxTimestamp)
 			if err != nil {
 				return err
 			}

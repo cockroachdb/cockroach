@@ -114,7 +114,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	// Split the range so that the RHS uses epoch-based leases.
 	startKey := []byte("a")
-	tc.SplitRangeOrFatal(t, startKey)
+	tc.SplitRangeOrFatal(t, startKey, hlc.MaxTimestamp)
 	tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
 	if pErr := tc.WaitForVoters(startKey, tc.Target(1), tc.Target(2)); pErr != nil {
 		t.Fatalf("Unexpected error waiting for replication: %v", pErr)
@@ -384,7 +384,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		tc.SplitRangeOrFatal(t, startKey)
+		tc.SplitRangeOrFatal(t, startKey, hlc.MaxTimestamp)
 		tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
 		rangeID := store.LookupReplica(startKey).RangeID
 
@@ -525,7 +525,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 
 		// Split the range.
-		tc.SplitRangeOrFatal(t, []byte("m"))
+		tc.SplitRangeOrFatal(t, []byte("m"), hlc.MaxTimestamp)
 
 		// Check the error.
 		pErr := <-streamErrC
@@ -542,7 +542,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}
 		// Split the range.
 		splitKey := []byte("m")
-		tc.SplitRangeOrFatal(t, splitKey)
+		tc.SplitRangeOrFatal(t, splitKey, hlc.MaxTimestamp)
 		if pErr := tc.WaitForSplitAndInitialization(splitKey); pErr != nil {
 			t.Fatalf("Unexpected error waiting for range split: %v", pErr)
 		}
@@ -722,7 +722,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Split the range so that the RHS is not a system range and thus will
 		// respect the rangefeed_enabled cluster setting.
 		startKey := keys.UserTableDataMin
-		tc.SplitRangeOrFatal(t, startKey)
+		tc.SplitRangeOrFatal(t, startKey, hlc.MaxTimestamp)
 
 		rightRangeID := store.LookupReplica(roachpb.RKey(startKey)).RangeID
 
@@ -772,8 +772,9 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, db, _, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, db, desc := setupClusterForClosedTsTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest")
 	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
@@ -884,8 +885,9 @@ func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, db, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, db, desc := setupClusterForClosedTsTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest")
 	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)

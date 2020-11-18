@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	hlc2 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -61,7 +62,7 @@ func TestManualReplication(t *testing.T) {
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	tableStartKey := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
-	leftRangeDesc, tableRangeDesc, err := tc.SplitRange(tableStartKey)
+	leftRangeDesc, tableRangeDesc, err := tc.SplitRange(tableStartKey, hlc2.MaxTimestamp)
 	if err != nil {
 		t.Fatal(err)
 	}

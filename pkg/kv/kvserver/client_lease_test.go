@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	hlc2 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -67,7 +68,7 @@ func TestStoreRangeLease(t *testing.T) {
 		keys.NodeLivenessKeyMax, roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
 	}
 	for _, splitKey := range splitKeys {
-		tc.SplitRangeOrFatal(t, splitKey)
+		tc.SplitRangeOrFatal(t, splitKey, hlc2.MaxTimestamp)
 	}
 
 	rLeft := store.LookupReplica(roachpb.RKeyMin)
@@ -114,7 +115,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 
 	store := tc.GetFirstStoreFromServer(t, 0)
 	splitKey := keys.SystemConfigSplitKey
-	tc.SplitRangeOrFatal(t, splitKey)
+	tc.SplitRangeOrFatal(t, splitKey, hlc2.MaxTimestamp)
 	if _, err := store.DB().Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}

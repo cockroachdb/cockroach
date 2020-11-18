@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	hlc2 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -378,7 +379,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 
 	// Splitting a learner is allowed. This orphans the two learners, but the
 	// replication queue will eventually clean this up.
-	left, right, err := tc.SplitRange(scratchStartKey.Next())
+	left, right, err := tc.SplitRange(scratchStartKey.Next(), hlc2.MaxTimestamp)
 	require.NoError(t, err)
 	require.Len(t, left.Replicas().Learners(), 1)
 	require.Len(t, right.Replicas().Learners(), 1)
@@ -402,7 +403,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 		return err
 	})
 	require.Len(t, right.Replicas().Filter(predIncoming), 1)
-	left, right, err = tc.SplitRange(right.StartKey.AsRawKey().Next())
+	left, right, err = tc.SplitRange(right.StartKey.AsRawKey().Next(), hlc2.MaxTimestamp)
 	require.NoError(t, err)
 	require.False(t, left.Replicas().InAtomicReplicationChange(), left)
 	require.False(t, right.Replicas().InAtomicReplicationChange(), right)
@@ -924,8 +925,8 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	scratchStartKey := tc.ScratchRange(t)
 	splitKey1 := scratchStartKey.Next()
 	splitKey2 := splitKey1.Next()
-	_, _ = tc.SplitRangeOrFatal(t, splitKey1)
-	_, _ = tc.SplitRangeOrFatal(t, splitKey2)
+	_, _ = tc.SplitRangeOrFatal(t, splitKey1, hlc2.MaxTimestamp)
+	_, _ = tc.SplitRangeOrFatal(t, splitKey2, hlc2.MaxTimestamp)
 
 	// Three ranges (in that order):
 	// desc1: will have a learner (later joint voter)
@@ -1016,7 +1017,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	splitKey := scratchStartKey.Next()
 
 	splitAndUnsplit := func() roachpb.RangeDescriptor {
-		desc, _ := tc.SplitRangeOrFatal(t, splitKey)
+		desc, _ := tc.SplitRangeOrFatal(t, splitKey, hlc2.MaxTimestamp)
 		// Unsplit the range to clear the sticky bit.
 		require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey))
 		return desc

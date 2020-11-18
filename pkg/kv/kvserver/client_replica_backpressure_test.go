@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	hlc2 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -99,7 +100,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		tdb.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = 'foo'").Scan(&tableID)
 		require.NotEqual(t, 0, tableID)
 		tablePrefix = keys.SystemSQLCodec.TablePrefix(uint32(tableID))
-		tc.SplitRangeOrFatal(t, tablePrefix)
+		tc.SplitRangeOrFatal(t, tablePrefix, hlc2.MaxTimestamp)
 		require.NoError(t, tc.WaitForSplitAndInitialization(tablePrefix))
 
 		for i := 0; i < dataSize/rowSize; i++ {

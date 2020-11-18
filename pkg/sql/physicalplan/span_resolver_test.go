@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	hlc2 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -178,7 +179,7 @@ func splitRangeAtVal(
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
 
-	leftRange, rightRange, err := ts.SplitRange(pik)
+	leftRange, rightRange, err := ts.SplitRange(pik, hlc2.MaxTimestamp)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Wrapf(err, "failed to split at row: %d", pk)

@@ -834,7 +834,7 @@ func TestStoreRangeSplitMergeGeneration(t *testing.T) {
 
 		// First, split at the left key for convenience, so that we can check
 		// leftDesc.StartKey == leftKey later.
-		_, _, err := s.SplitRange(leftKey)
+		_, _, err := s.SplitRange(leftKey, hlc.MaxTimestamp)
 		assert.NoError(t, err)
 
 		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
@@ -842,7 +842,7 @@ func TestStoreRangeSplitMergeGeneration(t *testing.T) {
 		leftRepl := store.LookupReplica(keys.MustAddr(leftKey))
 		assert.NotNil(t, leftRepl)
 		preSplitGen := leftRepl.Desc().Generation
-		leftDesc, rightDesc, err := s.SplitRange(rightKey)
+		leftDesc, rightDesc, err := s.SplitRange(rightKey, hlc.MaxTimestamp)
 		assert.NoError(t, err)
 
 		// Split should increment the LHS' generation and also propagate the result
@@ -856,7 +856,7 @@ func TestStoreRangeSplitMergeGeneration(t *testing.T) {
 			//
 			// |--left@2---||---right@3---||--don't care--|
 			//
-			rightDesc, _, err = s.SplitRange(rightKey.Next())
+			rightDesc, _, err = s.SplitRange(rightKey.Next(), hlc.MaxTimestamp)
 			assert.NoError(t, err)
 			assert.Equal(t, preSplitGen+2, rightDesc.Generation)
 		} else {
@@ -867,7 +867,7 @@ func TestStoreRangeSplitMergeGeneration(t *testing.T) {
 			//
 			// |--left@4---||---right@2---|
 			var tmpRightDesc roachpb.RangeDescriptor
-			leftDesc, tmpRightDesc, err = s.SplitRange(leftKey.Next())
+			leftDesc, tmpRightDesc, err = s.SplitRange(leftKey.Next(), hlc.MaxTimestamp)
 			assert.Equal(t, preSplitGen+2, leftDesc.Generation)
 			assert.Equal(t, preSplitGen+2, tmpRightDesc.Generation)
 			assert.NoError(t, err)
@@ -1966,7 +1966,7 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 	scratchStartKey := tc.ScratchRange(t)
 	origDesc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	splitKey := scratchStartKey.Next()
-	beforeDesc, _ := tc.SplitRangeOrFatal(t, splitKey)
+	beforeDesc, _ := tc.SplitRangeOrFatal(t, splitKey, hlc.MaxTimestamp)
 
 	mergeErrCh, addErrCh := make(chan error, 1), make(chan error, 1)
 	go func() {
@@ -2018,9 +2018,9 @@ func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 
 	scratchStartKey := tc.ScratchRange(t)
 	splitKey := scratchStartKey.Next()
-	origDesc, _ := tc.SplitRangeOrFatal(t, splitKey)
+	origDesc, _ := tc.SplitRangeOrFatal(t, splitKey, hlc.MaxTimestamp)
 	require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, scratchStartKey))
-	resplitDesc, _ := tc.SplitRangeOrFatal(t, splitKey)
+	resplitDesc, _ := tc.SplitRangeOrFatal(t, splitKey, hlc.MaxTimestamp)
 
 	assert.Equal(t, origDesc.RangeID, resplitDesc.RangeID)
 	assert.Equal(t, origDesc.StartKey, resplitDesc.StartKey)
