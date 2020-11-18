@@ -1,0 +1,412 @@
+exec-ddl
+CREATE TABLE t (
+    k INT PRIMARY KEY,
+    g GEOMETRY,
+    s STRING,
+    i INT,
+    INVERTED INDEX m (s, g)
+)
+----
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 7,
+    "null_count": 0,
+    "histo_col_type":"BYTES",
+    "histo_buckets":[
+      {"num_eq": 1000, "num_range": 0, "distinct_range": 0, "upper_bound": "\\x42fd0555555555555555"},
+      {"num_eq": 1000, "num_range": 1000, "distinct_range": 1, "upper_bound": "\\x42fd0fffffff00000000"},
+      {"num_eq": 1000, "num_range": 1000, "distinct_range": 1, "upper_bound": "\\x42fd1000000100000000"},
+      {"num_eq": 1000, "num_range": 1000, "distinct_range": 1, "upper_bound": "\\x42fd1aaaaaab00000000"}
+     ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 40,
+    "null_count": 100,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100, "num_range": 200, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 100, "num_range": 300, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "pineapple"}
+    ]
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 41,
+    "null_count": 30,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 190, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 280, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 670, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 760, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  }
+]'
+----
+
+# Test a multi-column inverted index scan where the scan.Constraint has a single
+# span. The row counts for the scan over the multi-column index should match the
+# row counts for the scan over the partial index.
+
+exec-ddl
+CREATE INVERTED INDEX p ON t (g) WHERE s = 'banana'
+----
+
+opt
+SELECT k FROM t@m WHERE s = 'banana' AND st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=11.1111111]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=11.1111111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
+      │   histogram(3)=  0   11.111
+      │                <--- 'banana'
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── index-join t
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=153.552632]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=153.552632]
+      │         ├── key: (1)
+      │         └── scan t@m
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── constraint: /3: [/'banana' - /'banana']
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── flags: force-index=m
+      │              ├── stats: [rows=153.552632, distinct(1)=43.8721805, null(1)=0, distinct(3)=1, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=3, null(3,6)=0]
+      │              │   histogram(3)=  0    100
+      │              │                <--- 'banana'
+      │              │   histogram(6)=  0             0              25.592             0              25.592           51.184           25.592             0              0             0              25.592             0
+      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt
+SELECT k FROM t@p WHERE s = 'banana' AND st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=11.1111111]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=11.1111111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
+      │   histogram(3)=  0   11.111
+      │                <--- 'banana'
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── index-join t
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=153.552632]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /7
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=153.552632]
+      │         ├── key: (1)
+      │         └── scan t@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── inverted constraint: /7/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── flags: force-index=p
+      │              ├── stats: [rows=153.552632, distinct(1)=43.8721805, null(1)=0, distinct(3)=1, null(3)=0, distinct(7)=3, null(7)=0, distinct(3,7)=3, null(3,7)=0]
+      │              │   histogram(3)=  0    100
+      │              │                <--- 'banana'
+      │              │   histogram(7)=  0             0              25.592             0              25.592           51.184           25.592             0              0             0              25.592             0
+      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(7)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+exec-ddl
+DROP INDEX p
+----
+
+# Test a multi-column inverted index scan where the scan.Constraint has multiple
+# spans. The row counts for the scan over the multi-column index should match
+# the row counts for the scan over the partial index.
+
+exec-ddl
+CREATE INVERTED INDEX p ON t (g) WHERE s IN ('apple', 'banana', 'cherry')
+----
+
+opt
+SELECT k FROM t@m WHERE s IN ('apple', 'banana', 'cherry') AND st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=22.2222222]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=22.2222222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      │   histogram(3)=  0   11.111   0   11.111
+      │                <--- 'banana' --- 'cherry'
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── index-join t
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=307.105263]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=307.105263]
+      │         ├── key: (1)
+      │         └── scan t@m
+      │              ├── columns: k:1(int!null) g_inverted_key:6(geometry!null)
+      │              ├── constraint: /3
+      │              │    ├── [/'apple' - /'apple']
+      │              │    ├── [/'banana' - /'banana']
+      │              │    └── [/'cherry' - /'cherry']
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── flags: force-index=m
+      │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
+      │              │   histogram(3)=  0    100     0    100
+      │              │                <--- 'banana' --- 'cherry'
+      │              │   histogram(6)=  0             0              51.184             0              51.184           102.37           51.184             0              0             0              51.184             0
+      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt
+SELECT k FROM t@p WHERE s IN ('apple', 'banana', 'cherry') AND st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=22.2222222]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
+      ├── immutable
+      ├── stats: [rows=22.2222222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      │   histogram(3)=  0   11.111   0   11.111
+      │                <--- 'banana' --- 'cherry'
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── index-join t
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
+      │    ├── stats: [rows=307.105263]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /8
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=307.105263]
+      │         ├── key: (1)
+      │         └── scan t@p,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:8(geometry!null)
+      │              ├── inverted constraint: /8/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── flags: force-index=p
+      │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(8)=3, null(8)=0, distinct(3,8)=6, null(3,8)=0]
+      │              │   histogram(3)=  0    100     0    100
+      │              │                <--- 'banana' --- 'cherry'
+      │              │   histogram(8)=  0             0              51.184             0              51.184           102.37           51.184             0              0             0              51.184             0
+      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(8)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+exec-ddl
+DROP INDEX p
+----
+
+# Test a partial, multi-column inverted index scan.
+
+exec-ddl
+CREATE INVERTED INDEX mp ON t (i, g) WHERE s IN ('apple', 'banana', 'cherry')
+----
+
+opt
+SELECT k FROM t@mp WHERE i = 400 AND s IN ('apple', 'banana', 'cherry') AND st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=0.33825004]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
+      ├── immutable
+      ├── stats: [rows=0.33825004, distinct(2)=0.33825004, null(2)=0, distinct(3)=0.33825004, null(3)=0, distinct(4)=0.33825004, null(4)=0, distinct(3,4)=0.33825004, null(3,4)=0]
+      │   histogram(3)=  0  0.16913   0  0.16913
+      │                <--- 'banana' --- 'cherry'
+      │   histogram(4)=  0 0.33825
+      │                <---- 400 -
+      ├── key: (1)
+      ├── fd: ()-->(4), (1)-->(2,3)
+      ├── index-join t
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
+      │    ├── stats: [rows=24.0813118]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /9
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=24.0813118]
+      │         ├── key: (1)
+      │         └── scan t@mp,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:9(geometry!null)
+      │              ├── constraint: /4: [/400 - /400]
+      │              ├── inverted constraint: /9/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── flags: force-index=mp
+      │              ├── stats: [rows=24.0813118, distinct(1)=6.88037479, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(9)=3, null(9)=0, distinct(3,4,9)=6, null(3,4,9)=0]
+      │              │   histogram(3)=  0   12.041   0   12.041
+      │              │                <--- 'banana' --- 'cherry'
+      │              │   histogram(4)=  0 24.081
+      │              │                <--- 400 -
+      │              │   histogram(9)=  0             0              4.0136             0              4.0136           8.0271           4.0136             0              0             0              4.0136             0
+      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(9)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt
+SELECT k FROM t@mp WHERE i IN (200, 300, 400) AND s IN ('apple', 'banana', 'cherry') AND st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=0.67650008]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
+      ├── immutable
+      ├── stats: [rows=0.67650008, distinct(2)=0.67650008, null(2)=0, distinct(3)=0.67650008, null(3)=0, distinct(4)=0.67650008, null(4)=0, distinct(3,4)=0.67650008, null(3,4)=0]
+      │   histogram(3)=  0  0.33825   0  0.33825
+      │                <--- 'banana' --- 'cherry'
+      │   histogram(4)=  0 0.11275 0 0.2255 0 0.33825
+      │                <---- 200 ---- 300 ----- 400 -
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── index-join t
+      │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
+      │    ├── stats: [rows=48.1626236]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    └── inverted-filter
+      │         ├── columns: k:1(int!null)
+      │         ├── inverted expression: /9
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=48.1626236]
+      │         ├── key: (1)
+      │         └── scan t@mp,partial
+      │              ├── columns: k:1(int!null) g_inverted_key:9(geometry!null)
+      │              ├── constraint: /4
+      │              │    ├── [/200 - /200]
+      │              │    ├── [/300 - /300]
+      │              │    └── [/400 - /400]
+      │              ├── inverted constraint: /9/1
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── flags: force-index=mp
+      │              ├── stats: [rows=48.1626236, distinct(1)=13.7607496, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=3, null(4)=0, distinct(9)=3, null(9)=0, distinct(3,4,9)=18, null(3,4,9)=0]
+      │              │   histogram(3)=  0   24.081   0   24.081
+      │              │                <--- 'banana' --- 'cherry'
+      │              │   histogram(4)=  0 8.0271 0 16.054 0 24.081
+      │              │                <--- 200 ---- 300 ---- 400 -
+      │              │   histogram(9)=  0             0              8.0271             0              8.0271           16.054           8.0271             0              0             0              8.0271             0
+      │              │                <--- '\x42fd1000000000000000' -------- '\x42fd1000000000000001' -------- '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000000' -------- '\x42fd1400000000000001'
+      │              ├── key: (1)
+      │              └── fd: (1)-->(9)
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]

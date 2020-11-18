@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -652,16 +653,11 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 		return
 	}
 
-	// If the constraint has a single span or is an inverted constraint, apply
-	// the constraint selectivity and the partial index predicate (if it exists)
-	// to the underlying table stats.
-	if scan.InvertedConstraint != nil {
-		sb.invertedConstrainScan(scan, pred, relProps)
-		sb.finalizeFromCardinality(relProps)
-		return
-	}
-	if scan.Constraint != nil && scan.Constraint.Spans.Count() < 2 {
-		sb.constrainScan(scan, scan.Constraint, pred, relProps, s)
+	// If the constraint is nil or it has a single span, apply the constraint
+	// selectivity, the inverted constraint selectivity, and the partial index
+	// predicate (if they exist) to the underlying table stats.
+	if scan.Constraint == nil || scan.Constraint.Spans.Count() < 2 {
+		sb.constrainScan(scan, scan.Constraint, scan.InvertedConstraint, pred, relProps, s)
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -685,17 +681,17 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	// Get the stats for each span and union them together.
 	c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(0))
-	sb.constrainScan(scan, &c, pred, relProps, &spanStatsUnion)
+	sb.constrainScan(scan, &c, scan.InvertedConstraint, pred, relProps, &spanStatsUnion)
 	for i, n := 1, scan.Constraint.Spans.Count(); i < n; i++ {
 		spanStats.CopyFrom(s)
 		c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(i))
-		sb.constrainScan(scan, &c, pred, relProps, &spanStats)
+		sb.constrainScan(scan, &c, scan.InvertedConstraint, pred, relProps, &spanStats)
 		spanStatsUnion.UnionWith(&spanStats)
 	}
 
 	// Now that we have the correct row count, use the combined spans and the
 	// partial index predicate (if it exists) to get the correct column stats.
-	sb.constrainScan(scan, scan.Constraint, pred, relProps, s)
+	sb.constrainScan(scan, scan.Constraint, scan.InvertedConstraint, pred, relProps, s)
 
 	// Copy in the row count and selectivity that were calculated above, if
 	// less than the values calculated from the combined spans.
@@ -713,21 +709,69 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 }
 
 // constrainScan is called from buildScan to calculate the stats for the scan
-// based on the given constraint. The pred argument is the predicate expression
-// of the partial index that the scan operates on. If it is not a partial index,
-// pred should be nil.
+// based on the given constraints and partial index predicate.
+//
+// The constraint and invertedConstraint arguments are both non-nil only when a
+// multi-column inverted index is scanned. In this case, the constraint must
+// have only single-key spans.
+//
+// The pred argument is the predicate expression of the partial index that the
+// scan operates on. If it is not a partial index, pred should be nil.
 func (sb *statisticsBuilder) constrainScan(
 	scan *ScanExpr,
 	constraint *constraint.Constraint,
+	invertedConstraint invertedexpr.InvertedSpans,
 	pred FiltersExpr,
 	relProps *props.Relational,
 	s *props.Statistics,
 ) {
-	// Calculate distinct counts and histograms for constrained columns
-	// ----------------------------------------------------------------
 	var numUnappliedConjuncts float64
 	var constrainedCols, histCols opt.ColSet
-	// Inverted indexes are a special case; a constraint like:
+	idx := sb.md.Table(scan.Table).Index(scan.Index)
+
+	// Calculate distinct counts and histograms for inverted constrained columns
+	// -------------------------------------------------------------------------
+	if invertedConstraint != nil {
+		// The constrained column is the virtual inverted column in the inverted
+		// index. Using scan.Cols here would also include the PK, which we don't
+		// want.
+		invertedConstrainedCol := scan.Table.ColumnID(idx.VirtualInvertedColumn().Ordinal())
+		constrainedCols.Add(invertedConstrainedCol)
+		colSet := opt.MakeColSet(invertedConstrainedCol)
+		if sb.shouldUseHistogram(relProps, colSet) {
+			// TODO(mjibson): set distinctCount to something correct. Max is
+			// fine for now because ensureColStat takes the minimum of the
+			// passed value and colSet's distinct count.
+			const distinctCount = math.MaxFloat64
+			sb.ensureColStat(colSet, distinctCount, scan, s)
+
+			inputStat, _ := sb.colStatFromInput(colSet, scan)
+			if inputHist := inputStat.Histogram; inputHist != nil {
+				// If we have a histogram, set the row count to its total,
+				// unfiltered count. This is needed because s.RowCount is
+				// currently the row count of the table, but should instead
+				// reflect the number of inverted index entries.
+				s.RowCount = inputHist.ValuesCount()
+				if colStat, ok := s.ColStats.Lookup(colSet); ok {
+					colStat.Histogram = inputHist.InvertedFilter(scan.InvertedConstraint)
+					histCols.Add(invertedConstrainedCol)
+					sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
+				}
+			} else {
+				// Just assume a single closed span such as ["\xfd", "\xfe").
+				// This corresponds to two "conjuncts" as defined in
+				// numConjunctsInConstraint.
+				numUnappliedConjuncts += 2
+			}
+		} else {
+			// Assume a single closed span.
+			numUnappliedConjuncts += 2
+		}
+	}
+
+	// Calculate distinct counts and histograms for constrained columns
+	// ----------------------------------------------------------------
+	// JSON and ARRAY inverted indexes are a special case; a constraint like:
 	// /1: [/'{"a": "b"}' - /'{"a": "b"}']
 	// does not necessarily mean there is only going to be one distinct
 	// value for column 1, if it is being applied to an inverted index.
@@ -735,17 +779,19 @@ func (sb *statisticsBuilder) constrainScan(
 	// column values, such as one path-to-a-leaf through a JSON object.
 	//
 	// For now, don't apply constraints on inverted index columns.
-	if sb.md.Table(scan.Table).Index(scan.Index).IsInverted() {
-		if scan.InvertedConstraint != nil {
-			panic(errors.AssertionFailedf("scan.InvertedConstraint not nil"))
-		}
-		if constraint != nil {
+	if constraint != nil {
+		// TODO(mgartner): Remove this special case for JSON and ARRAY inverted
+		// indexes that are constrained by scan.Constraint once they are instead
+		// constrained by scan.InvertedConstraint.
+		if idx.IsInverted() && invertedConstraint == nil {
 			for i, n := 0, constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
 				numUnappliedConjuncts += sb.numConjunctsInConstraint(constraint, i)
 			}
+		} else {
+			constrainedColsLocal, histColsLocal := sb.applyIndexConstraint(constraint, scan, relProps, s)
+			constrainedCols.UnionWith(constrainedColsLocal)
+			histCols.UnionWith(histColsLocal)
 		}
-	} else {
-		constrainedCols, histCols = sb.applyIndexConstraint(constraint, scan, relProps, s)
 	}
 
 	// Calculate distinct counts and histograms for the partial index predicate
@@ -766,86 +812,6 @@ func (sb *statisticsBuilder) constrainScan(
 		notNullCols.UnionWith(constraint.ExtractNotNullCols(sb.evalCtx))
 	}
 	// Add any not-null columns from the predicate constraints.
-	for i := range pred {
-		if c := pred[i].ScalarProps().Constraints; c != nil {
-			notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
-		}
-	}
-	sb.updateNullCountsFromNotNullCols(notNullCols, s)
-
-	// Calculate row count and selectivity
-	// -----------------------------------
-	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
-	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
-
-	// Adjust the selectivity so we don't double-count the histogram columns.
-	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
-}
-
-// invertedConstrainScan is called from buildScan to calculate the stats for
-// the scan based on the given inverted constraint.
-func (sb *statisticsBuilder) invertedConstrainScan(
-	scan *ScanExpr, pred FiltersExpr, relProps *props.Relational,
-) {
-	s := &relProps.Stats
-
-	// Calculate distinct counts and histograms for constrained columns
-	// ----------------------------------------------------------------
-	var numUnappliedConjuncts float64
-	var constrainedCols, histCols opt.ColSet
-	idx := sb.md.Table(scan.Table).Index(scan.Index)
-	// The constrained column is the first (and only) column in the inverted
-	// index. Using scan.Cols here would also include the PK, which we don't want.
-	constrainedCols.Add(scan.Table.ColumnID(idx.VirtualInvertedColumn().Ordinal()))
-	if sb.shouldUseHistogram(relProps, constrainedCols) {
-		constrainedCols.ForEach(func(col opt.ColumnID) {
-			colSet := opt.MakeColSet(col)
-			// TODO(mjibson): set distinctCount to something correct. Max is fine for now
-			// because ensureColStat takes the minimum of the passed value and colSet's
-			// distinct count.
-			const distinctCount = math.MaxFloat64
-			sb.ensureColStat(colSet, distinctCount, scan, s)
-
-			inputStat, _ := sb.colStatFromInput(colSet, scan)
-			if inputHist := inputStat.Histogram; inputHist != nil {
-				// If we have a histogram, set the row count to its total, unfiltered
-				// count. This is needed because s.RowCount is currently the row count of the
-				// table, but should instead reflect the number of inverted index entries.
-				s.RowCount = inputHist.ValuesCount()
-				if colStat, ok := s.ColStats.Lookup(colSet); ok {
-					colStat.Histogram = inputHist.InvertedFilter(scan.InvertedConstraint)
-					histCols.Add(col)
-					sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
-				}
-			} else {
-				// Just assume a single closed span such as ["\xfd", "\xfe"). This corresponds
-				// to two "conjuncts" as defined in numConjunctsInConstraint.
-				numUnappliedConjuncts += 2
-			}
-		})
-	} else {
-		// Assume a single closed span.
-		numUnappliedConjuncts += 2
-	}
-
-	// Calculate distinct counts and histograms for the partial index predicate
-	// ------------------------------------------------------------------------
-	if pred != nil {
-		predUnappliedConjucts, predConstrainedCols, predHistCols := sb.applyFilter(pred, scan, relProps)
-		numUnappliedConjuncts += predUnappliedConjucts
-		constrainedCols.UnionWith(predConstrainedCols)
-		constrainedCols = sb.tryReduceCols(constrainedCols, s, &scan.Relational().FuncDeps)
-		histCols.UnionWith(predHistCols)
-	}
-
-	// Set null counts to 0 for non-nullable columns
-	// ---------------------------------------------
-	// Inverted indexes don't contain NULLs, so there is no need to try to
-	// determine not-null columns from the constraint. However, the partial
-	// index predicate may guarantee that non-indexed columns are not-null.
-	notNullCols := relProps.NotNullCols.Copy()
 	for i := range pred {
 		if c := pred[i].ScalarProps().Constraints; c != nil {
 			notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
@@ -3014,9 +2980,9 @@ func (sb *statisticsBuilder) applyFilter(
 			histCols.UnionWith(histColsLocal)
 			if !scalarProps.TightConstraints {
 				numUnappliedConjuncts++
-				// Mimic invertedConstrainScan in the case of no histogram
-				// information that assumes a geo function is a single closed
-				// span that corresponds to two "conjuncts".
+				// Mimic constrainScan in the case of no histogram information
+				// that assumes a geo function is a single closed span that
+				// corresponds to two "conjuncts".
 				if isGeoIndexScanCond(conjunct.Condition) {
 					numUnappliedConjuncts++
 				}
