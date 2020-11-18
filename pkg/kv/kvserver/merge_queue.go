@@ -286,41 +286,52 @@ func (mq *mergeQueue) process(
 			return false, err
 		}
 	}
-	lhsReplicas, rhsReplicas := lhsDesc.Replicas().Descriptors(), rhsDesc.Replicas().Descriptors()
+	leftRepls, rightRepls := lhsDesc.Replicas().Descriptors(), rhsDesc.Replicas().Descriptors()
 
-	// Defensive sanity check that everything is now a voter.
-	for i := range lhsReplicas {
-		if lhsReplicas[i].GetType() != roachpb.VOTER_FULL {
-			return false, errors.Errorf(`cannot merge non-voter replicas on lhs: %v`, lhsReplicas)
+	// Defensive sanity check that the ranges involved only have either VOTER_FULL
+	// and NON_VOTER replicas.
+	for i := range leftRepls {
+		if typ := leftRepls[i].GetType(); !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
+			return false,
+				errors.AssertionFailedf(
+					`cannot merge because lhs is either in a joint state or has learner replicas: %v`,
+					leftRepls,
+				)
 		}
 	}
-	for i := range rhsReplicas {
-		if rhsReplicas[i].GetType() != roachpb.VOTER_FULL {
-			return false, errors.Errorf(`cannot merge non-voter replicas on rhs: %v`, rhsReplicas)
+	for i := range rightRepls {
+		if typ := rightRepls[i].GetType(); !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
+			return false,
+				errors.AssertionFailedf(
+					`cannot merge because rhs is either in a joint state or has learner replicas: %v`,
+					rightRepls,
+				)
 		}
 	}
 
-	if !replicaSetsEqual(lhsReplicas, rhsReplicas) {
-		var targets []roachpb.ReplicationTarget
-		for _, lhsReplDesc := range lhsReplicas {
-			targets = append(targets, roachpb.ReplicationTarget{
-				NodeID: lhsReplDesc.NodeID, StoreID: lhsReplDesc.StoreID,
-			})
-		}
+	// Range merges require that the set of stores that contain a replica for the
+	// RHS range be equal to the set of stores that contain a replica for the LHS
+	// range. The LHS and RHS ranges' leaseholders do not need to be co-located
+	// and types of the replicas (voting or non-voting) do not matter.
+	if !replicasCollocated(leftRepls, rightRepls) {
+		voterTargets, nonVoterTargets := TargetsToCollocateRHSDuringMerge(lhsDesc.Replicas(), rhsDesc.Replicas())
+
 		// AdminRelocateRange moves the lease to the first target in the list, so
 		// sort the existing leaseholder there to leave it unchanged.
 		lease, _ := lhsRepl.GetLease()
-		for i := range targets {
-			if targets[i].NodeID == lease.Replica.NodeID && targets[i].StoreID == lease.Replica.StoreID {
+		for i := range voterTargets {
+			if t := voterTargets[i]; t.NodeID == lease.Replica.NodeID && t.StoreID == lease.Replica.StoreID {
 				if i > 0 {
-					targets[0], targets[i] = targets[i], targets[0]
+					voterTargets[0], voterTargets[i] = voterTargets[i], voterTargets[0]
 				}
 				break
 			}
 		}
-		// TODO(benesch): RelocateRange can sometimes fail if it needs to move a replica
-		// from one store to another store on the same node.
-		if err := mq.store.DB().AdminRelocateRange(ctx, rhsDesc.StartKey, targets); err != nil {
+		// The merge queue will only merge ranges that have the same zone config
+		// (see check inside mergeQueue.shouldQueue).
+		if err := mq.store.DB().AdminRelocateRange(
+			ctx, rhsDesc.StartKey, voterTargets, nonVoterTargets,
+		); err != nil {
 			return false, err
 		}
 	}
@@ -358,6 +369,60 @@ func (mq *mergeQueue) process(
 		}
 	}
 	return true, nil
+}
+
+// TargetsToCollocateRHSDuringMerge computes the stores which the voters and
+// non-voters of an RHS (the right hand side range during a merge) should be
+// relocated to. This method produces relocation targets that avoid superfluous
+// data movement.
+//
+// TODO(aayush): Can moving a voter replica from RHS to a store that has a
+// non-voter for LHS (or vice versa) can lead to constraint violations? Justify
+// why or why not.
+func TargetsToCollocateRHSDuringMerge(
+	leftRepls roachpb.ReplicaSet, rightRepls roachpb.ReplicaSet,
+) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget) {
+	numVoters, numNonVoters := len(leftRepls.VoterDescriptors()), len(leftRepls.NonVoterDescriptors())
+	notInRight := func(desc roachpb.ReplicaDescriptor) bool {
+		return !rightRepls.Contains(desc)
+	}
+
+	// Sets of replicas that exist on the LHS but not on the RHS
+	nonCollocated := leftRepls.Filter(notInRight)
+	nonCollocatedVoters := nonCollocated.Voters().Descriptors()
+	nonCollocatedNonVoters := nonCollocated.NonVoters().Descriptors()
+
+	// We bootstrap our result set by first including the replicas (voting and
+	// non-voting) that _are_ collocated, as these will stay unchanged.
+	finalVoters := rightRepls.Voters().Filter(leftRepls.Contains).DeepCopy()
+	finalNonVoters := rightRepls.NonVoters().Filter(leftRepls.Contains).DeepCopy()
+
+	for len(finalVoters.Descriptors()) != numVoters {
+		// Prefer to relocate voters for RHS to stores that have voters for LHS, but
+		// resort to relocating them to stores with non-voters for LHS if that's not
+		// possible.
+		if len(nonCollocatedVoters) != 0 {
+			finalVoters.AddReplica(nonCollocatedVoters[0])
+			nonCollocatedVoters = nonCollocatedVoters[1:]
+		} else if len(nonCollocatedNonVoters) != 0 {
+			finalVoters.AddReplica(nonCollocatedNonVoters[0])
+			nonCollocatedNonVoters = nonCollocatedNonVoters[1:]
+		}
+	}
+
+	for len(finalNonVoters.Descriptors()) != numNonVoters {
+		// Like above, we try to relocate non-voters for RHS to stores that have
+		// non-voters for LHS, but resort to relocating them to stores with voters
+		// for LHS if that's not possible.
+		if len(nonCollocatedNonVoters) != 0 {
+			finalNonVoters.AddReplica(nonCollocatedNonVoters[0])
+			nonCollocatedNonVoters = nonCollocatedNonVoters[1:]
+		} else if len(nonCollocatedVoters) != 0 {
+			finalNonVoters.AddReplica(nonCollocatedVoters[0])
+			nonCollocatedVoters = nonCollocatedVoters[1:]
+		}
+	}
+	return finalVoters.ReplicationTargets(), finalNonVoters.ReplicationTargets()
 }
 
 func (mq *mergeQueue) timer(time.Duration) time.Duration {

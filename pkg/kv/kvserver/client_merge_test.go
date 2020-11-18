@@ -3468,6 +3468,22 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	}
 }
 
+func verifyMerged(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKey roachpb.RKey) {
+	t.Helper()
+	repl := store.LookupReplica(rhsStartKey)
+	if !repl.Desc().StartKey.Equal(lhsStartKey) {
+		t.Fatalf("ranges unexpectedly unmerged")
+	}
+}
+
+func verifyUnmerged(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKey roachpb.RKey) {
+	t.Helper()
+	repl := store.LookupReplica(rhsStartKey)
+	if repl.Desc().StartKey.Equal(lhsStartKey) {
+		t.Fatalf("ranges unexpectedly merged")
+	}
+}
+
 func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3548,37 +3564,21 @@ func TestMergeQueue(t *testing.T) {
 		split(t, roachpb.Key("b"), hlc.Timestamp{} /* expirationTime */)
 	}
 
-	verifyMerged := func(t *testing.T) {
-		t.Helper()
-		repl := store.LookupReplica(rhsStartKey)
-		if !repl.Desc().StartKey.Equal(lhsStartKey) {
-			t.Fatalf("ranges unexpectedly unmerged")
-		}
-	}
-
-	verifyUnmerged := func(t *testing.T) {
-		t.Helper()
-		repl := store.LookupReplica(rhsStartKey)
-		if repl.Desc().StartKey.Equal(lhsStartKey) {
-			t.Fatalf("ranges unexpectedly merged")
-		}
-	}
-
 	t.Run("sanity", func(t *testing.T) {
 		// Check that ranges are not trivially merged after reset.
 		reset(t)
 		store.MustForceMergeScanAndProcess()
-		verifyUnmerged(t)
+		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 		reset(t)
 		store.MustForceMergeScanAndProcess()
-		verifyUnmerged(t)
+		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 	})
 
 	t.Run("both-empty", func(t *testing.T) {
 		reset(t)
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
-		verifyMerged(t)
+		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})
 
 	t.Run("lhs-undersize", func(t *testing.T) {
@@ -3587,7 +3587,7 @@ func TestMergeQueue(t *testing.T) {
 		*zone.RangeMinBytes *= 2
 		lhs().SetZoneConfig(zone)
 		store.MustForceMergeScanAndProcess()
-		verifyMerged(t)
+		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})
 
 	t.Run("combined-threshold", func(t *testing.T) {
@@ -3600,18 +3600,18 @@ func TestMergeQueue(t *testing.T) {
 		zone.RangeMaxBytes = proto.Int64(lhs().GetMVCCStats().Total()*2 - 1)
 		setZones(*zone)
 		store.MustForceMergeScanAndProcess()
-		verifyUnmerged(t)
+		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
 		// Once the maximum size threshold is increased, the merge can occur.
 		zone.RangeMaxBytes = proto.Int64(*zone.RangeMaxBytes + 1)
 		setZones(*zone)
 		store.MustForceMergeScanAndProcess()
-		verifyMerged(t)
+		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})
 
 	t.Run("non-collocated", func(t *testing.T) {
 		reset(t)
-		verifyUnmerged(t)
+		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 		rhsRangeID := rhs().RangeID
 		mtc.replicateRange(rhsRangeID, 1)
 		mtc.transferLease(ctx, rhsRangeID, 0, 1)
@@ -3620,7 +3620,7 @@ func TestMergeQueue(t *testing.T) {
 
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
-		verifyMerged(t)
+		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})
 
 	// TODO(jeffreyxiao): Add subtest to consider load when making merging
@@ -3629,13 +3629,13 @@ func TestMergeQueue(t *testing.T) {
 	t.Run("sticky-bit", func(t *testing.T) {
 		reset(t)
 		store.MustForceMergeScanAndProcess()
-		verifyUnmerged(t)
+		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
 		// Perform manual merge and verify that no merge occurred.
 		split(t, rhsStartKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */)
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
-		verifyUnmerged(t)
+		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
 		// Delete sticky bit and verify that merge occurs.
 		unsplitArgs := &roachpb.AdminUnsplitRequest{
@@ -3647,31 +3647,156 @@ func TestMergeQueue(t *testing.T) {
 			t.Fatal(err)
 		}
 		store.MustForceMergeScanAndProcess()
-		verifyMerged(t)
+		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})
 
 	t.Run("sticky-bit-expiration", func(t *testing.T) {
 		manualSplitTTL := time.Millisecond * 200
 		reset(t)
 		store.MustForceMergeScanAndProcess()
-		verifyUnmerged(t)
+		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
 		// Perform manual merge and verify that no merge occurred.
 		split(t, rhsStartKey.AsRawKey(), clock.Now().Add(manualSplitTTL.Nanoseconds(), 0) /* expirationTime */)
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
-		verifyUnmerged(t)
+		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
 		// Sticky bit is not expired yet.
 		manualClock.Set(manualSplitTTL.Nanoseconds())
 		store.MustForceMergeScanAndProcess()
-		verifyUnmerged(t)
+		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
 		// Sticky bit is expired.
 		manualClock.Set(manualSplitTTL.Nanoseconds() * 2)
 		store.MustForceMergeScanAndProcess()
-		verifyMerged(t)
+		verifyMerged(t, store, lhsStartKey, rhsStartKey)
 	})
+}
+
+func TestMergeQueueSeesNonVoters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type test struct {
+		name                                                   string
+		leftNonVoters, rightNonVoters, leftVoters, rightVoters []int
+	}
+
+	// NB: The setup code for the "relocate-range" subtest places a single voter
+	// replica on (n1,s1) for both left and right range.
+	tests := []test{
+		{
+			name:           "collocated-per-type",
+			leftNonVoters:  []int{1},
+			rightNonVoters: []int{1},
+			leftVoters:     []int{2, 3, 4},
+			rightVoters:    []int{2, 3, 4},
+		},
+		{
+			name:           "collocated-overall",
+			leftNonVoters:  []int{1, 2},
+			rightNonVoters: []int{3, 4},
+			leftVoters:     []int{3, 4},
+			rightVoters:    []int{1, 2},
+		},
+		{
+			name:           "collocated-voters-only",
+			leftNonVoters:  []int{2},
+			rightNonVoters: []int{1},
+			leftVoters:     []int{3, 4},
+			rightVoters:    []int{3, 4},
+		},
+		{
+			name:           "collocated-non-voters-only",
+			leftNonVoters:  []int{1, 2},
+			rightNonVoters: []int{1, 2},
+			leftVoters:     []int{3},
+			rightVoters:    []int{4},
+		},
+		{
+			name:           "not-collocated",
+			leftNonVoters:  []int{2},
+			rightNonVoters: []int{1},
+			leftVoters:     []int{3},
+			rightVoters:    []int{4},
+		},
+		{
+			name:           "partially-collocated-voters-only",
+			leftNonVoters:  []int{1},
+			rightNonVoters: []int{2},
+			leftVoters:     []int{2, 3},
+			rightVoters:    []int{1, 4},
+		},
+		{
+			name:           "partially-collocated-non-voters-only",
+			leftNonVoters:  []int{1, 3},
+			rightNonVoters: []int{1, 2},
+			leftVoters:     []int{4},
+			rightVoters:    []int{4},
+		},
+		{
+			name:           "partially-collocated",
+			leftNonVoters:  []int{1, 3},
+			rightNonVoters: []int{1, 2},
+			leftVoters:     []int{2},
+			rightVoters:    []int{4},
+		},
+	}
+
+	var clusterArgs = base.TestClusterArgs{
+		// We dont want the replicate queue mucking with our test, so disable it.
+		ReplicationMode: base.ReplicationManual,
+	}
+	ctx := context.Background()
+
+	dbName := "testdb"
+	numNodes := 7
+	for _, subtest := range tests {
+		t.Run(subtest.name, func(t *testing.T) {
+			tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, dbName, "kv", numNodes)
+			defer tc.Stopper().Stop(ctx)
+			// We're controlling merge queue operation via
+			// `store.SetMergeQueueActive`, so enable the cluster setting here.
+			tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled=true`)
+			store, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(1)
+			require.Nil(t, err)
+			// We're going to split the dummy range created above with an empty
+			// expiration time. Disable the merge queue before splitting so that the
+			// split ranges aren't immediately merged.
+			store.SetMergeQueueActive(false)
+			leftDesc, rightDesc := splitDummyRangeInTestCluster(
+				t, tc, dbName, "kv" /* tableName */, hlc.Timestamp{} /* splitExpirationTime */)
+
+			leftRepls := leftDesc.Replicas().Descriptors()
+			rightRepls := rightDesc.Replicas().Descriptors()
+
+			require.Equal(t, 1, len(leftRepls))
+			require.Equal(t, 1, len(rightRepls))
+
+			for _, id := range subtest.leftNonVoters {
+				tc.AddNonVotersOrFatal(t, leftDesc.StartKey.AsRawKey(), tc.Target(id))
+				leftDesc = tc.LookupRangeOrFatal(t, leftDesc.StartKey.AsRawKey())
+			}
+			for _, id := range subtest.rightNonVoters {
+				tc.AddNonVotersOrFatal(t, rightDesc.StartKey.AsRawKey(), tc.Target(id))
+				rightDesc = tc.LookupRangeOrFatal(t, rightDesc.StartKey.AsRawKey())
+			}
+			for _, id := range subtest.leftVoters {
+				tc.AddVotersOrFatal(t, leftDesc.StartKey.AsRawKey(), tc.Target(id))
+				leftDesc = tc.LookupRangeOrFatal(t, leftDesc.StartKey.AsRawKey())
+			}
+			for _, id := range subtest.rightVoters {
+				tc.AddVotersOrFatal(t, rightDesc.StartKey.AsRawKey(), tc.Target(id))
+				rightDesc = tc.LookupRangeOrFatal(t, rightDesc.StartKey.AsRawKey())
+			}
+			// Sanity check
+			verifyUnmerged(t, store, leftDesc.StartKey, rightDesc.StartKey)
+
+			store.SetMergeQueueActive(true)
+			store.MustForceMergeScanAndProcess()
+			verifyMerged(t, store, leftDesc.StartKey, rightDesc.StartKey)
+		})
+	}
 }
 
 func TestInvalidSubsumeRequest(t *testing.T) {

@@ -563,7 +563,8 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 		// duration at the beginning of the test until we have the merge txn
 		// suspended at its commit trigger, and then change it back down to
 		// `testingTargetDuration`.
-		tc, leftDesc, rightDesc := setupClusterForClosedTsTestingWithSplitRanges(ctx, t, 5*time.Second, testingCloseFraction, clusterArgs)
+		tc, leftDesc, rightDesc := setupClusterForClosedTsTestingWithSplitRanges(
+			ctx, t, 5*time.Second, testingCloseFraction, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 
 		leftLeaseholder := getCurrentLeaseholder(t, tc, leftDesc)
@@ -878,7 +879,7 @@ func setupClusterForClosedTsTestingWithSplitRanges(
 ) (serverutils.TestClusterInterface, roachpb.RangeDescriptor, roachpb.RangeDescriptor) {
 	dbName := "cttest"
 	tc, _, _ := setupClusterForClosedTsTesting(ctx, t, targetDuration, closeFraction, clusterArgs, dbName)
-	leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, dbName)
+	leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, dbName, "kv" /* tableName */, hlc.MaxTimestamp)
 	return tc, leftDesc, rightDesc
 }
 
@@ -887,13 +888,17 @@ func setupClusterForClosedTsTestingWithSplitRanges(
 // the {dbname}.kv table and performs splits on the table's range such that the
 // 2 resulting ranges contain exactly one of the rows each.
 func splitDummyRangeInTestCluster(
-	t *testing.T, tc serverutils.TestClusterInterface, dbName string,
+	t *testing.T,
+	tc serverutils.TestClusterInterface,
+	dbName string,
+	tableName string,
+	splitExpirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor) {
 	db0 := tc.ServerConn(0)
-	if _, err := db0.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES(1, '%s')`, dbName, "foo")); err != nil {
+	if _, err := db0.Exec(fmt.Sprintf(`INSERT INTO %s.%s VALUES(1, '%s')`, dbName, tableName, "foo")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db0.Exec(fmt.Sprintf(`INSERT INTO %s.kv VALUES(3, '%s')`, dbName, "foo")); err != nil {
+	if _, err := db0.Exec(fmt.Sprintf(`INSERT INTO %s.%s VALUES(3, '%s')`, dbName, tableName, "foo")); err != nil {
 		t.Fatal(err)
 	}
 	// Manually split the table to have easier access to descriptors.
@@ -911,13 +916,15 @@ func splitDummyRangeInTestCluster(
 	// Split at `k` so that the `kv` table has exactly two ranges: [1,2) and [2,
 	// Max). This split will never be merged by the merge queue so the expiration
 	// time doesn't matter here.
-	tcImpl.SplitRangeOrFatal(t, k)
+	_, _, err = tcImpl.SplitRangeWithExpiration(k, splitExpirationTime)
+	require.NoError(t, err)
 	idxPrefix = keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
 	k, err = rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode split key: %+v", err)
 	}
-	leftDesc, rightDesc := tcImpl.SplitRangeOrFatal(t, k)
+	leftDesc, rightDesc, err := tcImpl.SplitRangeWithExpiration(k, splitExpirationTime)
+	require.NoError(t, err)
 	if tc.ReplicationMode() != base.ReplicationManual {
 		if err := tcImpl.WaitForFullReplication(); err != nil {
 			t.Fatal(err)
