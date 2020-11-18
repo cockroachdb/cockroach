@@ -1775,10 +1775,6 @@ func TestParse2(t *testing.T) {
 			`CREATE DATABASE a REGION "us-west-1"`,
 			`CREATE DATABASE a REGIONS = "us-west-1"`,
 		},
-		{
-			`CREATE DATABASE IF NOT EXISTS a SURVIVE DEFAULT`,
-			`CREATE DATABASE IF NOT EXISTS a`,
-		},
 		{`CREATE TABLE a (b INT) WITH (fillfactor=100)`,
 			`CREATE TABLE a (b INT8)`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
