@@ -875,15 +875,17 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(2))
 	})
 
-	check := func(targets []roachpb.ReplicationTarget) {
-		require.NoError(t, tc.Server(0).DB().AdminRelocateRange(ctx, scratchStartKey, targets))
+	check := func(voterTargets []roachpb.ReplicationTarget) {
+		require.NoError(t, tc.Server(0).DB().AdminRelocateRange(
+			ctx, scratchStartKey, voterTargets, []roachpb.ReplicationTarget{},
+		))
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 		voters := desc.Replicas().VoterDescriptors()
-		require.Len(t, voters, len(targets))
+		require.Len(t, voters, len(voterTargets))
 		sort.Slice(voters, func(i, j int) bool { return voters[i].NodeID < voters[j].NodeID })
 		for i := range voters {
-			require.Equal(t, targets[i].NodeID, voters[i].NodeID, `%v`, voters)
-			require.Equal(t, targets[i].StoreID, voters[i].StoreID, `%v`, voters)
+			require.Equal(t, voterTargets[i].NodeID, voters[i].NodeID, `%v`, voters)
+			require.Equal(t, voterTargets[i].StoreID, voters[i].StoreID, `%v`, voters)
 		}
 		require.Empty(t, desc.Replicas().LearnerDescriptors())
 		require.Empty(t, desc.Replicas().FilterToDescriptors(predIncoming))
@@ -943,11 +945,11 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 
 	checkFails := func() {
 		err := tc.Server(0).DB().AdminMerge(ctx, scratchStartKey)
-		if exp := `cannot merge range with non-voter replicas on`; !testutils.IsError(err, exp) {
+		if exp := `cannot merge ranges.*joint state`; !testutils.IsError(err, exp) {
 			t.Fatalf(`expected "%s" error got: %+v`, exp, err)
 		}
 		err = tc.Server(0).DB().AdminMerge(ctx, splitKey1)
-		if exp := `cannot merge range with non-voter replicas on`; !testutils.IsError(err, exp) {
+		if exp := `cannot merge ranges.*joint state`; !testutils.IsError(err, exp) {
 			t.Fatalf(`expected "%s" error got: %+v`, exp, err)
 		}
 	}
