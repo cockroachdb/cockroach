@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -668,7 +667,7 @@ func (ij *invertedJoiner) close() {
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
-func (ij *invertedJoiner) execStatsForTrace() *execstatspb.ComponentStats {
+func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(ij.input)
 	if !ok {
 		return nil
@@ -677,15 +676,15 @@ func (ij *invertedJoiner) execStatsForTrace() *execstatspb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execstatspb.ComponentStats{
-		Inputs: []execstatspb.InputStats{is},
-		KV: execstatspb.KVStats{
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		KV: execinfrapb.KVStats{
 			TuplesRead: fis.NumTuples,
 			KVTime:     fis.WaitTime,
 		},
-		Exec: execstatspb.ExecStats{
-			MaxAllocatedMem:  execstatspb.MakeIntValue(uint64(ij.MemMonitor.MaximumBytes())),
-			MaxAllocatedDisk: execstatspb.MakeIntValue(uint64(ij.diskMonitor.MaximumBytes())),
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(ij.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(ij.diskMonitor.MaximumBytes())),
 		},
 		Output: ij.Out.Stats(),
 	}

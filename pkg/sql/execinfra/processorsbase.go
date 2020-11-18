@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -342,9 +341,9 @@ func (h *ProcOutputHelper) consumerClosed() {
 }
 
 // Stats returns output statistics.
-func (h *ProcOutputHelper) Stats() execstatspb.OutputStats {
-	return execstatspb.OutputStats{
-		NumTuples: execstatspb.MakeIntValue(h.rowIdx),
+func (h *ProcOutputHelper) Stats() execinfrapb.OutputStats {
+	return execinfrapb.OutputStats{
+		NumTuples: execinfrapb.MakeIntValue(h.rowIdx),
 	}
 }
 
@@ -497,7 +496,7 @@ type ProcessorBase struct {
 	// MakeDeterministic might get called on the returned stats.
 	//
 	// Can return nil.
-	ExecStatsForTrace func() *execstatspb.ComponentStats
+	ExecStatsForTrace func() *execinfrapb.ComponentStats
 
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor

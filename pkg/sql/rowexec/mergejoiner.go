@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -274,7 +273,7 @@ func (m *mergeJoiner) ConsumerClosed() {
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
-func (m *mergeJoiner) execStatsForTrace() *execstatspb.ComponentStats {
+func (m *mergeJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	lis, ok := getInputStats(m.leftSource)
 	if !ok {
 		return nil
@@ -283,10 +282,10 @@ func (m *mergeJoiner) execStatsForTrace() *execstatspb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execstatspb.ComponentStats{
-		Inputs: []execstatspb.InputStats{lis, ris},
-		Exec: execstatspb.ExecStats{
-			MaxAllocatedMem: execstatspb.MakeIntValue(uint64(m.MemMonitor.MaximumBytes())),
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{lis, ris},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem: execinfrapb.MakeIntValue(uint64(m.MemMonitor.MaximumBytes())),
 		},
 		Output: m.Out.Stats(),
 	}

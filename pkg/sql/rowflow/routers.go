@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -102,7 +101,7 @@ type routerOutput struct {
 	// TODO(radu): add padding of size sys.CacheLineSize to ensure there is no
 	// false-sharing?
 
-	stats execstatspb.ComponentStats
+	stats execinfrapb.ComponentStats
 
 	// memoryMonitor and diskMonitor are mu.rowContainer's monitors.
 	memoryMonitor, diskMonitor *mon.BytesMonitor
@@ -312,7 +311,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
 				span.SetTag(execinfrapb.StreamIDTagKey, ro.streamID)
-				ro.stats.Inputs = make([]execstatspb.InputStats, 1)
+				ro.stats.Inputs = make([]execinfrapb.InputStats, 1)
 			}
 
 			drain := false
