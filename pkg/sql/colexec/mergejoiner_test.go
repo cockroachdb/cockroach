@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -2131,15 +2132,15 @@ func TestMergeJoinerRandomized(t *testing.T) {
 	}
 }
 
-func newBatchOfIntRows(nCols int, batch coldata.Batch) coldata.Batch {
+func newBatchOfIntRows(nCols int, batch coldata.Batch, length int) coldata.Batch {
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < length; i++ {
 			col[i] = int64(i)
 		}
 	}
 
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(length)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		vec := batch.ColVec(colIdx)
@@ -2148,15 +2149,17 @@ func newBatchOfIntRows(nCols int, batch coldata.Batch) coldata.Batch {
 	return batch
 }
 
-func newBatchOfRepeatedIntRows(nCols int, batch coldata.Batch, numRepeats int) coldata.Batch {
+func newBatchOfRepeatedIntRows(
+	nCols int, batch coldata.Batch, length int, numRepeats int,
+) coldata.Batch {
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < length; i++ {
 			col[i] = int64((i + 1) / numRepeats)
 		}
 	}
 
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(length)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		vec := batch.ColVec(colIdx)
@@ -2167,112 +2170,99 @@ func newBatchOfRepeatedIntRows(nCols int, batch coldata.Batch, numRepeats int) c
 
 func BenchmarkMergeJoiner(b *testing.B) {
 	ctx := context.Background()
-	nCols := 4
-	sourceTypes := make([]*types.T, nCols)
+	const nCols = 1
+	sourceTypes := []*types.T{types.Int}
 
-	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = types.Int
-	}
-
-	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	benchMemAccount := testMemMonitor.MakeBoundAccount()
 	defer benchMemAccount.Close(ctx)
 
-	// 1:1 join.
-	for _, nBatches := range []int{1, 4, 16, 1024} {
-		b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize()), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
-			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				leftSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), sourceTypes, nBatches)
-				rightSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), sourceTypes, nBatches)
-
-				benchMemAccount.Clear(ctx)
-				base, err := newMergeJoinBase(
-					colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
-					descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					testDiskAcc,
-				)
-				require.NoError(b, err)
-				s := mergeJoinInnerOp{mergeJoinBase: base}
-				s.Init()
-
-				b.StartTimer()
-				for b := s.Next(ctx); b.Length() != 0; b = s.Next(ctx) {
-				}
-				b.StopTimer()
-			}
-		})
+	getNewMergeJoiner := func(leftSource, rightSource colexecbase.Operator) colexecbase.Operator {
+		benchMemAccount.Clear(ctx)
+		base, err := newMergeJoinBase(
+			colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
+			descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
+			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+			testDiskAcc,
+		)
+		require.NoError(b, err)
+		return &mergeJoinInnerOp{mergeJoinBase: base}
 	}
 
-	// Groups on left side.
-	for _, nBatches := range []int{1, 4, 16, 1024} {
-		b.Run(fmt.Sprintf("oneSideRepeat-rows=%d", nBatches*coldata.BatchSize()), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
-			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, nBatches), sourceTypes, nBatches)
-				rightSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), sourceTypes, nBatches)
-
-				benchMemAccount.Clear(ctx)
-				base, err := newMergeJoinBase(
-					colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
-					descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					testDiskAcc,
-				)
-				require.NoError(b, err)
-				s := mergeJoinInnerOp{mergeJoinBase: base}
-				s.Init()
-
-				b.StartTimer()
-				for b := s.Next(ctx); b.Length() != 0; b = s.Next(ctx) {
-				}
-				b.StopTimer()
-			}
-		})
+	regularBatchCreator := func(batchLength, _ int) coldata.Batch {
+		return newBatchOfIntRows(nCols, testAllocator.NewMemBatchWithMaxCapacity(sourceTypes), batchLength)
+	}
+	repeatedBatchCreator := func(batchLength, numRepeats int) coldata.Batch {
+		return newBatchOfRepeatedIntRows(nCols, testAllocator.NewMemBatchWithMaxCapacity(sourceTypes), batchLength, numRepeats)
 	}
 
-	// Groups on both sides.
-	for _, nBatches := range []int{1, 4, 16, 32} {
-		numRepeats := nBatches
-		b.Run(fmt.Sprintf("bothSidesRepeat-rows=%d", nBatches*coldata.BatchSize()), func(b *testing.B) {
-
-			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
-			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), sourceTypes, nBatches)
-				rightSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), sourceTypes, nBatches)
-
-				benchMemAccount.Clear(ctx)
-				base, err := newMergeJoinBase(
-					colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
-					descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					testDiskAcc,
-				)
-				require.NoError(b, err)
-				s := mergeJoinInnerOp{mergeJoinBase: base}
-				s.Init()
-
-				b.StartTimer()
-				for b := s.Next(ctx); b.Length() != 0; b = s.Next(ctx) {
+	for _, c := range []struct {
+		namePrefix        string
+		numRepeatsGetter  func(nRows int) int
+		leftBatchCreator  func(batchLength, numRepeats int) coldata.Batch
+		rightBatchCreator func(batchLength, numRepeats int) coldata.Batch
+	}{
+		// 1:1 join.
+		{
+			namePrefix: "",
+			numRepeatsGetter: func(nRows int) int {
+				// This value will be ignored.
+				return 0
+			},
+			leftBatchCreator:  regularBatchCreator,
+			rightBatchCreator: regularBatchCreator,
+		},
+		// Groups on the right side.
+		{
+			namePrefix: "oneSideRepeat-",
+			numRepeatsGetter: func(nRows int) int {
+				return nRows
+			},
+			leftBatchCreator:  regularBatchCreator,
+			rightBatchCreator: repeatedBatchCreator,
+		},
+		// Groups on both sides.
+		{
+			namePrefix: "bothSidesRepeat-",
+			numRepeatsGetter: func(nRows int) int {
+				return int(math.Sqrt(float64(nRows)))
+			},
+			leftBatchCreator:  repeatedBatchCreator,
+			rightBatchCreator: repeatedBatchCreator,
+		},
+	} {
+		rowsOptions := []int{1, 16, 128, coldata.BatchSize(), 8 * coldata.BatchSize(), 64 * coldata.BatchSize()}
+		if testing.Short() {
+			rowsOptions = []int{16, coldata.BatchSize(), 64 * coldata.BatchSize()}
+		}
+		for _, nRows := range rowsOptions {
+			b.Run(fmt.Sprintf("%srows=%d", c.namePrefix, nRows), func(b *testing.B) {
+				batchLength := nRows
+				nBatches := 1
+				if nRows >= coldata.BatchSize() {
+					batchLength = coldata.BatchSize()
+					nBatches = nRows / coldata.BatchSize()
 				}
-				b.StopTimer()
-			}
-		})
-	}
+				numRepeats := c.numRepeatsGetter(nRows)
+				leftBatch := c.leftBatchCreator(batchLength, numRepeats)
+				rightBatch := c.rightBatchCreator(batchLength, numRepeats)
+				// 8 (bytes / int64) * nRows * nCols (number of columns / row) * 2 (number of sources).
+				b.SetBytes(int64(8 * nRows * nCols * 2))
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					leftSource := newFiniteChunksSource(leftBatch, sourceTypes, nBatches, 1)
+					rightSource := newFiniteChunksSource(rightBatch, sourceTypes, nBatches, 1)
+					s := getNewMergeJoiner(leftSource, rightSource)
+					s.Init()
 
+					b.StartTimer()
+					for b := s.Next(ctx); b.Length() != 0; b = s.Next(ctx) {
+					}
+					b.StopTimer()
+				}
+			})
+		}
+	}
 }
