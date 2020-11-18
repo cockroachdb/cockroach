@@ -305,8 +305,29 @@ func getCgroupDetails(mountinfoPath string, cRoot string, controller string) (st
 		}
 
 		ver, ok := detectCgroupVersion(fields, controller)
-		if ok && (ver == 1 && string(fields[3]) == cRoot) || ver == 2 {
-			return string(fields[4]), ver, nil
+		if ok {
+			mountPoint := string(fields[4])
+			if ver == 2 {
+				return mountPoint, ver, nil
+			}
+			// It is possible that the controller mount and the cgroup path are not the same (both are relative to the NS root).
+			// So start with the mount and construct the relative path of the cgroup.
+			// To test:
+			//   cgcreate -t $USER:$USER -a $USER:$USER -g memory:crdb_test
+			//   echo 3999997952 > /sys/fs/cgroup/memory/crdb_test/memory.limit_in_bytes
+			//   cgexec -g memory:crdb_test ./cockroach start-single-node
+			// cockroach.log -> server/config.go:433 ⋮ system total memory: ‹3.7 GiB›
+			//   without constructing the relative path
+			// cockroach.log -> server/config.go:433 ⋮ system total memory: ‹63 GiB›
+			nsRelativePath := string(fields[3])
+			if !strings.Contains(nsRelativePath, "..") {
+				// We don't expect to see err here ever but in case that it happens
+				// the best action is to ignore the line and hope that the rest of the lines
+				// will allow us to extract a valid path.
+				if relPath, err := filepath.Rel(nsRelativePath, cRoot); err == nil {
+					return filepath.Join(mountPoint, relPath), ver, nil
+				}
+			}
 		}
 	}
 
