@@ -85,7 +85,6 @@ func (a *defaultOrderedAgg) Compute(
 				if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
 					colexecerror.ExpectedError(err)
 				}
-
 			}
 		} else {
 			// Both aggregators convert the batch "sparsely" - without
@@ -115,7 +114,6 @@ func (a *defaultOrderedAgg) Compute(
 				if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
 					colexecerror.ExpectedError(err)
 				}
-
 			}
 		}
 	})
@@ -126,6 +124,19 @@ func (a *defaultOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	res, err := a.fn.Result()
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+	if res == tree.DNull {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
+	}
+}
+
+func (a *defaultOrderedAgg) HandleEmptyInputScalar() {
+	outputIdx := 0
 	res, err := a.fn.Result()
 	if err != nil {
 		colexecerror.ExpectedError(err)
