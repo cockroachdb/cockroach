@@ -42,8 +42,8 @@ func ProcessTargetColumns(
 		return nil, nil
 	}
 
+	var colIDSet catalog.TableColSet
 	cols := make([]descpb.ColumnDescriptor, len(nameList))
-	colIDSet := make(map[descpb.ColumnID]struct{}, len(nameList))
 	for i, colName := range nameList {
 		var col *descpb.ColumnDescriptor
 		var err error
@@ -56,11 +56,11 @@ func ProcessTargetColumns(
 			return nil, err
 		}
 
-		if _, ok := colIDSet[col.ID]; ok {
+		if colIDSet.Contains(col.ID) {
 			return nil, pgerror.Newf(pgcode.Syntax,
 				"multiple assignments to the same column %q", &nameList[i])
 		}
-		colIDSet[col.ID] = struct{}{}
+		colIDSet.Add(col.ID)
 		cols[i] = *col
 	}
 

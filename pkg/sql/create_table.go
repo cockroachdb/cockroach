@@ -608,8 +608,8 @@ func ResolveFK(
 	validationBehavior tree.ValidationBehavior,
 	evalCtx *tree.EvalContext,
 ) error {
+	var originColSet catalog.TableColSet
 	originCols := make([]*descpb.ColumnDescriptor, len(d.FromCols))
-	originColMap := make(map[descpb.ColumnID]struct{}, len(d.FromCols))
 	for i, col := range d.FromCols {
 		col, err := tbl.FindActiveOrNewColumnByName(col)
 		if err != nil {
@@ -619,11 +619,11 @@ func ResolveFK(
 			return err
 		}
 		// Ensure that the origin columns don't have duplicates.
-		if _, ok := originColMap[col.ID]; ok {
+		if originColSet.Contains(col.ID) {
 			return pgerror.Newf(pgcode.InvalidForeignKey,
 				"foreign key contains duplicate column %q", col.Name)
 		}
-		originColMap[col.ID] = struct{}{}
+		originColSet.Add(col.ID)
 		originCols[i] = col
 	}
 
