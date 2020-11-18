@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -703,7 +704,11 @@ func TestExitOnFullDisk(t *testing.T) {
 	})
 
 	fs := &fileSink{}
-	l := &loggerT{sinks: []logSink{fs}}
+	l := &loggerT{sinkInfos: []sinkInfo{{
+		sink:        fs,
+		editor:      func(r redactablePackage) redactablePackage { return r },
+		criticality: true,
+	}}}
 	fs.mu.file = &syncBuffer{
 		fileSink: fs,
 		Writer:   bufio.NewWriterSize(&outOfSpaceWriter{}, 1),
@@ -740,4 +745,52 @@ func BenchmarkVDepthWithVModule(b *testing.B) {
 			_ = VDepth(1, 1)
 		}
 	})
+}
+
+// TestLogEntryPropagation ensures that a log entry is written
+// to file even when stderr is not available.
+func TestLogEntryPropagation(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+	setFlags()
+	defer capture()()
+
+	tmpDir, err := ioutil.TempDir("", fileutil.EscapeFilename(t.Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if !t.Failed() {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
+
+	// Make stderr read-only so that writes to it reliably fail.
+	f, err := os.OpenFile(filepath.Join(tmpDir, "test"), os.O_RDONLY|os.O_CREATE, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	defer func(prevStderr *os.File) { OrigStderr = prevStderr }(OrigStderr)
+	OrigStderr = f
+
+	const specialMessage = `CAPTAIN KIRK`
+
+	// Enable output to stderr (the Scope disabled it).
+	logging.stderrSink.threshold.SetValue(severity.INFO)
+
+	// Make stderr non-critical.
+	// We assume that the stderr sink is the first one.
+	defer func(prevCriticality bool) { debugLog.sinkInfos[0].criticality = prevCriticality }(debugLog.sinkInfos[0].criticality)
+	debugLog.sinkInfos[0].criticality = false
+
+	// Now emit the log message. If criticality is respected, the
+	// failure to write on stderr is graceful and the message gets
+	// printed on the file output (and can be picked up by the contains
+	// function). If it is not, the test runner will stop abruptly.
+	Error(context.Background(), specialMessage)
+
+	if !contains(specialMessage, t) {
+		t.Fatalf("expected special message in file, got:\n%s", contents())
+	}
 }

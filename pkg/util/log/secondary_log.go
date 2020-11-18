@@ -69,15 +69,28 @@ func NewSecondaryLogger(
 	)
 	// TODO(knz): Make all this configurable.
 	// (As done in https://github.com/cockroachdb/cockroach/pull/51987.)
-	l.logger.sinks = []logSink{&logging.stderrSink, fileSink}
-	l.logger.sinkEditors = []redactEditor{
-		// stderr editor.
-		// We don't redact upfront, and we keep the redaction markers.
-		getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
-		// file editor.
-		// We don't redact upfront, and the "--redactable-logs" flag decides
-		// whether to keep the redaction markers in the output.
-		getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */)),
+	l.logger.sinkInfos = []sinkInfo{
+		{
+			sink: &logging.stderrSink,
+			// stderr editor.
+			// We don't redact upfront, and we keep the redaction markers.
+			editor: getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
+			// failure to write to stderr is critical for now. We may want
+			// to make this non-critical in the future, since it's common
+			// for folk to close the terminal where they launched 'cockroach
+			// start --background'.
+			// We keep this true for now for backward-compatibility.
+			criticality: true,
+		},
+		{
+			sink: fileSink,
+			// file editor.
+			// We don't redact upfront, and the "--redactable-logs" flag decides
+			// whether to keep the redaction markers in the output.
+			editor: getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */)),
+			// failure to write to file is definitely critical.
+			criticality: true,
+		},
 	}
 
 	// Ensure the registry knows about this logger.

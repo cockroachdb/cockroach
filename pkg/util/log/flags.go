@@ -94,15 +94,31 @@ func init() {
 	)
 	// TODO(knz): Make all this configurable.
 	// (As done in https://github.com/cockroachdb/cockroach/pull/51987.)
-	debugLog.sinks = []logSink{&logging.stderrSink, debugFileSink}
-	debugLog.sinkEditors = []redactEditor{
-		// stderr editor.
-		// We don't redact upfront, and we keep the redaction markers.
-		getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
-		// file editor.
-		// We don't redact upfront, and the "--redactable-logs" flag decides
-		// whether to keep the redaction markers in the output.
-		getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */)),
+	debugLog.sinkInfos = []sinkInfo{
+		{
+			// Nb: some tests in this package assume that the stderr sink is
+			// the first one. If this changes, the tests need to be updated
+			// as well.
+			sink: &logging.stderrSink,
+			// stderr editor.
+			// We don't redact upfront, and we keep the redaction markers.
+			editor: getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
+			// failure to write to stderr is critical for now. We may want
+			// to make this non-critical in the future, since it's common
+			// for folk to close the terminal where they launched 'cockroach
+			// start --background'.
+			// We keep this true for now for backward-compatibility.
+			criticality: true,
+		},
+		{
+			sink: debugFileSink,
+			// file editor.
+			// We don't redact upfront, and the "--redactable-logs" flag decides
+			// whether to keep the redaction markers in the output.
+			editor: getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */)),
+			// failure to write to file is definitely critical.
+			criticality: true,
+		},
 	}
 	allLoggers.put(debugLog)
 	allFileSinks.put(debugFileSink)
@@ -211,8 +227,8 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 
 		// Stderr capture produces unsafe strings. This logger
 		// thus generally produces non-redactable entries.
-		for i := range secLogger.logger.sinkEditors {
-			secLogger.logger.sinkEditors[i] = getEditor(SelectEditMode(false /* redact */, false /* keepRedactable */))
+		for i := range secLogger.logger.sinkInfos {
+			secLogger.logger.sinkInfos[i].editor = getEditor(SelectEditMode(false /* redact */, false /* keepRedactable */))
 		}
 
 		// Force a log entry. This does two things: it forces

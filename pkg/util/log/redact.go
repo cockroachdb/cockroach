@@ -185,12 +185,14 @@ func renderTagsAsRedactable(ctx context.Context, buf *strings.Builder) {
 //
 // This is not safe for concurrent use with logging operations.
 func TestingSetRedactable(redactableLogs bool) (cleanup func()) {
-	prevEditors := debugLog.sinkEditors
-	debugLog.sinkEditors = make([]redactEditor, len(prevEditors))
-	for i := range debugLog.sinkEditors {
-		debugLog.sinkEditors[i] = getEditor(SelectEditMode(false /* redact */, redactableLogs))
+	prevEditors := make([]redactEditor, len(debugLog.sinkInfos))
+	for i := range debugLog.sinkInfos {
+		prevEditors[i] = debugLog.sinkInfos[i].editor
+		debugLog.sinkInfos[i].editor = getEditor(SelectEditMode(false /* redact */, redactableLogs))
 	}
 	return func() {
-		debugLog.sinkEditors = prevEditors
+		for i, e := range prevEditors {
+			debugLog.sinkInfos[i].editor = e
+		}
 	}
 }
