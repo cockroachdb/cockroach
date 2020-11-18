@@ -114,5 +114,6 @@ func (ag *countAggregator) execStatsForTrace() *execstatspb.ComponentStats {
 	}
 	return &execstatspb.ComponentStats{
 		Inputs: []execstatspb.InputStats{is},
+		Output: ag.Out.Stats(),
 	}
 }

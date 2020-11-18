@@ -283,6 +283,7 @@ func (tr *tableReader) execStatsForTrace() *execstatspb.ComponentStats {
 			BytesRead:  execstatspb.MakeIntValue(uint64(tr.GetBytesRead())),
 			KVTime:     is.WaitTime,
 		},
+		Output: tr.Out.Stats(),
 	}
 }
 

@@ -355,6 +355,7 @@ func (d *distinct) execStatsForTrace() *execstatspb.ComponentStats {
 		Exec: execstatspb.ExecStats{
 			MaxAllocatedMem: execstatspb.MakeIntValue(uint64(d.MemMonitor.MaximumBytes())),
 		},
+		Output: d.Out.Stats(),
 	}
 }
 
