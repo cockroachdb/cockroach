@@ -1271,10 +1271,11 @@ type Instance struct {
 	// need to generate remaining filters (see Instance.Init()).
 	allFilters memo.FiltersExpr
 
-	constraint   constraint.Constraint
-	consolidated constraint.Constraint
-	tight        bool
-	initialized  bool
+	constraint             constraint.Constraint
+	consolidatedConstraint constraint.Constraint
+	tight                  bool
+	initialized            bool
+	consolidated           bool
 }
 
 // Init processes the filters and calculates the spans.
@@ -1290,6 +1291,7 @@ func (ic *Instance) Init(
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
 	isInverted bool,
+	consolidate bool,
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 ) {
@@ -1315,8 +1317,8 @@ func (ic *Instance) Init(
 	} else {
 		ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.allFilters, &ic.constraint)
 	}
-	// Note: we only consolidate spans at the end; consolidating partial results
-	// can lead to worse spans, for example:
+	// Note: If consolidate is true, we only consolidate spans at the
+	// end; consolidating partial results can lead to worse spans, for example:
 	//   a IN (1, 2) AND b = 4
 	//
 	// We want this to be:
@@ -1332,18 +1334,34 @@ func (ic *Instance) Init(
 	// The filter simplification code is able to simplify both expressions
 	// if we have the spans [/1/1 - /1/1], [/1/2 - /1/2] but not if
 	// we have [/1/1 - /1/2].
-	ic.consolidated = ic.constraint
-	ic.consolidated.ConsolidateSpans(evalCtx)
+	if consolidate {
+		ic.consolidatedConstraint = ic.constraint
+		ic.consolidatedConstraint.ConsolidateSpans(evalCtx)
+		ic.consolidated = true
+	}
 	ic.initialized = true
 }
 
-// Constraint returns the constraint created by Init. If Init wasn't called,
-// the result is nil.
+// Constraint returns the constraint created by Init. Panics if Init wasn't
+// called, or if a consolidated constraint was not built because
+// consolidate=false was passed as an argument to Init.
 func (ic *Instance) Constraint() *constraint.Constraint {
 	if !ic.initialized {
-		return nil
+		panic(errors.AssertionFailedf("Init was not called"))
 	}
-	return &ic.consolidated
+	if !ic.consolidated {
+		panic(errors.AssertionFailedf("Init was called with consolidate=false"))
+	}
+	return &ic.consolidatedConstraint
+}
+
+// UnconsolidatedConstraint returns the constraint created by Init before it was
+// consolidated. Panics if Init wasn't called.
+func (ic *Instance) UnconsolidatedConstraint() *constraint.Constraint {
+	if !ic.initialized {
+		panic(errors.AssertionFailedf("Init was not called"))
+	}
+	return &ic.constraint
 }
 
 // AllInvertedIndexConstraints returns all constraints that can be created on
