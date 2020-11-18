@@ -92,10 +92,10 @@ var requireConstFmt = map[string]bool{
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Infof":  true,
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Fatalf": true,
 
-	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.logger).Infof":    true,
-	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.logger).Warningf": true,
-	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.logger).Errorf":   true,
-	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.logger).Fatalf":   true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Infof":    true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Warningf": true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Errorf":   true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Fatalf":   true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Debugf":   true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Infof":    true,

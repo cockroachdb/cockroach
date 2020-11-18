@@ -452,6 +452,7 @@ func TestLint(t *testing.T) {
 					":!testutils/bazel.go",
 					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
+					":!util/grpcutil", // GRPC_GO_* variables
 				},
 			},
 		} {
