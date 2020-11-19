@@ -259,23 +259,32 @@ type LockTableKey struct {
 	TxnUUID []byte
 }
 
-// ToEngineKey converts a lock table key to an EngineKey.
-//
-// TODO(sumeer): if this function is needed for non-test code, change
-// it to use a buffer passed in by the caller, to avoid the allocation.
-func (lk LockTableKey) ToEngineKey() EngineKey {
+// ToEngineKey converts a lock table key to an EngineKey. buf is used as
+// scratch-space to avoid allocations -- its contents will be overwritten and
+// not appended to.
+func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
 	if len(lk.TxnUUID) != uuid.Size {
 		panic("invalid TxnUUID")
 	}
 	if lk.Strength != lock.Exclusive {
 		panic("unsupported lock strength")
 	}
-	ltKey, _ := keys.LockTableSingleKey(lk.Key, nil)
-	k := EngineKey{
-		Key:     ltKey,
-		Version: make([]byte, engineKeyVersionLockTableLen),
+	// The first term in estimatedLen is for LockTableSingleKey.
+	estimatedLen :=
+		(len(keys.LocalRangeLockTablePrefix) + len(keys.LockTableSingleKeyInfix) + len(lk.Key) + 3) +
+			engineKeyVersionLockTableLen
+	if len(buf) < estimatedLen {
+		buf = make([]byte, estimatedLen)
+	}
+	ltKey, buf := keys.LockTableSingleKey(lk.Key, buf)
+	k := EngineKey{Key: ltKey}
+	if cap(buf)-len(buf) >= engineKeyVersionLockTableLen {
+		k.Version = buf[len(buf) : len(buf)+engineKeyVersionLockTableLen]
+	} else {
+		// estimatedLen was an underestimate.
+		k.Version = make([]byte, engineKeyVersionLockTableLen)
 	}
 	k.Version[0] = byte(lk.Strength)
 	copy(k.Version[1:], lk.TxnUUID)
-	return k
+	return k, buf
 }
