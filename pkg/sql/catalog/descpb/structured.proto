@@ -1050,6 +1050,22 @@ message TableDescriptor {
   optional bool temporary = 39 [(gogoproto.nullable) = false];
 }
 
+// SurvivalGoal is the survival goal for a database.
+enum SurvivalGoal {
+  // Survive a zone failure. This is the default.
+  ZONE_FAILURE = 0;
+  // Survive a region failure.
+  REGION_FAILURE = 1;
+}
+
+// DatabaseRegionConfig stores region configuration for a given database.
+message DatabaseRegionConfig {
+  option (gogoproto.equal) = true;
+
+  repeated string regions = 1;
+  optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
+}
+
 // DatabaseDescriptor represents a namespace (aka database) and is stored
 // in a structured metadata key. The DatabaseDescriptor has a globally-unique ID
 // shared with other Descriptors.
@@ -1088,6 +1104,8 @@ message DatabaseDescriptor {
 
   optional DescriptorState state = 8 [(gogoproto.nullable) = false];
   optional string offline_reason = 9 [(gogoproto.nullable) = false];
+
+  optional DatabaseRegionConfig region_config = 10 [(gogoproto.nullable)=false];
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
