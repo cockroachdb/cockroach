@@ -480,6 +480,12 @@ func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
 	return s.w.ClearEngineKey(key)
 }
 
+func (s spanSetWriter) SingleClearEngineKey(key storage.EngineKey) error {
+	// Pass-through, since single clear is only used for the lock table, which
+	// is not in the spans.
+	return s.w.SingleClearEngineKey(key)
+}
+
 func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}); err != nil {
@@ -620,10 +626,6 @@ type spanSetBatch struct {
 }
 
 var _ storage.Batch = spanSetBatch{}
-
-func (s spanSetBatch) SingleClearEngineKey(key storage.EngineKey) error {
-	return s.b.SingleClearEngineKey(key)
-}
 
 func (s spanSetBatch) Commit(sync bool) error {
 	return s.b.Commit(sync)
