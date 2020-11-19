@@ -404,6 +404,9 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	return cfg
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (cfg *Config) SafeValue() {}
+
 // String implements the fmt.Stringer interface.
 func (cfg *Config) String() string {
 	var buf bytes.Buffer
@@ -432,7 +435,7 @@ func (cfg *Config) Report(ctx context.Context) {
 	} else {
 		log.Infof(ctx, "system total memory: %s", humanizeutil.IBytes(memSize))
 	}
-	log.Infof(ctx, "server configuration:\n%s", cfg)
+	log.Infof(ctx, "server configuration:\n%s", cfg.String())
 }
 
 // Engines is a container of engines, allowing convenient closing.
