@@ -779,7 +779,7 @@ type ExecutorConfig struct {
 	GCJobNotifier *gcjobnotifier.Notifier
 
 	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
-	// version` but before executing it. It can carry out arbitrary migrations
+	// version` but before executing it. It structuredcan carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
 	VersionUpgradeHook func(ctx context.Context, from, to clusterversion.ClusterVersion) error
 }
@@ -2244,6 +2244,11 @@ func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 // SetNoticeDisplaySeverity sets the NoticeDisplaySeverity for the given session.
 func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplaySeverity) {
 	m.data.NoticeDisplaySeverity = severity
+}
+
+// initSequenceCache
+func (m *sessionDataMutator) initSequenceCache() {
+	m.data.SequenceCache = sessiondata.SequenceCache{}
 }
 
 type sqlStatsCollector struct {

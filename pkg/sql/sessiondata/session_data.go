@@ -233,6 +233,9 @@ type LocalOnlySessionData struct {
 	// TODO(rytaft): remove this once unique without index constraints are fully
 	// supported.
 	EnableUniqueWithoutIndexConstraints bool
+	// SequenceCache stores sequence values which have been cached using the
+	// CACHE sequence option.
+	SequenceCache SequenceCache
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //
