@@ -107,16 +107,6 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
 	a.scratch.vec = vec._RET_TYPE()
-	a.Reset()
-}
-
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(

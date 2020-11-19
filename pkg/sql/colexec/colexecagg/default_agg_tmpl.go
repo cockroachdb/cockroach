@@ -63,16 +63,6 @@ func (a *default_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
 	a.vec = vec
-	a.Reset()
-}
-
-func (a *default_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	a.fn.Reset(a.ctx)
 }
 
 func (a *default_AGGKINDAgg) Compute(

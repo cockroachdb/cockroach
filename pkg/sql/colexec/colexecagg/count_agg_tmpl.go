@@ -57,16 +57,6 @@ func (a *count_COUNTKIND_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
 	a.vec = vec.Int64()
-	a.Reset()
-}
-
-func (a *count_COUNTKIND_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	a.curAgg = 0
 }
 
 func (a *count_COUNTKIND_AGGKINDAgg) Compute(

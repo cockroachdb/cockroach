@@ -41,13 +41,6 @@ var _ AggregateFunc = &boolAndHashAgg{}
 func (a *boolAndHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Bool()
-	a.Reset()
-}
-
-func (a *boolAndHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	// true indicates whether we are doing an AND aggregate or OR aggregate.
-	// For bool_and the true is true and for bool_or the true is false.
 	a.curAgg = true
 }
 
@@ -133,13 +126,6 @@ var _ AggregateFunc = &boolOrHashAgg{}
 func (a *boolOrHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Bool()
-	a.Reset()
-}
-
-func (a *boolOrHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	// false indicates whether we are doing an AND aggregate or OR aggregate.
-	// For bool_and the false is true and for bool_or the false is false.
 	a.curAgg = false
 }
 

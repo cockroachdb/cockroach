@@ -37,12 +37,6 @@ var _ AggregateFunc = &countRowsHashAgg{}
 func (a *countRowsHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Int64()
-	a.Reset()
-}
-
-func (a *countRowsHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.curAgg = 0
 }
 
 func (a *countRowsHashAgg) Compute(
@@ -104,12 +98,6 @@ var _ AggregateFunc = &countHashAgg{}
 func (a *countHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Int64()
-	a.Reset()
-}
-
-func (a *countHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.curAgg = 0
 }
 
 func (a *countHashAgg) Compute(

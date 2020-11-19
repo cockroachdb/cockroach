@@ -1029,16 +1029,6 @@ func benchmarkAggregateFunction(
 		&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 	)
 	require.NoError(b, err)
-	a, err := agg.new(
-		testAllocator, testMemAcc, source, typs, tc.spec, &evalCtx,
-		constructors, constArguments, outputTypes, false, /* isScalar */
-	)
-	if err != nil {
-		skip.IgnoreLint(b)
-	}
-	a.Init()
-
-	b.ResetTimer()
 
 	fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
 	// Only count the aggregation columns.
@@ -1074,13 +1064,24 @@ func benchmarkAggregateFunction(
 		fName, agg.name, inputTypesString, groupSize, distinctProbString, nullProb > 0, numInputBatches),
 		func(b *testing.B) {
 			b.SetBytes(int64(argumentsSize * nTuples))
+			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				a.(resetter).reset(ctx)
+				a, err := agg.new(
+					testAllocator, testMemAcc, source, typs, tc.spec, &evalCtx,
+					constructors, constArguments, outputTypes, false, /* isScalar */
+				)
+				if err != nil {
+					b.Fatal(err)
+				}
+				a.Init()
 				// Exhaust aggregator until all batches have been read.
 				for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 				}
+				if err = a.(colexecbase.Closer).Close(ctx); err != nil {
+					b.Fatal(err)
+				}
+				source.reset(ctx)
 			}
-			require.NoError(b, a.(colexecbase.Closer).Close(ctx))
 		},
 	)
 }
