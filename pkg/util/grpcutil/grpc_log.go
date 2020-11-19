@@ -20,13 +20,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"google.golang.org/grpc/grpclog"
 )
 
 func init() {
-	LowerSeverity(log.Severity_ERROR)
+	LowerSeverity(severity.ERROR)
 }
 
 // LowerSeverity ensures that the severity level below which GRPC
@@ -54,11 +55,11 @@ func getGRPCLogger(inputSeverity log.Severity, envSev, envVer string) *grpcLogge
 		var s log.Severity
 		switch e := strings.ToLower(envSev); e {
 		case "info":
-			s = log.Severity_INFO
+			s = severity.INFO
 		case "warning":
-			s = log.Severity_WARNING
+			s = severity.WARNING
 		case "error":
-			s = log.Severity_ERROR
+			s = severity.ERROR
 		case "":
 			s = inputSeverity
 		default:
@@ -132,28 +133,28 @@ func (l *grpcLogger) shouldLog(incomingSeverity log.Severity, depth int) bool {
 }
 
 func (l *grpcLogger) Info(args ...interface{}) {
-	if !l.shouldLog(log.Severity_INFO, depth2) {
+	if !l.shouldLog(severity.INFO, depth2) {
 		return
 	}
 	log.InfofDepth(context.TODO(), depth2, "", args...)
 }
 
 func (l *grpcLogger) Infoln(args ...interface{}) {
-	if !l.shouldLog(log.Severity_INFO, depth2) {
+	if !l.shouldLog(severity.INFO, depth2) {
 		return
 	}
 	log.InfofDepth(context.TODO(), depth2, "", args...)
 }
 
 func (l *grpcLogger) Infof(format string, args ...interface{}) {
-	if !l.shouldLog(log.Severity_INFO, depth2) {
+	if !l.shouldLog(severity.INFO, depth2) {
 		return
 	}
 	log.InfofDepth(context.TODO(), depth2, format, args...)
 }
 
 func (l *grpcLogger) Warning(args ...interface{}) {
-	if !l.shouldLog(log.Severity_WARNING, depth2) {
+	if !l.shouldLog(severity.WARNING, depth2) {
 		return
 	}
 	if !l.shouldPrintWarning(depth2, args...) {
@@ -163,35 +164,35 @@ func (l *grpcLogger) Warning(args ...interface{}) {
 }
 
 func (l *grpcLogger) Warningln(args ...interface{}) {
-	if !l.shouldLog(log.Severity_WARNING, depth2) {
+	if !l.shouldLog(severity.WARNING, depth2) {
 		return
 	}
 	log.WarningfDepth(context.TODO(), depth2, "", args...)
 }
 
 func (l *grpcLogger) Warningf(format string, args ...interface{}) {
-	if !l.shouldLog(log.Severity_WARNING, depth2) {
+	if !l.shouldLog(severity.WARNING, depth2) {
 		return
 	}
 	log.WarningfDepth(context.TODO(), depth2, format, args...)
 }
 
 func (l *grpcLogger) Error(args ...interface{}) {
-	if !l.shouldLog(log.Severity_ERROR, depth2) {
+	if !l.shouldLog(severity.ERROR, depth2) {
 		return
 	}
 	log.ErrorfDepth(context.TODO(), depth2, "", args...)
 }
 
 func (l *grpcLogger) Errorln(args ...interface{}) {
-	if !l.shouldLog(log.Severity_ERROR, depth2) {
+	if !l.shouldLog(severity.ERROR, depth2) {
 		return
 	}
 	log.ErrorfDepth(context.TODO(), depth2, "", args...)
 }
 
 func (l *grpcLogger) Errorf(format string, args ...interface{}) {
-	if !l.shouldLog(log.Severity_ERROR, depth2) {
+	if !l.shouldLog(severity.ERROR, depth2) {
 		return
 	}
 	log.ErrorfDepth(context.TODO(), depth2, format, args...)

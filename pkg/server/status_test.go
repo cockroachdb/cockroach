@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -735,7 +736,7 @@ func TestStatusLogRedaction(t *testing.T) {
 					func(t *testing.T) {
 						// checkEntries asserts that the redaction results are
 						// those expected in tc.
-						checkEntries := func(entries []log.Entry) {
+						checkEntries := func(entries []logpb.Entry) {
 							foundMessage := false
 							for _, entry := range entries {
 								if !strings.HasSuffix(entry.File, "status_test.go") {

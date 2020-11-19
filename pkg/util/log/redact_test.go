@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -35,7 +36,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
+	defer capture()()
 
 	defer TestingSetRedactable(false)()
 
@@ -48,14 +49,15 @@ func TestRedactedLogOutput(t *testing.T) {
 	}
 	// Also verify that raw markers are preserved, when redactable
 	// markers are disabled.
-	mainLog.newBuffers()
+	resetCaptured()
+
 	Errorf(context.Background(), "test2 %v end", startRedactable+"hello"+endRedactable)
-	if !contains("test2 "+startRedactable+"hello"+endRedactable+" end", t) {
-		t.Errorf("expected unquoted markers, got %q", contents())
+	if !contains("test2 ?hello? end", t) {
+		t.Errorf("expected escaped markers, got %q", contents())
 	}
 
-	mainLog.newBuffers()
-	mainLog.redactableLogs.Set(true)
+	resetCaptured()
+	_ = TestingSetRedactable(true)
 	Errorf(context.Background(), "test3 %v end", "hello")
 	if !contains(redactableIndicator+" test3", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
@@ -65,7 +67,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	}
 
 	// Verify that safe parts of errors don't get enclosed in redaction markers
-	mainLog.newBuffers()
+	resetCaptured()
 	Errorf(context.Background(), "test3e %v end",
 		errors.AssertionFailedf("hello %v",
 			errors.Newf("error-in-error %s", "world")))
@@ -77,7 +79,8 @@ func TestRedactedLogOutput(t *testing.T) {
 	}
 
 	// When redactable logs are enabled, the markers are always quoted.
-	mainLog.newBuffers()
+	resetCaptured()
+
 	const specialString = "x" + startRedactable + "hello" + endRedactable + "y"
 	Errorf(context.Background(), "test4 %v end", specialString)
 	if contains(specialString, t) {
@@ -116,35 +119,31 @@ func TestRedactTags(t *testing.T) {
 
 	for _, tc := range testData {
 		var buf strings.Builder
-		redactTags(tc.ctx, &buf)
+		renderTagsAsRedactable(tc.ctx, &buf)
 		assert.Equal(t, tc.expected, buf.String())
 	}
 }
 
 func TestRedactedDecodeFile(t *testing.T) {
 	testData := []struct {
-		redactableLogs bool
-		redactMode     EditSensitiveData
-		expRedactable  bool
-		expMessage     string
+		redactMode    EditSensitiveData
+		expRedactable bool
+		expMessage    string
 	}{
-		{false, WithMarkedSensitiveData, true, "‹marker: this is safe, stray marks ??, this is not safe›"},
-		{false, WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ‹›, this is not safe"},
-		{false, WithoutSensitiveData, true, "‹×›"},
-		{true, WithMarkedSensitiveData, true, "marker: this is safe, stray marks ??, ‹this is not safe›"},
-		{true, WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ??, this is not safe"},
-		{true, WithoutSensitiveData, true, "marker: this is safe, stray marks ??, ‹×›"},
+		{WithMarkedSensitiveData, true, "marker: this is safe, stray marks ??, ‹this is not safe›"},
+		{WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ??, this is not safe"},
+		{WithoutSensitiveData, true, "marker: this is safe, stray marks ??, ‹×›"},
 	}
 
 	for _, tc := range testData {
 		// Use a closure to force scope boundaries.
-		t.Run(fmt.Sprintf("%v/%v", tc.redactableLogs, tc.redactMode), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%v", tc.redactMode), func(t *testing.T) {
 			// Initialize the logging system for this test.
 			// The log file go to a different directory in each sub-test.
 			s := ScopeWithoutShowLogs(t)
 			defer s.Close(t)
 			setFlags()
-			defer TestingSetRedactable(tc.redactableLogs)()
+			defer TestingSetRedactable(true)()
 
 			// Force file re-initialization.
 			s.Rotate(t)
@@ -153,7 +152,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 			Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
 
 			// Retrieve the log writer and log location for this test.
-			info, ok := mainLog.mu.file.(*syncBuffer)
+			info, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
 			if !ok {
 				t.Fatalf("buffer wasn't created")
 			}
@@ -173,7 +172,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 
 			// Now verify we have what we want in the file.
 			foundMessage := false
-			var entry Entry
+			var entry logpb.Entry
 			for {
 				if err := decoder.Decode(&entry); err != nil {
 					if err == io.EOF {

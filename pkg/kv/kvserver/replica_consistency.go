@@ -15,10 +15,8 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
-	"math"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -294,15 +292,13 @@ func (r *Replica) CheckConsistency(
 		log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", tmp)
 	}
 
-	// We've noticed in practice that if the snapshot diff is large, the log
-	// file in it is promptly rotated away, so up the limits while the diff
-	// printing occurs.
+	// We've noticed in practice that if the snapshot diff is large, the
+	// log file to which it is printed is promptly rotated away, so up
+	// the limits while the diff printing occurs.
 	//
 	// See:
 	// https://github.com/cockroachdb/cockroach/issues/36861
-	oldLogLimit := atomic.LoadInt64(&log.LogFilesCombinedMaxSize)
-	atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, oldLogLimit, math.MaxInt64)
-	defer atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
+	defer log.TemporarilyDisableFileGCForMainLogger()()
 
 	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
 		log.Errorf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)

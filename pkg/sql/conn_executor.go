@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -776,7 +777,7 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 		// on it.
 		if ex.curStmtAST != nil {
 			// A warning header guaranteed to go to stderr.
-			log.Shoutf(ctx, log.Severity_ERROR,
+			log.Shoutf(ctx, severity.ERROR,
 				"a SQL panic has occurred while executing the following statement:\n%s",
 				// For the log message, the statement is not anonymized.
 				truncateStatementStringForTelemetry(ex.curStmtAST.String()))

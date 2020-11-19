@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 )
 
@@ -260,7 +261,7 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 	// with the provided certificate.
 	certInfo := cm.NodeCert()
 	if certInfo.Error != nil {
-		log.Shoutf(cctx, log.Severity_ERROR,
+		log.Shoutf(cctx, severity.ERROR,
 			"invalid node certificate: %v", certInfo.Error)
 	} else {
 		cert := certInfo.ParsedCertificates[0]
@@ -287,7 +288,7 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 			fmt.Fprintf(&msg, "advertise SQL address %q not in node certificate (%s)\n", host, addrInfo)
 		}
 		if msg.Len() > 0 {
-			log.Shoutf(cctx, log.Severity_WARNING,
+			log.Shoutf(cctx, severity.WARNING,
 				"%s"+
 					"Secure client connections are likely to fail.\n"+
 					"Consider extending the node certificate or tweak --listen-addr/--advertise-addr/--sql-addr/--advertise-sql-addr.",
@@ -308,7 +309,7 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 		certInfo = cm.NodeCert()
 	}
 	if certInfo.Error != nil {
-		log.Shoutf(cctx, log.Severity_ERROR,
+		log.Shoutf(cctx, severity.ERROR,
 			"invalid UI certificate: %v", certInfo.Error)
 	} else {
 		cert := certInfo.ParsedCertificates[0]

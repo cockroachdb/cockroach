@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/sentry-go"
@@ -135,7 +136,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 	// sure, whether some other caller further in the call stack is
 	// catching the panic object in the end or not.
 	panicErr := PanicAsError(depth+1, r)
-	Shoutf(ctx, Severity_ERROR, "a panic has occurred!\n%+v", panicErr)
+	Shoutf(ctx, severity.ERROR, "a panic has occurred!\n%+v", panicErr)
 
 	// In addition to informing the user, also report the details to telemetry.
 	sendCrashReport(ctx, sv, panicErr, ReportTypePanic)
@@ -318,10 +319,10 @@ func SendReport(
 
 	res := sentry.CaptureEvent(event)
 	if res != nil {
-		Shoutf(ctx, Severity_ERROR, "Queued as error %v", string(*res))
+		Shoutf(ctx, severity.ERROR, "Queued as error %v", string(*res))
 	}
 	if !sentry.Flush(10 * time.Second) {
-		Shout(ctx, Severity_ERROR, "Timeout trying to submit crash report")
+		Shout(ctx, severity.ERROR, "Timeout trying to submit crash report")
 	}
 }
 

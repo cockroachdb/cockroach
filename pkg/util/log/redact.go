@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/encodingtype"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -90,6 +91,28 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 	}
 }
 
+// maybeRedactEntry transforms a logpb.Entry to either strip
+// sensitive data or keep it, or strip the redaction markers or keep them,
+// or a combination of both. The specific behavior is selected
+// by the provided redactEditor.
+func maybeRedactEntry(entry logpb.Entry, editor redactEditor) logpb.Entry {
+	r := redactablePackage{
+		redactable: entry.Redactable,
+		msg:        []byte(entry.Message),
+	}
+	r = editor(r)
+	entry.Message = string(r.msg)
+	entry.Redactable = r.redactable
+
+	r = redactablePackage{
+		redactable: entry.Redactable,
+		msg:        []byte(entry.Tags),
+	}
+	r = editor(r)
+	entry.Tags = string(r.msg)
+	return entry
+}
+
 // Safe constructs a SafeFormatter / SafeMessager.
 // This is obsolete. Use redact.Safe directly.
 // TODO(knz): Remove this.
@@ -131,7 +154,7 @@ const redactableIndicator = "⋮"
 
 var redactableIndicatorBytes = []byte(redactableIndicator)
 
-func redactTags(ctx context.Context, buf *strings.Builder) {
+func renderTagsAsRedactable(ctx context.Context, buf *strings.Builder) {
 	tags := logtags.FromContext(ctx)
 	if tags == nil {
 		return
@@ -150,17 +173,26 @@ func redactTags(ctx context.Context, buf *strings.Builder) {
 	}
 }
 
-// TestingSetRedactable sets the redactable flag for usage in a test.
-// The caller is responsible for calling the cleanup function.  This
-// is exported for use in tests only -- it causes the logging
-// configuration to be at risk of leaking unsafe information due to
-// asynchronous direct writes to fd 2 / os.Stderr.
+// TestingSetRedactable sets the redactable flag on the file output of
+// the debug logger for usage in a test. The caller is responsible
+// for calling the cleanup function. This is exported for use in
+// tests only -- it causes the logging configuration to be at risk of
+// leaking unsafe information due to asynchronous direct writes to fd
+// 2 / os.Stderr.
 //
 // See the discussion on SetupRedactionAndStderrRedirects() for
 // details.
+//
+// This is not safe for concurrent use with logging operations.
 func TestingSetRedactable(redactableLogs bool) (cleanup func()) {
-	prev := mainLog.redactableLogs.Swap(redactableLogs)
+	prevEditors := make([]redactEditor, len(debugLog.sinkInfos))
+	for i := range debugLog.sinkInfos {
+		prevEditors[i] = debugLog.sinkInfos[i].editor
+		debugLog.sinkInfos[i].editor = getEditor(SelectEditMode(false /* redact */, redactableLogs))
+	}
 	return func() {
-		mainLog.redactableLogs.Set(prev)
+		for i, e := range prevEditors {
+			debugLog.sinkInfos[i].editor = e
+		}
 	}
 }

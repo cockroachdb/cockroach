@@ -31,7 +31,7 @@ go_library(
         "//pkg/ts/catalog",
         "//pkg/util",
         "//pkg/util/errorutil",
-        "//pkg/util/log",
+        "//pkg/util/log/logpb",
         "//pkg/util/metric",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",

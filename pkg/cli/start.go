@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -351,7 +352,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
-	grpcutil.LowerSeverity(log.Severity_WARNING)
+	grpcutil.LowerSeverity(severity.WARNING)
 
 	// Check the --join flag.
 	if !flagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
@@ -449,7 +450,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 		}
 
 		if waitForInit {
-			log.Shout(ctx, log.Severity_INFO,
+			log.Shout(ctx, severity.INFO,
 				"initial startup completed\n"+
 					"Node will now attempt to join a running cluster, or wait for `cockroach init`.\n"+
 					"Client connections will be accepted after this completes successfully.\n"+
@@ -480,7 +481,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 If problems persist, please see %s.`
 		docLink := docs.URL("cluster-setup-troubleshooting.html")
 		if !startCtx.inBackground {
-			log.Shoutf(context.Background(), log.Severity_WARNING, msg, docLink)
+			log.Shoutf(context.Background(), severity.WARNING, msg, docLink)
 		} else {
 			// Don't shout to stderr since the server will have detached by
 			// the time this function gets called.
@@ -669,7 +670,7 @@ If problems persist, please see %s.`
 			}
 			msgS := msg.ToString()
 			log.Infof(ctx, "node startup completed:\n%s", msgS)
-			if !startCtx.inBackground && !log.LoggingToStderr(log.Severity_INFO) {
+			if !startCtx.inBackground && !log.LoggingToStderr(severity.INFO) {
 				fmt.Print(msgS.StripMarkers())
 			}
 
@@ -699,15 +700,15 @@ If problems persist, please see %s.`
 	select {
 	case err := <-errChan:
 		// SetSync both flushes and ensures that subsequent log writes are flushed too.
-		log.SetSync(true)
+		log.StartSync()
 		return err
 
 	case <-stopper.ShouldStop():
 		// Server is being stopped externally and our job is finished
 		// here since we don't know if it's a graceful shutdown or not.
 		<-stopper.IsStopped()
-		// SetSync both flushes and ensures that subsequent log writes are flushed too.
-		log.SetSync(true)
+		// StartSync both flushes and ensures that subsequent log writes are flushed too.
+		log.StartSync()
 		return nil
 
 	case sig := <-signalCh:
@@ -715,7 +716,7 @@ If problems persist, please see %s.`
 		// signal was received there is a non-zero chance the sender of
 		// this signal will follow up with SIGKILL if the shutdown is not
 		// timely, and we don't want logs to be lost.
-		log.SetSync(true)
+		log.StartSync()
 
 		log.Infof(shutdownCtx, "received signal '%s'", sig)
 
@@ -728,7 +729,7 @@ If problems persist, please see %s.`
 			returnErr = &cliError{
 				exitCode: exit.Interrupted(),
 				// INFO because a single interrupt is rather innocuous.
-				severity: log.Severity_INFO,
+				severity: severity.INFO,
 				cause:    errors.New("interrupted"),
 			}
 			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
@@ -846,7 +847,7 @@ If problems persist, please see %s.`
 
 			// This new signal is not welcome, as it interferes with the graceful
 			// shutdown process.
-			log.Shoutf(shutdownCtx, log.Severity_ERROR,
+			log.Shoutf(shutdownCtx, severity.ERROR,
 				"received signal '%s' during shutdown, initiating hard shutdown%s",
 				log.Safe(sig), log.Safe(hardShutdownHint))
 			handleSignalDuringShutdown(sig)
@@ -892,7 +893,7 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 
 	if !listenAddrSpecified && !advAddrSpecified {
 		host, _, _ := net.SplitHostPort(serverCfg.AdvertiseAddr)
-		log.Shoutf(ctx, log.Severity_WARNING,
+		log.Shoutf(ctx, severity.WARNING,
 			"neither --listen-addr nor --advertise-addr was specified.\n"+
 				"The server will advertise %q to other nodes, is this routable?\n\n"+
 				"Consider using:\n"+
@@ -947,7 +948,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		requestedMem := serverCfg.CacheSize + serverCfg.MemoryPoolSize
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
-			log.Shoutf(ctx, log.Severity_WARNING,
+			log.Shoutf(ctx, severity.WARNING,
 				"the sum of --max-sql-memory (%s) and --cache (%s) is larger than 75%% of total RAM (%s).\nThis server is running at increased risk of memory-related failures.",
 				sqlSizeValue, cacheSizeValue, humanizeutil.IBytes(maxRecommendedMem))
 		}
@@ -1002,7 +1003,7 @@ func setupAndInitializeLoggingAndProfiling(
 		if !ls.Changed {
 			// Unless the settings were overridden by the user, silence
 			// logging to stderr because the messages will go to a log file.
-			if err := ls.Value.Set(log.Severity_NONE.String()); err != nil {
+			if err := ls.Value.Set(severity.NONE.String()); err != nil {
 				return nil, err
 			}
 		}
@@ -1033,11 +1034,18 @@ func setupAndInitializeLoggingAndProfiling(
 			}
 		}
 
-		// Start the log file GC daemon to remove files that make the log
-		// directory too large.
-		log.StartGCDaemon(ctx)
-
 		defer func() {
+			// Start the log file GC daemon to remove files that make the log
+			// directory too large.
+			//
+			// Note that as per the comment on this function, this must be
+			// called after command-line parsing has completed and the
+			// configuration was effected, so that no data is lost when the user
+			// configures larger max sizes than the defaults.
+			// This is why we defer this call here, to ensure it only occurs
+			// after SetupRedactionAndStderrRedirects() has been called.
+			log.StartGCDaemon(ctx)
+
 			if stopper != nil {
 				// When the function complete successfully, start the loggers
 				// for the storage engines. We need to do this at the end
@@ -1074,7 +1082,7 @@ func setupAndInitializeLoggingAndProfiling(
 	if ambiguousLogDirs {
 		// Note that we can't report this message earlier, because the log directory
 		// may not have been ready before the call to MkdirAll() above.
-		log.Shout(ctx, log.Severity_WARNING, "multiple stores configured"+
+		log.Shout(ctx, severity.WARNING, "multiple stores configured"+
 			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
 	}
 
@@ -1094,7 +1102,7 @@ func setupAndInitializeLoggingAndProfiling(
 		if addr == "" {
 			addr = "any of your IP addresses"
 		}
-		log.Shoutf(context.Background(), log.Severity_WARNING,
+		log.Shoutf(context.Background(), severity.WARNING,
 			"ALL SECURITY CONTROLS HAVE BEEN DISABLED!\n\n"+
 				"This mode is intended for non-production testing only.\n"+
 				"\n"+
@@ -1104,7 +1112,7 @@ func setupAndInitializeLoggingAndProfiling(
 				"- Intruders can log in without password and read or write any data in the cluster.\n"+
 				"- Intruders can consume all your server's resources and cause unavailability.",
 			addr)
-		log.Shoutf(context.Background(), log.Severity_INFO,
+		log.Shoutf(context.Background(), severity.INFO,
 			"To start a secure server without mandating TLS for clients,\n"+
 				"consider --accept-sql-without-tls instead. For other options, see:\n\n"+
 				"- %s\n"+

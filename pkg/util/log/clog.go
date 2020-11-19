@@ -15,14 +15,16 @@ package log
 
 import (
 	"context"
-	"fmt"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -33,11 +35,12 @@ var logging loggingT
 //
 // TODO(knz): better separate global state and per-logger state.
 type loggingT struct {
-	// the --no-color flag.
-	noColor bool
+	config
 
-	// pool for entry formatting buffers.
+	// allocation pool for entry formatting buffers.
 	bufPool sync.Pool
+	// allocation pool for slices of buffer pointers.
+	bufSlicePool sync.Pool
 
 	// interceptor is the configured InterceptorFn callback, if any.
 	interceptor atomic.Value
@@ -45,6 +48,9 @@ type loggingT struct {
 	// vmoduleConfig maintains the configuration for the log.V and vmodule
 	// facilities.
 	vmoduleConfig vmoduleConfig
+
+	// The common stderr sink.
+	stderrSink stderrSink
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
@@ -76,31 +82,29 @@ type loggingT struct {
 	}
 }
 
+func init() {
+	logging.bufPool.New = newBuffer
+	logging.bufSlicePool.New = newBufferSlice
+	logging.mu.fatalCh = make(chan struct{})
+}
+
+type sinkInfo struct {
+	// sink is where the log entries should be written.
+	sink logSink
+
+	// editor is the optional step that occurs prior to emitting the log
+	// entry.
+	editor redactEditor
+
+	// criticality indicates whether a failure to output some log
+	// entries should incur the process to terminate.
+	criticality bool
+}
+
+// loggerT represents the logging source for a given log channel.
 type loggerT struct {
-	// Directory prefix where to store this logger's files.
-	logDir DirName
-
-	// Name prefix for log files.
-	prefix string
-
-	// Level beyond which entries submitted to this logger are written
-	// to the output file. This acts as a filter between the log entry
-	// producers and the file sink.
-	fileThreshold Severity
-
-	// Level beyond which entries submitted to this logger are written
-	// to the process' external standard error stream (OrigStderr).
-	// This acts as a filter between the log entry producers and the
-	// stderr sink.
-	stderrThreshold Severity
-
-	// whether or not to include redaction markers.
-	// This is atomic because tests using TestLogScope might
-	// override this asynchronously with log calls.
-	redactableLogs syncutil.AtomicBool
-
-	// notify GC daemon that a new log file was created
-	gcNotify chan struct{}
+	// sinkInfos stores the destinations for log entries.
+	sinkInfos []sinkInfo
 
 	// logCounter supports the generation of a per-entry log entry
 	// counter. This is needed in audit logs to hinder malicious
@@ -108,40 +112,19 @@ type loggerT struct {
 	// entries.
 	logCounter EntryCounter
 
-	// mu protects the remaining elements of this structure and is
-	// used to synchronize logging.
-	mu struct {
-		syncutil.Mutex
+	// outputMu is used to coordinate output to the sinks, to guarantee
+	// that the ordering of events the the same on all sinks.
+	outputMu syncutil.Mutex
+}
 
-		// file holds the log file writer.
-		file flushSyncWriter
-
-		// syncWrites if true calls file.Flush and file.Sync on every log write.
-		syncWrites bool
-
-		// redirectInternalStderrWrites, when set, causes this logger to
-		// capture writes to system-wide file descriptor 2 (the standard
-		// error stream) and os.Stderr and redirect them to this logger's
-		// output file.
-		// This is managed by the takeOverInternalStderr() method.
-		//
-		// Note that this mechanism redirects file descriptor 2, and does
-		// not only assign a different *os.File reference to
-		// os.Stderr. This is because the Go runtime hardcodes stderr writes
-		// as writes to file descriptor 2 and disregards the value of
-		// os.Stderr entirely.
-		//
-		// There can be at most one logger with this boolean set. This
-		// constraint is enforced by takeOverInternalStderr().
-		redirectInternalStderrWrites bool
-
-		// currentlyOwnsInternalStderr determines whether a logger
-		// _currently_ has taken over fd 2. This may be false while
-		// redirectInternalStderrWrites above is true, when the logger has
-		// not yet opened its output file, or is in the process of
-		// switching over from one directory to the next.
-		currentlyOwnsInternalStderr bool
+// getFileSink retrieves the file sink if defined.
+func (l *loggerT) getFileSink() *fileSink {
+	for _, s := range l.sinkInfos {
+		if fs, ok := s.sink.(*fileSink); ok {
+			return fs
+		}
 	}
+	return nil
 }
 
 // EntryCounter supports the generation of a per-entry log entry
@@ -154,22 +137,6 @@ type EntryCounter struct {
 	EnableMsgCount bool
 	// msgCount is the current value of the counter.
 	msgCount uint64
-}
-
-func init() {
-	logging.bufPool.New = newBuffer
-	logging.mu.fatalCh = make(chan struct{})
-	mainLog.prefix = program
-	// Default stderrThreshold and fileThreshold to log everything
-	// both to the output file and to the process' external stderr
-	// (OrigStderr).
-	// This will be the default in tests unless overridden; the CLI
-	// commands set their default separately in cli/flags.go.
-	mainLog.stderrThreshold = Severity_INFO
-	mainLog.fileThreshold = Severity_INFO
-	// Don't capture stderr output until
-	// SetupRedactionAndStderrRedirects() has been called.
-	mainLog.mu.redirectInternalStderrWrites = false
 }
 
 // FatalChan is closed when Fatal is called. This can be used to make
@@ -203,7 +170,7 @@ func SetClusterID(clusterID string) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	addStructured(ctx, Severity_INFO, 1, "clusterID: %s", []interface{}{clusterID})
+	addStructured(ctx, severity.INFO, 1, "clusterID: %s", []interface{}{clusterID})
 
 	// Perform the change proper.
 	logging.mu.Lock()
@@ -219,21 +186,21 @@ func SetClusterID(clusterID string) {
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggerT) outputLogEntry(entry Entry) {
+func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
 		f(entry)
 		return
 	}
-
-	// TODO(tschottdorf): this is a pretty horrible critical section.
-	l.mu.Lock()
 
 	// Mark the logger as active, so that further configuration changes
 	// are disabled. See IsActive() and its callers for details.
 	setActive()
 	var stacks []byte
 	var fatalTrigger chan struct{}
-	if entry.Severity == Severity_FATAL {
+	extraSync := false
+
+	if entry.Severity == severity.FATAL {
+		extraSync = true
 		logging.signalFatalCh()
 
 		switch traceback {
@@ -243,12 +210,8 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 			stacks = getStacks(true)
 		}
 
-		// Since the Fatal output will be copied to stderr below, it may
-		// show up to a (human) observer through a different channel than
-		// a file in the log directory. So remind them where to look for
-		// more.
-		if logDir := l.logDir.String(); logDir != "" {
-			stacks = append(stacks, []byte(fmt.Sprintf("\nFor more context, check log files in: %s\n", l.logDir.String()))...)
+		for _, s := range l.sinkInfos {
+			stacks = s.sink.attachHints(stacks)
 		}
 
 		// Explain to the (human) user that we would like to hear from them.
@@ -293,50 +256,77 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 		}()
 	}
 
-	if entry.Severity >= l.stderrThreshold.get() {
-		if err := l.outputToStderr(entry, stacks); err != nil {
-			// The external stderr log is unavailable.  However, stderr was
-			// chosen by the stderrThreshold configuration, so abandoning
-			// the stderr write would be a contract violation.
+	// The following buffers contain the formatted entry before it enters the sink.
+	// We need different buffers because the different sinks use different formats.
+	// For example, the fluent sink needs JSON, and the file sink does not use
+	// the terminal escape codes that the stderr sink uses.
+	bufs := getBufferSlice(len(l.sinkInfos))
+	defer putBufferSlice(bufs)
+
+	// The following code constructs / populates the formatted entries
+	// for each sink.
+	// We only do the work if the sink is active and the filtering does
+	// not eliminate the event.
+	someSinkActive := false
+	for i, s := range l.sinkInfos {
+		if s.sink.activeAtSeverity(entry.Severity) {
+			editedEntry := maybeRedactEntry(entry, s.editor)
+			bufs.b[i] = s.sink.getFormatter().formatEntry(editedEntry, stacks)
+			someSinkActive = true
+		}
+	}
+
+	// If any of the sinks is active, it is now time to send it out.
+
+	if someSinkActive {
+		// The critical section here exists so that the output
+		// side effects from the same event (above) are emitted
+		// atomically. This ensures that the order of logging
+		// events is preserved across all sinks.
+		l.outputMu.Lock()
+		defer l.outputMu.Unlock()
+
+		var outputErr error
+		var outputErrExitCode exit.Code
+		for i, s := range l.sinkInfos {
+			if bufs.b[i] == nil {
+				// The sink was not accepting entries at this level. Nothing to do.
+				continue
+			}
+			if err := s.sink.output(extraSync, bufs.b[i].Bytes()); err != nil {
+				if !s.criticality {
+					// An error on this sink is not critical. Just report
+					// the error and move on.
+					l.reportErrorEverywhereLocked(context.Background(), err)
+				} else {
+					// This error is critical. We'll have to terminate the
+					// process below.
+					if outputErr == nil {
+						outputErrExitCode = s.sink.exitCode()
+					}
+					outputErr = errors.CombineErrors(outputErr, err)
+				}
+			}
+		}
+		if outputErr != nil {
+			// Some sink was unavailable. However, the sink was active as
+			// per the threshold, so abandoning the write would be a
+			// contract violation.
 			//
 			// We definitely do not like to lose log entries, so we stop
-			// here. Note that exitLocked() shouts the error to both stderr
-			// and the log file, so even though stderr is not available any
-			// more, we'll keep a trace of the error in the file.
-			l.exitLocked(err, exit.LoggingStderrUnavailable())
-			l.mu.Unlock() // unreachable except in tests
-			return        // unreachable except in tests
+			// here. Note that exitLocked() shouts the error to all sinks,
+			// so even though this sink is not available any more, we'll
+			// keep a trace of the error in another sink.
+			l.exitLocked(outputErr, outputErrExitCode)
+			return // unreachable except in tests
 		}
 	}
-	if l.logDir.IsSet() && entry.Severity >= l.fileThreshold.get() {
-		if err := l.ensureFileLocked(); err != nil {
-			// We definitely do not like to lose log entries, so we stop
-			// here. Note that exitLocked() shouts the error to both stderr
-			// and the log file, so even though the file is not available
-			// any more, we'll likely keep a trace of the error in stderr.
-			l.exitLocked(err, exit.LoggingFileUnavailable())
-			l.mu.Unlock() // unreachable except in tests
-			return        // unreachable except in tests
-		}
 
-		buf := logging.processForFile(entry, stacks)
-		data := buf.Bytes()
-
-		if err := l.writeToFileLocked(data); err != nil {
-			l.exitLocked(err, exit.LoggingFileUnavailable())
-			l.mu.Unlock()  // unreachable except in tests
-			putBuffer(buf) // unreachable except in tests
-			return         // unreachable except in tests
-		}
-
-		putBuffer(buf)
-	}
 	// Flush and exit on fatal logging.
-	if entry.Severity == Severity_FATAL {
-		l.flushAndSyncLocked(true /*doSync*/)
+	if entry.Severity == severity.FATAL {
 		close(fatalTrigger)
 		// Note: although it seems like the function is allowed to return
-		// below when s == Severity_FATAL, this is not so, because the
+		// below when s == severity.FATAL, this is not so, because the
 		// anonymous function func() { <-exitCalled } is deferred
 		// above. That function ensures that outputLogEntry() will wait
 		// until the exit function has been called. If the exit function
@@ -345,7 +335,6 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 		// overridden, then the client that has overridden the exit
 		// function is expecting log.Fatal to return and all is well too.
 	}
-	l.mu.Unlock()
 }
 
 // DumpStacks produces a dump of the stack traces in the logging output.
@@ -362,15 +351,6 @@ func setActive() {
 		logging.mu.active = true
 		logging.mu.firstUseStack = string(debug.Stack())
 	}
-}
-
-// outputToStderr writes the provided entry and potential stack
-// trace(s) to the process' external stderr stream.
-func (l *loggerT) outputToStderr(entry Entry, stacks []byte) error {
-	buf := logging.processForStderr(entry, stacks)
-	_, err := OrigStderr.Write(buf.Bytes())
-	putBuffer(buf)
-	return err
 }
 
 const fatalErrorPostamble = `

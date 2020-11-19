@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +31,7 @@ func TestShouldPrint(t *testing.T) {
 			msg = filteredWarningExampleMsg
 		}
 
-		l := getGRPCLogger(log.Severity_WARNING, "", "")
+		l := getGRPCLogger(severity.WARNING, "", "")
 
 		args := []interface{}{msg}
 		curriedShouldPrint := func() bool {
@@ -71,28 +71,28 @@ func TestShouldPrint(t *testing.T) {
 func TestGRPCLogger(t *testing.T) {
 	{
 		// If input < env var severity, use input.
-		l := getGRPCLogger(log.Severity_INFO, "warning", "")
-		require.Equal(t, l.sev, log.Severity_INFO)
+		l := getGRPCLogger(severity.INFO, "warning", "")
+		require.Equal(t, l.sev, severity.INFO)
 	}
 
 	{
 		// If env var smaller than info, use env var.
-		l := getGRPCLogger(log.Severity_ERROR, "info", "")
-		require.Equal(t, l.sev, log.Severity_INFO)
+		l := getGRPCLogger(severity.ERROR, "info", "")
+		require.Equal(t, l.sev, severity.INFO)
 	}
 
 	{
 		// When threshold is ERROR, should not log WARNING or below.
-		l := getGRPCLogger(log.Severity_ERROR, "", "")
-		require.False(t, l.shouldLog(log.Severity_WARNING, 1 /* depth */))
-		require.False(t, l.shouldLog(log.Severity_INFO, 1 /* depth */))
-		require.True(t, l.shouldLog(log.Severity_ERROR, 1 /* depth */))
+		l := getGRPCLogger(severity.ERROR, "", "")
+		require.False(t, l.shouldLog(severity.WARNING, 1 /* depth */))
+		require.False(t, l.shouldLog(severity.INFO, 1 /* depth */))
+		require.True(t, l.shouldLog(severity.ERROR, 1 /* depth */))
 	}
 
 	{
 		// When threshold is warning, some warnings are stripped because
 		// we consider them too noisy.
-		l := getGRPCLogger(log.Severity_ERROR, "warning", "")
+		l := getGRPCLogger(severity.ERROR, "warning", "")
 		require.True(t, l.shouldPrintWarning(
 			0 /* depth */, "i", "am", "harmless"),
 		)
@@ -113,12 +113,12 @@ func TestGRPCLogger(t *testing.T) {
 		// not zero.
 		//
 		// Also, we don't filter any warnings.
-		l := getGRPCLogger(log.Severity_ERROR, "", "1000")
+		l := getGRPCLogger(severity.ERROR, "", "1000")
 		require.Equal(t, l.grpcVerbosityLevel, 1000)
 		require.True(t, l.V(1000))
-		require.True(t, l.shouldLog(log.Severity_INFO, 1 /* depth */))
-		require.True(t, l.shouldLog(log.Severity_WARNING, 1 /* depth */))
-		require.True(t, l.shouldLog(log.Severity_ERROR, 1 /* depth */))
+		require.True(t, l.shouldLog(severity.INFO, 1 /* depth */))
+		require.True(t, l.shouldLog(severity.WARNING, 1 /* depth */))
+		require.True(t, l.shouldLog(severity.ERROR, 1 /* depth */))
 		for i := 0; i < 1000; i++ {
 			// The throttling here is stateful (rate limit based)
 			// so we hit it a few times. It should want to log every
