@@ -5614,3 +5614,34 @@ MULTILINESTRING ((0 0, 1 1), (1 1, 2.5 2.5), (1 3, 2.5 2.5), (2.5 2.5, 4 4), (4 
 
 statement error geometry type is unsupported. Please pass a LineString or a MultiLineString
 SELECT ST_AsText(ST_Node(ST_GeomFromText('POLYGON((1 1, 1 3, 3 3, 3 1, 1 1))')));
+
+
+query T
+SELECT
+ST_AsEWKT(
+  ST_SubDivide('SRID=4326;POLYGON((132 10,119 23,85 35,68 29,66 28,49 42,32 56,22 64,32 110,40 119,36 150,
+                          57 158,75 171,92 182,114 184,132 186,146 178,176 184,179 162,184 141,190 122,
+                          190 100,185 79,186 56,186 52,178 34,168 18,147 13,132 10))'::geometry,10)
+)
+----
+SRID=4326;POLYGON ((119 23, 85 35, 68 29, 66 28, 32 56, 22 64, 29.826086956521738 100, 119 100, 119 23))
+SRID=4326;POLYGON ((132 10, 119 23, 119 56, 186 56, 186 52, 178 34, 168 18, 147 13, 132 10))
+SRID=4326;POLYGON ((119 56, 119 100, 190 100, 185 79, 186 56, 119 56))
+SRID=4326;POLYGON ((29.826086956521738 100, 32 110, 40 119, 36 150, 57 158, 75 171, 92 182, 114 184, 114 100, 29.826086956521738 100))
+SRID=4326;POLYGON ((114 184, 132 186, 146 178, 176 184, 179 162, 184 141, 190 122, 190 100, 114 100, 114 184))
+
+query T
+SELECT ST_AsText(ST_Subdivide('POLYGON((-1 -1,-1 -0.5, -1 0, 1 0.5, 1 -1,-1 -1))'::geometry))
+----
+POLYGON ((-1 -1, -1 -0.5, -1 0, 1 0.5, 1 -1, -1 -1))
+
+query T
+SELECT ST_AsText(ST_Subdivide('SRID=4269;LINESTRING(0 0, 10 15, 0 0, 10 15, 10 0, 10 15)'::geometry, 5))
+----
+LINESTRING (0 0, 5 7.5)
+LINESTRING (10 7.5, 10 0)
+LINESTRING (5 7.5, 10 15)
+LINESTRING (10 15, 10 7.5)
+
+statement error pq: max_vertices number cannot be less than 5
+SELECT ST_AsText(ST_SubDivide(ST_GeomFromText('POLYGON((1 1, 1 3, 3 3, 3 1, 1 1))'), 4));
