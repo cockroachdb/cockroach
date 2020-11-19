@@ -244,7 +244,7 @@ func TestZoneConfigValidate(t *testing.T) {
 	}
 }
 
-func TestZoneConfigValidateTandemFields(t *testing.T) {
+func TestZoneConfigValidateNonVoterSpecific(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -252,19 +252,56 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 		expected string
 	}{
 		{
-			ZoneConfig{
+			cfg: ZoneConfig{
+				NumReplicas: proto.Int32(3),
+				NumVoters:   proto.Int32(1),
+				Constraints: []ConstraintsConjunction{
+					{Constraints: []Constraint{{Value: "a", Type: Constraint_PROHIBITED}}},
+				},
+				VoterConstraints: []ConstraintsConjunction{
+					{Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}}},
+				},
+			},
+			expected: "prohibitive constraint .* conflicts with voter_constraint .*",
+		},
+	}
+
+	for i, c := range testCases {
+		err := c.cfg.Validate()
+		if !testutils.IsError(err, c.expected) {
+			t.Errorf("%d: expected %q, got %v", i, c.expected, err)
+		}
+	}
+}
+
+func TestZoneConfigValidateTandemFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name       string
+		cfg        ZoneConfig
+		expected   string
+		shouldFail bool
+	}{
+		{
+			name: "range sizes not set in tandem#1",
+			cfg: ZoneConfig{
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
 			},
-			"range_min_bytes and range_max_bytes must be set together",
+			expected:   "range_min_bytes and range_max_bytes must be set together",
+			shouldFail: true,
 		},
 		{
-			ZoneConfig{
+			name: "range sizes not set in tandem#2",
+			cfg: ZoneConfig{
 				RangeMinBytes: DefaultZoneConfig().RangeMinBytes,
 			},
-			"range_min_bytes and range_max_bytes must be set together",
+			expected:   "range_min_bytes and range_max_bytes must be set together",
+			shouldFail: true,
 		},
 		{
-			ZoneConfig{
+			name: "per-replica constraints without num_replicas",
+			cfg: ZoneConfig{
 				Constraints: []ConstraintsConjunction{
 					{
 						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
@@ -272,10 +309,26 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 					},
 				},
 			},
-			"when per-replica constraints are set, num_replicas must be set as well",
+			expected:   "when per-replica constraints are set, num_replicas must be set as well",
+			shouldFail: true,
 		},
 		{
-			ZoneConfig{
+			name: "per-voter constraints without num_voters",
+			cfg: ZoneConfig{
+				NumReplicas: proto.Int32(3),
+				VoterConstraints: []ConstraintsConjunction{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+				},
+			},
+			expected:   "when voter_constraints are set, num_voters must be set as well",
+			shouldFail: true,
+		},
+		{
+			name: "lease preferences without constraints",
+			cfg: ZoneConfig{
 				InheritedConstraints:      true,
 				InheritedLeasePreferences: false,
 				LeasePreferences: []LeasePreference{
@@ -284,15 +337,50 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 					},
 				},
 			},
-			"lease preferences can not be set unless the constraints are explicitly set as well",
+			expected:   "lease preferences can not be set unless the constraints are explicitly set as well",
+			shouldFail: true,
+		},
+		{
+			name: "lease preferences without voter_constraints when voters are explicitly configured",
+			cfg: ZoneConfig{
+				NumVoters:                 proto.Int32(3),
+				InheritedConstraints:      false,
+				InheritedVoterConstraints: true,
+				InheritedLeasePreferences: false,
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{},
+					},
+				},
+			},
+			expected:   "lease preferences can not be set unless the voter_constraints are explicitly set as well",
+			shouldFail: true,
+		},
+		{
+			name: "lease preferences without voter_constraints when voters not explicitly configured",
+			cfg: ZoneConfig{
+				InheritedConstraints:      false,
+				InheritedVoterConstraints: true,
+				InheritedLeasePreferences: false,
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{},
+					},
+				},
+			},
+			shouldFail: false,
 		},
 	}
 
 	for i, c := range testCases {
-		err := c.cfg.ValidateTandemFields()
-		if !testutils.IsError(err, c.expected) {
-			t.Errorf("%d: expected %q, got %v", i, c.expected, err)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			err := c.cfg.ValidateTandemFields()
+			if !c.shouldFail {
+				require.NoError(t, err)
+			} else if !testutils.IsError(err, c.expected) {
+				t.Errorf("%d: expected %q, got %v", i, c.expected, err)
+			}
+		})
 	}
 }
 
@@ -394,11 +482,13 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 		GC: &GCPolicy{
 			TTLSeconds: 1,
 		},
-		NumReplicas: proto.Int32(1),
+		NumReplicas: proto.Int32(2),
+		NumVoters:   proto.Int32(1),
 	}
 
 	testCases := []struct {
 		constraints      []ConstraintsConjunction
+		voterConstraints []ConstraintsConjunction
 		leasePreferences []LeasePreference
 		expected         string
 	}{
@@ -407,8 +497,10 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
 constraints: []
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -424,12 +516,25 @@ lease_preferences: []
 					},
 				},
 			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "foo",
+							Value: "bar",
+						},
+					},
+				},
+			},
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
 constraints: [+duck=foo]
+voter_constraints: [+foo=bar]
 lease_preferences: []
 `,
 		},
@@ -458,8 +563,10 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
 constraints: [foo, +duck=foo, -duck=foo]
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -476,12 +583,26 @@ lease_preferences: []
 					},
 				},
 			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					NumReplicas: 1,
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
 constraints: {+duck=foo: 3}
+voter_constraints: {+duck=foo: 1}
 lease_preferences: []
 `,
 		},
@@ -511,8 +632,10 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
 constraints: {'foo,+duck=foo,-duck=foo': 3}
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -544,12 +667,41 @@ lease_preferences: []
 					},
 				},
 			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					NumReplicas: 1,
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar1",
+						},
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar2",
+						},
+					},
+				},
+				{
+					NumReplicas: 2,
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
 constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
+voter_constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
 lease_preferences: []
 `,
 		},
@@ -559,8 +711,10 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
 constraints: []
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -580,8 +734,10 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
 constraints: []
+voter_constraints: []
 lease_preferences: [[+duck=foo]]
 `,
 		},
@@ -593,6 +749,17 @@ lease_preferences: [[+duck=foo]]
 							Type:  Constraint_REQUIRED,
 							Key:   "duck",
 							Value: "foo",
+						},
+					},
+				},
+			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_PROHIBITED,
+							Key:   "duck",
+							Value: "bar",
 						},
 					},
 				},
@@ -626,8 +793,10 @@ lease_preferences: [[+duck=foo]]
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
 constraints: [+duck=foo]
+voter_constraints: [-duck=bar]
 lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 `,
 		},
@@ -636,6 +805,7 @@ lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			original.Constraints = tc.constraints
+			original.VoterConstraints = tc.voterConstraints
 			original.LeasePreferences = tc.leasePreferences
 			body, err := yaml.Marshal(original)
 			if err != nil {
