@@ -23,6 +23,9 @@ import (
 type Zone interface {
 	// ReplicaConstraintsCount returns the number of replica constraint sets that
 	// are part of this zone.
+	//
+	// TODO(aayush): Go through the callers of the methods here and decide the
+	// right semantics for handling the new `voter_constraints` attribute.
 	ReplicaConstraintsCount() int
 
 	// ReplicaConstraints returns the ith set of replica constraints in the zone,
