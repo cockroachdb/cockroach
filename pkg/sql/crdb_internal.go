@@ -225,15 +225,36 @@ var crdbInternalDatabasesTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.databases (
 	id INT NOT NULL,
 	name STRING NOT NULL,
-	owner NAME NOT NULL
+	owner NAME NOT NULL,
+	survival_goal STRING NOT NULL,
+	regions STRING[]
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
+				var survivalGoal string
+				switch db.RegionConfig.SurvivalGoal {
+				case descpb.SurvivalGoal_ZONE_FAILURE:
+					survivalGoal = "survive zone failure"
+				case descpb.SurvivalGoal_REGION_FAILURE:
+					survivalGoal = "survive region failure"
+				default:
+					return errors.Newf("unknown survival goal: %d", db.RegionConfig.SurvivalGoal)
+				}
+
+				regions := tree.NewDArray(types.String)
+				for _, region := range db.RegionConfig.Regions {
+					if err := regions.Append(tree.NewDString(region)); err != nil {
+						return err
+					}
+				}
+
 				return addRow(
 					tree.NewDInt(tree.DInt(db.GetID())),            // id
 					tree.NewDString(db.GetName()),                  // name
 					tree.NewDName(getOwnerOfDesc(db).Normalized()), // owner
+					tree.NewDString(survivalGoal),                  // survival_goal
+					regions,                                        // regions
 				)
 			})
 	},

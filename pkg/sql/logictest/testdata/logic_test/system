@@ -1,11 +1,11 @@
 # LogicTest: !3node-tenant(49854)
-query TT
+query TTTT
 SHOW DATABASES
 ----
-defaultdb  root
-postgres   root
-system     node
-test       root
+defaultdb  root  survive zone failure  {}
+postgres   root  survive zone failure  {}
+system     node  survive zone failure  {}
+test       root  survive zone failure  {}
 
 query TTTTI
 SHOW TABLES FROM system

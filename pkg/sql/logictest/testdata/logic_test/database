@@ -10,28 +10,28 @@ CREATE DATABASE IF NOT EXISTS a
 statement error pgcode 42601 empty database name
 CREATE DATABASE ""
 
-query TT colnames
+query TTTT colnames
 SHOW DATABASES
 ----
-database_name  owner
-a              root
-defaultdb      root
-postgres       root
-system         node
-test           root
+database_name  owner  survival_goal         regions
+a              root   survive zone failure  {}
+defaultdb      root   survive zone failure  {}
+postgres       root   survive zone failure  {}
+system         node   survive zone failure  {}
+test           root   survive zone failure  {}
 
 statement ok
 COMMENT ON DATABASE a IS 'A'
 
-query TTT colnames
+query TTTTT colnames
 SHOW DATABASES WITH COMMENT
 ----
-database_name  owner  comment
-a              root   A
-defaultdb      root   NULL
-postgres       root   NULL
-system         node   NULL
-test           root   NULL
+database_name  owner  survival_goal         regions  comment
+a              root   survive zone failure  {}       A
+defaultdb      root   survive zone failure  {}       NULL
+postgres       root   survive zone failure  {}       NULL
+system         node   survive zone failure  {}       NULL
+test           root   survive zone failure  {}       NULL
 
 query TT colnames
 SHOW SCHEMAS FROM a
@@ -94,22 +94,22 @@ CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
 statement ok
 CREATE DATABASE c
 
-query TT
+query TTTT
 SHOW DATABASES
 ----
-a          root
-b          root
-b2         root
-b3         root
-b4         root
-b5         root
-b6         root
-b7         root
-c          root
-defaultdb  root
-postgres   root
-system     node
-test       root
+a          root  survive zone failure  {}
+b          root  survive zone failure  {}
+b2         root  survive zone failure  {}
+b3         root  survive zone failure  {}
+b4         root  survive zone failure  {}
+b5         root  survive zone failure  {}
+b6         root  survive zone failure  {}
+b7         root  survive zone failure  {}
+c          root  survive zone failure  {}
+defaultdb  root  survive zone failure  {}
+postgres   root  survive zone failure  {}
+system     node  survive zone failure  {}
+test       root  survive zone failure  {}
 
 statement ok
 CREATE TABLE b.a (id INT PRIMARY KEY)
@@ -150,16 +150,16 @@ DROP DATABASE b2 CASCADE;
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
 
-query TT colnames
+query TTTT colnames
 SHOW DATABASES
 ----
-database_name  owner
-a              root
-c              root
-defaultdb      root
-postgres       root
-system         node
-test           root
+database_name  owner  survival_goal         regions
+a              root   survive zone failure  {}
+c              root   survive zone failure  {}
+defaultdb      root   survive zone failure  {}
+postgres       root   survive zone failure  {}
+system         node   survive zone failure  {}
+test           root   survive zone failure  {}
 
 statement ok
 CREATE DATABASE b
