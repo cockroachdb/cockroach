@@ -5014,6 +5014,43 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_subdivide": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				res, err := geomfn.Subdivide(g.Geometry, 256)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(res), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a geometry divided into parts, where each part contains no more than 256 vertices.",
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"max_vertices", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0]).Geometry
+				mv := int(tree.MustBeDInt(args[1]))
+				res, err := geomfn.Subdivide(g, mv)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(res), nil
+			},
+			Info: infoBuilder{
+				info: "Returns a geometry divided into parts, where each part contains no more than the number of vertices provided.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	//
 	// BoundingBox
@@ -5681,7 +5718,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_simplifyvw":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
 	"st_snap":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49040}),
 	"st_split":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
-	"st_subdivide":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49048}),
 	"st_tileenvelope":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
 	"st_voronoilines":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49065}),
 	"st_voronoipolygons":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49066}),
