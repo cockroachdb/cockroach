@@ -320,6 +320,22 @@ func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
 	return !opts.SequenceOwner.Equal(TableDescriptor_SequenceOpts_SequenceOwner{})
 }
 
+// EffectiveCacheSize returns the CacheSize field of a sequence option with
+// the exception that it will return 1 if the CacheSize field is 0.
+// A cache size of 1 indicates that there is no caching. The returned value
+// will always be greater than or equal to 1.
+//
+// Prior to #51259, sequence caching was unimplemented and cache sizes were
+// left uninitialized (ie. to have a value of 0). If a sequence has a cache
+// size of 0, it should be treated in the same was as sequences with cache
+// sizes of 1.
+func (opts *TableDescriptor_SequenceOpts) EffectiveCacheSize() int64 {
+	if opts.CacheSize == 0 {
+		return 1
+	}
+	return opts.CacheSize
+}
+
 // SafeValue implements the redact.SafeValue interface.
 func (ConstraintValidity) SafeValue() {}
 
