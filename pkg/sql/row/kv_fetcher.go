@@ -61,6 +61,9 @@ func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
 
 // GetBytesRead returns the number of bytes read by this fetcher.
 func (f *KVFetcher) GetBytesRead() int64 {
+	if f == nil {
+		return 0
+	}
 	return f.bytesRead
 }
 

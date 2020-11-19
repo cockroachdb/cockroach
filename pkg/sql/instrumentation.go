@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/gogo/protobuf/types"
 )
 
 // instrumentationHelper encapsulates the logic around extracting information
@@ -78,6 +83,8 @@ type instrumentationHelper struct {
 	explainPlan  *explain.Plan
 	distribution physicalplan.PlanDistribution
 	vectorized   bool
+
+	traceMetadata execNodeTraceMetadata
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -139,6 +146,7 @@ func (ih *instrumentationHelper) Setup(
 		return ctx, false
 	}
 
+	ih.traceMetadata = make(execNodeTraceMetadata)
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.StartSnowballTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
@@ -186,6 +194,11 @@ func (ih *instrumentationHelper) Finish(
 
 	if ih.withStatementTrace != nil {
 		ih.withStatementTrace(trace, stmtRawSQL)
+	}
+
+	if ih.traceMetadata != nil && ih.explainPlan != nil {
+		ih.traceMetadata.addSpans(trace)
+		ih.traceMetadata.annotateExplain(ih.explainPlan)
 	}
 
 	if ih.outputMode == explainAnalyzePlanOutput && retErr == nil {
@@ -334,4 +347,118 @@ func (ih *instrumentationHelper) setExplainAnalyzePlanResult(
 		}
 	}
 	return nil
+}
+
+// execNodeTraceMetadata associates exec.Nodes with metadata for corresponding
+// execution components.
+// Currently, we only store info about processors. A node can correspond to
+// multiple processors if the plan is distributed.
+//
+// TODO(radu): we perform similar processing of execution traces in various
+// parts of the code. Come up with some common infrastructure that makes this
+// easier.
+type execNodeTraceMetadata map[exec.Node]execComponents
+
+type execComponents struct {
+	flowID     uuid.UUID
+	processors []processorTraceMetadata
+}
+
+type processorTraceMetadata struct {
+	id    execinfrapb.ProcessorID
+	stats *execinfrapb.ComponentStats
+}
+
+// associateNodeWithProcessors is called during planning, as processors are
+// planned for an execution operator.
+func (m execNodeTraceMetadata) associateNodeWithProcessors(
+	node exec.Node, flowID uuid.UUID, processors []processorTraceMetadata,
+) {
+	m[node] = execComponents{
+		flowID:     flowID,
+		processors: processors,
+	}
+}
+
+// addSpans populates the processorTraceMetadata.fields with the statistics
+// recorded in a trace.
+func (m execNodeTraceMetadata) addSpans(spans []tracingpb.RecordedSpan) {
+	// Build a map from <flow-id, processor-id> pair (encoded as a string)
+	// to the corresponding processorTraceMetadata entry.
+	processorKeyToMetadata := make(map[string]*processorTraceMetadata)
+	for _, v := range m {
+		for i := range v.processors {
+			key := fmt.Sprintf("%s-p-%d", v.flowID.String(), v.processors[i].id)
+			processorKeyToMetadata[key] = &v.processors[i]
+		}
+	}
+
+	for i := range spans {
+		span := &spans[i]
+		if span.Stats == nil {
+			continue
+		}
+
+		fid, ok := span.Tags[execinfrapb.FlowIDTagKey]
+		if !ok {
+			continue
+		}
+		pid, ok := span.Tags[execinfrapb.ProcessorIDTagKey]
+		if !ok {
+			continue
+		}
+		key := fmt.Sprintf("%s-p-%s", fid, pid)
+		procMetadata := processorKeyToMetadata[key]
+		if procMetadata == nil {
+			// Processor not associated with an exec.Node; ignore.
+			continue
+		}
+
+		var stats execinfrapb.ComponentStats
+		if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
+			continue
+		}
+		procMetadata.stats = &stats
+	}
+}
+
+// annotateExplain aggregates the statistics that were collected and annotates
+// explain.Nodes with execution stats.
+func (m execNodeTraceMetadata) annotateExplain(plan *explain.Plan) {
+	var walk func(n *explain.Node)
+	walk = func(n *explain.Node) {
+		wrapped := n.WrappedNode()
+		if meta, ok := m[wrapped]; ok {
+			var rowCount uint64
+			incomplete := false
+			for i := range meta.processors {
+				stats := meta.processors[i].stats
+				if stats == nil {
+					incomplete = true
+					break
+				}
+				rowCount += stats.Output.NumTuples.Value()
+			}
+			// If we didn't get statistics for all processors, we don't show the
+			// incomplete results. In the future, we may consider an incomplete flag
+			// if we want to show them with a warning.
+			if !incomplete {
+				n.Annotate(exec.ExecutionStatsID, &exec.ExecutionStats{
+					RowCount: rowCount,
+				})
+			}
+		}
+
+		for i := 0; i < n.ChildCount(); i++ {
+			walk(n.Child(i))
+		}
+	}
+
+	walk(plan.Root)
+	for i := range plan.Subqueries {
+		walk(plan.Subqueries[i].Root.(*explain.Node))
+	}
+	for i := range plan.Checks {
+		walk(plan.Checks[i])
+	}
 }
