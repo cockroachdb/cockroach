@@ -761,8 +761,15 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 				return compiledTestCase{}, err
 			}
 		}
-		sysCfgBuilder.addDBDesc(dbID,
-			&dbdesc.NewInitial(descpb.ID(dbID), db.name, security.AdminRoleName()).Immutable)
+		sysCfgBuilder.addDBDesc(
+			dbID,
+			&dbdesc.NewInitial(
+				descpb.ID(dbID),
+				db.name,
+				security.AdminRoleName(),
+				descpb.DatabaseRegionConfig{},
+			).Immutable,
+		)
 
 		for _, table := range db.tables {
 			tableID := objectCounter

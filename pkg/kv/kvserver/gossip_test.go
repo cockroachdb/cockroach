@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -219,13 +220,13 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 	txB := db.NewTxn(ctx, "b")
 
 	require.NoError(t, txA.SetSystemConfigTrigger(true /* forSystemTenant */))
-	db1000 := dbdesc.NewInitial(1000, "1000", security.AdminRoleName())
+	db1000 := dbdesc.NewInitial(1000, "1000", security.AdminRoleName(), descpb.DatabaseRegionConfig{})
 	require.NoError(t, txA.Put(ctx,
 		keys.SystemSQLCodec.DescMetadataKey(1000),
 		db1000.DescriptorProto()))
 
 	require.NoError(t, txB.SetSystemConfigTrigger(true /* forSystemTenant */))
-	db2000 := dbdesc.NewInitial(2000, "2000", security.AdminRoleName())
+	db2000 := dbdesc.NewInitial(2000, "2000", security.AdminRoleName(), descpb.DatabaseRegionConfig{})
 	require.NoError(t, txB.Put(ctx,
 		keys.SystemSQLCodec.DescMetadataKey(2000),
 		db2000.DescriptorProto()))

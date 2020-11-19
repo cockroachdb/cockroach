@@ -49,22 +49,33 @@ type Mutable struct {
 
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
-func NewInitial(id descpb.ID, name string, owner security.SQLUsername) *Mutable {
-	return NewInitialWithPrivileges(id, name,
-		descpb.NewDefaultPrivilegeDescriptor(owner))
+func NewInitial(
+	id descpb.ID, name string, owner security.SQLUsername, regionConfig descpb.DatabaseRegionConfig,
+) *Mutable {
+	return NewInitialWithPrivileges(
+		id,
+		name,
+		descpb.NewDefaultPrivilegeDescriptor(owner),
+		regionConfig,
+	)
 }
 
 // NewInitialWithPrivileges constructs a new Mutable for an initial version
 // from an id and name and custom privileges.
 func NewInitialWithPrivileges(
-	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor,
+	id descpb.ID,
+	name string,
+	privileges *descpb.PrivilegeDescriptor,
+	regionConfig descpb.DatabaseRegionConfig,
 ) *Mutable {
-	return NewCreatedMutable(descpb.DatabaseDescriptor{
-		Name:       name,
-		ID:         id,
-		Version:    1,
-		Privileges: privileges,
-	})
+	ret := descpb.DatabaseDescriptor{
+		Name:         name,
+		ID:           id,
+		Version:      1,
+		Privileges:   privileges,
+		RegionConfig: regionConfig,
+	}
+	return NewCreatedMutable(ret)
 }
 
 func makeImmutable(desc descpb.DatabaseDescriptor) Immutable {
