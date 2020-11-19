@@ -232,3 +232,18 @@ func MinimumClearanceLine(g geo.Geometry) (geo.Geometry, error) {
 	}
 	return geo.ParseGeometryFromEWKB(retEWKB)
 }
+
+// CountVertices returns a number of vertices (points) for the geom.T provided.
+func CountVertices(t geom.T) int {
+	switch t := t.(type) {
+	case *geom.GeometryCollection:
+		// FlatCoords() does not work on GeometryCollection.
+		numPoints := 0
+		for _, g := range t.Geoms() {
+			numPoints += CountVertices(g)
+		}
+		return numPoints
+	default:
+		return len(t.FlatCoords()) / t.Stride()
+	}
+}
