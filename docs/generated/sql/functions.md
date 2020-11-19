@@ -2141,6 +2141,10 @@ The paths themselves are given in the direction of the first geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_startpoint"></a><code>st_startpoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the first point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.</p>
 </span></td></tr>
+<tr><td><a name="st_subdivide"></a><code>st_subdivide(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry divided into parts, where each part contains no more than 256 vertices.</p>
+</span></td></tr>
+<tr><td><a name="st_subdivide"></a><code>st_subdivide(geometry: geometry, max_vertices: int4) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry divided into parts, where each part contains no more than the number of vertices provided.</p>
+</span></td></tr>
 <tr><td><a name="st_summary"></a><code>st_summary(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a text summary of the contents of the geography.</p>
 <p>Flags shown square brackets after the geometry type have the following meaning:</p>
 <ul>
