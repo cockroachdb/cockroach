@@ -254,7 +254,10 @@ func (l *fileSink) flushAndSyncLocked(doSync bool) {
 		return
 	}
 
-	// If we can't sync within this duration, exit the process.
+	// TODO(knz): the following stall detection code is misplaced.
+	// See: https://github.com/cockroachdb/cockroach/issues/56893
+	//
+	// If we can't flush or sync within this duration, exit the process.
 	t := time.AfterFunc(maxSyncDuration, func() {
 		// NB: the disk-stall-detected roachtest matches on this message.
 		Shoutf(context.Background(), severity.FATAL,
@@ -262,7 +265,7 @@ func (l *fileSink) flushAndSyncLocked(doSync bool) {
 		)
 	})
 	defer t.Stop()
-	// If we can't sync within this duration, print a warning to the log and to
+	// If we can't flush sync within this duration, print a warning to the log and to
 	// stderr.
 	t2 := time.AfterFunc(syncWarnDuration, func() {
 		Shoutf(context.Background(), severity.WARNING,
