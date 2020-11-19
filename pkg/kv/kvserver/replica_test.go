@@ -12954,25 +12954,25 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 	tcs := []testCase{
 		// Simple addition of learner.
 		mk(
-			"SIMPLE(l2) ADD_VOTER[(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
+			"SIMPLE(l2) [(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 		),
 		// Simple addition of voter (necessarily via learner).
 		mk(
-			"SIMPLE(v2) ADD_VOTER[(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
+			"SIMPLE(v2) [(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 		),
 		// Simple removal of voter.
 		mk(
-			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2]: after=[(n100,s100):1] next=3",
+			"SIMPLE(r2) [(n200,s200):2]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 		),
 		// Simple removal of learner.
 		mk(
-			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
+			"SIMPLE(r2) [(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypeRemove},
 		),
@@ -12982,7 +12982,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Addition of learner and removal of voter at same time.
 		mk(
-			"ENTER_JOINT(r2 l3) ADD_VOTER[(n200,s200):3LEARNER], REMOVE_VOTER[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
+			"ENTER_JOINT(r2 l3) [(n200,s200):3LEARNER], [(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
@@ -12990,7 +12990,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Promotion of two voters.
 		mk(
-			"ENTER_JOINT(v2 v3) ADD_VOTER[(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
+			"ENTER_JOINT(v2 v3) [(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
@@ -12998,7 +12998,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Removal of two voters.
 		mk(
-			"ENTER_JOINT(r2 r3) REMOVE_VOTER[(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
+			"ENTER_JOINT(r2 r3) [(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
@@ -13006,7 +13006,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Demoting two voters.
 		mk(
-			"ENTER_JOINT(r2 l2 r3 l3) REMOVE_VOTER[(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
+			"ENTER_JOINT(r2 l2 r3 l3) [(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},

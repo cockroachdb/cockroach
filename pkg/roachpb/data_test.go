@@ -1702,8 +1702,8 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 		},
 	}
 	act := crt.String()
-	exp := "ENTER_JOINT(r6 r12 l12 v3) ADD_VOTER[(n1,s2):3VOTER_INCOMING], " +
-		"REMOVE_VOTER[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING]: " +
+	exp := "ENTER_JOINT(r6 r12 l12 v3) [(n1,s2):3VOTER_INCOMING], " +
+		"[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING]: " +
 		"after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER " +
 		"(n10,s11):12VOTER_DEMOTING] next=10"
 	require.Equal(t, exp, act)
