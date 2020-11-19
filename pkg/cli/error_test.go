@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
@@ -133,41 +134,41 @@ func TestErrorReporting(t *testing.T) {
 		{
 			desc:         "plain",
 			err:          errors.New("boom"),
-			wantSeverity: log.Severity_ERROR,
+			wantSeverity: severity.ERROR,
 			wantCLICause: false,
 		},
 		{
 			desc: "single cliError",
 			err: &cliError{
 				exitCode: exit.UnspecifiedError(),
-				severity: log.Severity_INFO,
+				severity: severity.INFO,
 				cause:    errors.New("routine"),
 			},
-			wantSeverity: log.Severity_INFO,
+			wantSeverity: severity.INFO,
 			wantCLICause: false,
 		},
 		{
 			desc: "double cliError",
 			err: &cliError{
 				exitCode: exit.UnspecifiedError(),
-				severity: log.Severity_INFO,
+				severity: severity.INFO,
 				cause: &cliError{
 					exitCode: exit.UnspecifiedError(),
-					severity: log.Severity_ERROR,
+					severity: severity.ERROR,
 					cause:    errors.New("serious"),
 				},
 			},
-			wantSeverity: log.Severity_INFO, // should only unwrap one layer
+			wantSeverity: severity.INFO, // should only unwrap one layer
 			wantCLICause: true,
 		},
 		{
 			desc: "wrapped cliError",
 			err: fmt.Errorf("some context: %w", &cliError{
 				exitCode: exit.UnspecifiedError(),
-				severity: log.Severity_INFO,
+				severity: severity.INFO,
 				cause:    errors.New("routine"),
 			}),
-			wantSeverity: log.Severity_INFO,
+			wantSeverity: severity.INFO,
 			wantCLICause: false,
 		},
 	}

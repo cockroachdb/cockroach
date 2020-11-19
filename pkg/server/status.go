@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -993,7 +994,7 @@ func (s *statusServer) LogFile(
 	}
 	defer reader.Close()
 
-	var entry log.Entry
+	var entry logpb.Entry
 	var resp serverpb.LogEntriesResponse
 	decoder := log.NewEntryDecoder(reader, inputEditMode)
 	for {

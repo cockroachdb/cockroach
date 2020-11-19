@@ -29,7 +29,7 @@ func TestGC(t *testing.T) {
 
 	setFlags()
 
-	testLogGC(t, &mainLog, Infof)
+	testLogGC(t, debugLog, Infof)
 }
 
 func TestSecondaryGC(t *testing.T) {
@@ -38,7 +38,7 @@ func TestSecondaryGC(t *testing.T) {
 
 	setFlags()
 
-	tmpDir, err := ioutil.TempDir(mainLog.logDir.String(), "gctest")
+	tmpDir, err := ioutil.TempDir(logging.logDir.String(), "gctest")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestSecondaryGC(t *testing.T) {
 			_ = os.RemoveAll(tmpDir)
 		}
 	}()
-	tmpDirName := DirName{name: tmpDir}
+	tmpDirName := DirName(tmpDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -75,19 +75,21 @@ func testLogGC(
 
 	const newLogFiles = 20
 
-	// Ensure the main log has at least one entry. This serves two
+	// Make an entry in the target logger. This ensures That there is at
+	// least one file in the target directory for the logger being
+	// tested. This serves two
 	// purposes. One is to serve as baseline for the file size. The
 	// other is to ensure that the TestLogScope does not erase the
 	// temporary directory, preventing further investigation.
-	Infof(context.Background(), "0")
-
-	// Make an entry in the target logger. This ensures That there is at
-	// least one file in the target directory for the logger being
-	// tested.
 	logFn(context.Background(), "0")
 
+	fileSink := logger.getFileSink()
+	if fileSink == nil {
+		t.Fatal("no file sink")
+	}
+
 	// Check that the file was created.
-	allFilesOriginal, err := logger.listLogFiles()
+	origDir, allFilesOriginal, err := fileSink.listLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,9 +100,12 @@ func testLogGC(
 	// Check that the file exists, and also measure its size.
 	// We'll use this as base value for the maximum combined size
 	// below, to force GC.
-	dir, isSet := logger.logDir.get()
-	if !isSet {
+	dir := fileSink.mu.logDir
+	if dir == "" {
 		t.Fatal(errDirectoryNotSet)
+	}
+	if origDir != dir {
+		t.Fatalf("dir expected %q, got %q", dir, origDir)
 	}
 	stat, err := os.Stat(filepath.Join(dir, allFilesOriginal[0].Name))
 	if err != nil {
@@ -115,12 +120,12 @@ func testLogGC(
 	// We want to create multiple log files below. For this we need to
 	// override the size/number limits first to the values suitable for
 	// the test.
-	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
-	LogFileMaxSize = 1 // ensure rotation on every log write
+	defer func(previous int64) { fileSink.logFileMaxSize = previous }(fileSink.logFileMaxSize)
+	fileSink.logFileMaxSize = 1 // ensure rotation on every log write
 	defer func(previous int64) {
-		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
-	}(LogFilesCombinedMaxSize)
-	atomic.StoreInt64(&LogFilesCombinedMaxSize, maxTotalLogFileSize)
+		atomic.StoreInt64(&fileSink.logFilesCombinedMaxSize, previous)
+	}(fileSink.logFilesCombinedMaxSize)
+	atomic.StoreInt64(&fileSink.logFilesCombinedMaxSize, maxTotalLogFileSize)
 
 	// Create the number of expected log files.
 	for i := 1; i < newLogFiles; i++ {
@@ -128,7 +133,7 @@ func testLogGC(
 		Flush()
 	}
 
-	allFilesBefore, err := logger.listLogFiles()
+	_, allFilesBefore, err := fileSink.listLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,14 +149,18 @@ func testLogGC(
 	// at the end of the test.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go logger.gcDaemon(ctx)
+	done := make(chan struct{})
+	go func() {
+		fileSink.gcDaemon(ctx)
+		close(done)
+	}()
 
 	// Emit a log line which will rotate the files and trigger GC.
 	logFn(context.Background(), "final")
 	Flush()
 
 	succeedsSoon(t, func() error {
-		allFilesAfter, err := logger.listLogFiles()
+		_, allFilesAfter, err := fileSink.listLogFiles()
 		if err != nil {
 			return err
 		}
@@ -160,6 +169,8 @@ func testLogGC(
 		}
 		return nil
 	})
+	cancel()
+	<-done
 }
 
 // succeedsSoon is a simplified version of testutils.SucceedsSoon.

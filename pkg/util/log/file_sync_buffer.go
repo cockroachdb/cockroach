@@ -12,13 +12,10 @@ package log
 
 import (
 	"bufio"
-	"context"
 	"os"
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -30,7 +27,7 @@ import (
 type syncBuffer struct {
 	*bufio.Writer
 
-	logger       *loggerT
+	fileSink     *fileSink
 	file         *os.File
 	lastRotation int64
 	nbytes       int64 // The number of bytes written to this file so far.
@@ -45,35 +42,27 @@ func (sb *syncBuffer) Sync() error {
 }
 
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
-	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&LogFileMaxSize) {
+	maxFileSize := atomic.LoadInt64(&sb.fileSink.logFileMaxSize)
+	if sb.nbytes+int64(len(p)) >= maxFileSize {
 		if err := sb.rotateFileLocked(timeutil.Now()); err != nil {
-			sb.logger.exitLocked(err, exit.LoggingFileUnavailable())
+			return 0, err
 		}
 	}
 	n, err = sb.Writer.Write(p)
 	sb.nbytes += int64(n)
-	if err != nil {
-		sb.logger.exitLocked(err, exit.LoggingFileUnavailable())
-	}
-	return
+	return n, err
 }
 
 // writeToFileLocked writes to the file and applies the synchronization policy.
 // Assumes that l.mu is held by the caller.
-func (l *loggerT) writeToFileLocked(data []byte) error {
-	if _, err := l.mu.file.Write(data); err != nil {
-		return err
-	}
-	if l.mu.syncWrites {
-		_ = l.mu.file.Flush()
-		_ = l.mu.file.Sync()
-	}
-	return nil
+func (l *fileSink) writeToFileLocked(data []byte) error {
+	_, err := l.mu.file.Write(data)
+	return err
 }
 
 // ensureFileLocked ensures that l.file is set and valid.
 // Assumes that l.mu is held by the caller.
-func (l *loggerT) ensureFileLocked() error {
+func (l *fileSink) ensureFileLocked() error {
 	if l.mu.file == nil {
 		return l.createFileLocked()
 	}
@@ -89,11 +78,11 @@ func (l *loggerT) ensureFileLocked() error {
 // (*syncBuffer).Write().
 //
 // Assumes that l.mu is held by the caller.
-func (l *loggerT) createFileLocked() error {
+func (l *fileSink) createFileLocked() error {
 	now := timeutil.Now()
 	if l.mu.file == nil {
 		sb := &syncBuffer{
-			logger: l,
+			fileSink: l,
 		}
 		if err := sb.rotateFileLocked(now); err != nil {
 			return err
@@ -108,7 +97,7 @@ func (l *loggerT) createFileLocked() error {
 // closed. In non-test cases, files are only closed in the context of
 // rotation to new files, in which case a new file is immediately
 // opened. See rotateFileLocked() below.
-func (l *loggerT) closeFileLocked() error {
+func (l *fileSink) closeFileLocked() error {
 	if l.mu.file == nil {
 		return nil
 	}
@@ -133,7 +122,7 @@ func (l *loggerT) closeFileLocked() error {
 // os.Stderr if this logger had previously taken ownership of it.
 //
 // This is used by the TestLogScope only when the scope is closed.
-func (l *loggerT) maybeRelinquishInternalStderrLocked() error {
+func (l *fileSink) maybeRelinquishInternalStderrLocked() error {
 	if !l.mu.currentlyOwnsInternalStderr {
 		return nil
 	}
@@ -171,7 +160,7 @@ func (sb *syncBuffer) rotateFileLocked(now time.Time) (err error) {
 	// continue using the previous file instead of breaking logging
 	// altogether.
 	newFile, newLastRotation, newFileName, symLinkName, err := create(
-		&sb.logger.logDir, sb.logger.prefix, now, sb.lastRotation)
+		sb.fileSink.mu.logDir, sb.fileSink.prefix, now, sb.lastRotation)
 	if err != nil {
 		return err
 	}
@@ -193,14 +182,14 @@ func (sb *syncBuffer) rotateFileLocked(now time.Time) (err error) {
 	// Initialize the new file: write headers and stuff. We do this
 	// before switching stderr over below, so that stderr output if any
 	// makes it to the file after the headers.
-	newWriter, nbytes, err := sb.logger.initializeNewOutputFile(newFile, now)
+	newWriter, nbytes, err := sb.fileSink.initializeNewOutputFile(newFile, now)
 	if err != nil {
 		return err
 	}
 
 	// Switch over internal stderr writes, if currently captured, to the
 	// new file.
-	if sb.logger.mu.redirectInternalStderrWrites {
+	if sb.fileSink.mu.redirectInternalStderrWrites {
 		if err := hijackStderr(newFile); err != nil {
 			return err
 		}
@@ -226,7 +215,7 @@ func (sb *syncBuffer) rotateFileLocked(now time.Time) (err error) {
 	// Finally, inform the garbage collector that they can do a round of
 	// checks.
 	select {
-	case sb.logger.gcNotify <- struct{}{}:
+	case sb.fileSink.gcNotify <- struct{}{}:
 	default:
 	}
 
@@ -235,7 +224,7 @@ func (sb *syncBuffer) rotateFileLocked(now time.Time) (err error) {
 
 // initializeNewOutputFile writes the log format headers at the top of
 // a new output file.
-func (l *loggerT) initializeNewOutputFile(
+func (l *fileSink) initializeNewOutputFile(
 	file *os.File, now time.Time,
 ) (newWriter *bufio.Writer, nbytes int64, err error) {
 	// bufferSize sizes the buffer associated with each log file. It's large
@@ -245,48 +234,19 @@ func (l *loggerT) initializeNewOutputFile(
 
 	newWriter = bufio.NewWriterSize(file, bufferSize)
 
-	messages := make([]Entry, 0, 6)
-	messages = append(messages,
-		l.makeStartLine("file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
-		l.makeStartLine("running on machine: %s", host),
-		l.makeStartLine("binary: %s", Safe(build.GetInfo().Short())),
-		l.makeStartLine("arguments: %s", os.Args),
-	)
-
-	logging.mu.Lock()
-	if logging.mu.clusterID != "" {
-		messages = append(messages, l.makeStartLine("clusterID: %s", logging.mu.clusterID))
-	}
-	logging.mu.Unlock()
-
-	// Including a non-ascii character in the first 1024 bytes of the log helps
-	// viewers that attempt to guess the character encoding.
-	messages = append(messages,
-		l.makeStartLine("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713"))
-
-	for _, entry := range messages {
-		buf := logging.formatLogEntry(entry, nil, nil)
-		var n int
-		n, err = file.Write(buf.Bytes())
-		putBuffer(buf)
-		nbytes += int64(n)
-		if err != nil {
-			return nil, 0, err
+	if l.getStartLines != nil {
+		messages := l.getStartLines(now)
+		for _, entry := range messages {
+			buf := l.formatter.formatEntry(entry, nil)
+			var n int
+			n, err = file.Write(buf.Bytes())
+			putBuffer(buf)
+			nbytes += int64(n)
+			if err != nil {
+				return nil, 0, err
+			}
 		}
 	}
 
 	return newWriter, nbytes, nil
-}
-
-func (l *loggerT) makeStartLine(format string, args ...interface{}) Entry {
-	entry := MakeEntry(
-		context.Background(),
-		Severity_INFO,
-		nil, /* logCounter */
-		2,   /* depth */
-		l.redactableLogs.Get(),
-		format,
-		args...)
-	entry.Tags = "config"
-	return entry
 }

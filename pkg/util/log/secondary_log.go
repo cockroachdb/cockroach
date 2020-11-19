@@ -13,22 +13,14 @@ package log
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
 
 // SecondaryLogger represents a secondary / auxiliary logging channel
 // whose logging events go to a different file than the main logging
 // facility.
 type SecondaryLogger struct {
-	logger          loggerT
-	forceSyncWrites bool
-}
-
-var secondaryLogRegistry struct {
-	mu struct {
-		syncutil.Mutex
-		loggers []*SecondaryLogger
-	}
+	logger loggerT
 }
 
 // NewSecondaryLogger creates a secondary logger.
@@ -49,9 +41,6 @@ func NewSecondaryLogger(
 	forceSyncWrites bool,
 	enableMsgCount bool,
 ) *SecondaryLogger {
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
-
 	// Any consumption of configuration off the main logger
 	// makes the logging module "active" and prevents further
 	// configuration changes.
@@ -62,30 +51,55 @@ func NewSecondaryLogger(
 		dir = dirName.String()
 	}
 	if dir == "" {
-		dir = mainLog.logDir.String()
+		dir = logging.logDir.String()
 	}
 	l := &SecondaryLogger{
 		logger: loggerT{
-			logDir:          DirName{name: dir},
-			prefix:          program + "-" + fileNamePrefix,
-			fileThreshold:   Severity_INFO,
-			stderrThreshold: mainLog.stderrThreshold.get(),
-			logCounter:      EntryCounter{EnableMsgCount: enableMsgCount},
-			gcNotify:        make(chan struct{}, 1),
+			logCounter: EntryCounter{EnableMsgCount: enableMsgCount},
 		},
-		forceSyncWrites: forceSyncWrites,
 	}
-	l.logger.redactableLogs.Set(mainLog.redactableLogs.Get())
-	l.logger.mu.syncWrites = forceSyncWrites || mainLog.mu.syncWrites
+	fileSink := newFileSink(
+		dir,
+		fileNamePrefix,
+		forceSyncWrites,
+		severity.INFO,
+		logging.logFileMaxSize,
+		logging.logFilesCombinedMaxSize,
+		l.logger.getStartLines,
+	)
+	// TODO(knz): Make all this configurable.
+	// (As done in https://github.com/cockroachdb/cockroach/pull/51987.)
+	l.logger.sinkInfos = []sinkInfo{
+		{
+			sink: &logging.stderrSink,
+			// stderr editor.
+			// We don't redact upfront, and we keep the redaction markers.
+			editor: getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
+			// failure to write to stderr is critical for now. We may want
+			// to make this non-critical in the future, since it's common
+			// for folk to close the terminal where they launched 'cockroach
+			// start --background'.
+			// We keep this true for now for backward-compatibility.
+			criticality: true,
+		},
+		{
+			sink: fileSink,
+			// file editor.
+			// We don't redact upfront, and the "--redactable-logs" flag decides
+			// whether to keep the redaction markers in the output.
+			editor: getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */)),
+			// failure to write to file is definitely critical.
+			criticality: true,
+		},
+	}
 
 	// Ensure the registry knows about this logger.
-	secondaryLogRegistry.mu.Lock()
-	secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers, l)
-	secondaryLogRegistry.mu.Unlock()
+	allFileSinks.put(fileSink)
+	allLoggers.put(&l.logger)
 
 	if enableGc {
 		// Start the log file GC for the secondary logger.
-		go l.logger.gcDaemon(ctx)
+		go fileSink.gcDaemon(ctx)
 	}
 
 	return l
@@ -93,31 +107,23 @@ func NewSecondaryLogger(
 
 // Close implements the stopper.Closer interface.
 func (l *SecondaryLogger) Close() {
-	// Make the registry forget about this logger. This avoids
-	// stacking many secondary loggers together when there are
-	// subsequent tests starting servers in the same package.
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for i, thatLogger := range secondaryLogRegistry.mu.loggers {
-		if thatLogger != l {
-			continue
-		}
-		secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers[:i], secondaryLogRegistry.mu.loggers[i+1:]...)
-		return
+	if fileSink := l.logger.getFileSink(); fileSink != nil {
+		allFileSinks.del(fileSink)
 	}
+	allLoggers.del(&l.logger)
 }
 
 func (l *SecondaryLogger) output(
 	ctx context.Context, depth int, sev Severity, format string, args ...interface{},
 ) {
 	entry := MakeEntry(
-		ctx, sev, &l.logger.logCounter, depth+1, l.logger.redactableLogs.Get(), format, args...)
+		ctx, sev, &l.logger.logCounter, depth+1, true /* redactable */, format, args...)
 	l.logger.outputLogEntry(entry)
 }
 
 // Logf logs an event on a secondary logger.
 func (l *SecondaryLogger) Logf(ctx context.Context, format string, args ...interface{}) {
-	l.output(ctx, 1, Severity_INFO, format, args...)
+	l.output(ctx, 1, severity.INFO, format, args...)
 }
 
 // LogfDepth logs an event on a secondary logger, offsetting the caller's stack
@@ -125,5 +131,5 @@ func (l *SecondaryLogger) Logf(ctx context.Context, format string, args ...inter
 func (l *SecondaryLogger) LogfDepth(
 	ctx context.Context, depth int, format string, args ...interface{},
 ) {
-	l.output(ctx, depth+1, Severity_INFO, format, args...)
+	l.output(ctx, depth+1, severity.INFO, format, args...)
 }
