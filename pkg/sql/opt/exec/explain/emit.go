@@ -326,6 +326,11 @@ func (e *emitter) joinNodeName(algo string, joinType descpb.JoinType) string {
 }
 
 func (e *emitter) emitNodeAttributes(n *Node) error {
+	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok {
+		s := stats.(*exec.ExecutionStats)
+		e.ob.Attr("actual row count", s.RowCount)
+	}
+
 	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok {
 		s := stats.(*exec.EstimatedStats)
 

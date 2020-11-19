@@ -361,6 +361,7 @@ go_library(
         "//vendor/github.com/cockroachdb/logtags",
         "//vendor/github.com/gogo/protobuf/jsonpb",
         "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/types",
         "//vendor/github.com/lib/pq",
         "//vendor/github.com/lib/pq/oid",
         "//vendor/github.com/prometheus/client_model/go",
