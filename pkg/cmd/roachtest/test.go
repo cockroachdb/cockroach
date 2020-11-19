@@ -148,6 +148,8 @@ type test struct {
 	}
 }
 
+func (t *test) Helper() {}
+
 func (t *test) Name() string {
 	return t.spec.Name
 }
