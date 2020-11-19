@@ -236,6 +236,10 @@ type LocalOnlySessionData struct {
 
 	// NewSchemaChangerMode indicates whether to use the new schema changer.
 	NewSchemaChangerMode NewSchemaChangerMode
+
+	// SequenceCache stores sequence values which have been cached using the
+	// CACHE sequence option.
+	SequenceCache SequenceCache
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //
