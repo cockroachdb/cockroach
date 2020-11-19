@@ -2405,10 +2405,6 @@ func MVCCDeleteRange(
 	txn *roachpb.Transaction,
 	returnKeys bool,
 ) ([]roachpb.Key, *roachpb.Span, int64, error) {
-	// In order to detect the potential write intent by another concurrent
-	// transaction with a newer timestamp, we need to use the max timestamp for
-	// scan.
-	scanTs := hlc.MaxTimestamp
 	// In order for this operation to be idempotent when run transactionally, we
 	// need to perform the initial scan at the previous sequence number so that
 	// we don't see the result from equal or later sequences.
@@ -2418,35 +2414,31 @@ func MVCCDeleteRange(
 		prevSeqTxn.Sequence--
 		scanTxn = prevSeqTxn
 	}
-	res, err := MVCCScan(
-		ctx, rw, key, endKey, scanTs, MVCCScanOptions{Txn: scanTxn, MaxKeys: max})
+	res, err := MVCCScan(ctx, rw, key, endKey, timestamp, MVCCScanOptions{
+		FailOnMoreRecent: true, Txn: scanTxn, MaxKeys: max,
+	})
 	if err != nil {
 		return nil, nil, 0, err
 	}
 
 	buf := newPutBuffer()
+	defer buf.release()
 	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
-
-	for i := range res.KVs {
-		err = mvccPutInternal(
-			ctx, rw, iter, ms, res.KVs[i].Key, timestamp, nil, txn, buf, nil)
-		if err != nil {
-			break
-		}
-	}
-
-	iter.Close()
-	buf.release()
+	defer iter.Close()
 
 	var keys []roachpb.Key
-	if returnKeys && err == nil && len(res.KVs) > 0 {
-		keys = make([]roachpb.Key, len(res.KVs))
-		for i := range res.KVs {
-			keys[i] = res.KVs[i].Key
+	for i, kv := range res.KVs {
+		if err := mvccPutInternal(ctx, rw, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
+			return nil, nil, 0, err
+		}
+		if returnKeys {
+			if i == 0 {
+				keys = make([]roachpb.Key, len(res.KVs))
+			}
+			keys[i] = kv.Key
 		}
 	}
-
-	return keys, res.ResumeSpan, res.NumKeys, err
+	return keys, res.ResumeSpan, res.NumKeys, nil
 }
 
 func mvccScanToBytes(
@@ -2648,12 +2640,11 @@ type MVCCScanResult struct {
 // non-transactional scans may be inconsistent.
 //
 // When scanning in "fail on more recent" mode, a WriteTooOldError will be
-// returned if the scan observes a version with a timestamp above the read
-// timestamp. If the scan observes multiple versions with timestamp above
+// returned if the scan observes a version with a timestamp at or above the read
+// timestamp. If the scan observes multiple versions with timestamp at or above
 // the read timestamp, the maximum will be returned in the WriteTooOldError.
-// Similarly, a WriteIntentError will be returned if the scan observes
-// another transaction's intent, even if it has a timestamp above the read
-// timestamp.
+// Similarly, a WriteIntentError will be returned if the scan observes another
+// transaction's intent, even if it has a timestamp above the read timestamp.
 func MVCCScan(
 	ctx context.Context,
 	reader Reader,
