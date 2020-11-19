@@ -21,6 +21,9 @@ statement error region "test1" defined multiple times
 CREATE DATABASE duplicate_region_name_db REGIONS "test1", "test1"
 
 statement error implementation pending
+CREATE DATABASE primary_region_db PRIMARY REGION "test"
+
+statement error implementation pending
 CREATE DATABASE new_db SURVIVE ZONE FAILURE
 
 statement ok
@@ -34,3 +37,6 @@ ALTER DATABASE new_db DROP REGION "us-west-1"
 
 statement error implementation pending
 ALTER TABLE a SET REGIONAL AFFINITY TO NONE
+
+statement error implementation pending
+ALTER DATABASE primary_region_db PRIMARY REGION "test"

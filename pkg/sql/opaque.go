@@ -55,6 +55,8 @@ func buildOpaque(
 		plan, err = p.AlterDatabaseAddRegion(ctx, n)
 	case *tree.AlterDatabaseDropRegion:
 		plan, err = p.AlterDatabaseDropRegion(ctx, n)
+	case *tree.AlterDatabasePrimaryRegion:
+		plan, err = p.AlterDatabasePrimaryRegion(ctx, n)
 	case *tree.AlterDatabaseSurvivalGoal:
 		plan, err = p.AlterDatabaseSurvivalGoal(ctx, n)
 	case *tree.AlterIndex:
@@ -198,6 +200,7 @@ func init() {
 		&tree.AlterDatabaseAddRegion{},
 		&tree.AlterDatabaseDropRegion{},
 		&tree.AlterDatabaseOwner{},
+		&tree.AlterDatabasePrimaryRegion{},
 		&tree.AlterDatabaseSurvivalGoal{},
 		&tree.AlterIndex{},
 		&tree.AlterSchema{},

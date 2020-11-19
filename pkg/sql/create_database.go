@@ -68,6 +68,10 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		}
 	}
 
+	if n.PrimaryRegion != "" {
+		return nil, unimplemented.New("create database primary region", "implementation pending")
+	}
+
 	if n.ConnectionLimit != -1 {
 		return nil, unimplemented.NewWithIssueDetailf(
 			54241,
