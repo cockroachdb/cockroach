@@ -8,11 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package sql_test
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -23,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -349,6 +354,361 @@ CREATE SEQUENCE t.useq OWNED BY t.test.a;
 CREATE SEQUENCE t.valid_seq OWNED BY t.test.a`)
 
 			tc.test(t, kvDB, sqlDB)
+		})
+	}
+}
+
+// TestCachedSequences tests the behavior of cached sequences.
+func TestCachedSequences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Start test cluster.
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	execStmt := func(node int, statement string) {
+		if _, err := tc.ServerConn(node).Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	anyNode := func() int {
+		return rand.Intn(3)
+	}
+
+	queryInt := func(node int, statement string) int {
+		rows, err := tc.ServerConn(node).Query(statement)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		if !rows.Next() {
+			t.Fatal("No rows returned.")
+		}
+		var intVal int
+		if err := rows.Scan(&intVal); err != nil {
+			t.Fatal(err)
+		}
+		return intVal
+	}
+
+	testCases := []struct {
+		name string
+		test func(*testing.T)
+	}{
+		// Test a cached sequence on the single node.
+		{
+			name: "Single Node Cache Test",
+			test: func(t *testing.T) {
+				execStmt(0, `
+				CREATE SEQUENCE s
+									CACHE 5
+				   INCREMENT BY 2
+					   START WITH 2
+			  `)
+
+				// The cache starts out empty. When the cache is empty, the underlying sequence in the database
+				// should be incremented by the cache size * increment amount, so it should increase by 10 each time.
+
+				// Node 0 caches 5 values (2,4,6,8,10) and uses the first value (2).
+				//
+				// caches:
+				//  node 0: 4,6,8,10
+				// db:
+				//  s: 10
+				assert.Equal(t, 2, queryInt(0, "SELECT nextval('s')"))
+				assert.Equal(t, 10, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				// caches:
+				//  node 0: -
+				// db:
+				//  s: 10
+				for sequenceNumber := 4; sequenceNumber <= 10; sequenceNumber += 2 {
+					assert.Equal(t, sequenceNumber, queryInt(0, "SELECT nextval('s')"))
+				}
+				assert.Equal(t, 10, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				// Node 0 caches 5 values (12,14,16,18,20) and uses the first value (12).
+				// caches:
+				//  node 0: 14,16,18,20
+				//  node 1: -
+				//  node 2: -
+				// db:
+				//  s: 20
+				assert.Equal(t, 12, queryInt(0, "SELECT nextval('s')"))
+				assert.Equal(t, 20, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				// caches:
+				//  node 0: -
+				// db:
+				//  s: 20
+				for sequenceNumber := 14; sequenceNumber <= 20; sequenceNumber += 2 {
+					assert.Equal(t, sequenceNumber, queryInt(0, "SELECT nextval('s')"))
+				}
+				assert.Equal(t, 20, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				execStmt(0, "DROP SEQUENCE s")
+			},
+		},
+		// Test a cached sequence on multiple nodes.
+		{
+			name: "Multi-Node Cache Test",
+			test: func(t *testing.T) {
+				execStmt(0, `
+				CREATE SEQUENCE s
+									CACHE 5
+				   INCREMENT BY 2
+					   START WITH 2
+			  `)
+
+				// The caches all start out empty. When a cache is empty, the underlying sequence in the database
+				// should be incremented by the cache size * increment amount, so it should increase by 10 each time.
+
+				// Node 0 caches 5 values (2,4,6,8,10) and uses the first value (2).
+				//
+				// caches:
+				//  node 0: 4,6,8,10
+				//  node 1: -
+				//  node 2: -
+				// db:
+				//  s: 10
+				assert.Equal(t, 2, queryInt(0, "SELECT nextval('s')"))
+				assert.Equal(t, 10, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				// Node 1 caches 5 values (12,14,16,18,20) and uses the first value (12).
+				// caches:
+				//  node 0: 4,6,8,10
+				//  node 1: 14,16,18,20
+				//  node 2: -
+				// db:
+				//  s: 20
+				assert.Equal(t, 12, queryInt(1, "SELECT nextval('s')"))
+				assert.Equal(t, 20, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				// Node 2 caches 5 values (22,24,26,28,30) and uses the first value (22).
+				// caches:
+				//  node 0: 4,6,8,10
+				//  node 1: 14,16,18,20
+				//  node 2: 24,26,28,30
+				// db:
+				//  s: 30
+				assert.Equal(t, 22, queryInt(2, "SELECT nextval('s')"))
+				assert.Equal(t, 30, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				// caches:
+				//  node 0: -
+				//  node 1: 14,16,18,20
+				//  node 2: 24,26,28,30
+				// db:
+				//  s: 30
+				for sequenceNumber := 4; sequenceNumber <= 10; sequenceNumber += 2 {
+					assert.Equal(t, sequenceNumber, queryInt(0, "SELECT nextval('s')"))
+				}
+
+				// caches:
+				//  node 0: -
+				//  node 1: -
+				//  node 2: 24,26,28,30
+				// db:
+				//  s: 30
+				for sequenceNumber := 14; sequenceNumber <= 20; sequenceNumber += 2 {
+					assert.Equal(t, sequenceNumber, queryInt(1, "SELECT nextval('s')"))
+				}
+
+				// caches:
+				//  node 0: -
+				//  node 1: -
+				//  node 2: -
+				// db:
+				//  s: 30
+				for sequenceNumber := 24; sequenceNumber <= 30; sequenceNumber += 2 {
+					assert.Equal(t, sequenceNumber, queryInt(2, "SELECT nextval('s')"))
+				}
+
+				assert.Equal(t, 30, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				// caches:
+				//  node 0: 34,36,38,40
+				//  node 1: -
+				//  node 2: -
+				// db:
+				//  s: 40
+				assert.Equal(t, 32, queryInt(0, "SELECT nextval('s')"))
+				assert.Equal(t, 40, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				// caches:
+				//  node 0: 34,36,38,40
+				//  node 1: 44,46,48,50
+				//  node 2: -
+				// db:
+				//  s: 50
+				assert.Equal(t, 42, queryInt(1, "SELECT nextval('s')"))
+				assert.Equal(t, 50, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				// caches:
+				//  node 0: 34,36,38,40
+				//  node 1: 44,46,48,50
+				//  node 2: 54,56,58,60
+				// db:
+				//  s: 60
+				assert.Equal(t, 52, queryInt(2, "SELECT nextval('s')"))
+				assert.Equal(t, 60, queryInt(anyNode(), "SELECT last_value FROM s"))
+
+				execStmt(0, "DROP SEQUENCE s")
+			},
+		},
+		// Test multiple cached sequences on multiple nodes.
+		{
+			name: "Multi-Node, Multi-Sequence Cache Test",
+			test: func(t *testing.T) {
+				execStmt(0, `
+				CREATE SEQUENCE s1
+									CACHE 5
+				   INCREMENT BY 2
+					   START WITH 2
+			  `)
+
+				execStmt(0, `
+				CREATE SEQUENCE s2
+									CACHE 4
+				   INCREMENT BY 3
+					   START WITH 3
+			  `)
+
+				// The caches all start out empty. When a cache is empty, the underlying sequence in the database
+				// should be incremented by the cache size * increment amount.
+				//
+				// s1 increases by 10 each time, and s2 increases by 12 each time.
+
+				// caches:
+				//  node 0:
+				//   s1: 4,6,8,10
+				//  node 1: -
+				//  node 2: -
+				// db:
+				//  s1: 10
+				assert.Equal(t, 2, queryInt(0, "SELECT nextval('s1')"))
+				assert.Equal(t, 10, queryInt(anyNode(), "SELECT last_value FROM s1"))
+
+				// caches:
+				//  node 0:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				//  node 1: -
+				//  node 2: -
+				// db:
+				//  s1: 10
+				//  s2: 12
+				assert.Equal(t, 3, queryInt(0, "SELECT nextval('s2')"))
+				assert.Equal(t, 12, queryInt(anyNode(), "SELECT last_value FROM s2"))
+
+				// caches:
+				//  node 0:
+				//   s1: 4,6,8,10
+				//   s2: 6, 9, 12
+				//  node 1:
+				//   s1: 14,16,18,20
+				//  node 2: -
+				// db:
+				//  s1: 20
+				//  s2: 12
+				assert.Equal(t, 12, queryInt(1, "SELECT nextval('s1')"))
+				assert.Equal(t, 20, queryInt(anyNode(), "SELECT last_value FROM s1"))
+
+				// caches:
+				//  node 0:
+				//   s1: 4,6,8,10
+				//   s2: 6, 9, 12
+				//  node 1:
+				//   s1: 14,16,18,20
+				//   s2: 18,21,24
+				//  node 2: -
+				// db:
+				//  s1: 20
+				//  s2: 24
+				assert.Equal(t, 15, queryInt(1, "SELECT nextval('s2')"))
+				assert.Equal(t, 24, queryInt(anyNode(), "SELECT last_value FROM s2"))
+
+				// caches:
+				//  node 0:
+				//   s1: 4,6,8,10
+				//   s2: 6, 9, 12
+				//  node 1:
+				//   s1: 14,16,18,20
+				//   s2: 18,21,24
+				//  node 2:
+				//   s1: 24,26,28,30
+				// db:
+				//  s1: 30
+				//  s2: 24
+				assert.Equal(t, 22, queryInt(2, "SELECT nextval('s1')"))
+				assert.Equal(t, 30, queryInt(anyNode(), "SELECT last_value FROM s1"))
+
+				// caches:
+				//  node 0:
+				//   s1: 4,6,8,10
+				//   s2: 6, 9, 12
+				//  node 1:
+				//   s1: 14,16,18,20
+				//   s2: 18,21,24
+				//  node 2:
+				//   s1: 24,26,28,30
+				//   s2: 30,33,36
+				// db:
+				//  s1: 30
+				//  s2: 36
+				assert.Equal(t, 27, queryInt(2, "SELECT nextval('s2')"))
+				assert.Equal(t, 36, queryInt(anyNode(), "SELECT last_value FROM s2"))
+
+				// caches:
+				//  node 0:
+				//   s1: 4,6,8,10
+				//   s2: 6, 9, 12
+				//  node 1:
+				//   s1: 14,16,18,20
+				//   s2: 18,21,24
+				//  node 2:
+				//   s1: 24,26,28,30
+				//   s2: 30,33,36
+				// db:
+				//  s1: 30
+				//  s2: 36
+				wg := sync.WaitGroup{}
+				emptyCache := func(node, start, finish, inc int, seq string) {
+					for sequenceNumber := start; sequenceNumber <= finish; sequenceNumber += inc {
+						assert.Equal(t, sequenceNumber, queryInt(node, fmt.Sprintf("SELECT nextval('%s')", seq)))
+					}
+					wg.Done()
+				}
+				wg.Add(6)
+				go emptyCache(0, 4, 10, 2, "s1")
+				go emptyCache(0, 6, 12, 3, "s2")
+				go emptyCache(1, 14, 20, 2, "s1")
+				go emptyCache(1, 18, 24, 3, "s2")
+				go emptyCache(2, 24, 30, 2, "s1")
+				go emptyCache(2, 30, 36, 3, "s2")
+				wg.Wait()
+
+				// caches:
+				//  node 0: -
+				//  node 1: -
+				//  node 2: -
+				// db:
+				//  s1: 30
+				//  s2: 36
+				assert.Equal(t, 30, queryInt(anyNode(), "SELECT last_value FROM s1"))
+				assert.Equal(t, 36, queryInt(anyNode(), "SELECT last_value FROM s2"))
+
+				execStmt(0, "DROP SEQUENCE s1")
+				execStmt(0, "DROP SEQUENCE s2")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.test(t)
 		})
 	}
 }

@@ -538,6 +538,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		ExternalIODirConfig:        cfg.ExternalIODirConfig,
 		HydratedTables:             hydratedTablesCache,
 		GCJobNotifier:              gcJobNotifier,
+		SequenceCache:              sql.NewSequenceCache(),
 	}
 
 	cfg.stopper.AddCloser(execCfg.ExecLogger)

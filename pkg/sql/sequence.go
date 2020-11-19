@@ -32,8 +32,75 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
+
+// SequenceCache stores sequence values that have already been created in KV
+// and are available to be given out as sequence numbers. Values for sequences
+// are stored using sequence descriptor IDs as keys. The cache should only
+// be accessed using the provided API.
+type SequenceCache struct {
+	mu struct {
+		syncutil.Mutex
+		entries map[uint32]*sequenceCacheEntry
+	}
+}
+
+// NewSequenceCache creates an instance of sequenceCache.
+func NewSequenceCache() *SequenceCache {
+	sc := &SequenceCache{}
+	sc.mu.entries = map[uint32]*sequenceCacheEntry{}
+	return sc
+}
+
+type sequenceCacheEntry struct {
+	mu struct {
+		syncutil.Mutex
+		// currentIndex stores the index of the next number to be given out. It is empty
+		// if currentIndex == len(values). currentIdx will not be incremented past len(values).
+		currentIndex int
+		// Stores values to be given out.
+		values *[]int64
+	}
+}
+
+func newSequenceCacheEntry() *sequenceCacheEntry {
+	sce := &sequenceCacheEntry{}
+	sce.mu.values = &[]int64{}
+	return sce
+}
+
+// NextValue fetches the next value in the sequence cache atomically. If the values in the
+// cache have all been given out, then fetchNextValues() is used to repopulate the cache.
+func (sc *SequenceCache) NextValue(
+	seqID uint32, fetchNextValues func(seqID uint32) (*[]int64, error),
+) (int64, error) {
+	// Create entry for this sequence ID if there are no existing entries.
+	sc.mu.Lock()
+	if _, existsInCache := sc.mu.entries[seqID]; !existsInCache {
+		sc.mu.entries[seqID] = newSequenceCacheEntry()
+	}
+	seqNumsForDesc := sc.mu.entries[seqID]
+	sc.mu.Unlock()
+
+	seqNumsForDesc.mu.Lock()
+	defer seqNumsForDesc.mu.Unlock()
+
+	// Cache is empty. Fetch new values.
+	if seqNumsForDesc.mu.currentIndex == len(*seqNumsForDesc.mu.values) {
+		newValues, err := fetchNextValues(seqID)
+		if err != nil {
+			return 0, err
+		}
+
+		seqNumsForDesc.mu.currentIndex = 0
+		seqNumsForDesc.mu.values = newValues
+	}
+
+	seqNumsForDesc.mu.currentIndex++
+	return (*seqNumsForDesc.mu.values)[seqNumsForDesc.mu.currentIndex-1], nil
+}
 
 // GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
 func (p *planner) GetSerialSequenceNameFromColumn(
@@ -92,17 +159,41 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID.SQLInstanceID())
 		val = int64(rowid)
 	} else {
-		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.ID))
-		val, err = kv.IncrementValRetryable(
-			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment)
-		if err != nil {
-			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
-				return 0, boundsExceededError(descriptor)
+
+		fetchNextValues := func(seqID uint32) (*[]int64, error) {
+			seqValueKey := p.ExecCfg().Codec.SequenceKey(seqID)
+
+			endValue, err := kv.IncrementValRetryable(
+				ctx, p.txn.DB(), seqValueKey, seqOpts.Increment*seqOpts.CacheSize)
+
+			if err != nil {
+				if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
+					return nil, boundsExceededError(descriptor)
+				}
+				return nil, err
 			}
-			return 0, err
+			if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
+				return nil, boundsExceededError(descriptor)
+			}
+
+			result := make([]int64, seqOpts.CacheSize)
+			for i := int64(0); i < seqOpts.CacheSize; i++ {
+				result[seqOpts.CacheSize-i-1] = endValue - (seqOpts.Increment * i)
+			}
+			return &result, nil
 		}
-		if val > seqOpts.MaxValue || val < seqOpts.MinValue {
-			return 0, boundsExceededError(descriptor)
+
+		if seqOpts.CacheSize == 1 {
+			keys, err := fetchNextValues(uint32(descriptor.ID))
+			if err != nil {
+				return 0, err
+			}
+			val = (*keys)[0]
+		} else {
+			val, err = p.ExecCfg().SequenceCache.NextValue(uint32(descriptor.ID), fetchNextValues)
+			if err != nil {
+				return 0, err
+			}
 		}
 	}
 
@@ -262,6 +353,8 @@ func assignSequenceOptions(
 			opts.MaxValue = -1
 			opts.Start = opts.MaxValue
 		}
+		// No Caching
+		opts.CacheSize = 1
 	}
 
 	// Fill in all other options.
@@ -289,8 +382,7 @@ func assignSequenceOptions(
 			case v == 1:
 				// Do nothing; this is the default.
 			case v > 1:
-				return unimplemented.NewWithIssuef(32567,
-					"CACHE values larger than 1 are not supported, found %d", v)
+				opts.CacheSize = *option.IntVal
 			}
 		case tree.SeqOptIncrement:
 			// Do nothing; this has already been set.

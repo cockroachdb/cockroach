@@ -741,6 +741,8 @@ type ExecutorConfig struct {
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
 	VersionUpgradeHook func(ctx context.Context, to roachpb.Version) error
+
+	SequenceCache *SequenceCache
 }
 
 // Organization returns the value of cluster.organization.
