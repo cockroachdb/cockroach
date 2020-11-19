@@ -945,9 +945,8 @@ END;
 				`,
 			query: map[string][][]string{
 				`SELECT nextval('i_seq')`:    {{"11"}},
-				`SHOW CREATE SEQUENCE i_seq`: {{"i_seq", "CREATE SEQUENCE i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1"}},
+				`SHOW CREATE SEQUENCE i_seq`: {{"i_seq", "CREATE SEQUENCE public.i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1"}},
 			},
-			skipIssue: 53958,
 		},
 		{
 			name: "INSERT without specifying all column values",
@@ -1598,7 +1597,15 @@ func TestImportRowLimit(t *testing.T) {
 		if actualRowCount := len(res); expectedRowLimit != actualRowCount {
 			t.Fatalf("expected %d, got %d", expectedRowLimit, actualRowCount)
 		}
+    
+	t.Run("row limit multiple csv", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE test; USE test`)
+		defer sqlDB.Exec(t, `DROP DATABASE test`)
 
+		csvData1 := "apple\nblueberry"
+		err := ioutil.WriteFile(filepath.Join(baseDir, "testData1"), []byte(csvData1), 0666)
+		require.NoError(t, err)
+    
 		sqlDB.Exec(t, `DROP TABLE IF EXISTS second`)
 
 		// Import multiple tables including `simple` and `second`.
@@ -2309,6 +2316,41 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 	})
 }
 
+// TestImportFeatureFlag tests the feature flag logic that allows the IMPORT and
+// IMPORT INTO commands to be toggled off via cluster settings.
+func TestImportFeatureFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	const nodes = 1
+	numFiles := nodes + 2
+	rowsPerFile := 1000
+	rowsPerRaceFile := 16
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "csv")
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
+
+	// Feature flag is off — test that IMPORT and IMPORT INTO surface error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = FALSE`)
+	sqlDB.ExpectErr(t, `IMPORT feature was disabled by the database administrator`,
+		fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]))
+	sqlDB.Exec(t, `CREATE TABLE feature_flag (a INT8 PRIMARY KEY, b STRING)`)
+	sqlDB.ExpectErr(t, `IMPORT feature was disabled by the database administrator`,
+		fmt.Sprintf(`IMPORT INTO feature_flag (a, b) CSV DATA (%s)`, testFiles.files[0]))
+
+	// Feature flag is on — test that IMPORT and IMPORT INTO do not error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = TRUE`)
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
+		testFiles.files[0]))
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO feature_flag (a, b) CSV DATA (%s)`, testFiles.files[0]))
+}
+
 func TestImportObjectLevelRBAC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2833,7 +2875,7 @@ func TestImportIntoCSV(t *testing.T) {
 				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
 			)
 
-			jobPrefix := fmt.Sprintf(`IMPORT INTO defaultdb.public.t(a, b)`)
+			jobPrefix := `IMPORT INTO defaultdb.public.t(a, b)`
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUserName(),
 				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
@@ -3344,8 +3386,8 @@ func TestImportIntoCSV(t *testing.T) {
 		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		var checkValidated, fkValidated bool
-		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'check_a'`)).Scan(&checkValidated)
-		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'fk_ref'`)).Scan(&fkValidated)
+		sqlDB.QueryRow(t, `SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'check_a'`).Scan(&checkValidated)
+		sqlDB.QueryRow(t, `SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'fk_ref'`).Scan(&fkValidated)
 
 		// Prior to import all constraints should be validated.
 		if !checkValidated || !fkValidated {
@@ -3354,8 +3396,8 @@ func TestImportIntoCSV(t *testing.T) {
 
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]))
 
-		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'check_a'`)).Scan(&checkValidated)
-		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'fk_ref'`)).Scan(&fkValidated)
+		sqlDB.QueryRow(t, `SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'check_a'`).Scan(&checkValidated)
+		sqlDB.QueryRow(t, `SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'fk_ref'`).Scan(&fkValidated)
 
 		// Following an import the constraints should be unvalidated.
 		if checkValidated || fkValidated {

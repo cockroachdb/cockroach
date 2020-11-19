@@ -237,4 +237,8 @@ type TestTenantArgs struct {
 	// Stopper, if not nil, is used to stop the tenant manually otherwise the
 	// TestServer stopper will be used.
 	Stopper *stop.Stopper
+
+	// DeterministicExplainAnalyze, if set, will result in overriding fields in
+	// EXPLAIN ANALYZE (PLAN) that can vary between runs (like elapsed times).
+	DeterministicExplainAnalyze bool
 }

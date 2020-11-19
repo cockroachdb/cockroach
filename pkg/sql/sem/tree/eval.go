@@ -1038,7 +1038,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -1048,7 +1048,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -1064,7 +1064,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				nanos := left.(*DTimestamp).Sub(stripped.Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityStable,
 		},
@@ -1080,7 +1080,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				nanos := stripped.Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeDurationJustifyHours(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityStable,
 		},
@@ -1955,41 +1955,27 @@ var BinOps = map[BinaryOperator]binOpOverload{
 	},
 }
 
-// timestampMinusBinOp is the implementation of the subtraction
-// between types.TimestampTZ operands.
-var timestampMinusBinOp *BinOp
-
-// TimestampDifference computes the interval difference between two
-// TimestampTZ datums. The result is a DInterval. The caller must
-// ensure that the arguments are of the proper Datum type.
-func TimestampDifference(ctx *EvalContext, start, end Datum) (Datum, error) {
-	return timestampMinusBinOp.Fn(ctx, start, end)
-}
-
-func init() {
-	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(types.TimestampTZ, types.TimestampTZ)
-}
-
 // CmpOp is a comparison operator.
 type CmpOp struct {
+	types TypeList
+
 	LeftType  *types.T
 	RightType *types.T
+
+	// Datum return type is a union between *DBool and dNull.
+	Fn TwoArgFn
+
+	// counter, if non-nil, should be incremented every time the
+	// operator is type checked.
+	counter telemetry.Counter
 
 	// If NullableArgs is false, the operator returns NULL
 	// whenever either argument is NULL.
 	NullableArgs bool
 
-	// Datum return type is a union between *DBool and dNull.
-	Fn TwoArgFn
-
 	Volatility Volatility
 
-	types       TypeList
 	isPreferred bool
-
-	// counter, if non-nil, should be incremented every time the
-	// operator is type checked.
-	counter telemetry.Counter
 }
 
 func (op *CmpOp) params() TypeList {
@@ -3045,6 +3031,22 @@ type EvalPlanner interface {
 
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *Subquery) (Datum, error)
+
+	// UnsafeUpsertDescriptor is a used to repair descriptors in dire
+	// circumstances. See the comment on the planner implementation.
+	UnsafeUpsertDescriptor(ctx context.Context, descID int64, encodedDescriptor []byte) error
+
+	// UnsafeDeleteDescriptor is a used to repair descriptors in dire
+	// circumstances. See the comment on the planner implementation.
+	UnsafeDeleteDescriptor(ctx context.Context, descID int64) error
+
+	// UnsafeUpsertNamespaceEntry is a used to repair namespace entries in dire
+	// circumstances. See the comment on the planner implementation.
+	UnsafeUpsertNamespaceEntry(ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool) error
+
+	// UnsafeDeleteNamespaceEntry is a used to repair namespace entries in dire
+	// circumstances. See the comment on the planner implementation.
+	UnsafeDeleteNamespaceEntry(ctx context.Context, parentID, parentSchemaID int64, name string, descID int64) error
 }
 
 // EvalSessionAccessor is a limited interface to access session variables.
@@ -4383,6 +4385,12 @@ func (t *DOidWrapper) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
+func makeNoValueProvidedForPlaceholderErr(pIdx PlaceholderIdx) error {
+	return pgerror.Newf(pgcode.UndefinedParameter,
+		"no value provided for placeholder: $%d", pIdx+1,
+	)
+}
+
 // Eval implements the TypedExpr interface.
 func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 	if !ctx.HasPlaceholders() {
@@ -4392,8 +4400,7 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	e, ok := ctx.Placeholders.Value(t.Idx)
 	if !ok {
-		return nil, pgerror.Newf(pgcode.UndefinedParameter,
-			"no value provided for placeholder: %s", t)
+		return nil, makeNoValueProvidedForPlaceholderErr(t.Idx)
 	}
 	// Placeholder expressions cannot contain other placeholders, so we do
 	// not need to recurse.

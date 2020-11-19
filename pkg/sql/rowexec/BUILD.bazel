@@ -28,7 +28,6 @@ go_library(
         "scrub_tablereader.go",
         "sorter.go",
         "stats.go",
-        "stats.pb.go",
         "stream_group_accumulator.go",
         "stream_merger.go",
         "subquery.go",
@@ -40,7 +39,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/rowexec",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -78,7 +76,6 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
-        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
@@ -89,8 +86,6 @@ go_library(
         "//vendor/github.com/axiomhq/hyperloglog",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/logtags",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/gogo/protobuf/types",
     ],
 )
 

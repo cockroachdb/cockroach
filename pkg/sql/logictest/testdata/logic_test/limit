@@ -176,3 +176,146 @@ INSERT INTO t_47283 VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)
 query II
 SELECT * FROM (SELECT * FROM t_47283 ORDER BY k LIMIT 4) WHERE a > 5 LIMIT 1
 ----
+
+# Test various combinations of LIMIT and OFFSET with values coming from
+# subqueries, including values that can cause overflows.
+statement ok
+CREATE TABLE vals (k STRING PRIMARY KEY, v INT);
+INSERT INTO vals VALUES ('zero', 0), ('one', 1), ('large', 9223372036854775806), ('maxint64', 9223372036854775807);
+CREATE TABLE probe (a INT PRIMARY KEY);
+INSERT INTO probe VALUES (1), (2), (3), (4);
+
+# No offset.
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'zero');
+----
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'one');
+----
+1
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'large');
+----
+1
+2
+3
+4
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'maxint64');
+----
+1
+2
+3
+4
+
+# No limit.
+query I
+SELECT a FROM probe ORDER BY a OFFSET (SELECT v FROM vals WHERE k = 'zero');
+----
+1
+2
+3
+4
+
+query I
+SELECT a FROM probe ORDER BY a OFFSET (SELECT v FROM vals WHERE k = 'one');
+----
+2
+3
+4
+
+query I
+SELECT a FROM probe ORDER BY a OFFSET (SELECT v FROM vals WHERE k = 'large');
+----
+
+query I
+SELECT a FROM probe ORDER BY a OFFSET (SELECT v FROM vals WHERE k = 'maxint64');
+----
+
+
+# Offset zero.
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'zero') OFFSET (SELECT v FROM vals WHERE k = 'zero');
+----
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'one') OFFSET (SELECT v FROM vals WHERE k = 'zero');
+----
+1
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'large') OFFSET (SELECT v FROM vals WHERE k = 'zero');
+----
+1
+2
+3
+4
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'maxint64') OFFSET (SELECT v FROM vals WHERE k = 'zero');
+----
+1
+2
+3
+4
+
+# Offset one.
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'zero') OFFSET (SELECT v FROM vals WHERE k = 'one');
+----
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'one') OFFSET (SELECT v FROM vals WHERE k = 'one');
+----
+2
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'large') OFFSET (SELECT v FROM vals WHERE k = 'one');
+----
+2
+3
+4
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'maxint64') OFFSET (SELECT v FROM vals WHERE k = 'one');
+----
+2
+3
+4
+
+# Offset large.
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'zero') OFFSET (SELECT v FROM vals WHERE k = 'large');
+----
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'one') OFFSET (SELECT v FROM vals WHERE k = 'large');
+----
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'large') OFFSET (SELECT v FROM vals WHERE k = 'large');
+----
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'maxint64') OFFSET (SELECT v FROM vals WHERE k = 'large');
+----
+
+# Offset maxint64.
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'zero') OFFSET (SELECT v FROM vals WHERE k = 'maxint64');
+----
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'one') OFFSET (SELECT v FROM vals WHERE k = 'maxint64');
+----
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'large') OFFSET (SELECT v FROM vals WHERE k = 'maxint64');
+----
+
+query I
+SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'maxint64') OFFSET (SELECT v FROM vals WHERE k = 'maxint64');
+----

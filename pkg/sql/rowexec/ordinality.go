@@ -69,7 +69,7 @@ func newOrdinalityProcessor(
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		o.input = newInputStatCollector(o.input)
-		o.FinishTrace = o.outputStatsToTrace
+		o.ExecStatsForTrace = o.execStatsForTrace
 	}
 
 	return o, nil
@@ -114,26 +114,15 @@ func (o *ordinalityProcessor) ConsumerClosed() {
 	o.InternalClose()
 }
 
-const ordinalityTagPrefix = "ordinality."
-
-// Stats implements the SpanStats interface.
-func (os *OrdinalityStats) Stats() map[string]string {
-	return os.InputStats.Stats(ordinalityTagPrefix)
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (os *OrdinalityStats) StatsForQueryPlan() []string {
-	return os.InputStats.StatsForQueryPlan("")
-}
-
-// outputStatsToTrace outputs the collected distinct stats to the trace. Will
+// execStatsForTrace outputs the collected distinct stats to the trace. Will
 // fail silently if the Distinct processor is not collecting stats.
-func (o *ordinalityProcessor) outputStatsToTrace() {
-	is, ok := getInputStats(o.FlowCtx, o.input)
+func (o *ordinalityProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(o.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(o.Ctx); sp != nil {
-		sp.SetSpanStats(&OrdinalityStats{InputStats: is})
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Output: o.Out.Stats(),
 	}
 }

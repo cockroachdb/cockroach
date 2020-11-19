@@ -45,7 +45,7 @@ type Options struct {
 	// connection. The TLS config is in it and it must have an appropriate
 	// ServerName for the remote backend.
 	BackendConfigFromParams func(
-		params map[string]string, ipAddress string,
+		params map[string]string, incomingConn net.Conn,
 	) (config *BackendConfig, clientErr error)
 
 	// If set, consulted to modify the parameters set by the frontend before
@@ -125,14 +125,8 @@ func (s *Server) Proxy(conn net.Conn) error {
 
 	var backendConfig *BackendConfig
 	{
-		ip, _, err := net.SplitHostPort(conn.RemoteAddr().String())
-		if err != nil {
-			return NewErrorf(
-				CodeParamsRoutingFailed, "could not parse address %s: %v",
-				conn.RemoteAddr().String(), err)
-		}
 		var clientErr error
-		backendConfig, clientErr = s.opts.BackendConfigFromParams(msg.Parameters, ip)
+		backendConfig, clientErr = s.opts.BackendConfigFromParams(msg.Parameters, conn)
 		if clientErr != nil {
 			var codeErr *codeError
 			if !errors.As(clientErr, &codeErr) {

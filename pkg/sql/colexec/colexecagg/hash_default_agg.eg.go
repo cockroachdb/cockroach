@@ -78,7 +78,6 @@ func (a *defaultHashAgg) Compute(
 				if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
 					colexecerror.ExpectedError(err)
 				}
-
 			}
 		}
 	})

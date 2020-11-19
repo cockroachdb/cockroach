@@ -110,6 +110,7 @@ type Registry struct {
 	settings *cluster.Settings
 	execCtx  jobExecCtxMaker
 	metrics  Metrics
+	knobs    TestingKnobs
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
 	// potentially attempt to claim jobs.
@@ -201,6 +202,7 @@ func MakeRegistry(
 	histogramWindowInterval time.Duration,
 	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
+	knobs *TestingKnobs,
 ) *Registry {
 	r := &Registry{
 		ac:                  ac,
@@ -215,6 +217,9 @@ func MakeRegistry(
 		execCtx:             execCtxFn,
 		preventAdoptionFile: preventAdoptionFile,
 		adoptionCh:          make(chan adoptionNotice),
+	}
+	if knobs != nil {
+		r.knobs = *knobs
 	}
 	r.mu.deprecatedEpoch = 1
 	r.mu.deprecatedJobs = make(map[int64]context.CancelFunc)
@@ -624,8 +629,12 @@ func (r *Registry) Start(
 UPDATE system.jobs
    SET claim_session_id = NULL
  WHERE claim_session_id <> $1
+   AND status NOT IN ($2, $3, $4)
    AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)`,
-			s.ID().UnsafeBytes()); err != nil {
+			s.ID().UnsafeBytes(),
+			// Don't touch terminal jobs.
+			StatusSucceeded, StatusCanceled, StatusFailed,
+		); err != nil {
 			log.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}

@@ -29,12 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -234,6 +234,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogLocksTableID:               pgCatalogLocksTable,
 		catconstants.PgCatalogMatViewsTableID:            pgCatalogMatViewsTable,
 		catconstants.PgCatalogNamespaceTableID:           pgCatalogNamespaceTable,
+		catconstants.PgCatalogOpclassTableID:             pgCatalogOpclassTable,
 		catconstants.PgCatalogOperatorTableID:            pgCatalogOperatorTable,
 		catconstants.PgCatalogPreparedStatementsTableID:  pgCatalogPreparedStatementsTable,
 		catconstants.PgCatalogPreparedXactsTableID:       pgCatalogPreparedXactsTable,
@@ -446,7 +447,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
 			for _, colID := range index.ColumnIDs {
 				idxID := h.IndexOid(table.GetID(), index.ID)
-				column := table.GetColumnAtIdx(columnIdxMap[colID])
+				column := table.GetColumnAtIdx(columnIdxMap.GetDefault(colID))
 				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
 					return err
 				}
@@ -1655,6 +1656,15 @@ var (
 	// Avoid unused warning for constants.
 	_ = postfixKind
 )
+
+var pgCatalogOpclassTable = virtualSchemaTable{
+	comment: `opclass (empty - Operator classes not supported yet)
+https://www.postgresql.org/docs/12/catalog-pg-opclass.html`,
+	schema: vtable.PGCatalogOpclass,
+	populate: func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
 
 var pgCatalogOperatorTable = virtualSchemaTable{
 	comment: `operators (incomplete)

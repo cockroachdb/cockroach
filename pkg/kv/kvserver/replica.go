@@ -719,7 +719,7 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 
 // NodeID returns the ID of the node this replica belongs to.
 func (r *Replica) NodeID() roachpb.NodeID {
-	return r.store.nodeDesc.NodeID
+	return r.store.NodeID()
 }
 
 // GetNodeLocality returns the locality of the node this replica belongs to.

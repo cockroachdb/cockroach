@@ -77,9 +77,6 @@ type hashJoinerSourceSpec struct {
 	// sourceTypes specify the types of the input columns of the source table for
 	// the hash joiner.
 	sourceTypes []*types.T
-
-	// outer specifies whether an outer join is required over the input.
-	outer bool
 }
 
 // hashJoiner performs a hash join on the input tables equality columns.
@@ -198,11 +195,10 @@ type hashJoiner struct {
 		buildIdx []int
 		probeIdx []int
 
-		// probeRowUnmatched is used in the case that the spec.left.outer is true.
-		// This means that an outer join is performed on the probe side and we use
-		// probeRowUnmatched to represent that the resulting columns should be NULL on
-		// the build table. This indicates that the probe table row did not match any
-		// build table rows.
+		// probeRowUnmatched is used in the case of left/full outer joins. We
+		// use probeRowUnmatched to represent that the resulting columns should
+		// be NULL on the build table. This indicates that the probe table row
+		// did not match any build table rows.
 		probeRowUnmatched []bool
 		// buildRowMatched is used in the case that spec.trackBuildMatches is true. This
 		// means that an outer join is performed on the build side and buildRowMatched
@@ -314,9 +310,9 @@ func (hj *hashJoiner) build(ctx context.Context) {
 
 	// We might have duplicates in the hash table, so we need to set up
 	// same and visited slices for the prober.
-	if !hj.spec.rightDistinct && hj.spec.joinType != descpb.LeftAntiJoin && hj.spec.joinType != descpb.ExceptAllJoin {
+	if !hj.spec.rightDistinct && !hj.spec.joinType.IsLeftAntiOrExceptAll() {
 		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
-		// they have separate collectAnti* methods.
+		// they have separate collectLeftAnti method.
 		hj.ht.same = maybeAllocateUint64Array(hj.ht.same, hj.ht.vals.Length()+1)
 	}
 	if !hj.spec.rightDistinct || hj.spec.joinType.IsSetOpJoin() {
@@ -345,6 +341,19 @@ func (hj *hashJoiner) build(ctx context.Context) {
 // didn't get a match when matched==false (right/full outer and right anti
 // joins) or did get a match when matched==true (right semi joins).
 func (hj *hashJoiner) emitRight(matched bool) {
+	// Make sure that hj.probeState.buildIdx is of sufficient size (it is used
+	// as a selection vector to select only the necessary tuples).
+	buildIdxSize := hj.ht.vals.Length() - hj.emittingRightState.rowIdx
+	if buildIdxSize > coldata.BatchSize() {
+		buildIdxSize = coldata.BatchSize()
+	}
+	if cap(hj.probeState.buildIdx) < buildIdxSize {
+		hj.probeState.buildIdx = make([]int, buildIdxSize)
+	} else {
+		hj.probeState.buildIdx = hj.probeState.buildIdx[:buildIdxSize]
+	}
+
+	// Find the next batch of tuples that have the requested 'matched' value.
 	nResults := 0
 	for nResults < coldata.BatchSize() && hj.emittingRightState.rowIdx < hj.ht.vals.Length() {
 		if hj.probeState.buildRowMatched[hj.emittingRightState.rowIdx] == matched {
@@ -390,6 +399,45 @@ func (hj *hashJoiner) emitRight(matched bool) {
 	})
 }
 
+// prepareForCollecting sets up the hash joiner for collecting by making sure
+// that various slices in hj.probeState are of sufficient length depending on
+// the join type. Note that batchSize might cap the number of tuples collected
+// in a single output batch (this is the case with non-distinct collectProbe*
+// methods).
+func (hj *hashJoiner) prepareForCollecting(batchSize int) {
+	if hj.spec.joinType.IsRightSemiOrRightAnti() {
+		// Right semi/anti joins have a separate collecting method that simply
+		// records the fact whether build rows had a match and don't need these
+		// probing slices.
+		return
+	}
+	// Note that we don't need to zero out the slices if they have enough
+	// capacity because the correct values will always be set in the collecting
+	// methods.
+	if cap(hj.probeState.probeIdx) < batchSize {
+		hj.probeState.probeIdx = make([]int, batchSize)
+	} else {
+		hj.probeState.probeIdx = hj.probeState.probeIdx[:batchSize]
+	}
+	if hj.spec.joinType.IsLeftAntiOrExceptAll() {
+		// Left anti and except all joins have special collectLeftAnti method
+		// that only uses probeIdx slice.
+		return
+	}
+	if hj.spec.joinType.IsLeftOuterOrFullOuter() {
+		if cap(hj.probeState.probeRowUnmatched) < batchSize {
+			hj.probeState.probeRowUnmatched = make([]bool, batchSize)
+		} else {
+			hj.probeState.probeRowUnmatched = hj.probeState.probeRowUnmatched[:batchSize]
+		}
+	}
+	if cap(hj.probeState.buildIdx) < batchSize {
+		hj.probeState.buildIdx = make([]int, batchSize)
+	} else {
+		hj.probeState.buildIdx = hj.probeState.buildIdx[:batchSize]
+	}
+}
+
 // exec is a general prober that works with non-distinct build table equality
 // columns. It returns a Batch with N + M columns where N is the number of
 // left source columns and M is the number of right source columns. The first N
@@ -398,12 +446,17 @@ func (hj *hashJoiner) emitRight(matched bool) {
 func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 	if batch := hj.probeState.prevBatch; batch != nil {
 		// The previous result was bigger than the maximum batch size, so we didn't
-		// finish outputting it in the last call to probe. Continue outputting the
+		// finish outputting it in the last call to exec. Continue outputting the
 		// result from the previous batch.
 		hj.probeState.prevBatch = nil
 		batchSize := batch.Length()
 		sel := batch.Selection()
 
+		// Since we're probing the same batch for the second time, it is likely
+		// that every probe tuple has multiple matches, so we want to maximize
+		// the number of tuples we collect in a single output batch, and,
+		// therefore, we use coldata.BatchSize() here.
+		hj.prepareForCollecting(coldata.BatchSize())
 		nResults := hj.collect(batch, batchSize, sel)
 		hj.congregate(nResults, batch)
 	} else {
@@ -433,6 +486,7 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 			hj.ht.computeBuckets(
 				ctx, hj.probeState.buckets, hj.ht.keys, batchSize, sel,
 			)
+
 			// Then, we initialize groupID with the initial hash buckets and
 			// toCheck with all applicable indices.
 			hj.ht.probeScratch.setupLimitedSlices(batchSize, hj.ht.buildMode)
@@ -460,6 +514,9 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 				nToCheck = uint64(batchSize)
 			}
 
+			// Now we collect all matches that we can emit in the probing phase
+			// in a single batch.
+			hj.prepareForCollecting(batchSize)
 			var nResults int
 			if hj.spec.rightDistinct {
 				for nToCheck > 0 {
@@ -545,7 +602,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 					)
 				}
 			}
-			if hj.spec.left.outer {
+			if hj.spec.joinType.IsLeftOuterOrFullOuter() {
 				// Add in the nulls we needed to set for the outer join.
 				for i := range hj.spec.right.sourceTypes {
 					outCol := hj.output.ColVec(i + rightColOffset)
@@ -560,7 +617,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 		}
 
 		if hj.spec.trackBuildMatches {
-			if hj.spec.left.outer {
+			if hj.spec.joinType.IsLeftOuterOrFullOuter() {
 				for i := 0; i < nResults; i++ {
 					if !hj.probeState.probeRowUnmatched[i] {
 						hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
@@ -632,11 +689,9 @@ func (hj *hashJoiner) reset(ctx context.Context) {
 	}
 	hj.state = hjBuilding
 	hj.ht.reset(ctx)
-	copy(hj.probeState.buildIdx[:coldata.BatchSize()], zeroIntColumn)
-	copy(hj.probeState.probeIdx[:coldata.BatchSize()], zeroIntColumn)
-	if hj.spec.left.outer {
-		copy(hj.probeState.probeRowUnmatched[:coldata.BatchSize()], zeroBoolColumn)
-	}
+	// Note that we don't zero out hj.probeState.buildIdx,
+	// hj.probeState.probeIdx, and hj.probeState.probeRowUnmatched because the
+	// values in these slices are always set in collecting methods.
 	// hj.probeState.buildRowMatched is reset after building the hash table is
 	// complete in build() method.
 	hj.emittingRightState.rowIdx = 0
@@ -655,20 +710,8 @@ func MakeHashJoinerSpec(
 	leftTypes []*types.T,
 	rightTypes []*types.T,
 	rightDistinct bool,
-) (HashJoinerSpec, error) {
-	var (
-		spec                  HashJoinerSpec
-		leftOuter, rightOuter bool
-	)
+) HashJoinerSpec {
 	switch joinType {
-	case descpb.InnerJoin:
-	case descpb.RightOuterJoin:
-		rightOuter = true
-	case descpb.LeftOuterJoin:
-		leftOuter = true
-	case descpb.FullOuterJoin:
-		rightOuter = true
-		leftOuter = true
 	case descpb.LeftSemiJoin:
 		// In a left semi join, we don't need to store anything but a single row per
 		// build row, since all we care about is whether a row on the left matches
@@ -693,8 +736,6 @@ func MakeHashJoinerSpec(
 		// TODO(yuzefovich): refactor these joins to take advantage of the
 		// actual distinctness information.
 		rightDistinct = false
-	default:
-		return spec, errors.AssertionFailedf("hash join of type %s not supported", joinType)
 	}
 	var trackBuildMatches bool
 	switch joinType {
@@ -706,21 +747,18 @@ func MakeHashJoinerSpec(
 	left := hashJoinerSourceSpec{
 		eqCols:      leftEqCols,
 		sourceTypes: leftTypes,
-		outer:       leftOuter,
 	}
 	right := hashJoinerSourceSpec{
 		eqCols:      rightEqCols,
 		sourceTypes: rightTypes,
-		outer:       rightOuter,
 	}
-	spec = HashJoinerSpec{
+	return HashJoinerSpec{
 		joinType:          joinType,
 		left:              left,
 		right:             right,
 		trackBuildMatches: trackBuildMatches,
 		rightDistinct:     rightDistinct,
 	}
-	return spec, nil
 }
 
 // NewHashJoiner creates a new equality hash join operator on the left and
@@ -740,17 +778,11 @@ func NewHashJoiner(
 	if spec.joinType.ShouldIncludeRightColsInOutput() {
 		outputTypes = append(outputTypes, spec.right.sourceTypes...)
 	}
-	hj := &hashJoiner{
+	return &hashJoiner{
 		twoInputNode:             newTwoInputNode(leftSource, rightSource),
 		buildSideAllocator:       buildSideAllocator,
 		outputUnlimitedAllocator: outputUnlimitedAllocator,
 		spec:                     spec,
 		outputTypes:              outputTypes,
 	}
-	hj.probeState.buildIdx = make([]int, coldata.BatchSize())
-	hj.probeState.probeIdx = make([]int, coldata.BatchSize())
-	if spec.left.outer {
-		hj.probeState.probeRowUnmatched = make([]bool, coldata.BatchSize())
-	}
-	return hj
 }

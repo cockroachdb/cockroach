@@ -139,8 +139,8 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		Inputs:              columnarizers,
 		StreamingMemAccount: &acc,
 		DiskQueueCfg: colcontainer.DiskQueueCfg{
-			FS:      tempFS,
-			GetPath: func(context.Context) string { return "" },
+			FS:        tempFS,
+			GetPather: colcontainer.GetPatherFunc(func(context.Context) string { return "" }),
 		},
 		FDSemaphore: colexecbase.NewTestingSemaphore(256),
 
@@ -175,7 +175,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		nil, /* output */
 		result.MetadataSources,
 		result.ToClose,
-		nil, /* outputStatsToTrace */
+		nil, /* execStatsForTrace */
 		nil, /* cancelFlow */
 	)
 	if err != nil {

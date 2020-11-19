@@ -77,7 +77,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		)
 	}
 
-	if n.Survive != tree.SurviveDefault {
+	if n.SurvivalGoal != tree.SurvivalGoalDefault {
 		return nil, unimplemented.New("create database survive", "implementation pending")
 	}
 

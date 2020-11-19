@@ -360,12 +360,13 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 	otherIntentVisible := metaTS.LessEq(maxVisibleTS) || p.failOnMoreRecent
 
 	if !ownIntent && !otherIntentVisible {
-		// 6. The key contains an intent, but we're reading before the
-		// intent. Seek to the desired version. Note that if we own the
-		// intent (i.e. we're reading transactionally) we want to read
-		// the intent regardless of our read timestamp and fall into
-		// case 8 below.
-		return p.seekVersion(p.ts, false)
+		// 6. The key contains an intent, but we're reading below the intent.
+		// Seek to the desired version, checking for uncertainty if necessary.
+		//
+		// Note that if we own the intent (i.e. we're reading transactionally)
+		// we want to read the intent regardless of our read timestamp and fall
+		// into case 8 below.
+		return p.seekVersion(maxVisibleTS, p.checkUncertainty)
 	}
 
 	if p.inconsistent {

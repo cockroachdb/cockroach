@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -52,6 +53,9 @@ import (
 func TestRestoreMidSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 56584)
+
 	const (
 		testdataBase = "testdata/restore_mid_schema_change"
 		exportDirs   = testdataBase + "/exports"
@@ -213,9 +217,9 @@ func restoreMidSchemaChange(
 		require.NoError(t, err)
 
 		sqlDB.Exec(t, "USE defaultdb")
-		restoreQuery := fmt.Sprintf("RESTORE defaultdb.* from $1")
+		restoreQuery := "RESTORE defaultdb.* from $1"
 		if isClusterRestore {
-			restoreQuery = fmt.Sprintf("RESTORE from $1")
+			restoreQuery = "RESTORE from $1"
 		}
 		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", LocalFoo))
 		sqlDB.Exec(t, restoreQuery, LocalFoo)

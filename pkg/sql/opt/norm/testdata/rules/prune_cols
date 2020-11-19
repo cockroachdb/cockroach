@@ -2585,6 +2585,9 @@ upsert checks
            ├── upsert_b:16 > 10 [as=check2:18, outer=(16)]
            └── column2:7 > upsert_b:16 [as=check3:19, outer=(7,16)]
 
+# TODO(rytaft): test that columns needed for unique checks are not pruned
+# from updates.
+
 # ------------------------------------------------------------------------------
 # PruneMutationReturnCols
 # ------------------------------------------------------------------------------

@@ -141,6 +141,22 @@ const (
 	EventLogDropRole EventLogType = "drop_role"
 	// EventLogAlterRole is recorded when a role is altered.
 	EventLogAlterRole EventLogType = "alter_role"
+
+	// EventLogUnsafeUpsertDescriptor is recorded when a descriptor is written
+	// using crdb_internal.unsafe_upsert_descriptor.
+	EventLogUnsafeUpsertDescriptor EventLogType = "unsafe_upsert_descriptor"
+
+	// EventLogUnsafeDeleteDescriptor is recorded when a descriptor is written
+	// using crdb_internal.unsafe_delete_descriptor.
+	EventLogUnsafeDeleteDescriptor EventLogType = "unsafe_delete_descriptor"
+
+	// EventLogUnsafeUpsertNamespaceEntry is recorded when a namespace entry is
+	// written using crdb_internal.unsafe_upsert_namespace_entry.
+	EventLogUnsafeUpsertNamespaceEntry EventLogType = "unsafe_upsert_namespace_entry"
+
+	// EventLogUnsafeDeleteNamespaceEntry is recorded when a namespace entry is
+	// written using crdb_internal.unsafe_delete_namespace_entry.
+	EventLogUnsafeDeleteNamespaceEntry EventLogType = "unsafe_delete_namespace_entry"
 )
 
 // EventLogSetClusterSettingDetail is the json details for a settings change.

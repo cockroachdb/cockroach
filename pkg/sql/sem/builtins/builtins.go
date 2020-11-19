@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -107,6 +108,7 @@ const (
 	categorySpatial        = "Spatial"
 	categoryString         = "String and byte"
 	categorySystemInfo     = "System info"
+	categorySystemRepair   = "System repair"
 )
 
 func categorizeType(t *types.T) string {
@@ -2104,18 +2106,34 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"val", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.TimestampDifference(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
+				return &tree.DInterval{
+					Duration: duration.Age(
+						ctx.GetTxnTimestamp(time.Microsecond).Time,
+						args[0].(*tree.DTimestampTZ).Time,
+					),
+				}, nil
 			},
-			Info:       "Calculates the interval between `val` and the current time.",
+			Info: "Calculates the interval between `val` and the current time, normalized into years, months and days." + `
+
+			Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context.
+			To avoid normalizing days into months and years, use ` + "`now() - timestamptz`" + `.`,
 			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"end", types.TimestampTZ}, {"begin", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.TimestampDifference(ctx, args[0], args[1])
+				return &tree.DInterval{
+					Duration: duration.Age(
+						args[0].(*tree.DTimestampTZ).Time,
+						args[1].(*tree.DTimestampTZ).Time,
+					),
+				}, nil
 			},
-			Info:       "Calculates the interval between `begin` and `end`.",
+			Info: "Calculates the interval between `begin` and `end`, normalized into years, months and days." + `
+
+			Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context.
+			To avoid normalizing days into months and years, use the timestamptz subtraction operator.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
@@ -3635,9 +3653,9 @@ may increase either contention or retry errors, or both.`,
 
 				// Create a column id to row index map. In this case, each column ID
 				// just maps to the i'th ordinal.
-				colMap := make(map[descpb.ColumnID]int)
+				var colMap catalog.TableColMap
 				for i, id := range indexColIDs {
-					colMap[id] = i
+					colMap.Set(id, i)
 				}
 				// Finally, encode the index key using the provided datums.
 				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, indexDesc.ID)
@@ -4268,6 +4286,139 @@ may increase either contention or retry errors, or both.`,
 					ret.Array = append(ret.Array, tree.NewDString(string(key)))
 				}
 				return ret, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_upsert_descriptor": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"desc", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+					[]byte(*args[1].(*tree.DBytes))); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_delete_descriptor": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_upsert_namespace_entry": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+				{"force", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // descID
+					bool(*args[4].(*tree.DBool)),     // force
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // descID
+					false,                            // force
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_delete_namespace_entry": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // descID
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: tree.VolatilityVolatile,

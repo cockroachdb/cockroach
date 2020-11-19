@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/text/language"
 )
 
 var mustQuoteMap = map[byte]bool{
@@ -112,6 +114,10 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags lexbase.Encode
 // need to be quoted, and they are considered equivalent to dash characters by
 // the CLDR standard: http://cldr.unicode.org/.
 func EncodeLocaleName(buf *bytes.Buffer, s string) {
+	// If possible, try to normalize the case of the locale name.
+	if normalized, err := language.Parse(s); err == nil {
+		s = normalized.String()
+	}
 	for i, n := 0, len(s); i < n; i++ {
 		ch := s[i]
 		if ch == '-' {
@@ -120,6 +126,33 @@ func EncodeLocaleName(buf *bytes.Buffer, s string) {
 			buf.WriteByte(ch)
 		}
 	}
+}
+
+// LocaleNamesAreEqual checks for equality of two locale names. The comparison
+// is case-insensitive and treats '-' and '_' as the same.
+func LocaleNamesAreEqual(a, b string) bool {
+	if a == b {
+		return true
+	}
+	if len(a) != len(b) {
+		return false
+	}
+	for i, n := 0, len(a); i < n; i++ {
+		ai, bi := a[i], b[i]
+		if ai == bi {
+			continue
+		}
+		if ai == '-' && bi == '_' {
+			continue
+		}
+		if ai == '_' && bi == '-' {
+			continue
+		}
+		if unicode.ToLower(rune(ai)) != unicode.ToLower(rune(bi)) {
+			return false
+		}
+	}
+	return true
 }
 
 // EncodeSQLBytes encodes the SQL byte array in 'in' to buf, to a

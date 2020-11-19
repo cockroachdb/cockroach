@@ -71,7 +71,9 @@ type cTableInfo struct {
 	neededValueColsByIdx util.FastIntSet
 
 	// Map used to get the index for columns in cols.
-	colIdxMap colIdxMap
+	// It's kept as a pointer so we don't have to re-allocate to sort it each
+	// time.
+	colIdxMap *colIdxMap
 
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
@@ -122,7 +124,9 @@ var _ execinfra.Releasable = &cTableInfo{}
 
 var cTableInfoPool = sync.Pool{
 	New: func() interface{} {
-		return &cTableInfo{}
+		return &cTableInfo{
+			colIdxMap: &colIdxMap{},
+		}
 	},
 }
 
@@ -132,11 +136,13 @@ func newCTableInfo() *cTableInfo {
 
 // Release implements the execinfra.Releasable interface.
 func (c *cTableInfo) Release() {
+	c.colIdxMap.ords = c.colIdxMap.ords[:0]
+	c.colIdxMap.vals = c.colIdxMap.vals[:0]
 	*c = cTableInfo{
-		colIdxMap: colIdxMap{
-			vals: c.colIdxMap.vals[:0],
-			ords: c.colIdxMap.ords[:0],
-		},
+		colIdxMap:              c.colIdxMap,
+		keyValTypes:            c.keyValTypes[:0],
+		extraTypes:             c.extraTypes[:0],
+		neededColsList:         c.neededColsList[:0],
 		indexColOrdinals:       c.indexColOrdinals[:0],
 		allIndexColOrdinals:    c.allIndexColOrdinals[:0],
 		extraValColOrdinals:    c.extraValColOrdinals[:0],
@@ -345,13 +351,15 @@ func (rf *cFetcher) Init(
 
 	tableArgs := tables[0]
 	table := newCTableInfo()
-	if cap(table.colIdxMap.vals) < len(tableArgs.ColIdxMap) {
-		table.colIdxMap.vals = make(descpb.ColumnIDs, 0, len(tableArgs.ColIdxMap))
-		table.colIdxMap.ords = make([]int, 0, len(tableArgs.ColIdxMap))
+	nCols := tableArgs.ColIdxMap.Len()
+	if cap(table.colIdxMap.vals) < nCols {
+		table.colIdxMap.vals = make(descpb.ColumnIDs, 0, nCols)
+		table.colIdxMap.ords = make([]int, 0, nCols)
 	}
-	for k, v := range tableArgs.ColIdxMap {
-		table.colIdxMap.vals = append(table.colIdxMap.vals, k)
-		table.colIdxMap.ords = append(table.colIdxMap.ords, v)
+	for i := range tableArgs.Cols {
+		id := tableArgs.Cols[i].ID
+		table.colIdxMap.vals = append(table.colIdxMap.vals, id)
+		table.colIdxMap.ords = append(table.colIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
 	}
 	sort.Sort(table.colIdxMap)
 	colDescriptors := tableArgs.Cols
@@ -371,7 +379,11 @@ func (rf *cFetcher) Init(
 		oidOutputIdx:           noOutputColumn,
 	}
 
-	rf.typs = make([]*types.T, len(colDescriptors))
+	if cap(rf.typs) < len(colDescriptors) {
+		rf.typs = make([]*types.T, len(colDescriptors))
+	} else {
+		rf.typs = rf.typs[:len(colDescriptors)]
+	}
 	for i := range rf.typs {
 		rf.typs[i] = colDescriptors[i].Type
 	}
@@ -384,7 +396,9 @@ func (rf *cFetcher) Init(
 	if numNeededCols := tableArgs.ValNeededForCol.Len(); cap(table.neededColsList) < numNeededCols {
 		table.neededColsList = make([]int, 0, numNeededCols)
 	}
-	for col, idx := range tableArgs.ColIdxMap {
+	for i := range tableArgs.Cols {
+		col := tableArgs.Cols[i].ID
+		idx := tableArgs.ColIdxMap.GetDefault(col)
 		if tableArgs.ValNeededForCol.Contains(idx) {
 			// The idx-th column is required.
 			neededCols.Add(int(col))
@@ -438,7 +452,7 @@ func (rf *cFetcher) Init(
 		table.allIndexColOrdinals = make([]int, nIndexCols)
 	}
 	for i, id := range indexColumnIDs {
-		colIdx, ok := tableArgs.ColIdxMap[id]
+		colIdx, ok := tableArgs.ColIdxMap.Get(id)
 		table.allIndexColOrdinals[i] = colIdx
 		if ok && neededCols.Contains(int(id)) {
 			table.indexColOrdinals[i] = colIdx
@@ -462,7 +476,7 @@ func (rf *cFetcher) Init(
 	// what extra columns are composite or not.
 	if table.isSecondaryIndex && table.index.Unique {
 		for _, id := range table.index.ExtraColumnIDs {
-			colIdx, ok := tableArgs.ColIdxMap[id]
+			colIdx, ok := tableArgs.ColIdxMap.Get(id)
 			if ok && neededCols.Contains(int(id)) {
 				if compositeColumnIDs.Contains(int(id)) {
 					table.compositeIndexColOrdinals.Add(colIdx)
@@ -491,7 +505,7 @@ func (rf *cFetcher) Init(
 	}
 
 	// Prepare our index key vals slice.
-	table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs)
+	table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs, table.keyValTypes)
 	if err != nil {
 		return err
 	}
@@ -501,7 +515,7 @@ func (rf *cFetcher) Init(
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
-		table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
+		table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.ExtraColumnIDs, table.extraTypes)
 		nExtraColumns := len(table.index.ExtraColumnIDs)
 		if cap(table.extraValColOrdinals) >= nExtraColumns {
 			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
@@ -516,9 +530,10 @@ func (rf *cFetcher) Init(
 		}
 
 		for i, id := range table.index.ExtraColumnIDs {
-			table.allExtraValColOrdinals[i] = tableArgs.ColIdxMap[id]
+			idx := tableArgs.ColIdxMap.GetDefault(id)
+			table.allExtraValColOrdinals[i] = idx
 			if neededCols.Contains(int(id)) {
-				table.extraValColOrdinals[i] = tableArgs.ColIdxMap[id]
+				table.extraValColOrdinals[i] = idx
 			} else {
 				table.extraValColOrdinals[i] = -1
 			}
@@ -1422,4 +1437,18 @@ func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 		return nil, false
 	}
 	return rf.table.desc, true
+}
+
+var cFetcherPool = sync.Pool{
+	New: func() interface{} {
+		return &cFetcher{}
+	},
+}
+
+func (rf *cFetcher) Release() {
+	rf.table.Release()
+	*rf = cFetcher{
+		typs: rf.typs[:0],
+	}
+	cFetcherPool.Put(rf)
 }

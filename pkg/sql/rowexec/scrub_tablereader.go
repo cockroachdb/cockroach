@@ -15,6 +15,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -114,7 +115,7 @@ func newScrubTableReader(
 	} else {
 		colIdxMap := tr.tableDesc.ColumnIdxMap()
 		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id descpb.ColumnID) error {
-			neededColumns.Add(colIdxMap[id])
+			neededColumns.Add(colIdxMap.GetDefault(id))
 			return nil
 		})
 		if err != nil {
@@ -190,14 +191,14 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 func (tr *scrubTableReader) prettyPrimaryKeyValues(
 	row rowenc.EncDatumRow, table *descpb.TableDescriptor,
 ) string {
-	colIdxMap := make(map[descpb.ColumnID]int, len(table.Columns))
+	var colIdxMap catalog.TableColMap
 	for i := range table.Columns {
 		id := table.Columns[i].ID
-		colIdxMap[id] = i
+		colIdxMap.Set(id, i)
 	}
-	colIDToRowIdxMap := make(map[descpb.ColumnID]int, len(table.Columns))
+	var colIDToRowIdxMap catalog.TableColMap
 	for rowIdx, colIdx := range tr.fetcherResultToColIdx {
-		colIDToRowIdxMap[tr.tableDesc.Columns[colIdx].ID] = rowIdx
+		colIDToRowIdxMap.Set(tr.tableDesc.Columns[colIdx].ID, rowIdx)
 	}
 	var primaryKeyValues bytes.Buffer
 	primaryKeyValues.WriteByte('(')
@@ -206,7 +207,7 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 			primaryKeyValues.WriteByte(',')
 		}
 		primaryKeyValues.WriteString(
-			row[colIDToRowIdxMap[id]].String(table.Columns[colIdxMap[id]].Type))
+			row[colIDToRowIdxMap.GetDefault(id)].String(table.Columns[colIdxMap.GetDefault(id)].Type))
 	}
 	primaryKeyValues.WriteByte(')')
 	return primaryKeyValues.String()

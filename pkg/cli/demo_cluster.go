@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -53,6 +54,9 @@ type transientCluster struct {
 	stopper    *stop.Stopper
 	s          *server.TestServer
 	servers    []*server.TestServer
+
+	httpFirstPort int
+	sqlFirstPort  int
 
 	adminPassword string
 	adminUser     security.SQLUsername
@@ -103,6 +107,9 @@ func (c *transientCluster) checkConfigAndSetupLogging(
 		}
 	}
 
+	c.httpFirstPort = demoCtx.httpPort
+	c.sqlFirstPort = demoCtx.sqlPort
+
 	return nil
 }
 
@@ -127,7 +134,11 @@ func (c *transientCluster) start(
 			joinAddr = c.s.ServingRPCAddr()
 		}
 		nodeID := roachpb.NodeID(i + 1)
-		args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir)
+		args := testServerArgsForTransientCluster(
+			c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir,
+			c.sqlFirstPort,
+			c.httpFirstPort,
+		)
 		if i == 0 {
 			// The first node also auto-inits the cluster.
 			args.NoAutoInitializeCluster = false
@@ -149,7 +160,12 @@ func (c *transientCluster) start(
 			}
 		}
 
-		serv := serverFactory.New(args).(*server.TestServer)
+		s, err := serverFactory.New(args)
+		if err != nil {
+			return err
+		}
+		serv := s.(*server.TestServer)
+		c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 		if i == 0 {
 			c.s = serv
 			// The first node connects its Settings instance to the `log`
@@ -194,7 +210,6 @@ func (c *transientCluster) start(
 			errCh <- nil
 		}
 
-		c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 		// Ensure we close all sticky stores we've created.
 		for _, store := range args.StoreSpecs {
 			if store.StickyInMemoryEngineID != "" {
@@ -302,7 +317,11 @@ func (c *transientCluster) start(
 // testServerArgsForTransientCluster creates the test arguments for
 // a necessary server in the demo cluster.
 func testServerArgsForTransientCluster(
-	sock unixSocketDetails, nodeID roachpb.NodeID, joinAddr string, demoDir string,
+	sock unixSocketDetails,
+	nodeID roachpb.NodeID,
+	joinAddr string,
+	demoDir string,
+	sqlBasePort, httpBasePort int,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
 	storeSpec := base.DefaultTestStoreSpec
@@ -323,6 +342,15 @@ func testServerArgsForTransientCluster(
 		TenantAddr: new(string),
 	}
 
+	if !testingForceRandomizeDemoPorts {
+		// Unit tests can be run with multiple processes side-by-side with
+		// `make stress`. This is bound to not work with fixed ports.
+		sqlPort := sqlBasePort + int(nodeID) - 1
+		httpPort := httpBasePort + int(nodeID) - 1
+		args.SQLAddr = fmt.Sprintf(":%d", sqlPort)
+		args.HTTPAddr = fmt.Sprintf(":%d", httpPort)
+	}
+
 	if demoCtx.localities != nil {
 		args.Locality = demoCtx.localities[int(nodeID-1)]
 	}
@@ -335,6 +363,10 @@ func testServerArgsForTransientCluster(
 
 	return args
 }
+
+// testingForceRandomizeDemoPorts disables the fixed port allocation
+// for demo clusters, for use in tests.
+var testingForceRandomizeDemoPorts bool
 
 func (c *transientCluster) cleanup(ctx context.Context) {
 	if c.stopper != nil {
@@ -470,8 +502,13 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	}
 
 	// TODO(#42243): re-compute the latency mapping.
-	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir)
-	serv := server.TestServerFactory.New(args).(*server.TestServer)
+	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir,
+		c.sqlFirstPort, c.httpFirstPort)
+	s, err := server.TestServerFactory.New(args)
+	if err != nil {
+		return err
+	}
+	serv := s.(*server.TestServer)
 
 	// We want to only return after the server is ready.
 	readyCh := make(chan struct{})
@@ -536,8 +573,7 @@ func maybeWarnMemSize(ctx context.Context) {
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
 			log.Shoutf(
-				ctx,
-				log.Severity_WARNING,
+				ctx, severity.WARNING,
 				`HIGH MEMORY USAGE
 The sum of --max-sql-memory (%s) and --cache (%s) multiplied by the
 number of nodes (%d) results in potentially high memory usage on your
@@ -715,11 +751,15 @@ func (c *transientCluster) runWorkload(
 						panic(err)
 					}
 					if err := f(ctx); err != nil {
-						// Only log an error and return when the workload function throws
-						// an error, because errors these errors should be ignored, and
-						// should not interrupt the rest of the demo.
+						// Log an error without exiting the load generator when the workload
+						// function throws an error. A single error during the workload demo
+						// should not stop the demo.
 						log.Warningf(ctx, "error running workload query: %+v", err)
+					}
+					select {
+					case <-c.s.Stopper().ShouldStop():
 						return
+					default:
 					}
 				}
 			}
@@ -783,10 +823,9 @@ func (c *transientCluster) sockForServer(nodeID roachpb.NodeID) unixSocketDetail
 	if !c.useSockets {
 		return unixSocketDetails{}
 	}
-	defaultPort, _ := strconv.Atoi(base.DefaultPort)
 	return unixSocketDetails{
 		socketDir:  c.demoDir,
-		portNumber: defaultPort + int(nodeID) - 1,
+		portNumber: c.sqlFirstPort + int(nodeID) - 1,
 		username:   c.adminUser,
 		password:   c.adminPassword,
 	}

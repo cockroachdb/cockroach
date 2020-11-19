@@ -60,18 +60,18 @@ func (node *AlterDatabaseDropRegion) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Region)
 }
 
-// AlterDatabaseSurvive represents a ALTER DATABASE SURVIVE ... statement.
-type AlterDatabaseSurvive struct {
-	Name    Name
-	Survive Survive
+// AlterDatabaseSurvivalGoal represents a ALTER DATABASE SURVIVE ... statement.
+type AlterDatabaseSurvivalGoal struct {
+	Name         Name
+	SurvivalGoal SurvivalGoal
 }
 
-var _ Statement = &AlterDatabaseSurvive{}
+var _ Statement = &AlterDatabaseSurvivalGoal{}
 
 // Format implements the NodeFormatter interface.
-func (node *AlterDatabaseSurvive) Format(ctx *FmtCtx) {
+func (node *AlterDatabaseSurvivalGoal) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ")
-	node.Survive.Format(ctx)
+	node.SurvivalGoal.Format(ctx)
 }

@@ -419,6 +419,9 @@ func Example_demo() {
 	c := newCLITest(cliTestParams{noServer: true})
 	defer c.cleanup()
 
+	defer func(b bool) { testingForceRandomizeDemoPorts = b }(testingForceRandomizeDemoPorts)
+	testingForceRandomizeDemoPorts = true
+
 	testData := [][]string{
 		{`demo`, `-e`, `show database`},
 		{`demo`, `-e`, `show database`, `--empty`},

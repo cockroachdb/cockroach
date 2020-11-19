@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -74,22 +75,22 @@ func newIndexCheckOperation(
 func (o *indexCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 
-	colToIdx := make(map[descpb.ColumnID]int)
+	var colToIdx catalog.TableColMap
 	for i := range o.tableDesc.Columns {
 		id := o.tableDesc.Columns[i].ID
-		colToIdx[id] = i
+		colToIdx.Set(id, i)
 	}
 
 	var pkColumns, otherColumns []*descpb.ColumnDescriptor
 
 	for _, colID := range o.tableDesc.PrimaryIndex.ColumnIDs {
-		col := &o.tableDesc.Columns[colToIdx[colID]]
+		col := &o.tableDesc.Columns[colToIdx.GetDefault(colID)]
 		pkColumns = append(pkColumns, col)
-		colToIdx[colID] = -1
+		colToIdx.Set(colID, -1)
 	}
 
 	maybeAddOtherCol := func(colID descpb.ColumnID) {
-		pos := colToIdx[colID]
+		pos := colToIdx.GetDefault(colID)
 		if pos == -1 {
 			// Skip PK column.
 			return

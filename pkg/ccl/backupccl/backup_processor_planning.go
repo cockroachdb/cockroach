@@ -76,11 +76,7 @@ func distBackup(
 		return nil
 	}
 
-	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
-	if err != nil {
-		return err
-	}
-	p := sql.MakePhysicalPlan(planCtx, gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
@@ -96,7 +92,7 @@ func distBackup(
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
 	p.PlanToStreamColMap = []int{}
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
@@ -122,7 +118,7 @@ func distBackup(
 	defer close(progCh)
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
+	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 	return rowResultWriter.Err()
 }
 

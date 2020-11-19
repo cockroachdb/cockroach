@@ -151,7 +151,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		).Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 	case types.TimestampFamily:
 		return tree.MustMakeDTimestamp(
-			timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
+			timeutil.Unix(rng.Int63n(2000000000), rng.Int63n(1000000)),
 			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()),
 		)
 	case types.IntervalFamily:
@@ -202,7 +202,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		return tree.NewDBytes(tree.DBytes(p))
 	case types.TimestampTZFamily:
 		return tree.MustMakeDTimestampTZ(
-			timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
+			timeutil.Unix(rng.Int63n(2000000000), rng.Int63n(1000000)),
 			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()),
 		)
 	case types.CollatedStringFamily:
@@ -1019,9 +1019,9 @@ func TestingMakePrimaryIndexKey(
 	}
 	// Create the ColumnID to index in datums slice map needed by
 	// MakeIndexKeyPrefix.
-	colIDToRowIndex := make(map[descpb.ColumnID]int)
+	var colIDToRowIndex catalog.TableColMap
 	for i := range vals {
-		colIDToRowIndex[index.ColumnIDs[i]] = i
+		colIDToRowIndex.Set(index.ColumnIDs[i], i)
 	}
 
 	keyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, index.ID)

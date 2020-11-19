@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -124,11 +123,15 @@ func (bic *batchInfoCollector) getElapsedTime() time.Duration {
 // (with 'idTagKey' distinguishing between the two). 'ioReader' is a component
 // (either an operator or a wrapped processor) that performs IO reads that is
 // present in the chain of operators rooted at 'op'.
+//
+// If omitNumTuples is set, the Output.NumTuples stat will not be set. This is
+// used for operators that wrap row processors which already emit the same stat.
 func NewVectorizedStatsCollector(
 	op colexecbase.Operator,
 	ioReader execinfra.IOReader,
 	id int32,
 	idTagKey string,
+	omitNumTuples bool,
 	inputWatch *timeutil.StopWatch,
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
@@ -139,6 +142,7 @@ func NewVectorizedStatsCollector(
 	return &vectorizedStatsCollectorImpl{
 		batchInfoCollector: makeBatchInfoCollector(op, id, inputWatch, inputStatsCollectors),
 		idTagKey:           idTagKey,
+		omitNumTuples:      omitNumTuples,
 		ioReader:           ioReader,
 		memMonitors:        memMonitors,
 		diskMonitors:       diskMonitors,
@@ -153,16 +157,18 @@ type vectorizedStatsCollectorImpl struct {
 	// idTagKey is the span tag key that will be set to ComponentID.
 	idTagKey string
 
+	omitNumTuples bool
+
 	ioReader     execinfra.IOReader
 	memMonitors  []*mon.BytesMonitor
 	diskMonitors []*mon.BytesMonitor
 }
 
 // finish returns the collected stats.
-func (vsc *vectorizedStatsCollectorImpl) finish() *execstatspb.ComponentStats {
+func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := vsc.batchInfoCollector.finish()
 
-	s := &execstatspb.ComponentStats{ComponentID: vsc.operatorID}
+	s := &execinfrapb.ComponentStats{ComponentID: vsc.operatorID}
 
 	for _, memMon := range vsc.memMonitors {
 		s.Exec.MaxAllocatedMem.Add(memMon.MaximumBytes())
@@ -199,7 +205,9 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execstatspb.ComponentStats {
 	}
 
 	s.Output.NumBatches.Set(numBatches)
-	s.Output.NumTuples.Set(numTuples)
+	if !vsc.omitNumTuples {
+		s.Output.NumTuples.Set(numTuples)
+	}
 	return s
 }
 
@@ -241,10 +249,10 @@ type networkVectorizedStatsCollectorImpl struct {
 }
 
 // finish returns the collected stats.
-func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execstatspb.ComponentStats {
+func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := nvsc.batchInfoCollector.finish()
 
-	s := &execstatspb.ComponentStats{ComponentID: nvsc.operatorID}
+	s := &execinfrapb.ComponentStats{ComponentID: nvsc.operatorID}
 
 	s.NetRx.Latency = nvsc.latency
 	s.NetRx.WaitTime = time
@@ -274,7 +282,7 @@ func createStatsSpan(
 	opName string,
 	flowID string,
 	idTagKey string,
-	stats *execstatspb.ComponentStats,
+	stats *execinfrapb.ComponentStats,
 ) {
 	// We're creating a new span for every component setting the appropriate
 	// tag so that it is displayed correctly on the flow diagram.

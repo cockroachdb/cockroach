@@ -340,6 +340,13 @@ func (h *ProcOutputHelper) consumerClosed() {
 	h.rowIdx = h.maxRowIdx
 }
 
+// Stats returns output statistics.
+func (h *ProcOutputHelper) Stats() execinfrapb.OutputStats {
+	return execinfrapb.OutputStats{
+		NumTuples: execinfrapb.MakeIntValue(h.rowIdx),
+	}
+}
+
 // ProcessorConstructor is a function that creates a Processor. It is
 // abstracted away so that we could create mixed flows (i.e. a vectorized flow
 // with wrapped processors) without bringing a dependency on sql/rowexec
@@ -483,11 +490,13 @@ type ProcessorBase struct {
 
 	State procState
 
-	// FinishTrace, if set, will be called before getting the trace data from
-	// the span and adding the recording to the trailing metadata. Useful for
-	// adding any extra information (e.g. stats) that should be captured in a
-	// trace.
-	FinishTrace func()
+	// ExecStatsForTrace, if set, will be called before getting the trace data from
+	// the span and adding the recording to the trailing metadata. The returned
+	// ComponentStats are associated with the processor's span. Note that
+	// MakeDeterministic might get called on the returned stats.
+	//
+	// Can return nil.
+	ExecStatsForTrace func() *execinfrapb.ComponentStats
 
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
@@ -511,9 +520,13 @@ type ProcessorBase struct {
 	// InternalClose() calls ConsumerClosed() on then.
 	//
 	// ConsumerDone() is called on all inputs at once and then inputs are drained
-	// one by one (in StateDraining, inputsToDrain[0] is the one currently being
-	// drained).
+	// one by one (in StateDraining, inputsToDrain[curInputToDrain] is the one
+	// currently being drained).
 	inputsToDrain []RowSource
+
+	// curInputToDrain is the index into inputsToDrain that needs to be drained
+	// next.
+	curInputToDrain int
 }
 
 // Reset resets this ProcessorBase, retaining allocated memory in slices.
@@ -610,12 +623,12 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 	if err != nil {
 		pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{Err: err})
 	}
-	if len(pb.inputsToDrain) > 0 {
+	if pb.curInputToDrain < len(pb.inputsToDrain) {
 		// We go to StateDraining here. DrainHelper() will transition to
 		// StateTrailingMeta when the inputs are drained (including if the inputs
 		// are already drained).
 		pb.State = StateDraining
-		for _, input := range pb.inputsToDrain {
+		for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
 			input.ConsumerDone()
 		}
 	} else {
@@ -648,12 +661,12 @@ func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 
 	// Ignore all rows; only return meta.
 	for {
-		input := pb.inputsToDrain[0]
+		input := pb.inputsToDrain[pb.curInputToDrain]
 
 		row, meta := input.Next()
 		if row == nil && meta == nil {
-			pb.inputsToDrain = pb.inputsToDrain[1:]
-			if len(pb.inputsToDrain) == 0 {
+			pb.curInputToDrain++
+			if pb.curInputToDrain >= len(pb.inputsToDrain) {
 				pb.moveToTrailingMeta()
 				return pb.popTrailingMeta()
 			}
@@ -710,13 +723,17 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 		)
 	}
 
-	if pb.FinishTrace != nil {
-		pb.FinishTrace()
-	}
-
 	pb.State = StateTrailingMeta
 	if pb.span != nil {
-		if trace := GetTraceData(pb.Ctx); trace != nil {
+		if pb.ExecStatsForTrace != nil {
+			if stats := pb.ExecStatsForTrace(); stats != nil {
+				if pb.FlowCtx.Cfg.TestingKnobs.DeterministicStats {
+					stats.MakeDeterministic()
+				}
+				pb.span.SetSpanStats(stats)
+			}
+		}
+		if trace := pb.span.GetRecording(); trace != nil {
 			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 		}
 	}
@@ -827,7 +844,12 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.processorID = processorID
 	pb.MemMonitor = memMonitor
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
-	pb.inputsToDrain = opts.InputsToDrain
+	if opts.InputsToDrain != nil {
+		// Only initialize this if non-nil, because we cache the slice of inputs
+		// to drain in our object pool, and overwriting the slice in Init would
+		// be horribly counterproductive.
+		pb.inputsToDrain = opts.InputsToDrain
+	}
 
 	// Hydrate all types used in the processor.
 	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
@@ -886,7 +908,7 @@ func (pb *ProcessorBase) InternalClose() bool {
 	// be called on processors that have already closed themselves by moving to
 	// StateTrailingMeta.
 	if closing {
-		for _, input := range pb.inputsToDrain {
+		for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
 			input.ConsumerClosed()
 		}
 

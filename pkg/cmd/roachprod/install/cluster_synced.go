@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
-	crdberrors "github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -463,12 +462,12 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		display = fmt.Sprintf("%s: %s", c.Name, title)
 	}
 
-	errors := make([]error, len(nodes))
+	errs := make([]error, len(nodes))
 	results := make([]string, len(nodes))
 	c.Parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
 		sess, err := c.newSession(nodes[i])
 		if err != nil {
-			errors[i] = err
+			errs[i] = err
 			results[i] = err.Error()
 			return nil, nil
 		}
@@ -500,12 +499,12 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		if stream {
 			sess.SetStdout(stdout)
 			sess.SetStderr(stderr)
-			errors[i] = sess.Run(nodeCmd)
-			if errors[i] != nil {
+			errs[i] = sess.Run(nodeCmd)
+			if errs[i] != nil {
 				detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
-				err = crdberrors.WithDetail(errors[i], detailMsg)
+				err = errors.WithDetail(errs[i], detailMsg)
 				err = rperrors.ClassifyCmdError(err)
-				errors[i] = err
+				errs[i] = err
 			}
 			return nil, nil
 		}
@@ -514,9 +513,9 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		msg := strings.TrimSpace(string(out))
 		if err != nil {
 			detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
-			err = crdberrors.WithDetail(err, detailMsg)
+			err = errors.WithDetail(err, detailMsg)
 			err = rperrors.ClassifyCmdError(err)
-			errors[i] = err
+			errs[i] = err
 			msg += fmt.Sprintf("\n%v", err)
 		}
 		results[i] = msg
@@ -529,7 +528,7 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		}
 	}
 
-	return rperrors.SelectPriorityError(errors)
+	return rperrors.SelectPriorityError(errs)
 }
 
 // Wait TODO(peter): document

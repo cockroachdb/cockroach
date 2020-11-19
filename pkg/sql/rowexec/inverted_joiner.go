@@ -12,8 +12,8 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -65,7 +64,7 @@ type invertedJoiner struct {
 	diskMonitor  *mon.BytesMonitor
 	desc         tabledesc.Immutable
 	// The map from ColumnIDs in the table to the column position.
-	colIdxMap map[descpb.ColumnID]int
+	colIdxMap catalog.TableColMap
 	index     *descpb.IndexDescriptor
 	// The ColumnID of the inverted column. Confusingly, this is also the id of
 	// the table column that was indexed.
@@ -192,7 +191,7 @@ func newInvertedJoiner(
 	ij.keyRowToTableRowMap = make([]int, len(indexColumnIDs)-1)
 	for i := 1; i < len(indexColumnIDs); i++ {
 		keyRowIdx := i - 1
-		tableRowIdx := ij.colIdxMap[indexColumnIDs[i]]
+		tableRowIdx := ij.colIdxMap.GetDefault(indexColumnIDs[i])
 		ij.tableRowToKeyRowMap[tableRowIdx] = keyRowIdx
 		ij.keyRowToTableRowMap[keyRowIdx] = tableRowIdx
 		ij.keyTypes[keyRowIdx] = ij.desc.Columns[tableRowIdx].Type
@@ -270,7 +269,7 @@ func newInvertedJoiner(
 	// such workloads actually occur in practice.
 	allIndexCols := util.MakeFastIntSet()
 	for _, colID := range indexColumnIDs {
-		allIndexCols.Add(ij.colIdxMap[colID])
+		allIndexCols.Add(ij.colIdxMap.GetDefault(colID))
 	}
 	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
 	// and so do not need to see in-progress schema changes.
@@ -291,7 +290,7 @@ func newInvertedJoiner(
 	if collectingStats {
 		ij.input = newInputStatCollector(ij.input)
 		ij.fetcher = newRowFetcherStatCollector(&fetcher)
-		ij.FinishTrace = ij.outputStatsToTrace
+		ij.ExecStatsForTrace = ij.execStatsForTrace
 	} else {
 		ij.fetcher = &fetcher
 	}
@@ -459,7 +458,8 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			// Done with this input batch.
 			break
 		}
-		encInvertedVal := scannedRow[ij.colIdxMap[ij.invertedColID]].EncodedBytes()
+		idx := ij.colIdxMap.GetDefault(ij.invertedColID)
+		encInvertedVal := scannedRow[idx].EncodedBytes()
 		shouldAdd, err := ij.batchedExprEval.prepareAddIndexRow(encInvertedVal)
 		if err != nil {
 			ij.MoveToDraining(err)
@@ -666,58 +666,27 @@ func (ij *invertedJoiner) close() {
 	}
 }
 
-var _ execinfrapb.DistSQLSpanStats = &InvertedJoinerStats{}
-
-const invertedJoinerTagPrefix = "invertedjoiner."
-
-// Stats implements the SpanStats interface.
-func (ijs *InvertedJoinerStats) Stats() map[string]string {
-	statsMap := ijs.InputStats.Stats(invertedJoinerTagPrefix)
-	toMerge := ijs.IndexScanStats.Stats(invertedJoinerTagPrefix + "index.")
-	for k, v := range toMerge {
-		statsMap[k] = v
-	}
-	statsMap[invertedJoinerTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(ijs.MaxAllocatedMem)
-	statsMap[invertedJoinerTagPrefix+MaxDiskTagSuffix] = humanizeutil.IBytes(ijs.MaxAllocatedDisk)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (ijs *InvertedJoinerStats) StatsForQueryPlan() []string {
-	stats := append(
-		ijs.InputStats.StatsForQueryPlan(""),
-		ijs.IndexScanStats.StatsForQueryPlan("index ")...,
-	)
-	if ijs.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ijs.MaxAllocatedMem)))
-	}
-	if ijs.MaxAllocatedDisk != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ijs.MaxAllocatedDisk)))
-	}
-	return stats
-}
-
-// outputStatsToTrace outputs the collected stats to the trace. Will
-// fail silently if the invertedJoiner is not collecting stats.
-func (ij *invertedJoiner) outputStatsToTrace() {
-	is, ok := getInputStats(ij.FlowCtx, ij.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(ij.input)
 	if !ok {
-		return
+		return nil
 	}
-	fis, ok := getFetcherInputStats(ij.FlowCtx, ij.fetcher)
+	fis, ok := getFetcherInputStats(ij.fetcher)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(ij.Ctx); sp != nil {
-		sp.SetSpanStats(
-			&InvertedJoinerStats{
-				InputStats:       is,
-				IndexScanStats:   fis,
-				MaxAllocatedMem:  ij.MemMonitor.MaximumBytes(),
-				MaxAllocatedDisk: ij.diskMonitor.MaximumBytes(),
-			})
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		KV: execinfrapb.KVStats{
+			TuplesRead: fis.NumTuples,
+			KVTime:     fis.WaitTime,
+		},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(ij.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(ij.diskMonitor.MaximumBytes())),
+		},
+		Output: ij.Out.Stats(),
 	}
 }
 

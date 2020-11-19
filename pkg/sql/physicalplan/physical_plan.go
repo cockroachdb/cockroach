@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -63,11 +62,10 @@ type Stream struct {
 	DestInput int
 }
 
-// PhysicalPlan represents a network of processors and streams along with
-// information about the results output by this network. The results come from
-// unconnected output routers of a subset of processors; all these routers
-// output the same kind of data (same schema).
-type PhysicalPlan struct {
+// PhysicalInfrastructure stores information about processors and streams.
+// Multiple PhysicalPlans can be associated with the same PhysicalInfrastructure
+// instance; this allows merging plans.
+type PhysicalInfrastructure struct {
 	// -- The following fields are immutable --
 
 	FlowID        uuid.UUID
@@ -84,16 +82,37 @@ type PhysicalPlan struct {
 	// wrapping had to happen.
 	LocalProcessors []execinfra.LocalProcessor
 
-	// LocalProcessorIndexes contains pointers to all of the RowSourceIdx fields
-	// of the LocalPlanNodeSpecs that were created. This list is in the same
-	// order as LocalProcessors, and is kept up-to-date so that LocalPlanNodeSpecs
-	// always have the correct index into the LocalProcessors slice.
-	LocalProcessorIndexes []*uint32
-
 	// Streams accumulates the streams in the plan - both local (intra-node) and
 	// remote (inter-node); when we have a final plan, the streams are used to
 	// generate processor input and output specs (see PopulateEndpoints).
 	Streams []Stream
+
+	// Used internally for numbering stages.
+	stageCounter int32
+}
+
+// AddProcessor adds a processor and returns the index that can be used to refer
+// to that processor.
+func (p *PhysicalInfrastructure) AddProcessor(proc Processor) ProcessorIdx {
+	idx := ProcessorIdx(len(p.Processors))
+	p.Processors = append(p.Processors, proc)
+	return idx
+}
+
+// AddLocalProcessor adds a local processor and returns the index that can be
+// used to refer to that processor.
+func (p *PhysicalInfrastructure) AddLocalProcessor(proc execinfra.LocalProcessor) int {
+	idx := len(p.LocalProcessors)
+	p.LocalProcessors = append(p.LocalProcessors, proc)
+	return idx
+}
+
+// PhysicalPlan represents a network of processors and streams along with
+// information about the results output by this network. The results come from
+// unconnected output routers of a subset of processors; all these routers
+// output the same kind of data (same schema).
+type PhysicalPlan struct {
+	*PhysicalInfrastructure
 
 	// ResultRouters identifies the output routers which output the results of the
 	// plan. These are the routers to which we have to connect new streams in
@@ -120,26 +139,36 @@ type PhysicalPlan struct {
 	// want to pay this cost if we don't have multiple streams to merge.
 	MergeOrdering execinfrapb.Ordering
 
-	// Used internally for numbering stages.
-	stageCounter int32
-
 	// MaxEstimatedRowCount tracks the maximum estimated row count that a table
 	// reader in this plan will output. This information is used to decide
 	// whether to use the vectorized execution engine.
+	// TODO(radu): move this field to PlanInfrastructure.
 	MaxEstimatedRowCount uint64
 	// TotalEstimatedScannedRows is the sum of the row count estimate of all the
 	// table readers in the plan.
+	// TODO(radu): move this field to PlanInfrastructure.
 	TotalEstimatedScannedRows uint64
 
 	// Distribution is the indicator of the distribution of the physical plan.
+	// TODO(radu): move this field to PlanInfrastructure?
 	Distribution PlanDistribution
 }
 
-// MakePhysicalPlan initializes a PhysicalPlan.
-func MakePhysicalPlan(flowID uuid.UUID, gatewayNodeID roachpb.NodeID) PhysicalPlan {
-	return PhysicalPlan{
+// MakePhysicalInfrastructure initializes a PhysicalInfrastructure that can then
+// be used with MakePhysicalPlan.
+func MakePhysicalInfrastructure(
+	flowID uuid.UUID, gatewayNodeID roachpb.NodeID,
+) PhysicalInfrastructure {
+	return PhysicalInfrastructure{
 		FlowID:        flowID,
 		GatewayNodeID: gatewayNodeID,
+	}
+}
+
+// MakePhysicalPlan initializes a PhysicalPlan.
+func MakePhysicalPlan(infra *PhysicalInfrastructure) PhysicalPlan {
+	return PhysicalPlan{
+		PhysicalInfrastructure: infra,
 	}
 }
 
@@ -176,18 +205,16 @@ func (p *PhysicalPlan) NewStage(containsRemoteProcessor bool) int32 {
 // NewStageOnNodes is the same as NewStage but takes in the information about
 // the nodes participating in the new stage and the gateway.
 func (p *PhysicalPlan) NewStageOnNodes(nodes []roachpb.NodeID) int32 {
+	return p.NewStageWithFirstNode(len(nodes), nodes[0])
+}
+
+// NewStageWithFirstNode is the same as NewStage but takes in the number of
+// total nodes participating in the new stage and the first node's id.
+func (p *PhysicalPlan) NewStageWithFirstNode(nNodes int, firstNode roachpb.NodeID) int32 {
 	// We have a remote processor either when we have multiple nodes
 	// participating in the stage or the single processor is scheduled not on
 	// the gateway.
-	return p.NewStage(len(nodes) > 1 || nodes[0] != p.GatewayNodeID /* containsRemoteProcessor */)
-}
-
-// AddProcessor adds a processor to a PhysicalPlan and returns the index that
-// can be used to refer to that processor.
-func (p *PhysicalPlan) AddProcessor(proc Processor) ProcessorIdx {
-	idx := ProcessorIdx(len(p.Processors))
-	p.Processors = append(p.Processors, proc)
-	return idx
+	return p.NewStage(nNodes > 1 || firstNode != p.GatewayNodeID /* containsRemoteProcessor */)
 }
 
 // SetMergeOrdering sets p.MergeOrdering.
@@ -216,12 +243,8 @@ func (p *PhysicalPlan) AddNoInputStage(
 	outputTypes []*types.T,
 	newOrdering execinfrapb.Ordering,
 ) {
-	nodes := make([]roachpb.NodeID, len(corePlacements))
-	for i := range corePlacements {
-		nodes[i] = corePlacements[i].NodeID
-	}
-	stageID := p.NewStageOnNodes(nodes)
-	p.ResultRouters = make([]ProcessorIdx, len(nodes))
+	stageID := p.NewStageWithFirstNode(len(corePlacements), corePlacements[0].NodeID)
+	p.ResultRouters = make([]ProcessorIdx, len(corePlacements))
 	for i := range p.ResultRouters {
 		proc := Processor{
 			Node: corePlacements[i].NodeID,
@@ -783,34 +806,6 @@ func (p *PhysicalPlan) AddFilter(
 	return nil
 }
 
-// emptyPlan updates p in-place with a plan consisting of a single processor on
-// the gateway that generates no rows; the output stream has the same types as
-// p produces.
-func (p *PhysicalPlan) emptyPlan() {
-	s := execinfrapb.ValuesCoreSpec{
-		Columns: make([]execinfrapb.DatumInfo, len(p.GetResultTypes())),
-	}
-	for i, t := range p.GetResultTypes() {
-		s.Columns[i].Encoding = descpb.DatumEncoding_VALUE
-		s.Columns[i].Type = t
-	}
-
-	*p = PhysicalPlan{
-		Processors: []Processor{{
-			Node: p.GatewayNodeID,
-			Spec: execinfrapb.ProcessorSpec{
-				Core:        execinfrapb.ProcessorCoreUnion{Values: &s},
-				Output:      make([]execinfrapb.OutputRouterSpec, 1),
-				ResultTypes: p.GetResultTypes(),
-			},
-		}},
-		ResultRouters: []ProcessorIdx{0},
-		ResultColumns: p.ResultColumns,
-		GatewayNodeID: p.GatewayNodeID,
-		Distribution:  LocalPlan,
-	}
-}
-
 // AddLimit adds a limit and/or offset to the results of the current plan. If
 // there are multiple result streams, they are joined into a single processor
 // that is placed on the given node.
@@ -832,10 +827,6 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 	// instead of completely eliding the 0-limit plan.
 	limitZero := false
 	if count == 0 {
-		if len(p.LocalProcessors) == 0 {
-			p.emptyPlan()
-			return nil
-		}
 		count = 1
 		limitZero = true
 	}
@@ -846,36 +837,36 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 		// SELECT OFFSET 10+5 LIMIT min(1000, 20).
 		post := p.GetLastStagePost()
 		if offset != 0 {
-			if post.Limit > 0 && post.Limit <= uint64(offset) {
+			switch {
+			case post.Limit > 0 && post.Limit <= uint64(offset):
 				// The previous limit is not enough to reach the offset; we know there
 				// will be no results. For example:
 				//   SELECT * FROM (SELECT * FROM .. LIMIT 5) OFFSET 10
-				// TODO(radu): perform this optimization while propagating filters
-				// instead of having to detect it here.
-				if len(p.LocalProcessors) == 0 {
-					// Even though we know there will be no results, we don't elide the
-					// plan if there are local processors. See comment above limitZero
-					// for why.
-					p.emptyPlan()
-					return nil
-				}
 				count = 1
 				limitZero = true
-			}
-			// If we're collapsing an offset into a stage that already has a limit,
-			// we have to be careful, since offsets always are applied first, before
-			// limits. So, if the last stage already has a limit, we subtract the
-			// offset from that limit to preserve correctness.
-			//
-			// As an example, consider the requirement of applying an offset of 3 on
-			// top of a limit of 10. In this case, we need to emit 7 result rows. But
-			// just propagating the offset blindly would produce 10 result rows, an
-			// incorrect result.
-			post.Offset += uint64(offset)
-			if post.Limit > 0 {
-				// Note that this can't fall below 0 - we would have already caught this
-				// case above and returned an empty plan.
-				post.Limit -= uint64(offset)
+
+			case post.Offset > math.MaxUint64-uint64(offset):
+				// The sum of the offsets would overflow. There is no way we'll ever
+				// generate enough rows.
+				count = 1
+				limitZero = true
+
+			default:
+				// If we're collapsing an offset into a stage that already has a limit,
+				// we have to be careful, since offsets always are applied first, before
+				// limits. So, if the last stage already has a limit, we subtract the
+				// offset from that limit to preserve correctness.
+				//
+				// As an example, consider the requirement of applying an offset of 3 on
+				// top of a limit of 10. In this case, we need to emit 7 result rows. But
+				// just propagating the offset blindly would produce 10 result rows, an
+				// incorrect result.
+				post.Offset += uint64(offset)
+				if post.Limit > 0 {
+					// Note that this can't fall below 1 - we would have already caught this
+					// case above.
+					post.Limit -= uint64(offset)
+				}
 			}
 		}
 		if count != math.MaxInt64 && (post.Limit == 0 || post.Limit > uint64(count)) {
@@ -991,51 +982,19 @@ func (p *PhysicalPlan) SetRowEstimates(left, right *PhysicalPlan) {
 	}
 }
 
-// MergePlans merges the processors and streams of two plans into a new plan.
-// The result routers for each side are returned (they point at processors in
-// the merged plan).
+// MergePlans is used when merging two plans into a new plan. All plans must
+// share the same PlanInfrastructure.
 func MergePlans(
 	mergedPlan *PhysicalPlan,
 	left, right *PhysicalPlan,
 	leftPlanDistribution, rightPlanDistribution PlanDistribution,
-) (leftRouters []ProcessorIdx, rightRouters []ProcessorIdx) {
-	mergedPlan.Processors = append(left.Processors, right.Processors...)
-	rightProcStart := ProcessorIdx(len(left.Processors))
-
-	mergedPlan.Streams = append(left.Streams, right.Streams...)
-
-	// Update the processor indices in the right streams.
-	for i := len(left.Streams); i < len(mergedPlan.Streams); i++ {
-		mergedPlan.Streams[i].SourceProcessor += rightProcStart
-		mergedPlan.Streams[i].DestProcessor += rightProcStart
+) {
+	if mergedPlan.PhysicalInfrastructure != left.PhysicalInfrastructure ||
+		mergedPlan.PhysicalInfrastructure != right.PhysicalInfrastructure {
+		panic(errors.AssertionFailedf("can only merge plans that share infrastructure"))
 	}
-
-	// Renumber the stages from the right plan.
-	for i := rightProcStart; int(i) < len(mergedPlan.Processors); i++ {
-		s := &mergedPlan.Processors[i].Spec
-		if s.StageID != 0 {
-			s.StageID += left.stageCounter
-		}
-	}
-	mergedPlan.stageCounter = left.stageCounter + right.stageCounter
-
-	mergedPlan.LocalProcessors = append(left.LocalProcessors, right.LocalProcessors...)
-	mergedPlan.LocalProcessorIndexes = append(left.LocalProcessorIndexes, right.LocalProcessorIndexes...)
-	// Update the local processor indices in the right streams.
-	for i := len(left.LocalProcessorIndexes); i < len(mergedPlan.LocalProcessorIndexes); i++ {
-		*mergedPlan.LocalProcessorIndexes[i] += uint32(len(left.LocalProcessorIndexes))
-	}
-
-	leftRouters = left.ResultRouters
-	rightRouters = append([]ProcessorIdx(nil), right.ResultRouters...)
-	// Update the processor indices in the right routers.
-	for i := range rightRouters {
-		rightRouters[i] += rightProcStart
-	}
-
 	mergedPlan.SetRowEstimates(left, right)
 	mergedPlan.Distribution = leftPlanDistribution.compose(rightPlanDistribution)
-	return leftRouters, rightRouters
 }
 
 // MergeResultTypes reconciles the ResultTypes between two plans. It enforces

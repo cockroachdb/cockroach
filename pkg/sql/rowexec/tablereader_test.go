@@ -438,12 +438,12 @@ func TestLimitScans(t *testing.T) {
 	for _, span := range spans {
 		if span.Operation == tableReaderProcName {
 			// Verify that stat collection lines up with results.
-			trs := TableReaderStats{}
-			if err := types.UnmarshalAny(span.Stats, &trs); err != nil {
+			stats := execinfrapb.ComponentStats{}
+			if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
 				t.Fatal(err)
 			}
-			if trs.InputStats.NumRows != limit {
-				t.Fatalf("read %d rows, but stats only counted: %d", limit, trs.InputStats.NumRows)
+			if stats.KV.TuplesRead.Value() != limit {
+				t.Fatalf("read %d rows, but stats counted: %s", limit, stats.KV.TuplesRead)
 			}
 		}
 		for _, l := range span.Logs {

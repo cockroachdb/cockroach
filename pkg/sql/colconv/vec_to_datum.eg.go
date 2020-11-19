@@ -56,24 +56,46 @@ var vecToDatumConverterPool = sync.Pool{
 	},
 }
 
-// NewVecToDatumConverter creates a new VecToDatumConverter.
-// - batchWidth determines the width of the batches that it will be converting.
-// - vecIdxsToConvert determines which vectors need to be converted.
-func NewVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *VecToDatumConverter {
+func getNewVecToDatumConverter(batchWidth int) *VecToDatumConverter {
 	c := vecToDatumConverterPool.Get().(*VecToDatumConverter)
 	if cap(c.convertedVecs) < batchWidth {
 		c.convertedVecs = make([]tree.Datums, batchWidth)
 	} else {
 		c.convertedVecs = c.convertedVecs[:batchWidth]
 	}
+	return c
+}
+
+// NewVecToDatumConverter creates a new VecToDatumConverter.
+// - batchWidth determines the width of the batches that it will be converting.
+// - vecIdxsToConvert determines which vectors need to be converted.
+func NewVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *VecToDatumConverter {
+	c := getNewVecToDatumConverter(batchWidth)
 	c.vecIdxsToConvert = vecIdxsToConvert
+	return c
+}
+
+// NewAllVecToDatumConverter is like NewVecToDatumConverter except all of the
+// vectors in the batch will be converted.
+func NewAllVecToDatumConverter(batchWidth int) *VecToDatumConverter {
+	c := getNewVecToDatumConverter(batchWidth)
+	if cap(c.vecIdxsToConvert) < batchWidth {
+		c.vecIdxsToConvert = make([]int, batchWidth)
+	} else {
+		c.vecIdxsToConvert = c.vecIdxsToConvert[:batchWidth]
+	}
+	for i := 0; i < batchWidth; i++ {
+		c.vecIdxsToConvert[i] = i
+	}
 	return c
 }
 
 // Release is part of the execinfra.Releasable interface.
 func (c *VecToDatumConverter) Release() {
-	c.convertedVecs = c.convertedVecs[:0]
-	c.vecIdxsToConvert = nil
+	*c = VecToDatumConverter{
+		convertedVecs:    c.convertedVecs[:0],
+		vecIdxsToConvert: c.vecIdxsToConvert[:0],
+	}
 	vecToDatumConverterPool.Put(c)
 }
 

@@ -21,8 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -31,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -1338,10 +1339,10 @@ func (ef *execFactory) ConstructUpdate(
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
+	var updateColsIdx catalog.TableColMap
 	for i := range ru.UpdateCols {
 		id := ru.UpdateCols[i].ID
-		updateColsIdx[id] = i
+		updateColsIdx.Set(id, i)
 	}
 
 	upd := updateNodePool.Get().(*updateNode)
@@ -1453,14 +1454,6 @@ func (ef *execFactory) ConstructUpsert(
 	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
 	// computed a correct set that can sometimes be smaller.
 	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
-
-	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
-	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
-	for i := range ru.UpdateCols {
-		id := ru.UpdateCols[i].ID
-		updateColsIdx[id] = i
-	}
 
 	// Instantiate the upsert node.
 	ups := upsertNodePool.Get().(*upsertNode)

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -134,12 +135,6 @@ var colBatchScanPool = sync.Pool{
 	},
 }
 
-var cFetcherPool = sync.Pool{
-	New: func() interface{} {
-		return &cFetcher{}
-	},
-}
-
 // NewColBatchScan creates a new ColBatchScan operator.
 func NewColBatchScan(
 	ctx context.Context,
@@ -176,7 +171,7 @@ func NewColBatchScan(
 	}
 	for i := range sysColDescs {
 		typs = append(typs, sysColDescs[i].Type)
-		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+		columnIdxMap.Set(sysColDescs[i].ID, columnIdxMap.Len())
 	}
 
 	semaCtx := tree.MakeSemaContext()
@@ -230,7 +225,7 @@ func initCRowFetcher(
 	fetcher *cFetcher,
 	desc *tabledesc.Immutable,
 	indexIdx int,
-	colIdxMap map[descpb.ColumnID]int,
+	colIdxMap catalog.TableColMap,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	scanVisibility execinfrapb.ScanVisibility,
@@ -269,9 +264,7 @@ func initCRowFetcher(
 
 // Release implements the execinfra.Releasable interface.
 func (s *ColBatchScan) Release() {
-	s.rf.table.Release()
-	*s.rf = cFetcher{}
-	cFetcherPool.Put(s.rf)
+	s.rf.Release()
 	*s = ColBatchScan{
 		spans: s.spans[:0],
 	}

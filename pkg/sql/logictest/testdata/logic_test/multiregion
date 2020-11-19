@@ -21,7 +21,7 @@ statement error region "test1" defined multiple times
 CREATE DATABASE duplicate_region_name_db REGIONS "test1", "test1"
 
 statement error implementation pending
-CREATE DATABASE new_db SURVIVE AVAILABILITY ZONE FAILURE
+CREATE DATABASE new_db SURVIVE ZONE FAILURE
 
 statement ok
 CREATE DATABASE new_db

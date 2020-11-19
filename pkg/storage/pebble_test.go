@@ -234,7 +234,7 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 	}
 	for _, tc := range sepCases {
 		t.Run("", func(t *testing.T) {
-			got := string(MVCCComparer.Separator(nil, EncodeKey(tc.a), EncodeKey(tc.b)))
+			got := string(EngineComparer.Separator(nil, EncodeKey(tc.a), EncodeKey(tc.b)))
 			if got != string(EncodeKey(tc.want)) {
 				t.Errorf("a, b = %q, %q: got %q, want %q", tc.a, tc.b, got, tc.want)
 			}
@@ -269,7 +269,7 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 	}
 	for _, tc := range succCases {
 		t.Run("", func(t *testing.T) {
-			got := string(MVCCComparer.Successor(nil, EncodeKey(tc.a)))
+			got := string(EngineComparer.Successor(nil, EncodeKey(tc.a)))
 			if got != string(EncodeKey(tc.want)) {
 				t.Errorf("a = %q: got %q, want %q", tc.a, got, tc.want)
 			}
@@ -313,7 +313,7 @@ func BenchmarkMVCCKeyCompare(b *testing.B) {
 	b.ResetTimer()
 	var c int
 	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
-		c = MVCCKeyCompare(keys[i%len(keys)], keys[j%len(keys)])
+		c = EngineKeyCompare(keys[i%len(keys)], keys[j%len(keys)])
 	}
 	if testing.Verbose() {
 		fmt.Fprint(ioutil.Discard, c)

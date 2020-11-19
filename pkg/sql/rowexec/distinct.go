@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -136,7 +134,7 @@ func newDistinct(
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		d.input = newInputStatCollector(d.input)
-		d.FinishTrace = d.outputStatsToTrace
+		d.ExecStatsForTrace = d.execStatsForTrace
 	}
 
 	return returnProcessor, nil
@@ -345,40 +343,18 @@ func (d *distinct) ConsumerClosed() {
 	d.close()
 }
 
-var _ execinfrapb.DistSQLSpanStats = &DistinctStats{}
-
-const distinctTagPrefix = "distinct."
-
-// Stats implements the SpanStats interface.
-func (ds *DistinctStats) Stats() map[string]string {
-	inputStatsMap := ds.InputStats.Stats(distinctTagPrefix)
-	inputStatsMap[distinctTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(ds.MaxAllocatedMem)
-	return inputStatsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (ds *DistinctStats) StatsForQueryPlan() []string {
-	stats := ds.InputStats.StatsForQueryPlan("")
-
-	if ds.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ds.MaxAllocatedMem)))
-	}
-
-	return stats
-}
-
-// outputStatsToTrace outputs the collected distinct stats to the trace. Will
-// fail silently if the Distinct processor is not collecting stats.
-func (d *distinct) outputStatsToTrace() {
-	is, ok := getInputStats(d.FlowCtx, d.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (d *distinct) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(d.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(d.Ctx); sp != nil {
-		sp.SetSpanStats(
-			&DistinctStats{InputStats: is, MaxAllocatedMem: d.MemMonitor.MaximumBytes()},
-		)
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem: execinfrapb.MakeIntValue(uint64(d.MemMonitor.MaximumBytes())),
+		},
+		Output: d.Out.Stats(),
 	}
 }
 

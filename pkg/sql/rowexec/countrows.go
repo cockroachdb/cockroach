@@ -47,7 +47,7 @@ func newCountAggregator(
 
 	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		ag.input = newInputStatCollector(input)
-		ag.FinishTrace = ag.outputStatsToTrace
+		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
 
 	if err := ag.Init(
@@ -105,16 +105,14 @@ func (ag *countAggregator) ConsumerClosed() {
 	ag.InternalClose()
 }
 
-// outputStatsToTrace outputs the collected distinct stats to the trace. Will
-// fail silently if the Distinct processor is not collecting stats.
-func (ag *countAggregator) outputStatsToTrace() {
-	is, ok := getInputStats(ag.FlowCtx, ag.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (ag *countAggregator) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(ag.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(ag.Ctx); sp != nil {
-		sp.SetSpanStats(
-			&AggregatorStats{InputStats: is},
-		)
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Output: ag.Out.Stats(),
 	}
 }

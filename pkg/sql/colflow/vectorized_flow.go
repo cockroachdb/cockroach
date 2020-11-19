@@ -213,8 +213,8 @@ func (f *vectorizedFlow) Setup(
 	}
 
 	diskQueueCfg := colcontainer.DiskQueueCfg{
-		FS:      f.Cfg.TempFS,
-		GetPath: f.getTempStoragePath,
+		FS:        f.Cfg.TempFS,
+		GetPather: f,
 	}
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
 		return ctx, err
@@ -256,10 +256,12 @@ func (f *vectorizedFlow) Setup(
 	return ctx, err
 }
 
-// getTempStoragePath returns the path of the temporary directory for
+var _ colcontainer.GetPather = &vectorizedFlow{}
+
+// GetPath returns the path of the temporary directory for
 // disk-spilling components of the flow. The directory is created on the first
 // call to this method.
-func (f *vectorizedFlow) getTempStoragePath(ctx context.Context) string {
+func (f *vectorizedFlow) GetPath(ctx context.Context) string {
 	f.tempStorage.Lock()
 	defer f.tempStorage.Unlock()
 	if f.tempStorage.path != "" {
@@ -315,14 +317,14 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	created := f.tempStorage.path != ""
 	f.tempStorage.Unlock()
 	if created {
-		if err := f.Cfg.TempFS.RemoveAll(f.getTempStoragePath(ctx)); err != nil {
+		if err := f.Cfg.TempFS.RemoveAll(f.GetPath(ctx)); err != nil {
 			// Log error as a Warning but keep on going to close the memory
 			// infrastructure.
 			log.Warningf(
 				ctx,
 				"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
 				f.GetID().Short(),
-				f.getTempStoragePath(ctx),
+				f.GetPath(ctx),
 				err,
 			)
 		}
@@ -345,6 +347,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	inputs []colexecbase.Operator,
 	id int32,
 	idTagKey string,
+	omitNumTuples bool,
 	monitors []*mon.BytesMonitor,
 ) (colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
@@ -365,7 +368,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 		inputStatsCollectors[i] = sc
 	}
 	vsc := colexec.NewVectorizedStatsCollector(
-		op, ioReader, id, idTagKey, inputWatch,
+		op, ioReader, id, idTagKey, omitNumTuples, inputWatch,
 		memMonitors, diskMonitors, inputStatsCollectors,
 	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
@@ -551,6 +554,7 @@ func newVectorizedFlowCreator(
 		flowID:                         flowID,
 		exprHelper:                     creator.exprHelper,
 		typeResolver:                   typeResolver,
+		procIdxQueue:                   creator.procIdxQueue,
 		leaves:                         creator.leaves,
 		monitors:                       creator.monitors,
 		accounts:                       creator.accounts,
@@ -771,7 +775,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				var err error
 				localOp, err = s.wrapWithVectorizedStatsCollectorBase(
 					op, nil /* ioReader */, nil, /* inputs */
-					int32(stream.StreamID), execinfrapb.StreamIDTagKey, mons,
+					int32(stream.StreamID), execinfrapb.StreamIDTagKey, false /* omitNumTuples */, mons,
 				)
 				if err != nil {
 					return err
@@ -910,7 +914,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			var err error
 			op, err = s.wrapWithVectorizedStatsCollectorBase(
 				op, nil /* ioReader */, statsInputsAsOps, -1, /* id */
-				"" /* idTagKey */, nil, /* monitors */
+				"" /* idTagKey */, false /* omitNumTuples */, nil, /* monitors */
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -991,15 +995,19 @@ func (s *vectorizedFlowCreator) setupOutput(
 		s.leaves = append(s.leaves, outbox)
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 		// Make the materializer, which will write to the given receiver.
-		var outputStatsToTrace func()
+		var outputStatsToTrace func() *execinfrapb.ComponentStats
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
 			// appended to.
 			vscq := append([]colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
-			outputStatsToTrace = func() {
+			outputStatsToTrace = func() *execinfrapb.ComponentStats {
+				// TODO(radu): this is a sketchy way to use this infrastructure. We
+				// aren't actually returning any stats, but we are creating and closing
+				// child spans with stats.
 				finishVectorizedStatsCollectors(
 					ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq,
 				)
+				return nil
 			}
 		}
 		proc, err := colexec.NewMaterializer(
@@ -1115,6 +1123,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
 			}
+			originalOp := result.Op
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
 				result.Op = colexec.NewInvariantsChecker(result.Op)
 			}
@@ -1142,9 +1151,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 			op := result.Op
 			if s.recordingStats {
+				// We prevent emitting the NumTuples stat from Columnarizers because the
+				// wrapped processor already emits the same stat.
+				_, isColumnarizer := originalOp.(*colexec.Columnarizer)
 				op, err = s.wrapWithVectorizedStatsCollectorBase(
 					op, result.IOReader, inputs, pspec.ProcessorID,
-					execinfrapb.ProcessorIDTagKey, result.OpMonitors,
+					execinfrapb.ProcessorIDTagKey, isColumnarizer, result.OpMonitors,
 				)
 				if err != nil {
 					return

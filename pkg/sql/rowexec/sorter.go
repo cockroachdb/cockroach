@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -56,7 +55,7 @@ func (s *sorterBase) init(
 	ctx := flowCtx.EvalCtx.Ctx()
 	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		input = newInputStatCollector(input)
-		s.FinishTrace = s.outputStatsToTrace
+		s.ExecStatsForTrace = s.execStatsForTrace
 	}
 
 	// Limit the memory use by creating a child monitor with a hard limit.
@@ -126,50 +125,19 @@ func (s *sorterBase) close() {
 	}
 }
 
-var _ execinfrapb.DistSQLSpanStats = &SorterStats{}
-
-const sorterTagPrefix = "sorter."
-
-// Stats implements the SpanStats interface.
-func (ss *SorterStats) Stats() map[string]string {
-	statsMap := ss.InputStats.Stats(sorterTagPrefix)
-	statsMap[sorterTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedMem)
-	statsMap[sorterTagPrefix+MaxDiskTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedDisk)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (ss *SorterStats) StatsForQueryPlan() []string {
-	stats := ss.InputStats.StatsForQueryPlan("" /* prefix */)
-
-	if ss.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedMem)))
-	}
-
-	if ss.MaxAllocatedDisk != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedDisk)))
-	}
-
-	return stats
-}
-
-// outputStatsToTrace outputs the collected sorter stats to the trace. Will fail
-// silently if stats are not being collected.
-func (s *sorterBase) outputStatsToTrace() {
-	is, ok := getInputStats(s.FlowCtx, s.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (s *sorterBase) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(s.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := tracing.SpanFromContext(s.Ctx); sp != nil {
-		sp.SetSpanStats(
-			&SorterStats{
-				InputStats:       is,
-				MaxAllocatedMem:  s.MemMonitor.MaximumBytes(),
-				MaxAllocatedDisk: s.diskMonitor.MaximumBytes(),
-			},
-		)
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(s.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(s.diskMonitor.MaximumBytes())),
+		},
+		Output: s.Out.Stats(),
 	}
 }
 
@@ -186,14 +154,9 @@ func newSorter(
 	if post.Limit != 0 && post.Filter.Empty() {
 		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
 		// will discard the first Offset ones.
-		// LIMIT and OFFSET should each never be greater than math.MaxInt64, the
-		// parser ensures this.
-		if post.Limit > math.MaxInt64 || post.Offset > math.MaxInt64 {
-			return nil, errors.AssertionFailedf(
-				"error creating sorter: limit %d offset %d too large",
-				errors.Safe(post.Limit), errors.Safe(post.Offset))
+		if post.Limit <= math.MaxUint64-post.Offset {
+			count = post.Limit + post.Offset
 		}
-		count = post.Limit + post.Offset
 	}
 
 	// Choose the optimal processor.

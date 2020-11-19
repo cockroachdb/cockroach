@@ -115,8 +115,9 @@ func (td *tableDeleter) deleteAllRowsScan(
 	}
 
 	var valNeededForCol util.FastIntSet
-	for _, idx := range td.rd.FetchColIDtoRowIndex {
-		valNeededForCol.Add(idx)
+	for i := range td.rd.FetchCols {
+		col := td.rd.FetchCols[i].ID
+		valNeededForCol.Add(td.rd.FetchColIDtoRowIndex.GetDefault(col))
 	}
 
 	var rf row.Fetcher
@@ -245,8 +246,9 @@ func (td *tableDeleter) deleteIndexScan(
 	}
 
 	var valNeededForCol util.FastIntSet
-	for _, idx := range td.rd.FetchColIDtoRowIndex {
-		valNeededForCol.Add(idx)
+	for i := range td.rd.FetchCols {
+		col := td.rd.FetchCols[i].ID
+		valNeededForCol.Add(td.rd.FetchColIDtoRowIndex.GetDefault(col))
 	}
 
 	var rf row.Fetcher

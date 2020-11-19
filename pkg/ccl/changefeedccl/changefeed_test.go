@@ -59,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	crdberrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1882,6 +1881,16 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
+	// Feature flag for changefeeds is off — test that CREATE CHANGEFEED and
+	// EXPERIMENTAL CHANGEFEED FOR surface error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = false`)
+	sqlDB.ExpectErr(t, `CHANGEFEED feature was disabled by the database administrator`,
+		`CREATE CHANGEFEED FOR foo`)
+	sqlDB.ExpectErr(t, `CHANGEFEED feature was disabled by the database administrator`,
+		`EXPERIMENTAL CHANGEFEED FOR foo`)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = true`)
+
 	sqlDB.ExpectErr(
 		t, `unknown format: nope`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH format=nope`,
@@ -2557,7 +2566,7 @@ func TestChangefeedProtectedTimestampsVerificationFails(t *testing.T) {
 				if err == nil {
 					return errors.Errorf("expected record to be removed")
 				}
-				if crdberrors.Is(err, protectedts.ErrNotExists) {
+				if errors.Is(err, protectedts.ErrNotExists) {
 					return nil
 				}
 				return err

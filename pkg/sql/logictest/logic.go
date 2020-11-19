@@ -492,15 +492,6 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade:      true,
 	},
 	{
-		name:                "local-mixed-19.2-20.1",
-		numNodes:            1,
-		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
-		bootstrapVersion:    roachpb.Version{Major: 19, Minor: 2},
-		binaryVersion:       roachpb.Version{Major: 20, Minor: 1},
-		disableUpgrade:      true,
-	},
-	{
 		name:                "local-mixed-20.1-20.2",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
@@ -1374,7 +1365,12 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
 	if cfg.useTenant {
 		var err error
-		t.tenantAddr, _, err = t.cluster.Server(t.nodeIdx).StartTenant(base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), AllowSettingClusterSettings: true})
+		tenantArgs := base.TestTenantArgs{
+			TenantID:                    roachpb.MakeTenantID(10),
+			AllowSettingClusterSettings: true,
+			DeterministicExplainAnalyze: true,
+		}
+		t.tenantAddr, _, err = t.cluster.Server(t.nodeIdx).StartTenant(tenantArgs)
 		if err != nil {
 			t.rootT.Fatalf("%+v", err)
 		}

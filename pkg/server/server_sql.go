@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"net"
 	"os"
@@ -225,7 +224,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
 
 	jobRegistry := cfg.circularJobRegistry
-
 	{
 		regLiveness := cfg.nodeLiveness
 		if testingLiveness := cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
@@ -237,6 +235,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		)
 		cfg.registry.AddMetricStruct(cfg.sqlLivenessProvider.Metrics())
 
+		var jobsKnobs *jobs.TestingKnobs
+		if cfg.TestingKnobs.JobsTestingKnobs != nil {
+			jobsKnobs = cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs)
+		}
 		*jobRegistry = *jobs.MakeRegistry(
 			cfg.AmbientCtx,
 			cfg.stopper,
@@ -254,6 +256,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 				return sql.MakeJobExecContext(opName, user, &sql.MemoryMetrics{}, execCfg)
 			},
 			cfg.jobAdoptionStopFile,
+			jobsKnobs,
 		)
 	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
@@ -379,7 +382,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		) (kvserverbase.BulkAdder, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
-			bulkMon := execinfra.NewMonitor(ctx, bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
+			bulkMon := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "bulk-adder-monitor")
 			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon)
 		},
 

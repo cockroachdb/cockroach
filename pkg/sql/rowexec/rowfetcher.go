@@ -63,7 +63,7 @@ func initRowFetcher(
 	fetcher *row.Fetcher,
 	desc *tabledesc.Immutable,
 	indexIdx int,
-	colIdxMap map[descpb.ColumnID]int,
+	colIdxMap catalog.TableColMap,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	isCheck bool,

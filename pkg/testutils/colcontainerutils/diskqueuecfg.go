@@ -56,10 +56,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 		}
 	}
 	cfg.FS = testingFS
-	cfg.GetPath = func(context.Context) string {
-		return path
-	}
-
+	cfg.GetPather = colcontainer.GetPatherFunc(func(context.Context) string { return path })
 	if err := cfg.EnsureDefaults(); err != nil {
 		t.Fatal(err)
 	}

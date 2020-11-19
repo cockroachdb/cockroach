@@ -77,7 +77,9 @@ func (mb *mutationBuilder) buildDelete(returning tree.ReturningExprs) {
 	mb.buildFKChecksAndCascadesForDelete()
 
 	private := mb.makeMutationPrivate(returning != nil)
-	mb.outScope.expr = mb.b.factory.ConstructDelete(mb.outScope.expr, mb.checks, private)
+	mb.outScope.expr = mb.b.factory.ConstructDelete(
+		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
+	)
 
 	mb.buildReturning(returning)
 }

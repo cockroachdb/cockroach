@@ -18,6 +18,7 @@ import (
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -44,10 +45,6 @@ type tShim interface {
 	Logf(fmt string, args ...interface{})
 }
 
-// showLogs reflects the use of -show-logs on the command line and is
-// used for testing.
-var showLogs bool
-
 // Scope creates a TestLogScope which corresponds to the lifetime of a
 // temporary logging directory. If -show-logs was passed on the
 // command line, this is a no-op. Otherwise, it behaves
@@ -56,7 +53,7 @@ var showLogs bool
 // See the documentation of ScopeWithoutShowLogs() for API usage and
 // restrictions.
 func Scope(t tShim) *TestLogScope {
-	if showLogs {
+	if logging.showLogs {
 		return (*TestLogScope)(nil)
 	}
 
@@ -90,7 +87,7 @@ func Scope(t tShim) *TestLogScope {
 // The reason for this restriction is ease of implementation: to
 // support TestLogScope "under" multiple loggers, we'd need to
 // extend the implementation to save/restore the state of all the loggers,
-// not just mainLog. This would be necessary because loggers don't
+// not just debugLog. This would be necessary because loggers don't
 // necessarily have the same config. Until that is implemented,
 // we prevent the use case altogether.
 //
@@ -102,9 +99,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// Refuse to work "under" secondary loggers (saving+restoring
 	// state for secondary loggers is not implemented yet).
 	func() {
-		secondaryLogRegistry.mu.Lock()
-		defer secondaryLogRegistry.mu.Unlock()
-		if len(secondaryLogRegistry.mu.loggers) > 0 {
+		if allLoggers.len() > 1 {
 			t.Fatal("can't use TestLogScope with secondary loggers active")
 		}
 	}()
@@ -122,7 +117,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 
 	sc = &TestLogScope{
 		// Remember the stderr threshold. Close() will restore it.
-		stderrThreshold: mainLog.stderrThreshold.get(),
+		stderrThreshold: logging.stderrSink.threshold.Get(),
 	}
 	defer func() {
 		// If any of the following initialization fails, we close the scope.
@@ -150,7 +145,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// Override the stderr threshold for the main logger.
 	// From this point log entries do not show up on stderr any more;
 	// they only go to files.
-	mainLog.stderrThreshold.set(Severity_NONE)
+	logging.stderrSink.threshold.SetValue(severity.NONE)
 
 	t.Logf("test logs captured to: %s", tempDir)
 	return sc
@@ -163,51 +158,19 @@ func (l *TestLogScope) Rotate(t tShim) {
 	// Ensure remaining logs are written.
 	Flush()
 
-	func() {
-		mainLog.mu.Lock()
-		defer mainLog.mu.Unlock()
-		if err := mainLog.closeFileLocked(); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		func() {
-			l.logger.mu.Lock()
-			defer l.logger.mu.Unlock()
-			if err := l.logger.closeFileLocked(); err != nil {
-				t.Fatal(err)
-			}
-		}()
+	if err := allFileSinks.iter(func(l *fileSink) error {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		return l.closeFileLocked()
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 
 // restoreStderrThreshold restores the stderr output threshold at the end
 // of a scope.
-// The threshold is restored on mainLog and all the secondary loggers.
-// Why not just mainLog, given that the ScopeWithoutShowLog() API has
-// "no secondary loggers" as a prerequisite? Well it may be that
-// the test code "under" the scope started some secondary loggers, and
-// those have not stopped yet. This is legitimate. So now we want
-// to do something about their individual stderr threshold.
-//
-// The question is however which threshold to use for which secondary
-// logger. Since we know that all these secondary loggers were forked
-// off mainLog (since they didn't exist before), we also know they all
-// have the same threshold setting: the one that was present on
-// mainLog originally. Therefore, if we restore the mainLog setting,
-// it is reasonable to also restore the mainLog setting onto all the
-// secondary loggers.
 func (l *TestLogScope) restoreStderrThreshold() {
-	mainLog.stderrThreshold.set(l.stderrThreshold)
-
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, secL := range secondaryLogRegistry.mu.loggers {
-		secL.logger.stderrThreshold.set(l.stderrThreshold)
-	}
+	logging.stderrSink.threshold.SetValue(l.stderrThreshold)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are
@@ -276,34 +239,39 @@ func calledDuringPanic() bool {
 // dirTestOverride sets the default value for the logging output directory
 // for use in tests.
 func dirTestOverride(expected, newDir string) error {
-	if err := mainLog.dirTestOverride(expected, newDir); err != nil {
+	if err := allLoggers.iter(func(l *loggerT) error {
+		fileSink := l.getFileSink()
+		if fileSink == nil {
+			return nil
+		}
+		l.outputMu.Lock()
+		defer l.outputMu.Unlock()
+		return fileSink.dirTestOverride(expected, newDir)
+	}); err != nil {
 		return err
 	}
-	// Same with secondary loggers.
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		if err := l.logger.dirTestOverride(expected, newDir); err != nil {
-			return err
-		}
-	}
+	// Set the default also for any subsequently defined secondary
+	// logger.
+	_ = logging.logDir.Set(newDir)
 	return nil
 }
 
-func (l *loggerT) dirTestOverride(expected, newDir string) error {
+func (l *fileSink) dirTestOverride(expected, newDir string) error {
+	if l == nil {
+		return nil
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.logDir.Lock()
 	// The following check is intended to catch concurrent uses of
 	// Scope() or TestLogScope.Close(), which would be invalid.
-	if l.logDir.name != expected {
-		l.logDir.Unlock()
+	if l.mu.logDir != expected {
 		return errors.Errorf("unexpected logDir setting: set to %q, expected %q",
-			l.logDir.name, expected)
+			l.mu.logDir, expected)
 	}
-	l.logDir.name = newDir
-	l.logDir.Unlock()
+	l.mu.logDir = newDir
+	l.enabled.Set(l.mu.logDir != "")
 
 	// When we change the directory we close the current logging
 	// output, so that a rotation to the new directory is forced on

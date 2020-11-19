@@ -2162,13 +2162,16 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	}
 
 	// Engine is not bootstrapped yet (i.e. no StoreIdent). Does it contain
-	// a cluster version and nothing else?
+	// a cluster version, cached settings and nothing else?
 
 	var sawClusterVersion bool
 	var keyVals []string
 	for _, kv := range kvs {
 		if kv.Key.Key.Equal(keys.StoreClusterVersionKey()) {
 			sawClusterVersion = true
+			continue
+		} else if _, err := keys.DecodeStoreCachedSettingsKey(kv.Key.Key); err == nil {
+			// Cached cluster settings may be present on uninitialized engines.
 			continue
 		}
 		keyVals = append(keyVals, fmt.Sprintf("%s: %q", kv.Key, kv.Value))
@@ -2259,6 +2262,9 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 
 // ClusterID accessor.
 func (s *Store) ClusterID() uuid.UUID { return s.Ident.ClusterID }
+
+// NodeID accessor.
+func (s *Store) NodeID() roachpb.NodeID { return s.Ident.NodeID }
 
 // StoreID accessor.
 func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }

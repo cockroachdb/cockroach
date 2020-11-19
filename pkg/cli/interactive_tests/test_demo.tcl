@@ -32,13 +32,17 @@ eexpect "Welcome"
 eexpect "defaultdb>"
 
 # Show the URLs.
+# Also check that the default port is used.
 send "\\demo ls\r"
 eexpect "(console)"
 eexpect "http://"
+eexpect ":8080"
 eexpect "(sql)"
 eexpect "root:unused@"
+eexpect "=26257"
 eexpect "(sql/tcp)"
 eexpect "root@"
+eexpect ":26257"
 eexpect "sslmode=disable"
 eexpect "defaultdb>"
 
@@ -79,13 +83,17 @@ eexpect "has been created."
 eexpect "defaultdb>"
 
 # Show the URLs.
+# Also check that the default port is used.
 send "\\demo ls\r"
 eexpect "(console)"
 eexpect "http://"
+eexpect ":8080"
 eexpect "(sql)"
 eexpect "demo:"
+eexpect "=26257"
 eexpect "(sql/tcp)"
 eexpect "demo:"
+eexpect ":26257"
 eexpect "sslmode=require"
 eexpect "defaultdb>"
 
@@ -159,5 +167,50 @@ eexpect "defaultdb>"
 
 send_eof
 eexpect eof
+
+end_test
+
+start_test "Check that the port numbers can be overridden from the command line."
+
+spawn $argv demo --empty --nodes 3 --http-port 8000
+eexpect "Welcome"
+eexpect "defaultdb>"
+
+# Show the URLs.
+send "\\demo ls\r"
+eexpect "http://"
+eexpect ":8000"
+eexpect "http://"
+eexpect ":8001"
+eexpect "http://"
+eexpect ":8002"
+eexpect "defaultdb>"
+
+interrupt
+eexpect eof
+
+spawn $argv demo --empty --nodes 3 --sql-port 23000
+eexpect "Welcome"
+eexpect "defaultdb>"
+
+# Show the URLs.
+send "\\demo ls\r"
+eexpect "(sql)"
+eexpect "=23000"
+eexpect "(sql/tcp)"
+eexpect ":23000"
+eexpect "(sql)"
+eexpect "=23001"
+eexpect "(sql/tcp)"
+eexpect ":23001"
+eexpect "(sql)"
+eexpect "=23002"
+eexpect "(sql/tcp)"
+eexpect ":23002"
+eexpect "defaultdb>"
+
+interrupt
+eexpect eof
+
 
 end_test

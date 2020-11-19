@@ -82,6 +82,7 @@ func TestRegistryCancelation(t *testing.T) {
 		histogramWindowInterval,
 		FakePHS,
 		"",
+		nil, /* knobs */
 	)
 
 	const cancelInterval = time.Nanosecond

@@ -22,16 +22,16 @@ import (
 type offsetOp struct {
 	OneInputNode
 
-	offset int
+	offset uint64
 
 	// seen is the number of tuples seen so far.
-	seen int
+	seen uint64
 }
 
 var _ colexecbase.Operator = &offsetOp{}
 
 // NewOffsetOp returns a new offset operator with the given offset.
-func NewOffsetOp(input colexecbase.Operator, offset int) colexecbase.Operator {
+func NewOffsetOp(input colexecbase.Operator, offset uint64) colexecbase.Operator {
 	c := &offsetOp{
 		OneInputNode: NewOneInputNode(input),
 		offset:       offset,
@@ -51,14 +51,14 @@ func (c *offsetOp) Next(ctx context.Context) coldata.Batch {
 			return bat
 		}
 
-		c.seen += length
+		c.seen += uint64(length)
 
 		delta := c.seen - c.offset
 		// If the current batch encompasses the offset "boundary",
 		// add the elements after the boundary to the selection vector.
-		if delta > 0 && delta < length {
+		if delta > 0 && delta < uint64(length) {
 			sel := bat.Selection()
-			outputStartIdx := length - delta
+			outputStartIdx := length - int(delta)
 			if sel != nil {
 				copy(sel, sel[outputStartIdx:length])
 			} else {
@@ -68,7 +68,7 @@ func (c *offsetOp) Next(ctx context.Context) coldata.Batch {
 					sel[i] = outputStartIdx + i
 				}
 			}
-			bat.SetLength(delta)
+			bat.SetLength(int(delta))
 		}
 
 		if c.seen > c.offset {

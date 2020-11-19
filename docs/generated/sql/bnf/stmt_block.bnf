@@ -774,7 +774,6 @@ unreserved_keyword ::=
 	| 'AT'
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
-	| 'AVAILABILITY'
 	| 'BACKUP'
 	| 'BACKUPS'
 	| 'BEFORE'
@@ -2142,9 +2141,8 @@ region_name ::=
 	name
 
 survive_clause ::=
-	'SURVIVE' 'REGION' 'FAILURE'
-	| 'SURVIVE' 'AVAILABILITY' 'ZONE' 'FAILURE'
-	| 'SURVIVE' 'DEFAULT'
+	'SURVIVE' opt_equal 'REGION' 'FAILURE'
+	| 'SURVIVE' opt_equal 'ZONE' 'FAILURE'
 
 role_option ::=
 	'CREATEROLE'

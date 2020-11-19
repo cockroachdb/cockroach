@@ -76,7 +76,7 @@ func wrapRowSources(
 				nil, /* output */
 				nil, /* metadataSourcesQueue */
 				nil, /* toClose */
-				nil, /* outputStatsToTrace */
+				nil, /* execStatsForTrace */
 				nil, /* cancelFlow */
 			)
 			if err != nil {
@@ -410,14 +410,16 @@ func (r opResult) createDiskBackedSort(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen),
 		)
-	} else if post.Limit != 0 && post.Filter.Empty() && int(post.Limit+post.Offset) > 0 {
+	} else if post.Limit != 0 && post.Filter.Empty() && post.Limit < math.MaxUint64-post.Offset {
 		// There is a limit specified with no post-process filter, so we know
 		// exactly how many rows the sorter should output. The last part of the
-		// condition is making sure there is no overflow when converting from
-		// the sum of two uint64s to int.
+		// condition is making sure there is no overflow.
 		//
 		// Choose a top K sorter, which uses a heap to avoid storing more rows
 		// than necessary.
+		//
+		// TODO(radu): we should not choose this processor when K is very large - it
+		// is slower unless we get significantly more rows than the limit.
 		sorterMemMonitorName = fmt.Sprintf("%stopk-sort-%d", memMonitorNamePrefix, processorID)
 		var topKSorterMemAccount *mon.BoundAccount
 		if useStreamingMemAccountForBuffering {
@@ -427,7 +429,7 @@ func (r opResult) createDiskBackedSort(
 				ctx, flowCtx, sorterMemMonitorName,
 			)
 		}
-		k := int(post.Limit + post.Offset)
+		k := post.Limit + post.Offset
 		inMemorySorter = colexec.NewTopKSorter(
 			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input, inputTypes,
 			ordering.Columns, k,
@@ -858,7 +860,7 @@ func NewColOperator(
 			// joiner, in order to handle NULL values correctly, needs to think
 			// that an empty set of equality columns doesn't form a key.
 			rightEqColsAreKey := core.HashJoiner.RightEqColumnsAreKey && len(core.HashJoiner.RightEqColumns) > 0
-			hjSpec, err := colexec.MakeHashJoinerSpec(
+			hjSpec := colexec.MakeHashJoinerSpec(
 				core.HashJoiner.Type,
 				core.HashJoiner.LeftEqColumns,
 				core.HashJoiner.RightEqColumns,
@@ -866,9 +868,6 @@ func NewColOperator(
 				rightTypes,
 				rightEqColsAreKey,
 			)
-			if err != nil {
-				return r, err
-			}
 
 			inMemoryHashJoiner := colexec.NewHashJoiner(
 				colmem.NewAllocator(ctx, hashJoinerMemAccount, factory),
@@ -1335,10 +1334,10 @@ func (r *postProcessResult) planPostProcessSpec(
 		r.ColumnTypes = newTypes
 	}
 	if post.Offset != 0 {
-		r.Op = colexec.NewOffsetOp(r.Op, int(post.Offset))
+		r.Op = colexec.NewOffsetOp(r.Op, post.Offset)
 	}
 	if post.Limit != 0 {
-		r.Op = colexec.NewLimitOp(r.Op, int(post.Limit))
+		r.Op = colexec.NewLimitOp(r.Op, post.Limit)
 	}
 	return nil
 }

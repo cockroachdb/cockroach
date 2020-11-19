@@ -171,10 +171,18 @@ func TestErrorDeprecatedFields(t *testing.T) {
 		require.Equal(t, TransactionRestart_NONE, pErr.deprecatedTransactionRestart)
 		require.Nil(t, pErr.deprecatedDetail.Value)
 	})
-	t.Run("structured", func(t *testing.T) {
-		txn := MakeTransaction("foo", Key("k"), 0, hlc.Timestamp{WallTime: 1}, 50000)
+	txn := MakeTransaction("foo", Key("k"), 0, hlc.Timestamp{WallTime: 1}, 50000)
+
+	t.Run("structured-wrapped", func(t *testing.T) {
+		// For extra spice, wrap the structured error. This ensures
+		// that we populate the deprecated fields even when
+		// the error detail is not the head of the error chain.
 		err := NewReadWithinUncertaintyIntervalError(hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, &txn)
-		pErr := NewError(err)
+
+		pErr := NewError(errors.Wrap(err, "foo"))
+		// Quick check that the detail round-trips when EncodedError is still there.
+		require.EqualValues(t, err, pErr.GetDetail())
+
 		pErr.EncodedError.Reset()
 
 		var ure *UnhandledRetryableError
