@@ -172,17 +172,13 @@ func NewMaterializer(
 	execStatsForTrace func() *execinfrapb.ComponentStats,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
-	vecIdxsToConvert := make([]int, len(typs))
-	for i := range vecIdxsToConvert {
-		vecIdxsToConvert[i] = i
-	}
 	m := materializerPool.Get().(*Materializer)
 	*m = Materializer{
 		ProcessorBase: m.ProcessorBase,
 		input:         input,
 		typs:          typs,
 		drainHelper:   newDrainHelper(metadataSourcesQueue),
-		converter:     colconv.NewVecToDatumConverter(len(typs), vecIdxsToConvert),
+		converter:     colconv.NewAllVecToDatumConverter(len(typs)),
 		row:           make(rowenc.EncDatumRow, len(typs)),
 		closers:       toClose,
 	}

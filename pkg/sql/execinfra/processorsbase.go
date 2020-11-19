@@ -520,9 +520,13 @@ type ProcessorBase struct {
 	// InternalClose() calls ConsumerClosed() on then.
 	//
 	// ConsumerDone() is called on all inputs at once and then inputs are drained
-	// one by one (in StateDraining, inputsToDrain[0] is the one currently being
-	// drained).
+	// one by one (in StateDraining, inputsToDrain[curInputToDrain] is the one
+	// currently being drained).
 	inputsToDrain []RowSource
+
+	// curInputToDrain is the index into inputsToDrain that needs to be drained
+	// next.
+	curInputToDrain int
 }
 
 // Reset resets this ProcessorBase, retaining allocated memory in slices.
@@ -619,12 +623,12 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 	if err != nil {
 		pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{Err: err})
 	}
-	if len(pb.inputsToDrain) > 0 {
+	if pb.curInputToDrain < len(pb.inputsToDrain) {
 		// We go to StateDraining here. DrainHelper() will transition to
 		// StateTrailingMeta when the inputs are drained (including if the inputs
 		// are already drained).
 		pb.State = StateDraining
-		for _, input := range pb.inputsToDrain {
+		for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
 			input.ConsumerDone()
 		}
 	} else {
@@ -657,12 +661,12 @@ func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 
 	// Ignore all rows; only return meta.
 	for {
-		input := pb.inputsToDrain[0]
+		input := pb.inputsToDrain[pb.curInputToDrain]
 
 		row, meta := input.Next()
 		if row == nil && meta == nil {
-			pb.inputsToDrain = pb.inputsToDrain[1:]
-			if len(pb.inputsToDrain) == 0 {
+			pb.curInputToDrain++
+			if pb.curInputToDrain >= len(pb.inputsToDrain) {
 				pb.moveToTrailingMeta()
 				return pb.popTrailingMeta()
 			}
@@ -840,7 +844,12 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.processorID = processorID
 	pb.MemMonitor = memMonitor
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
-	pb.inputsToDrain = opts.InputsToDrain
+	if opts.InputsToDrain != nil {
+		// Only initialize this if non-nil, because we cache the slice of inputs
+		// to drain in our object pool, and overwriting the slice in Init would
+		// be horribly counterproductive.
+		pb.inputsToDrain = opts.InputsToDrain
+	}
 
 	// Hydrate all types used in the processor.
 	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
@@ -899,7 +908,7 @@ func (pb *ProcessorBase) InternalClose() bool {
 	// be called on processors that have already closed themselves by moving to
 	// StateTrailingMeta.
 	if closing {
-		for _, input := range pb.inputsToDrain {
+		for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
 			input.ConsumerClosed()
 		}
 

@@ -307,14 +307,14 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 
 		// Now simulate an operator spilling to disk. The flow should have set this
 		// up to create its directory.
-		creator.diskQueueCfg.GetPath(ctx)
+		creator.diskQueueCfg.GetPather.GetPath(ctx)
 
 		// We should now have one directory, the flow's temporary storage directory.
 		checkDirs(t, 1)
 
 		// Another operator calling GetPath again should not create a new
 		// directory.
-		creator.diskQueueCfg.GetPath(ctx)
+		creator.diskQueueCfg.GetPather.GetPath(ctx)
 		checkDirs(t, 1)
 
 		// When the flow is Cleaned up, this directory should be removed.
@@ -332,16 +332,16 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		_, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
 		require.NoError(t, err)
 
-		createTempDir := creator.diskQueueCfg.GetPath
+		createTempDir := creator.diskQueueCfg.GetPather.GetPath
 		errCh := make(chan error)
 		go func() {
 			createTempDir(ctx)
-			errCh <- ngn.MkdirAll(filepath.Join(vf.getTempStoragePath(ctx), "async"))
+			errCh <- ngn.MkdirAll(filepath.Join(vf.GetPath(ctx), "async"))
 		}()
 		createTempDir(ctx)
 		// Both goroutines should be able to create their subdirectories within the
 		// flow's temporary directory.
-		require.NoError(t, ngn.MkdirAll(filepath.Join(vf.getTempStoragePath(ctx), "main_goroutine")))
+		require.NoError(t, ngn.MkdirAll(filepath.Join(vf.GetPath(ctx), "main_goroutine")))
 		require.NoError(t, <-errCh)
 		vf.Cleanup(ctx)
 		checkDirs(t, 0)

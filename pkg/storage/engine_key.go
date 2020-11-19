@@ -219,6 +219,25 @@ func DecodeEngineKey(b []byte) (key EngineKey, ok bool) {
 	return key, true
 }
 
+// GetKeyPartFromEngineKey is a specialization of DecodeEngineKey which avoids
+// constructing a slice for the version part of the key, since the caller does
+// not need it.
+func GetKeyPartFromEngineKey(engineKey []byte) (key []byte, ok bool) {
+	if len(engineKey) == 0 {
+		return nil, false
+	}
+	// Last byte is the version length + 1 when there is a version,
+	// else it is 0.
+	versionLen := int(engineKey[len(engineKey)-1])
+	// keyPartEnd points to the sentinel byte.
+	keyPartEnd := len(engineKey) - 1 - versionLen
+	if keyPartEnd < 0 {
+		return nil, false
+	}
+	// Key excludes the sentinel byte.
+	return engineKey[:keyPartEnd], true
+}
+
 // EngineKeyFormatter is a fmt.Formatter for EngineKeys.
 type EngineKeyFormatter struct {
 	key EngineKey

@@ -213,8 +213,8 @@ func (f *vectorizedFlow) Setup(
 	}
 
 	diskQueueCfg := colcontainer.DiskQueueCfg{
-		FS:      f.Cfg.TempFS,
-		GetPath: f.getTempStoragePath,
+		FS:        f.Cfg.TempFS,
+		GetPather: f,
 	}
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
 		return ctx, err
@@ -256,10 +256,12 @@ func (f *vectorizedFlow) Setup(
 	return ctx, err
 }
 
-// getTempStoragePath returns the path of the temporary directory for
+var _ colcontainer.GetPather = &vectorizedFlow{}
+
+// GetPath returns the path of the temporary directory for
 // disk-spilling components of the flow. The directory is created on the first
 // call to this method.
-func (f *vectorizedFlow) getTempStoragePath(ctx context.Context) string {
+func (f *vectorizedFlow) GetPath(ctx context.Context) string {
 	f.tempStorage.Lock()
 	defer f.tempStorage.Unlock()
 	if f.tempStorage.path != "" {
@@ -315,14 +317,14 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	created := f.tempStorage.path != ""
 	f.tempStorage.Unlock()
 	if created {
-		if err := f.Cfg.TempFS.RemoveAll(f.getTempStoragePath(ctx)); err != nil {
+		if err := f.Cfg.TempFS.RemoveAll(f.GetPath(ctx)); err != nil {
 			// Log error as a Warning but keep on going to close the memory
 			// infrastructure.
 			log.Warningf(
 				ctx,
 				"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
 				f.GetID().Short(),
-				f.getTempStoragePath(ctx),
+				f.GetPath(ctx),
 				err,
 			)
 		}
@@ -552,6 +554,7 @@ func newVectorizedFlowCreator(
 		flowID:                         flowID,
 		exprHelper:                     creator.exprHelper,
 		typeResolver:                   typeResolver,
+		procIdxQueue:                   creator.procIdxQueue,
 		leaves:                         creator.leaves,
 		monitors:                       creator.monitors,
 		accounts:                       creator.accounts,

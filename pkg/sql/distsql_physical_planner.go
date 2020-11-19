@@ -1297,25 +1297,29 @@ func (dsp *DistSQLPlanner) planTableReaders(
 
 	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdinalMap)
 	planToStreamColMap := make([]int, len(info.cols))
-	descColumnIDs := make([]descpb.ColumnID, 0, len(info.desc.Columns))
+	var descColumnIDs util.FastIntMap
+	colID := 0
 	for i := range info.desc.Columns {
-		descColumnIDs = append(descColumnIDs, info.desc.Columns[i].ID)
+		descColumnIDs.Set(colID, int(info.desc.Columns[i].ID))
+		colID++
 	}
 	if returnMutations {
 		for _, c := range info.desc.MutationColumns() {
-			descColumnIDs = append(descColumnIDs, c.ID)
+			descColumnIDs.Set(colID, int(c.ID))
+			colID++
 		}
 	}
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
-			descColumnIDs = append(descColumnIDs, colinfo.AllSystemColumnDescs[i].ID)
+			descColumnIDs.Set(colID, int(colinfo.AllSystemColumnDescs[i].ID))
+			colID++
 		}
 	}
 
 	for i := range planToStreamColMap {
 		planToStreamColMap[i] = -1
 		for j, c := range outCols {
-			if descColumnIDs[c] == info.cols[i].ID {
+			if descColumnIDs.GetDefault(int(c)) == int(info.cols[i].ID) {
 				planToStreamColMap[i] = j
 				break
 			}
