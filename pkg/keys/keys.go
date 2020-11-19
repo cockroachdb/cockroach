@@ -427,7 +427,9 @@ func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 // For a scan [start, end) the corresponding lock table scan is
 // [LTSK(start), LTSK(end)).
 func LockTableSingleKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
-	// The +3 accounts for the bytesMarker and terminator.
+	// The +3 accounts for the bytesMarker and terminator. Note that this is a
+	// lower-bound, since the escaping done by EncodeBytesAscending depends on
+	// what bytes are in the key. But we expect this to be usually accurate.
 	keyLen := len(LocalRangeLockTablePrefix) + len(LockTableSingleKeyInfix) + len(key) + 3
 	if cap(buf) < keyLen {
 		buf = make([]byte, 0, keyLen)
