@@ -44,6 +44,11 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/opt/rule_name_string.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
 
+# Generally useful references:
+#
+#   https://docs.bazel.build/versions/master/user-manual.html
+#   https://docs.bazel.build/versions/master/guide.html
+
 # TODO(irfansharif): Today we let bazel take over the vendor directory and
 # define each vendored dependency as a bazel target. We should be able to have
 # bazel ignore all of vendor/ and create those dependencies on the fly.
@@ -55,6 +60,10 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # short hands I've used so far:
 #
 #   bazel test //pkg/kv/kvserver/concurrency/...
+#   bazel test //pkg/kv/kvserver:all --test_cache_results=no --test_output=all
+#   bazel test --features race //pkg/kv/kvserver/concurrency/... --test_output=all \
+#     --test_arg='-test.v' --test_arg='-show-logs' --test_filter='TestBTreeClone.*' \
+#     --run_under='stress -maxtime=120s' --cache_test_results=no
 #   bazel build //pkg/sql/opt
 #   bazel build //pkg/sql/opt:all
 #   bazel build //pkg/sql/colexec:gen-exec
@@ -72,13 +81,13 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 #
 #   bazel build @cockroach//pkg/cmd/cockroach-short
 #
-# TODO(irfansharif): We should probably define shorthands for the more common
-# ones from up above.
+# TODO(irfansharif): We should define shorthands for all of the above. See
+# https://docs.bazel.build/versions/master/skylark/tutorial-custom-verbs.html
 
 # TODO(irfansharif): The way we currently generate code through bazel, that
 # code is only available within the bazel sandbox. Bazel ignores all
 # the pre-generated code that is already checked into the codebase (through
-# `make generate`/etc.)through the exclude directives above. It's generating
+# `make generate`/etc.) through the exclude directives above. It's generating
 # everything on the fly.
 #
 # As we move towards bazel, we'll want to introduce a mechanism that implants
