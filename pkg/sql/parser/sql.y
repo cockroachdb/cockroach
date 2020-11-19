@@ -7588,11 +7588,11 @@ region_or_regions:
 | REGIONS
 
 survive_clause:
-  SURVIVE REGION FAILURE
+  SURVIVE opt_equal REGION FAILURE
   {
     $$.val = tree.SurvivalGoalRegionFailure
   }
-| SURVIVE ZONE FAILURE
+| SURVIVE opt_equal ZONE FAILURE
   {
     $$.val = tree.SurvivalGoalZoneFailure
   }
