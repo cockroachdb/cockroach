@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // TestServerInterface defines test server functionality that tests need; it is
@@ -225,7 +226,7 @@ type TestServerInterface interface {
 // service.
 type TestServerFactory interface {
 	// New instantiates a test server.
-	New(params base.TestServerArgs) interface{}
+	New(params base.TestServerArgs) (interface{}, error)
 }
 
 var srvFactoryImpl TestServerFactory
@@ -243,7 +244,10 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
-	server := NewServer(params)
+	server, err := NewServer(params)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
 	if err := server.Start(); err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -252,13 +256,17 @@ func StartServer(
 }
 
 // NewServer creates a test server.
-func NewServer(params base.TestServerArgs) TestServerInterface {
+func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	if srvFactoryImpl == nil {
-		panic("TestServerFactory not initialized. One needs to be injected " +
+		return nil, errors.AssertionFailedf("TestServerFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")
 	}
 
-	return srvFactoryImpl.New(params).(TestServerInterface)
+	srv, err := srvFactoryImpl.New(params)
+	if err != nil {
+		return nil, err
+	}
+	return srv.(TestServerInterface), nil
 }
 
 // OpenDBConnE is like OpenDBConn, but returns an error.
@@ -303,7 +311,10 @@ func OpenDBConn(
 // Generally StartServer() should be used. However this function can be used
 // directly when opening a connection to the server is not desired.
 func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
-	server := NewServer(args)
+	server, err := NewServer(args)
+	if err != nil {
+		return nil, err
+	}
 	if err := server.Start(); err != nil {
 		return nil, err
 	}
