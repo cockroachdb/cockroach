@@ -156,8 +156,15 @@ func NewError(err error) *Error {
 	{
 		if intErr, ok := err.(*internalError); ok {
 			*e = *(*Error)(intErr)
-		} else if msg, ok := err.(ErrorDetailInterface); ok {
-			e.DeprecatedSetDetail(msg)
+		} else if detail := ErrorDetailInterface(nil); errors.As(err, &detail) {
+			e.deprecatedMessage = detail.message(e)
+			if r, ok := detail.(transactionRestartError); ok {
+				e.deprecatedTransactionRestart = r.canRestartTransaction()
+			} else {
+				e.deprecatedTransactionRestart = TransactionRestart_NONE
+			}
+			e.deprecatedDetail.MustSetInner(detail)
+			e.checkTxnStatusValid()
 		} else {
 			e.deprecatedMessage = err.Error()
 		}
@@ -354,25 +361,6 @@ func (e *Error) GoError() error {
 		return detail
 	}
 	return (*internalError)(e)
-}
-
-// DeprecatedSetDetail sets the error detail for the error. The argument cannot be nil.
-//
-// DEPRECATED: see Error.EncodedError instead.
-func (e *Error) DeprecatedSetDetail(detail ErrorDetailInterface) {
-	if detail == nil {
-		panic("nil detail argument")
-	}
-	e.EncodedError = errors.EncodeError(context.Background(), detail)
-
-	e.deprecatedMessage = detail.message(e)
-	if r, ok := detail.(transactionRestartError); ok {
-		e.deprecatedTransactionRestart = r.canRestartTransaction()
-	} else {
-		e.deprecatedTransactionRestart = TransactionRestart_NONE
-	}
-	e.deprecatedDetail.MustSetInner(detail)
-	e.checkTxnStatusValid()
 }
 
 // GetDetail returns an error detail associated with the error, or nil otherwise.

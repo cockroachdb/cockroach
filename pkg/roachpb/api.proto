@@ -1981,6 +1981,11 @@ message BatchResponse {
     Error error = 1;
     // timestamp denotes the timestamp at which the batch's reads executed. The
     // timestamp cache is updated at this timestamp.
+    //
+    // TODO(tbg): for transactional requests, this duplicates `Txn.ReadTimestamp`,
+    // which is awkward. We could consider making this field optional and only
+    // populate it for non-transactional requests. The timestamp cache would then
+    // use an accessor on BatchResponse to pick the one that matters.
     util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
     // txn is non-nil if the request specified a non-nil
     // transaction. The transaction timestamp and/or priority may have
