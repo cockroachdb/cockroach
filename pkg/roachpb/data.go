@@ -1709,6 +1709,16 @@ func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 	var nextReplicaID ReplicaID
 	var afterReplicas []ReplicaDescriptor
 	added, removed := crt.Added(), crt.Removed()
+	addOp, removeOp := ADD_VOTER, REMOVE_VOTER
+	// Voters and non voters are never added/removed in tandem and they're only
+	// ever added/removed/swapped one at a time.
+	if len(ReplicaDescriptors{added}.NonVoters()) > 0 {
+		addOp = ADD_NON_VOTER
+	}
+	if len(ReplicaDescriptors{removed}.NonVoters()) > 0 {
+		removeOp = ADD_NON_VOTER
+	}
+
 	if crt.Desc != nil {
 		nextReplicaID = crt.Desc.NextReplicaID
 		// NB: we don't want to mutate InternalReplicas, so we don't call
@@ -1738,13 +1748,13 @@ func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 		}
 	}
 	if len(added) > 0 {
-		w.Printf("%s%s", ADD_VOTER, added)
+		w.Printf("%s -> %s", addOp, added)
 	}
 	if len(removed) > 0 {
 		if len(added) > 0 {
 			w.SafeString(", ")
 		}
-		w.Printf("%s%s", REMOVE_VOTER, removed)
+		w.Printf("%s -> %s", removeOp, removed)
 	}
 	w.Printf(": after=%s next=%d", afterReplicas, nextReplicaID)
 }
