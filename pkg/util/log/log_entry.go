@@ -303,6 +303,9 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			continue
 		}
 
+		// Erase all the fields, to be sure.
+		*entry = Entry{}
+
 		// Process the severity.
 		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
 
