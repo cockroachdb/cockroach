@@ -14,6 +14,7 @@ pkg/roachpb/metadata.go | `ReplicaID`
 pkg/roachpb/metadata.go | `RangeGeneration`
 pkg/roachpb/metadata.go | `ReplicaType`
 pkg/roachpb/method.go | `Method`
+pkg/server/config.go | `*Config`
 pkg/sql/catalog/descpb/structured.go | `ID`
 pkg/sql/catalog/descpb/structured.go | `FamilyID`
 pkg/sql/catalog/descpb/structured.go | `IndexID`

@@ -404,6 +404,9 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	return cfg
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (cfg *Config) SafeValue() {}
+
 // String implements the fmt.Stringer interface.
 func (cfg *Config) String() string {
 	var buf bytes.Buffer
