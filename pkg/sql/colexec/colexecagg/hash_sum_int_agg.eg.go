@@ -56,8 +56,8 @@ type sumIntInt16HashAgg struct {
 
 var _ AggregateFunc = &sumIntInt16HashAgg{}
 
-func (a *sumIntInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *sumIntInt16HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Int64()
 }
 
@@ -155,8 +155,8 @@ type sumIntInt32HashAgg struct {
 
 var _ AggregateFunc = &sumIntInt32HashAgg{}
 
-func (a *sumIntInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *sumIntInt32HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Int64()
 }
 
@@ -254,8 +254,8 @@ type sumIntInt64HashAgg struct {
 
 var _ AggregateFunc = &sumIntInt64HashAgg{}
 
-func (a *sumIntInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *sumIntInt64HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Int64()
 }
 

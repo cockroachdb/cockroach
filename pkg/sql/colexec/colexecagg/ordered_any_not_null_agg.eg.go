@@ -97,8 +97,8 @@ type anyNotNullBoolOrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullBoolOrderedAgg{}
 
-func (a *anyNotNullBoolOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullBoolOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bool()
 }
@@ -277,8 +277,8 @@ type anyNotNullBytesOrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullBytesOrderedAgg{}
 
-func (a *anyNotNullBytesOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullBytesOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bytes()
 }
@@ -463,8 +463,8 @@ type anyNotNullDecimalOrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullDecimalOrderedAgg{}
 
-func (a *anyNotNullDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Decimal()
 }
@@ -643,8 +643,8 @@ type anyNotNullInt16OrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullInt16OrderedAgg{}
 
-func (a *anyNotNullInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullInt16OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int16()
 }
@@ -823,8 +823,8 @@ type anyNotNullInt32OrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullInt32OrderedAgg{}
 
-func (a *anyNotNullInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullInt32OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int32()
 }
@@ -1003,8 +1003,8 @@ type anyNotNullInt64OrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullInt64OrderedAgg{}
 
-func (a *anyNotNullInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullInt64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int64()
 }
@@ -1183,8 +1183,8 @@ type anyNotNullFloat64OrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullFloat64OrderedAgg{}
 
-func (a *anyNotNullFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Float64()
 }
@@ -1363,8 +1363,8 @@ type anyNotNullTimestampOrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullTimestampOrderedAgg{}
 
-func (a *anyNotNullTimestampOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullTimestampOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Timestamp()
 }
@@ -1543,8 +1543,8 @@ type anyNotNullIntervalOrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullIntervalOrderedAgg{}
 
-func (a *anyNotNullIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Interval()
 }
@@ -1723,8 +1723,8 @@ type anyNotNullDatumOrderedAgg struct {
 
 var _ AggregateFunc = &anyNotNullDatumOrderedAgg{}
 
-func (a *anyNotNullDatumOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *anyNotNullDatumOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Datum()
 }
