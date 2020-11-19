@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -174,6 +176,12 @@ var allowedIntoFormats = map[string]struct{}{
 	"PGCOPY":    {},
 }
 
+// featureImportEnabled is used to enable and disable the IMPORT feature.
+var featureImportEnabled = settings.RegisterPublicBoolSetting(
+	"feature.import.enabled",
+	"set to true to enable imports, false to disable; default is true",
+	featureflag.FeatureFlagEnabledDefault)
+
 func validateFormatOptions(
 	format string, specified map[string]string, formatAllowed map[string]struct{},
 ) error {
@@ -259,6 +267,13 @@ func importPlanHook(
 	}
 
 	addToFileFormatTelemetry(importStmt.FileFormat, "attempted")
+
+	if err := featureflag.CheckEnabled(featureImportEnabled,
+		&p.ExecCfg().Settings.SV,
+		"IMPORT",
+	); err != nil {
+		return nil, nil, nil, false, err
+	}
 
 	filesFn, err := p.TypeAsStringArray(ctx, importStmt.Files, "IMPORT")
 	if err != nil {
