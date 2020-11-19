@@ -1019,6 +1019,10 @@ message TableDescriptor {
     }
 
     optional SequenceOwner sequence_owner = 6 [(gogoproto.nullable) = false];
+
+    // The number of values (which have already been created in KV)
+    // that a node can cache locally.
+    optional int64 cache_size = 7 [(gogoproto.nullable) = false];
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.

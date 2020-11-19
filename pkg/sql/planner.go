@@ -453,6 +453,16 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg
 }
 
+// GetOrInitSequenceCache returns the sequence cache for the session.
+// If the sequence cache has not been used yet, it initializes the cache
+// inside the session data.
+func (p *planner) GetOrInitSequenceCache() sessiondata.SequenceCache {
+	if p.SessionData().SequenceCache == nil {
+		p.sessionDataMutator.initSequenceCache()
+	}
+	return p.SessionData().SequenceCache
+}
+
 func (p *planner) LeaseMgr() *lease.Manager {
 	return p.Descriptors().LeaseManager()
 }
