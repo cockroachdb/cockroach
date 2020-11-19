@@ -66,6 +66,10 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 	"range_min_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
 	"range_max_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
 	"num_replicas":    {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) }},
+	"num_voters": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) {
+		c.NumVoters = proto.Int32(int32(tree.MustBeDInt(d)))
+		c.NumVotersConfiguredSeparately = true
+	}},
 	"gc.ttlseconds": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) {
 		c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
 	}},
@@ -77,6 +81,15 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 		loadYAML(&constraintsList, string(tree.MustBeDString(d)))
 		c.Constraints = constraintsList.Constraints
 		c.InheritedConstraints = false
+	}},
+	"voter_constraints": {types.String, func(c *zonepb.ZoneConfig, d tree.Datum) {
+		voterConstraintsList := zonepb.ConstraintsList{
+			Constraints: c.VoterConstraints,
+			Inherited:   c.InheritedVoterConstraints,
+		}
+		loadYAML(&voterConstraintsList, string(tree.MustBeDString(d)))
+		c.VoterConstraints = voterConstraintsList.Constraints
+		c.InheritedVoterConstraints = false
 	}},
 	"lease_preferences": {types.String, func(c *zonepb.ZoneConfig, d tree.Datum) {
 		loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
@@ -645,8 +658,10 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			// require from changes made to parent zones. The extra protections are:
 			//
 			// RangeMinBytes and RangeMaxBytes must be set together
-			// LeasePreferences cannot be set unless Constraints are explicitly set
-			// Per-replica constraints cannot be set unless num_replicas is explicitly set
+			// LeasePreferences cannot be set unless Constraints/VoterConstraints are
+			// explicitly set
+			// Per-replica constraints cannot be set unless num_replicas is explicitly
+			// set
 			if err := finalZone.ValidateTandemFields(); err != nil {
 				err = errors.Wrap(err, "could not validate zone config")
 				err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
@@ -723,7 +738,14 @@ type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesRe
 // will be rejected. Additionally, invalid constraints such as
 // [+region=us-east1, -region=us-east1] will also be rejected.
 func validateNoRepeatKeysInZone(zone *zonepb.ZoneConfig) error {
-	for _, constraints := range zone.Constraints {
+	if err := validateNoRepeatKeysInConjunction(zone.Constraints); err != nil {
+		return err
+	}
+	return validateNoRepeatKeysInConjunction(zone.VoterConstraints)
+}
+
+func validateNoRepeatKeysInConjunction(conjunctions []zonepb.ConstraintsConjunction) error {
+	for _, constraints := range conjunctions {
 		// Because we expect to have a small number of constraints, a nested
 		// loop is probably better than allocating a map.
 		for i, curr := range constraints.Constraints {
@@ -771,7 +793,7 @@ func validateNoRepeatKeysInZone(zone *zonepb.ZoneConfig) error {
 func validateZoneAttrsAndLocalities(
 	ctx context.Context, getNodes nodeGetter, zone *zonepb.ZoneConfig,
 ) error {
-	if len(zone.Constraints) == 0 && len(zone.LeasePreferences) == 0 {
+	if len(zone.VoterConstraints) == 0 && len(zone.Constraints) == 0 && len(zone.LeasePreferences) == 0 {
 		return nil
 	}
 
@@ -797,6 +819,11 @@ func validateZoneAttrsAndLocalities(
 		}
 	}
 	for _, constraints := range zone.Constraints {
+		for _, constraint := range constraints.Constraints {
+			addToValidate(constraint)
+		}
+	}
+	for _, constraints := range zone.VoterConstraints {
 		for _, constraint := range constraints.Constraints {
 			addToValidate(constraint)
 		}

@@ -199,15 +199,18 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 //
 // TODO(a-robinson,v2.2): Remove the experimental_lease_preferences field.
 type marshalableZoneConfig struct {
-	RangeMinBytes                *int64            `json:"range_min_bytes" yaml:"range_min_bytes"`
-	RangeMaxBytes                *int64            `json:"range_max_bytes" yaml:"range_max_bytes"`
-	GC                           *GCPolicy         `json:"gc"`
-	NumReplicas                  *int32            `json:"num_replicas" yaml:"num_replicas"`
-	Constraints                  ConstraintsList   `json:"constraints" yaml:"constraints,flow"`
-	LeasePreferences             []LeasePreference `json:"lease_preferences" yaml:"lease_preferences,flow"`
-	ExperimentalLeasePreferences []LeasePreference `json:"experimental_lease_preferences" yaml:"experimental_lease_preferences,flow,omitempty"`
-	Subzones                     []Subzone         `json:"subzones" yaml:"-"`
-	SubzoneSpans                 []SubzoneSpan     `json:"subzone_spans" yaml:"-"`
+	RangeMinBytes                 *int64            `json:"range_min_bytes" yaml:"range_min_bytes"`
+	RangeMaxBytes                 *int64            `json:"range_max_bytes" yaml:"range_max_bytes"`
+	GC                            *GCPolicy         `json:"gc"`
+	NumReplicas                   *int32            `json:"num_replicas" yaml:"num_replicas"`
+	NumVoters                     *int32            `json:"num_voters" yaml:"num_voters"`
+	NumVotersConfiguredSeparately bool              `json:"num_voters_configured_separately" yaml:"num_voters_configured_separately"`
+	Constraints                   ConstraintsList   `json:"constraints" yaml:"constraints,flow"`
+	VoterConstraints              ConstraintsList   `json:"voter_constraints" yaml:"voter_constraints,flow"`
+	LeasePreferences              []LeasePreference `json:"lease_preferences" yaml:"lease_preferences,flow"`
+	ExperimentalLeasePreferences  []LeasePreference `json:"experimental_lease_preferences" yaml:"experimental_lease_preferences,flow,omitempty"`
+	Subzones                      []Subzone         `json:"subzones" yaml:"-"`
+	SubzoneSpans                  []SubzoneSpan     `json:"subzone_spans" yaml:"-"`
 }
 
 func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
@@ -226,6 +229,11 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 		m.NumReplicas = proto.Int32(*c.NumReplicas)
 	}
 	m.Constraints = ConstraintsList{c.Constraints, c.InheritedConstraints}
+	if c.NumVotersConfiguredSeparately && c.NumVoters != nil && *c.NumVoters != 0 {
+		m.NumVoters = proto.Int32(*c.NumVoters)
+		m.NumVotersConfiguredSeparately = true
+	}
+	m.VoterConstraints = ConstraintsList{c.VoterConstraints, c.InheritedVoterConstraints}
 	if !c.InheritedLeasePreferences {
 		m.LeasePreferences = c.LeasePreferences
 	}
@@ -255,6 +263,12 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig, c ZoneConfig) ZoneConfig
 	}
 	c.Constraints = m.Constraints.Constraints
 	c.InheritedConstraints = m.Constraints.Inherited
+	if m.NumVotersConfiguredSeparately && m.NumVoters != nil {
+		c.NumVotersConfiguredSeparately = true
+		c.NumVoters = proto.Int32(*m.NumVoters)
+	}
+	c.VoterConstraints = m.VoterConstraints.Constraints
+	c.InheritedVoterConstraints = m.VoterConstraints.Inherited
 	if m.LeasePreferences != nil {
 		c.LeasePreferences = m.LeasePreferences
 	}

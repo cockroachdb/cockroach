@@ -244,6 +244,24 @@ func TestZoneConfigValidate(t *testing.T) {
 	}
 }
 
+func TestZoneConfigValidateNonVoterSpecific(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(aayush): Add tests.
+	testCases := []struct {
+		cfg      ZoneConfig
+		expected string
+	}{}
+
+	for i, c := range testCases {
+		err := c.cfg.Validate()
+		if !testutils.IsError(err, c.expected) {
+			t.Errorf("%d: expected %q, got %v", i, c.expected, err)
+		}
+	}
+}
+
+// TODO(aayush): Add some tests here
 func TestZoneConfigValidateTandemFields(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -285,6 +303,20 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 				},
 			},
 			"lease preferences can not be set unless the constraints are explicitly set as well",
+		},
+		{
+			ZoneConfig{
+				InheritedConstraints:          false,
+				NumVotersConfiguredSeparately: true,
+				InheritedVoterConstraints:     true,
+				InheritedLeasePreferences:     false,
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{},
+					},
+				},
+			},
+			"lease preferences can not be set unless the voter constraints are explicitly set as well",
 		},
 	}
 
@@ -394,11 +426,14 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 		GC: &GCPolicy{
 			TTLSeconds: 1,
 		},
-		NumReplicas: proto.Int32(1),
+		NumReplicas:                   proto.Int32(2),
+		NumVoters:                     proto.Int32(1),
+		NumVotersConfiguredSeparately: true,
 	}
 
 	testCases := []struct {
 		constraints      []ConstraintsConjunction
+		voterConstraints []ConstraintsConjunction
 		leasePreferences []LeasePreference
 		expected         string
 	}{
@@ -407,8 +442,11 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
+num_voters_configured_separately: true
 constraints: []
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -424,12 +462,26 @@ lease_preferences: []
 					},
 				},
 			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "foo",
+							Value: "bar",
+						},
+					},
+				},
+			},
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
+num_voters_configured_separately: true
 constraints: [+duck=foo]
+voter_constraints: [+foo=bar]
 lease_preferences: []
 `,
 		},
@@ -458,8 +510,11 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
+num_voters_configured_separately: true
 constraints: [foo, +duck=foo, -duck=foo]
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -476,12 +531,27 @@ lease_preferences: []
 					},
 				},
 			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					NumReplicas: 1,
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
+num_voters_configured_separately: true
 constraints: {+duck=foo: 3}
+voter_constraints: {+duck=foo: 1}
 lease_preferences: []
 `,
 		},
@@ -511,8 +581,11 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
+num_voters_configured_separately: true
 constraints: {'foo,+duck=foo,-duck=foo': 3}
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -544,12 +617,42 @@ lease_preferences: []
 					},
 				},
 			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					NumReplicas: 1,
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar1",
+						},
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar2",
+						},
+					},
+				},
+				{
+					NumReplicas: 2,
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
+num_voters_configured_separately: true
 constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
+voter_constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
 lease_preferences: []
 `,
 		},
@@ -559,8 +662,11 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
+num_voters_configured_separately: true
 constraints: []
+voter_constraints: []
 lease_preferences: []
 `,
 		},
@@ -580,8 +686,11 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
+num_voters_configured_separately: true
 constraints: []
+voter_constraints: []
 lease_preferences: [[+duck=foo]]
 `,
 		},
@@ -593,6 +702,17 @@ lease_preferences: [[+duck=foo]]
 							Type:  Constraint_REQUIRED,
 							Key:   "duck",
 							Value: "foo",
+						},
+					},
+				},
+			},
+			voterConstraints: []ConstraintsConjunction{
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_PROHIBITED,
+							Key:   "duck",
+							Value: "bar",
 						},
 					},
 				},
@@ -626,8 +746,11 @@ lease_preferences: [[+duck=foo]]
 range_max_bytes: 1
 gc:
   ttlseconds: 1
-num_replicas: 1
+num_replicas: 2
+num_voters: 1
+num_voters_configured_separately: true
 constraints: [+duck=foo]
+voter_constraints: [-duck=bar]
 lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 `,
 		},
@@ -636,6 +759,7 @@ lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			original.Constraints = tc.constraints
+			original.VoterConstraints = tc.voterConstraints
 			original.LeasePreferences = tc.leasePreferences
 			body, err := yaml.Marshal(original)
 			if err != nil {

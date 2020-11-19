@@ -176,6 +176,13 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 		return "", err
 	}
 	constraints = strings.TrimSpace(constraints)
+	voterConstraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
+		Constraints: zone.VoterConstraints,
+		Inherited:   zone.InheritedVoterConstraints})
+	if err != nil {
+		return "", err
+	}
+	voterConstraints = strings.TrimSpace(voterConstraints)
 	prefs, err := yamlMarshalFlow(zone.LeasePreferences)
 	if err != nil {
 		return "", err
@@ -206,9 +213,21 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 		f.Printf("\tnum_replicas = %d", *zone.NumReplicas)
 		useComma = true
 	}
+	if zone.NumVotersConfiguredSeparately {
+		if zone.NumVoters != nil {
+			writeComma(f, useComma)
+			f.Printf("\tnum_voters = %d", *zone.NumVoters)
+			useComma = true
+		}
+	}
 	if !zone.InheritedConstraints {
 		writeComma(f, useComma)
 		f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
+		useComma = true
+	}
+	if !zone.InheritedVoterConstraints && zone.NumVotersConfiguredSeparately {
+		writeComma(f, useComma)
+		f.Printf("\tvoter_constraints = %s", lex.EscapeSQLString(voterConstraints))
 		useComma = true
 	}
 	if !zone.InheritedLeasePreferences {
