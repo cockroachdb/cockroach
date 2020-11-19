@@ -996,10 +996,10 @@ func (s *statusServer) LogFile(
 	}
 	defer reader.Close()
 
-	var entry log.Entry
 	var resp serverpb.LogEntriesResponse
 	decoder := log.NewEntryDecoder(reader, inputEditMode)
 	for {
+		var entry log.Entry
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {
 				break
