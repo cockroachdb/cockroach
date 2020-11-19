@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -343,11 +344,14 @@ type Writer interface {
 	// {ClearMVCC,ClearUnversioned} this is a higher-level method that may make
 	// changes in parts of the key space that are not only a function of the
 	// input, and may choose to use a single-clear under the covers.
-	// TODO(sumeer): add additional parameters. This initial placeholder is so
-	// that we can identify all call-sites.
+	// txnDidNotUpdateMeta allows for performance optimization when set to true,
+	// and has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can
+	// be conservatively set to false).
+	// REQUIRES: state is ExistingIntentInterleaved or ExistingIntentSeparated.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearIntent(key roachpb.Key) error
+	ClearIntent(
+		key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID) error
 	// ClearEngineKey removes the item from the db with the given EngineKey.
 	// Note that clear actually removes entries from the storage engine. This is
 	// a general-purpose and low-level method that should be used sparingly,
@@ -431,15 +435,18 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutUnversioned(key roachpb.Key, value []byte) error
-	// PutIntent puts an intent at the given key to the value provided.
-	// This is a higher-level method that may make changes in parts of the key
-	// space that are not only a function of the input key, and may explicitly
-	// clear the preceding intent.
-	// TODO(sumeer): add additional parameters. This initial placeholder is so
-	// that we can identify all call-sites.
+	// PutIntent puts an intent at the given key to the value provided. This is
+	// a higher-level method that may make changes in parts of the key space
+	// that are not only a function of the input key, and may explicitly clear
+	// the preceding intent. txnDidNotUpdateMeta defines what happened prior to
+	// this put, and allows for performance optimization when set to true, and
+	// has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can be
+	// conservatively set to false).
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
-	PutIntent(key roachpb.Key, value []byte) error
+	PutIntent(
+		key roachpb.Key, value []byte, state PrecedingIntentState, txnDidNotUpdateMeta bool,
+		txnUUID uuid.UUID) error
 	// PutEngineKey sets the given key to the value provided. This is a
 	// general-purpose and low-level method that should be used sparingly,
 	// only when the other Put* methods are not applicable.
