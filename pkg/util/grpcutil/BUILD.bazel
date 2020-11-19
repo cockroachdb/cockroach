@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "grpcutil",
     srcs = [
+        "grpc_log.go",
         "grpc_util.go",
-        "log.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/grpcutil",
     visibility = ["//visibility:public"],
@@ -25,16 +25,18 @@ go_library(
 go_test(
     name = "grpcutil_test",
     srcs = [
+        "grpc_log_test.go",
         "grpc_util_test.go",
-        "log_test.go",
     ],
     embed = [":grpcutil"],
     deps = [
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
         "//vendor/google.golang.org/grpc",
         "//vendor/google.golang.org/grpc/health/grpc_health_v1",
     ],
