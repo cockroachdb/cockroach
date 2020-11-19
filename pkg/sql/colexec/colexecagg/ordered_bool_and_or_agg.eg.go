@@ -38,10 +38,9 @@ type boolAndOrderedAgg struct {
 
 var _ AggregateFunc = &boolAndOrderedAgg{}
 
-func (a *boolAndOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *boolAndOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec.Bool()
-	a.curAgg = true
 }
 
 func (a *boolAndOrderedAgg) Compute(
@@ -173,6 +172,7 @@ func (a *boolAndOrderedAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
+	f.curAgg = true
 	return f
 }
 
@@ -194,10 +194,9 @@ type boolOrOrderedAgg struct {
 
 var _ AggregateFunc = &boolOrOrderedAgg{}
 
-func (a *boolOrOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *boolOrOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec.Bool()
-	a.curAgg = false
 }
 
 func (a *boolOrOrderedAgg) Compute(
@@ -329,5 +328,6 @@ func (a *boolOrOrderedAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
+	f.curAgg = false
 	return f
 }

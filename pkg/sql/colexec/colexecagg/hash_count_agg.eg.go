@@ -34,8 +34,8 @@ type countRowsHashAgg struct {
 
 var _ AggregateFunc = &countRowsHashAgg{}
 
-func (a *countRowsHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *countRowsHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec.Int64()
 }
 
@@ -101,8 +101,8 @@ type countHashAgg struct {
 
 var _ AggregateFunc = &countHashAgg{}
 
-func (a *countHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *countHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec.Int64()
 }
 

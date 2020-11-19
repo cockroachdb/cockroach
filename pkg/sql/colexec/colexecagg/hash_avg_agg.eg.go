@@ -69,8 +69,8 @@ type avgInt16HashAgg struct {
 
 var _ AggregateFunc = &avgInt16HashAgg{}
 
-func (a *avgInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgInt16HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
 }
 
@@ -184,8 +184,8 @@ type avgInt32HashAgg struct {
 
 var _ AggregateFunc = &avgInt32HashAgg{}
 
-func (a *avgInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgInt32HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
 }
 
@@ -299,8 +299,8 @@ type avgInt64HashAgg struct {
 
 var _ AggregateFunc = &avgInt64HashAgg{}
 
-func (a *avgInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgInt64HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
 }
 
@@ -413,8 +413,8 @@ type avgDecimalHashAgg struct {
 
 var _ AggregateFunc = &avgDecimalHashAgg{}
 
-func (a *avgDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgDecimalHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
 }
 
@@ -522,8 +522,8 @@ type avgFloat64HashAgg struct {
 
 var _ AggregateFunc = &avgFloat64HashAgg{}
 
-func (a *avgFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgFloat64HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Float64()
 }
 
@@ -621,8 +621,8 @@ type avgIntervalHashAgg struct {
 
 var _ AggregateFunc = &avgIntervalHashAgg{}
 
-func (a *avgIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgIntervalHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Interval()
 }
 

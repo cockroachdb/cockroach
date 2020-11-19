@@ -54,11 +54,16 @@ func IsAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
 // store a carry value itself that it will use next time Compute is called to
 // continue the aggregation of the last group.
 type AggregateFunc interface {
-	// Init sets the groups for the aggregation and the output vector. Each
-	// index in groups corresponds to a column value in the input batch. true
-	// represents the start of a new group. Note that the very first group in
-	// the whole input should *not* be marked as a start of a new group.
-	Init(groups []bool, vec coldata.Vec)
+	// Init sets the groups for the aggregation. Each index in groups
+	// corresponds to a column value in the input batch. true represents the
+	// start of a new group. Note that the very first group in the whole input
+	// should *not* be marked as a start of a new group.
+	Init(groups []bool)
+
+	// SetOutput sets the output vector to write the results of aggregation
+	// into. If the output vector changes, it is up to the caller to make sure
+	// that results already written to the old vector are propagated further.
+	SetOutput(vec coldata.Vec)
 
 	// CurrentOutputIndex returns the current index in the output vector that
 	// the aggregate function is writing to. All indices < the index returned
@@ -96,8 +101,11 @@ type orderedAggregateFuncBase struct {
 	nulls *coldata.Nulls
 }
 
-func (o *orderedAggregateFuncBase) Init(groups []bool, vec coldata.Vec) {
+func (o *orderedAggregateFuncBase) Init(groups []bool) {
 	o.groups = groups
+}
+
+func (o *orderedAggregateFuncBase) SetOutput(vec coldata.Vec) {
 	o.nulls = vec.Nulls()
 }
 
@@ -121,7 +129,9 @@ type hashAggregateFuncBase struct {
 	nulls *coldata.Nulls
 }
 
-func (h *hashAggregateFuncBase) Init(_ []bool, vec coldata.Vec) {
+func (h *hashAggregateFuncBase) Init(_ []bool) {}
+
+func (h *hashAggregateFuncBase) SetOutput(vec coldata.Vec) {
 	h.nulls = vec.Nulls()
 }
 

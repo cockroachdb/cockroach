@@ -565,11 +565,11 @@ type aggBucket struct {
 }
 
 func (b *aggBucket) init(
-	batch coldata.Batch, fns []colexecagg.AggregateFunc, seen []map[string]struct{}, groups []bool,
+	fns []colexecagg.AggregateFunc, seen []map[string]struct{}, groups []bool,
 ) {
 	b.fns = fns
-	for fnIdx, fn := range b.fns {
-		fn.Init(groups, batch.ColVec(fnIdx))
+	for _, fn := range b.fns {
+		fn.Init(groups)
 	}
 	b.seen = seen
 }

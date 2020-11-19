@@ -137,11 +137,11 @@ type _AGG_TYPE_AGGKINDAgg struct {
 
 var _ AggregateFunc = &_AGG_TYPE_AGGKINDAgg{}
 
-func (a *_AGG_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *_AGG_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.Init(groups, vec)
+	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.vec = vec
 	a.col = vec._TYPE()
