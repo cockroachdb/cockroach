@@ -112,7 +112,7 @@ func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, catalog.Tabl
 func decodeIndex(
 	codec keys.SQLCodec, tableDesc *tabledesc.Immutable, index *descpb.IndexDescriptor, key []byte,
 ) ([]tree.Datum, error) {
-	types, err := colinfo.GetColumnTypes(tableDesc, index.ColumnIDs)
+	types, err := colinfo.GetColumnTypes(tableDesc, index.ColumnIDs, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1220,7 +1220,7 @@ func ExtractIndexKey(
 	}
 
 	// Extract the values for index.ColumnIDs.
-	indexTypes, err := colinfo.GetColumnTypes(tableDesc, index.ColumnIDs)
+	indexTypes, err := colinfo.GetColumnTypes(tableDesc, index.ColumnIDs, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1246,7 +1246,7 @@ func ExtractIndexKey(
 	}
 
 	// Extract the values for index.ExtraColumnIDs
-	extraTypes, err := colinfo.GetColumnTypes(tableDesc, index.ExtraColumnIDs)
+	extraTypes, err := colinfo.GetColumnTypes(tableDesc, index.ExtraColumnIDs, nil)
 	if err != nil {
 		return nil, err
 	}

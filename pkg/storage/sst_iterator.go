@@ -45,7 +45,7 @@ func NewSSTIterator(path string) (SimpleMVCCIterator, error) {
 		return nil, err
 	}
 	sst, err := sstable.NewReader(file, sstable.ReaderOptions{
-		Comparer: MVCCComparer,
+		Comparer: EngineComparer,
 	})
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func NewSSTIterator(path string) (SimpleMVCCIterator, error) {
 // format.
 func NewMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(vfs.NewMemFile(data), sstable.ReaderOptions{
-		Comparer: MVCCComparer,
+		Comparer: EngineComparer,
 	})
 	if err != nil {
 		return nil, err

@@ -205,10 +205,16 @@ func (p *PhysicalPlan) NewStage(containsRemoteProcessor bool) int32 {
 // NewStageOnNodes is the same as NewStage but takes in the information about
 // the nodes participating in the new stage and the gateway.
 func (p *PhysicalPlan) NewStageOnNodes(nodes []roachpb.NodeID) int32 {
+	return p.NewStageWithFirstNode(len(nodes), nodes[0])
+}
+
+// NewStageWithFirstNode is the same as NewStage but takes in the number of
+// total nodes participating in the new stage and the first node's id.
+func (p *PhysicalPlan) NewStageWithFirstNode(nNodes int, firstNode roachpb.NodeID) int32 {
 	// We have a remote processor either when we have multiple nodes
 	// participating in the stage or the single processor is scheduled not on
 	// the gateway.
-	return p.NewStage(len(nodes) > 1 || nodes[0] != p.GatewayNodeID /* containsRemoteProcessor */)
+	return p.NewStage(nNodes > 1 || firstNode != p.GatewayNodeID /* containsRemoteProcessor */)
 }
 
 // SetMergeOrdering sets p.MergeOrdering.
@@ -237,12 +243,8 @@ func (p *PhysicalPlan) AddNoInputStage(
 	outputTypes []*types.T,
 	newOrdering execinfrapb.Ordering,
 ) {
-	nodes := make([]roachpb.NodeID, len(corePlacements))
-	for i := range corePlacements {
-		nodes[i] = corePlacements[i].NodeID
-	}
-	stageID := p.NewStageOnNodes(nodes)
-	p.ResultRouters = make([]ProcessorIdx, len(nodes))
+	stageID := p.NewStageWithFirstNode(len(corePlacements), corePlacements[0].NodeID)
+	p.ResultRouters = make([]ProcessorIdx, len(corePlacements))
 	for i := range p.ResultRouters {
 		proc := Processor{
 			Node: corePlacements[i].NodeID,

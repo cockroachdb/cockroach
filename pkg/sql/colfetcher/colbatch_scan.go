@@ -135,12 +135,6 @@ var colBatchScanPool = sync.Pool{
 	},
 }
 
-var cFetcherPool = sync.Pool{
-	New: func() interface{} {
-		return &cFetcher{}
-	},
-}
-
 // NewColBatchScan creates a new ColBatchScan operator.
 func NewColBatchScan(
 	ctx context.Context,
@@ -270,9 +264,7 @@ func initCRowFetcher(
 
 // Release implements the execinfra.Releasable interface.
 func (s *ColBatchScan) Release() {
-	s.rf.table.Release()
-	*s.rf = cFetcher{}
-	cFetcherPool.Put(s.rf)
+	s.rf.Release()
 	*s = ColBatchScan{
 		spans: s.spans[:0],
 	}
