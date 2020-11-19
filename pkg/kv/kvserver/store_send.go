@@ -230,6 +230,7 @@ func (s *Store) Send(
 		if endKey.Less(rSpan.EndKey) {
 			endKey = rSpan.EndKey
 		}
+		var ris []roachpb.RangeInfo
 		s.VisitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, r KeyRange) bool {
 			var l roachpb.Lease
 			var desc roachpb.RangeDescriptor
@@ -243,14 +244,14 @@ func (s *Store) Send(
 			if desc.RangeID == skipRID {
 				return true // continue visiting
 			}
-			t.AppendRangeInfo(ctx, desc, l)
-			// We have to write `t` back to `pErr` so that it picks up the changes.
-			//
-			// TODO(tbg): avoid DeprecatedSetDetail. Instead, collect the range infos
-			// separately and make a new pErr at the end.
-			pErr.DeprecatedSetDetail(t)
+			ris = append(ris, roachpb.RangeInfo{Desc: desc, Lease: l})
 			return true // continue visiting
 		})
+		for _, ri := range ris {
+			t.AppendRangeInfo(ctx, ri.Desc, ri.Lease)
+		}
+		// We have to write `t` back to `pErr` so that it picks up the changes.
+		pErr = roachpb.NewError(t)
 	case *roachpb.RaftGroupDeletedError:
 		// This error needs to be converted appropriately so that clients
 		// will retry.
