@@ -1253,8 +1253,13 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 		oldRaw = l.raw
 	}
 
-	v := new(roachpb.Value)
+	var v *roachpb.Value
 	if err := nl.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// NB: we have to allocate a new Value every time because once we've
+		// put a value into the KV API we have to assume something hangs on
+		// to it still.
+		v = new(roachpb.Value)
+
 		b := txn.NewBatch()
 		key := keys.NodeLivenessKey(update.newLiveness.NodeID)
 		if err := v.SetProto(&update.newLiveness); err != nil {
