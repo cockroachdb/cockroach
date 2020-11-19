@@ -37,12 +37,6 @@ var _ AggregateFunc = &countRowsOrderedAgg{}
 func (a *countRowsOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Int64()
-	a.Reset()
-}
-
-func (a *countRowsOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.curAgg = 0
 }
 
 func (a *countRowsOrderedAgg) Compute(
@@ -136,12 +130,6 @@ var _ AggregateFunc = &countOrderedAgg{}
 func (a *countOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Int64()
-	a.Reset()
-}
-
-func (a *countOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.curAgg = 0
 }
 
 func (a *countOrderedAgg) Compute(

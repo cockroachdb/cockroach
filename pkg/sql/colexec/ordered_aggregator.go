@@ -198,8 +198,6 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
 			for i := 0; i < len(a.outputTypes); i++ {
 				vec := a.scratch.ColVec(i)
-				// According to the aggregate function interface contract, the value at
-				// the current index must also be copied.
 				// Note that we're using Append here instead of Copy because we want the
 				// "truncation" behavior, i.e. we want to copy over the remaining tuples
 				// such the "lengths" of the vectors are equal to the number of copied
@@ -209,7 +207,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 						Src:         vec,
 						DestIdx:     0,
 						SrcStartIdx: coldata.BatchSize(),
-						SrcEndIdx:   a.scratch.resumeIdx + 1,
+						SrcEndIdx:   a.scratch.resumeIdx,
 					},
 				)
 				// Now we need to restore the desired length for the Vec.
@@ -217,7 +215,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				a.bucket.fns[i].SetOutputIndex(newResumeIdx)
 				// There might have been some NULLs set in the part that we
 				// have just copied over, so we need to unset the NULLs.
-				a.scratch.ColVec(i).Nulls().UnsetNullsAfter(newResumeIdx + 1)
+				a.scratch.ColVec(i).Nulls().UnsetNullsAfter(newResumeIdx)
 			}
 		})
 		a.scratch.resumeIdx = newResumeIdx
@@ -294,20 +292,6 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	}
 
 	return batchToReturn
-}
-
-// reset resets the orderedAggregator for another run. Primarily used for
-// benchmarks.
-func (a *orderedAggregator) reset(ctx context.Context) {
-	if r, ok := a.input.(resetter); ok {
-		r.reset(ctx)
-	}
-	a.done = false
-	a.seenNonEmptyBatch = false
-	a.scratch.resumeIdx = 0
-	for _, fn := range a.bucket.fns {
-		fn.Reset()
-	}
 }
 
 func (a *orderedAggregator) Close(ctx context.Context) error {

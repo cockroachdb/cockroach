@@ -41,13 +41,6 @@ var _ AggregateFunc = &boolAndOrderedAgg{}
 func (a *boolAndOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Bool()
-	a.Reset()
-}
-
-func (a *boolAndOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	// true indicates whether we are doing an AND aggregate or OR aggregate.
-	// For bool_and the true is true and for bool_or the true is false.
 	a.curAgg = true
 }
 
@@ -204,13 +197,6 @@ var _ AggregateFunc = &boolOrOrderedAgg{}
 func (a *boolOrOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Bool()
-	a.Reset()
-}
-
-func (a *boolOrOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	// false indicates whether we are doing an AND aggregate or OR aggregate.
-	// For bool_and the false is true and for bool_or the false is false.
 	a.curAgg = false
 }
 

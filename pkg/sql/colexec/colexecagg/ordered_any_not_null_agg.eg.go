@@ -101,12 +101,6 @@ func (a *anyNotNullBoolOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Bool()
-	a.Reset()
-}
-
-func (a *anyNotNullBoolOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullBoolOrderedAgg) Compute(
@@ -287,12 +281,6 @@ func (a *anyNotNullBytesOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.Reset()
-}
-
-func (a *anyNotNullBytesOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullBytesOrderedAgg) Compute(
@@ -479,12 +467,6 @@ func (a *anyNotNullDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Decimal()
-	a.Reset()
-}
-
-func (a *anyNotNullDecimalOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullDecimalOrderedAgg) Compute(
@@ -665,12 +647,6 @@ func (a *anyNotNullInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Int16()
-	a.Reset()
-}
-
-func (a *anyNotNullInt16OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullInt16OrderedAgg) Compute(
@@ -851,12 +827,6 @@ func (a *anyNotNullInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Int32()
-	a.Reset()
-}
-
-func (a *anyNotNullInt32OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullInt32OrderedAgg) Compute(
@@ -1037,12 +1007,6 @@ func (a *anyNotNullInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Int64()
-	a.Reset()
-}
-
-func (a *anyNotNullInt64OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullInt64OrderedAgg) Compute(
@@ -1223,12 +1187,6 @@ func (a *anyNotNullFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Float64()
-	a.Reset()
-}
-
-func (a *anyNotNullFloat64OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullFloat64OrderedAgg) Compute(
@@ -1409,12 +1367,6 @@ func (a *anyNotNullTimestampOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Timestamp()
-	a.Reset()
-}
-
-func (a *anyNotNullTimestampOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullTimestampOrderedAgg) Compute(
@@ -1595,12 +1547,6 @@ func (a *anyNotNullIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Interval()
-	a.Reset()
-}
-
-func (a *anyNotNullIntervalOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullIntervalOrderedAgg) Compute(
@@ -1781,12 +1727,6 @@ func (a *anyNotNullDatumOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Datum()
-	a.Reset()
-}
-
-func (a *anyNotNullDatumOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *anyNotNullDatumOrderedAgg) Compute(

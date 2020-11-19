@@ -41,13 +41,6 @@ func (a *concatHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.Reset()
-}
-
-func (a *concatHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
-	a.curAgg = zeroBytesValue
 }
 
 func (a *concatHashAgg) Compute(
