@@ -339,6 +339,10 @@ func DefaultPebbleOptions() *pebble.Options {
 	// memtable. This ensures that we can reclaim space even when there's no
 	// activity on the database generating flushes.
 	opts.Experimental.DeleteRangeFlushDelay = 10 * time.Second
+	// Enable deletion pacing. This helps prevent disk slowness events on some
+	// SSDs, that kick off an expensive GC if a lot of files are deleted at
+	// once.
+	opts.Experimental.MinDeletionRate = 128 << 20 // 128 MB
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
