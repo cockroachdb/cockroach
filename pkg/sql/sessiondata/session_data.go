@@ -152,6 +152,10 @@ type SessionData struct {
 	SynchronousCommit bool
 	// EnableSeqScan is a dummy setting for the enable_seqscan var.
 	EnableSeqScan bool
+
+	// SequenceCache stores sequence values which have been cached using the
+	// CACHE sequence option.
+	SequenceCache SequenceCache
 }
 
 // IsTemporarySchemaID returns true if the given ID refers to any of the temp

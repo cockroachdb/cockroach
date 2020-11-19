@@ -2278,6 +2278,11 @@ func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplayS
 	m.data.NoticeDisplaySeverity = severity
 }
 
+// initSequenceCache creates an empty sequence cache instance for the session.
+func (m *sessionDataMutator) initSequenceCache() {
+	m.data.SequenceCache = sessiondata.SequenceCache{}
+}
+
 type sqlStatsCollector struct {
 	// sqlStats tracks per-application statistics for all applications on each
 	// node.

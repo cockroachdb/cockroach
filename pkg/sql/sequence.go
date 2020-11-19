@@ -87,27 +87,66 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	}
 
 	seqOpts := descriptor.SequenceOpts
+
 	var val int64
 	if seqOpts.Virtual {
 		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID.SQLInstanceID())
 		val = int64(rowid)
 	} else {
-		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.ID))
-		val, err = kv.IncrementValRetryable(
-			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment)
-		if err != nil {
-			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
-				return 0, boundsExceededError(descriptor)
-			}
-			return 0, err
-		}
-		if val > seqOpts.MaxValue || val < seqOpts.MinValue {
-			return 0, boundsExceededError(descriptor)
-		}
+		val, err = p.incrementSequenceUsingCache(ctx, descriptor)
+	}
+	if err != nil {
+		return 0, err
 	}
 
 	p.ExtendedEvalContext().SessionMutator.RecordLatestSequenceVal(uint32(descriptor.ID), val)
 
+	return val, nil
+}
+
+// incrementSequenceUsingCache fetches the next value of the sequence
+// represented by the passed catalog.TableDescriptor. If the sequence has a
+// cache size of greater than 1, then this function will read cached values
+// from the session data and repopulate these values when the cache is empty.
+func (p *planner) incrementSequenceUsingCache(
+	ctx context.Context, descriptor catalog.TableDescriptor,
+) (int64, error) {
+	seqOpts := descriptor.GetSequenceOpts()
+
+	cacheSize := seqOpts.EffectiveCacheSize()
+
+	fetchNextValues := func() (currentValue int64, incrementAmount int64, sizeOfCache int64, err error) {
+		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.ID))
+
+		endValue, err := kv.IncrementValRetryable(
+			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment*cacheSize)
+
+		if err != nil {
+			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
+				return 0, 0, 0, boundsExceededError(descriptor)
+			}
+			return 0, 0, 0, err
+		}
+		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
+			return 0, 0, 0, boundsExceededError(descriptor)
+		}
+
+		return endValue - seqOpts.Increment*(cacheSize-1), seqOpts.Increment, cacheSize, nil
+	}
+
+	var val int64
+	var err error
+	if cacheSize == 1 {
+		val, _, _, err = fetchNextValues()
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		val, err = p.GetOrInitSequenceCache().NextValue(uint32(descriptor.GetID()), uint32(descriptor.GetVersion()), fetchNextValues)
+		if err != nil {
+			return 0, err
+		}
+	}
 	return val, nil
 }
 
@@ -262,6 +301,8 @@ func assignSequenceOptions(
 			opts.MaxValue = -1
 			opts.Start = opts.MaxValue
 		}
+		// No Caching
+		opts.CacheSize = 1
 	}
 
 	// Fill in all other options.
@@ -289,8 +330,7 @@ func assignSequenceOptions(
 			case v == 1:
 				// Do nothing; this is the default.
 			case v > 1:
-				return unimplemented.NewWithIssuef(32567,
-					"CACHE values larger than 1 are not supported, found %d", v)
+				opts.CacheSize = *option.IntVal
 			}
 		case tree.SeqOptIncrement:
 			// Do nothing; this has already been set.
