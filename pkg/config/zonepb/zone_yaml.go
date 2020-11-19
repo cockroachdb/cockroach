@@ -204,7 +204,9 @@ type marshalableZoneConfig struct {
 	GC                           *GCPolicy         `json:"gc"`
 	GlobalReads                  *bool             `json:"global_reads" yaml:"global_reads"`
 	NumReplicas                  *int32            `json:"num_replicas" yaml:"num_replicas"`
+	NumVoters                    *int32            `json:"num_voters" yaml:"num_voters"`
 	Constraints                  ConstraintsList   `json:"constraints" yaml:"constraints,flow"`
+	VoterConstraints             ConstraintsList   `json:"voter_constraints" yaml:"voter_constraints,flow"`
 	LeasePreferences             []LeasePreference `json:"lease_preferences" yaml:"lease_preferences,flow"`
 	ExperimentalLeasePreferences []LeasePreference `json:"experimental_lease_preferences" yaml:"experimental_lease_preferences,flow,omitempty"`
 	Subzones                     []Subzone         `json:"subzones" yaml:"-"`
@@ -230,6 +232,10 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 		m.NumReplicas = proto.Int32(*c.NumReplicas)
 	}
 	m.Constraints = ConstraintsList{c.Constraints, c.InheritedConstraints}
+	if c.NumVoters != nil && *c.NumVoters != 0 {
+		m.NumVoters = proto.Int32(*c.NumVoters)
+	}
+	m.VoterConstraints = ConstraintsList{c.VoterConstraints, c.InheritedVoterConstraints}
 	if !c.InheritedLeasePreferences {
 		m.LeasePreferences = c.LeasePreferences
 	}
@@ -262,6 +268,11 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig, c ZoneConfig) ZoneConfig
 	}
 	c.Constraints = m.Constraints.Constraints
 	c.InheritedConstraints = m.Constraints.Inherited
+	if m.NumVoters != nil {
+		c.NumVoters = proto.Int32(*m.NumVoters)
+	}
+	c.VoterConstraints = m.VoterConstraints.Constraints
+	c.InheritedVoterConstraints = m.VoterConstraints.Inherited
 	if m.LeasePreferences != nil {
 		c.LeasePreferences = m.LeasePreferences
 	}
