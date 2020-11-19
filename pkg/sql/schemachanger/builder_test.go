@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -70,32 +71,58 @@ func TestBuilder(t *testing.T) {
 		},
 	}, sc.state.elements)
 
-	err = descs.Txn(ctx, s.ClusterSettings(), s.LeaseManager().(*lease.Manager), s.InternalExecutor().(sqlutil.InternalExecutor), s.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			return sc.Run(ctx, runDependenciesTesting{
-				descriptors: descriptors,
-				txn:         txn,
-			})
-		})
+	err = sc.Run(ctx, runDependenciesTesting{
+		lm: s.LeaseManager().(*lease.Manager),
+		ie: s.InternalExecutor().(sqlutil.InternalExecutor),
+		s:  s.ClusterSettings(),
+		db: s.DB(),
+	})
 	require.NoError(t, err)
-
+	require.Equal(t, []element{
+		&addColumn{
+			statementID: 0,
+			tableID:     tableID,
+			columnID:    2,
+			state:       elemPublic,
+		},
+	}, sc.state.elements)
 	time.Sleep(time.Second)
 	tdb.Exec(t, `INSERT INTO db.public.foo VALUES (1, 2)`)
 }
 
 type runDependenciesTesting struct {
+	lm *lease.Manager
+	ie sqlutil.InternalExecutor
+	s  *cluster.Settings
+	db *kv.DB
+}
+
+type testingDepsForDescriptorMutation struct {
 	descriptors *descs.Collection
 	txn         *kv.Txn
 }
 
-func (r runDependenciesTesting) GetDesc(
+var _ runDependencies = (*runDependenciesTesting)(nil)
+var _ depsForDescriptorMutation = (*testingDepsForDescriptorMutation)(nil)
+
+func (r runDependenciesTesting) withDescriptorMutationDeps(
+	ctx context.Context, f func(ctx2 context.Context, deps depsForDescriptorMutation) error,
+) error {
+	return descs.Txn(ctx, r.s, r.lm, r.ie, r.db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		return f(ctx, testingDepsForDescriptorMutation{
+			descriptors: descriptors,
+			txn:         txn,
+		})
+	})
+}
+
+func (r testingDepsForDescriptorMutation) GetDesc(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
 	return r.descriptors.GetMutableDescriptorByID(ctx, id, r.txn)
-
 }
 
-func (r runDependenciesTesting) GetDescs(
+func (r testingDepsForDescriptorMutation) GetDescs(
 	ctx context.Context, reqs []descpb.ID,
 ) ([]catalog.Descriptor, error) {
 	ret := make([]catalog.Descriptor, len(reqs))
@@ -105,17 +132,8 @@ func (r runDependenciesTesting) GetDescs(
 	return ret, nil
 }
 
-func (r runDependenciesTesting) WriteDesc(
+func (r testingDepsForDescriptorMutation) WriteDesc(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) error {
 	return r.descriptors.WriteDesc(ctx, false /* kvTrace */, desc, r.txn)
 }
-
-func (r runDependenciesTesting) withDescriptorMutationDeps(
-	ctx context.Context, f func(ctx2 context.Context, deps depsForDescriptorMutation) error,
-) error {
-	return f(ctx, r)
-}
-
-var _ runDependencies = (*runDependenciesTesting)(nil)
-var _ depsForDescriptorMutation = (*runDependenciesTesting)(nil)
