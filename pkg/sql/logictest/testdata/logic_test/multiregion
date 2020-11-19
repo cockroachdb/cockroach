@@ -8,20 +8,20 @@ test1   {test1-az1,test1-az2,test1-az3}
 test2   {test2-az1,test2-az2,test2-az3}
 test3   {test3-az1,test3-az2,test3-az3}
 
-statement error implementation pending
-CREATE DATABASE region_test_db REGION "test1"
+statement ok
+CREATE DATABASE region_test_db REGION "test1" SURVIVE ZONE FAILURE
 
-statement error implementation pending
-CREATE DATABASE multi_region_test_db REGIONS "test1", "test2"
+statement ok
+CREATE DATABASE multi_region_test_db REGIONS "test1", "test2", "test3" SURVIVE REGION FAILURE
+
+statement error at least 3 regions are required for surviving a region failure
+CREATE DATABASE not_enough_regions_db REGIONS "test1", "test2" SURVIVE REGION FAILURE
 
 statement error region "region_no_exists" does not exist\nHINT:.*valid regions: test1, test2, test3
 CREATE DATABASE invalid_region_db REGION "region_no_exists"
 
 statement error region "test1" defined multiple times
 CREATE DATABASE duplicate_region_name_db REGIONS "test1", "test1"
-
-statement error implementation pending
-CREATE DATABASE new_db SURVIVE ZONE FAILURE
 
 statement ok
 CREATE DATABASE new_db
