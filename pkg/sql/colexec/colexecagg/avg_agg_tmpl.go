@@ -114,18 +114,6 @@ func (a *avg_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
 	a.scratch.vec = vec._RET_TYPE()
-	a.Reset()
-}
-
-func (a *avg_TYPE_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	a.scratch.curSum = zero_RET_TYPEValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avg_TYPE_AGGKINDAgg) Compute(

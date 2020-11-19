@@ -45,12 +45,6 @@ var _ AggregateFunc = &defaultHashAgg{}
 func (a *defaultHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
-	a.Reset()
-}
-
-func (a *defaultHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.fn.Reset(a.ctx)
 }
 
 func (a *defaultHashAgg) Compute(

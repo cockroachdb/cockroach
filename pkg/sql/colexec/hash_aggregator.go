@@ -431,20 +431,6 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	}
 }
 
-// reset resets the hashAggregator for another run. Primarily used for
-// benchmarks.
-func (op *hashAggregator) reset(ctx context.Context) {
-	if r, ok := op.input.(resetter); ok {
-		r.reset(ctx)
-	}
-	op.bufferingState.tuples.ResetInternalBatch()
-	op.bufferingState.tuples.SetLength(0)
-	op.bufferingState.pendingBatch = nil
-	op.buckets = op.buckets[:0]
-	op.state = hashAggregatorBuffering
-	op.ht.reset(ctx)
-}
-
 func (op *hashAggregator) Close(ctx context.Context) error {
 	return op.toClose.Close(ctx)
 }

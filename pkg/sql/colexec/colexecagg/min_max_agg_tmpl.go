@@ -145,16 +145,6 @@ func (a *_AGG_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{end}}
 	a.vec = vec
 	a.col = vec._TYPE()
-	a.Reset()
-}
-
-func (a *_AGG_TYPE_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *_AGG_TYPE_AGGKINDAgg) Compute(

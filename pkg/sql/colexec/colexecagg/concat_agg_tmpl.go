@@ -59,17 +59,6 @@ func (a *concat_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{end}}
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.Reset()
-}
-
-func (a *concat_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	a.foundNonNullForCurrentGroup = false
-	a.curAgg = zeroBytesValue
 }
 
 func (a *concat_AGGKINDAgg) Compute(

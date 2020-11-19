@@ -69,12 +69,6 @@ var _ AggregateFunc = &sumInt16OrderedAgg{}
 func (a *sumInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumInt16OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumInt16OrderedAgg) Compute(
@@ -281,12 +275,6 @@ var _ AggregateFunc = &sumInt32OrderedAgg{}
 func (a *sumInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumInt32OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumInt32OrderedAgg) Compute(
@@ -493,12 +481,6 @@ var _ AggregateFunc = &sumInt64OrderedAgg{}
 func (a *sumInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumInt64OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumInt64OrderedAgg) Compute(
@@ -704,12 +686,6 @@ var _ AggregateFunc = &sumDecimalOrderedAgg{}
 func (a *sumDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumDecimalOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumDecimalOrderedAgg) Compute(
@@ -908,12 +884,6 @@ var _ AggregateFunc = &sumFloat64OrderedAgg{}
 func (a *sumFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Float64()
-	a.Reset()
-}
-
-func (a *sumFloat64OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumFloat64OrderedAgg) Compute(
@@ -1100,12 +1070,6 @@ var _ AggregateFunc = &sumIntervalOrderedAgg{}
 func (a *sumIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Interval()
-	a.Reset()
-}
-
-func (a *sumIntervalOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumIntervalOrderedAgg) Compute(

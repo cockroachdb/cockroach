@@ -69,12 +69,6 @@ var _ AggregateFunc = &sumInt16HashAgg{}
 func (a *sumInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumInt16HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumInt16HashAgg) Compute(
@@ -180,12 +174,6 @@ var _ AggregateFunc = &sumInt32HashAgg{}
 func (a *sumInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumInt32HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumInt32HashAgg) Compute(
@@ -291,12 +279,6 @@ var _ AggregateFunc = &sumInt64HashAgg{}
 func (a *sumInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumInt64HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumInt64HashAgg) Compute(
@@ -401,12 +383,6 @@ var _ AggregateFunc = &sumDecimalHashAgg{}
 func (a *sumDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumDecimalHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumDecimalHashAgg) Compute(
@@ -506,12 +482,6 @@ var _ AggregateFunc = &sumFloat64HashAgg{}
 func (a *sumFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Float64()
-	a.Reset()
-}
-
-func (a *sumFloat64HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumFloat64HashAgg) Compute(
@@ -605,12 +575,6 @@ var _ AggregateFunc = &sumIntervalHashAgg{}
 func (a *sumIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Interval()
-	a.Reset()
-}
-
-func (a *sumIntervalHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumIntervalHashAgg) Compute(

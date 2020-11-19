@@ -73,17 +73,11 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
 	a.vec = vec.Bool()
-	a.Reset()
-}
-
-func (a *bool_OP_TYPE_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR aggregate.
-	// For bool_and the _DEFAULT_VAL is true and for bool_or the _DEFAULT_VAL is false.
+	// {{/*
+	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR
+	// aggregate. For bool_and the _DEFAULT_VAL is true and for bool_or the
+	// _DEFAULT_VAL is false.
+	// */}}
 	a.curAgg = _DEFAULT_VAL
 }
 
