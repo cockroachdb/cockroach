@@ -12,7 +12,10 @@ package storage
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
+	"math/rand"
+	"sort"
 	"strings"
 	"testing"
 
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 // TODO(sumeer):
@@ -293,3 +297,409 @@ func TestIntentInterleavingIter(t *testing.T) {
 		})
 	})
 }
+
+type lockKeyValue struct {
+	key LockTableKey
+	val []byte
+}
+
+func generateRandomData(t *testing.T, rng *rand.Rand) (lkv []lockKeyValue, mvcckv []MVCCKeyValue) {
+	numKeys := 1000
+	for i := 0; i < numKeys; i++ {
+		key := roachpb.Key(fmt.Sprintf("key%08d", i))
+		hasIntent := rng.Int31n(2) == 0
+		numVersions := int(rng.Int31n(4)) + 1
+		var timestamps []int
+		for j := 0; j < numVersions; j++ {
+			timestamps = append(timestamps, rng.Int())
+		}
+		// Sort in descending order and make unique.
+		sort.Sort(sort.Reverse(sort.IntSlice(timestamps)))
+		last := 0
+		for j := 1; j < len(timestamps); j++ {
+			if timestamps[j] != timestamps[last] {
+				last++
+				timestamps[last] = timestamps[j]
+			}
+		}
+		timestamps = timestamps[:last+1]
+		if hasIntent {
+			txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(rng.Int31())))
+			meta := enginepb.MVCCMetadata{
+				Timestamp: hlc.LegacyTimestamp{WallTime: int64(timestamps[0]) + 1},
+				Txn:       &enginepb.TxnMeta{ID: txnUUID},
+			}
+			val, err := protoutil.Marshal(&meta)
+			require.NoError(t, err)
+			isSeparated := rng.Int31n(2) == 0
+			if isSeparated {
+				ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}
+				lkv = append(lkv, lockKeyValue{key: ltKey, val: val})
+			} else {
+				mvcckv = append(mvcckv, MVCCKeyValue{Key: MVCCKey{Key: key}, Value: val})
+			}
+		}
+		for _, ts := range timestamps {
+			mvcckv = append(mvcckv, MVCCKeyValue{
+				Key:   MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(ts) + 1}},
+				Value: []byte("value"),
+			})
+		}
+	}
+	return lkv, mvcckv
+}
+
+func writeRandomData(
+	t *testing.T, eng Engine, lkv []lockKeyValue, mvcckv []MVCCKeyValue, interleave bool,
+) {
+	batch := eng.NewBatch()
+	for _, kv := range lkv {
+		if interleave {
+			require.NoError(t, batch.PutUnversioned(kv.key.Key, kv.val))
+		} else {
+			require.NoError(t, batch.PutEngineKey(kv.key.ToEngineKey(), kv.val))
+		}
+	}
+	for _, kv := range mvcckv {
+		if kv.Key.Timestamp.IsEmpty() {
+			require.NoError(t, batch.PutUnversioned(kv.Key.Key, kv.Value))
+		} else {
+			require.NoError(t, batch.PutMVCC(kv.Key, kv.Value))
+		}
+	}
+	require.NoError(t, batch.Commit(true))
+}
+
+func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue) []string {
+	var ops []string
+	lowerIndex := rng.Intn(len(mvcckv) / 2)
+	upperIndex := lowerIndex + rng.Intn(len(mvcckv)/2)
+	if upperIndex == len(mvcckv) {
+		upperIndex = len(mvcckv) - 1
+	}
+	lower := mvcckv[lowerIndex].Key.Key
+	upper := mvcckv[upperIndex].Key.Key
+	var iterStr string
+	if bytes.Equal(lower, upper) {
+		upperIndex = len(mvcckv) - 1
+		iterStr = fmt.Sprintf("iter lower=%s upper=%s", string(lower), string(lower.PrefixEnd()))
+	} else {
+		iterStr = fmt.Sprintf("iter lower=%s upper=%s", string(lower), string(upper))
+	}
+	ops = append(ops, iterStr)
+	for i := 0; i < 100; i++ {
+		// Seek key
+		seekIndex := rng.Intn(upperIndex-lowerIndex) + lowerIndex
+		useTimestamp := rng.Intn(2) == 0
+		seekKey := mvcckv[seekIndex].Key
+		if !useTimestamp {
+			seekKey.Timestamp = hlc.Timestamp{}
+		}
+		op := "seek-ge"
+		fwdDirection := true
+		if rng.Intn(2) == 0 {
+			op = "seek-lt"
+			fwdDirection = false
+		}
+		if useTimestamp {
+			op = fmt.Sprintf("%s k=%s ts=%d", op, string(seekKey.Key), seekKey.Timestamp.WallTime)
+		} else {
+			op = fmt.Sprintf("%s k=%s", op, string(seekKey.Key))
+		}
+		ops = append(ops, op)
+		iterCount := rng.Intn(8)
+		for j := 0; j < iterCount; j++ {
+			// 40% prev, 40% next, 20% next-key
+			p := rng.Intn(10)
+			if p < 4 {
+				op = "prev"
+				fwdDirection = false
+			} else if p < 8 {
+				op = "next"
+				fwdDirection = true
+			} else {
+				op = "next-key"
+				// NextKey cannot be used to switch direction
+				if !fwdDirection {
+					ops = append(ops, "next")
+					fwdDirection = true
+				}
+			}
+			ops = append(ops, op)
+		}
+	}
+	return ops
+}
+
+func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings.Builder) {
+	var iter MVCCIterator
+	var d datadriven.TestData
+	var err error
+	for _, op := range ops {
+		d.Cmd, d.CmdArgs, err = datadriven.ParseLine(op)
+		require.NoError(t, err)
+		switch d.Cmd {
+		case "iter":
+			var opts IterOptions
+			opts.LowerBound = scanRoachKey(t, &d, "lower")
+			if d.HasArg("upper") {
+				opts.UpperBound = scanRoachKey(t, &d, "upper")
+			}
+			if interleave {
+				iter = newIntentInterleavingIterator(eng, opts)
+			} else {
+				iter = eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+			}
+			fmt.Fprintf(out, "iter lower=%s upper=%s\n",
+				string(opts.LowerBound), string(opts.UpperBound))
+		case "seek-ge":
+			key := scanSeekKey(t, &d)
+			iter.SeekGE(key)
+			fmt.Fprintf(out, "seek-ge %s: ", makePrintableKey(key))
+			checkAndOutputIter(iter, out)
+		case "seek-lt":
+			key := scanSeekKey(t, &d)
+			iter.SeekLT(key)
+			fmt.Fprintf(out, "seek-lt %s: ", makePrintableKey(key))
+			checkAndOutputIter(iter, out)
+		case "next":
+			iter.Next()
+			fmt.Fprintf(out, "next: ")
+			checkAndOutputIter(iter, out)
+		case "next-key":
+			iter.NextKey()
+			fmt.Fprintf(out, "next-key: ")
+			checkAndOutputIter(iter, out)
+		case "prev":
+			iter.Prev()
+			fmt.Fprintf(out, "prev: ")
+			checkAndOutputIter(iter, out)
+		default:
+			fmt.Fprintf(out, "unknown command: %s\n", d.Cmd)
+		}
+	}
+}
+
+var seedFlag = flag.Int64("seed", -1, "specify seed to use for random number generator")
+
+func TestRandomizedIntentInterleavingIter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	seed := *seedFlag
+	if seed < 0 {
+		seed = rand.Int63()
+	}
+	rng := rand.New(rand.NewSource(seed))
+	lkv, mvcckv := generateRandomData(t, rng)
+	eng1 := createTestPebbleEngine()
+	eng2 := createTestPebbleEngine()
+	defer eng1.Close()
+	defer eng2.Close()
+	writeRandomData(t, eng1, lkv, mvcckv, false)
+	writeRandomData(t, eng2, lkv, mvcckv, true)
+	var ops []string
+	for i := 0; i < 10; i++ {
+		ops = append(ops, generateIterOps(rng, mvcckv)...)
+	}
+	var out1, out2 strings.Builder
+	doOps(t, ops, eng1, true, &out1)
+	doOps(t, ops, eng2, false, &out2)
+	require.Equal(t, out1.String(), out2.String(),
+		fmt.Sprintf("seed=%d\n=== separated ===\n%s\n=== interleaved ===\n%s\n",
+			seed, out1.String(), out2.String()))
+}
+
+// TODO(sumeer): configure engine such that benchmark has data in multiple levels.
+
+func writeBenchData(
+	b *testing.B,
+	eng Engine,
+	numKeys int,
+	versionsPerKey int,
+	intentKeyStride int,
+	prefix []byte,
+	separated bool,
+) {
+	batch := eng.NewBatch()
+	txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(1000)))
+	for i := 0; i < numKeys; i++ {
+		key := makeKey(prefix, i)
+		if i%intentKeyStride == 0 {
+			// Write intent.
+			meta := enginepb.MVCCMetadata{
+				Timestamp: hlc.LegacyTimestamp{WallTime: int64(versionsPerKey)},
+				Txn:       &enginepb.TxnMeta{ID: txnUUID},
+			}
+			val, err := protoutil.Marshal(&meta)
+			require.NoError(b, err)
+			if separated {
+				require.NoError(b, batch.PutEngineKey(
+					LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}.ToEngineKey(), val))
+			} else {
+				require.NoError(b, batch.PutUnversioned(key, val))
+			}
+		}
+		for j := versionsPerKey; j >= 1; j-- {
+			require.NoError(b, batch.PutMVCC(
+				MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j)}}, []byte("value")))
+		}
+	}
+	require.NoError(b, batch.Commit(true))
+}
+
+func makeKey(prefix []byte, num int) roachpb.Key {
+	return append(prefix, []byte(fmt.Sprintf("%08d", num))...)
+}
+
+type benchState struct {
+	benchPrefix string
+	keyPrefix   roachpb.Key
+	eng         Engine
+	separated   bool
+}
+
+var numBenchKeys = 10000
+
+func intentInterleavingIterBench(b *testing.B, runFunc func(b *testing.B, state benchState)) {
+	for _, separated := range []bool{false, true} {
+		for _, versionsPerKey := range []int{1, 5} {
+			for _, intentKeyStride := range []int{1, 100, 1000000} {
+				for _, keyLength := range []int{10, 100} {
+					func() {
+						state := benchState{
+							benchPrefix: fmt.Sprintf(
+								"separated=%t/version=%d/intentStride=%d/keyLen=%d",
+								separated, versionsPerKey, intentKeyStride, keyLength),
+							keyPrefix: bytes.Repeat([]byte("k"), keyLength),
+							eng:       createTestPebbleEngine(),
+							separated: separated,
+						}
+						defer state.eng.Close()
+						writeBenchData(b, state.eng, numBenchKeys, versionsPerKey, intentKeyStride,
+							state.keyPrefix, separated)
+						runFunc(b, state)
+					}()
+				}
+			}
+		}
+	}
+}
+
+func BenchmarkIntentInterleavingIterNext(b *testing.B) {
+	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
+		b.Run(state.benchPrefix,
+			func(b *testing.B) {
+				var iter MVCCIterator
+				opts := IterOptions{LowerBound: state.keyPrefix, UpperBound: state.keyPrefix.PrefixEnd()}
+				if state.separated {
+					iter = newIntentInterleavingIterator(state.eng, opts)
+				} else {
+					iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+				}
+				startKey := MVCCKey{Key: state.keyPrefix}
+				iter.SeekGE(startKey)
+				b.ResetTimer()
+				var unsafeKey MVCCKey
+				// Each iteration does a Next(). It may additionally also do a SeekGE
+				// if the iterator is exhausted, but we stop the timer for that.
+				for i := 0; i < b.N; i++ {
+					valid, err := iter.Valid()
+					if err != nil {
+						b.Fatal(err)
+					}
+					if !valid {
+						b.StopTimer()
+						iter.SeekGE(startKey)
+						b.StartTimer()
+					}
+					unsafeKey = iter.UnsafeKey()
+					iter.Next()
+				}
+				_ = unsafeKey
+			})
+	})
+}
+
+func BenchmarkIntentInterleavingIterPrev(b *testing.B) {
+	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
+		b.Run(state.benchPrefix,
+			func(b *testing.B) {
+				var iter MVCCIterator
+				endKey := MVCCKey{Key: state.keyPrefix.PrefixEnd()}
+				opts := IterOptions{LowerBound: state.keyPrefix, UpperBound: endKey.Key}
+				if state.separated {
+					iter = newIntentInterleavingIterator(state.eng, opts)
+				} else {
+					iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+				}
+				iter.SeekLT(endKey)
+				b.ResetTimer()
+				var unsafeKey MVCCKey
+				// Each iteration does a Prev(). It may additionally also do a SeekLT
+				// if the iterator is exhausted, but we stop the timer for that.
+				for i := 0; i < b.N; i++ {
+					valid, err := iter.Valid()
+					if err != nil {
+						b.Fatal(err)
+					}
+					if !valid {
+						b.StopTimer()
+						iter.SeekLT(endKey)
+						b.StartTimer()
+					}
+					unsafeKey = iter.UnsafeKey()
+					iter.Prev()
+				}
+				_ = unsafeKey
+			})
+	})
+}
+
+func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
+	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
+		for _, seekStride := range []int{1, 10} {
+			b.Run(fmt.Sprintf("%s/seekStride=%d", state.benchPrefix, seekStride),
+				func(b *testing.B) {
+					var seekKeys []roachpb.Key
+					for i := 0; i < numBenchKeys; i += seekStride {
+						seekKeys = append(seekKeys, makeKey(state.keyPrefix, i))
+					}
+					var iter MVCCIterator
+					endKey := state.keyPrefix.PrefixEnd()
+					opts := IterOptions{LowerBound: state.keyPrefix, UpperBound: endKey}
+					if state.separated {
+						iter = newIntentInterleavingIterator(state.eng, opts)
+					} else {
+						iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+					}
+					b.ResetTimer()
+					var unsafeKey MVCCKey
+					for i := 0; i < b.N; i++ {
+						j := i % len(seekKeys)
+						upperIndex := j + 1
+						if upperIndex < len(seekKeys) {
+							iter.SetUpperBound(seekKeys[upperIndex])
+						} else {
+							iter.SetUpperBound(endKey)
+						}
+						iter.SeekGE(MVCCKey{Key: seekKeys[j]})
+						for {
+							valid, err := iter.Valid()
+							if err != nil {
+								b.Fatal(err)
+							}
+							if !valid {
+								break
+							}
+							unsafeKey = iter.UnsafeKey()
+							iter.Next()
+						}
+					}
+					_ = unsafeKey
+				})
+		}
+	})
+}
+
+// TODO(sumeer): add SeekLTAndIter benchmark -- needs the ability to do
+// SetLowerBound.
