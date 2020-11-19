@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -219,6 +220,7 @@ type IterOptions struct {
 // by the caller.
 type MVCCIterKind int
 
+// "Intent" refers to non-inline meta, that can be interleaved or separated.
 const (
 	// MVCCKeyAndIntentsIterKind specifies that intents must be seen, and appear
 	// interleaved with keys, even if they are in a separated lock table.
@@ -301,6 +303,22 @@ type Reader interface {
 	NewEngineIterator(opts IterOptions) EngineIterator
 }
 
+// PrecedingIntentState is information needed when writing or clearing an
+// intent for a transaction. It specifies the state of the intent that was
+// there before this write (for the specified transaction).
+type PrecedingIntentState int
+
+const (
+	// ExistingIntentInterleaved specifies that there is an existing intent and
+	// that it is interleaved.
+	ExistingIntentInterleaved PrecedingIntentState = iota
+	// ExistingIntentSeparated specifies that there is an existing intent and
+	// that it is separated (in the lock table key space).
+	ExistingIntentSeparated
+	// NoExistingIntent specifies that there isn't an existing intent.
+	NoExistingIntent
+)
+
 // Writer is the write interface to an engine's data.
 type Writer interface {
 	// ApplyBatchRepr atomically applies a set of batched updates. Created by
@@ -331,11 +349,20 @@ type Writer interface {
 	// {ClearMVCC,ClearUnversioned} this is a higher-level method that may make
 	// changes in parts of the key space that are not only a function of the
 	// input, and may choose to use a single-clear under the covers.
-	// TODO(sumeer): add additional parameters. This initial placeholder is so
-	// that we can identify all call-sites.
+	// txnDidNotUpdateMeta allows for performance optimization when set to true,
+	// and has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can
+	// be conservatively set to false).
+	// REQUIRES: state is ExistingIntentInterleaved or ExistingIntentSeparated.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearIntent(key roachpb.Key) error
+	//
+	// TODO(sumeer): after the full transition to separated locks, measure the
+	// cost of a PutIntent implementation, where there is an existing intent,
+	// that does a <single-clear, put> pair. If there isn't a performance
+	// decrease, we can stop tracking txnDidNotUpdateMeta and still optimize
+	// ClearIntent by always doing single-clear.
+	ClearIntent(
+		key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID) error
 	// ClearEngineKey removes the item from the db with the given EngineKey.
 	// Note that clear actually removes entries from the storage engine. This is
 	// a general-purpose and low-level method that should be used sparingly,
@@ -419,15 +446,18 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutUnversioned(key roachpb.Key, value []byte) error
-	// PutIntent puts an intent at the given key to the value provided.
-	// This is a higher-level method that may make changes in parts of the key
-	// space that are not only a function of the input key, and may explicitly
-	// clear the preceding intent.
-	// TODO(sumeer): add additional parameters. This initial placeholder is so
-	// that we can identify all call-sites.
+	// PutIntent puts an intent at the given key to the value provided. This is
+	// a higher-level method that may make changes in parts of the key space
+	// that are not only a function of the input key, and may explicitly clear
+	// the preceding intent. txnDidNotUpdateMeta defines what happened prior to
+	// this put, and allows for performance optimization when set to true, and
+	// has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can be
+	// conservatively set to false).
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
-	PutIntent(key roachpb.Key, value []byte) error
+	PutIntent(
+		key roachpb.Key, value []byte, state PrecedingIntentState, txnDidNotUpdateMeta bool,
+		txnUUID uuid.UUID) error
 	// PutEngineKey sets the given key to the value provided. This is a
 	// general-purpose and low-level method that should be used sparingly,
 	// only when the other Put* methods are not applicable.
@@ -444,6 +474,21 @@ type Writer interface {
 	// details to the writer, if it has logical op logging enabled. For most
 	// Writer implementations, this is a no-op.
 	LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails)
+
+	// SingleClearEngineKey removes the most recent write to the item from the db
+	// with the given key. Whether older writes of the item will come back
+	// to life if not also removed with SingleClear is undefined. See the
+	// following:
+	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
+	// for details on the SingleDelete operation that this method invokes. Note
+	// that clear actually removes entries from the storage engine, rather than
+	// inserting MVCC tombstones. This is a low-level interface that must not be
+	// called from outside the storage package. It is part of the interface
+	// because there are structs that wrap Writer and implement the Writer
+	// interface, that are not part of the storage package.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	SingleClearEngineKey(key EngineKey) error
 }
 
 // ReadWriter is the read/write interface to an engine's data.
@@ -559,21 +604,6 @@ type Engine interface {
 // Batch is the interface for batch specific operations.
 type Batch interface {
 	ReadWriter
-	// SingleClearEngineKey removes the most recent write to the item from the db
-	// with the given key. Whether older writes of the item will come back
-	// to life if not also removed with SingleClear is undefined. See the
-	// following:
-	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
-	// for details on the SingleDelete operation that this method invokes. Note
-	// that clear actually removes entries from the storage engine, rather than
-	// inserting MVCC tombstones. This is a low-level interface that must not be
-	// called from outside the storage package. It is part of the interface because
-	// there are structs that wrap Batch and implement the Batch interface, that are
-	// not part of the storage package.
-	// TODO(sumeer): try to remove it from this exported interface.
-	//
-	// It is safe to modify the contents of the arguments after it returns.
-	SingleClearEngineKey(key EngineKey) error
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.

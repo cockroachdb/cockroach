@@ -12,8 +12,10 @@ package storage
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 	"testing"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -40,9 +42,19 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 			Strength: lock.Exclusive,
 			TxnUUID:  uuid1[:]}},
 	}
-	for _, test := range testCases {
-		t.Run("", func(t *testing.T) {
-			eKey := test.key.ToEngineKey()
+	buf := make([]byte, 100)
+	for i, test := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			eKey, buf2 := test.key.ToEngineKey(nil)
+			// buf2 should be larger than the non-versioned part.
+			require.Less(t, len(eKey.Key), cap(buf2))
+			eKey2, buf3 := test.key.ToEngineKey(buf)
+			// buf3 should be larger than the non-versioned part.
+			require.Less(t, len(eKey.Key), cap(buf3))
+			// buf is big enough for all keys we encode here, so buf3 should be the same as buf
+			require.True(t, unsafe.Pointer(&buf3[0]) == unsafe.Pointer(&buf[0]))
+			require.Equal(t, eKey, eKey2)
+
 			b1 := eKey.Encode()
 			require.Equal(t, len(b1), eKey.EncodedLen())
 			var b2 []byte
