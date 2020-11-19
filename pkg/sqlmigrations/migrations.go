@@ -1106,7 +1106,7 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 	if err := r.execAsRoot(
 		ctx,
 		"insert-setting",
-		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'v') ON CONFLICT(name) DO NOTHING`, b),
+		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'm') ON CONFLICT(name) DO NOTHING`, b),
 	); err != nil {
 		return err
 	}
