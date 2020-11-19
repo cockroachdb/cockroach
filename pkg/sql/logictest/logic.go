@@ -461,6 +461,7 @@ type testClusterConfig struct {
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
+const threeNodeBackupConfigName = "3node-backup"
 
 // logicTestConfigs contains all possible cluster configs. A test file can
 // specify a list of configs they run on in a file-level comment like:
@@ -590,6 +591,17 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats: "false",
 		useTenant:         true,
 		isCCLConfig:       true,
+	},
+	{
+		// 3node-backup is a config that runs the test as a SQL tenant. This config
+		// can only be run with a CCL binary, so is a noop if run through the normal
+		// logictest command.
+		// To run a logic test with this config as a directive, run:
+		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic//<test_name>
+		name:        threeNodeBackupConfigName,
+		numNodes:    3,
+		isCCLConfig: true,
+		// TODO: Add backup restore probability.
 	},
 	{
 		name:              "multiregion-9node-3region-3azs",
