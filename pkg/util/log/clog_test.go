@@ -149,13 +149,14 @@ func TestStandardLog(t *testing.T) {
 }
 
 func TestEntryDecoder(t *testing.T) {
-	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, msg string) string {
+	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, tags, msg string) string {
 		entry := logpb.Entry{
 			Severity:  s,
 			Time:      now.UnixNano(),
 			Goroutine: int64(gid),
 			File:      file,
 			Line:      int64(line),
+			Tags:      tags,
 			Message:   msg,
 		}
 		var f formatCrdbV1
@@ -175,19 +176,23 @@ func TestEntryDecoder(t *testing.T) {
 
 	// Verify the truncation logic for reading logs that are longer than the
 	// default scanner can handle.
-	preambleLength := len(formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, ""))
+	preambleLength := len(formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, ``, ""))
 	maxMessageLength := bufio.MaxScanTokenSize - preambleLength - 1
 	reallyLongEntry := string(bytes.Repeat([]byte("a"), maxMessageLength))
 	tooLongEntry := reallyLongEntry + "a"
 
-	contents := formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, "info")
-	contents += formatEntry(severity.INFO, t2, 1, "clog_test.go", 137, "multi-\nline")
-	contents += formatEntry(severity.INFO, t3, 2, "clog_test.go", 138, reallyLongEntry)
-	contents += formatEntry(severity.INFO, t4, 3, "clog_test.go", 139, tooLongEntry)
-	contents += formatEntry(severity.WARNING, t5, 4, "clog_test.go", 140, "warning")
-	contents += formatEntry(severity.ERROR, t6, 5, "clog_test.go", 141, "error")
-	contents += formatEntry(severity.FATAL, t7, 6, "clog_test.go", 142, "fatal\nstack\ntrace")
-	contents += formatEntry(severity.INFO, t8, 7, "clog_test.go", 143, tooLongEntry)
+	contents := formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, ``, "info")
+	contents += formatEntry(severity.INFO, t2, 1, "clog_test.go", 137, ``, "multi-\nline")
+	contents += formatEntry(severity.INFO, t3, 2, "clog_test.go", 138, ``, reallyLongEntry)
+	contents += formatEntry(severity.INFO, t4, 3, "clog_test.go", 139, ``, tooLongEntry)
+	contents += formatEntry(severity.WARNING, t5, 4, "clog_test.go", 140, ``, "warning")
+	contents += formatEntry(severity.ERROR, t6, 5, "clog_test.go", 141, ``, "error")
+	contents += formatEntry(severity.FATAL, t7, 6, "clog_test.go", 142, ``, "fatal\nstack\ntrace")
+	contents += formatEntry(severity.INFO, t8, 7, "clog_test.go", 143, ``, tooLongEntry)
+
+	// Regression test for #56873.
+	contents += formatEntry(severity.INFO, t8, 8, "clog_test.go", 144, `sometags`, "foo")
+	contents += formatEntry(severity.INFO, t8, 9, "clog_test.go", 145, ``, "bar" /* no tags */)
 
 	readAllEntries := func(contents string) []logpb.Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
@@ -273,6 +278,23 @@ trace`,
 			File:      `clog_test.go`,
 			Line:      143,
 			Message:   tooLongEntry[:maxMessageLength],
+		},
+		{
+			Severity:  severity.INFO,
+			Time:      t8.UnixNano(),
+			Goroutine: 8,
+			File:      `clog_test.go`,
+			Line:      144,
+			Tags:      `sometags`,
+			Message:   `foo`,
+		},
+		{
+			Severity:  severity.INFO,
+			Time:      t8.UnixNano(),
+			Goroutine: 9,
+			File:      `clog_test.go`,
+			Line:      145,
+			Message:   `bar`,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
