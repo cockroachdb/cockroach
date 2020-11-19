@@ -44,10 +44,11 @@ get k=k1 ts=10,0
 ----
 get: "k1" -> /BYTES/v @0.000000010,0
 
-run ok
+run error
 get k=k1 ts=10,0 failOnMoreRecent
 ----
-get: "k1" -> /BYTES/v @0.000000010,0
+get: "k1" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000010,0 too old; wrote at 0.000000010,1
 
 run ok
 get k=k1 ts=11,0
@@ -75,10 +76,11 @@ scan k=k1 end=k2 ts=10,0
 ----
 scan: "k1" -> /BYTES/v @0.000000010,0
 
-run ok
+run error
 scan k=k1 end=k2 ts=10,0 failOnMoreRecent
 ----
-scan: "k1" -> /BYTES/v @0.000000010,0
+scan: "k1"-"k2" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000010,0 too old; wrote at 0.000000010,1
 
 run ok
 scan k=k1 end=k2 ts=11,0
@@ -190,7 +192,7 @@ run error
 scan k=k1 end=k3 ts=10,0 failOnMoreRecent
 ----
 scan: "k1"-"k3" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000010,0 too old; wrote at 0.000000010,1
 
 run error
 scan k=k1 end=k3 ts=11,0
