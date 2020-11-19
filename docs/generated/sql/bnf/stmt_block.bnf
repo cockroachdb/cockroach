@@ -2141,8 +2141,8 @@ region_name ::=
 	name
 
 survive_clause ::=
-	'SURVIVE' 'REGION' 'FAILURE'
-	| 'SURVIVE' 'ZONE' 'FAILURE'
+	'SURVIVE' opt_equal 'REGION' 'FAILURE'
+	| 'SURVIVE' opt_equal 'ZONE' 'FAILURE'
 
 role_option ::=
 	'CREATEROLE'
