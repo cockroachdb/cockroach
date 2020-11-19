@@ -121,6 +121,9 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 
 // GetBytesRead is part of the execinfra.IOReader interface.
 func (s *ColBatchScan) GetBytesRead() int64 {
+	if s.rf.fetcher == nil {
+		return 0
+	}
 	return s.rf.fetcher.GetBytesRead()
 }
 

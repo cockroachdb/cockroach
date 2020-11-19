@@ -835,6 +835,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if planner.instrumentation.ShouldCollectBundle() {
 		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
+	subqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
 	// Don't close the top-level plan from subqueries - someone else will handle
 	// that.
 	subqueryPlanCtx.ignoreClose = true
@@ -1126,6 +1127,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	if planner.instrumentation.ShouldCollectBundle() {
 		postqueryPlanCtx.saveFlows = postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
+	postqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
 
 	postqueryPhysPlan, err := dsp.createPhysPlan(postqueryPlanCtx, postqueryPlan)
 	if err != nil {
