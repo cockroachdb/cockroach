@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -137,7 +138,7 @@ var _ execinfra.Processor = &joinReader{}
 var _ execinfra.RowSource = &joinReader{}
 var _ execinfrapb.MetadataSource = &joinReader{}
 var _ execinfra.OpNode = &joinReader{}
-var _ execinfra.IOReader = &joinReader{}
+var _ execinfra.KVReader = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -688,21 +689,27 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
-			TuplesRead: fis.NumTuples,
-			KVTime:     fis.WaitTime,
+			TuplesRead:     fis.NumTuples,
+			KVTime:         fis.WaitTime,
+			ContentionTime: jr.GetCumulativeContentionTime(),
 		},
 		Output: jr.Out.Stats(),
 	}
 }
 
-// GetBytesRead is part of the execinfra.IOReader interface.
+// GetBytesRead is part of the execinfra.KVReader interface.
 func (jr *joinReader) GetBytesRead() int64 {
 	return jr.fetcher.GetBytesRead()
 }
 
-// GetRowsRead is part of the execinfra.IOReader interface.
+// GetRowsRead is part of the execinfra.KVReader interface.
 func (jr *joinReader) GetRowsRead() int64 {
 	return jr.rowsRead
+}
+
+// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
+func (jr *joinReader) GetCumulativeContentionTime() time.Duration {
+	return getCumulativeContentionTime(jr.fetcher.GetContentionEvents())
 }
 
 func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {

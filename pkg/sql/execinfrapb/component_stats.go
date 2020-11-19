@@ -95,6 +95,10 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.KV.KVTime != 0 {
 		fn("KV time", s.KV.KVTime.Round(time.Microsecond))
 	}
+	if s.KV.ContentionTime != 0 {
+		// TODO(asubiotto): Round once KV layer produces real contention events.
+		fn("KV contention time", s.KV.ContentionTime)
+	}
 	if s.KV.TuplesRead.HasValue() {
 		fn("KV tuples read", s.KV.TuplesRead.Value())
 	}
@@ -158,6 +162,7 @@ func (s *ComponentStats) MakeDeterministic() {
 
 	// KV.
 	timeVal(&s.KV.KVTime)
+	timeVal(&s.KV.ContentionTime)
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
 		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())

@@ -87,6 +87,11 @@ message KVStats {
   optional google.protobuf.Duration kv_time = 3 [(gogoproto.customname) = "KVTime",
                                                  (gogoproto.nullable) = false,
                                                  (gogoproto.stdduration) = true];
+
+  // ContentionTime is the cumulative time a KV request spent contending with
+  // other transactions. This time is a subset of KVTime above.
+  optional google.protobuf.Duration contention_time = 4 [(gogoproto.nullable) = false,
+                                                         (gogoproto.stdduration) = true];
 }
 
 // ExecStats contains statistics about the execution of an components.
