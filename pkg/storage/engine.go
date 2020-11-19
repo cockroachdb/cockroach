@@ -219,6 +219,7 @@ type IterOptions struct {
 // by the caller.
 type MVCCIterKind int
 
+// "Intent" refers to non-inline meta, that can be interleaved or separated.
 const (
 	// MVCCKeyAndIntentsIterKind specifies that intents must be seen, and appear
 	// interleaved with keys, even if they are in a separated lock table.
@@ -300,6 +301,17 @@ type Reader interface {
 	// after this function returns.
 	NewEngineIterator(opts IterOptions) EngineIterator
 }
+
+// PrecedingIntentState is information needed when writing or clearing an
+// intent for a transaction. It specifies the state of the intent that was
+// there before this write (for the specified transaction).
+type PrecedingIntentState int
+
+const (
+	ExistingIntentInterleaved PrecedingIntentState = iota
+	ExistingIntentSeparated
+	NoExistingIntent
+)
 
 // Writer is the write interface to an engine's data.
 type Writer interface {
@@ -444,6 +456,21 @@ type Writer interface {
 	// details to the writer, if it has logical op logging enabled. For most
 	// Writer implementations, this is a no-op.
 	LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails)
+
+	// SingleClearEngineKey removes the most recent write to the item from the db
+	// with the given key. Whether older writes of the item will come back
+	// to life if not also removed with SingleClear is undefined. See the
+	// following:
+	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
+	// for details on the SingleDelete operation that this method invokes. Note
+	// that clear actually removes entries from the storage engine, rather than
+	// inserting MVCC tombstones. This is a low-level interface that must not be
+	// called from outside the storage package. It is part of the interface
+	// because there are structs that wrap Writer and implement the Writer
+	// interface, that are not part of the storage package.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	SingleClearEngineKey(key EngineKey) error
 }
 
 // ReadWriter is the read/write interface to an engine's data.
@@ -559,21 +586,6 @@ type Engine interface {
 // Batch is the interface for batch specific operations.
 type Batch interface {
 	ReadWriter
-	// SingleClearEngineKey removes the most recent write to the item from the db
-	// with the given key. Whether older writes of the item will come back
-	// to life if not also removed with SingleClear is undefined. See the
-	// following:
-	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
-	// for details on the SingleDelete operation that this method invokes. Note
-	// that clear actually removes entries from the storage engine, rather than
-	// inserting MVCC tombstones. This is a low-level interface that must not be
-	// called from outside the storage package. It is part of the interface because
-	// there are structs that wrap Batch and implement the Batch interface, that are
-	// not part of the storage package.
-	// TODO(sumeer): try to remove it from this exported interface.
-	//
-	// It is safe to modify the contents of the arguments after it returns.
-	SingleClearEngineKey(key EngineKey) error
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.

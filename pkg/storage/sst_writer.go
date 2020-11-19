@@ -221,6 +221,11 @@ func (fw *SSTWriter) clear(key MVCCKey) error {
 	return fw.fw.Delete(fw.scratch)
 }
 
+// SingleClearEngineKey implements the Writer interface.
+func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
+	panic("unimplemented")
+}
+
 // ClearIterRange implements the Writer interface.
 func (fw *SSTWriter) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
 	if fw.fw == nil {
