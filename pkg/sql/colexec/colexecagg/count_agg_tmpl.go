@@ -135,11 +135,14 @@ func (a *count_COUNTKIND_AGGKINDAgg) Flush(outputIdx int) {
 	a.vec[outputIdx] = a.curAgg
 }
 
+// {{if eq "_AGGKIND" "Ordered"}}
 func (a *count_COUNTKIND_AGGKINDAgg) HandleEmptyInputScalar() {
 	// COUNT aggregates are special because they return zero in case of an
 	// empty input in the scalar context.
 	a.vec[0] = 0
 }
+
+// {{end}}
 
 type count_COUNTKIND_AGGKINDAggAlloc struct {
 	aggAllocBase

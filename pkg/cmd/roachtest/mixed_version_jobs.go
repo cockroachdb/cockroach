@@ -176,8 +176,11 @@ func checkForFailedJobsStep(ctx context.Context, t *test, u *versionUpgradeTest)
 	t.l.Printf("Checking for failed jobs.")
 
 	db := u.conn(ctx, t, 1)
+	// The ifnull is because the move to session-based job claims in 20.2 has left
+	// us without a populated coordinator_id in crdb_internal.jobs. We may start
+	// populating it with the claim_instance_id.
 	rows, err := db.Query(`
-SELECT job_id, job_type, description, status, error, coordinator_id
+SELECT job_id, job_type, description, status, error, ifnull(coordinator_id, 0)
 FROM [SHOW JOBS] WHERE status = $1 OR status = $2`,
 		jobs.StatusFailed, jobs.StatusReverting,
 	)

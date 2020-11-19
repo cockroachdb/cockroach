@@ -112,16 +112,16 @@ func (a *default_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	res, err := a.fn.Result()
-	if err != nil {
-		colexecerror.ExpectedError(err)
-	}
-	if res == tree.DNull {
-		a.nulls.SetNull(outputIdx)
-	} else {
-		coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
-	}
+	_SET_RESULT(a, outputIdx)
 }
+
+// {{if eq "_AGGKIND" "Ordered"}}
+func (a *default_AGGKINDAgg) HandleEmptyInputScalar() {
+	outputIdx := 0
+	_SET_RESULT(a, outputIdx)
+}
+
+// {{end}}
 
 func newDefault_AGGKINDAggAlloc(
 	allocator *colmem.Allocator,
@@ -248,7 +248,27 @@ func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupl
 	if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
 		colexecerror.ExpectedError(err)
 	}
-
 	// {{end}}
+
+	// {{/*
+} // */}}
+
+// {{/*
+// _SET_RESULT is a code snippet that sets the result obtained from a.fn in
+// position outputIdx of the output.
+func _SET_RESULT(a *default_AGGKINDAgg, outputIdx int) { // */}}
+	// {{define "setResult" -}}
+
+	res, err := a.fn.Result()
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+	if res == tree.DNull {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
+	}
+	// {{end}}
+
 	// {{/*
 } // */}}
