@@ -18,7 +18,6 @@ import (
 
 // delegateShowRanges implements the SHOW REGIONS statement.
 func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, error) {
-
 	if n.Database != "" {
 		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromDatabase)
 		return nil, unimplemented.New(
@@ -28,31 +27,42 @@ func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, er
 	}
 	sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromCluster)
 
-	// TODO (storm): Change this so that it doesn't use hard-coded strings and is
-	// more flexible for custom named sub-regions.
+	regionKey := "region"
+	zoneKeys := []string {"zone", "az", "availability_zone"}
+	zoneKeysSubClause := ""
+
+	// Build the zone sub-clause based on the zone keys that we're accepting above.
+	for i, zk := range zoneKeys {
+		zoneKeysSubClause += `
+						substring(locality,'`
+		zoneKeysSubClause += zk
+		zoneKeysSubClause += `=([^,]*)')`
+
+		// If we're not the last zone key, add a comma.
+		if i != len(zoneKeys) - 1 {
+			zoneKeysSubClause += `,`
+		}
+	}
+
+	// Form the final zoneClause to include each of the substrings in zoneSubClause.
+	zoneKeysClause := `
+			array_remove(
+				array_agg(
+					COALESCE(` + zoneKeysSubClause + `
+					)
+				),
+				NULL
+			)`
+
 	query := `
 SELECT
 	region, zones
 FROM
 	(
 		SELECT
-			substring(locality, 'region=([^,]*)') AS region,
-			array_remove(
-				array_agg(
-					COALESCE(
-						substring(locality, 'az=([^,]*)'),
-						substring(
-							locality,
-							'availability-zone=([^,]*)'),
-						substring(
-							locality,
-							'zone=([^,]*)'
-						)
-					)
-				),
-				NULL
-			)
-				AS zones
+			substring(locality, '` + regionKey + `=([^,]*)') AS region,` +
+			zoneKeysClause +
+`			AS zones
 		FROM
 			crdb_internal.kv_node_status
 		GROUP BY
