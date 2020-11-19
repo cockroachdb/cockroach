@@ -365,11 +365,9 @@ func NewExternalHashJoiner(
 		// half for the right side.
 		// TODO(yuzefovich): figure out whether we should care about
 		// hj.numBuckets being a power of two (finalizeHash step is faster if so).
-		numBuckets:                     maxNumberActivePartitions / 2,
-		partitionsToJoinUsingInMemHash: make(map[int]*externalHJPartitionInfo),
-		partitionsToJoinUsingSortMerge: make([]int, 0),
-		leftJoinerInput:                leftJoinerInput,
-		rightJoinerInput:               rightJoinerInput,
+		numBuckets:       maxNumberActivePartitions / 2,
+		leftJoinerInput:  leftJoinerInput,
+		rightJoinerInput: rightJoinerInput,
 		// Note that the external hash joiner is responsible for making sure
 		// that partitions to join using in-memory hash joiner fit under the
 		// limit, so we use the same unlimited allocator for both
@@ -390,23 +388,6 @@ func NewExternalHashJoiner(
 	if ehj.memState.maxRightPartitionSizeToJoin < externalHJMinimalMaxRightPartitionSize {
 		ehj.memState.maxRightPartitionSizeToJoin = externalHJMinimalMaxRightPartitionSize
 	}
-	ehj.scratch.leftBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.left.sourceTypes, coldata.BatchSize())
-	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.left.sourceTypes, coldata.BatchSize())
-	sameSourcesSchema := len(spec.left.sourceTypes) == len(spec.right.sourceTypes)
-	for i, leftType := range spec.left.sourceTypes {
-		if i < len(spec.right.sourceTypes) && !leftType.Identical(spec.right.sourceTypes[i]) {
-			sameSourcesSchema = false
-		}
-	}
-	if sameSourcesSchema {
-		// The schemas of both sources are the same, so we can reuse the left
-		// scratch batch.
-		ehj.scratch.rightBatch = ehj.scratch.leftBatch
-		ehj.recursiveScratch.rightBatch = ehj.recursiveScratch.leftBatch
-	} else {
-		ehj.scratch.rightBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.right.sourceTypes, coldata.BatchSize())
-		ehj.recursiveScratch.rightBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.right.sourceTypes, coldata.BatchSize())
-	}
 	ehj.testingKnobs.numForcedRepartitions = numForcedRepartitions
 	ehj.testingKnobs.delegateFDAcquisitions = delegateFDAcquisitions
 	return ehj
@@ -415,6 +396,28 @@ func NewExternalHashJoiner(
 func (hj *externalHashJoiner) Init() {
 	hj.inputOne.Init()
 	hj.inputTwo.Init()
+	hj.partitionsToJoinUsingInMemHash = make(map[int]*externalHJPartitionInfo)
+	// If we are initializing the external hash joiner, it means that we had to
+	// fallback from the in-memory hash joiner since the inputs had more tuples
+	// that could fit into the memory, and, therefore, it makes sense to
+	// instantiate the batches with maximum capacity.
+	hj.scratch.leftBatch = hj.unlimitedAllocator.NewMemBatchWithFixedCapacity(hj.spec.left.sourceTypes, coldata.BatchSize())
+	hj.recursiveScratch.leftBatch = hj.unlimitedAllocator.NewMemBatchWithFixedCapacity(hj.spec.left.sourceTypes, coldata.BatchSize())
+	sameSourcesSchema := len(hj.spec.left.sourceTypes) == len(hj.spec.right.sourceTypes)
+	for i, leftType := range hj.spec.left.sourceTypes {
+		if i < len(hj.spec.right.sourceTypes) && !leftType.Identical(hj.spec.right.sourceTypes[i]) {
+			sameSourcesSchema = false
+		}
+	}
+	if sameSourcesSchema {
+		// The schemas of both sources are the same, so we can reuse the left
+		// scratch batch.
+		hj.scratch.rightBatch = hj.scratch.leftBatch
+		hj.recursiveScratch.rightBatch = hj.recursiveScratch.leftBatch
+	} else {
+		hj.scratch.rightBatch = hj.unlimitedAllocator.NewMemBatchWithFixedCapacity(hj.spec.right.sourceTypes, coldata.BatchSize())
+		hj.recursiveScratch.rightBatch = hj.unlimitedAllocator.NewMemBatchWithFixedCapacity(hj.spec.right.sourceTypes, coldata.BatchSize())
+	}
 	// In the join phase, hash join operator will use the default init hash
 	// value, so in order to use a "different" hash function in the partitioning
 	// phase we use a different init hash value.
