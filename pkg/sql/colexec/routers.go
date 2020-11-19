@@ -152,6 +152,11 @@ type routerOutputOp struct {
 		blocked   bool
 	}
 
+	// pendingBatchCapacity indicates the capacity which the new mu.pendingBatch
+	// should be allocated with. It'll increase dynamically until
+	// coldata.BatchSize().
+	pendingBatchCapacity int
+
 	testingKnobs routerOutputOpTestingKnobs
 }
 
@@ -411,7 +416,22 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 
 	for toAppend := len(selection); toAppend > 0; {
 		if o.mu.pendingBatch == nil {
-			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithFixedCapacity(o.types, coldata.BatchSize())
+			if o.pendingBatchCapacity < coldata.BatchSize() {
+				// We still haven't reached the maximum capacity, so let's
+				// calculate the next capacity to use.
+				if o.pendingBatchCapacity == 0 {
+					// This is the first set of tuples that are added to this
+					// router output, so we'll allocate the batch with just
+					// enough capacity to fill all of these tuples.
+					o.pendingBatchCapacity = len(selection)
+				} else {
+					o.pendingBatchCapacity *= 2
+					if o.pendingBatchCapacity > coldata.BatchSize() {
+						o.pendingBatchCapacity = coldata.BatchSize()
+					}
+				}
+			}
+			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithFixedCapacity(o.types, o.pendingBatchCapacity)
 		}
 		available := o.mu.pendingBatch.Capacity() - o.mu.pendingBatch.Length()
 		numAppended := toAppend
@@ -478,6 +498,7 @@ func (o *routerOutputOp) resetForTests(ctx context.Context) {
 	o.mu.data.reset(ctx)
 	o.mu.numUnread = 0
 	o.mu.blocked = false
+	o.pendingBatchCapacity = 0
 }
 
 // hashRouterDrainState is a state that specifically describes the hashRouter's

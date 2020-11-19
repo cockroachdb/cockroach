@@ -114,14 +114,9 @@ type tupleHashDistributor struct {
 }
 
 func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDistributor {
-	selections := make([][]int, numOutputs)
-	for i := range selections {
-		selections[i] = make([]int, 0, coldata.BatchSize())
-	}
 	return &tupleHashDistributor{
 		initHashValue: initHashValue,
-		buckets:       make([]uint64, coldata.BatchSize()),
-		selections:    selections,
+		selections:    make([][]int, numOutputs),
 	}
 }
 
@@ -129,6 +124,11 @@ func (d *tupleHashDistributor) distribute(
 	ctx context.Context, b coldata.Batch, hashCols []uint32,
 ) [][]int {
 	n := b.Length()
+	if cap(d.buckets) < n {
+		d.buckets = make([]uint64, n)
+	} else {
+		d.buckets = d.buckets[:n]
+	}
 	initHash(d.buckets, n, d.initHashValue)
 
 	// Check if we received a batch with more tuples than the current
@@ -171,8 +171,11 @@ func (d *tupleHashDistributor) resetNumOutputs(numOutputs int) {
 		d.selections = d.selections[:numOutputs]
 		return
 	}
-	d.selections = d.selections[:cap(d.selections)]
-	for len(d.selections) < numOutputs {
-		d.selections = append(d.selections, make([]int, 0, coldata.BatchSize()))
+	// We need to allocate new selections slice, but we also want to keep all
+	// old selection vectors and reuse them if possible.
+	oldSelections := d.selections
+	d.selections = make([][]int, numOutputs)
+	for i := range oldSelections {
+		d.selections[i] = oldSelections[i]
 	}
 }
