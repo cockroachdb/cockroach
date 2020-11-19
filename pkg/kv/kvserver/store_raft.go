@@ -314,6 +314,7 @@ func (s *Store) processRaftSnapshotRequest(
 		if err := r.stepRaftGroup(&snapHeader.RaftMessageRequest); err != nil {
 			return roachpb.NewError(err)
 		}
+
 		_, expl, err := r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 		maybeFatalOnRaftReadyErr(ctx, expl, err)
 		removePlaceholder = false

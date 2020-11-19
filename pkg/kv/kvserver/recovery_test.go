@@ -2,15 +2,16 @@ package kvserver_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/server"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -49,39 +50,41 @@ func TestRecoverRangeWithNoReplicas(t *testing.T) {
 	require.Error(t, srv.DB().Put(cCtx, k, "baz"))
 	require.Equal(t, context.DeadlineExceeded, cCtx.Err())
 
+	// Get the store on the designated survivor (nodeID 1).
 	var store *kvserver.Store
 	require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
-		if store == nil {
-			store = inner
-		}
+		store = inner
 		return nil
 	}))
+	if store == nil {
+		log.Fatal(ctx, "could not find store on node 1.")
+	}
 
 	storeID, nodeID := store.Ident.StoreID, store.Ident.NodeID
 
-	// Update range descriptor.
+	// Update range descriptor and update meta ranges for the descriptor.
 	// Remove dead replica.
 	deadReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().All()...)
 	for _, rd := range deadReplicas {
+		log.Info(ctx, fmt.Sprintf("removed %v %v", rd.NodeID, rd.StoreID))
 		desc.RemoveReplica(rd.NodeID, rd.StoreID)
 	}
 	// Add new replica.
 	desc.AddReplica(nodeID, storeID, roachpb.VOTER_FULL)
-	// Update meta1 and meta2 range addressing records for the descriptor.
+	log.Info(ctx, fmt.Sprintf("added %v %v", nodeID, storeID))
+	// Write to meta1 and meta2.
 	var b kv.Batch
 	require.NoError(t, kvserver.UpdateRangeAddressing(&b, &desc))
 	require.NoError(t, srv.DB().NewTxn(ctx, "update range descriptor").Run(ctx, &b))
 
-	// Call UnsafeHealRange to apply a new snapshot to new node.
+	// Call UnsafeHealRange to apply a new snapshot to the designated survivor.
 	_, err = srv.Node().(*server.Node).UnsafeHealRange(
 		ctx,
 		&roachpb.UnsafeHealRangeRequest{Desc: desc, NodeID: int32(nodeID), StoreID: int32(storeID)},
 	)
 	require.NoError(t, err)
 
-	log.Info(ctx, "snapshot applied")
+	log.Info(ctx, "unsafe heal range request sent")
 
 	require.NoError(t, srv.DB().Put(ctx, k, "baz"))
-
-	log.Info(ctx, "put ok")
 }
