@@ -5,12 +5,6 @@ set -euxo pipefail
 source "$(dirname "${0}")/teamcity-support.sh"
 
 
-if [[ -n "${PUBLISH_LATEST}" && -n "$PRE_RELEASE" ]]; then
-  echo "Invalid parameter combination: PUBLISH_LATEST and PRE_RELEASE can't both be set."
-  exit 6
-fi
-
-
 tc_start_block "Variable Setup"
 export BUILDER_HIDE_GOPATH_SRC=1
 
@@ -144,9 +138,11 @@ tc_end_block "Tag docker image as latest-RELEASE_BRANCH"
 
 
 tc_start_block "Tag docker image as latest"
-# Only push the "latest" tag for our most recent release branch.
+# Only push the "latest" tag for our most recent release branch and for the
+# latest unstable release
 # https://github.com/cockroachdb/cockroach/issues/41067
-if [[ -n "${PUBLISH_LATEST}" && -z "$PRE_RELEASE" ]]; then
+# https://github.com/cockroachdb/cockroach/issues/48309
+if [[ -n "${PUBLISH_LATEST}" ]]; then
   docker push "${dockerhub_repository}:latest"
 else
   echo "The ${dockerhub_repository}:latest docker image tag was _not_ pushed."
