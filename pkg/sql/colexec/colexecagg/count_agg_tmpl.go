@@ -50,11 +50,11 @@ type count_COUNTKIND_AGGKINDAgg struct {
 
 var _ AggregateFunc = &count_COUNTKIND_AGGKINDAgg{}
 
-func (a *count_COUNTKIND_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *count_COUNTKIND_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.Init(groups, vec)
+	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.vec = vec.Int64()
 }

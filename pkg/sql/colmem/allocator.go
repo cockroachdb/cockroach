@@ -45,6 +45,9 @@ func selVectorSize(capacity int) int64 {
 }
 
 func getVecMemoryFootprint(vec coldata.Vec) int64 {
+	if vec == nil {
+		return 0
+	}
 	switch vec.CanonicalTypeFamily() {
 	case types.BytesFamily:
 		return int64(vec.Bytes().Size())

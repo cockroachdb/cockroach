@@ -38,10 +38,9 @@ type boolAndHashAgg struct {
 
 var _ AggregateFunc = &boolAndHashAgg{}
 
-func (a *boolAndHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *boolAndHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec.Bool()
-	a.curAgg = true
 }
 
 func (a *boolAndHashAgg) Compute(
@@ -102,6 +101,7 @@ func (a *boolAndHashAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
+	f.curAgg = true
 	return f
 }
 
@@ -123,10 +123,9 @@ type boolOrHashAgg struct {
 
 var _ AggregateFunc = &boolOrHashAgg{}
 
-func (a *boolOrHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *boolOrHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec.Bool()
-	a.curAgg = false
 }
 
 func (a *boolOrHashAgg) Compute(
@@ -187,5 +186,6 @@ func (a *boolOrHashAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
+	f.curAgg = false
 	return f
 }

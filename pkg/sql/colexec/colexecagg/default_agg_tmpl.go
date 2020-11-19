@@ -56,11 +56,11 @@ type default_AGGKINDAgg struct {
 
 var _ AggregateFunc = &default_AGGKINDAgg{}
 
-func (a *default_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *default_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.Init(groups, vec)
+	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.vec = vec
 }

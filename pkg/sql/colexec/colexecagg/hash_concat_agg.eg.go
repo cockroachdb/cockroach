@@ -37,8 +37,8 @@ type concatHashAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-func (a *concatHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *concatHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bytes()
 }

@@ -109,8 +109,8 @@ type minBoolOrderedAgg struct {
 
 var _ AggregateFunc = &minBoolOrderedAgg{}
 
-func (a *minBoolOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minBoolOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bool()
 }
@@ -374,8 +374,8 @@ type minBytesOrderedAgg struct {
 
 var _ AggregateFunc = &minBytesOrderedAgg{}
 
-func (a *minBytesOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minBytesOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bytes()
 }
@@ -615,8 +615,8 @@ type minDecimalOrderedAgg struct {
 
 var _ AggregateFunc = &minDecimalOrderedAgg{}
 
-func (a *minDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Decimal()
 }
@@ -848,8 +848,8 @@ type minInt16OrderedAgg struct {
 
 var _ AggregateFunc = &minInt16OrderedAgg{}
 
-func (a *minInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minInt16OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int16()
 }
@@ -1125,8 +1125,8 @@ type minInt32OrderedAgg struct {
 
 var _ AggregateFunc = &minInt32OrderedAgg{}
 
-func (a *minInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minInt32OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int32()
 }
@@ -1402,8 +1402,8 @@ type minInt64OrderedAgg struct {
 
 var _ AggregateFunc = &minInt64OrderedAgg{}
 
-func (a *minInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minInt64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int64()
 }
@@ -1679,8 +1679,8 @@ type minFloat64OrderedAgg struct {
 
 var _ AggregateFunc = &minFloat64OrderedAgg{}
 
-func (a *minFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Float64()
 }
@@ -1988,8 +1988,8 @@ type minTimestampOrderedAgg struct {
 
 var _ AggregateFunc = &minTimestampOrderedAgg{}
 
-func (a *minTimestampOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minTimestampOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Timestamp()
 }
@@ -2249,8 +2249,8 @@ type minIntervalOrderedAgg struct {
 
 var _ AggregateFunc = &minIntervalOrderedAgg{}
 
-func (a *minIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Interval()
 }
@@ -2482,8 +2482,8 @@ type minDatumOrderedAgg struct {
 
 var _ AggregateFunc = &minDatumOrderedAgg{}
 
-func (a *minDatumOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *minDatumOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Datum()
 }
@@ -2737,8 +2737,8 @@ type maxBoolOrderedAgg struct {
 
 var _ AggregateFunc = &maxBoolOrderedAgg{}
 
-func (a *maxBoolOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxBoolOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bool()
 }
@@ -3002,8 +3002,8 @@ type maxBytesOrderedAgg struct {
 
 var _ AggregateFunc = &maxBytesOrderedAgg{}
 
-func (a *maxBytesOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxBytesOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bytes()
 }
@@ -3243,8 +3243,8 @@ type maxDecimalOrderedAgg struct {
 
 var _ AggregateFunc = &maxDecimalOrderedAgg{}
 
-func (a *maxDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Decimal()
 }
@@ -3476,8 +3476,8 @@ type maxInt16OrderedAgg struct {
 
 var _ AggregateFunc = &maxInt16OrderedAgg{}
 
-func (a *maxInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxInt16OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int16()
 }
@@ -3753,8 +3753,8 @@ type maxInt32OrderedAgg struct {
 
 var _ AggregateFunc = &maxInt32OrderedAgg{}
 
-func (a *maxInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxInt32OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int32()
 }
@@ -4030,8 +4030,8 @@ type maxInt64OrderedAgg struct {
 
 var _ AggregateFunc = &maxInt64OrderedAgg{}
 
-func (a *maxInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxInt64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int64()
 }
@@ -4307,8 +4307,8 @@ type maxFloat64OrderedAgg struct {
 
 var _ AggregateFunc = &maxFloat64OrderedAgg{}
 
-func (a *maxFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Float64()
 }
@@ -4616,8 +4616,8 @@ type maxTimestampOrderedAgg struct {
 
 var _ AggregateFunc = &maxTimestampOrderedAgg{}
 
-func (a *maxTimestampOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxTimestampOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Timestamp()
 }
@@ -4877,8 +4877,8 @@ type maxIntervalOrderedAgg struct {
 
 var _ AggregateFunc = &maxIntervalOrderedAgg{}
 
-func (a *maxIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Interval()
 }
@@ -5110,8 +5110,8 @@ type maxDatumOrderedAgg struct {
 
 var _ AggregateFunc = &maxDatumOrderedAgg{}
 
-func (a *maxDatumOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *maxDatumOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Datum()
 }

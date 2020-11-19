@@ -37,8 +37,8 @@ type concatOrderedAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-func (a *concatOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *concatOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bytes()
 }

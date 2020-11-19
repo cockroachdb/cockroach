@@ -34,8 +34,8 @@ type countRowsOrderedAgg struct {
 
 var _ AggregateFunc = &countRowsOrderedAgg{}
 
-func (a *countRowsOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *countRowsOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec.Int64()
 }
 
@@ -127,8 +127,8 @@ type countOrderedAgg struct {
 
 var _ AggregateFunc = &countOrderedAgg{}
 
-func (a *countOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *countOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec.Int64()
 }
 

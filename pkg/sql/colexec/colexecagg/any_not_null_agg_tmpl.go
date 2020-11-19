@@ -84,11 +84,11 @@ type anyNotNull_TYPE_AGGKINDAgg struct {
 
 var _ AggregateFunc = &anyNotNull_TYPE_AGGKINDAgg{}
 
-func (a *anyNotNull_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *anyNotNull_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.Init(groups, vec)
+	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.vec = vec
 	a.col = vec.TemplateType()
