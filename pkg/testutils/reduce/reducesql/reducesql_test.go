@@ -41,11 +41,15 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		args := base.TestServerArgs{
 			Insecure: true,
 		}
-		serv := server.TestServerFactory.New(args).(*server.TestServer)
+		ts, err := server.TestServerFactory.New(args)
+		if err != nil {
+			panic(err)
+		}
+		serv := ts.(*server.TestServer)
+		defer serv.Stopper().Stop(ctx)
 		if err := serv.Start(); err != nil {
 			panic(err)
 		}
-		defer serv.Stopper().Stop(ctx)
 
 		options := url.Values{}
 		options.Add("sslmode", "disable")
