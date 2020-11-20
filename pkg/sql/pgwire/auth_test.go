@@ -109,6 +109,7 @@ import (
 //
 func TestAuthenticationAndHBARules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "takes >1min under race")
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		hbaRunTest(t, insecure)

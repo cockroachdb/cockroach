@@ -231,6 +231,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 func TestParallel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	skip.UnderRace(t, "takes >1 min under race")
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
