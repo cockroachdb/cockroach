@@ -1029,10 +1029,21 @@ func (c *CustomFuncs) DatumsEqual(first, second tree.Datum) bool {
 //
 // ----------------------------------------------------------------------
 
+// DuplicateScan constructs a new Scan with new table and column IDs. Only the
+// Index, Flags, and Locking fields are copied from the input Scan. Panics if s
+// is not a ScanExpr.
+func (c *CustomFuncs) DuplicateScan(s memo.RelExpr) memo.RelExpr {
+	scan, ok := s.(*memo.ScanExpr)
+	if !ok {
+		panic(errors.AssertionFailedf("s must be a ScanExpr"))
+	}
+	return c.f.ConstructScan(c.DuplicateScanPrivate(&scan.ScanPrivate))
+}
+
 // DuplicateScanPrivate constructs a new ScanPrivate with new table and column
-// IDs. Only the Index, Flags and Locking fields are copied from the old
-// ScanPrivate, so the new ScanPrivate will not have constraints even if the old
-// one did.
+// IDs. Only the Index, Flags, and Locking fields are copied from the input
+// ScanPrivate, so the new ScanPrivate will not have constraints even if the
+// input ScanPrivate did.
 func (c *CustomFuncs) DuplicateScanPrivate(sp *memo.ScanPrivate) *memo.ScanPrivate {
 	md := c.mem.Metadata()
 	tabMeta := md.TableMeta(sp.Table)

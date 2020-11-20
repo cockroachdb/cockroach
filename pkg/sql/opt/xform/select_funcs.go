@@ -1573,7 +1573,7 @@ func (c *CustomFuncs) ExprPairForSplitDisjunction(
 	return ExprPair{}
 }
 
-// buildExprPairForSplitDisjunction groups disjuction sub-expressions into an
+// buildExprPairForSplitDisjunction groups disjunction sub-expressions into an
 // "interesting" ExprPair.
 //
 // An "interesting" ExprPair is one where:
@@ -1739,7 +1739,8 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 }
 
 // MapScanFilterCols returns a new FiltersExpr with all the src column IDs in
-// the input expression replaced with column IDs in dst.
+// the input expression replaced with column IDs in dst. Panics if either src or
+// dst are not ScanExprs.
 //
 // NOTE: Every ColumnID in src must map to the a ColumnID in dst with the same
 // relative position in the ColSets. For example, if src and dst are (1, 5, 6)
@@ -1748,10 +1749,19 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 //   1 => 7
 //   5 => 12
 //   6 => 15
+//
 func (c *CustomFuncs) MapScanFilterCols(
-	filters memo.FiltersExpr, src *memo.ScanPrivate, dst *memo.ScanPrivate,
+	filters memo.FiltersExpr, src memo.RelExpr, dst memo.RelExpr,
 ) memo.FiltersExpr {
-	return c.mapFilterCols(filters, src.Cols, dst.Cols)
+	srcScan, ok := src.(*memo.ScanExpr)
+	if !ok {
+		panic(errors.AssertionFailedf("src must be a ScanExpr"))
+	}
+	dstScan, ok := dst.(*memo.ScanExpr)
+	if !ok {
+		panic(errors.AssertionFailedf("dst must be a ScanExpr"))
+	}
+	return c.mapFilterCols(filters, srcScan.Cols, dstScan.Cols)
 }
 
 // mapFilterCols returns a new FiltersExpr with all the src column IDs in
@@ -1788,30 +1798,42 @@ func (c *CustomFuncs) mapFilterCols(
 	return *newFilters
 }
 
-// MakeSetPrivateForSplitDisjunction constructs a new SetPrivate with column sets
-// from the left and right ScanPrivate. We use the same ColList for the
-// LeftCols and OutCols of the SetPrivate because we've used the original
-// ScanPrivate column IDs for the left ScanPrivate and those are safe to use as
-// output column IDs of the Union expression.
-func (c *CustomFuncs) MakeSetPrivateForSplitDisjunction(
-	left, right *memo.ScanPrivate,
-) *memo.SetPrivate {
-	leftAndOutCols := opt.ColSetToList(left.Cols)
+// MakeSelect constructs a select with the given input and filters. This can be
+// used to construct a Select expression in the match pattern of a rule.
+func (c *CustomFuncs) MakeSelect(input memo.RelExpr, filters memo.FiltersExpr) memo.RelExpr {
+	return c.e.f.ConstructSelect(input, filters)
+}
+
+// MakeSetPrivateForSplitDisjunction constructs a new SetPrivate with column
+// sets from the left and right Scan. We use the same ColList for the LeftCols
+// and OutCols of the SetPrivate because we've used the original Scan's column
+// IDs for the left scan and those are safe to use as output column IDs of the
+// Union expression. Panics if either left or right are not ScanExprs.
+func (c *CustomFuncs) MakeSetPrivateForSplitDisjunction(left, right memo.RelExpr) *memo.SetPrivate {
+	leftScan, ok := left.(*memo.ScanExpr)
+	if !ok {
+		panic(errors.AssertionFailedf("left must be a ScanExpr"))
+	}
+	rightScan, ok := right.(*memo.ScanExpr)
+	if !ok {
+		panic(errors.AssertionFailedf("right must be a ScanExpr"))
+	}
+	leftAndOutCols := opt.ColSetToList(leftScan.Cols)
 	return &memo.SetPrivate{
 		LeftCols:  leftAndOutCols,
-		RightCols: opt.ColSetToList(right.Cols),
+		RightCols: opt.ColSetToList(rightScan.Cols),
 		OutCols:   leftAndOutCols,
 	}
 }
 
-// AddPrimaryKeyColsToScanPrivate creates a new ScanPrivate that is the same as
-// the input ScanPrivate, but has primary keys added to the ColSet.
-func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo.ScanPrivate {
+// MakeScanAddPrimaryKeyCols creates a new Scan with the same ScanPrivate as the
+// input, but with the primary key columns of the table added to the ColSet.
+func (c *CustomFuncs) MakeScanAddPrimaryKeyCols(sp *memo.ScanPrivate) memo.RelExpr {
 	keyCols := c.PrimaryKeyCols(sp.Table)
-	return &memo.ScanPrivate{
+	return c.e.f.ConstructScan(&memo.ScanPrivate{
 		Table:   sp.Table,
 		Cols:    sp.Cols.Union(keyCols),
 		Flags:   sp.Flags,
 		Locking: sp.Locking,
-	}
+	})
 }

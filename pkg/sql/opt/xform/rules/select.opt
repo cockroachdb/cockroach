@@ -105,12 +105,25 @@
 # the Or expression. The execution plan can use both indexes to satisfy both
 # sides of the disjunction and union the results together.
 #
-# Note that this rule only matches Selects with canonical scans. Therefore scan
-# constraints do not need to be duplicated in the left and right scans of the
-# union.
+# The actual expression generated is a (DistinctOn (UnionAll ...)). This is more
+# performant than a (Union ...) when there are many non-key columns of the
+# expression. During execution a Union expression has to store and compare all
+# columns when de-duplicating rows from its inputs. The generated (DistinctOn
+# (UnionAll ...)) de-duplicates rows during the DistinctOn expression, where
+# only the key columns are compared.
 #
-# Also note that this rule only matches Selects that have strict keys. See
-# SplitDisjunctionAddKey which handles Selects that do not have strict keys.
+# This rule only matches when the following conditions are true:
+#
+#   - The Scan within the Select is a canonical scan. Because of this, scan
+#     constraints do no need to be duplicated in the left and right scans of the
+#     UnionAll.
+#   - The Select's output column include a strict key. This is required for
+#     generating the DistinctOn expression. SplitDisjunctionAddKey is a similar
+#     rule that matches Selects without strict keys.
+#   - The newly constructed Selects on the left and right side of the UnionAll
+#     have non-zero cardinality. This avoids constructing unnecessary UnionAlls
+#     which normalize to Value expressions with zero rows.
+#
 [SplitDisjunction, Explore]
 (Select
     $input:(Scan
@@ -123,74 +136,50 @@
                 $scanPrivate
                 $filters
             )
+        ) &
+        ^(HasZeroRows
+            $leftSelect:(MakeSelect
+                $input
+                (ReplaceFiltersItem
+                    $filters
+                    (ExprPairFiltersItemToReplace $pair)
+                    (ExprPairLeft $pair)
+                )
+            )
+        ) &
+        ^(HasZeroRows
+            $rightSelect:(MakeSelect
+                $rightScan:(DuplicateScan $input)
+                (MapScanFilterCols
+                    (ReplaceFiltersItem
+                        $filters
+                        (ExprPairFiltersItemToReplace $pair)
+                        (ExprPairRight $pair)
+                    )
+                    $input
+                    $rightScan
+                )
+            )
         )
 )
 =>
 (DistinctOn
     (UnionAll
-        (Select
-            $input
-            (ReplaceFiltersItem
-                $filters
-                (ExprPairFiltersItemToReplace $pair)
-                (ExprPairLeft $pair)
-            )
-        )
-        (Select
-            (Scan
-                $rightScanPrivate:(DuplicateScanPrivate
-                    $scanPrivate
-                )
-            )
-            (MapScanFilterCols
-                (ReplaceFiltersItem
-                    $filters
-                    (ExprPairFiltersItemToReplace $pair)
-                    (ExprPairRight $pair)
-                )
-                $scanPrivate
-                $rightScanPrivate
-            )
-        )
-        (MakeSetPrivateForSplitDisjunction
-            $scanPrivate
-            $rightScanPrivate
-        )
+        $leftSelect
+        $rightSelect
+        (MakeSetPrivateForSplitDisjunction $input $rightScan)
     )
     (MakeAggCols ConstAgg (NonKeyCols $input))
     (MakeGrouping (KeyCols $input) (EmptyOrdering))
 )
 
-# SplitDisjunctionAddKey performs a transformation similar to
-# SplitDisjunction, but it handles the special case when the original Scan
-# does not have a strict key in its ColSet.
+# SplitDisjunctionAddKey performs a transformation similar to SplitDisjunction,
+# but it handles the special case when the original Scan does not have a strict
+# key in its output ColSet. The generated DistinctOn requires strict key columns
+# in order to de-duplicate rows.
 #
-# For this special case, the replace pattern adds primary key columns to the
-# original Scan ColSet. It also adds a Project to remove those columns after the
-# Union operation. Inclusion of the primary keys is required to prevent the
-# generated Union from de-duplicating rows that have the same selected values.
-#
-# To understand why the addition of the primary key columns to the Scans is
-# necessary, consider the following:
-#
-#     CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT)
-#     INSERT INTO t VALUES (1, 1, 3)
-#     INSERT INTO t VALUES (2, 1, 3)
-#     SELECT a, b FROM t WHERE a = 1 OR b = 3
-#
-# The expected result of the Select query is 2 rows, with values (1, 3). Now
-# consider the following query:
-#
-#     SELECT a, b FROM t WHERE a = 1
-#     UNION
-#     SELECT a, b FROM t WHERE b = 3
-#
-# Union de-duplicates all tuples with the same set of values. So, this
-# query returns only a single row.
-#
-# By adding a primary key in the output columns, each input row to the Union is
-# guaranteed to be unique. This prevents incorrect de-duplication and guarantees
-# that the newly generated plan is equivalent to the original plan.
+# The replace pattern adds primary key columns to the original Scan ColSet. It
+# also adds a Project to remove those columns after the DistinctOn expression.
 [SplitDisjunctionAddKey, Explore]
 (Select
     $input:(Scan
@@ -203,17 +192,11 @@
                 $scanPrivate
                 $filters
             )
-        )
-)
-=>
-(Project
-    (DistinctOn
-        (UnionAll
-            (Select
-                $leftScan:(Scan
-                    $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate
-                        $scanPrivate
-                    )
+        ) &
+        ^(HasZeroRows
+            $leftSelect:(MakeSelect
+                $leftScan:(MakeScanAddPrimaryKeyCols
+                    $scanPrivate
                 )
                 (ReplaceFiltersItem
                     $filters
@@ -221,25 +204,31 @@
                     (ExprPairLeft $pair)
                 )
             )
-            (Select
-                (Scan
-                    $rightScanPrivate:(DuplicateScanPrivate
-                        $leftScanPrivate
-                    )
-                )
+        ) &
+        ^(HasZeroRows
+            $rightSelect:(MakeSelect
+                $rightScan:(DuplicateScan $leftScan)
                 (MapScanFilterCols
                     (ReplaceFiltersItem
                         $filters
                         (ExprPairFiltersItemToReplace $pair)
                         (ExprPairRight $pair)
                     )
-                    $leftScanPrivate
-                    $rightScanPrivate
+                    $leftScan
+                    $rightScan
                 )
             )
+        )
+)
+=>
+(Project
+    (DistinctOn
+        (UnionAll
+            $leftSelect
+            $rightSelect
             (MakeSetPrivateForSplitDisjunction
-                $leftScanPrivate
-                $rightScanPrivate
+                $leftScan
+                $rightScan
             )
         )
         (MakeAggCols ConstAgg (NonKeyCols $leftScan))
