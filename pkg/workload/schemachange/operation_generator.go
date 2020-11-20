@@ -44,7 +44,6 @@ type operationGeneratorParams struct {
 // The OperationBuilder has the sole responsibility of generating ops
 type operationGenerator struct {
 	params               *operationGeneratorParams
-	screenForExecErrors  bool
 	expectedExecErrors   errorCodeSet
 	expectedCommitErrors errorCodeSet
 
@@ -64,7 +63,6 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 
 // Reset internal state used per operation within a transaction
 func (og *operationGenerator) resetOpState() {
-	og.screenForExecErrors = false
 	og.expectedExecErrors.reset()
 }
 
@@ -79,50 +77,6 @@ func (og *operationGenerator) resetTxnState() {
 
 //go:generate stringer -type=opType
 type opType int
-
-// opsWithErrorScreening stores ops which currently check for exec
-// errors and update expectedExecErrors in the op generator state
-var opsWithExecErrorScreening = map[opType]bool{
-	addColumn: true,
-
-	createIndex:    true,
-	createSequence: true,
-	createTable:    true,
-	createTableAs:  true,
-	createView:     true,
-	createEnum:     true,
-	createSchema:   true,
-
-	dropColumn:        true,
-	dropColumnDefault: true,
-	dropColumnNotNull: true,
-	dropColumnStored:  true,
-	dropConstraint:    true,
-	dropIndex:         true,
-	dropSequence:      true,
-	dropTable:         true,
-	dropView:          true,
-	dropSchema:        true,
-
-	renameColumn:   true,
-	renameIndex:    true,
-	renameSequence: true,
-	renameTable:    true,
-	renameView:     true,
-
-	setColumnDefault: true,
-	setColumnNotNull: true,
-	setColumnType:    true,
-
-	insertRow: true,
-}
-
-func opScreensForExecErrors(op opType) bool {
-	if _, exists := opsWithExecErrorScreening[op]; exists {
-		return true
-	}
-	return false
-}
 
 const (
 	addColumn     opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
@@ -251,14 +205,10 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 			continue
 		}
 
-		if opScreensForExecErrors(op) {
-			og.screenForExecErrors = true
-
-			// Screen for schema change after write in the same transaction.
-			if op != insertRow {
-				if _, previous := og.opsInTxn[insertRow]; previous {
-					og.expectedExecErrors.add(pgcode.FeatureNotSupported)
-				}
+		// Screen for schema change after write in the same transaction.
+		if op != insertRow {
+			if _, previous := og.opsInTxn[insertRow]; previous {
+				og.expectedExecErrors.add(pgcode.FeatureNotSupported)
 			}
 		}
 
