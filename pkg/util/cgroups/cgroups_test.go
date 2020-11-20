@@ -67,6 +67,15 @@ func TestCgroupsGetMemory(t *testing.T) {
 			limit: 2936016896,
 		},
 		{
+			name: "fetches the limit for cgroup v1 when the NS relative paths of mount and cgroup don't match",
+			paths: map[string]string{
+				"/proc/self/cgroup":                             v1CgroupWithMemoryControllerNS,
+				"/proc/self/mountinfo":                          v1MountsWithMemControllerNS,
+				"/sys/fs/cgroup/memory/cgroup_test/memory.stat": v1MemoryStat,
+			},
+			limit: 2936016896,
+		},
+		{
 			name: "fails when the stat file is missing for cgroup v2",
 			paths: map[string]string{
 				"/proc/self/cgroup":    v2CgroupWithMemoryController,
@@ -161,6 +170,59 @@ func TestCgroupsGetCPU(t *testing.T) {
 				"/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us":  "67890",
 				"/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage_sys":  "123",
 				"/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage_user": "456",
+			},
+			quota:  int64(12345),
+			period: int64(67890),
+			system: uint64(123),
+			user:   uint64(456),
+		},
+		{
+			name: "fetches the cpu quota and usage for cgroup v1 where the mount and cgroup path don't match",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v1CgroupWithCPUControllerNS,
+				"/proc/self/mountinfo": v1MountsWithCPUControllerNS,
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpu.cfs_quota_us":   "12345",
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpu.cfs_period_us":  "67890",
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpuacct.usage_sys":  "123",
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpuacct.usage_user": "456",
+			},
+			quota:  int64(12345),
+			period: int64(67890),
+			system: uint64(123),
+			user:   uint64(456),
+		},
+		{
+			name: "fetches the cpu quota and usage for cgroup v1 where the mount is relative",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v1CgroupWithCPUControllerNSMountRel,
+				"/proc/self/mountinfo": v1MountsWithCPUControllerNSMountRel,
+			},
+			errMsg: "failed to detect cgroup root mount and version",
+		},
+		{
+			name: "fetches the cpu quota and usage for cgroup v1 where the mount and cgroup match but there is extra mount",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v1CgroupWithCPUControllerNSMountRelRemount,
+				"/proc/self/mountinfo": v1MountsWithCPUControllerNSMountRelRemount,
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpu.cfs_quota_us":   "12345",
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpu.cfs_period_us":  "67890",
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpuacct.usage_sys":  "123",
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpuacct.usage_user": "456",
+			},
+			quota:  int64(12345),
+			period: int64(67890),
+			system: uint64(123),
+			user:   uint64(456),
+		},
+		{
+			name: "fetches the cpu quota and usage for cgroup v1 where the mount and cgroup match",
+			paths: map[string]string{
+				"/proc/self/cgroup":    v1CgroupWithCPUControllerNS2,
+				"/proc/self/mountinfo": v1MountsWithCPUControllerNS2,
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpu.cfs_quota_us":   "12345",
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpu.cfs_period_us":  "67890",
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpuacct.usage_sys":  "123",
+				"/sys/fs/cgroup/cpu,cpuacct/crdb_test/cpuacct.usage_user": "456",
 			},
 			quota:  int64(12345),
 			period: int64(67890),
@@ -534,4 +596,34 @@ total_inactive_file 1363746816
 total_active_file 308867072
 total_unevictable 0
 `
+
+	// Both /proc/<pid>/mountinfo and /proc/<pid>/cgroup will show the mount and the cgroup relative to the cgroup NS root
+	// This tests the case where the memory controller mount and the cgroup are not exactly the same (as is with k8s pods).
+	v1CgroupWithMemoryControllerNS = "12:memory:/cgroup_test"
+	v1MountsWithMemControllerNS    = "50 35 0:44 / /sys/fs/cgroup/memory rw,nosuid,nodev,noexec,relatime shared:25 - cgroup cgroup rw,memory"
+
+	// Example where the paths in /proc/self/mountinfo and /proc/self/cgroup are not the same for the cpu controller
+	//
+	// sudo cgcreate -t $USER:$USER -a $USER:$USER -g cpu:crdb_test
+	// echo 100000 > /sys/fs/cgroup/cpu/crdb_test/cpu.cfs_period_us
+	// echo 33300 > /sys/fs/cgroup/cpu/crdb_test/cpu.cfs_quota_us
+	// cgexec -g cpu:crdb_test ./cockroach ...
+	v1CgroupWithCPUControllerNS = "5:cpu,cpuacct:/crdb_test"
+	v1MountsWithCPUControllerNS = "43 35 0:37 / /sys/fs/cgroup/cpu,cpuacct rw,nosuid,nodev,noexec,relatime shared:18 - cgroup cgroup rw,cpu,cpuacct"
+
+	// Same as above but with unshare -C
+	// Can't determine the location of the mount
+	v1CgroupWithCPUControllerNSMountRel = "5:cpu,cpuacct:/"
+	v1MountsWithCPUControllerNSMountRel = "43 35 0:37 /.. /sys/fs/cgroup/cpu,cpuacct rw,nosuid,nodev,noexec,relatime shared:18 - cgroup cgroup rw,cpu,cpuacct"
+
+	// Same as above but with mounting the cgroup fs one more time in the NS
+	// sudo mount -t cgroup -o cpu,cpuacct none /sys/fs/cgroup/cpu,cpuacct/crdb_test
+	v1CgroupWithCPUControllerNSMountRelRemount = "5:cpu,cpuacct:/"
+	v1MountsWithCPUControllerNSMountRelRemount = `
+43 35 0:37 /.. /sys/fs/cgroup/cpu,cpuacct rw,nosuid,nodev,noexec,relatime shared:18 - cgroup cgroup rw,cpu,cpuacct
+161 43 0:37 / /sys/fs/cgroup/cpu,cpuacct/crdb_test rw,relatime shared:95 - cgroup none rw,cpu,cpuacct
+`
+	// Same as above but exiting the NS w/o unmounting
+	v1CgroupWithCPUControllerNS2 = "5:cpu,cpuacct:/crdb_test"
+	v1MountsWithCPUControllerNS2 = "161 43 0:37 /crdb_test /sys/fs/cgroup/cpu,cpuacct/crdb_test rw,relatime shared:95 - cgroup none rw,cpu,cpuacct"
 )
