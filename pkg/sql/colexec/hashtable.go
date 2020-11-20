@@ -190,12 +190,29 @@ type hashTable struct {
 var _ resetter = &hashTable{}
 
 // newHashTable returns a new hashTable.
+//
 // - loadFactor determines the average number of tuples per bucket which, if
 // exceeded, will trigger resizing the hash table. This number can have a
 // noticeable effect on the performance, so every user of the hash table should
 // choose the number that works well for the corresponding use case. 1.0 could
 // be used as the initial default value, and most likely the best value will be
 // in [0.1, 10.0] range.
+//
+// - initialNumHashBuckets determines the number of buckets allocated initially.
+// When the current load factor of the hash table exceeds the loadFactor, the
+// hash table is resized by doubling the number of buckets. The user of the hash
+// table should choose this number based on the amount of its other allocations,
+// but it is likely should be in [8, coldata.BatchSize()] range.
+// The thinking process for choosing coldata.BatchSize() could be roughly as
+// follows:
+// - on one hand, if we make several other allocations that have to be at
+// least coldata.BatchSize() in size, then we don't win much in the case of
+// the input with small number of tuples;
+// - on the other hand, if we start out with a larger number, we won't be
+// using the vast of majority of the buckets on the input with small number
+// of tuples (a downside) while not gaining much in the case of the input
+// with large number of tuples.
+//
 // - colsToStore indicates the positions of columns to actually store in this
 // batch. All columns are stored if colsToStore is nil, but when it is non-nil,
 // then columns with positions not present in colsToStore will remain
@@ -203,6 +220,7 @@ var _ resetter = &hashTable{}
 func newHashTable(
 	allocator *colmem.Allocator,
 	loadFactor float64,
+	initialNumHashBuckets uint64,
 	sourceTypes []*types.T,
 	eqCols []uint32,
 	colsToStore []int,
@@ -215,21 +233,6 @@ func newHashTable(
 		// assert that it is not requested.
 		colexecerror.InternalError(errors.AssertionFailedf("hashTableDeletingProbeMode is supported only when null equality is allowed"))
 	}
-	// This number was chosen after running benchmarks of all users of the hash
-	// table (hash joiner, hash aggregator, unordered distinct). The reasoning
-	// for why using coldata.BatchSize() as the initial number of buckets makes
-	// sense:
-	// - on one hand, we make several other allocations that have to be at
-	// least coldata.BatchSize() in size, so we don't win much in the case of
-	// the input with small number of tuples;
-	// - on the other hand, if we start out with a larger number, we won't be
-	// using the vast of majority of the buckets on the input with small number
-	// of tuples (a downside) while not gaining much in the case of the input
-	// with large number of tuples.
-	// TODO(yuzefovich): the comment above is no longer true because all
-	// limited slices in hashTableProbeBuffer are now allocated dynamically, so
-	// we might need to re-tune this number.
-	initialNumHashBuckets := uint64(coldata.BatchSize())
 	// Note that we don't perform memory accounting of the internal memory here
 	// and delay it till buildFromBufferedTuples in order to appease *-disk
 	// logic test configs (our disk-spilling infrastructure doesn't know how to

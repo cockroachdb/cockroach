@@ -1090,7 +1090,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 										)
 										hj := NewHashJoiner(
 											testAllocator, testAllocator, hjSpec,
-											leftSource, rightSource,
+											leftSource, rightSource, HashJoinerInitialNumBuckets,
 										)
 										hj.Init()
 

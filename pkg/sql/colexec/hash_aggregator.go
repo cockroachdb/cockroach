@@ -185,12 +185,14 @@ func (op *hashAggregator) Init() {
 	for i := range colsToStore {
 		colsToStore[i] = int(op.spec.GroupCols[i])
 	}
-	// This number was chosen after running the micro-benchmarks and relevant
+	// These numbers were chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
-	const hashTableLoadFactor = 0.25
+	const hashTableLoadFactor = 0.1
+	const hashTableNumBuckets = 256
 	op.ht = newHashTable(
 		op.allocator,
 		hashTableLoadFactor,
+		hashTableNumBuckets,
 		op.inputTypes,
 		op.spec.GroupCols,
 		colsToStore,

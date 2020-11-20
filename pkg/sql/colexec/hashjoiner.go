@@ -179,7 +179,8 @@ type hashJoiner struct {
 	// spec holds the specification for the current hash join process.
 	spec HashJoinerSpec
 	// state stores the current state of the hash joiner.
-	state hashJoinerState
+	state                      hashJoinerState
+	hashTableInitialNumBuckets uint64
 	// ht holds the hashTable that is populated during the build phase and used
 	// during the probe phase.
 	ht *hashTable
@@ -232,6 +233,12 @@ type hashJoiner struct {
 var _ colexecbase.BufferingInMemoryOperator = &hashJoiner{}
 var _ resetter = &hashJoiner{}
 
+// HashJoinerInitialNumBuckets is the number of the hash buckets initially
+// allocated by the hash table that is used by the in-memory hash joiner.
+// This number was chosen after running the micro-benchmarks and relevant
+// TPCH queries using tpchvec/bench.
+const HashJoinerInitialNumBuckets = 256
+
 func (hj *hashJoiner) Init() {
 	hj.inputOne.Init()
 	hj.inputTwo.Init()
@@ -243,10 +250,11 @@ func (hj *hashJoiner) Init() {
 	}
 	// This number was chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
-	const hashTableLoadFactor = 8.0
+	const hashTableLoadFactor = 1.0
 	hj.ht = newHashTable(
 		hj.buildSideAllocator,
 		hashTableLoadFactor,
+		hj.hashTableInitialNumBuckets,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
 		// Store all columns from the right source since we need to be able to
@@ -770,6 +778,7 @@ func NewHashJoiner(
 	buildSideAllocator, outputUnlimitedAllocator *colmem.Allocator,
 	spec HashJoinerSpec,
 	leftSource, rightSource colexecbase.Operator,
+	initialNumBuckets uint64,
 ) colexecbase.Operator {
 	var outputTypes []*types.T
 	if spec.joinType.ShouldIncludeLeftColsInOutput() {
@@ -779,10 +788,11 @@ func NewHashJoiner(
 		outputTypes = append(outputTypes, spec.right.sourceTypes...)
 	}
 	return &hashJoiner{
-		twoInputNode:             newTwoInputNode(leftSource, rightSource),
-		buildSideAllocator:       buildSideAllocator,
-		outputUnlimitedAllocator: outputUnlimitedAllocator,
-		spec:                     spec,
-		outputTypes:              outputTypes,
+		twoInputNode:               newTwoInputNode(leftSource, rightSource),
+		buildSideAllocator:         buildSideAllocator,
+		outputUnlimitedAllocator:   outputUnlimitedAllocator,
+		spec:                       spec,
+		outputTypes:                outputTypes,
+		hashTableInitialNumBuckets: initialNumBuckets,
 	}
 }
