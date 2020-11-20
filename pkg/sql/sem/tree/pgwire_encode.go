@@ -102,6 +102,9 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 		return
 	}
 
+	if ctx.HasFlags(FmtPGCatalog) {
+		ctx.WriteByte('\'')
+	}
 	ctx.WriteByte('{')
 	comma := ""
 	for _, v := range d.Array {
@@ -110,20 +113,23 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 		case dNull:
 			ctx.WriteString("NULL")
 		case *DString:
-			pgwireFormatStringInArray(&ctx.Buffer, string(*dv))
+			pgwireFormatStringInArray(ctx, string(*dv))
 		case *DCollatedString:
-			pgwireFormatStringInArray(&ctx.Buffer, dv.Contents)
+			pgwireFormatStringInArray(ctx, dv.Contents)
 			// Bytes cannot use the default case because they will be incorrectly
 			// double escaped.
 		case *DBytes:
 			ctx.FormatNode(dv)
 		default:
 			s := AsStringWithFlags(v, ctx.flags)
-			pgwireFormatStringInArray(&ctx.Buffer, s)
+			pgwireFormatStringInArray(ctx, s)
 		}
 		comma = ","
 	}
 	ctx.WriteByte('}')
+	if ctx.HasFlags(FmtPGCatalog) {
+		ctx.WriteByte('\'')
+	}
 }
 
 var tupleQuoteSet, arrayQuoteSet asciiSet
@@ -158,7 +164,8 @@ func pgwireQuoteStringInArray(in string) bool {
 	return false
 }
 
-func pgwireFormatStringInArray(buf *bytes.Buffer, in string) {
+func pgwireFormatStringInArray(ctx *FmtCtx, in string) {
+	buf := &ctx.Buffer
 	quote := pgwireQuoteStringInArray(in)
 	if quote {
 		buf.WriteByte('"')
@@ -169,6 +176,9 @@ func pgwireFormatStringInArray(buf *bytes.Buffer, in string) {
 			// Strings in arrays escape " and \.
 			buf.WriteByte('\\')
 			buf.WriteByte(byte(r))
+		} else if ctx.HasFlags(FmtPGCatalog) && r == '\'' {
+			buf.WriteByte('\'')
+			buf.WriteByte('\'')
 		} else {
 			buf.WriteRune(r)
 		}

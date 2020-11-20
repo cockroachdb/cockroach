@@ -3849,7 +3849,7 @@ func (d *DArray) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(ctx *FmtCtx) {
-	if ctx.HasFlags(fmtPgwireFormat) {
+	if ctx.flags.HasAnyFlags(fmtPgwireFormat | FmtPGCatalog) {
 		d.pgwireFormat(ctx)
 		return
 	}
