@@ -42,7 +42,7 @@ users_dupe  foo         true        2             id           ASC        false 
 users_dupe  bar         false       1             id           ASC        false    false
 users_dupe  bar         false       2             name         ASC        false    false
 
-statement error index name "bar" already exists
+statement error pgcode 42P07 index name "bar" already exists
 ALTER INDEX users@foo RENAME TO bar
 
 statement error pgcode 42601 empty index name
