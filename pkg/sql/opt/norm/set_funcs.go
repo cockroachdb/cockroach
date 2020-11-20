@@ -46,26 +46,6 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 	return items
 }
 
-// ProjectPassthroughLeft returns a ColSet that contains the columns that can
-// be passed-through from the left side in a SetPrivate when eliminating a set
-// operation, like in EliminateUnionAllLeft. Columns in both the output
-// ColList and the left ColList should be passed-through.
-func (c *CustomFuncs) ProjectPassthroughLeft(set *memo.SetPrivate) opt.ColSet {
-	out := set.OutCols.ToSet()
-	out.IntersectionWith(set.LeftCols.ToSet())
-	return out
-}
-
-// ProjectPassthroughRight returns a ColSet that contains the columns that can
-// be passed-through from the right side in a SetPrivate when eliminating a set
-// operation, like in EliminateUnionAllRight. Columns in both the output
-// ColList and the right ColList should be passed-through.
-func (c *CustomFuncs) ProjectPassthroughRight(set *memo.SetPrivate) opt.ColSet {
-	out := set.OutCols.ToSet()
-	out.IntersectionWith(set.RightCols.ToSet())
-	return out
-}
-
 // PruneSetPrivate returns a SetPrivate based on the given SetPrivate, but with
 // unneeded input and output columns discarded.
 func (c *CustomFuncs) PruneSetPrivate(needed opt.ColSet, set *memo.SetPrivate) *memo.SetPrivate {
