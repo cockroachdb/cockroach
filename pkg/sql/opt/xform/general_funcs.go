@@ -150,7 +150,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 	ic.Init(
 		requiredFilters, optionalFilters,
 		columns, notNullCols, tabMeta.ComputedCols,
-		isInverted, c.e.evalCtx, c.e.f,
+		isInverted, true /* consolidate */, c.e.evalCtx, c.e.f,
 	)
 	return ic
 }
