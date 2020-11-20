@@ -28,9 +28,11 @@ import (
 
 const severityChar = "IWEF"
 
-// makeStartLine creates a log entry suitable for the start of a logging
-// output using the canonical logging format.
-func (l *loggerT) makeStartLine(format string, args ...interface{}) logpb.Entry {
+// makeStartLine creates a formatted log entry suitable for the start
+// of a logging output using the canonical logging format.
+func (l *loggerT) makeStartLine(
+	formatter logFormatter, format string, args ...interface{},
+) *buffer {
 	entry := MakeEntry(
 		context.Background(),
 		severity.INFO,
@@ -39,30 +41,36 @@ func (l *loggerT) makeStartLine(format string, args ...interface{}) logpb.Entry 
 		format,
 		args...)
 	entry.Tags = "config"
-	return entry
+	var f formatCrdbV1
+	return f.formatEntry(entry, nil)
 }
 
 // getStartLines retrieves the log entries for the start
-// of a new logging output.
-func (l *loggerT) getStartLines(now time.Time) []logpb.Entry {
-	messages := make([]logpb.Entry, 0, 6)
+// of a new log file output.
+func (l *loggerT) getStartLines(now time.Time) []*buffer {
+	idx := l.getFileSinkIndex()
+	if idx == -1 {
+		return nil
+	}
+	f := l.sinkInfos[idx].formatter
+	messages := make([]*buffer, 0, 6)
 	messages = append(messages,
-		l.makeStartLine("file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
-		l.makeStartLine("running on machine: %s", host),
-		l.makeStartLine("binary: %s", Safe(build.GetInfo().Short())),
-		l.makeStartLine("arguments: %s", os.Args),
+		l.makeStartLine(f, "file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
+		l.makeStartLine(f, "running on machine: %s", host),
+		l.makeStartLine(f, "binary: %s", Safe(build.GetInfo().Short())),
+		l.makeStartLine(f, "arguments: %s", os.Args),
 	)
 
 	logging.mu.Lock()
 	if logging.mu.clusterID != "" {
-		messages = append(messages, l.makeStartLine("clusterID: %s", logging.mu.clusterID))
+		messages = append(messages, l.makeStartLine(f, "clusterID: %s", logging.mu.clusterID))
 	}
 	logging.mu.Unlock()
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
 	messages = append(messages,
-		l.makeStartLine("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713"))
+		l.makeStartLine(f, "line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713"))
 	return messages
 }
 
