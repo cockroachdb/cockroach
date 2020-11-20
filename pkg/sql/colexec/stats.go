@@ -193,7 +193,7 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	}
 
 	if ioTime {
-		s.KV.KVTime = time
+		s.KV.KVTime.Set(time)
 		// Note that ioTime is true only for ColBatchScans, and this is the
 		// only case when we want to add the number of rows read (because the
 		// wrapped joinReaders and tableReaders will add that statistic
@@ -201,7 +201,7 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 		s.KV.TuplesRead.Set(uint64(vsc.ioReader.GetRowsRead()))
 		s.KV.BytesRead.Set(uint64(vsc.ioReader.GetBytesRead()))
 	} else {
-		s.Exec.ExecTime = time
+		s.Exec.ExecTime.Set(time)
 	}
 
 	s.Output.NumBatches.Set(numBatches)
@@ -254,9 +254,9 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 
 	s := &execinfrapb.ComponentStats{ComponentID: nvsc.operatorID}
 
-	s.NetRx.Latency = nvsc.latency
-	s.NetRx.WaitTime = time
-	s.NetRx.DeserializationTime = nvsc.networkReader.GetDeserializationTime()
+	s.NetRx.Latency.Set(nvsc.latency)
+	s.NetRx.WaitTime.Set(time)
+	s.NetRx.DeserializationTime.Set(nvsc.networkReader.GetDeserializationTime())
 	s.NetRx.TuplesReceived.Set(uint64(nvsc.networkReader.GetRowsRead()))
 	s.NetRx.BytesReceived.Set(uint64(nvsc.networkReader.GetBytesRead()))
 

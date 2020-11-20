@@ -41,24 +41,20 @@ message InputStats {
   optional uint64 num_tuples = 1 [(gogoproto.customtype) = "IntValue",
                                   (gogoproto.nullable) = false];
   // Cumulated time spent waiting for rows from the input operator.
-  optional google.protobuf.Duration wait_time = 2 [(gogoproto.nullable) = false,
-                                                   (gogoproto.stdduration) = true];
+  optional TimeValue wait_time = 2 [(gogoproto.nullable) = false];
 }
 
 // NetworkRxStats contains statistics for components that receive row data
 // over the network. Note: Rx is shorthand for Receive.
 message NetworkRxStats {
   // Observed network latency (round-trip time between the two nodes).
-  optional google.protobuf.Duration latency = 1 [(gogoproto.nullable) = false,
-                                                 (gogoproto.stdduration) = true];
+  optional TimeValue latency = 1 [(gogoproto.nullable) = false];
 
   // Cumulated time spent waiting to receive or transmit tuple data.
-  optional google.protobuf.Duration wait_time = 2 [(gogoproto.nullable) = false,
-                                                   (gogoproto.stdduration) = true];
+  optional TimeValue wait_time = 2 [(gogoproto.nullable) = false];
 
   // Time spent deserializing network data.
-  optional google.protobuf.Duration deserialization_time = 3 [(gogoproto.nullable) = false,
-                                                              (gogoproto.stdduration) = true];
+  optional TimeValue deserialization_time = 3 [(gogoproto.nullable) = false];
 
   optional uint64 tuples_received = 4 [(gogoproto.customtype) = "IntValue",
                                        (gogoproto.nullable) = false];
@@ -84,16 +80,14 @@ message KVStats {
 
   // Cumulated time spent waiting for a KV request. This includes disk IO time
   // and potentially network time (if any of the keys are not local).
-  optional google.protobuf.Duration kv_time = 3 [(gogoproto.customname) = "KVTime",
-                                                 (gogoproto.nullable) = false,
-                                                 (gogoproto.stdduration) = true];
+  optional TimeValue kv_time = 3 [(gogoproto.customname) = "KVTime",
+                                  (gogoproto.nullable) = false];
 }
 
 // ExecStats contains statistics about the execution of an components.
 message ExecStats {
   // Time spent executing the component.
-  optional google.protobuf.Duration exec_time = 1 [(gogoproto.nullable) = false,
-                                                   (gogoproto.stdduration) = true];
+  optional TimeValue exec_time = 1 [(gogoproto.nullable) = false];
   // Maximum memory allocated by the component.
   optional uint64 max_allocated_mem = 2 [(gogoproto.customtype) = "IntValue",
                                          (gogoproto.nullable) = false];
@@ -112,4 +106,17 @@ message OutputStats {
   // Number of tuples produced by the component.
   optional uint64 num_tuples = 2 [(gogoproto.customtype) = "IntValue",
                                   (gogoproto.nullable) = false];
+}
+
+// TimeValue stores an optional time.Duration, used in the ComponentStats
+// message.
+//
+// The underlying value is the logical value plus 1, so that zero remains the
+// special case of having no value.
+message TimeValue {
+  option (gogoproto.goproto_stringer) = false;
+  // RawValue is the TimeValue's underlying value.
+  // DO NOT ACCESS THIS DIRECTLY. Use HasValue and Value instead.
+  optional google.protobuf.Duration raw_value = 1 [(gogoproto.nullable) = false,
+                                                   (gogoproto.stdduration) = true];
 }

@@ -68,7 +68,7 @@ func (isc *inputStatCollector) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 	if row != nil {
 		isc.stats.NumTuples.Add(1)
 	}
-	isc.stats.WaitTime += timeutil.Since(start)
+	isc.stats.WaitTime.Add(timeutil.Since(start))
 	return row, meta
 }
 
@@ -100,7 +100,7 @@ func (c *rowFetcherStatCollector) NextRow(
 	if row != nil {
 		c.stats.NumTuples.Add(1)
 	}
-	c.stats.WaitTime += timeutil.Since(start)
+	c.stats.WaitTime.Add(timeutil.Since(start))
 	return row, t, i, err
 }
 
@@ -158,6 +158,6 @@ func getFetcherInputStats(f rowFetcher) (execinfrapb.InputStats, bool) {
 		return execinfrapb.InputStats{}, false
 	}
 	// Add row fetcher start scan stall time to Next() stall time.
-	rfsc.stats.WaitTime += rfsc.startScanStallTime
+	rfsc.stats.WaitTime.Add(rfsc.startScanStallTime)
 	return rfsc.stats, true
 }
