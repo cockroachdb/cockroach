@@ -345,24 +345,6 @@ func (c *sqlConn) checkServerMetadata() error {
 	return nil
 }
 
-// requireServerVersion returns an error if the version of the connected server
-// is not at least the given version.
-func (c *sqlConn) requireServerVersion(required *version.Version) error {
-	_, versionString, _, err := c.getServerMetadata()
-	if err != nil {
-		return err
-	}
-	vers, err := version.Parse(versionString)
-	if err != nil {
-		return fmt.Errorf("unable to parse server version %q", versionString)
-	}
-	if !vers.AtLeast(required) {
-		return fmt.Errorf("incompatible client and server versions (detected server version: %s, required: %s)",
-			vers, required)
-	}
-	return nil
-}
-
 // getServerValue retrieves the first driverValue returned by the
 // given sql query. If the query fails or does not return a single
 // column, `false` is returned in the second result.

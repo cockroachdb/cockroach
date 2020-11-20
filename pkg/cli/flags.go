@@ -543,7 +543,6 @@ func init() {
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
 		doctorClusterCmd,
-		dumpCmd,
 		genHAProxyCmd,
 		initCmd,
 		quitCmd,
@@ -663,14 +662,9 @@ func init() {
 		boolFlag(f, &sqlCtx.debugMode, cliflags.CliDebugMode)
 	}
 
-	varFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
-	stringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime)
-	boolFlag(dumpCmd.Flags(), &dumpCtx.dumpAll, cliflags.DumpAll)
-
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{
 		sqlShellCmd,
-		dumpCmd,
 		demoCmd,
 		doctorClusterCmd,
 		lsNodesCmd,
