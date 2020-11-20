@@ -54,9 +54,7 @@ func NewSecondaryLogger(
 		dir = logging.logDir.String()
 	}
 	l := &SecondaryLogger{
-		logger: loggerT{
-			logCounter: EntryCounter{EnableMsgCount: enableMsgCount},
-		},
+		logger: loggerT{},
 	}
 	fileSink := newFileSink(
 		dir,
@@ -93,6 +91,10 @@ func NewSecondaryLogger(
 		},
 	}
 
+	if enableMsgCount {
+		fileSink.formatter = formatCrdbV1WithCounter{}
+	}
+
 	// Ensure the registry knows about this logger.
 	allFileSinks.put(fileSink)
 	allLoggers.put(&l.logger)
@@ -117,7 +119,7 @@ func (l *SecondaryLogger) output(
 	ctx context.Context, depth int, sev Severity, format string, args ...interface{},
 ) {
 	entry := MakeEntry(
-		ctx, sev, &l.logger.logCounter, depth+1, true /* redactable */, format, args...)
+		ctx, sev, depth+1, true /* redactable */, format, args...)
 	l.logger.outputLogEntry(entry)
 }
 

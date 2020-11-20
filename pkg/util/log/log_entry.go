@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -35,7 +34,6 @@ func (l *loggerT) makeStartLine(format string, args ...interface{}) logpb.Entry 
 	entry := MakeEntry(
 		context.Background(),
 		severity.INFO,
-		nil,  /* logCounter */
 		2,    /* depth */
 		true, /* redactable */
 		format,
@@ -70,13 +68,7 @@ func (l *loggerT) getStartLines(now time.Time) []logpb.Entry {
 
 // MakeEntry creates an logpb.Entry.
 func MakeEntry(
-	ctx context.Context,
-	s Severity,
-	lc *EntryCounter,
-	depth int,
-	redactable bool,
-	format string,
-	args ...interface{},
+	ctx context.Context, s Severity, depth int, redactable bool, format string, args ...interface{},
 ) (res logpb.Entry) {
 	res = logpb.Entry{
 		Severity:   s,
@@ -89,12 +81,6 @@ func MakeEntry(
 	file, line, _ := caller.Lookup(depth + 1)
 	res.File = file
 	res.Line = int64(line)
-
-	// Optionally populate the counter.
-	if lc != nil && lc.EnableMsgCount {
-		// Add a counter. This is important for e.g. the SQL audit logs.
-		res.Counter = atomic.AddUint64(&lc.msgCount, 1)
-	}
 
 	// Populate the tags.
 	var buf strings.Builder

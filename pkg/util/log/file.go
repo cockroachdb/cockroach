@@ -150,7 +150,7 @@ func newFileSink(
 	f := &fileSink{
 		prefix:                  prefix,
 		threshold:               fileThreshold,
-		formatter:               formatCrdbV1WithCounter{},
+		formatter:               formatCrdbV1{},
 		syncWrites:              forceSyncWrites,
 		logFileMaxSize:          fileMaxSize,
 		logFilesCombinedMaxSize: combinedMaxSize,

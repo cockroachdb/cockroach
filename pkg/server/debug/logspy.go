@@ -160,7 +160,7 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 		if err == nil {
 			if dropped := atomic.LoadInt32(&countDropped); dropped > 0 {
 				entry := log.MakeEntry(
-					ctx, severity.WARNING, nil /* LogCounter */, 0 /* depth */, false, /* redactable */
+					ctx, severity.WARNING, 0 /* depth */, false, /* redactable */
 					"%d messages were dropped", log.Safe(dropped))
 				err = log.FormatEntry(entry, w) // modify return value
 			}
@@ -175,7 +175,7 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 
 	{
 		entry := log.MakeEntry(
-			ctx, severity.INFO, nil /* LogCounter */, 0 /* depth */, false, /* redactable */
+			ctx, severity.INFO, 0 /* depth */, false, /* redactable */
 			"intercepting logs with options %+v", opts)
 		entries <- entry
 	}
@@ -212,8 +212,8 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 	for {
 		select {
 		case <-done:
-
 			return
+
 		case entry := <-entries:
 			if err := log.FormatEntry(entry, w); err != nil {
 				return errors.Wrapf(err, "while writing entry %v", entry)
@@ -225,6 +225,7 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 			if done == nil {
 				done = ctx.Done()
 			}
+
 		case <-flushTimer.C:
 			flushTimer.Read = true
 			flushTimer.Reset(flushInterval)
