@@ -37,17 +37,10 @@ type concatHashAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-func (a *concatHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *concatHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.Reset()
-}
-
-func (a *concatHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
-	a.curAgg = zeroBytesValue
 }
 
 func (a *concatHashAgg) Compute(

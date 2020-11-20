@@ -56,15 +56,9 @@ type sumIntInt16OrderedAgg struct {
 
 var _ AggregateFunc = &sumIntInt16OrderedAgg{}
 
-func (a *sumIntInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *sumIntInt16OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Int64()
-	a.Reset()
-}
-
-func (a *sumIntInt16OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumIntInt16OrderedAgg) Compute(
@@ -260,15 +254,9 @@ type sumIntInt32OrderedAgg struct {
 
 var _ AggregateFunc = &sumIntInt32OrderedAgg{}
 
-func (a *sumIntInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *sumIntInt32OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Int64()
-	a.Reset()
-}
-
-func (a *sumIntInt32OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumIntInt32OrderedAgg) Compute(
@@ -464,15 +452,9 @@ type sumIntInt64OrderedAgg struct {
 
 var _ AggregateFunc = &sumIntInt64OrderedAgg{}
 
-func (a *sumIntInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *sumIntInt64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Int64()
-	a.Reset()
-}
-
-func (a *sumIntInt64OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *sumIntInt64OrderedAgg) Compute(

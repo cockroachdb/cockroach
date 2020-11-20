@@ -42,15 +42,9 @@ type defaultOrderedAgg struct {
 
 var _ AggregateFunc = &defaultOrderedAgg{}
 
-func (a *defaultOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *defaultOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
-	a.Reset()
-}
-
-func (a *defaultOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.fn.Reset(a.ctx)
 }
 
 func (a *defaultOrderedAgg) Compute(

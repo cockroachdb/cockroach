@@ -69,17 +69,9 @@ type avgInt16OrderedAgg struct {
 
 var _ AggregateFunc = &avgInt16OrderedAgg{}
 
-func (a *avgInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *avgInt16OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *avgInt16OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroDecimalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgInt16OrderedAgg) Compute(
@@ -315,17 +307,9 @@ type avgInt32OrderedAgg struct {
 
 var _ AggregateFunc = &avgInt32OrderedAgg{}
 
-func (a *avgInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *avgInt32OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *avgInt32OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroDecimalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgInt32OrderedAgg) Compute(
@@ -561,17 +545,9 @@ type avgInt64OrderedAgg struct {
 
 var _ AggregateFunc = &avgInt64OrderedAgg{}
 
-func (a *avgInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *avgInt64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *avgInt64OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroDecimalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgInt64OrderedAgg) Compute(
@@ -806,17 +782,9 @@ type avgDecimalOrderedAgg struct {
 
 var _ AggregateFunc = &avgDecimalOrderedAgg{}
 
-func (a *avgDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *avgDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *avgDecimalOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroDecimalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgDecimalOrderedAgg) Compute(
@@ -1044,17 +1012,9 @@ type avgFloat64OrderedAgg struct {
 
 var _ AggregateFunc = &avgFloat64OrderedAgg{}
 
-func (a *avgFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *avgFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Float64()
-	a.Reset()
-}
-
-func (a *avgFloat64OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroFloat64Value
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgFloat64OrderedAgg) Compute(
@@ -1250,17 +1210,9 @@ type avgIntervalOrderedAgg struct {
 
 var _ AggregateFunc = &avgIntervalOrderedAgg{}
 
-func (a *avgIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *avgIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Interval()
-	a.Reset()
-}
-
-func (a *avgIntervalOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroIntervalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgIntervalOrderedAgg) Compute(

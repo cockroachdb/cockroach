@@ -109,16 +109,10 @@ type minBoolHashAgg struct {
 
 var _ AggregateFunc = &minBoolHashAgg{}
 
-func (a *minBoolHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minBoolHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bool()
-	a.Reset()
-}
-
-func (a *minBoolHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minBoolHashAgg) Compute(
@@ -255,16 +249,10 @@ type minBytesHashAgg struct {
 
 var _ AggregateFunc = &minBytesHashAgg{}
 
-func (a *minBytesHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minBytesHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.Reset()
-}
-
-func (a *minBytesHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minBytesHashAgg) Compute(
@@ -391,16 +379,10 @@ type minDecimalHashAgg struct {
 
 var _ AggregateFunc = &minDecimalHashAgg{}
 
-func (a *minDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minDecimalHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Decimal()
-	a.Reset()
-}
-
-func (a *minDecimalHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minDecimalHashAgg) Compute(
@@ -521,16 +503,10 @@ type minInt16HashAgg struct {
 
 var _ AggregateFunc = &minInt16HashAgg{}
 
-func (a *minInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minInt16HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int16()
-	a.Reset()
-}
-
-func (a *minInt16HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minInt16HashAgg) Compute(
@@ -673,16 +649,10 @@ type minInt32HashAgg struct {
 
 var _ AggregateFunc = &minInt32HashAgg{}
 
-func (a *minInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minInt32HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int32()
-	a.Reset()
-}
-
-func (a *minInt32HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minInt32HashAgg) Compute(
@@ -825,16 +795,10 @@ type minInt64HashAgg struct {
 
 var _ AggregateFunc = &minInt64HashAgg{}
 
-func (a *minInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minInt64HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int64()
-	a.Reset()
-}
-
-func (a *minInt64HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minInt64HashAgg) Compute(
@@ -977,16 +941,10 @@ type minFloat64HashAgg struct {
 
 var _ AggregateFunc = &minFloat64HashAgg{}
 
-func (a *minFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minFloat64HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Float64()
-	a.Reset()
-}
-
-func (a *minFloat64HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minFloat64HashAgg) Compute(
@@ -1145,16 +1103,10 @@ type minTimestampHashAgg struct {
 
 var _ AggregateFunc = &minTimestampHashAgg{}
 
-func (a *minTimestampHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minTimestampHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Timestamp()
-	a.Reset()
-}
-
-func (a *minTimestampHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minTimestampHashAgg) Compute(
@@ -1289,16 +1241,10 @@ type minIntervalHashAgg struct {
 
 var _ AggregateFunc = &minIntervalHashAgg{}
 
-func (a *minIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minIntervalHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Interval()
-	a.Reset()
-}
-
-func (a *minIntervalHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minIntervalHashAgg) Compute(
@@ -1419,16 +1365,10 @@ type minDatumHashAgg struct {
 
 var _ AggregateFunc = &minDatumHashAgg{}
 
-func (a *minDatumHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *minDatumHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Datum()
-	a.Reset()
-}
-
-func (a *minDatumHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *minDatumHashAgg) Compute(
@@ -1567,16 +1507,10 @@ type maxBoolHashAgg struct {
 
 var _ AggregateFunc = &maxBoolHashAgg{}
 
-func (a *maxBoolHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxBoolHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bool()
-	a.Reset()
-}
-
-func (a *maxBoolHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxBoolHashAgg) Compute(
@@ -1713,16 +1647,10 @@ type maxBytesHashAgg struct {
 
 var _ AggregateFunc = &maxBytesHashAgg{}
 
-func (a *maxBytesHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxBytesHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.Reset()
-}
-
-func (a *maxBytesHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxBytesHashAgg) Compute(
@@ -1849,16 +1777,10 @@ type maxDecimalHashAgg struct {
 
 var _ AggregateFunc = &maxDecimalHashAgg{}
 
-func (a *maxDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxDecimalHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Decimal()
-	a.Reset()
-}
-
-func (a *maxDecimalHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxDecimalHashAgg) Compute(
@@ -1979,16 +1901,10 @@ type maxInt16HashAgg struct {
 
 var _ AggregateFunc = &maxInt16HashAgg{}
 
-func (a *maxInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxInt16HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int16()
-	a.Reset()
-}
-
-func (a *maxInt16HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxInt16HashAgg) Compute(
@@ -2131,16 +2047,10 @@ type maxInt32HashAgg struct {
 
 var _ AggregateFunc = &maxInt32HashAgg{}
 
-func (a *maxInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxInt32HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int32()
-	a.Reset()
-}
-
-func (a *maxInt32HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxInt32HashAgg) Compute(
@@ -2283,16 +2193,10 @@ type maxInt64HashAgg struct {
 
 var _ AggregateFunc = &maxInt64HashAgg{}
 
-func (a *maxInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxInt64HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Int64()
-	a.Reset()
-}
-
-func (a *maxInt64HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxInt64HashAgg) Compute(
@@ -2435,16 +2339,10 @@ type maxFloat64HashAgg struct {
 
 var _ AggregateFunc = &maxFloat64HashAgg{}
 
-func (a *maxFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxFloat64HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Float64()
-	a.Reset()
-}
-
-func (a *maxFloat64HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxFloat64HashAgg) Compute(
@@ -2603,16 +2501,10 @@ type maxTimestampHashAgg struct {
 
 var _ AggregateFunc = &maxTimestampHashAgg{}
 
-func (a *maxTimestampHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxTimestampHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Timestamp()
-	a.Reset()
-}
-
-func (a *maxTimestampHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxTimestampHashAgg) Compute(
@@ -2747,16 +2639,10 @@ type maxIntervalHashAgg struct {
 
 var _ AggregateFunc = &maxIntervalHashAgg{}
 
-func (a *maxIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxIntervalHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Interval()
-	a.Reset()
-}
-
-func (a *maxIntervalHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxIntervalHashAgg) Compute(
@@ -2877,16 +2763,10 @@ type maxDatumHashAgg struct {
 
 var _ AggregateFunc = &maxDatumHashAgg{}
 
-func (a *maxDatumHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *maxDatumHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Datum()
-	a.Reset()
-}
-
-func (a *maxDatumHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
 }
 
 func (a *maxDatumHashAgg) Compute(
