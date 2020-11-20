@@ -275,10 +275,28 @@ func (s *raftScheduler) worker(ctx context.Context) {
 			// state map.
 			delete(s.mu.state, id)
 		} else {
-			// There was a concurrent call to one of the Enqueue* methods. Queue the
-			// range ID for further processing.
+			// There was a concurrent call to one of the Enqueue* methods. Queue
+			// the range ID for further processing.
+			//
+			// Even though the Enqueue* method did not signal after detecting
+			// that the range was being processed, there also is no need for us
+			// to signal the condition variable. This is because this worker
+			// goroutine will loop back around and continue working without ever
+			// going back to sleep.
+			//
+			// We can prove this out through a short derivation.
+			// - For optimal concurrency, we want:
+			//     awake_workers = min(max_workers, num_ranges)
+			// - The condition variable / mutex structure ensures that:
+			//     awake_workers = cur_awake_workers + num_signals
+			// - So we need the following number of signals for optimal concurrency:
+			//     num_signals = min(max_workers, num_ranges) - cur_awake_workers
+			// - If we re-enqueue a range that's currently being processed, the
+			//   num_ranges does not change once the current iteration completes
+			//   and the worker does not go back to sleep between the current
+			//   iteration and the next iteration, so no change to num_signals
+			//   is needed.
 			s.mu.queue.Push(id)
-			s.mu.cond.Signal()
 		}
 	}
 }
