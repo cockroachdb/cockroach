@@ -382,6 +382,8 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 				typ = p.typ
 			} else if d.AmbiguousFormat() {
 				typ = d.ResolvedType()
+			} else if _, isArray := d.(*DArray); isArray && f.HasFlags(FmtPGCatalog) {
+				typ = d.ResolvedType()
 			}
 		}
 		if typ != nil {

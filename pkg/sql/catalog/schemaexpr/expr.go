@@ -164,7 +164,7 @@ func FormatExprForDisplay(
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
 ) (string, error) {
-	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx)
+	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx, fmtFlags)
 	if err != nil {
 		return "", err
 	}
@@ -172,7 +172,11 @@ func FormatExprForDisplay(
 }
 
 func deserializeExprForFormatting(
-	ctx context.Context, desc catalog.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	exprStr string,
+	semaCtx *tree.SemaContext,
+	fmtFlags tree.FmtFlags,
 ) (tree.Expr, error) {
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
@@ -181,15 +185,27 @@ func deserializeExprForFormatting(
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	expr, _, err = replaceColumnVars(desc, expr)
+	replacedExpr, _, err := replaceColumnVars(desc, expr)
 	if err != nil {
 		return nil, err
 	}
 
 	// Type-check the expression to resolve user defined types.
-	typedExpr, err := expr.TypeCheck(ctx, semaCtx, types.Any)
+	typedExpr, err := replacedExpr.TypeCheck(ctx, semaCtx, types.Any)
 	if err != nil {
 		return nil, err
+	}
+
+	if fmtFlags == tree.FmtPGCatalog {
+		sanitizedExpr, err := SanitizeVarFreeExpr(ctx, expr, typedExpr.ResolvedType(), "FORMAT", semaCtx,
+			tree.VolatilityImmutable)
+		if err == nil {
+			// An empty EvalContext is fine here since the expression has VolatilityImmutable.
+			d, err := sanitizedExpr.Eval(&tree.EvalContext{})
+			if err == nil {
+				return d, nil
+			}
+		}
 	}
 
 	return typedExpr, nil
