@@ -66,25 +66,13 @@ type bool_OP_TYPE_AGGKINDAgg struct {
 
 var _ AggregateFunc = &bool_OP_TYPE_AGGKINDAgg{}
 
-func (a *bool_OP_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *bool_OP_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.Init(groups, vec)
+	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
 	a.vec = vec.Bool()
-	a.Reset()
-}
-
-func (a *bool_OP_TYPE_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR aggregate.
-	// For bool_and the _DEFAULT_VAL is true and for bool_or the _DEFAULT_VAL is false.
-	a.curAgg = _DEFAULT_VAL
 }
 
 func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
@@ -158,6 +146,12 @@ func (a *bool_OP_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	a.aggFuncs = a.aggFuncs[1:]
+	// {{/*
+	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR
+	// aggregate. For bool_and the _DEFAULT_VAL is true and for bool_or the
+	// _DEFAULT_VAL is false.
+	// */}}
+	f.curAgg = _DEFAULT_VAL
 	return f
 }
 

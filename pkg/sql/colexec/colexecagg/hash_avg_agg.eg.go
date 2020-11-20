@@ -69,17 +69,9 @@ type avgInt16HashAgg struct {
 
 var _ AggregateFunc = &avgInt16HashAgg{}
 
-func (a *avgInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgInt16HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *avgInt16HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroDecimalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgInt16HashAgg) Compute(
@@ -192,17 +184,9 @@ type avgInt32HashAgg struct {
 
 var _ AggregateFunc = &avgInt32HashAgg{}
 
-func (a *avgInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgInt32HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *avgInt32HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroDecimalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgInt32HashAgg) Compute(
@@ -315,17 +299,9 @@ type avgInt64HashAgg struct {
 
 var _ AggregateFunc = &avgInt64HashAgg{}
 
-func (a *avgInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgInt64HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *avgInt64HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroDecimalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgInt64HashAgg) Compute(
@@ -437,17 +413,9 @@ type avgDecimalHashAgg struct {
 
 var _ AggregateFunc = &avgDecimalHashAgg{}
 
-func (a *avgDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgDecimalHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *avgDecimalHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroDecimalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgDecimalHashAgg) Compute(
@@ -554,17 +522,9 @@ type avgFloat64HashAgg struct {
 
 var _ AggregateFunc = &avgFloat64HashAgg{}
 
-func (a *avgFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgFloat64HashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Float64()
-	a.Reset()
-}
-
-func (a *avgFloat64HashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroFloat64Value
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgFloat64HashAgg) Compute(
@@ -661,17 +621,9 @@ type avgIntervalHashAgg struct {
 
 var _ AggregateFunc = &avgIntervalHashAgg{}
 
-func (a *avgIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
+func (a *avgIntervalHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.scratch.vec = vec.Interval()
-	a.Reset()
-}
-
-func (a *avgIntervalHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.scratch.curSum = zeroIntervalValue
-	a.scratch.curCount = 0
-	a.scratch.foundNonNullForCurrentGroup = false
 }
 
 func (a *avgIntervalHashAgg) Compute(

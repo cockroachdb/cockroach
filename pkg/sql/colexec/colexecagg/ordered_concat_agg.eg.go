@@ -37,17 +37,10 @@ type concatOrderedAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-func (a *concatOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
+func (a *concatOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.Reset()
-}
-
-func (a *concatOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
-	a.curAgg = zeroBytesValue
 }
 
 func (a *concatOrderedAgg) Compute(
