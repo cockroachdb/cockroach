@@ -128,11 +128,11 @@ func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
 		_ SendOptions,
 		_ *nodedialer.Dialer,
-		replicas []roachpb.ReplicaDescriptor,
+		replicas ReplicaSlice,
 	) (Transport, error) {
 		return &simpleTransportAdapter{
 			fn:       fn,
-			replicas: replicas,
+			replicas: replicas.Descriptors(),
 		}, nil
 	}
 }
@@ -192,6 +192,8 @@ func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) 
 		}
 	}
 }
+
+func (l *simpleTransportAdapter) Release() {}
 
 func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
 	server := rpc.NewServer(rpcContext)
@@ -356,10 +358,9 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(SendOptions, []roachpb.ReplicaDescriptor) error
 
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
+		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
 	) (Transport, error) {
-		reps := make([]roachpb.ReplicaDescriptor, len(replicas))
-		copy(reps, replicas)
+		reps := replicas.Descriptors()
 		if err := verifyCall(opts, reps); err != nil {
 			return nil, err
 		}
@@ -3008,7 +3009,7 @@ func TestSenderTransport(t *testing.T) {
 			) (r *roachpb.BatchResponse, e *roachpb.Error) {
 				return
 			},
-		))(SendOptions{}, &nodedialer.Dialer{}, []roachpb.ReplicaDescriptor{{}})
+		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3764,7 +3765,7 @@ func TestConnectionClass(t *testing.T) {
 	// created.
 	var class rpc.ConnectionClass
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
+		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
 	) (Transport, error) {
 		class = opts.class
 		return adaptSimpleTransport(
