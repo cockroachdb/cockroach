@@ -96,6 +96,12 @@ type sinkInfo struct {
 	// entry.
 	editor redactEditor
 
+	// msgCount supports the generation of a per-entry log entry
+	// counter. This is needed in audit logs to hinder malicious
+	// repudiation of log events by manually erasing log files or log
+	// entries.
+	msgCount uint64
+
 	// criticality indicates whether a failure to output some log
 	// entries should incur the process to terminate.
 	criticality bool
@@ -105,12 +111,6 @@ type sinkInfo struct {
 type loggerT struct {
 	// sinkInfos stores the destinations for log entries.
 	sinkInfos []sinkInfo
-
-	// logCounter supports the generation of a per-entry log entry
-	// counter. This is needed in audit logs to hinder malicious
-	// repudiation of log events by manually erasing log files or log
-	// entries.
-	logCounter EntryCounter
 
 	// outputMu is used to coordinate output to the sinks, to guarantee
 	// that the ordering of events the the same on all sinks.
@@ -125,18 +125,6 @@ func (l *loggerT) getFileSink() *fileSink {
 		}
 	}
 	return nil
-}
-
-// EntryCounter supports the generation of a per-entry log entry
-// counter. This is needed in audit logs to hinder malicious
-// repudiation of log events by manually erasing log files or log
-// entries.
-type EntryCounter struct {
-	// EnableMsgCount, if true, enables the production of entry
-	// counters.
-	EnableMsgCount bool
-	// msgCount is the current value of the counter.
-	msgCount uint64
 }
 
 // FatalChan is closed when Fatal is called. This can be used to make
@@ -268,9 +256,16 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	// We only do the work if the sink is active and the filtering does
 	// not eliminate the event.
 	someSinkActive := false
-	for i, s := range l.sinkInfos {
+	for i := range l.sinkInfos {
+		s := &l.sinkInfos[i]
 		if s.sink.activeAtSeverity(entry.Severity) {
 			editedEntry := maybeRedactEntry(entry, s.editor)
+
+			// Add a counter. This is important for e.g. the SQL audit logs.
+			// Note: whether the counter is displayed or not depends on
+			// the formatter.
+			editedEntry.Counter = atomic.AddUint64(&s.msgCount, 1)
+
 			bufs.b[i] = s.sink.getFormatter().formatEntry(editedEntry, stacks)
 			someSinkActive = true
 		}
