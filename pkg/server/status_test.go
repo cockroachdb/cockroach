@@ -561,11 +561,11 @@ func TestStatusLocalLogs(t *testing.T) {
 		}
 		for _, entry := range wrapper.Entries {
 			switch entry.Message {
-			case "TestStatusLocalLogFile test message-Error":
+			case "‹TestStatusLocalLogFile test message-Error›":
 				foundError = true
-			case "TestStatusLocalLogFile test message-Warning":
+			case "‹TestStatusLocalLogFile test message-Warning›":
 				foundWarning = true
-			case "TestStatusLocalLogFile test message-Info":
+			case "‹TestStatusLocalLogFile test message-Info›":
 				foundInfo = true
 			}
 		}
@@ -640,11 +640,11 @@ func TestStatusLocalLogs(t *testing.T) {
 				fmt.Fprintln(&logsBuf, entry.Message)
 
 				switch entry.Message {
-				case "TestStatusLocalLogFile test message-Error":
+				case "‹TestStatusLocalLogFile test message-Error›":
 					actual.Error = true
-				case "TestStatusLocalLogFile test message-Warning":
+				case "‹TestStatusLocalLogFile test message-Warning›":
 					actual.Warning = true
-				case "TestStatusLocalLogFile test message-Info":
+				case "‹TestStatusLocalLogFile test message-Info›":
 					actual.Info = true
 				}
 			}
@@ -664,39 +664,24 @@ func TestStatusLogRedaction(t *testing.T) {
 	testData := []struct {
 		redactableLogs     bool // logging flag
 		redact             bool // RPC request flag
-		keepRedactable     bool // RPC request flag
 		expectedMessage    string
 		expectedRedactable bool // redactable bit in result entries
 	}{
-		// Note: all 2^3 combinations of (redactableLogs, redact,
-		// keepRedactable) must be tested below.
+		// Note: all combinations of (redactableLogs, redact) must be tested below.
 
-		// redact=false, keepredactable=false results in an unsafe "flat"
-		// format regardless of whether there were markers in the log
-		// file.
-		{false, false, false, `THISISSAFE THISISUNSAFE`, false},
-		// keepredactable=true, if there were no markers to start with
-		// (redactableLogs=false), introduces markers around the entire
-		// message to indicate it's not known to be safe.
-		{false, false, true, `‹THISISSAFE THISISUNSAFE›`, true},
+		// If there were no markers to start with (redactableLogs=false), we
+		// introduce markers around the entire message to indicate it's not known to
+		// be safe.
+		{false, false, `‹THISISSAFE THISISUNSAFE›`, true},
 		// redact=true must be conservative and redact everything out if
 		// there were no markers to start with (redactableLogs=false).
-		{false, true, false, `‹×›`, false},
-		{false, true, true, `‹×›`, false},
-		// redact=false, keepredactable=false results in an unsafe "flat"
-		// format regardless of whether there were markers in the log
-		// file.
-		{true, false, false, `THISISSAFE THISISUNSAFE`, false},
-		// keepredactable=true, redact=false, keeps whatever was in the
-		// log file.
-		{true, false, true, `THISISSAFE ‹THISISUNSAFE›`, true},
-		// if there were markers in the log to start with, redact=true
-		// removes only the unsafe information.
-		{true, true, false, `THISISSAFE ‹×›`, false},
+		{false, true, `‹×›`, false},
+		// redact=false keeps whatever was in the log file.
+		{true, false, `THISISSAFE ‹THISISUNSAFE›`, true},
 		// Whether or not to keep the redactable markers has no influence
 		// on the output of redaction, just on the presence of the
 		// "redactable" marker. In any case no information is leaked.
-		{true, true, true, `THISISSAFE ‹×›`, true},
+		{true, true, `THISISSAFE ‹×›`, true},
 	}
 
 	testutils.RunTrueAndFalse(t, "redactableLogs",
@@ -732,7 +717,7 @@ func TestStatusLogRedaction(t *testing.T) {
 				if tc.redactableLogs != redactableLogs {
 					continue
 				}
-				t.Run(fmt.Sprintf("redact=%v,keepredactable=%v", tc.redact, tc.keepRedactable),
+				t.Run(fmt.Sprintf("redact=%v", tc.redact),
 					func(t *testing.T) {
 						// checkEntries asserts that the redaction results are
 						// those expected in tc.
@@ -753,8 +738,7 @@ func TestStatusLogRedaction(t *testing.T) {
 
 						// Retrieve the log entries with the configured flags using
 						// the LogFiles() RPC.
-						logFilesURL := fmt.Sprintf("logfiles/local/%s?redact=%v&keep_redactable=%v",
-							file.Name, tc.redact, tc.keepRedactable)
+						logFilesURL := fmt.Sprintf("logfiles/local/%s?redact=%v", file.Name, tc.redact)
 						var wrapper serverpb.LogEntriesResponse
 						if err := getStatusJSONProto(ts, logFilesURL, &wrapper); err != nil {
 							t.Fatal(err)
@@ -771,8 +755,7 @@ func TestStatusLogRedaction(t *testing.T) {
 						}
 
 						// Retrieve the log entries using the Logs() RPC.
-						logsURL := fmt.Sprintf("logs/local?redact=%v&keep_redactable=%v",
-							tc.redact, tc.keepRedactable)
+						logsURL := fmt.Sprintf("logs/local?redact=%v", tc.redact)
 						var wrapper2 serverpb.LogEntriesResponse
 						if err := getStatusJSONProto(ts, logsURL, &wrapper2); err != nil {
 							t.Fatal(err)
