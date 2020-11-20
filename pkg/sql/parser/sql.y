@@ -756,7 +756,8 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> alter_database_to_schema_stmt
 %type <tree.Statement> alter_database_add_region_stmt
 %type <tree.Statement> alter_database_drop_region_stmt
-%type <tree.Statement> alter_database_survive_stmt
+%type <tree.Statement> alter_database_survival_goal_stmt
+%type <tree.Statement> alter_database_primary_region_stmt
 %type <tree.Statement> alter_zone_database_stmt
 %type <tree.Statement> alter_database_owner
 
@@ -955,9 +956,9 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 %type <tree.NameList> opt_regions_list
-%type <str> region_name
+%type <str> region_name primary_region_clause opt_primary_region_clause
 %type <tree.NameList> region_name_list
-%type <tree.SurvivalGoal> survive_clause opt_survive_clause
+%type <tree.SurvivalGoal> survival_goal_clause opt_survival_goal_clause
 %type <tree.RegionalAffinity> regional_affinity
 %type <int32> opt_connection_limit
 
@@ -1458,6 +1459,7 @@ alter_sequence_options_stmt:
 // ALTER DATABASE <name> CONVERT TO SCHEMA WITH PARENT <name>
 // ALTER DATABASE <name> ADD REGIONS <regions>
 // ALTER DATABASE <name> DROP REGIONS <regions>
+// ALTER DATABASE <name> SET PRIMARY REGION <region>
 // ALTER DATABASE <name> SURVIVE <failure type>
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
@@ -1467,7 +1469,8 @@ alter_database_stmt:
 | alter_database_to_schema_stmt
 | alter_database_add_region_stmt
 | alter_database_drop_region_stmt
-| alter_database_survive_stmt
+| alter_database_survival_goal_stmt
+| alter_database_primary_region_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -1496,12 +1499,21 @@ alter_database_drop_region_stmt:
     }
   }
 
-alter_database_survive_stmt:
-  ALTER DATABASE database_name survive_clause
+alter_database_survival_goal_stmt:
+  ALTER DATABASE database_name survival_goal_clause
   {
     $$.val = &tree.AlterDatabaseSurvivalGoal{
       Name: tree.Name($3),
       SurvivalGoal: $4.survivalGoal(),
+    }
+  }
+
+alter_database_primary_region_stmt:
+  ALTER DATABASE database_name primary_region_clause
+  {
+    $$.val = &tree.AlterDatabasePrimaryRegion{
+      Name: tree.Name($3),
+      PrimaryRegion: tree.Name($4),
     }
   }
 
@@ -7544,7 +7556,7 @@ transaction_deferrable_mode:
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
 // %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
-  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_regions_list opt_survive_clause
+  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
   {
     $$.val = &tree.CreateDatabase{
       Name: tree.Name($3),
@@ -7553,11 +7565,12 @@ create_database_stmt:
       Collate: $7,
       CType: $8,
       ConnectionLimit: $9.int32(),
-      Regions: $10.nameList(),
-      SurvivalGoal: $11.survivalGoal(),
+      PrimaryRegion: tree.Name($10),
+      Regions: $11.nameList(),
+      SurvivalGoal: $12.survivalGoal(),
     }
   }
-| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_regions_list opt_survive_clause
+| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
   {
     $$.val = &tree.CreateDatabase{
       IfNotExists: true,
@@ -7567,11 +7580,24 @@ create_database_stmt:
       Collate: $10,
       CType: $11,
       ConnectionLimit: $12.int32(),
-      Regions: $13.nameList(),
-      SurvivalGoal: $14.survivalGoal(),
+      PrimaryRegion: tree.Name($13),
+      Regions: $14.nameList(),
+      SurvivalGoal: $15.survivalGoal(),
     }
   }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
+
+opt_primary_region_clause:
+  primary_region_clause
+| /* EMPTY */
+  {
+    $$ = ""
+  }
+
+primary_region_clause:
+  PRIMARY REGION opt_equal region_name {
+    $$ = $4
+  }
 
 opt_regions_list:
   region_or_regions opt_equal region_name_list
@@ -7587,7 +7613,7 @@ region_or_regions:
   REGION
 | REGIONS
 
-survive_clause:
+survival_goal_clause:
   SURVIVE opt_equal REGION FAILURE
   {
     $$.val = tree.SurvivalGoalRegionFailure
@@ -7597,8 +7623,8 @@ survive_clause:
     $$.val = tree.SurvivalGoalZoneFailure
   }
 
-opt_survive_clause:
-  survive_clause
+opt_survival_goal_clause:
+  survival_goal_clause
 | /* EMPTY */
   {
     $$.val = tree.SurvivalGoalDefault
