@@ -364,7 +364,6 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	ifNotExists := og.randIntn(2) == 0
 	schemaExists, err := schemaExists(tx, seqName.Schema())
 	if err != nil {
 		return "", err
@@ -372,6 +371,14 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 	sequenceExists, err := sequenceExists(tx, seqName)
 	if err != nil {
 		return "", err
+	}
+
+	// If the sequence exists and an error should be produced, then
+	// exclude the IF NOT EXISTS clause from the statement. Otherwise, default
+	// to including the clause prevent all pgcode.DuplicateRelation errors.
+	ifNotExists := true
+	if sequenceExists && og.produceError() {
+		ifNotExists = false
 	}
 
 	codesWithConditions{
