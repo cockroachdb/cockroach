@@ -619,7 +619,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	// on read transactions, but perhaps one day it will release some resources.
 
 	rf.traceKV = traceKV
-	f, err := makeKVBatchFetcherWithSendFunc(
+	f, err := makeKVBatchFetcherWithSender(
 		sendFunc(sendFn),
 		spans,
 		rf.reverse,

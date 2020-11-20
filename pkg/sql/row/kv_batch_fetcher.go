@@ -48,10 +48,16 @@ type sendFunc func(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error)
 
+func (s sendFunc) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	return s(ctx, ba)
+}
+
 // txnKVFetcher handles retrieval of key/values.
 type txnKVFetcher struct {
 	// "Constant" fields, provided by the caller.
-	sendFn sendFunc
+	sender sender
 	spans  roachpb.Spans
 	// If useBatchLimit is true, batches are limited to kvBatchSize. If
 	// firstBatchLimit is also set, the first batch is limited to that value.
@@ -193,22 +199,37 @@ func makeKVBatchFetcher(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
 ) (txnKVFetcher, error) {
-	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-		res, err := txn.Send(ctx, ba)
-		if err != nil {
-			return nil, err.GoError()
-		}
-		return res, nil
-	}
-	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
+	wrapper := sendingTxn{txn: txn}
+	return makeKVBatchFetcherWithSender(
+		wrapper, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
 	)
 }
 
-// makeKVBatchFetcherWithSendFunc is like makeKVBatchFetcher but uses a custom
-// send function.
-func makeKVBatchFetcherWithSendFunc(
-	sendFn sendFunc,
+type sendingTxn struct {
+	txn *kv.Txn
+}
+
+func (s sendingTxn) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	res, err := s.txn.Send(ctx, ba)
+	if err != nil {
+		return nil, err.GoError()
+	}
+	return res, nil
+}
+
+var _ sender = sendingTxn{}
+
+// sender is like kv.Sender but it returns a Go error, not a roachpb Error.
+type sender interface {
+	Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+}
+
+// makeKVBatchFetcherWithSender is like makeKVBatchFetcher but uses a custom
+// sender.
+func makeKVBatchFetcherWithSender(
+	sender sender,
 	spans roachpb.Spans,
 	reverse bool,
 	useBatchLimit bool,
@@ -261,7 +282,7 @@ func makeKVBatchFetcherWithSendFunc(
 	}
 
 	return txnKVFetcher{
-		sendFn:          sendFn,
+		sender:          sender,
 		spans:           copySpans,
 		reverse:         reverse,
 		useBatchLimit:   useBatchLimit,
@@ -353,7 +374,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// Reset spans in preparation for adding resume-spans below.
 	f.spans = f.spans[:0]
 
-	br, err := f.sendFn(ctx, ba)
+	br, err := f.sender.Send(ctx, ba)
 	if err != nil {
 		return err
 	}
