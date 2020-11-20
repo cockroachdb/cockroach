@@ -275,10 +275,10 @@ func (s *raftScheduler) worker(ctx context.Context) {
 			// state map.
 			delete(s.mu.state, id)
 		} else {
-			// There was a concurrent call to one of the Enqueue* methods. Queue the
-			// range ID for further processing.
+			// There was a concurrent call to one of the Enqueue* methods. Queue
+			// the range ID for further processing. There's no need to signal
+			// because this worker will loop back around and continue working.
 			s.mu.queue.Push(id)
-			s.mu.cond.Signal()
 		}
 	}
 }
