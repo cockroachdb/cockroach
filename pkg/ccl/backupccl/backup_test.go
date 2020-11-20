@@ -111,7 +111,7 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 }
 
 func (d *datadrivenTestState) addServer(
-	t *testing.T, name, iodir string, allowImplicitAccess bool,
+	t *testing.T, name, iodir, tempCleanupFrequency string, allowImplicitAccess bool,
 ) {
 	var tc serverutils.TestClusterInterface
 	var cleanup func()
@@ -119,6 +119,14 @@ func (d *datadrivenTestState) addServer(
 	if allowImplicitAccess {
 		params.ServerArgs.Knobs.BackupRestore = &sql.BackupRestoreTestingKnobs{
 			AllowImplicitAccess: true,
+		}
+	}
+	if tempCleanupFrequency != "" {
+		duration, err := time.ParseDuration(tempCleanupFrequency)
+		if err == nil {
+			settings := cluster.MakeTestingClusterSettings()
+			sql.TempObjectCleanupInterval.Override(&settings.SV, duration)
+			params.ServerArgs.Settings = settings
 		}
 	}
 	if iodir == "" {
@@ -189,12 +197,21 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 		defer ds.cleanup(ctx)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "sleep":
+				var sleepDuration string
+				d.ScanArgs(t, "time", &sleepDuration)
+				duration, err := time.ParseDuration(sleepDuration)
+				if err != nil {
+					return err.Error()
+				}
+				time.Sleep(duration)
+				return ""
 			case "reset":
 				ds.cleanup(ctx)
 				ds = newDatadrivenTestState()
 				return ""
 			case "new-server":
-				var name, shareDirWith, iodir string
+				var name, shareDirWith, iodir, tempCleanupFrequency string
 				var allowImplicitAccess bool
 				d.ScanArgs(t, "name", &name)
 				if d.HasArg("share-io-dir") {
@@ -206,8 +223,11 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				if d.HasArg("allow-implicit-access") {
 					allowImplicitAccess = true
 				}
+				if d.HasArg("temp-cleanup-freq") {
+					d.ScanArgs(t, "temp-cleanup-freq", &tempCleanupFrequency)
+				}
 				lastCreatedServer = name
-				ds.addServer(t, name, iodir, allowImplicitAccess)
+				ds.addServer(t, name, iodir, tempCleanupFrequency, allowImplicitAccess)
 				return ""
 			case "exec-sql":
 				server := lastCreatedServer
@@ -2037,7 +2057,7 @@ INSERT INTO sc.tb2 VALUES ('hello');
 		// Now backup the full cluster.
 		sqlDB.Exec(t, `BACKUP TO 'nodelocal://0/test/'`)
 		// Start a new server that shares the data directory.
-		_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dataDir, InitNone)
+		_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dataDir, InitNone, base.TestClusterArgs{})
 		defer cleanupRestore()
 
 		// Restore into the new cluster.
@@ -6698,4 +6718,125 @@ func flipBitInManifests(t *testing.T, rawDir string) {
 	if !foundManifest {
 		t.Fatal("found no manifest")
 	}
+}
+
+func TestFullClusterTemporaryBackupAndRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	numNodes := 4
+	// Start a new server that shares the data directory.
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.UseDatabase = "defaultdb"
+	tc := serverutils.StartNewTestCluster(
+		t, numNodes, params,
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	// Start two temporary schemas and create a table in each. This table will
+	// have different pg_temp schemas but will be created in the same defaultdb.
+	comment := "never see this"
+	for _, dbID := range []int{0, 1} {
+		db := tc.ServerConn(dbID)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+		sqlDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+		sqlDB.Exec(t, fmt.Sprintf(`COMMENT ON TABLE t IS '%s'`, comment))
+	}
+
+	// Create a third session where we have two temp tables which will be in the
+	// same pg_temp schema with the same name but in different DBs.
+	diffDBConn := tc.ServerConn(2)
+	diffDB := sqlutils.MakeSQLRunner(diffDBConn)
+	diffDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+	diffDB.Exec(t, `CREATE DATABASE t1`)
+	diffDB.Exec(t, `USE t1`)
+	diffDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+	diffDB.Exec(t, `CREATE DATABASE t2`)
+	diffDB.Exec(t, `USE t2`)
+	diffDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+
+	backupDBConn := tc.ServerConn(3)
+	backupDB := sqlutils.MakeSQLRunner(backupDBConn)
+	backupDB.Exec(t, `BACKUP TO 'nodelocal://0/full_cluster_backup'`)
+
+	params = base.TestClusterArgs{}
+	ch := make(chan time.Time)
+	finishedCh := make(chan struct{})
+	knobs := base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			OnTempObjectsCleanupDone: func() {
+				finishedCh <- struct{}{}
+			},
+			TempObjectsCleanupCh: ch,
+		},
+	}
+	params.ServerArgs.Knobs = knobs
+	//settings := cluster.MakeClusterSettings()
+	//sql.TempObjectCleanupInterval.Override(&settings.SV, time.Second*5)
+	//params.ServerArgs.Settings = settings
+	_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, numNodes, dir, InitNone,
+		params)
+	defer cleanupRestore()
+	sqlDBRestore.Exec(t, `RESTORE FROM 'nodelocal://0/full_cluster_backup'`)
+
+	// Before the reconciliation job runs we should be able to see the following:
+	// - 4 synthesized pg_temp sessions in defaultdb.
+	// We synthesize a new temp schema for each unique backed-up <dbID, schemaID>
+	// tuple of a temporary table descriptor.
+	// - All temp tables remapped to belong to the associated synthesized temp
+	// schema, and in the defaultdb.
+	checkSchemasQuery := `SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%' ORDER BY
+schema_name`
+	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery,
+		[][]string{{"pg_temp_0_0"}, {"pg_temp_0_1"}, {"pg_temp_0_2"}, {"pg_temp_0_3"}})
+
+	checkTempTablesQuery := `SELECT schema_name, 
+table_name FROM [SHOW TABLES] ORDER BY schema_name, table_name`
+	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{{"pg_temp_0_0", "t"},
+		{"pg_temp_0_1", "t"}, {"pg_temp_0_2", "t"}, {"pg_temp_0_3", "t"}})
+
+	// Sanity check that the databases the temporary tables originally belonged to
+	// are restored and empty because of the remapping.
+	sqlDBRestore.CheckQueryResults(t,
+		`SELECT database_name FROM [SHOW DATABASES] ORDER BY database_name`,
+		[][]string{{"defaultdb"}, {"postgres"}, {"system"}, {"t1"}, {"t2"}})
+
+	// Check that we can see the comment on the temporary tables before the
+	// reconciliation job runs.
+	checkCommentQuery := fmt.Sprintf(`SELECT COUNT(comment) FROM system.comments WHERE comment='%s'`,
+		comment)
+	var commentCount int
+	sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
+	require.Equal(t, commentCount, 2)
+
+	testutils.SucceedsSoon(t, func() error {
+		// Now force a cleanup run (by default, it is every 30mins).
+		// Send this to every node, in case one is not the leaseholder.
+		// This needs to be sent on each run, in case the lease master
+		// has not been decided.
+		for i := 0; i < numNodes; i++ {
+			ch <- timeutil.Now()
+		}
+		// Block until all nodes have responded.
+		// This prevents the stress tests running into #28033, where
+		// ListSessions races with the QueryRow.
+		for i := 0; i < numNodes; i++ {
+			<-finishedCh
+		}
+
+		// Check that all the synthesized temp schemas have been wiped.
+		sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{})
+
+		// Check that all the temp tables have been wiped.
+		sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{})
+
+		// Check that all the temp table comments have been wiped.
+		sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
+		require.Equal(t, commentCount, 0)
+		return nil
+	})
 }
