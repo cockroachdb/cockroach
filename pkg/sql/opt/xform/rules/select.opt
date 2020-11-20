@@ -123,39 +123,38 @@
                 $scanPrivate
                 $filters
             )
+        ) &
+        ^(HasZeroRows
+            $leftSelect:(MakeSelect
+                $input
+                (ReplaceFiltersItem
+                    $filters
+                    (ExprPairFiltersItemToReplace $pair)
+                    (ExprPairLeft $pair)
+                )
+            )
+        ) &
+        ^(HasZeroRows
+            $rightSelect:(MakeSelect
+                $rightScan:(DuplicateScan $input)
+                (MapScanFilterCols
+                    (ReplaceFiltersItem
+                        $filters
+                        (ExprPairFiltersItemToReplace $pair)
+                        (ExprPairRight $pair)
+                    )
+                    $input
+                    $rightScan
+                )
+            )
         )
 )
 =>
 (DistinctOn
     (UnionAll
-        (Select
-            $input
-            (ReplaceFiltersItem
-                $filters
-                (ExprPairFiltersItemToReplace $pair)
-                (ExprPairLeft $pair)
-            )
-        )
-        (Select
-            (Scan
-                $rightScanPrivate:(DuplicateScanPrivate
-                    $scanPrivate
-                )
-            )
-            (MapScanFilterCols
-                (ReplaceFiltersItem
-                    $filters
-                    (ExprPairFiltersItemToReplace $pair)
-                    (ExprPairRight $pair)
-                )
-                $scanPrivate
-                $rightScanPrivate
-            )
-        )
-        (MakeSetPrivateForSplitDisjunction
-            $scanPrivate
-            $rightScanPrivate
-        )
+        $leftSelect
+        $rightSelect
+        (MakeSetPrivateForSplitDisjunction $input $rightScan)
     )
     (MakeAggCols ConstAgg (NonKeyCols $input))
     (MakeGrouping (KeyCols $input) (EmptyOrdering))
@@ -203,17 +202,11 @@
                 $scanPrivate
                 $filters
             )
-        )
-)
-=>
-(Project
-    (DistinctOn
-        (UnionAll
-            (Select
-                $leftScan:(Scan
-                    $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate
-                        $scanPrivate
-                    )
+        ) &
+        ^(HasZeroRows
+            $leftSelect:(MakeSelect
+                $leftScan:(MakeScanAddPrimaryKeyCols
+                    $scanPrivate
                 )
                 (ReplaceFiltersItem
                     $filters
@@ -221,25 +214,31 @@
                     (ExprPairLeft $pair)
                 )
             )
-            (Select
-                (Scan
-                    $rightScanPrivate:(DuplicateScanPrivate
-                        $leftScanPrivate
-                    )
-                )
+        ) &
+        ^(HasZeroRows
+            $rightSelect:(MakeSelect
+                $rightScan:(DuplicateScan $leftScan)
                 (MapScanFilterCols
                     (ReplaceFiltersItem
                         $filters
                         (ExprPairFiltersItemToReplace $pair)
                         (ExprPairRight $pair)
                     )
-                    $leftScanPrivate
-                    $rightScanPrivate
+                    $leftScan
+                    $rightScan
                 )
             )
+        )
+)
+=>
+(Project
+    (DistinctOn
+        (UnionAll
+            $leftSelect
+            $rightSelect
             (MakeSetPrivateForSplitDisjunction
-                $leftScanPrivate
-                $rightScanPrivate
+                $leftScan
+                $rightScan
             )
         )
         (MakeAggCols ConstAgg (NonKeyCols $leftScan))

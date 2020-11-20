@@ -209,21 +209,36 @@ WHERE
 distribution: local
 vectorized: true
 ·
-• project
+• root
 │ columns: (col0)
-│ estimated row count: 311 (missing stats)
 │
-└── • project
-    │ columns: (col0, col3, col4)
-    │ estimated row count: 311 (missing stats)
+├── • project
+│   │ columns: (col0)
+│   │ estimated row count: 311 (missing stats)
+│   │
+│   └── • filter
+│       │ columns: (col0, col3, col4)
+│       │ estimated row count: 311 (missing stats)
+│       │ filter: ((col0 <= 0) AND (col4 <= 5.38)) OR ((((col4 = ANY @S1) AND (col3 <= 5)) AND (col3 >= 7)) AND (col3 <= 9))
+│       │
+│       └── • scan
+│             columns: (col0, col3, col4)
+│             estimated row count: 1000 (missing stats)
+│             table: tab4@primary
+│             spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT col1 FROM tab4 WHERE col1 > 8.27)
+    │ exec mode: any rows
     │
     └── • filter
-        │ columns: (col0, col3, col4, rowid)
-        │ estimated row count: 311 (missing stats)
-        │ filter: (col0 <= 0) AND (col4 <= 5.38)
+        │ columns: (col1)
+        │ estimated row count: 333 (missing stats)
+        │ filter: col1 > 8.27
         │
         └── • scan
-              columns: (col0, col3, col4, rowid)
+              columns: (col1)
               estimated row count: 1000 (missing stats)
               table: tab4@primary
               spans: FULL SCAN
