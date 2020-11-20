@@ -46,7 +46,7 @@ func addStructured(
 	}
 
 	entry := MakeEntry(
-		ctx, sev, &debugLog.logCounter, depth+1, true /* redactable */, format, args...)
+		ctx, sev, depth+1, true /* redactable */, format, args...)
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
 		eventInternal(sp, el, (sev >= severity.ERROR), entry)
 	}
