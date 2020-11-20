@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -433,9 +434,23 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 
 	// The other nodes are just as careful.
 	for i := 0; i < len(versions)-2; i++ {
-		if err := tc.setVersion(i, v1s); !testutils.IsError(err,
-			fmt.Sprintf("binary version %s less than target version %s", v0s, v1s),
-		) {
+		var err error
+		for {
+			err = tc.setVersion(i, v1s)
+			if testutils.IsError(err, "required, but unavailable") {
+				// Paper over transient unavailability errors. Because we're
+				// setting the cluster version so soon after cluster startup,
+				// it's possible that we're doing so before all the nodes have
+				// had a chance to heartbeat their liveness records for the very
+				// first time. To other nodes it appears that the node in
+				// question is unavailable.
+				time.Sleep(time.Second)
+				continue
+			}
+			break
+		}
+
+		if !testutils.IsError(err, fmt.Sprintf("binary version %s less than target version %s", v0s, v1s)) {
 			t.Fatal(i, err)
 		}
 	}
