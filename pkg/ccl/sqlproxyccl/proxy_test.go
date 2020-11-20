@@ -243,6 +243,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
 		require.True(t, connSuccess)
+		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
 	}()
 
 	var n int
@@ -327,4 +328,5 @@ func TestProxyRefuseConn(t *testing.T) {
 		CodeProxyRefusedConnection, "too many attempts",
 	)
 	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
+	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
 }

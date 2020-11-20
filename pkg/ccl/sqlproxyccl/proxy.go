@@ -183,6 +183,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 			backendConfig.OutgoingAddress, err)
 	}
 
+	s.metrics.SuccessfulConnCount.Inc(1)
 	if backendConfig.OnConnectionSuccess != nil {
 		backendConfig.OnConnectionSuccess()
 	}

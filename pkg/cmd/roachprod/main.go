@@ -80,7 +80,10 @@ var (
 	listMine          bool
 	clusterType       = "cockroach"
 	secure            = false
-	nodeEnv           = []string{"COCKROACH_ENABLE_RPC_COMPRESSION=false"}
+	nodeEnv           = []string{
+		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
+		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
+	}
 	nodeArgs          []string
 	tag               string
 	external          = false
