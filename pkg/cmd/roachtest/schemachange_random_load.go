@@ -29,6 +29,9 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 		Owner:      OwnerSQLSchema,
 		Cluster:    makeClusterSpec(3),
 		MinVersion: "v20.1.0",
+		// This is set while development is still happening on the workload and we
+		// fix (or bypass) minor schema change bugs that are discovered.
+		NonReleaseBlocker: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			maxOps := 5000
 			concurrency := 20
@@ -69,6 +72,9 @@ func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
 		Owner:      OwnerSQLSchema,
 		Cluster:    makeClusterSpec(b.Nodes),
 		MinVersion: "v20.1.0",
+		// This is set while development is still happening on the workload and we
+		// fix (or bypass) minor schema change bugs that are discovered.
+		NonReleaseBlocker: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
 		},
