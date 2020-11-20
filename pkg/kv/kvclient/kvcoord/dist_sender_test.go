@@ -193,6 +193,8 @@ func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) 
 	}
 }
 
+func (l *simpleTransportAdapter) Release() {}
+
 func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
 	server := rpc.NewServer(rpcContext)
 
