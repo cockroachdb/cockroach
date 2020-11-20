@@ -244,7 +244,7 @@ func (ds *DistSender) singleRangeFeed(
 	for {
 		if transport.IsExhausted() {
 			return args.Timestamp, newSendError(
-				fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
+				fmt.Sprintf("sending to all %d replicas failed", len(replicas.Descriptors())))
 		}
 
 		args.Replica = transport.NextReplica()

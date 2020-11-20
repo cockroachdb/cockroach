@@ -707,6 +707,8 @@ func (t *multiTestContextKVTransport) MoveToFront(replica roachpb.ReplicaDescrip
 	}
 }
 
+func (t *multiTestContextKVTransport) Release() {}
+
 func (t *multiTestContextKVTransport) setPending(repID roachpb.ReplicaID, pending bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

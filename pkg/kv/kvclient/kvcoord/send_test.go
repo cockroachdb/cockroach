@@ -114,6 +114,8 @@ func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
 
+func (f *firstNErrorTransport) Release() {}
+
 func (f *firstNErrorTransport) SendNext(
 	_ context.Context, _ roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
@@ -262,10 +264,14 @@ func TestSplitHealthy(t *testing.T) {
 	for _, td := range testData {
 		t.Run("", func(t *testing.T) {
 			replicas := make([]roachpb.ReplicaDescriptor, len(td.in))
-			health := make(map[roachpb.ReplicaDescriptor]bool)
+			var health util.FastIntMap
 			for i, r := range td.in {
 				replicas[i] = r.replica
-				health[replicas[i]] = r.healthy
+				if r.healthy {
+					health.Set(i, 1)
+				} else {
+					health.Set(i, 0)
+				}
 			}
 			splitHealthy(replicas, health)
 			if !reflect.DeepEqual(replicas, td.out) {

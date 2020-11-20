@@ -28,16 +28,21 @@ type ReplicaInfo struct {
 	NodeDesc *roachpb.NodeDescriptor
 }
 
-func (i ReplicaInfo) locality() []roachpb.Tier {
-	return i.NodeDesc.Locality.Tiers
+func (rs ReplicaSlice) locality(i int) []roachpb.Tier {
+	return rs.nodes[i].Locality.Tiers
 }
 
-func (i ReplicaInfo) addr() string {
-	return i.NodeDesc.Address.String()
+func (rs ReplicaSlice) addr(i int) string {
+	return rs.nodes[i].Address.String()
 }
 
-// A ReplicaSlice is a slice of ReplicaInfo.
-type ReplicaSlice []ReplicaInfo
+// A ReplicaSlice is a slice of replica descriptors with an associated slice
+// of node descriptors. Each node descriptor corresponds to the replica decriptor
+// at the same index.
+type ReplicaSlice struct {
+	replicas []roachpb.ReplicaDescriptor
+	nodes    []*roachpb.NodeDescriptor
+}
 
 // NewReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
@@ -84,7 +89,10 @@ func NewReplicaSlice(
 			voters = append(voters, *leaseholder)
 		}
 	}
-	rs := make(ReplicaSlice, 0, len(voters))
+	rs := ReplicaSlice{
+		replicas: make([]roachpb.ReplicaDescriptor, 0, len(voters)),
+		nodes:    make([]*roachpb.NodeDescriptor, 0, len(voters)),
+	}
 	for _, r := range voters {
 		nd, err := nodeDescs.GetNodeDescriptor(r.NodeID)
 		if err != nil {
@@ -93,13 +101,11 @@ func NewReplicaSlice(
 			}
 			continue
 		}
-		rs = append(rs, ReplicaInfo{
-			ReplicaDescriptor: r,
-			NodeDesc:          nd,
-		})
+		rs.nodes = append(rs.nodes, nd)
+		rs.replicas = append(rs.replicas, r)
 	}
-	if len(rs) == 0 {
-		return nil, newSendError(
+	if len(rs.replicas) == 0 {
+		return ReplicaSlice{}, newSendError(
 			fmt.Sprintf("no replica node addresses available via gossip for r%d", desc.RangeID))
 	}
 	return rs, nil
@@ -109,15 +115,19 @@ func NewReplicaSlice(
 var _ shuffle.Interface = ReplicaSlice{}
 
 // Len returns the total number of replicas in the slice.
-func (rs ReplicaSlice) Len() int { return len(rs) }
+func (rs ReplicaSlice) Len() int { return len(rs.replicas) }
 
 // Swap swaps the replicas with indexes i and j.
-func (rs ReplicaSlice) Swap(i, j int) { rs[i], rs[j] = rs[j], rs[i] }
+func (rs ReplicaSlice) Swap(i, j int) {
+	rs.replicas[i], rs.replicas[j] = rs.replicas[j], rs.replicas[i]
+	rs.nodes[i], rs.nodes[j] = rs.nodes[j], rs.nodes[i]
+}
 
 // Find returns the index of the specified ReplicaID, or -1 if missing.
 func (rs ReplicaSlice) Find(id roachpb.ReplicaID) int {
-	for i := range rs {
-		if rs[i].ReplicaID == id {
+	replicas := rs.replicas
+	for i := range replicas {
+		if replicas[i].ReplicaID == id {
 			return i
 		}
 	}
@@ -128,13 +138,16 @@ func (rs ReplicaSlice) Find(id roachpb.ReplicaID) int {
 // of the slice, keeping the order of the remaining elements stable.
 // The function will panic when invoked with an invalid index.
 func (rs ReplicaSlice) MoveToFront(i int) {
-	if i >= len(rs) {
+	if i >= len(rs.replicas) {
 		panic("out of bound index")
 	}
-	front := rs[i]
+	frontReplica := rs.replicas[i]
+	frontNode := rs.nodes[i]
 	// Move the first i elements one index to the right
-	copy(rs[1:], rs[:i])
-	rs[0] = front
+	copy(rs.replicas[1:], rs.replicas[:i])
+	copy(rs.nodes[1:], rs.nodes[:i])
+	rs.replicas[0] = frontReplica
+	rs.nodes[0] = frontNode
 }
 
 // localityMatch returns the number of consecutive locality tiers
@@ -180,18 +193,18 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 	// Sort replicas by latency and then attribute affinity.
 	sort.Slice(rs, func(i, j int) bool {
 		// If there is a replica in local node, it sorts first.
-		if rs[i].NodeID == nodeDesc.NodeID {
+		if rs.nodes[i].NodeID == nodeDesc.NodeID {
 			return true
 		}
 		if latencyFn != nil {
-			latencyI, okI := latencyFn(rs[i].addr())
-			latencyJ, okJ := latencyFn(rs[j].addr())
+			latencyI, okI := latencyFn(rs.addr(i))
+			latencyJ, okJ := latencyFn(rs.addr(j))
 			if okI && okJ {
 				return latencyI < latencyJ
 			}
 		}
-		attrMatchI := localityMatch(nodeDesc.Locality.Tiers, rs[i].locality())
-		attrMatchJ := localityMatch(nodeDesc.Locality.Tiers, rs[j].locality())
+		attrMatchI := localityMatch(nodeDesc.Locality.Tiers, rs.locality(i))
+		attrMatchJ := localityMatch(nodeDesc.Locality.Tiers, rs.locality(j))
 		// Longer locality matches sort first (the assumption is that
 		// they'll have better latencies).
 		return attrMatchI > attrMatchJ
@@ -199,10 +212,7 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 }
 
 // Descriptors returns the ReplicaDescriptors inside the ReplicaSlice.
+// This slice shouldn't be mutated!
 func (rs ReplicaSlice) Descriptors() []roachpb.ReplicaDescriptor {
-	reps := make([]roachpb.ReplicaDescriptor, len(rs))
-	for i := range rs {
-		reps[i] = rs[i].ReplicaDescriptor
-	}
-	return reps
+	return rs.replicas
 }

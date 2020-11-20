@@ -1809,6 +1809,7 @@ func (ds *DistSender) sendToReplicas(
 	if err != nil {
 		return nil, err
 	}
+	defer transport.Release()
 
 	// inTransferRetry is used to slow down retries in cases where an ongoing
 	// lease transfer is suspected.

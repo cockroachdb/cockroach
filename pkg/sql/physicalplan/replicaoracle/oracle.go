@@ -139,7 +139,8 @@ func (o *randomOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	return replicas[rand.Intn(len(replicas))].ReplicaDescriptor, nil
+	descriptors := replicas.Descriptors()
+	return descriptors[rand.Intn(len(descriptors))], nil
 }
 
 type closestOracle struct {
@@ -170,7 +171,7 @@ func (o *closestOracle) ChoosePreferredReplica(
 		return roachpb.ReplicaDescriptor{}, err
 	}
 	replicas.OptimizeReplicaOrder(&o.nodeDesc, o.latencyFunc)
-	return replicas[0].ReplicaDescriptor, nil
+	return replicas.Descriptors()[0], nil
 }
 
 // maxPreferredRangesPerLeaseHolder applies to the binPackingOracle.
@@ -232,10 +233,11 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	// Look for a replica that has been assigned some ranges, but it's not yet full.
 	minLoad := int(math.MaxInt32)
 	var leastLoadedIdx int
-	for i, repl := range replicas {
+	descriptors := replicas.Descriptors()
+	for i, repl := range descriptors {
 		assignedRanges := queryState.RangesPerNode[repl.NodeID]
 		if assignedRanges != 0 && assignedRanges < o.maxPreferredRangesPerLeaseHolder {
-			return repl.ReplicaDescriptor, nil
+			return repl, nil
 		}
 		if assignedRanges < minLoad {
 			leastLoadedIdx = i
@@ -245,7 +247,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	// Either no replica was assigned any previous ranges, or all replicas are
 	// full. Use the least-loaded one (if all the load is 0, then the closest
 	// replica is returned).
-	return replicas[leastLoadedIdx].ReplicaDescriptor, nil
+	return descriptors[leastLoadedIdx], nil
 }
 
 // replicaSliceOrErr returns a ReplicaSlice for the given range descriptor.
