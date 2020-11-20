@@ -44,6 +44,7 @@ type CreateDatabase struct {
 	Collate         string
 	CType           string
 	ConnectionLimit int32
+	PrimaryRegion   Name
 	Regions         NameList
 	SurvivalGoal    SurvivalGoal
 }
@@ -74,6 +75,10 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.ConnectionLimit != -1 {
 		ctx.WriteString(" CONNECTION LIMIT = ")
 		ctx.WriteString(strconv.Itoa(int(node.ConnectionLimit)))
+	}
+	if node.PrimaryRegion != "" {
+		ctx.WriteString(" PRIMARY REGION ")
+		node.PrimaryRegion.Format(ctx)
 	}
 	if node.Regions != nil {
 		ctx.WriteString(" REGIONS = ")

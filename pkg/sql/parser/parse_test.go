@@ -74,6 +74,7 @@ func TestParse(t *testing.T) {
 		{`CREATE DATABASE a REGIONS = "us-west-1", "us-west-2"`},
 		{`CREATE DATABASE a SURVIVE REGION FAILURE`},
 		{`CREATE DATABASE a SURVIVE ZONE FAILURE`},
+		{`CREATE DATABASE a PRIMARY REGION "us-west-1"`},
 		{`CREATE DATABASE IF NOT EXISTS a`},
 		{`CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0'`},
 		{`CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'invalid'`},
@@ -87,6 +88,7 @@ func TestParse(t *testing.T) {
 		{`CREATE DATABASE IF NOT EXISTS a REGIONS = "us-west-1", "us-west-2"`},
 		{`CREATE DATABASE IF NOT EXISTS a SURVIVE REGION FAILURE`},
 		{`CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE`},
+		{`CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1"`},
 
 		{`CREATE SCHEMA IF NOT EXISTS foo`},
 		{`CREATE SCHEMA foo`},
@@ -1363,6 +1365,7 @@ func TestParse(t *testing.T) {
 		{`ALTER DATABASE a ADD REGION "us-west-1"`},
 		{`ALTER DATABASE a DROP REGION "us-west-1"`},
 		{`ALTER DATABASE a SURVIVE REGION FAILURE`},
+		{`ALTER DATABASE a PRIMARY REGION "us-west-3"`},
 		{`EXPLAIN ALTER DATABASE a RENAME TO b`},
 
 		{`ALTER DATABASE a OWNER TO foo`},
@@ -1782,6 +1785,10 @@ func TestParse2(t *testing.T) {
 		{
 			`CREATE DATABASE a REGION "us-west-1"`,
 			`CREATE DATABASE a REGIONS = "us-west-1"`,
+		},
+		{
+			`CREATE DATABASE a PRIMARY REGION = "us-west-1"`,
+			`CREATE DATABASE a PRIMARY REGION "us-west-1"`,
 		},
 		{`CREATE TABLE a (b INT) WITH (fillfactor=100)`,
 			`CREATE TABLE a (b INT8)`},
