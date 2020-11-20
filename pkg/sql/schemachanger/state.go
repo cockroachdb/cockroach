@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -27,54 +28,10 @@ type element interface {
 	// ...
 }
 
-type addIndex struct {
-	statementID stmtID
-
-	tableID descpb.ID
-	indexID descpb.IndexID
-	// TODO(ajwerner): Consider adding column IDs to track dependencies at
-	// step compile time.
-
-	// Refer to a descriptor
-	// And column ID
-	// And maybe higher level change?
-	state elemState
-}
-
-func (a addIndex) stmtID() stmtID {
-	return a.statementID
-}
-
-type addColumn struct {
-	statementID stmtID
-
-	tableID  descpb.ID
-	columnID descpb.ColumnID
-
-	// Refer to a descriptor
-	// And column ID
-	// And maybe higher level change?
-	state elemState
-}
-
-func (a addColumn) stmtID() stmtID {
-	return a.statementID
-}
-
-type elemState int
-
-const (
-	elemDeleteOnly elemState = iota
-	elemDeleteAndWriteOnly
-	elemBackfilled
-	elemPublic
-	elemRemoved
-)
-
-func compileStateToForwardSteps(ctx context.Context, st schemaChangerState) ([]step, error) {
+func compileStateToForwardSteps(ctx context.Context, st schemaChangerState) ([]ops2.step, error) {
 	// Elements to sequence of steps per element, then will combine.
 
-	// elem: addColumn{state: elemDeleteOnly}
+	// elem: AddColumn{state: elemDeleteOnly}
 	// ops:
 	//  - addColumnChangeStateOp{nextState: elemDeleteAndWriteOnly}
 	//  - columnBackfillOp
@@ -88,7 +45,7 @@ func compileStateToForwardSteps(ctx context.Context, st schemaChangerState) ([]s
 	//  - uniqueIndexValidateOp
 	//  - addIndexChangeStateOp{nextState: elemPublic}
 
-	elemOps := make(map[element][]op)
+	elemOps := make(map[element][]ops2.op)
 	for _, elem := range st.elements {
 		var err error
 		elemOps[elem], err = compileOps(elem)
@@ -98,30 +55,30 @@ func compileStateToForwardSteps(ctx context.Context, st schemaChangerState) ([]s
 	}
 	// Combine elemOps
 	// panic("unimplemented")
-	var result []step
+	var result []ops2.step
 	if len(elemOps) != 1 {
 		panic("unimplemented")
 	}
-	var ops []op
+	var ops []ops2.op
 	for _, ops = range elemOps {
 		break
 	}
 	for _, op := range ops {
 		switch t := op.(type) {
-		case descriptorMutationOp:
-			result = append(result, descriptorMutationOps{t})
-		case validationOp:
-			result = append(result, validationOps{t})
-		case backfillOp:
-			result = append(result, backfillOps{t})
+		case ops2.descriptorMutationOp:
+			result = append(result, ops2.descriptorMutationOps{t})
+		case ops2.validationOp:
+			result = append(result, ops2.validationOps{t})
+		case ops2.backfillOp:
+			result = append(result, ops2.backfillOps{t})
 		}
 	}
 	return result, nil
 }
 
-func compileOps(e element) ([]op, error) {
+func compileOps(e element) ([]ops2.op, error) {
 	switch e := e.(type) {
-	case *addColumn:
+	case *targets.AddColumn:
 		return compileAddColumnOps(e)
 	default:
 		return nil, errors.AssertionFailedf("unknown element type %T", e)
@@ -129,30 +86,30 @@ func compileOps(e element) ([]op, error) {
 
 }
 
-func compileAddColumnOps(e *addColumn) ([]op, error) {
-	var ops []op
-	descChange := func(nextState elemState) *addColumnChangeStateOp {
-		return &addColumnChangeStateOp{
+func compileAddColumnOps(e *targets.AddColumn) ([]ops2.op, error) {
+	var ops []ops2.op
+	descChange := func(nextState targets.elemState) *ops2.addColumnChangeStateOp {
+		return &ops2.addColumnChangeStateOp{
 			tableID:   e.tableID,
 			columnID:  e.columnID,
 			nextState: nextState,
 		}
 	}
 	switch e.state {
-	case elemDeleteOnly:
-		ops = append(ops, descChange(elemDeleteAndWriteOnly))
+	case targets.elemDeleteOnly:
+		ops = append(ops, descChange(targets.elemDeleteAndWriteOnly))
 		fallthrough
-	case elemDeleteAndWriteOnly:
-		ops = append(ops, &columnBackfillOp{
+	case targets.elemDeleteAndWriteOnly:
+		ops = append(ops, &ops2.columnBackfillOp{
 			tableID:            e.tableID,
 			storedColumnsToAdd: []descpb.ColumnID{e.columnID},
 		})
 		fallthrough
-	case elemBackfilled:
-		ops = append(ops, descChange(elemPublic))
-	case elemPublic:
+	case targets.elemBackfilled:
+		ops = append(ops, descChange(targets.elemPublic))
+	case targets.elemPublic:
 	// no-op
-	case elemRemoved:
+	case targets.elemRemoved:
 		return nil, errors.AssertionFailedf("unexpected descriptor in %s state for %T", e.state, e)
 	}
 	return ops, nil

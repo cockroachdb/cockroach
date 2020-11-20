@@ -53,7 +53,7 @@ func (sc *SchemaChanger) Step(ctx context.Context) error {
 // func (sc *SchemaChanger) alterTableCmd()
 
 type runDependencies interface {
-	withDescriptorMutationDeps(context.Context, func(ctx2 context.Context, deps depsForDescriptorMutation) error) error
+	withDescriptorMutationDeps(context.Context, func(ctx2 context.Context, deps ops.depsForDescriptorMutation) error) error
 }
 
 func (sc *SchemaChanger) Run(ctx context.Context, deps runDependencies) error {
@@ -63,7 +63,7 @@ func (sc *SchemaChanger) Run(ctx context.Context, deps runDependencies) error {
 	}
 	for _, step := range steps {
 		switch t := step.(type) {
-		case descriptorMutationStep:
+		case ops.descriptorMutationStep:
 			if err := deps.withDescriptorMutationDeps(ctx, t.run); err != nil {
 				return err
 			}
