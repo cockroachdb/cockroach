@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -143,20 +144,20 @@ func (b *Builder) alterTableAddColumn(
 	table.MaybeIncrementVersion()
 	b.modifiedDescriptors = append(b.modifiedDescriptors, table)
 
-	b.sc.elements = append(b.sc.elements, &addColumn{
+	b.sc.elements = append(b.sc.elements, &targets.AddColumn{
 		statementID: statementID,
 		tableID:     table.GetID(),
 		columnID:    col.ID,
 
-		state: elemDeleteOnly,
+		state: targets.elemDeleteOnly,
 		// TODO(ajwerner): indicate whether we need a backfill.
 	})
 	if idx != nil {
-		b.sc.elements = append(b.sc.elements, &addIndex{
+		b.sc.elements = append(b.sc.elements, &targets.AddIndex{
 			statementID: statementID,
 			tableID:     table.GetID(),
 			indexID:     idx.ID,
-			state:       elemDeleteOnly,
+			state:       targets.elemDeleteOnly,
 		})
 	}
 	return nil

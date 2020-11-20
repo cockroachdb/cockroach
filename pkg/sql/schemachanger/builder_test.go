@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -63,11 +64,11 @@ func TestBuilder(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.Equal(t, []element{
-		&addColumn{
+		&targets.AddColumn{
 			statementID: 0,
 			tableID:     tableID,
 			columnID:    2,
-			state:       elemDeleteOnly,
+			state:       targets.elemDeleteOnly,
 		},
 	}, sc.state.elements)
 
@@ -79,11 +80,11 @@ func TestBuilder(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []element{
-		&addColumn{
+		&targets.AddColumn{
 			statementID: 0,
 			tableID:     tableID,
 			columnID:    2,
-			state:       elemPublic,
+			state:       targets.elemPublic,
 		},
 	}, sc.state.elements)
 	time.Sleep(time.Second)
@@ -103,10 +104,10 @@ type testingDepsForDescriptorMutation struct {
 }
 
 var _ runDependencies = (*runDependenciesTesting)(nil)
-var _ depsForDescriptorMutation = (*testingDepsForDescriptorMutation)(nil)
+var _ ops.depsForDescriptorMutation = (*testingDepsForDescriptorMutation)(nil)
 
 func (r runDependenciesTesting) withDescriptorMutationDeps(
-	ctx context.Context, f func(ctx2 context.Context, deps depsForDescriptorMutation) error,
+	ctx context.Context, f func(ctx2 context.Context, deps ops.depsForDescriptorMutation) error,
 ) error {
 	return descs.Txn(ctx, r.s, r.lm, r.ie, r.db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 		return f(ctx, testingDepsForDescriptorMutation{
