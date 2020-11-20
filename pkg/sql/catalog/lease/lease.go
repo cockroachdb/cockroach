@@ -414,7 +414,9 @@ func (s storage) getForExpiration(
 			return err
 		}
 		if prevTimestamp.LessEq(desc.GetModificationTime()) {
-			return errors.AssertionFailedf("unable to read descriptor (%d, %s)", id, expiration)
+			return errors.AssertionFailedf("unable to read descriptor"+
+				" (%d, %s) found descriptor with modificationTime %s",
+				id, expiration, desc.GetModificationTime())
 		}
 		// Create a descriptorVersionState with the descriptor and without a lease.
 		descVersionState = &descriptorVersionState{
