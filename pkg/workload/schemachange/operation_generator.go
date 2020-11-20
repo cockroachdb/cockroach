@@ -31,12 +31,13 @@ import (
 // seqNum may be shared across multiple instances of this, so it should only
 // be change atomically.
 type operationGeneratorParams struct {
-	seqNum          *int64
-	errorRate       int
-	enumPct         int
-	rng             *rand.Rand
-	ops             *deck
-	maxSourceTables int
+	seqNum             *int64
+	errorRate          int
+	enumPct            int
+	rng                *rand.Rand
+	ops                *deck
+	maxSourceTables    int
+	sequenceOwnedByPct int
 }
 
 // The OperationBuilder has the sole responsibility of generating ops
@@ -380,9 +381,9 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 
 	var seqOptions tree.SequenceOptions
 
-	// Randomly decide if the sequence should be owned by a column. If so, it can
+	// Decide if the sequence should be owned by a column. If so, it can
 	// set set using the tree.SeqOptOwnedBy sequence option.
-	if og.randIntn(2) == 0 {
+	if og.randIntn(100) < og.params.sequenceOwnedByPct {
 		table, err := og.randTable(tx, og.pctExisting(true), "")
 		if err != nil {
 			return "", err
@@ -1397,7 +1398,7 @@ ORDER BY random()
 	return name, nil
 }
 
-// randTable returns a sequence qualified by a schema
+// randSequence returns a sequence qualified by a schema
 func (og *operationGenerator) randSequence(
 	tx *pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
