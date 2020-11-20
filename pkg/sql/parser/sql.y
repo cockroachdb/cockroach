@@ -5093,8 +5093,8 @@ show_zone_stmt:
 // %Help: SHOW RANGE - show range information for a row
 // %Category: Misc
 // %Text:
-// SHOW RANGE FROM TABLE <tablename> FOR ROW (row, value, ...)
-// SHOW RANGE FROM INDEX [ <tablename> @ ] <indexname> FOR ROW (row, value, ...)
+// SHOW RANGE FROM TABLE <tablename> FOR ROW (value1, value2, ...)
+// SHOW RANGE FROM INDEX [ <tablename> @ ] <indexname> FOR ROW (value1, value2, ...)
 show_range_for_row_stmt:
   SHOW RANGE FROM TABLE table_name FOR ROW '(' expr_list ')'
   {
