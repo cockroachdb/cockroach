@@ -14,11 +14,13 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -40,7 +42,7 @@ type SendOptions struct {
 // The caller is responsible for ordering the replicas in the slice according to
 // the order in which the should be tried.
 type TransportFactory func(
-	SendOptions, *nodedialer.Dialer, []roachpb.ReplicaDescriptor,
+	SendOptions, *nodedialer.Dialer, ReplicaSlice,
 ) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
@@ -77,7 +79,16 @@ type Transport interface {
 	// already been tried, it will be retried. If the specified replica
 	// can't be found, this is a noop.
 	MoveToFront(roachpb.ReplicaDescriptor)
+
+	// Release releases any resources held by this Transport.
+	Release()
 }
+
+// These constants are used for the replica health map below.
+const (
+	healthUnhealthy = iota
+	healthHealthy
+)
 
 // grpcTransportFactoryImpl is the default TransportFactory, using GRPC.
 // Do not use this directly - use grpcTransportFactory instead.
@@ -85,25 +96,40 @@ type Transport interface {
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, rs []roachpb.ReplicaDescriptor,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
 ) (Transport, error) {
-	health := make(map[roachpb.ReplicaDescriptor]bool)
-	replicas := make([]roachpb.ReplicaDescriptor, len(rs))
+	transport := grpcTransportPool.Get().(*grpcTransport)
+	// Grab the saved slice memory from grpcTransport.
+	replicas := transport.replicas
+
+	if cap(replicas) < len(rs) {
+		replicas = make([]roachpb.ReplicaDescriptor, len(rs))
+	} else {
+		replicas = replicas[:len(rs)]
+	}
+	// We'll map the index of the replica descriptor in its slice to its health.
+	var health util.FastIntMap
 	for i, r := range rs {
-		replicas[i] = r
-		health[r] = nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
+		replicas[i] = r.ReplicaDescriptor
+		healthy := nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
+		if healthy {
+			health.Set(i, healthHealthy)
+		} else {
+			health.Set(i, healthUnhealthy)
+		}
 	}
 
 	// Put known-healthy clients first, while otherwise respecting the existing
 	// ordering of the replicas.
 	splitHealthy(replicas, health)
 
-	return &grpcTransport{
+	*transport = grpcTransport{
 		opts:       opts,
 		nodeDialer: nodeDialer,
 		class:      opts.class,
 		replicas:   replicas,
-	}, nil
+	}
+	return transport, nil
 }
 
 type grpcTransport struct {
@@ -115,6 +141,17 @@ type grpcTransport struct {
 	// nextReplicaIdx represents the index into replicas of the next replica to be
 	// tried.
 	nextReplicaIdx int
+}
+
+var grpcTransportPool = sync.Pool{
+	New: func() interface{} { return &grpcTransport{} },
+}
+
+func (gt *grpcTransport) Release() {
+	*gt = grpcTransport{
+		replicas: gt.replicas[0:],
+	}
+	grpcTransportPool.Put(gt)
 }
 
 // IsExhausted returns false if there are any untried replicas remaining.
@@ -222,30 +259,37 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 // be rearranged first in the slice, and unhealthy clients will be rearranged
 // last. Within these two groups, the rearrangement will be stable. The function
 // will then return the number of healthy clients.
-func splitHealthy(replicas []roachpb.ReplicaDescriptor, health map[roachpb.ReplicaDescriptor]bool) {
-	sort.Stable(byHealth{replicas: replicas, health: health})
+// The input FastIntMap maps index within the input replicas slice to an integer
+// healthHealthy or healthUnhealthy.
+func splitHealthy(replicas []roachpb.ReplicaDescriptor, health util.FastIntMap) {
+	sort.Stable(&byHealth{replicas: replicas, health: health})
 }
 
 // byHealth sorts a slice of batchClients by their health with healthy first.
 type byHealth struct {
 	replicas []roachpb.ReplicaDescriptor
-	health   map[roachpb.ReplicaDescriptor]bool
+	// This map maps replica index within the replicas slice to healthHealthy if
+	// healthy, and healthUnhealthy if unhealthy.
+	health util.FastIntMap
 }
 
-func (h byHealth) Len() int { return len(h.replicas) }
-func (h byHealth) Swap(i, j int) {
+func (h *byHealth) Len() int { return len(h.replicas) }
+func (h *byHealth) Swap(i, j int) {
 	h.replicas[i], h.replicas[j] = h.replicas[j], h.replicas[i]
+	oldI := h.health.GetDefault(i)
+	h.health.Set(i, h.health.GetDefault(j))
+	h.health.Set(j, oldI)
 }
-func (h byHealth) Less(i, j int) bool {
-	ih, ok := h.health[h.replicas[i]]
+func (h *byHealth) Less(i, j int) bool {
+	ih, ok := h.health.Get(i)
 	if !ok {
 		panic(fmt.Sprintf("missing health info for %s", h.replicas[i]))
 	}
-	jh, ok := h.health[h.replicas[j]]
+	jh, ok := h.health.Get(j)
 	if !ok {
 		panic(fmt.Sprintf("missing health info for %s", h.replicas[j]))
 	}
-	return ih && !jh
+	return ih == healthHealthy && jh != healthHealthy
 }
 
 // SenderTransportFactory wraps a client.Sender for use as a KV
@@ -253,10 +297,10 @@ func (h byHealth) Less(i, j int) bool {
 // without a full RPC stack.
 func SenderTransportFactory(tracer *tracing.Tracer, sender kv.Sender) TransportFactory {
 	return func(
-		_ SendOptions, _ *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
+		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice,
 	) (Transport, error) {
 		// Always send to the first replica.
-		replica := replicas[0]
+		replica := replicas[0].ReplicaDescriptor
 		return &senderTransport{tracer, sender, replica, false}, nil
 	}
 }
@@ -333,3 +377,5 @@ func (s *senderTransport) SkipReplica() {
 
 func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 }
+
+func (s *senderTransport) Release() {}

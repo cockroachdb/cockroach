@@ -1805,10 +1805,11 @@ func (ds *DistSender) sendToReplicas(
 		class:   rpc.ConnectionClassForKey(desc.RSpan().Key),
 		metrics: &ds.metrics,
 	}
-	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas.Descriptors())
+	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
 	if err != nil {
 		return nil, err
 	}
+	defer transport.Release()
 
 	// inTransferRetry is used to slow down retries in cases where an ongoing
 	// lease transfer is suspected.
