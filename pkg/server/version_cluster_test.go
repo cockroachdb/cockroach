@@ -433,11 +433,23 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 
 	// The other nodes are just as careful.
 	for i := 0; i < len(versions)-2; i++ {
-		if err := tc.setVersion(i, v1s); !testutils.IsError(err,
-			fmt.Sprintf("binary version %s less than target version %s", v0s, v1s),
-		) {
-			t.Fatal(i, err)
-		}
+		testutils.SucceedsSoon(t, func() error {
+			err := tc.setVersion(i, v1s)
+			if testutils.IsError(err, "required, but unavailable") {
+				// Paper over transient unavailability errors. Because we're
+				// setting the cluster version so soon after cluster startup,
+				// it's possible that we're doing so before all the nodes have
+				// had a chance to heartbeat their liveness records for the very
+				// first time. To other nodes it appears that the node in
+				// question is unavailable.
+				return err
+			}
+
+			if !testutils.IsError(err, fmt.Sprintf("binary version %s less than target version %s", v0s, v1s)) {
+				t.Fatal(i, err)
+			}
+			return nil
+		})
 	}
 
 	// Check that we can still talk to the first three nodes.
