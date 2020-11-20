@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1315,9 +1316,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 		listenHTTP:   s.cfg.HTTPAdvertiseAddr,
 	}.Iter()
 
+	encryptedStore := false
 	for _, storeSpec := range s.cfg.Stores.Specs {
 		if storeSpec.InMemory {
 			continue
+		}
+		if len(storeSpec.ExtraOptions) > 0 {
+			encryptedStore = true
 		}
 
 		for name, val := range listenerFiles {
@@ -1528,10 +1533,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTags(map[string]string{
-			"cluster":     s.ClusterID().String(),
-			"node":        s.NodeID().String(),
-			"server_id":   fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
-			"engine_type": s.cfg.StorageEngine.String(),
+			"cluster":         s.ClusterID().String(),
+			"node":            s.NodeID().String(),
+			"server_id":       fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
+			"engine_type":     s.cfg.StorageEngine.String(),
+			"encrypted_store": strconv.FormatBool(encryptedStore),
 		})
 	})
 
