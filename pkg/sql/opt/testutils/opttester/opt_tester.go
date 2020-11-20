@@ -83,6 +83,10 @@ var (
 		"columns":     memo.ExprFmtHideColumns,
 		"all":         memo.ExprFmtHideAll,
 	}
+
+	memoFormatFlags = map[string]xform.FmtFlags{
+		"state": xform.FmtHideState,
+	}
 )
 
 // RuleSet efficiently stores an unordered set of RuleNames.
@@ -338,6 +342,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //      (show|hide)-(all|miscprops|constraints|scalars|types|...)
 //    See formatFlags for all flags. Multiple flags can be specified; each flag
 //    modifies the existing set of the flags.
+//
+//  - memo-format: controls the formatting for the memo command. Memo format
+//    flags are of the form
+//      (show|hide)-<flag>
+//    See memoFormatFlags for all flags. Multiple flags can be specified; each
+//    flag modifies the existing set of the flags.
 //
 //  - no-stable-folds: disallows constant folding for stable operators; only
 //                     used with "norm".
@@ -705,6 +715,27 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 				f.ExprFormat |= formatFlags[parts[1]]
 			} else {
 				f.ExprFormat &= ^formatFlags[parts[1]]
+			}
+		}
+
+	case "memo-format":
+		if len(arg.Vals) == 0 {
+			return fmt.Errorf("memo format flag requires value(s)")
+		}
+		for _, v := range arg.Vals {
+			// Memo format values are of the form (hide|show)-(flag). These
+			// flags modify the default flags for the test and multiple flags
+			// are applied in order.
+			parts := strings.SplitN(v, "-", 2)
+			if len(parts) != 2 ||
+				(parts[0] != "show" && parts[0] != "hide") ||
+				memoFormatFlags[parts[1]] == 0 {
+				return fmt.Errorf("unknown format value %s", v)
+			}
+			if parts[0] == "hide" {
+				f.MemoFormat |= memoFormatFlags[parts[1]]
+			} else {
+				f.MemoFormat &= ^memoFormatFlags[parts[1]]
 			}
 		}
 
