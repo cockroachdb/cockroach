@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -595,6 +597,10 @@ If problems persist, please see %s.`
 			if err := s.AcceptClients(ctx); err != nil {
 				return err
 			}
+			// Configure UI settings.
+			if err := setUIDataFromEnv(ctx, s); err != nil {
+				return err
+			}
 
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
@@ -867,6 +873,19 @@ If problems persist, please see %s.`
 	}
 
 	return returnErr
+}
+
+// setUIDataFromEnv toggles presence of release notes signup banner
+// based on an environment variable.
+func setUIDataFromEnv(ctx context.Context, s *server.Server) error {
+	b := envutil.EnvOrDefaultBool("COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED", false)
+	_, err := s.SetUIData(ctx, &serverpb.SetUIDataRequest{
+		KeyValues: map[string][]byte{"release_notes_signup_dismissed": []byte(strconv.FormatBool(b))}},
+		security.RootUserName())
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // expandTabsInRedactableBytes expands tabs in the redactable byte
