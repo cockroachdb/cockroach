@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "dev_lib",
+    srcs = [
+        "bench.go",
+        "build.go",
+        "generate.go",
+        "main.go",
+        "test.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/dev",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/spf13/cobra",
+    ],
+)
+
+go_binary(
+    name = "dev",
+    embed = [":dev_lib"],
+    visibility = ["//visibility:public"],
+)
