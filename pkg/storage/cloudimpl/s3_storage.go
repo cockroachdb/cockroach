@@ -36,7 +36,7 @@ type s3Storage struct {
 	conf     *roachpb.ExternalStorage_S3
 	ioConf   base.ExternalIODirConfig
 	prefix   string
-	s3       *s3.S3
+	opts     session.Options
 	settings *cluster.Settings
 }
 
@@ -78,7 +78,6 @@ func MakeS3Storage(
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
-	region := conf.Region
 	config := conf.Keys()
 	if conf.Endpoint != "" {
 		if ioConf.DisableHTTP {
@@ -87,7 +86,7 @@ func MakeS3Storage(
 		}
 		config.Endpoint = &conf.Endpoint
 		if conf.Region == "" {
-			region = "default-region"
+			conf.Region = "default-region"
 		}
 		client, err := makeHTTPClient(settings)
 		if err != nil {
@@ -130,29 +129,17 @@ func MakeS3Storage(
 		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, AuthParam)
 	}
 
-	sess, err := session.NewSessionWithOptions(opts)
-	if err != nil {
-		return nil, errors.Wrap(err, "new aws session")
-	}
-	if region == "" {
-		err = delayedRetry(ctx, func() error {
-			var err error
-			region, err = s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
-			return err
-		})
-		if err != nil {
-			return nil, errors.Wrap(err, "could not find s3 bucket's region")
-		}
-	}
-	sess.Config.Region = aws.String(region)
+	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
+	maxRetries := 10
+	opts.Config.MaxRetries = &maxRetries
+
 	if conf.Endpoint != "" {
-		sess.Config.S3ForcePathStyle = aws.Bool(true)
+		opts.Config.S3ForcePathStyle = aws.Bool(true)
 	}
 	if log.V(2) {
-		sess.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
+		opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
+		opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
 	}
-	maxRetries := 10
-	sess.Config.MaxRetries = &maxRetries
 
 	// Ensure that a KMS ID is specified if server side encryption is set to use
 	// KMS.
@@ -175,9 +162,27 @@ func MakeS3Storage(
 		conf:     conf,
 		ioConf:   ioConf,
 		prefix:   conf.Prefix,
-		s3:       s3.New(sess),
+		opts:     opts,
 		settings: settings,
 	}, nil
+}
+
+func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
+	sess, err := session.NewSessionWithOptions(s.opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "new aws session")
+	}
+	if s.conf.Region == "" {
+		if err := delayedRetry(ctx, func() error {
+			var err error
+			s.conf.Region, err = s3manager.GetBucketRegion(ctx, sess, s.conf.Bucket, "us-east-1")
+			return err
+		}); err != nil {
+			return nil, errors.Wrap(err, "could not find s3 bucket's region")
+		}
+	}
+	sess.Config.Region = aws.String(s.conf.Region)
+	return s3.New(sess), nil
 }
 
 func (s *s3Storage) Conf() roachpb.ExternalStorage {
@@ -196,7 +201,11 @@ func (s *s3Storage) Settings() *cluster.Settings {
 }
 
 func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	err := contextutil.RunWithTimeout(ctx, "put s3 object",
+	client, err := s.newS3Client(ctx)
+	if err != nil {
+		return err
+	}
+	err = contextutil.RunWithTimeout(ctx, "put s3 object",
 		timeoutSetting.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			putObjectInput := s3.PutObjectInput{
@@ -220,7 +229,7 @@ func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.R
 						"Supported values are `aws:kms` and `AES256`.", s.conf.ServerEncMode)
 				}
 			}
-			_, err := s.s3.PutObjectWithContext(ctx, &putObjectInput)
+			_, err := client.PutObjectWithContext(ctx, &putObjectInput)
 			return err
 		})
 	return errors.Wrap(err, "failed to put s3 object")
@@ -228,7 +237,12 @@ func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.R
 
 func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	out, err := s.s3.GetObjectWithContext(ctx, &s3.GetObjectInput{
+	client, err := s.newS3Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := client.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: s.bucket,
 		Key:    aws.String(path.Join(s.prefix, basename)),
 	})
@@ -255,9 +269,13 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 		}
 		pattern = path.Join(pattern, patternSuffix)
 	}
+	client, err := s.newS3Client(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	var matchErr error
-	err := s.s3.ListObjectsPagesWithContext(
+	err = client.ListObjectsPagesWithContext(
 		ctx,
 		&s3.ListObjectsInput{
 			Bucket: s.bucket,
@@ -303,10 +321,14 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 }
 
 func (s *s3Storage) Delete(ctx context.Context, basename string) error {
+	client, err := s.newS3Client(ctx)
+	if err != nil {
+		return err
+	}
 	return contextutil.RunWithTimeout(ctx, "delete s3 object",
 		timeoutSetting.Get(&s.settings.SV),
 		func(ctx context.Context) error {
-			_, err := s.s3.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
+			_, err := client.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
 				Bucket: s.bucket,
 				Key:    aws.String(path.Join(s.prefix, basename)),
 			})
@@ -315,12 +337,16 @@ func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 }
 
 func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
+	client, err := s.newS3Client(ctx)
+	if err != nil {
+		return 0, err
+	}
 	var out *s3.HeadObjectOutput
-	err := contextutil.RunWithTimeout(ctx, "get s3 object header",
+	err = contextutil.RunWithTimeout(ctx, "get s3 object header",
 		timeoutSetting.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			var err error
-			out, err = s.s3.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+			out, err = client.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
 				Bucket: s.bucket,
 				Key:    aws.String(path.Join(s.prefix, basename)),
 			})
