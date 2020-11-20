@@ -311,3 +311,12 @@ INSERT INTO t SELECT a + 1 FROM t;
 
 statement error pgcode 23505 duplicate key value: decoding err=column-id "2" does not exist
 UPSERT INTO t SELECT a + 1 FROM t;
+
+statement ok
+COMMIT;
+
+# test the primary key cannot be dropped with drop index; see #56853
+subtest drop_primary_key
+
+statement error pgcode 0A000 cannot drop the primary index of a table using DROP INDEX
+CREATE TABLE drop_primary(); DROP INDEX drop_primary@primary CASCADE;

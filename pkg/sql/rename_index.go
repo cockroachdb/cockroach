@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -92,7 +91,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 	}
 
 	if _, _, err := tableDesc.FindIndexByName(string(n.n.NewName)); err == nil {
-		return fmt.Errorf("index name %q already exists", string(n.n.NewName))
+		return pgerror.Newf(pgcode.DuplicateRelation, "index name %q already exists", string(n.n.NewName))
 	}
 
 	if err := tableDesc.RenameIndexDescriptor(idx, string(n.n.NewName)); err != nil {
