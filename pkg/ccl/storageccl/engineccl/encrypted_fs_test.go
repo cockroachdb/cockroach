@@ -273,10 +273,10 @@ func TestPebbleEncryption(t *testing.T) {
 	// Flushing should've created a new sstable under the active key.
 	stats, err = db.GetEnvStats()
 	require.NoError(t, err)
-	require.Equal(t, uint64(5), stats.TotalFiles)
-	require.Equal(t, uint64(5), stats.ActiveKeyFiles)
-	require.Equal(t, stats.TotalBytes, stats.ActiveKeyBytes)
 	t.Logf("EnvStats:\n%+v\n\n", *stats)
+	require.Equal(t, uint64(5), stats.TotalFiles)
+	require.LessOrEqual(t, uint64(5), stats.ActiveKeyFiles)
+	require.Equal(t, stats.TotalBytes, stats.ActiveKeyBytes)
 
 	db.Close()
 }
