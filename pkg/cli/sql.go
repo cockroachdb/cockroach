@@ -79,6 +79,9 @@ Informational
   \du               list the users for all databases.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
 
+Formatting
+  \x [on|off]       toggle records display format.
+
 Operating System
   \! CMD            run an external command and print its results on standard output.
 
@@ -310,15 +313,13 @@ var options = map[string]struct {
 		isBoolean:                 false,
 		validDuringMultilineEntry: false,
 		set: func(val string) error {
-			val = strings.ToLower(strings.TrimSpace(val))
-			switch val {
-			case "false", "0", "off":
-				sqlCtx.autoTrace = ""
-			case "true", "1":
-				val = "on"
-				fallthrough
-			default:
+			b, err := parseBool(val)
+			if err != nil {
 				sqlCtx.autoTrace = "on, " + val
+			} else if b {
+				sqlCtx.autoTrace = "on, on"
+			} else {
+				sqlCtx.autoTrace = ""
 			}
 			return nil
 		},
@@ -482,15 +483,12 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	var err error
 	if !opt.isBoolean {
 		err = opt.set(val)
+	} else if b, e := parseBool(val); e != nil {
+		return c.invalidOptSet(errState, args)
+	} else if b {
+		err = opt.set("true")
 	} else {
-		switch val {
-		case "true", "1", "on":
-			err = opt.set("true")
-		case "false", "0", "off":
-			err = opt.reset()
-		default:
-			return c.invalidOptSet(errState, args)
-		}
+		err = opt.reset()
 	}
 
 	if err != nil {
@@ -1165,6 +1163,28 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 		}
 		return c.invalidSyntax(errState, `%s. Try \? for help`, c.lastInputLine)
+
+	case `\x`:
+		format := tableDisplayRecords
+		switch len(cmd) {
+		case 1:
+			if cliCtx.tableDisplayFormat == tableDisplayRecords {
+				format = tableDisplayTable
+			}
+		case 2:
+			b, err := parseBool(cmd[1])
+			if err != nil {
+				return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+			} else if b {
+				format = tableDisplayRecords
+			} else {
+				format = tableDisplayTable
+			}
+		default:
+			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+		}
+		cliCtx.tableDisplayFormat = format
+		return loopState
 
 	case `\demo`:
 		return c.handleDemo(cmd[1:], loopState, errState)
