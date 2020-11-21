@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -23,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func (p *planner) schemaExists(
-	ctx context.Context, parentID descpb.ID, schema string,
+func schemaExists(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, schema string,
 ) (bool, error) {
 	// Check statically known schemas.
 	if schema == tree.PublicSchema {
@@ -36,7 +37,7 @@ func (p *planner) schemaExists(
 		}
 	}
 	// Now lookup in the namespace for other schemas.
-	exists, _, err := catalogkv.LookupObjectID(ctx, p.txn, p.ExecCfg().Codec, parentID, keys.RootNamespaceID, schema)
+	exists, _, err := catalogkv.LookupObjectID(ctx, txn, codec, parentID, keys.RootNamespaceID, schema)
 	if err != nil {
 		return false, err
 	}

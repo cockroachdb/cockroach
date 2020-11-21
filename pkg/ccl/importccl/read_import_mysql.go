@@ -451,7 +451,7 @@ func mysqlTableToCockroach(
 		if err != nil {
 			return nil, nil, err
 		}
-		fks.resolver[seqName] = seqDesc
+		fks.resolver.tableNameToDesc[seqName] = seqDesc
 		id++
 	}
 
@@ -538,7 +538,7 @@ func mysqlTableToCockroach(
 			fkDefs = append(fkDefs, delayedFK{desc, d})
 		}
 	}
-	fks.resolver[desc.Name] = desc
+	fks.resolver.tableNameToDesc[desc.Name] = desc
 	if seqDesc != nil {
 		return []*tabledesc.Mutable{seqDesc, desc}, fkDefs, nil
 	}
@@ -569,7 +569,8 @@ func addDelayedFKs(
 ) error {
 	for _, def := range defs {
 		if err := sql.ResolveFK(
-			ctx, nil, resolver, def.tbl, def.def, map[descpb.ID]*tabledesc.Mutable{}, sql.NewTable, tree.ValidationDefault, evalCtx,
+			ctx, nil, &resolver, def.tbl, def.def, map[descpb.ID]*tabledesc.Mutable{}, sql.NewTable,
+			tree.ValidationDefault, evalCtx,
 		); err != nil {
 			return err
 		}

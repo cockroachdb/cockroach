@@ -937,8 +937,14 @@ func newTestSpec(
 	}
 	assert.True(t, numCols > 0)
 
-	spec.tables = map[string]*execinfrapb.ReadImportDataSpec_ImportTable{
-		"simple": {Desc: descr.TableDesc(), TargetCols: targetCols[0:numCols]},
+	if format.Format == roachpb.IOFileFormat_PgDump {
+		spec.tables = map[string]*execinfrapb.ReadImportDataSpec_ImportTable{
+			"public.simple": {Desc: descr.TableDesc(), TargetCols: targetCols[0:numCols]},
+		}
+	} else {
+		spec.tables = map[string]*execinfrapb.ReadImportDataSpec_ImportTable{
+			"simple": {Desc: descr.TableDesc(), TargetCols: targetCols[0:numCols]},
+		}
 	}
 
 	for id, path := range inputs {
