@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -285,7 +286,7 @@ func (m *mergeJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{lis, ris},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem: execinfrapb.MakeIntValue(uint64(m.MemMonitor.MaximumBytes())),
+			MaxAllocatedMem: optional.MakeUint(uint64(m.MemMonitor.MaximumBytes())),
 		},
 		Output: m.Out.Stats(),
 	}

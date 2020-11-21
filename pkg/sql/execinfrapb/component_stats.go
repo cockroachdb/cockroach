@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	optional "github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/dustin/go-humanize"
 )
 
@@ -131,8 +132,8 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 // value before. This allows tests to verify the set of stats that were
 // collected.
 func (s *ComponentStats) MakeDeterministic() {
-	// intVal resets an IntValue to 0, if it was set.
-	intVal := func(v *IntValue) {
+	// resetUint resets an optional.Uint to 0, if it was set.
+	resetUint := func(v *optional.Uint) {
 		if v.HasValue() {
 			v.Set(0)
 		}
@@ -154,7 +155,7 @@ func (s *ComponentStats) MakeDeterministic() {
 	}
 
 	// NetTx.
-	intVal(&s.NetTx.BytesSent)
+	resetUint(&s.NetTx.BytesSent)
 
 	// KV.
 	timeVal(&s.KV.KVTime)
@@ -165,11 +166,11 @@ func (s *ComponentStats) MakeDeterministic() {
 
 	// Exec.
 	timeVal(&s.Exec.ExecTime)
-	intVal(&s.Exec.MaxAllocatedMem)
-	intVal(&s.Exec.MaxAllocatedDisk)
+	resetUint(&s.Exec.MaxAllocatedMem)
+	resetUint(&s.Exec.MaxAllocatedDisk)
 
 	// Output.
-	intVal(&s.Output.NumBatches)
+	resetUint(&s.Output.NumBatches)
 
 	// Inputs.
 	for i := range s.Inputs {

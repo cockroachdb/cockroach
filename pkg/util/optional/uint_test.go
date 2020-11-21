@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfrapb
+package optional
 
 import (
 	"testing"
@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIntValue(t *testing.T) {
-	var v IntValue
+func TestUint(t *testing.T) {
+	var v Uint
 	require.False(t, v.HasValue())
 	require.Equal(t, uint64(0), v.Value())
 
