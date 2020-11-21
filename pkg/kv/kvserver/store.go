@@ -735,11 +735,6 @@ type StoreConfig struct {
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
 
-	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
-	// gossiped store capacity values which need be exceeded before the store will
-	// gossip immediately without waiting for the periodic gossip interval.
-	GossipWhenCapacityDeltaExceedsFraction float64
-
 	// ExternalStorage creates ExternalStorage objects which allows access to external files
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
@@ -791,8 +786,8 @@ func (sc *StoreConfig) SetDefaults() {
 			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1)
 	}
 
-	if sc.GossipWhenCapacityDeltaExceedsFraction == 0 {
-		sc.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
+	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
+		sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
 	}
 }
 
@@ -1919,9 +1914,9 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	// the usual periodic interval. Re-gossip more rapidly for RangeCount
 	// changes because allocators with stale information are much more
 	// likely to make bad decisions.
-	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
+	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Min(rangeCountdown, 3))))
-	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
+	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
 	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, storeDesc.Capacity.QueriesPerSecond)
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
