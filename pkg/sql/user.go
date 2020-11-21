@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -211,10 +212,12 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUsername]boo
 }
 
 // RoleExists returns true if the role exists.
-func (p *planner) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+func RoleExists(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role security.SQLUsername,
+) (bool, error) {
 	query := `SELECT username FROM system.users WHERE username = $1`
-	row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
-		ctx, "read-users", p.txn,
+	row, err := execCfg.InternalExecutor.QueryRowEx(
+		ctx, "read-users", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query, role,
 	)

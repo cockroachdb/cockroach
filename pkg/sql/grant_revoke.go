@@ -221,8 +221,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				return err
 			}
 			if err := p.createNonDropDatabaseChangeJob(ctx, d.ID,
-				fmt.Sprintf("updating privileges for database %d", d.ID),
-			); err != nil {
+				fmt.Sprintf("updating privileges for database %d", d.ID)); err != nil {
 				return err
 			}
 			for _, grantee := range n.grantees {

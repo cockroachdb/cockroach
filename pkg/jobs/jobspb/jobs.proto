@@ -214,7 +214,11 @@ message ImportDetails {
     repeated string target_cols = 21;
     reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
   }
+  message Schema {
+    sqlbase.SchemaDescriptor desc = 1;
+  }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
+  repeated Schema schemas = 23 [(gogoproto.nullable) = false];
   repeated string uris = 2 [(gogoproto.customname) = "URIs"];
   roachpb.IOFileFormat format = 3 [(gogoproto.nullable) = false];
 
@@ -243,6 +247,7 @@ message ImportDetails {
   bool ingest_directly = 11;
 
   bool prepare_complete = 12;
+  bool schemas_published = 24;
   bool tables_published = 13;
 
   bool parse_bundle_schema = 14;
@@ -256,6 +261,8 @@ message ImportDetails {
     (gogoproto.customname) = "ProtectedTimestampRecord",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
+
+  // next val: 25
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -83,7 +84,9 @@ type fkHandler struct {
 }
 
 // NoFKs is used by formats that do not support FKs.
-var NoFKs = fkHandler{resolver: make(fkResolver)}
+var NoFKs = fkHandler{resolver: fkResolver{
+	tableNameToDesc: make(map[string]*tabledesc.Mutable),
+}}
 
 // MakeSimpleTableDescriptor creates a Mutable from a CreateTable parse
 // node without the full machinery. Many parts of the syntax are unsupported
@@ -155,7 +158,7 @@ func MakeSimpleTableDescriptor(
 	tableDesc, err := sql.NewTableDesc(
 		ctx,
 		nil, /* txn */
-		fks.resolver,
+		&fks.resolver,
 		st,
 		create,
 		parentID,
@@ -289,59 +292,73 @@ func (so *importSequenceOperators) SetSequenceValueByID(
 	return errSequenceOperators
 }
 
-type fkResolver map[string]*tabledesc.Mutable
+type fkResolver struct {
+	tableNameToDesc map[string]*tabledesc.Mutable
+	format          roachpb.IOFileFormat
+}
 
-var _ resolver.SchemaResolver = fkResolver{}
+var _ resolver.SchemaResolver = &fkResolver{}
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) Txn() *kv.Txn {
+func (r *fkResolver) Txn() *kv.Txn {
 	return nil
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LogicalSchemaAccessor() catalog.Accessor {
+func (r *fkResolver) LogicalSchemaAccessor() catalog.Accessor {
 	return nil
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) CurrentDatabase() string {
+func (r *fkResolver) CurrentDatabase() string {
 	return ""
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) CurrentSearchPath() sessiondata.SearchPath {
+func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 	return sessiondata.SearchPath{}
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) CommonLookupFlags(required bool) tree.CommonLookupFlags {
+func (r *fkResolver) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	return tree.CommonLookupFlags{}
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags {
+func (r *fkResolver) ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags {
 	return tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{Required: required, RequireMutable: requireMutable},
 	}
 }
 
 // Implements the tree.ObjectNameExistingResolver interface.
-func (r fkResolver) LookupObject(
-	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, obName string,
+func (r *fkResolver) LookupObject(
+	_ context.Context, _ tree.ObjectLookupFlags, catalogName, scName, obName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
-	if scName != "" {
-		obName = strings.TrimPrefix(obName, scName+".")
+	// PGDUMP supports non-public schemas so respect the schema name.
+	var lookupName string
+	if r.format.Format == roachpb.IOFileFormat_PgDump {
+		if scName == "" || catalogName == "" {
+			return false, nil, errors.Errorf("expected catalog and schema name to be set when resolving"+
+				" table %q in PGDUMP", obName)
+		}
+		lookupName = fmt.Sprintf("%s.%s", scName, obName)
+	} else {
+		if scName != "" {
+			lookupName = strings.TrimPrefix(obName, scName+".")
+		}
 	}
-	tbl, ok := r[obName]
+	tbl, ok := r.tableNameToDesc[lookupName]
 	if ok {
 		return true, tbl, nil
 	}
-	names := make([]string, 0, len(r))
-	for k := range r {
+	names := make([]string, 0, len(r.tableNameToDesc))
+	for k := range r.tableNameToDesc {
 		names = append(names, k)
 	}
 	suggestions := strings.Join(names, ",")
-	return false, nil, errors.Errorf("referenced table %q not found in tables being imported (%s)", obName, suggestions)
+	return false, nil, errors.Errorf("referenced table %q not found in tables being imported (%s)",
+		lookupName, suggestions)
 }
 
 // Implements the tree.ObjectNameTargetResolver interface.
