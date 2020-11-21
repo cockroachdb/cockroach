@@ -71,7 +71,7 @@ func (p *planner) createDropDatabaseJob(
 	return nil
 }
 
-// createNonDropDatabaseChangeJob covers all database descriptor updates other
+// CreateNonDropDatabaseChangeJob covers all database descriptor updates other
 // than dropping the database.
 // TODO (lucy): This should ideally look into the set of queued jobs so that we
 // don't queue multiple jobs for the same database.

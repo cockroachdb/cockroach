@@ -81,7 +81,7 @@ func (p *planner) ReparentDatabase(
 	}
 
 	// Ensure that this database wouldn't collide with a name under the new database.
-	exists, err := p.schemaExists(ctx, parent.ID, db.Name)
+	exists, err := schemaExists(ctx, p.txn, p.ExecCfg().Codec, parent.ID, db.Name)
 	if err != nil {
 		return nil, err
 	}

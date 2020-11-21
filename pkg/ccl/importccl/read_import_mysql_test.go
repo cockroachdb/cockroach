@@ -138,9 +138,9 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 	referencedSimple := descForTable(ctx, t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 52, NoFKs)
 	fks := fkHandler{
 		allowed: true,
-		resolver: fkResolver(map[string]*tabledesc.Mutable{
-			referencedSimple.Name: referencedSimple,
-		}),
+		resolver: fkResolver{
+			tableNameToDesc: map[string]*tabledesc.Mutable{referencedSimple.Name: referencedSimple},
+			format:          mysqlDumpFormat()},
 	}
 
 	t.Run("simple", func(t *testing.T) {
@@ -169,7 +169,10 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 	})
 
 	t.Run("third-in-multi", func(t *testing.T) {
-		skip := fkHandler{allowed: true, skip: true, resolver: make(fkResolver)}
+		skip := fkHandler{allowed: true, skip: true, resolver: fkResolver{
+			tableNameToDesc: make(map[string]*tabledesc.Mutable),
+			format:          mysqlDumpFormat(),
+		}}
 		expected := descForTable(ctx, t, readFile(t, `third.cockroach-schema.sql`), expectedParent, 52, skip)
 		got := readMysqlCreateFrom(t, files.wholeDB, "third", 51, skip)
 		compareTables(t, expected.TableDesc(), got)
