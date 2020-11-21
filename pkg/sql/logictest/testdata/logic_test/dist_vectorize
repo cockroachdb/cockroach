@@ -167,7 +167,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │     │   └ *colrpc.Inbox
 │           │     ├ *colexec.ParallelUnorderedSynchronizer
 │           │     ├ *colexec.ParallelUnorderedSynchronizer
-│           │     └ *colexec.externalHashJoiner
+│           │     └ *colexec.hashBasedPartitioner
 │           │       ├ *colexec.bufferExportingOperator
 │           │       └ *colexec.bufferExportingOperator
 │           ├ *colrpc.Inbox
@@ -201,7 +201,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │   └ *colrpc.Inbox
 │           ├ *colexec.ParallelUnorderedSynchronizer
 │           ├ *colexec.ParallelUnorderedSynchronizer
-│           └ *colexec.externalHashJoiner
+│           └ *colexec.hashBasedPartitioner
 │             ├ *colexec.bufferExportingOperator
 │             └ *colexec.bufferExportingOperator
 ├ Node 3
@@ -231,7 +231,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │   └ *colrpc.Inbox
 │           ├ *colexec.ParallelUnorderedSynchronizer
 │           ├ *colexec.ParallelUnorderedSynchronizer
-│           └ *colexec.externalHashJoiner
+│           └ *colexec.hashBasedPartitioner
 │             ├ *colexec.bufferExportingOperator
 │             └ *colexec.bufferExportingOperator
 ├ Node 4
@@ -261,7 +261,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │   └ *colrpc.Inbox
 │           ├ *colexec.ParallelUnorderedSynchronizer
 │           ├ *colexec.ParallelUnorderedSynchronizer
-│           └ *colexec.externalHashJoiner
+│           └ *colexec.hashBasedPartitioner
 │             ├ *colexec.bufferExportingOperator
 │             └ *colexec.bufferExportingOperator
 └ Node 5
@@ -291,7 +291,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
             │         └ *colfetcher.ColBatchScan
             ├ *colexec.ParallelUnorderedSynchronizer
             ├ *colexec.ParallelUnorderedSynchronizer
-            └ *colexec.externalHashJoiner
+            └ *colexec.hashBasedPartitioner
               ├ *colexec.bufferExportingOperator
               └ *colexec.bufferExportingOperator
 

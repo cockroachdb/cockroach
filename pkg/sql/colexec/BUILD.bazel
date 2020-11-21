@@ -21,6 +21,7 @@ go_library(
         "fn_op.go",
         "hash.go",
         "hash_aggregator.go",
+        "hash_based_partitioner.go",
         "hash_utils.go",
         "hashjoiner.go",
         "hashtable.go",
