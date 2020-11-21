@@ -164,7 +164,6 @@ var _ closableOperator = &externalSorter{}
 // the partitioned disk queue acquire file descriptors instead of acquiring
 // them up front in Next. This should only be true in tests.
 func NewExternalSorter(
-	ctx context.Context,
 	unlimitedAllocator *colmem.Allocator,
 	standaloneMemAccount *mon.BoundAccount,
 	input colexecbase.Operator,

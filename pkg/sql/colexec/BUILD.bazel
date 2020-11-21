@@ -17,6 +17,7 @@ go_library(
         "disk_spiller.go",
         "expr.go",
         "external_hash_joiner.go",
+        "external_operator.go",
         "external_sort.go",
         "fn_op.go",
         "hash.go",
