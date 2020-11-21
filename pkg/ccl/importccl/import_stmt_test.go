@@ -1015,8 +1015,12 @@ END;
 		{
 			name: "non-public schema",
 			typ:  "PGDUMP",
-			data: "create table s.t (i INT8)",
-			err:  `non-public schemas unsupported: s`,
+			data: `
+        create schema s;
+        create table s.t (i INT8)`,
+			query: map[string][][]string{
+				getTablesQuery: {{"s", "t", "table"}},
+			},
 		},
 		{
 			name: "various create ignores",
@@ -5571,6 +5575,168 @@ func TestImportPgDumpDropTable(t *testing.T) {
 
 		// Since the PGDump failed on error, table `u` should not exist.
 		sqlDB.ExpectErr(t, `does not exist`, `SELECT * FROM u`)
+	})
+}
+
+func TestImportPgDumpSchemas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const nodes = 1
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "pgdump")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+
+	// Simple schema test which creates 3 schemas with a single `test` table in
+	// each schema.
+	t.Run("schema.sql", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		defer tc.Stopper().Stop(ctx)
+		conn := tc.Conns[0]
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+
+		sqlDB.Exec(t, `CREATE DATABASE schemadb; SET DATABASE = schemadb`)
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/schema.sql'")
+
+		// Check that we have imported 4 schemas.
+		expectedSchemaNames := [][]string{{"bar"}, {"baz"}, {"foo"}, {"public"}}
+		sqlDB.CheckQueryResults(t,
+			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner IS NOT NULL ORDER BY schema_name`,
+			expectedSchemaNames)
+
+		// Check that we have a test table in each schema with the expected content.
+		expectedContent := [][]string{{"1", "abc"}, {"2", "def"}}
+		expectedTableName := "test"
+		expectedTableName2 := "test2"
+		expectedSeqName := "testseq"
+		sqlDB.CheckQueryResults(t, `SELECT schema_name, 
+table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
+			[][]string{{"bar", expectedTableName}, {"bar", expectedTableName2}, {"bar", expectedSeqName},
+				{"baz", expectedTableName}, {"foo", expectedTableName}, {"public", expectedTableName}})
+
+		for _, schemaCollection := range expectedSchemaNames {
+			for _, schema := range schemaCollection {
+				sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s.%s`, schema, expectedTableName),
+					expectedContent)
+			}
+		}
+
+		// There should be two jobs, the import and a job updating the parent
+		// database descriptor.
+		sqlDB.CheckQueryResults(t, `SELECT job_type, status FROM [SHOW JOBS] ORDER BY job_type`,
+			[][]string{{"IMPORT", "succeeded"}, {"SCHEMA CHANGE", "succeeded"}})
+
+		// Attempt to rename one of the imported schema's so as to verify that
+		// parent database descriptor has been updated with information about the
+		// imported schemas.
+		sqlDB.Exec(t, `ALTER SCHEMA foo RENAME TO biz`)
+
+		// Ensure that FK relationship works fine with UDS.
+		sqlDB.Exec(t, `INSERT INTO bar.test VALUES (100, 'a')`)
+		sqlDB.ExpectErr(t, "violates foreign key constraint \"testfk\"", `INSERT INTO bar.test2 VALUES (101, 'a')`)
+	})
+
+	t.Run("inject-error-ensure-cleanup", func(t *testing.T) {
+		defer gcjob.SetSmallMaxGCIntervalForTest()()
+		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		defer tc.Stopper().Stop(ctx)
+		conn := tc.Conns[0]
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+		kvDB := tc.Server(0).DB()
+
+		beforeImport, err := tree.MakeDTimestampTZ(tc.Server(0).Clock().Now().GoTime(), time.Millisecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for i := range tc.Servers {
+			tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs =
+				map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+					jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+						r := raw.(*importResumer)
+						r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+							return errors.New("testing injected failure")
+						}
+						return r
+					},
+				}
+		}
+
+		sqlDB.Exec(t, `CREATE DATABASE failedimportpgdump; SET DATABASE = failedimportpgdump`)
+		// Hit a failure during import.
+		sqlDB.ExpectErr(
+			t, `testing injected failure`,
+			fmt.Sprintf(`IMPORT PGDUMP 'nodelocal://0/schema.sql'`),
+		)
+		// Nudge the registry to quickly adopt the job.
+		tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+
+		dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimportpgdump")
+		// In the case of the test, the ID of the 3 schemas that will be cleaned up
+		// due to the failed import will be consecutive IDs after the ID of the
+		// empty database it was created in.
+		schemaIDs := []descpb.ID{descpb.ID(dbID + 1), descpb.ID(dbID + 2), descpb.ID(dbID + 3)}
+		// The table IDs are allocated after the schemas are created. There is one
+		// extra table in the "public" schema.
+		tableIDs := []descpb.ID{descpb.ID(dbID + 4), descpb.ID(dbID + 5), descpb.ID(dbID + 6),
+			descpb.ID(dbID + 7)}
+
+		// At this point we expect to see three jobs related to the cleanup.
+		// - SCHEMA CHANGE GC job for the table cleanup.
+		// - SCHEMA CHANGE job to drop the schemas.
+		// - SCHEMA CHANGE job to update the database descriptor with dropped
+		// schemas.
+
+		// Ensure that a GC job was created, and wait for it to finish.
+		doneGCQuery := fmt.Sprintf(
+			"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND status = '%s' AND created > %s",
+			"SCHEMA CHANGE GC", jobs.StatusSucceeded, beforeImport.String(),
+		)
+
+		doneSchemaDropQuery := fmt.Sprintf(
+			"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND status = '%s' AND description"+
+				" LIKE '%s'", "SCHEMA CHANGE", jobs.StatusSucceeded, "dropping schemas%")
+
+		doneDatabaseUpdateQuery := fmt.Sprintf(
+			"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND status = '%s' AND description"+
+				" LIKE '%s'", "SCHEMA CHANGE", jobs.StatusSucceeded, "updating parent database%")
+
+		sqlDB.CheckQueryResultsRetry(t, doneGCQuery, [][]string{{"1"}})
+		sqlDB.CheckQueryResultsRetry(t, doneSchemaDropQuery, [][]string{{"1"}})
+		sqlDB.CheckQueryResultsRetry(t, doneDatabaseUpdateQuery, [][]string{{"1"}})
+
+		for _, schemaID := range schemaIDs {
+			// Expect that the schema descriptor is deleted.
+			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				_, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, schemaID)
+				if !testutils.IsError(err, "descriptor not found") {
+					return err
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		for _, tableID := range tableIDs {
+			// Expect that the table descriptor is deleted.
+			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				_, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
+				if !testutils.IsError(err, "descriptor not found") {
+					return err
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// As a final sanity check that the schemas have been removed.
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner IS NOT NULL`,
+			[][]string{{"public"}})
+
+		// Check that the database descriptor has been updated with the removed schemas.
+		sqlDB.ExpectErr(t, "unknown schema \"foo\"", `ALTER SCHEMA foo RENAME TO biz`)
 	})
 }
 

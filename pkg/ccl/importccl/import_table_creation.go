@@ -290,7 +290,7 @@ func (r fkResolver) LookupObject(
 	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
 	if scName != "" {
-		obName = strings.TrimPrefix(obName, scName+".")
+		obName = fmt.Sprintf("%s.%s", scName, obName)
 	}
 	tbl, ok := r[obName]
 	if ok {
