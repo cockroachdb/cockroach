@@ -152,6 +152,13 @@ type routerOutputOp struct {
 		blocked   bool
 	}
 
+	// pendingBatchCapacity indicates the capacity which the new mu.pendingBatch
+	// should be allocated with. It'll increase dynamically until
+	// coldata.BatchSize(). We need to track it ourselves since the pending
+	// batch ownership is given to the spillingQueue, so when using
+	// ResetMaybeReallocate, we don't the old batch to check the capacity of.
+	pendingBatchCapacity int
+
 	testingKnobs routerOutputOpTestingKnobs
 }
 
@@ -411,7 +418,22 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 
 	for toAppend := len(selection); toAppend > 0; {
 		if o.mu.pendingBatch == nil {
-			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithFixedCapacity(o.types, coldata.BatchSize())
+			if o.pendingBatchCapacity < coldata.BatchSize() {
+				// We still haven't reached the maximum capacity, so let's
+				// calculate the next capacity to use.
+				if o.pendingBatchCapacity == 0 {
+					// This is the first set of tuples that are added to this
+					// router output, so we'll allocate the batch with just
+					// enough capacity to fill all of these tuples.
+					o.pendingBatchCapacity = len(selection)
+				} else {
+					o.pendingBatchCapacity *= 2
+				}
+			}
+			// Note: we could have used NewMemBatchWithFixedCapacity here, but
+			// we choose not to in order to indicate that the capacity of the
+			// pending batches has dynamic behavior.
+			o.mu.pendingBatch, _ = o.mu.unlimitedAllocator.ResetMaybeReallocate(o.types, nil /* oldBatch */, o.pendingBatchCapacity)
 		}
 		available := o.mu.pendingBatch.Capacity() - o.mu.pendingBatch.Length()
 		numAppended := toAppend
@@ -478,6 +500,7 @@ func (o *routerOutputOp) resetForTests(ctx context.Context) {
 	o.mu.data.reset(ctx)
 	o.mu.numUnread = 0
 	o.mu.blocked = false
+	o.pendingBatchCapacity = 0
 }
 
 // hashRouterDrainState is a state that specifically describes the hashRouter's

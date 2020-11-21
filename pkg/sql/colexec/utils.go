@@ -70,9 +70,10 @@ func newPartitionerToOperator(
 	partitionIdx int,
 ) *partitionerToOperator {
 	return &partitionerToOperator{
+		allocator:    allocator,
+		types:        types,
 		partitioner:  partitioner,
 		partitionIdx: partitionIdx,
-		batch:        allocator.NewMemBatchWithFixedCapacity(types, coldata.BatchSize()),
 	}
 }
 
@@ -83,6 +84,8 @@ type partitionerToOperator struct {
 	colexecbase.ZeroInputNode
 	NonExplainable
 
+	allocator    *colmem.Allocator
+	types        []*types.T
 	partitioner  colcontainer.PartitionedQueue
 	partitionIdx int
 	batch        coldata.Batch
@@ -90,7 +93,11 @@ type partitionerToOperator struct {
 
 var _ colexecbase.Operator = &partitionerToOperator{}
 
-func (p *partitionerToOperator) Init() {}
+func (p *partitionerToOperator) Init() {
+	// We will be dequeuing the batches from disk into this batch, so we need to
+	// have enough capacity to support the batches of any size.
+	p.batch = p.allocator.NewMemBatchWithFixedCapacity(p.types, coldata.BatchSize())
+}
 
 func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 	if err := p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch); err != nil {
