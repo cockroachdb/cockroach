@@ -78,6 +78,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "//pkg/util/optional",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/stringarena",

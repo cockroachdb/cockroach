@@ -34,7 +34,6 @@ go_library(
         "data.pb.go",
         "expr.go",
         "flow_diagram.go",
-        "int_value.go",
         "processors.go",
         "processors.pb.go",
         "processors_base.pb.go",
@@ -76,6 +75,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/netutil",
+        "//pkg/util/optional",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
@@ -97,7 +97,6 @@ go_test(
     srcs = [
         "expr_test.go",
         "flow_diagram_test.go",
-        "int_value_test.go",
     ],
     embed = [":execinfrapb"],
     deps = [
@@ -107,6 +106,5 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
-        "//vendor/github.com/stretchr/testify/require",
     ],
 )
