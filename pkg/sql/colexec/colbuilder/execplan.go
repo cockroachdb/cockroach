@@ -490,7 +490,6 @@ func (r opResult) createDiskBackedSort(
 				maxNumberPartitions = args.TestingKnobs.NumForcedRepartitions
 			}
 			es := colexec.NewExternalSorter(
-				ctx,
 				unlimitedAllocator,
 				standaloneMemAccount,
 				input, inputTypes, ordering,
@@ -506,6 +505,43 @@ func (r opResult) createDiskBackedSort(
 		},
 		args.TestingKnobs.SpillingCallbackFn,
 	), nil
+}
+
+// makeDistBackedSorterConstructors creates a DiskBackedSorterConstructor that
+// can be used by the hash-based partitioner.
+// NOTE: unless DelegateFDAcquisitions testing knob is set to true, it is up to
+// the caller to acquire the necessary file descriptors up front.
+func (r opResult) makeDiskBackedSorterConstructor(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	args *colexec.NewColOperatorArgs,
+	monitorNamePrefix string,
+	factory coldata.ColumnFactory,
+) colexec.DiskBackedSorterConstructor {
+	return func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecbase.Operator {
+		if maxNumberPartitions < colexec.ExternalSorterMinPartitions {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"external sorter is attempted to be created with %d partitions, minimum %d required",
+				maxNumberPartitions, colexec.ExternalSorterMinPartitions,
+			))
+		}
+		sortArgs := *args
+		if !args.TestingKnobs.DelegateFDAcquisitions {
+			// Set the FDSemaphore to nil. This indicates that no FDs should be
+			// acquired. The hash-based partitioner will do this up front.
+			sortArgs.FDSemaphore = nil
+		}
+		sorter, err := r.createDiskBackedSort(
+			ctx, flowCtx, &sortArgs, input, inputTypes,
+			execinfrapb.Ordering{Columns: orderingCols},
+			0 /* matchLen */, maxNumberPartitions, args.Spec.ProcessorID,
+			&execinfrapb.PostProcessSpec{}, monitorNamePrefix, factory,
+		)
+		if err != nil {
+			colexecerror.InternalError(err)
+		}
+		return sorter
+	}
 }
 
 // createAndWrapRowSource takes a processor spec, creating the row source and
@@ -910,34 +946,13 @@ func NewColOperator(
 						unlimitedAllocator := colmem.NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, monitorNamePrefix), factory,
 						)
-						// Make a copy of the DiskQueueCfg and set defaults for the hash
-						// joiner. The cache mode is chosen to automatically close the cache
-						// belonging to partitions at a parent level when repartitioning.
-						diskQueueCfg := args.DiskQueueCfg
-						diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-						diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 						ehj := colexec.NewExternalHashJoiner(
-							unlimitedAllocator, hjSpec,
+							unlimitedAllocator,
+							flowCtx,
+							args,
+							hjSpec,
 							inputOne, inputTwo,
-							execinfra.GetWorkMemLimit(flowCtx.Cfg),
-							diskQueueCfg,
-							args.FDSemaphore,
-							func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (colexecbase.Operator, error) {
-								sortArgs := *args
-								if !args.TestingKnobs.DelegateFDAcquisitions {
-									// Set the FDSemaphore to nil. This indicates that no FDs
-									// should be acquired. The external hash joiner will do this
-									// up front.
-									sortArgs.FDSemaphore = nil
-								}
-								return result.createDiskBackedSort(
-									ctx, flowCtx, &sortArgs, input, inputTypes,
-									execinfrapb.Ordering{Columns: orderingCols},
-									0 /* matchLen */, maxNumberPartitions, spec.ProcessorID,
-									&execinfrapb.PostProcessSpec{}, monitorNamePrefix+"-", factory)
-							},
-							args.TestingKnobs.NumForcedRepartitions,
-							args.TestingKnobs.DelegateFDAcquisitions,
+							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, monitorNamePrefix, factory),
 							diskAccount,
 						)
 						result.ToClose = append(result.ToClose, ehj.(colexecbase.Closer))

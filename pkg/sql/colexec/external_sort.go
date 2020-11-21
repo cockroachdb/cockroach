@@ -60,9 +60,10 @@ const (
 	externalSorterFinished
 )
 
-// In order to make progress when merging we have to merge at least two
-// partitions into a new third one.
-const externalSorterMinPartitions = 3
+// ExternalSorterMinPartitions determines the minimum number of file descriptors
+// that the external sorter needs to have in order to make progress (when
+// merging, we have to merge at least two partitions into a new third one).
+const ExternalSorterMinPartitions = 3
 
 // externalSorter is an Operator that performs external merge sort. It works in
 // two stages:
@@ -164,7 +165,6 @@ var _ closableOperator = &externalSorter{}
 // the partitioned disk queue acquire file descriptors instead of acquiring
 // them up front in Next. This should only be true in tests.
 func NewExternalSorter(
-	ctx context.Context,
 	unlimitedAllocator *colmem.Allocator,
 	standaloneMemAccount *mon.BoundAccount,
 	input colexecbase.Operator,
@@ -187,8 +187,8 @@ func NewExternalSorter(
 		// TODO(asubiotto): this number should be tuned.
 		maxNumberPartitions = fdSemaphore.GetLimit() / 16
 	}
-	if maxNumberPartitions < externalSorterMinPartitions {
-		maxNumberPartitions = externalSorterMinPartitions
+	if maxNumberPartitions < ExternalSorterMinPartitions {
+		maxNumberPartitions = ExternalSorterMinPartitions
 	}
 	// Each disk queue will use up to BufferSizeBytes of RAM, so we reduce the
 	// memoryLimit of the partitions to sort in memory by those cache sizes. To be

@@ -775,7 +775,7 @@ func NewHashJoiner(
 	spec HashJoinerSpec,
 	leftSource, rightSource colexecbase.Operator,
 	initialNumBuckets uint64,
-) colexecbase.Operator {
+) ResettableOperator {
 	var outputTypes []*types.T
 	if spec.joinType.ShouldIncludeLeftColsInOutput() {
 		outputTypes = append(outputTypes, spec.left.sourceTypes...)
