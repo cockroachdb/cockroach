@@ -252,6 +252,10 @@ type cFetcher struct {
 	mvccDecodeStrategy row.MVCCDecodingStrategy
 
 	// fetcher is the underlying fetcher that provides KVs.
+	// TODO(jordan): this should really be stored as a non-pointer since
+	// the cfetcher itself is pooled. Ideally, we'd have a function that
+	// initializes this fetcher and doesn't allocate one, so all of the memory
+	// could be happily pooled together.
 	fetcher *row.KVFetcher
 
 	// machine contains fields that get updated during the run of the fetcher.
@@ -1447,6 +1451,12 @@ var cFetcherPool = sync.Pool{
 
 func (rf *cFetcher) Release() {
 	rf.table.Release()
+	if rf.fetcher != nil {
+		// We can pass context.TODO() here because the fetcher stack only needs a
+		// context to close its memory accounting, which is disabled because the
+		// vectorized engine does its own scan accounting.
+		rf.fetcher.Close(context.TODO())
+	}
 	*rf = cFetcher{
 		typs: rf.typs[:0],
 	}

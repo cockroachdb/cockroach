@@ -551,7 +551,7 @@ func (rf *Fetcher) StartScan(
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+	return rf.StartScanFrom(ctx, f)
 }
 
 // StartInconsistentScan initializes and starts an inconsistent scan, where each
@@ -632,7 +632,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+	return rf.StartScanFrom(ctx, f)
 }
 
 func (rf *Fetcher) firstBatchLimit(limitHint int64) int64 {

@@ -49,7 +49,7 @@ func NewKVFetcher(
 	kvBatchFetcher, err := makeKVBatchFetcher(
 		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
 	)
-	return newKVFetcher(&kvBatchFetcher), err
+	return newKVFetcher(kvBatchFetcher), err
 }
 
 func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
