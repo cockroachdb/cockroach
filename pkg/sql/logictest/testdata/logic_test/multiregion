@@ -14,6 +14,17 @@ CREATE DATABASE region_test_db REGION "test1" SURVIVE ZONE FAILURE
 statement ok
 CREATE DATABASE multi_region_test_db REGIONS "test1", "test2", "test3" SURVIVE REGION FAILURE
 
+query TTTT colnames
+SHOW DATABASES
+----
+database_name         owner  regions              survival_goal
+defaultdb             root   {}                   NULL
+multi_region_test_db  root   {test1,test2,test3}  region
+postgres              root   {}                   NULL
+region_test_db        root   {test1}              zone
+system                node   {}                   NULL
+test                  root   {}                   NULL
+
 statement error at least 3 regions are required for surviving a region failure
 CREATE DATABASE not_enough_regions_db REGIONS "test1", "test2" SURVIVE REGION FAILURE
 

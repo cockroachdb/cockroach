@@ -534,7 +534,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{}", false).
 				Results("isRole", "BOOL", false, false, "", "{}", false),
 		}},
-		{"SHOW DATABASES", []preparedQueryTest{
+		{"SELECT database_name, owner FROM [SHOW DATABASES]", []preparedQueryTest{
 			baseTest.Results("d", security.RootUser).
 				Results("defaultdb", security.RootUser).
 				Results("postgres", security.RootUser).
