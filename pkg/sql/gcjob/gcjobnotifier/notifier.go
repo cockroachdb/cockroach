@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -77,7 +77,7 @@ func (n *Notifier) AddNotifyee(ctx context.Context) (onChange <-chan struct{}, c
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if !n.mu.started {
-		log.ReportOrPanic(ctx, &n.settings.SV,
+		logcrash.ReportOrPanic(ctx, &n.settings.SV,
 			"adding a notifyee to a Notifier before starting")
 	}
 	if n.mu.stopped {
@@ -121,7 +121,7 @@ func (n *Notifier) markStarted() (alreadyStarted bool) {
 // Start must not be called more than once.
 func (n *Notifier) Start(ctx context.Context) {
 	if alreadyStarted := n.markStarted(); alreadyStarted {
-		log.ReportOrPanic(ctx, &n.settings.SV, "started Notifier more than once")
+		logcrash.ReportOrPanic(ctx, &n.settings.SV, "started Notifier more than once")
 		return
 	}
 	if err := n.stopper.RunAsyncTask(ctx, "gcjob.Notifier", n.run); err != nil {
