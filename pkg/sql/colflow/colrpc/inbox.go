@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 )
@@ -260,7 +261,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		// during normal termination.
 		if err := recover(); err != nil {
 			i.close()
-			colexecerror.InternalError(log.PanicAsError(0, err))
+			colexecerror.InternalError(logcrash.PanicAsError(0, err))
 		}
 	}()
 

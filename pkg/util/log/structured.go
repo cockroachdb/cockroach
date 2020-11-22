@@ -14,7 +14,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 )
@@ -36,13 +35,9 @@ func FormatWithContextTags(ctx context.Context, format string, args ...interface
 func addStructured(
 	ctx context.Context, sev Severity, depth int, format string, args ...interface{},
 ) {
-	if sev == severity.FATAL {
-		// We load the ReportingSettings from the a global singleton in this
-		// call path. See the singleton's comment for a rationale.
-		if sv := settings.TODO(); sv != nil {
-			err := errors.NewWithDepthf(depth+1, "log.Fatal: "+format, args...)
-			sendCrashReport(ctx, sv, err, ReportTypeLogFatal)
-		}
+	if sev == severity.FATAL && MaybeSendCrashReport != nil {
+		err := errors.NewWithDepthf(depth+1, "log.Fatal: "+format, args...)
+		MaybeSendCrashReport(ctx, err)
 	}
 
 	entry := MakeEntry(
@@ -52,3 +47,6 @@ func addStructured(
 	}
 	debugLog.outputLogEntry(entry)
 }
+
+// MaybeSendCrashReport is injected by package logcrash
+var MaybeSendCrashReport func(ctx context.Context, err error)
