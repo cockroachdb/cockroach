@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -59,6 +60,7 @@ import (
 // database may be examined to verify correctness.
 func TestDumpData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "takes >1min under race")
 
 	datadriven.Walk(t, filepath.Join("testdata", "dump"), func(t *testing.T, path string) {
 		c := newCLITest(cliTestParams{t: t})
@@ -515,6 +517,7 @@ ALTER TABLE public.orders VALIDATE CONSTRAINT fk_customer;
 
 func TestDatabaseDumpCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "takes >1min under race")
 
 	tests := []struct {
 		name     string
@@ -631,6 +634,7 @@ USE TEST;
 
 func TestDumpAllTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "takes >1min under race")
 
 	tests := []struct {
 		name     string

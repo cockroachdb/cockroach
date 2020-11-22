@@ -43,6 +43,7 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	// Under stressrace, replication changes seem to hit 1m deadline errors and
 	// don't make progress.
 	skip.UnderStressRace(t)
+	skip.UnderRace(t, "takes >1min under race")
 
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{

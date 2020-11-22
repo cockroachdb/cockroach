@@ -101,6 +101,7 @@ func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "takes >1min under race")
 	const getTablesQuery = `
 SELECT schema_name, table_name, type
 FROM [SHOW TABLES]
@@ -1534,6 +1535,7 @@ func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderShort(t)
+	skip.UnderRace(t, "takes >1min under race")
 
 	const nodes = 3
 
@@ -2435,6 +2437,7 @@ func TestImportIntoCSV(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
+	skip.UnderRace(t, "takes >1min under race")
 
 	const nodes = 3
 
@@ -3504,6 +3507,7 @@ func TestImportDefault(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "takes >1min under race")
 	const nodes = 3
 	numFiles := nodes + 2
 	rowsPerFile := 1000
