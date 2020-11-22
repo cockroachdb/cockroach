@@ -21,6 +21,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/errors"
 )
@@ -190,9 +191,24 @@ func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 		)
 	}
 	if err != nil {
-		return nil, "", errors.Wrap(err, "geos: error during GEOS init")
+		return nil, "", wrapGEOSInitError(errors.Wrap(err, "geos: error during GEOS init"))
 	}
-	return nil, "", errors.Newf("geos: no locations to init GEOS")
+	return nil, "", wrapGEOSInitError(errors.Newf("geos: no locations to init GEOS"))
+}
+
+func wrapGEOSInitError(err error) error {
+	page := "linux"
+	switch runtime.GOOS {
+	case "darwin":
+		page = "mac"
+	case "windows":
+		page = "windows"
+	}
+	return errors.WithHintf(
+		err,
+		"Ensure you have the spatial libraries installed as per the instructions in %s",
+		docs.URL("install-cockroachdb-"+page),
+	)
 }
 
 // goToCSlice returns a CR_GEOS_Slice from a given Go byte slice.
