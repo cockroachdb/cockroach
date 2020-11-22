@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
+	"github.com/twpayne/go-geom/encoding/ewkb"
 )
 
 // LineStringFromMultiPoint generates a linestring from a multipoint.
@@ -251,4 +252,61 @@ func removePoint(lineString *geom.LineString, index int) (*geom.LineString, erro
 	coords = append(coords[:index], coords[index+1:]...)
 
 	return lineString.SetCoords(coords)
+}
+
+// LineSubString returns a LineString being a substring by start and end
+func LineSubString(g geo.Geometry, start, end float64) (geo.Geometry, error) {
+
+	if start < 0 || start > 1 || end < 0 || end > 1 {
+		return g, pgerror.Newf(pgcode.InvalidParameterValue,
+			"start and and must be within 0 and 1")
+	}
+	if start > end {
+		return g, pgerror.Newf(pgcode.Internal,
+			"2nd arg must be smaller then 3rd arg")
+	}
+
+	if start == end {
+		return LineInterpolatePoints(g, start, false)
+	}
+
+	lineT, err := g.AsGeomT()
+	if err != nil {
+		return g, err
+	}
+	lineString, ok := lineT.(*geom.LineString)
+	if !ok {
+		return g, pgerror.Newf(pgcode.InvalidParameterValue,
+			"first parameter has to be of type LineString")
+	}
+
+	var newCoords, tmpCoords []float64
+	var stop bool
+	for i := 0; i < len(lineString.FlatCoords())-1 && !stop; i += 2 {
+		tmpCoords = append(tmpCoords, lineString.FlatCoords()[i:i+2]...)
+		tmpLineString := geom.NewLineStringFlat(geom.XY, tmpCoords)
+		distance := tmpLineString.Length()
+		if start != 0 && i == 0 {
+			distance = start * lineString.Length()
+		}
+
+		if start != 0 && i != 0 && distance < (start*lineString.Length()) {
+			continue
+		}
+
+		if maxEndDistance := end * lineString.Length(); distance >= maxEndDistance {
+			distance, stop = maxEndDistance, true
+		}
+
+		pointEWKB, err := geos.InterpolateLine(g.EWKB(), distance)
+		if err != nil {
+			return geo.Geometry{}, err
+		}
+		point, err := ewkb.Unmarshal(pointEWKB)
+		if err != nil {
+			return geo.Geometry{}, err
+		}
+		newCoords = append(newCoords, point.FlatCoords()...)
+	}
+	return geo.MakeGeometryFromGeomT(geom.NewLineStringFlat(geom.XY, newCoords))
 }

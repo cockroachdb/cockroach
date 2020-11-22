@@ -5855,6 +5855,29 @@ May return a Point or LineString in the case of degenerate inputs.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_linesubstring": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"a_linestring", types.Geometry},
+				{"start_fraction", types.Float},
+				{"end_fraction", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Volatility: tree.VolatilityImmutable,
+			Info: infoBuilder{
+				info: "Return a linestring being a substring of the input one starting and ending at the given fractions of total 2d length. Second and third arguments are float8 values between 0 and 1.",
+			}.String(),
+			Fn: func(_ *tree.EvalContext, datums tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(datums[0])
+				startFraction := float64(tree.MustBeDFloat(datums[1]))
+				endFraction := float64(tree.MustBeDFloat(datums[2]))
+				geometry, err := geomfn.LineSubString(g.Geometry, startFraction, endFraction)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(geometry), nil
+			},
+		}),
 
 	//
 	// Unimplemented.
@@ -5884,7 +5907,6 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	"st_length2dspheroid":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
 	"st_lengthspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
 	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
-	"st_linesubstring":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
 	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
 	"st_quantizecoordinates":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
 	"st_seteffectivearea":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),

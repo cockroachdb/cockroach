@@ -486,3 +486,60 @@ func TestRemovePoint(t *testing.T) {
 		})
 	}
 }
+
+func TestLineSubString(t *testing.T) {
+	tests := []struct {
+		name           string
+		lineString     *geom.LineString
+		start          float64
+		end            float64
+		wantLineString geom.T
+	}{
+		{
+			name:           "1/3 mid-range part of a linestring",
+			lineString:     geom.NewLineStringFlat(geom.XY, []float64{25, 50, 100, 125, 150, 190}),
+			start:          0.333,
+			end:            0.666,
+			wantLineString: geom.NewLineStringFlat(geom.XY, []float64{69.2846934853974, 94.2846934853974, 100, 125, 111.700356260683, 140.210463138888}),
+		},
+		{
+			name:           "1/2 mid-range part of a linestring",
+			lineString:     geom.NewLineStringFlat(geom.XY, []float64{25, 50, 100, 125, 150, 190}),
+			start:          0,
+			end:            0.5,
+			wantLineString: geom.NewLineStringFlat(geom.XY, []float64{25, 50, 91.493533761858, 116.493533761858}),
+		},
+		{
+			name:           "linestring with start from 0.1 and end 0.8",
+			lineString:     geom.NewLineStringFlat(geom.XY, []float64{70, 10, 10, 125.6, 15.40, 1.9, 4, 6}),
+			start:          0.1,
+			end:            0.8,
+			wantLineString: geom.NewLineStringFlat(geom.XY, []float64{57.7379118112583, 33.6249565769758, 10, 125.6, 13.6066396467739, 42.9812362396412}),
+		},
+		{
+			name:           "10% of the line length with negative coords",
+			lineString:     geom.NewLineStringFlat(geom.XY, []float64{-25, -50, 100, 125, 150, 190, 40, 60}),
+			start:          0.7,
+			end:            0.8,
+			wantLineString: geom.NewLineStringFlat(geom.XY, []float64{130.56590018391, 167.032427490075, 100.377266789273, 131.35495166005}),
+		},
+		{
+			name:           "the `start` and the `end` are the same, use InterpolatePoint",
+			lineString:     geom.NewLineStringFlat(geom.XY, []float64{25, 50, 100, 125, 150, 190}),
+			start:          0.5,
+			end:            0.5,
+			wantLineString: geom.NewPointFlat(geom.XY, []float64{91.493533761858, 116.493533761858}),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g, err := geo.MakeGeometryFromGeomT(tt.lineString)
+			require.NoError(t, err)
+			got, err := LineSubString(g, tt.start, tt.end)
+			require.NoError(t, err)
+			geomT, err := got.AsGeomT()
+			require.NoError(t, err)
+			require.InEpsilonSlice(t, tt.wantLineString.FlatCoords(), geomT.FlatCoords(), 0.00004)
+		})
+	}
+}
