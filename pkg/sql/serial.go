@@ -40,6 +40,16 @@ var virtualSequenceOpts = tree.SequenceOptions{
 	tree.SequenceOption{Name: tree.SeqOptVirtual},
 }
 
+// cachedSequencesCacheSize is the default cache size used when
+// SessionNormalizationMode is SerialUsesCachedSQLSequences.
+var cachedSequencesCacheSize int64 = 256
+
+// cachedSequenceOpts is used when SessionNormalizationMode is
+// SerialUsesCachedSQLSequences.
+var cachedSequenceOpts = tree.SequenceOptions{
+	tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &cachedSequencesCacheSize},
+}
+
 // processSerialInColumnDef analyzes a column definition and determines
 // whether to use a sequence if the requested type is SERIAL-like.
 // If a sequence must be created, it returns an TableName to use
@@ -84,7 +94,7 @@ func (p *planner) processSerialInColumnDef(
 		// switch this behavior around.
 		newSpec.Type = types.Int
 
-	case sessiondata.SerialUsesSQLSequences:
+	case sessiondata.SerialUsesSQLSequences, sessiondata.SerialUsesCachedSQLSequences:
 		// With real sequences we can use the requested type as-is.
 
 	default:
@@ -154,6 +164,9 @@ func (p *planner) processSerialInColumnDef(
 	if serialNormalizationMode == sessiondata.SerialUsesVirtualSequences {
 		seqType = "virtual "
 		seqOpts = virtualSequenceOpts
+	} else if serialNormalizationMode == sessiondata.SerialUsesCachedSQLSequences {
+		seqType = "cached "
+		seqOpts = cachedSequenceOpts
 	}
 	log.VEventf(ctx, 2, "new column %q of %q will have %s sequence name %q and default %q",
 		d, tableName, seqType, seqName, defaultExpr)
