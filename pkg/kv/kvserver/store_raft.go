@@ -484,6 +484,7 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	removed := maybeFatalOnRaftReadyErr(ctx, expl, err)
 	elapsed := timeutil.Since(start)
 	s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
+	s.metrics.RaftHandleReadyLatency.RecordValue(elapsed.Nanoseconds())
 	// Warn if Raft processing took too long. We use the same duration as we
 	// use for warning about excessive raft mutex lock hold times. Long
 	// processing time means we'll have starved local replicas of ticks and

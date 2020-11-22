@@ -417,10 +417,6 @@ var noSnap IncomingSnapshot
 func (r *Replica) handleRaftReady(
 	ctx context.Context, inSnap IncomingSnapshot,
 ) (handleRaftReadyStats, string, error) {
-	defer func(start time.Time) {
-		elapsed := timeutil.Since(start)
-		r.store.metrics.RaftHandleReadyLatency.RecordValue(elapsed.Nanoseconds())
-	}(timeutil.Now())
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
