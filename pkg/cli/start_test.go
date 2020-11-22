@@ -11,21 +11,12 @@
 package cli
 
 import (
-	"context"
-	"fmt"
-	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/require"
 )
 
 func TestInitInsecure(t *testing.T) {
@@ -150,54 +141,5 @@ func TestAddrWithDefaultHost(t *testing.T) {
 		} else if addr != test.outAddr {
 			t.Errorf("expected %q, got %q", test.outAddr, addr)
 		}
-	}
-}
-
-func TestSetUIFromEnv(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	ts := s.(*server.TestServer)
-
-	const name = "COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED"
-	const key = "release_notes_signup_dismissed"
-	for v, expected := range map[string]string{"true": "true", "false": "false", "": "false"} {
-		t.Run(fmt.Sprintf("%s=%s", name, v), func(t *testing.T) {
-			var err error
-			if v == "" {
-				err = os.Unsetenv(name)
-			} else {
-				err = os.Setenv(name, v)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer envutil.ClearEnvCache()
-
-			err = setUIDataFromEnv(ctx, ts.Server)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			cc, err := ts.RPCContext().GRPCDialNode(
-				ts.RPCAddr(),
-				1,
-				rpc.DefaultClass,
-			).Connect(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			adminClient := serverpb.NewAdminClient(cc)
-
-			resp, err := adminClient.GetUIData(ctx, &serverpb.GetUIDataRequest{Keys: []string{key}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			actual := string(resp.KeyValues[key].Value)
-			require.Equal(t, expected, actual)
-		})
 	}
 }
