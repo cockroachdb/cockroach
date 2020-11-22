@@ -320,7 +320,6 @@ go_test(
         "//pkg/util",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
-        "//pkg/util/envutil",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/leaktest",
