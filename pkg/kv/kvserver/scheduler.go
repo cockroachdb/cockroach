@@ -60,16 +60,31 @@ func (c *rangeIDChunk) Len() int {
 // amortizing the allocation/GC cost. Using a chunk queue avoids any copying
 // that would occur if a slice were used (the copying would occur on slice
 // reallocation).
+//
+// The queue has a naive understanding of priority and fairness. For the most
+// part, it implements a FIFO queueing policy with no prioritization of some
+// ranges over others. However, the queue can be configured with up to one
+// high-priority range, which will always be placed at the front when added.
 type rangeIDQueue struct {
+	len int
+
+	// Default priority.
 	chunks list.List
-	len    int
+
+	// High priority.
+	priorityID     roachpb.RangeID
+	priorityQueued bool
 }
 
-func (q *rangeIDQueue) PushBack(id roachpb.RangeID) {
+func (q *rangeIDQueue) Push(id roachpb.RangeID) {
+	q.len++
+	if q.priorityID == id {
+		q.priorityQueued = true
+		return
+	}
 	if q.chunks.Len() == 0 || q.back().WriteCap() == 0 {
 		q.chunks.PushBack(&rangeIDChunk{})
 	}
-	q.len++
 	if !q.back().PushBack(id) {
 		panic(fmt.Sprintf(
 			"unable to push rangeID to chunk: len=%d, cap=%d",
@@ -81,13 +96,17 @@ func (q *rangeIDQueue) PopFront() (roachpb.RangeID, bool) {
 	if q.len == 0 {
 		return 0, false
 	}
+	q.len--
+	if q.priorityQueued {
+		q.priorityQueued = false
+		return q.priorityID, true
+	}
 	frontElem := q.chunks.Front()
 	front := frontElem.Value.(*rangeIDChunk)
 	id, ok := front.PopFront()
 	if !ok {
 		panic("encountered empty chunk")
 	}
-	q.len--
 	if front.Len() == 0 && front.WriteCap() == 0 {
 		q.chunks.Remove(frontElem)
 	}
@@ -96,6 +115,15 @@ func (q *rangeIDQueue) PopFront() (roachpb.RangeID, bool) {
 
 func (q *rangeIDQueue) Len() int {
 	return q.len
+}
+
+func (q *rangeIDQueue) SetPriorityID(id roachpb.RangeID) {
+	if q.priorityID != 0 && q.priorityID != id {
+		panic(fmt.Sprintf(
+			"priority range ID already set: old=%d, new=%d",
+			q.priorityID, id))
+	}
+	q.priorityID = id
 }
 
 func (q *rangeIDQueue) back() *rangeIDChunk {
@@ -172,6 +200,20 @@ func (s *raftScheduler) Wait(context.Context) {
 	s.done.Wait()
 }
 
+// SetPriorityID configures the single range that the scheduler will prioritize
+// above others. Once set, callers are not permitted to change this value.
+func (s *raftScheduler) SetPriorityID(id roachpb.RangeID) {
+	s.mu.Lock()
+	s.mu.queue.SetPriorityID(id)
+	s.mu.Unlock()
+}
+
+func (s *raftScheduler) PriorityID() roachpb.RangeID {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.queue.priorityID
+}
+
 func (s *raftScheduler) worker(ctx context.Context) {
 	defer s.done.Done()
 
@@ -235,7 +277,7 @@ func (s *raftScheduler) worker(ctx context.Context) {
 		} else {
 			// There was a concurrent call to one of the Enqueue* methods. Queue the
 			// range ID for further processing.
-			s.mu.queue.PushBack(id)
+			s.mu.queue.Push(id)
 			s.mu.cond.Signal()
 		}
 	}
@@ -251,7 +293,7 @@ func (s *raftScheduler) enqueue1Locked(addState raftScheduleState, id roachpb.Ra
 	if newState&stateQueued == 0 {
 		newState |= stateQueued
 		queued++
-		s.mu.queue.PushBack(id)
+		s.mu.queue.Push(id)
 	}
 	s.mu.state[id] = newState
 	return queued
@@ -268,8 +310,13 @@ func (s *raftScheduler) enqueueN(addState raftScheduleState, ids ...roachpb.Rang
 	// Enqueue the ids in chunks to avoid hold raftScheduler.mu for too long.
 	const enqueueChunkSize = 128
 
-	var count int
+	// Avoid locking for 0 new ranges.
+	if len(ids) == 0 {
+		return 0
+	}
+
 	s.mu.Lock()
+	var count int
 	for i, id := range ids {
 		count += s.enqueue1Locked(addState, id)
 		if (i+1)%enqueueChunkSize == 0 {
@@ -299,6 +346,10 @@ func (s *raftScheduler) EnqueueRaftRequest(id roachpb.RangeID) {
 	s.signal(s.enqueue1(stateRaftRequest, id))
 }
 
-func (s *raftScheduler) EnqueueRaftTick(ids ...roachpb.RangeID) {
+func (s *raftScheduler) EnqueueRaftRequests(ids ...roachpb.RangeID) {
+	s.signal(s.enqueueN(stateRaftRequest, ids...))
+}
+
+func (s *raftScheduler) EnqueueRaftTicks(ids ...roachpb.RangeID) {
 	s.signal(s.enqueueN(stateRaftTick, ids...))
 }

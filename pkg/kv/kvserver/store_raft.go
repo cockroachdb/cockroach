@@ -76,6 +76,7 @@ func (s *Store) uncoalesceBeats(
 		log.Infof(ctx, "uncoalescing %d beats of type %v: %+v", len(beats), msgT, beats)
 	}
 	beatReqs := make([]RaftMessageRequest, len(beats))
+	var toEnqueue []roachpb.RangeID
 	for i, beat := range beats {
 		msg := raftpb.Message{
 			Type:   msgT,
@@ -105,10 +106,12 @@ func (s *Store) uncoalesceBeats(
 			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
 		}
 
-		if err := s.HandleRaftUncoalescedRequest(ctx, &beatReqs[i], respStream); err != nil {
-			log.Errorf(ctx, "could not handle uncoalesced heartbeat %s", err)
+		enqueue := s.HandleRaftUncoalescedRequest(ctx, &beatReqs[i], respStream)
+		if enqueue {
+			toEnqueue = append(toEnqueue, beat.RangeID)
 		}
 	}
+	s.scheduler.EnqueueRaftRequests(toEnqueue...)
 }
 
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
@@ -128,15 +131,19 @@ func (s *Store) HandleRaftRequest(
 		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeatResp, respStream)
 		return nil
 	}
-	return s.HandleRaftUncoalescedRequest(ctx, req, respStream)
+	enqueue := s.HandleRaftUncoalescedRequest(ctx, req, respStream)
+	if enqueue {
+		s.scheduler.EnqueueRaftRequest(req.RangeID)
+	}
+	return nil
 }
 
 // HandleRaftUncoalescedRequest dispatches a raft message to the appropriate
-// Replica. It requires that s.mu is not held.
+// Replica. The method returns whether the Range needs to be enqueued in the
+// Raft scheduler. It requires that s.mu is not held.
 func (s *Store) HandleRaftUncoalescedRequest(
 	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
-) *roachpb.Error {
-
+) (enqueue bool) {
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		log.Fatalf(ctx, "HandleRaftUncoalescedRequest cannot be given coalesced heartbeats or heartbeat responses, received %s", req)
 	}
@@ -151,28 +158,22 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	}
 	q := (*raftRequestQueue)(value)
 	q.Lock()
+	defer q.Unlock()
 	if len(q.infos) >= replicaRequestQueueSize {
-		q.Unlock()
 		// TODO(peter): Return an error indicating the request was dropped. Note
 		// that dropping the request is safe. Raft will retry.
 		s.metrics.RaftRcvdMsgDropped.Inc(1)
-		return nil
+		return false
 	}
 	q.infos = append(q.infos, raftRequestInfo{
 		req:        req,
 		respStream: respStream,
 	})
-	first := len(q.infos) == 1
-	q.Unlock()
-
 	// processRequestQueue will process all infos in the slice each time it
 	// runs, so we only need to schedule a Raft request event if we added the
 	// first info in the slice. Everyone else can rely on the request that added
 	// the first info already having scheduled a Raft request event.
-	if first {
-		s.scheduler.EnqueueRaftRequest(req.RangeID)
-	}
-	return nil
+	return len(q.infos) == 1 /* enqueue */
 }
 
 // withReplicaForRequest calls the supplied function with the (lazily
@@ -601,7 +602,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			}
 			s.unquiescedReplicas.Unlock()
 
-			s.scheduler.EnqueueRaftTick(rangeIDs...)
+			s.scheduler.EnqueueRaftTicks(rangeIDs...)
 			s.metrics.RaftTicks.Inc(1)
 
 		case <-s.stopper.ShouldStop():
