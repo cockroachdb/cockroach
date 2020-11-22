@@ -192,3 +192,31 @@ func TestRedactedDecodeFile(t *testing.T) {
 		})
 	}
 }
+
+// TestRedactableFlag checks that --redactable-logs does its job.
+// TODO(knz): Remove this with
+// https://github.com/cockroachdb/cockroach/pull/51987.
+func TestRedactableFlag(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+	setFlags()
+
+	TestingResetActive()
+
+	// Request redaction markers in generated files.
+	defer func(p bool) { logging.redactableLogsRequested = p }(logging.redactableLogsRequested)
+	logging.redactableLogsRequested = true
+	// Propagate the flag.
+	cleanup, err := SetupRedactionAndStderrRedirects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	// Now we check that they are present.
+	defer capture()()
+	Infof(context.Background(), "safe %s", "unsafe")
+
+	if !contains("safe "+startRedactable+"unsafe"+endRedactable, t) {
+		t.Errorf("expected marked data, got %q", contents())
+	}
+}

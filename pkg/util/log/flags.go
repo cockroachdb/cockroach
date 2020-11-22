@@ -148,15 +148,29 @@ func init() {
 // during SetupRedactionAndStderrRedirects() after the custom
 // logging configuration has been selected.
 func initDebugLogFromDefaultConfig() {
-	if fileSink := debugLog.getFileSink(); fileSink != nil {
-		fileSink.mu.Lock()
-		defer fileSink.mu.Unlock()
-		fileSink.prefix = program
-		fileSink.mu.logDir = logging.logDir.String()
-		fileSink.enabled.Set(fileSink.mu.logDir != "")
-		fileSink.logFileMaxSize = logging.logFileMaxSize
-		fileSink.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
-		fileSink.threshold = logging.fileThreshold
+	for i := range debugLog.sinkInfos {
+		fileSink, ok := debugLog.sinkInfos[i].sink.(*fileSink)
+		if !ok {
+			continue
+		}
+		// Re-configure the redaction editor. This may have changed
+		// after SetupRedactionAndStderrRedirects() reconfigures
+		// logging.redactableLogs.
+		//
+		// TODO(knz): Remove this initialization when
+		// https://github.com/cockroachdb/cockroach/pull/51987 introduces
+		// proper configurability.
+		debugLog.sinkInfos[i].editor = getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */))
+		func() {
+			fileSink.mu.Lock()
+			defer fileSink.mu.Unlock()
+			fileSink.prefix = program
+			fileSink.mu.logDir = logging.logDir.String()
+			fileSink.enabled.Set(fileSink.mu.logDir != "")
+			fileSink.logFileMaxSize = logging.logFileMaxSize
+			fileSink.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
+			fileSink.threshold = logging.fileThreshold
+		}()
 	}
 }
 
