@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRangeIDChunk(t *testing.T) {
@@ -96,7 +97,7 @@ func TestRangeIDQueue(t *testing.T) {
 
 	const count = 3 * rangeIDChunkSize
 	for i := 1; i <= count; i++ {
-		q.PushBack(roachpb.RangeID(i))
+		q.Push(roachpb.RangeID(i))
 		if e := i; e != q.Len() {
 			t.Fatalf("expected %d, but found %d", e, q.Len())
 		}
@@ -119,6 +120,41 @@ func TestRangeIDQueue(t *testing.T) {
 	}
 	if _, ok := q.PopFront(); ok {
 		t.Fatalf("successfully popped from empty queue")
+	}
+}
+
+func TestRangeIDQueuePrioritization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var q rangeIDQueue
+	for _, withPriority := range []bool{false, true} {
+		if withPriority {
+			q.SetPriorityID(3)
+		}
+
+		// Push 5 ranges in order, then pop them off.
+		for i := 1; i <= 5; i++ {
+			q.Push(roachpb.RangeID(i))
+			require.Equal(t, i, q.Len())
+		}
+		var popped []int
+		for i := 5; ; i-- {
+			require.Equal(t, i, q.Len())
+			id, ok := q.PopFront()
+			if !ok {
+				require.Equal(t, i, 0)
+				break
+			}
+			popped = append(popped, int(id))
+		}
+
+		// Assert pop order.
+		if withPriority {
+			require.Equal(t, []int{3, 1, 2, 4, 5}, popped)
+		} else {
+			require.Equal(t, []int{1, 2, 3, 4, 5}, popped)
+		}
 	}
 }
 
@@ -199,7 +235,7 @@ func TestSchedulerLoop(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	s.Start(ctx, stopper)
-	s.EnqueueRaftTick(1, 2, 3)
+	s.EnqueueRaftTicks(1, 2, 3)
 
 	testutils.SucceedsSoon(t, func() error {
 		const expected = "ready=[] request=[] tick=[1:1,2:1,3:1]"

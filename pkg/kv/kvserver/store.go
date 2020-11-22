@@ -100,11 +100,18 @@ const (
 )
 
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
-	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
+	// For small machines, we scale the scheduler concurrency by the number of
+	// CPUs. 8*runtime.NumCPU() was determined in 9a68241 (April 2017) as the
+	// optimal concurrency level on 8 CPU machines. For larger machines, we've
+	// seen (#56851) that this scaling curve can be too aggressive and lead to
+	// too much contention in the Raft scheduler, so we cap the concurrency
+	// level at 96.
+	//
+	// As of November 2020, this default value could be re-tuned.
+	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.NumCPU(), 96))
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
-	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60,
-)
+	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterPublicByteSizeSetting(
@@ -2779,4 +2786,11 @@ func ReadClusterVersion(
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
