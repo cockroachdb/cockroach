@@ -369,9 +369,10 @@ var SerialNormalizationMode = settings.RegisterPublicEnumSetting(
 	"default handling of SERIAL in table definitions",
 	"rowid",
 	map[int64]string{
-		int64(sessiondata.SerialUsesRowID):            "rowid",
-		int64(sessiondata.SerialUsesVirtualSequences): "virtual_sequence",
-		int64(sessiondata.SerialUsesSQLSequences):     "sql_sequence",
+		int64(sessiondata.SerialUsesRowID):              "rowid",
+		int64(sessiondata.SerialUsesVirtualSequences):   "virtual_sequence",
+		int64(sessiondata.SerialUsesSQLSequences):       "sql_sequence",
+		int64(sessiondata.SerialUsesCachedSQLSequences): "sql_sequence_cached",
 	},
 )
 

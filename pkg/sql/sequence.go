@@ -109,14 +109,14 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 // cache size of greater than 1, then this function will read cached values
 // from the session data and repopulate these values when the cache is empty.
 func (p *planner) incrementSequenceUsingCache(
-	ctx context.Context, descriptor catalog.TableDescriptor,
+	ctx context.Context, descriptor *tabledesc.Immutable,
 ) (int64, error) {
 	seqOpts := descriptor.GetSequenceOpts()
 
 	cacheSize := seqOpts.EffectiveCacheSize()
 
 	fetchNextValues := func() (currentValue int64, incrementAmount int64, sizeOfCache int64, err error) {
-		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.ID))
+		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.GetID()))
 
 		endValue, err := kv.IncrementValRetryable(
 			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment*cacheSize)
@@ -179,7 +179,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 		return 0, err
 	}
 
-	val, ok := p.SessionData().SequenceState.GetLastValueByID(uint32(descriptor.ID))
+	val, ok := p.SessionData().SequenceState.GetLastValueByID(uint32(descriptor.GetID()))
 	if !ok {
 		return 0, pgerror.Newf(
 			pgcode.ObjectNotInPrerequisiteState,
@@ -255,7 +255,7 @@ func (p *planner) GetSequenceValue(
 	if desc.SequenceOpts == nil {
 		return 0, errors.New("descriptor is not a sequence")
 	}
-	keyValue, err := p.txn.Get(ctx, codec.SequenceKey(uint32(desc.ID)))
+	keyValue, err := p.txn.Get(ctx, codec.SequenceKey(uint32(desc.GetID())))
 	if err != nil {
 		return 0, err
 	}
