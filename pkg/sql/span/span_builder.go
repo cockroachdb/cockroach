@@ -12,6 +12,7 @@ package span
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -55,6 +56,10 @@ var _ = (*Builder).UnsetNeededColumns
 var _ = (*Builder).SetNeededFamilies
 var _ = (*Builder).UnsetNeededFamilies
 
+var builderPool = sync.Pool{
+	New: func() interface{} { return &Builder{} },
+}
+
 // MakeBuilder creates a Builder for a table and index.
 func MakeBuilder(
 	evalCtx *tree.EvalContext,
@@ -62,19 +67,31 @@ func MakeBuilder(
 	table catalog.TableDescriptor,
 	index catalog.Index,
 ) *Builder {
-	s := &Builder{
+	s := builderPool.Get().(*Builder)
+	*s = Builder{
 		evalCtx:        evalCtx,
 		codec:          codec,
 		table:          table,
 		index:          index,
+		indexColTypes:  s.indexColTypes,
 		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table, index.GetID()),
-		interstices:    make([][]byte, index.NumKeyColumns()+index.NumKeySuffixColumns()+1),
+		interstices:    s.interstices,
 		neededFamilies: nil,
+	}
+	nInterstices := index.NumKeyColumns() + index.NumKeySuffixColumns() + 1
+	if cap(s.interstices) < nInterstices {
+		s.interstices = make([][]byte, nInterstices)
+	} else {
+		s.interstices = s.interstices[:nInterstices]
 	}
 
 	var columnIDs descpb.ColumnIDs
 	columnIDs, s.indexColDirs = catalog.FullIndexColumnIDs(index)
-	s.indexColTypes = make([]*types.T, len(columnIDs))
+	if cap(s.indexColTypes) < len(columnIDs) {
+		s.indexColTypes = make([]*types.T, len(columnIDs))
+	} else {
+		s.indexColTypes = s.indexColTypes[:len(columnIDs)]
+	}
 	for i, colID := range columnIDs {
 		col, _ := table.FindColumnWithID(colID)
 		// TODO (rohany): do I need to look at table columns with mutations here as well?
@@ -536,4 +553,17 @@ func (s *Builder) generateInvertedSpanKey(
 
 	span, _, err := s.SpanFromEncDatums(scratchRow, keyLen)
 	return span.Key, err
+}
+
+func (s *Builder) Release() {
+	for i := range s.interstices {
+		s.interstices[i] = nil
+	}
+	*s = Builder{
+		// Note that the types are small objects, so we don't bother deeply
+		// resetting the indexColTypes slice.
+		indexColTypes: s.indexColTypes[:0],
+		interstices:   s.interstices[:0],
+	}
+	builderPool.Put(s)
 }
