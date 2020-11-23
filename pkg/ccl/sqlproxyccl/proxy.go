@@ -45,7 +45,7 @@ type Options struct {
 	// connection. The TLS config is in it and it must have an appropriate
 	// ServerName for the remote backend.
 	BackendConfigFromParams func(
-		params map[string]string, incomingConn net.Conn,
+		params map[string]string, incomingConn *Conn,
 	) (config *BackendConfig, clientErr error)
 
 	// If set, consulted to modify the parameters set by the frontend before
@@ -59,7 +59,7 @@ type Options struct {
 
 // Proxy takes an incoming client connection and relays it to a backend SQL
 // server.
-func (s *Server) Proxy(conn net.Conn) error {
+func (s *Server) Proxy(proxyConn *Conn) error {
 	sendErrToClient := func(conn net.Conn, code ErrorCode, msg string) {
 		if s.opts.OnSendErrToClient != nil {
 			msg = s.opts.OnSendErrToClient(code, msg)
@@ -71,6 +71,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 		}).Encode(nil))
 	}
 
+	var conn net.Conn = proxyConn
 	{
 		m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 		if err != nil {
@@ -126,7 +127,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 	var backendConfig *BackendConfig
 	{
 		var clientErr error
-		backendConfig, clientErr = s.opts.BackendConfigFromParams(msg.Parameters, conn)
+		backendConfig, clientErr = s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
 		if clientErr != nil {
 			var codeErr *codeError
 			if !errors.As(clientErr, &codeErr) {
