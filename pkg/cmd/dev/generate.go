@@ -17,7 +17,7 @@ import (
 
 // generateCmd generates the specified files.
 var generateCmd = &cobra.Command{
-	Use:     "generate",
+	Use:     "generate <target>",
 	Aliases: []string{"gen"},
 	Short:   `Generate the specified files`,
 	Long:    `Generate the specified files.`,

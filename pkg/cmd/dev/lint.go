@@ -17,7 +17,7 @@ import (
 
 // lintCmd runs the specified linters.
 var lintCmd = &cobra.Command{
-	Use:   "lint [pkg] (flags)",
+	Use:   "lint",
 	Short: `Run the specified linters`,
 	Long:  `Run the specified linters.`,
 	Example: `
