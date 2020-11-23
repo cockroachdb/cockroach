@@ -242,9 +242,9 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 
 	anyCmd := []string{"sql", "quit"}
 	anyNonSQL := []string{"quit", "init"}
-	anySQL := []string{"sql", "dump"}
+	anySQL := []string{"sql"}
 	sqlShell := []string{"sql"}
-	anyNonSQLShell := []string{"dump", "quit"}
+	anyNonSQLShell := []string{"quit"}
 
 	testData := []struct {
 		cmds       []string

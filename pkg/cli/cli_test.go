@@ -2042,21 +2042,6 @@ func Example_sqlfmt() {
 	// SELECT (1 + 2) + 3
 }
 
-func Example_dump_no_visible_columns() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
-
-	c.RunWithArgs([]string{"sql", "-e", "create table t(x int); set sql_safe_updates=false; alter table t drop x"})
-	c.RunWithArgs([]string{"dump", "defaultdb"})
-
-	// Output:
-	// sql -e create table t(x int); set sql_safe_updates=false; alter table t drop x
-	// ALTER TABLE
-	// dump defaultdb
-	// CREATE TABLE public.t (FAMILY "primary" (rowid)
-	// );
-}
-
 // Example_read_from_file tests the -f parameter.
 // The input file contains a mix of client-side and
 // server-side commands to ensure that both are supported with -f.

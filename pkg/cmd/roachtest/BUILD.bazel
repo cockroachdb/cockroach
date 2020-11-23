@@ -31,7 +31,6 @@ go_library(
         "django.go",
         "django_blocklist.go",
         "drop.go",
-        "dump.go",
         "election.go",
         "encryption.go",
         "engine_switch.go",

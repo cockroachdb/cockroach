@@ -198,7 +198,6 @@ func init() {
 		stmtDiagCmd,
 		authCmd,
 		nodeCmd,
-		dumpCmd,
 		nodeLocalCmd,
 		userFileCmd,
 		importCmd,
