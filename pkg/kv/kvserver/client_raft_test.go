@@ -2852,7 +2852,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 					StoreID: mtc.stores[1].Ident.StoreID,
 				})
 				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonUnknown, "", chgs); err != nil {
-					if kvserver.IsSnapshotError(err) {
+					if kvserver.IsRetriableReplicationChangeError(err) {
 						continue
 					} else {
 						t.Fatal(err)
@@ -4959,8 +4959,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
 		err = changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
-		require.True(t,
-			testutils.IsError(err, "snapshot failed.*cannot apply snapshot: snapshot intersects"), err)
+		require.True(t, kvserver.IsRetriableReplicationChangeError(err))
 
 		// Without a partitioned RHS we'll end up always writing a tombstone here because
 		// the RHS will be created at the initial replica ID because it will get

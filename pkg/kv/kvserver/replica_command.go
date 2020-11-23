@@ -77,25 +77,6 @@ func maybeDescriptorChangedError(
 	return false, nil
 }
 
-const (
-	descChangedRangeSubsumedErrorFmt = "descriptor changed: expected %s != [actual] nil (range subsumed)"
-	descChangedErrorFmt              = "descriptor changed: [expected] %s != [actual] %s"
-)
-
-func newDescChangedError(desc, actualDesc *roachpb.RangeDescriptor) error {
-	if actualDesc == nil {
-		return errors.Newf(descChangedRangeSubsumedErrorFmt, desc)
-	}
-	return errors.Newf(descChangedErrorFmt, desc, actualDesc)
-}
-
-func wrapDescChangedError(err error, desc, actualDesc *roachpb.RangeDescriptor) error {
-	if actualDesc == nil {
-		return errors.Wrapf(err, descChangedRangeSubsumedErrorFmt, desc)
-	}
-	return errors.Wrapf(err, descChangedErrorFmt, desc, actualDesc)
-}
-
 func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) string {
 	var s string
 	if status != nil && status.RaftState == raft.StateLeader {
@@ -849,20 +830,6 @@ func waitForReplicasInit(
 	})
 }
 
-type snapshotError struct {
-	// NB: don't implement Cause() on this type without also updating IsSnapshotError.
-	cause error
-}
-
-func (s *snapshotError) Error() string {
-	return fmt.Sprintf("snapshot failed: %s", s.cause.Error())
-}
-
-// IsSnapshotError returns true iff the error indicates a snapshot failed.
-func IsSnapshotError(err error) bool {
-	return errors.HasType(err, (*snapshotError)(nil))
-}
-
 // ChangeReplicas atomically changes the replicas that are members of a range.
 // The change is performed in a distributed transaction and takes effect when
 // that transaction is committed. This transaction confirms that the supplied
@@ -1207,17 +1174,21 @@ func validateReplicationChanges(
 			// interrupted or else we hit a race between the replicate queue and
 			// AdminChangeReplicas.
 			if rDesc.GetType() == roachpb.LEARNER {
-				return errors.Errorf(
-					"unable to add replica %v which is already present as a learner in %s", chg.Target, desc)
+				return errors.Mark(errors.Errorf(
+					"unable to add replica %v which is already present as a learner in %s", chg.Target, desc),
+					errMarkCanRetryReplicationChangeWithUpdatedDesc)
 			}
 			if rDesc.GetType() == roachpb.NON_VOTER {
-				return errors.Errorf(
-					"unable to add replica %v which is already present as a non-voter in %s", chg.Target, desc)
+				return errors.Mark(errors.Errorf(
+					"unable to add replica %v which is already present as a non-voter in %s", chg.Target, desc),
+					errMarkCanRetryReplicationChangeWithUpdatedDesc)
 			}
 
 			// Otherwise, we already had a full voter replica. Can't add another to
 			// this store.
-			return errors.Errorf("unable to add replica %v which is already present in %s", chg.Target, desc)
+			return errors.Mark(
+				errors.Errorf("unable to add replica %v which is already present in %s", chg.Target, desc),
+				errMarkCanRetryReplicationChangeWithUpdatedDesc)
 		}
 
 		for _, chg := range byStoreID {
@@ -1225,10 +1196,14 @@ func validateReplicationChanges(
 			// when the newly added one would be on a different store.
 			if chg.ChangeType.IsAddition() {
 				if len(desc.Replicas().All()) > 1 {
-					return errors.Errorf("unable to add replica %v; node already has a replica in %s", chg.Target.StoreID, desc)
+					return errors.Mark(
+						errors.Errorf("unable to add replica %v; node already has a replica in %s", chg.Target.StoreID, desc),
+						errMarkCanRetryReplicationChangeWithUpdatedDesc)
 				}
 			} else {
-				return errors.Errorf("removing %v which is not in %s", chg.Target, desc)
+				return errors.Mark(
+					errors.Errorf("removing %v which is not in %s", chg.Target, desc),
+					errMarkCanRetryReplicationChangeWithUpdatedDesc)
 			}
 		}
 	}
@@ -1239,7 +1214,7 @@ func validateReplicationChanges(
 			if !chg.ChangeType.IsRemoval() {
 				continue
 			}
-			return errors.Errorf("removing %v which is not in %s", chg.Target, desc)
+			return errors.Mark(errors.Errorf("removing %v which is not in %s", chg.Target, desc), errMarkCanRetryReplicationChangeWithUpdatedDesc)
 		}
 	}
 	return nil
@@ -2017,7 +1992,7 @@ func (r *Replica) sendSnapshot(
 
 			log.Fatal(ctx, "malformed snapshot generated")
 		}
-		return &snapshotError{err}
+		return errors.Mark(err, errMarkSnapshotError)
 	}
 	return nil
 }
@@ -2483,7 +2458,8 @@ func (r *Replica) adminScatter(
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		requeue, err := rq.processOneChange(ctx, r, canTransferLease, false /* dryRun */)
 		if err != nil {
-			if IsSnapshotError(err) {
+			// TODO(tbg): can this use IsRetriableReplicationError?
+			if isSnapshotError(err) {
 				continue
 			}
 			break

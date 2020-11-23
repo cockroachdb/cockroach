@@ -271,7 +271,8 @@ func (rq *replicateQueue) process(
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
 			requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */)
-			if IsSnapshotError(err) {
+			// TODO(tbg): can this use IsRetriableReplicationError?
+			if isSnapshotError(err) {
 				// If ChangeReplicas failed because the snapshot failed, we log the
 				// error but then return success indicating we should retry the
 				// operation. The most likely causes of the snapshot failing are a

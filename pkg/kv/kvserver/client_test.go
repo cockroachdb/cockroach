@@ -1246,10 +1246,7 @@ func (m *multiTestContext) changeReplicas(
 			continue
 		}
 
-		// We can't use storage.IsSnapshotError() because the original error object
-		// is lost. We could make a this into a roachpb.Error but it seems overkill
-		// for this one usage.
-		if testutils.IsError(err, "snapshot failed: .*|descriptor changed") {
+		if kvserver.IsRetriableReplicationChangeError(err) {
 			log.Infof(ctx, "%v", err)
 			continue
 		}
