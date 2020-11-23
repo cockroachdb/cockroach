@@ -6607,7 +6607,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		// first place. Right now we just settle for having some error reported, even
 		// if it's not the ideal error.
 
-		sqlDB.CheckQueryResults(t, `SHOW DATABASES`, [][]string{
+		sqlDB.CheckQueryResults(t, `SELECT database_name, owner FROM [SHOW DATABASES]`, [][]string{
 			{"data", security.RootUser}, {"defaultdb", security.RootUser},
 			{"postgres", security.RootUser}, {"system", security.NodeUser}})
 

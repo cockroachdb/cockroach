@@ -10,28 +10,28 @@ CREATE DATABASE IF NOT EXISTS a
 statement error pgcode 42601 empty database name
 CREATE DATABASE ""
 
-query TT colnames
+query TTTT colnames
 SHOW DATABASES
 ----
-database_name  owner
-a              root
-defaultdb      root
-postgres       root
-system         node
-test           root
+database_name  owner  regions  survival_goal
+a              root   {}       NULL
+defaultdb      root   {}       NULL
+postgres       root   {}       NULL
+system         node   {}       NULL
+test           root   {}       NULL
 
 statement ok
 COMMENT ON DATABASE a IS 'A'
 
-query TTT colnames
+query TTTTT colnames
 SHOW DATABASES WITH COMMENT
 ----
-database_name  owner  comment
-a              root   A
-defaultdb      root   NULL
-postgres       root   NULL
-system         node   NULL
-test           root   NULL
+database_name  owner  regions  survival_goal  comment
+a              root   {}       NULL           A
+defaultdb      root   {}       NULL           NULL
+postgres       root   {}       NULL           NULL
+system         node   {}       NULL           NULL
+test           root   {}       NULL           NULL
 
 query TT colnames
 SHOW SCHEMAS FROM a
@@ -94,22 +94,22 @@ CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
 statement ok
 CREATE DATABASE c
 
-query TT
+query TTTT
 SHOW DATABASES
 ----
-a          root
-b          root
-b2         root
-b3         root
-b4         root
-b5         root
-b6         root
-b7         root
-c          root
-defaultdb  root
-postgres   root
-system     node
-test       root
+a          root  {}  NULL
+b          root  {}  NULL
+b2         root  {}  NULL
+b3         root  {}  NULL
+b4         root  {}  NULL
+b5         root  {}  NULL
+b6         root  {}  NULL
+b7         root  {}  NULL
+c          root  {}  NULL
+defaultdb  root  {}  NULL
+postgres   root  {}  NULL
+system     node  {}  NULL
+test       root  {}  NULL
 
 statement ok
 CREATE TABLE b.a (id INT PRIMARY KEY)
@@ -150,16 +150,16 @@ DROP DATABASE b2 CASCADE;
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
 
-query TT colnames
+query TTTT colnames
 SHOW DATABASES
 ----
-database_name  owner
-a              root
-c              root
-defaultdb      root
-postgres       root
-system         node
-test           root
+database_name  owner  regions  survival_goal
+a              root   {}       NULL
+c              root   {}       NULL
+defaultdb      root   {}       NULL
+postgres       root   {}       NULL
+system         node   {}       NULL
+test           root   {}       NULL
 
 statement ok
 CREATE DATABASE b

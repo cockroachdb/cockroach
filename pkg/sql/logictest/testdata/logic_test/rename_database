@@ -1,13 +1,13 @@
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
-query TT
+query TTTT
 SHOW DATABASES
 ----
-defaultdb  root
-postgres   root
-system     node
-test       root
+defaultdb  root  {}  NULL
+postgres   root  {}  NULL
+system     node  {}  NULL
+test       root  {}  NULL
 
 query TTTT
 SHOW GRANTS ON DATABASE test
@@ -56,13 +56,13 @@ SELECT * FROM kv
 statement error target database or schema does not exist
 SHOW GRANTS ON DATABASE test
 
-query TT
+query TTTT
 SHOW DATABASES
 ----
-defaultdb  root
-postgres   root
-system     node
-u          root
+defaultdb  root  {}  NULL
+postgres   root  {}  NULL
+system     node  {}  NULL
+u          root  {}  NULL
 
 # check the name in descriptor is also changed
 query TTTT
@@ -113,10 +113,10 @@ user testuser
 statement error must be owner of database t
 ALTER DATABASE t RENAME TO v
 
-query TT
+query TTTT
 SHOW DATABASES
 ----
-t          root
+t  root  {}  NULL
 
 # Test that owners can rename databases as long as they have the CREATEDB
 # privilege.
@@ -180,14 +180,14 @@ ALTER DATABASE defaultdb RENAME TO w;
   ALTER DATABASE postgres RENAME TO defaultdb;
   ALTER DATABASE w RENAME TO postgres
 
-query TT
+query TTTT
 SHOW DATABASES
 ----
-defaultdb  root
-postgres   root
-system     node
-t          root
-v          root
+defaultdb  root  {}  NULL
+postgres   root  {}  NULL
+system     node  {}  NULL
+t          root  {}  NULL
+v          root  {}  NULL
 
 query T
 EXPLAIN ALTER DATABASE v RENAME TO x
@@ -198,15 +198,15 @@ vectorized: false
 • rename database
 
 # Verify that the EXPLAIN above does not actually rename the database (#30543)
-query TT colnames
+query TTTT colnames
 SHOW DATABASES
 ----
-database_name  owner
-defaultdb      root
-postgres       root
-system         node
-t              root
-v              root
+database_name  owner  regions  survival_goal
+defaultdb      root   {}       NULL
+postgres       root   {}       NULL
+system         node   {}       NULL
+t              root   {}       NULL
+v              root   {}       NULL
 
 # Test dependent sequences on different databases upon renames
 # return the appropriate error message, as well as testing

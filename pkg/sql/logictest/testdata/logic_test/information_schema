@@ -114,13 +114,13 @@ TRUNCATE TABLE information_schema.tables
 
 # Verify information_schema handles reflection correctly.
 
-query TT
+query TTTT
 SHOW DATABASES
 ----
-defaultdb  root
-postgres   root
-system     node
-test       root
+defaultdb  root  {}  NULL
+postgres   root  {}  NULL
+system     node  {}  NULL
+test       root  {}  NULL
 
 query TTTTI
 SHOW TABLES FROM test.information_schema

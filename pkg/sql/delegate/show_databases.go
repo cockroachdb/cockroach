@@ -19,8 +19,7 @@ import (
 
 func (d *delegator) delegateShowDatabases(stmt *tree.ShowDatabases) (tree.Statement, error) {
 	query := `SELECT
-	name AS database_name, owner
-`
+	name AS database_name, owner, regions, survival_goal`
 
 	if stmt.WithComment {
 		query += `, comment`
