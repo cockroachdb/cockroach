@@ -2242,8 +2242,7 @@ signed_iconst ::=
 	| only_signed_iconst
 
 region_or_regions ::=
-	'REGION'
-	| 'REGIONS'
+	'REGIONS'
 
 region_name_list ::=
 	name_list

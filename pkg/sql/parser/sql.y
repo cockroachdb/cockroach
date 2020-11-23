@@ -7611,6 +7611,9 @@ opt_regions_list:
 
 region_or_regions:
   REGION
+  {
+    /* SKIP DOC */
+  }
 | REGIONS
 
 survival_goal_clause:
