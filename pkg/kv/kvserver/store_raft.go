@@ -36,9 +36,31 @@ type raftRequestInfo struct {
 type raftRequestQueue struct {
 	syncutil.Mutex
 	infos []raftRequestInfo
-	// TODO(nvanbenschoten): consider recycling []raftRequestInfo slices. This
-	// could be done without any new mutex locking by storing two slices here
-	// and swapping them under lock in processRequestQueue.
+}
+
+func (q *raftRequestQueue) drain() ([]raftRequestInfo, bool) {
+	q.Lock()
+	defer q.Unlock()
+	if len(q.infos) == 0 {
+		return nil, false
+	}
+	infos := q.infos
+	q.infos = nil
+	return infos, true
+}
+
+func (q *raftRequestQueue) recycle(processed []raftRequestInfo) {
+	if cap(processed) > 4 {
+		return // cap recycled slice lengths
+	}
+	q.Lock()
+	defer q.Unlock()
+	if q.infos == nil {
+		for i := range processed {
+			processed[i] = raftRequestInfo{}
+		}
+		q.infos = processed[:0]
+	}
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
@@ -420,13 +442,11 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		return false
 	}
 	q := (*raftRequestQueue)(value)
-	q.Lock()
-	infos := q.infos
-	q.infos = nil
-	q.Unlock()
-	if len(infos) == 0 {
+	infos, ok := q.drain()
+	if !ok {
 		return false
 	}
+	defer q.recycle(infos)
 
 	var hadError bool
 	for i := range infos {
