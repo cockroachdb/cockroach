@@ -179,6 +179,7 @@ func (g *defaultSpanGenerator) memUsage() int64 {
 
 func (g *defaultSpanGenerator) close(ctx context.Context) {
 	g.memAcc.Close(ctx)
+	g.spanBuilder.Release()
 	*g = defaultSpanGenerator{}
 }
 
@@ -728,6 +729,7 @@ func (g *multiSpanGenerator) memUsage() int64 {
 
 func (g *multiSpanGenerator) close(ctx context.Context) {
 	g.memAcc.Close(ctx)
+	g.spanBuilder.Release()
 	*g = multiSpanGenerator{}
 }
 
@@ -741,9 +743,12 @@ type localityOptimizedSpanGenerator struct {
 }
 
 // init must be called before the localityOptimizedSpanGenerator can be used to
-// generate spans.
+// generate spans. Note that we use two different span builders so that both
+// local and remote span generators could release their own when they are
+// close()d.
 func (g *localityOptimizedSpanGenerator) init(
-	spanBuilder *span.Builder,
+	localSpanBuilder *span.Builder,
+	remoteSpanBuilder *span.Builder,
 	numKeyCols int,
 	numInputCols int,
 	localExprHelper *execinfrapb.ExprHelper,
@@ -753,12 +758,12 @@ func (g *localityOptimizedSpanGenerator) init(
 	remoteSpanGenMemAcc *mon.BoundAccount,
 ) error {
 	if err := g.localSpanGen.init(
-		spanBuilder, numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, localSpanGenMemAcc,
+		localSpanBuilder, numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, localSpanGenMemAcc,
 	); err != nil {
 		return err
 	}
 	if err := g.remoteSpanGen.init(
-		spanBuilder, numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, remoteSpanGenMemAcc,
+		remoteSpanBuilder, numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, remoteSpanGenMemAcc,
 	); err != nil {
 		return err
 	}

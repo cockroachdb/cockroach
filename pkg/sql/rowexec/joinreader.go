@@ -478,9 +478,12 @@ func (jr *joinReader) initJoinReaderStrategy(
 			generator = multiSpanGen
 		} else {
 			localityOptSpanGen := &localityOptimizedSpanGenerator{}
+			remoteSpanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
+			remoteSpanBuilder.SetNeededColumns(neededRightCols)
 			remoteSpanGenMemAcc := jr.MemMonitor.MakeBoundAccount()
 			if err := localityOptSpanGen.init(
 				spanBuilder,
+				remoteSpanBuilder,
 				numKeyCols,
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,
