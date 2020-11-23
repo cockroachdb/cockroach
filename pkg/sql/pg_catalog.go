@@ -554,6 +554,7 @@ var (
 	relKindSequence         = tree.NewDString("S")
 
 	relPersistencePermanent = tree.NewDString("p")
+	relPersistenceTemporary = tree.NewDString("t")
 )
 
 var pgCatalogClassTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
@@ -576,6 +577,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relKind = relKindSequence
 			relAm = oidZero
 		}
+		relPersistence := relPersistencePermanent
+		if table.IsTemporary() {
+			relPersistence = relPersistenceTemporary
+		}
 		namespaceOid := h.NamespaceOid(db.GetID(), scName)
 		if err := addRow(
 			tableOid(table.GetID()),        // oid
@@ -592,10 +597,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			zeroVal,                        // relallvisible
 			oidZero,                        // reltoastrelid
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
-			tree.DBoolFalse,         // relisshared
-			relPersistencePermanent, // relPersistence
-			tree.DBoolFalse,         // relistemp
-			relKind,                 // relkind
+			tree.DBoolFalse, // relisshared
+			relPersistence,  // relPersistence
+			tree.DBoolFalse, // relistemp
+			relKind,         // relkind
 			tree.NewDInt(tree.DInt(len(table.GetPublicColumns()))), // relnatts
 			tree.NewDInt(tree.DInt(len(table.GetChecks()))),        // relchecks
 			tree.DBoolFalse, // relhasoids
