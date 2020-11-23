@@ -635,6 +635,14 @@ func backupPlanHook(
 			return err
 		}
 
+		// TODO (lucy): For partitioned backups, also add verification for other
+		// stores we are writing to in addition to the default.
+		if err := VerifyUsableExportTarget(
+			ctx, p.ExecCfg().Settings, defaultStore, defaultURI, encryption,
+		); err != nil {
+			return err
+		}
+
 		// If we didn't load any prior backups from which get encryption info, we
 		// need to pick a new salt and record it.
 		if encryptionPassphrase != nil && encryption == nil {
@@ -651,14 +659,6 @@ func backupPlanHook(
 				return err
 			}
 			encryption = &roachpb.FileEncryptionOptions{Key: storageccl.GenerateKey(encryptionPassphrase, salt)}
-		}
-
-		// TODO (lucy): For partitioned backups, also add verification for other
-		// stores we are writing to in addition to the default.
-		if err := VerifyUsableExportTarget(
-			ctx, p.ExecCfg().Settings, defaultStore, defaultURI, encryption,
-		); err != nil {
-			return err
 		}
 
 		backupDetails := jobspb.BackupDetails{
