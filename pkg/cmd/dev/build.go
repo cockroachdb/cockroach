@@ -17,7 +17,7 @@ import (
 
 // buildCmd builds the specified binaries.
 var buildCmd = &cobra.Command{
-	Use:   "build",
+	Use:   "build <binary>",
 	Short: "Build the specified binaries",
 	Long:  "Build the specified binaries.",
 	Example: `
