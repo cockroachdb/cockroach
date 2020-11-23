@@ -29,6 +29,8 @@ CREATE INDEX y_idx ON t (y);
 # priority ensures that we don't block in this test).
 user testuser
 
+subtest other_user retryable
+
 statement ok
 BEGIN TRANSACTION PRIORITY HIGH
 

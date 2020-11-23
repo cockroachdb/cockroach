@@ -372,7 +372,7 @@ plates
 statement ok
 COMMIT
 
-subtest create_as_drop_and_create_in_txn
+subtest create_as_drop_and_create_in_txn retryable
 
 statement ok
 BEGIN
@@ -1667,7 +1667,7 @@ ALTER TABLE t DROP CONSTRAINT fk
 statement ok
 DROP TABLE t, t2
 
-subtest delete_index_in_other_table
+subtest delete_index_in_other_table retryable
 
 # Test setup
 statement ok

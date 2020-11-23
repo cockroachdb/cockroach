@@ -1675,6 +1675,7 @@ type subtestDetails struct {
 	name                  string        // the subtest's name, empty if not a subtest
 	buffer                *bytes.Buffer // a chunk of the test file representing the subtest
 	lineLineIndexIntoFile int           // the line number of the test file where the subtest started
+	retryable             bool
 }
 
 func (t *logicTest) processTestFile(path string, config testClusterConfig) error {
@@ -1695,7 +1696,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		// If subtest has no name, then it is not a subtest, so just run the lines
 		// in the overall test. Note that this can only happen in the first subtest.
 		if len(subtest.name) == 0 {
-			if err := t.processSubtest(subtest, path, config); err != nil {
+			if err := t.processSubtest(subtest, path); err != nil {
 				return err
 			}
 		} else {
@@ -1705,8 +1706,23 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 				defer func() {
 					t.subtestT = nil
 				}()
-				if err := t.processSubtest(subtest, path, config); err != nil {
-					t.Error(err)
+				// Loop running the subtest, which might be a retryable subtest. We
+				// retry a subtest if its marked as retryable and encounters a retryable
+				// error.
+				for {
+					if err := t.processSubtest(subtest, path); err != nil {
+						if isRetryable(subtest, err) {
+							// Retry subtest.
+							_, err := t.db.Exec("ROLLBACK")
+							if err != nil {
+								t.Error(err)
+							} else {
+								continue
+							}
+						}
+						t.Error(err)
+					}
+					break
 				}
 			})
 		}
@@ -1743,27 +1759,36 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 	var subtests []subtestDetails
 	var curName string
 	var curLineIndexIntoFile int
+	var curRetryable bool
 	buffer := &bytes.Buffer{}
 	for s.Scan() {
 		line := s.Text()
 		fields := strings.Fields(line)
 		if len(fields) > 0 && fields[0] == "subtest" {
-			if len(fields) != 2 {
+			if len(fields) < 2 {
 				return nil, errors.Errorf(
-					"%s:%d expected only one field following the subtest command\n"+
-						"Note that this check does not respect the other commands so if a query result has a "+
-						"line that starts with \"subtest\" it will either fail or be split into a subtest.",
-					path, s.line,
+					"%s:%d expected subtest name following the subtest command", path, s.line,
 				)
 			}
 			subtests = append(subtests, subtestDetails{
 				name:                  curName,
 				buffer:                buffer,
 				lineLineIndexIntoFile: curLineIndexIntoFile,
+				retryable:             curRetryable,
 			})
 			buffer = &bytes.Buffer{}
 			curName = fields[1]
+			curRetryable = false
 			curLineIndexIntoFile = s.line + 1
+			options := fields[2:]
+			for _, option := range options {
+				switch option {
+				case "retryable":
+					curRetryable = true
+				default:
+					return nil, errors.Errorf("%s:%d no such subtest option %s", path, s.line, option)
+				}
+			}
 		} else {
 			buffer.WriteString(line)
 			buffer.WriteRune('\n')
@@ -1778,9 +1803,7 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 	return subtests, nil
 }
 
-func (t *logicTest) processSubtest(
-	subtest subtestDetails, path string, config testClusterConfig,
-) error {
+func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 	defer t.traceStop()
 
 	s := newLineScanner(subtest.buffer)
@@ -1867,6 +1890,9 @@ func (t *logicTest) processSubtest(
 				for i := 0; i < repeat; i++ {
 					if cont, err := t.execStatement(stmt); err != nil {
 						if !cont {
+							return err
+						}
+						if isRetryable(subtest, err) {
 							return err
 						}
 						t.Error(err)
@@ -2148,6 +2174,9 @@ func (t *logicTest) processSubtest(
 							time.Sleep(time.Millisecond * 500)
 						}
 						if err := t.execQuery(query); err != nil {
+							if isRetryable(subtest, err) {
+								return err
+							}
 							t.Error(err)
 						}
 					}
@@ -2279,6 +2308,11 @@ func (t *logicTest) processSubtest(
 		}
 	}
 	return s.Err()
+}
+
+func isRetryable(subtest subtestDetails, err error) bool {
+	var pqErr *pq.Error
+	return subtest.retryable && errors.As(err, &pqErr) && pqErr.Code == "40001"
 }
 
 // verifyError checks that either no error was found where none was
