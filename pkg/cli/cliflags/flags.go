@@ -975,8 +975,10 @@ Base64-encoded Descriptor to use as the table when decoding KVs.`,
 	DrainWait = FlagInfo{
 		Name: "drain-wait",
 		Description: `
-When non-zero, wait for the specified amount of time for the node to
-drain all active client connections and migrate away range leases.`,
+When non-zero, wait for at most the specified amount of time for the node to
+drain all active client connections and migrate away range leases.
+If zero, the command waits until the last client has disconnected and
+all range leases have been migrated away.`,
 	}
 
 	Wait = FlagInfo{
