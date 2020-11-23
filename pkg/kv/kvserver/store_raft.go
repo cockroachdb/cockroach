@@ -214,7 +214,6 @@ func (s *Store) withReplicaForRequest(
 		return roachpb.NewError(err)
 	}
 	defer r.raftMu.Unlock()
-	ctx = r.AnnotateCtx(ctx)
 	r.setLastReplicaDescriptors(req)
 	return f(ctx, r)
 }
@@ -280,6 +279,7 @@ func (s *Store) processRaftSnapshotRequest(
 	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
 	) (pErr *roachpb.Error) {
+		ctx = r.AnnotateCtx(ctx)
 		if snapHeader.RaftMessageRequest.Message.Type != raftpb.MsgSnap {
 			log.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
 		}
@@ -453,6 +453,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		info := &infos[i]
 		if pErr := s.withReplicaForRequest(
 			ctx, info.req, func(ctx context.Context, r *Replica) *roachpb.Error {
+				ctx = r.raftSchedulerCtx(ctx)
 				return s.processRaftRequestWithReplica(ctx, r, info.req)
 			},
 		); pErr != nil {
@@ -498,7 +499,7 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	}
 
 	r := (*Replica)(value)
-	ctx = r.AnnotateCtx(ctx)
+	ctx = r.raftSchedulerCtx(ctx)
 	start := timeutil.Now()
 	stats, expl, err := r.handleRaftReady(ctx, noSnap)
 	removed := maybeFatalOnRaftReadyErr(ctx, expl, err)
@@ -539,7 +540,8 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 
 	start := timeutil.Now()
 	r := (*Replica)(value)
-	exists, err := r.tick(livenessMap)
+	ctx = r.raftSchedulerCtx(ctx)
+	exists, err := r.tick(ctx, livenessMap)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
 	}
