@@ -140,7 +140,7 @@ CREATE TABLE data2.foo (a int);
 
 	t.Run("ensure all databases restored", func(t *testing.T) {
 		sqlDBRestore.CheckQueryResults(t,
-			`SHOW DATABASES`,
+			`SELECT database_name, owner FROM [SHOW DATABASES]`,
 			[][]string{
 				{"data", security.RootUser},
 				{"data2", security.RootUser},
