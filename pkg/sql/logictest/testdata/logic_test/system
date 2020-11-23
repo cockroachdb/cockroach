@@ -1,11 +1,11 @@
 # LogicTest: !3node-tenant(49854)
-query TTTT
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb  root  {}  NULL
-postgres   root  {}  NULL
-system     node  {}  NULL
-test       root  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 query TTTTI
 SHOW TABLES FROM system

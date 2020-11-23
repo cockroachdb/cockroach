@@ -10,28 +10,28 @@ CREATE DATABASE IF NOT EXISTS a
 statement error pgcode 42601 empty database name
 CREATE DATABASE ""
 
-query TTTT colnames
+query TTTTT colnames
 SHOW DATABASES
 ----
-database_name  owner  regions  survival_goal
-a              root   {}       NULL
-defaultdb      root   {}       NULL
-postgres       root   {}       NULL
-system         node   {}       NULL
-test           root   {}       NULL
+database_name  owner  primary_region  regions  survival_goal
+a              root   NULL            {}       NULL
+defaultdb      root   NULL            {}       NULL
+postgres       root   NULL            {}       NULL
+system         node   NULL            {}       NULL
+test           root   NULL            {}       NULL
 
 statement ok
 COMMENT ON DATABASE a IS 'A'
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES WITH COMMENT
 ----
-database_name  owner  regions  survival_goal  comment
-a              root   {}       NULL           A
-defaultdb      root   {}       NULL           NULL
-postgres       root   {}       NULL           NULL
-system         node   {}       NULL           NULL
-test           root   {}       NULL           NULL
+database_name  owner  primary_region  regions  survival_goal  comment
+a              root   NULL            {}       NULL           A
+defaultdb      root   NULL            {}       NULL           NULL
+postgres       root   NULL            {}       NULL           NULL
+system         node   NULL            {}       NULL           NULL
+test           root   NULL            {}       NULL           NULL
 
 query TT colnames
 SHOW SCHEMAS FROM a
@@ -94,22 +94,22 @@ CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
 statement ok
 CREATE DATABASE c
 
-query TTTT
+query TTTTT
 SHOW DATABASES
 ----
-a          root  {}  NULL
-b          root  {}  NULL
-b2         root  {}  NULL
-b3         root  {}  NULL
-b4         root  {}  NULL
-b5         root  {}  NULL
-b6         root  {}  NULL
-b7         root  {}  NULL
-c          root  {}  NULL
-defaultdb  root  {}  NULL
-postgres   root  {}  NULL
-system     node  {}  NULL
-test       root  {}  NULL
+a          root  NULL  {}  NULL
+b          root  NULL  {}  NULL
+b2         root  NULL  {}  NULL
+b3         root  NULL  {}  NULL
+b4         root  NULL  {}  NULL
+b5         root  NULL  {}  NULL
+b6         root  NULL  {}  NULL
+b7         root  NULL  {}  NULL
+c          root  NULL  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 statement ok
 CREATE TABLE b.a (id INT PRIMARY KEY)
@@ -150,16 +150,16 @@ DROP DATABASE b2 CASCADE;
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
 
-query TTTT colnames
+query TTTTT colnames
 SHOW DATABASES
 ----
-database_name  owner  regions  survival_goal
-a              root   {}       NULL
-c              root   {}       NULL
-defaultdb      root   {}       NULL
-postgres       root   {}       NULL
-system         node   {}       NULL
-test           root   {}       NULL
+database_name  owner  primary_region  regions  survival_goal
+a              root   NULL            {}       NULL
+c              root   NULL            {}       NULL
+defaultdb      root   NULL            {}       NULL
+postgres       root   NULL            {}       NULL
+system         node   NULL            {}       NULL
+test           root   NULL            {}       NULL
 
 statement ok
 CREATE DATABASE b
