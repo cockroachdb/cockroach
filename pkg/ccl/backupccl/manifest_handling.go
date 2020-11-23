@@ -628,13 +628,13 @@ func VerifyUsableExportTarget(
 			"%s already contains a %s file",
 			redactedURI, BackupManifestName)
 	}
-	if r, err := exportStore.ReadFile(ctx, BackupManifestName); err == nil {
+	if r, err := exportStore.ReadFile(ctx, BackupNewManifestName); err == nil {
 		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
 		// returns (and then wrap/tag them), we could narrow this check.
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
-			redactedURI, BackupManifestName)
+			redactedURI, BackupNewManifestName)
 	}
 	if r, err := exportStore.ReadFile(ctx, BackupManifestCheckpointName); err == nil {
 		r.Close()
