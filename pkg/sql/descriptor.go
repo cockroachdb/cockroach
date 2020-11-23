@@ -91,28 +91,51 @@ func (p *planner) createDatabase(
 	if err != nil {
 		return nil, false, err
 	}
-	if len(database.Regions) > 0 {
+	if database.PrimaryRegion != "" || len(database.Regions) > 0 {
 		liveRegions, err := p.getLiveClusterRegions()
 		if err != nil {
 			return nil, false, err
 		}
-		regionConfig.Regions = make([]string, 0, len(database.Regions))
-		seenRegions := make(map[string]struct{}, len(database.Regions))
-		for _, r := range database.Regions {
-			region := string(r)
-			if err := checkLiveClusterRegion(liveRegions, region); err != nil {
+		regionConfig.PrimaryRegion = string(database.PrimaryRegion)
+		if regionConfig.PrimaryRegion != "" {
+			if err := checkLiveClusterRegion(liveRegions, regionConfig.PrimaryRegion); err != nil {
 				return nil, false, err
 			}
-
-			if _, ok := seenRegions[region]; ok {
+		}
+		if len(database.Regions) > 0 {
+			if regionConfig.PrimaryRegion == "" {
 				return nil, false, pgerror.Newf(
-					pgcode.InvalidName,
-					"region %q defined multiple times",
-					region,
+					pgcode.InvalidDatabaseDefinition,
+					"PRIMARY REGION must be specified if REGIONS are specified",
 				)
 			}
-			seenRegions[region] = struct{}{}
-			regionConfig.Regions = append(regionConfig.Regions, region)
+			regionConfig.Regions = make([]string, 0, len(database.Regions))
+			seenRegions := make(map[string]struct{}, len(database.Regions))
+			for _, r := range database.Regions {
+				region := string(r)
+				if err := checkLiveClusterRegion(liveRegions, region); err != nil {
+					return nil, false, err
+				}
+
+				if _, ok := seenRegions[region]; ok {
+					return nil, false, pgerror.Newf(
+						pgcode.InvalidName,
+						"region %q defined multiple times",
+						region,
+					)
+				}
+				seenRegions[region] = struct{}{}
+				regionConfig.Regions = append(regionConfig.Regions, region)
+			}
+			// If PRIMARY REGION is not in REGIONS, add it implicitly.
+			if _, ok := seenRegions[regionConfig.PrimaryRegion]; !ok {
+				regionConfig.Regions = append(
+					[]string{regionConfig.PrimaryRegion},
+					regionConfig.Regions...,
+				)
+			}
+		} else {
+			regionConfig.Regions = []string{regionConfig.PrimaryRegion}
 		}
 	}
 	if err := validateDatabaseRegionConfig(regionConfig); err != nil {
