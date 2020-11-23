@@ -4214,6 +4214,229 @@ func NewDOid(d DInt) *DOid {
 	return &oid
 }
 
+// ParseDOid parses and returns an Oid family datum.
+func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
+	// If it is an integer in string form, convert it as an int.
+	if val, err := ParseDInt(strings.TrimSpace(s)); err == nil {
+		tmpOid := NewDOid(*val)
+		oid, err := queryOid(ctx, t, tmpOid)
+		if err != nil {
+			oid = tmpOid
+			oid.semanticType = t
+		}
+		return oid, nil
+	}
+
+	switch t.Oid() {
+	case oid.T_regproc, oid.T_regprocedure:
+		// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
+		// Postgres only does this when the cast is ::regprocedure, but we're
+		// going to always do it.
+		// We additionally do not yet implement disambiguation based on type
+		// parameters: we return the match iff there is exactly one.
+		s = pgSignatureRegexp.ReplaceAllString(s, "$1")
+
+		substrs, err := splitIdentifierList(s)
+		if err != nil {
+			return nil, err
+		}
+		if len(substrs) > 3 {
+			// A fully qualified function name in pg's dialect can contain
+			// at most 3 parts: db.schema.funname.
+			// For example mydb.pg_catalog.max().
+			// Anything longer is always invalid.
+			return nil, pgerror.Newf(pgcode.Syntax,
+				"invalid function name: %s", s)
+		}
+		name := UnresolvedName{NumParts: len(substrs)}
+		for i := 0; i < len(substrs); i++ {
+			name.Parts[i] = substrs[len(substrs)-1-i]
+		}
+		funcDef, err := name.ResolveFunction(ctx.SessionData.SearchPath)
+		if err != nil {
+			return nil, err
+		}
+		return queryOid(ctx, t, NewDString(funcDef.Name))
+	case oid.T_regtype:
+		parsedTyp, err := ctx.Planner.ParseType(s)
+		if err == nil {
+			return &DOid{
+				semanticType: t,
+				DInt:         DInt(parsedTyp.Oid()),
+				name:         parsedTyp.SQLStandardName(),
+			}, nil
+		}
+
+		// Fall back to searching pg_type, since we don't provide syntax for
+		// every postgres type that we understand OIDs for.
+		// Note this section does *not* work if there is a schema in front of the
+		// type, e.g. "pg_catalog"."int4" (if int4 was not defined).
+
+		// Trim whitespace and unwrap outer quotes if necessary.
+		// This is required to mimic postgres.
+		s = strings.TrimSpace(s)
+		if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
+			s = s[1 : len(s)-1]
+		}
+		// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
+		s = pgSignatureRegexp.ReplaceAllString(s, "$1")
+
+		dOid, missingTypeErr := queryOid(ctx, t, NewDString(s))
+		if missingTypeErr == nil {
+			return dOid, missingTypeErr
+		}
+		// Fall back to some special cases that we support for compatibility
+		// only. Client use syntax like 'sometype'::regtype to produce the oid
+		// for a type that they want to search a catalog table for. Since we
+		// don't support that type, we return an artificial OID that will never
+		// match anything.
+		switch s {
+		// We don't support triggers, but some tools search for them
+		// specifically.
+		case "trigger":
+		default:
+			return nil, missingTypeErr
+		}
+		return &DOid{
+			semanticType: t,
+			// Types we don't support get OID -1, so they won't match anything
+			// in catalogs.
+			DInt: -1,
+			name: s,
+		}, nil
+
+	case oid.T_regclass:
+		tn, err := castStringToRegClassTableName(s)
+		if err != nil {
+			return nil, err
+		}
+		id, err := ctx.Planner.ResolveTableName(ctx.Ctx(), &tn)
+		if err != nil {
+			return nil, err
+		}
+		return &DOid{
+			semanticType: t,
+			DInt:         DInt(id),
+			name:         tn.ObjectName.String(),
+		}, nil
+	default:
+		return queryOid(ctx, t, NewDString(s))
+	}
+}
+
+// castStringToRegClassTableName normalizes a TableName from a string.
+func castStringToRegClassTableName(s string) (TableName, error) {
+	components, err := splitIdentifierList(s)
+	if err != nil {
+		return TableName{}, err
+	}
+
+	if len(components) > 3 {
+		return TableName{}, pgerror.Newf(
+			pgcode.InvalidName,
+			"too many components: %s",
+			s,
+		)
+	}
+	var retComponents [3]string
+	for i := 0; i < len(components); i++ {
+		retComponents[len(components)-1-i] = components[i]
+	}
+	u, err := NewUnresolvedObjectName(
+		len(components),
+		retComponents,
+		0,
+	)
+	if err != nil {
+		return TableName{}, err
+	}
+	return u.ToTableName(), nil
+}
+
+// splitIdentifierList splits identifiers to individual components, lower
+// casing non-quoted identifiers and escaping quoted identifiers as appropriate.
+// It is based on PostgreSQL's SplitIdentifier.
+func splitIdentifierList(in string) ([]string, error) {
+	var pos int
+	var ret []string
+	const separator = '.'
+
+	for pos < len(in) {
+		if isWhitespace(in[pos]) {
+			pos++
+			continue
+		}
+		if in[pos] == '"' {
+			var b strings.Builder
+			// Attempt to find the ending quote. If the quote is double "",
+			// fold it into a " character for the str (e.g. "a""" means a").
+			for {
+				pos++
+				endIdx := strings.IndexByte(in[pos:], '"')
+				if endIdx == -1 {
+					return nil, pgerror.Newf(
+						pgcode.InvalidName,
+						`invalid name: unclosed ": %s`,
+						in,
+					)
+				}
+				b.WriteString(in[pos : pos+endIdx])
+				pos += endIdx + 1
+				// If we reached the end, or the following character is not ",
+				// we can break and assume this is one identifier.
+				// There are checks below to ensure EOF or whitespace comes
+				// afterward.
+				if pos == len(in) || in[pos] != '"' {
+					break
+				}
+				b.WriteByte('"')
+			}
+			ret = append(ret, b.String())
+		} else {
+			var b strings.Builder
+			for pos < len(in) && in[pos] != separator && !isWhitespace(in[pos]) {
+				b.WriteByte(in[pos])
+				pos++
+			}
+			// Anything with no quotations should be lowered.
+			ret = append(ret, strings.ToLower(b.String()))
+		}
+
+		// Further ignore all white space.
+		for pos < len(in) && isWhitespace(in[pos]) {
+			pos++
+		}
+
+		// At this stage, we expect separator or end of string.
+		if pos == len(in) {
+			break
+		}
+
+		if in[pos] != separator {
+			return nil, pgerror.Newf(
+				pgcode.InvalidName,
+				"invalid name: expected separator %c: %s",
+				separator,
+				in,
+			)
+		}
+
+		pos++
+	}
+
+	return ret, nil
+}
+
+// isWhitespace returns true if the given character is a space.
+// This must match parser.SkipWhitespace above.
+func isWhitespace(ch byte) bool {
+	switch ch {
+	case ' ', '\t', '\r', '\f', '\n':
+		return true
+	}
+	return false
+}
+
 // AsDOid attempts to retrieve a DOid from an Expr, returning a DOid and
 // a flag signifying whether the assertion was successful. The function should
 // be used instead of direct type assertions wherever a *DOid wrapped by a

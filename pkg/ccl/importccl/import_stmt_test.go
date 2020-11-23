@@ -5334,6 +5334,91 @@ func TestImportPgDumpGeo(t *testing.T) {
 	})
 }
 
+func TestImportPgDumpDropTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	// If the target table for a DROP exists, we throw an error.
+	t.Run("table exists", func(t *testing.T) {
+
+		// Set up table `t` exists for testing.
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS t; CREATE TABLE t (a INT);`)
+
+		// Import PGDump data which includes DROP TABLE.
+		data = `DROP TABLE t; CREATE TABLE t (a INT); INSERT INTO t VALUES (4);`
+		sqlDB.ExpectErr(t, `drop table "t" and then retry the import`, `IMPORT PGDUMP ($1)`, srv.URL)
+
+		// Also expect error on existing table with IF EXISTS.
+		data = `DROP TABLE IF EXISTS t; CREATE TABLE t (a INT); INSERT INTO t VALUES (4);`
+		sqlDB.ExpectErr(t, `drop table "t" and then retry the import`, `IMPORT PGDUMP ($1)`, srv.URL)
+
+		// Cleanup.
+		sqlDB.Exec(t, `DROP TABLE t`)
+	})
+
+	// If the target table for a DROP does not exist, we ignore the statement.
+	t.Run("table does not exist", func(t *testing.T) {
+
+		// Set up table `t` does not exist for testing.
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS t;`)
+
+		// No error should be thrown with DROP statement.
+		data = `DROP TABLE t; CREATE TABLE t (a INT); INSERT INTO t VALUES (4);`
+		expected := [][]string{{"4"}}
+
+		sqlDB.Exec(t, `IMPORT PGDUMP ($1)`, srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, expected)
+
+		// Drop the table `t` that pgdump imported.
+		// Now table `t` does not exist for the IF EXISTS example.
+		sqlDB.Exec(t, `DROP TABLE t;`)
+
+		// Also expect no errors and successful import with IF EXISTS.
+		data = `DROP TABLE IF EXISTS t; CREATE TABLE t (a INT); INSERT INTO t VALUES (4);`
+		sqlDB.Exec(t, `IMPORT PGDUMP ($1)`, srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, expected)
+
+		// Cleanup.
+		sqlDB.Exec(t, `DROP TABLE t`)
+	})
+
+	t.Run("multiple tables and drops", func(t *testing.T) {
+		// Set up.
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS t, u;`)
+
+		// Import table `t` successfully.
+		data = `DROP TABLE t; CREATE TABLE t (a INT)`
+		sqlDB.Exec(t, `IMPORT PGDUMP ($1)`, srv.URL)
+
+		// Table `u` does not exist, so create it successfully.
+		// Table `t` exists, so an error is thrown for table `t`.
+		data = `DROP TABLE u; 
+		CREATE TABLE u (a INT); 
+		INSERT INTO u VALUES (55);
+		DROP TABLE t;`
+		sqlDB.ExpectErr(t, `drop table "t" and then retry the import`, `IMPORT PGDUMP ($1)`, srv.URL)
+
+		// Since the PGDump failed on error, table `u` should not exist.
+		sqlDB.ExpectErr(t, `does not exist`, `SELECT * FROM u`)
+	})
+}
+
 func TestImportCockroachDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

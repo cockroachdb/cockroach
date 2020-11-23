@@ -386,3 +386,9 @@ SELECT
   '12345'::regprocedure::string
 ----
 12345  12345  12345  12345  12345
+
+query T
+PREPARE regression_56193 AS SELECT $1::regclass;
+EXECUTE regression_56193('regression_53686"'::regclass)
+----
+"regression_53686"""
