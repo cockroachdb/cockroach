@@ -1064,6 +1064,7 @@ message DatabaseRegionConfig {
 
   repeated string regions = 1;
   optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
+  optional string primary_region = 3 [(gogoproto.nullable)=false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
