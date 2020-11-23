@@ -624,9 +624,9 @@ func (p *pebbleMVCCScanner) addAndAdvance(rawKey []byte, val []byte) bool {
 // Seeks to the latest revision of the current key that's still less than or
 // equal to the specified timestamp, adds it to the result set, then moves onto
 // the next user key.
-func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool) bool {
-	key := MVCCKey{Key: p.curKey.Key, Timestamp: ts}
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
+func (p *pebbleMVCCScanner) seekVersion(seekTS hlc.Timestamp, uncertaintyCheck bool) bool {
+	seekKey := MVCCKey{Key: p.curKey.Key, Timestamp: seekTS}
+	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], seekKey)
 	origKey := p.keyBuf[:len(p.curKey.Key)]
 
 	for i := 0; i < p.itersBeforeSeek; i++ {
@@ -637,7 +637,7 @@ func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool)
 			p.incrementItersBeforeSeek()
 			return p.advanceKeyAtNewKey(origKey)
 		}
-		if p.curKey.Timestamp.LessEq(ts) {
+		if p.curKey.Timestamp.LessEq(seekTS) {
 			p.incrementItersBeforeSeek()
 			if uncertaintyCheck && p.ts.Less(p.curKey.Timestamp) {
 				return p.uncertaintyError(p.curKey.Timestamp)
@@ -647,19 +647,16 @@ func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool)
 	}
 
 	p.decrementItersBeforeSeek()
-	if !p.iterSeek(key) {
+	if !p.iterSeek(seekKey) {
 		return p.advanceKeyAtEnd()
 	}
 	if !bytes.Equal(p.curKey.Key, origKey) {
 		return p.advanceKeyAtNewKey(origKey)
 	}
-	if p.curKey.Timestamp.LessEq(ts) {
-		if uncertaintyCheck && p.ts.Less(p.curKey.Timestamp) {
-			return p.uncertaintyError(p.curKey.Timestamp)
-		}
-		return p.addAndAdvance(p.curRawKey, p.curValue)
+	if uncertaintyCheck && p.ts.Less(p.curKey.Timestamp) {
+		return p.uncertaintyError(p.curKey.Timestamp)
 	}
-	return p.advanceKey()
+	return p.addAndAdvance(p.curRawKey, p.curValue)
 }
 
 // Updates cur{RawKey, Key, TS} to match record the iterator is pointing to.
