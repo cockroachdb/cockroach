@@ -97,7 +97,7 @@ message RaftMessageRequestBatch {
 message RaftMessageResponseUnion {
   option (gogoproto.onlyone) = true;
 
-  roachpb.Error error = 1;
+  kv.kvpb.Error error = 1;
 }
 
 // RaftMessageResponse may be sent to the sender of a
