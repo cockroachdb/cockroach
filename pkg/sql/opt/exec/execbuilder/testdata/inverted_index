@@ -659,14 +659,8 @@ EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
 distribution: local
 vectorized: true
 ·
-• index join
-│ columns: (a, b)
-│ estimated row count: 110 (missing stats)
-│ table: e@primary
-│ key columns: a
-│
-└── • norows
-      columns: (a)
+• norows
+  columns: (a, b)
 
 query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> NULL

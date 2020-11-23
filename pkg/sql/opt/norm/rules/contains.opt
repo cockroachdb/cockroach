@@ -1,0 +1,10 @@
+# =============================================================================
+# contains.opt contains normalization pattern for Contains operator.
+# =============================================================================
+
+# SimplifyContainsArrayWithNulls simplifies the Contains operator to false if
+# its right argument is a constant array that contains null elements.
+[SimplifyContainsArrayWithNulls, Normalize]
+(Contains * $right:* & (IsConstArrayWithNulls $right))
+=>
+(False)
