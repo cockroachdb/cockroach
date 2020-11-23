@@ -266,7 +266,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size, stopper)
 	r := MakeDistSQLReceiver(
 		ctx, nil /* resultWriter */, tree.Rows,
-		rangeCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
+		rangeCache, nil /* txn */, nil /* clockUpdater */, &SessionTracing{})
 
 	replicas := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}}
 
