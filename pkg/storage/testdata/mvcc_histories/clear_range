@@ -11,51 +11,51 @@ with t=A v=abc resolve
   put  k=c
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000044,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000044,0 wto=false max=0,0
-data: "a"/0.000000044,0 -> /BYTES/abc
-data: "a/123"/0.000000044,0 -> /BYTES/abc
-data: "b"/0.000000044,0 -> /BYTES/abc
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000044,0 -> /BYTES/abc
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 wto=false max=0,0
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
 
 
 run ok
 clear_range k=a end=+a
 ----
 >> at end:
-data: "a/123"/0.000000044,0 -> /BYTES/abc
-data: "b"/0.000000044,0 -> /BYTES/abc
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000044,0 -> /BYTES/abc
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
 
 run ok
 clear_range k=a end=-a
 ----
 >> at end:
-data: "b"/0.000000044,0 -> /BYTES/abc
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000044,0 -> /BYTES/abc
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
 
 run ok
 clear_range k=a end==b
 ----
 >> at end:
-data: "b"/0.000000044,0 -> /BYTES/abc
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000044,0 -> /BYTES/abc
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
 
 run ok
 clear_range k=a end=+b
 ----
 >> at end:
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000044,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
 
 run ok
 clear_range k=a end=-b
 ----
 >> at end:
-data: "c"/0.000000044,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
 
 run ok
 clear_range k=a end=-c
