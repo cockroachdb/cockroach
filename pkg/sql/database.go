@@ -262,7 +262,6 @@ func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
 	if name == sqlbase.SystemDB.Name {
 		return sqlbase.SystemDB.ID, nil
 	}
-
 	var nameKey sqlbase.DescriptorKey = sqlbase.NewDatabaseKey(name)
 	nameVal := dc.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {

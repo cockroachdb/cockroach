@@ -170,6 +170,10 @@ type dbCacheSubscriber interface {
 	// until the callback declares success. The callback is repeatedly called as
 	// the cache is updated.
 	waitForCacheState(cond func(*databaseCache) bool)
+
+	// getDatabaseCache gets a databaseCache which should stay alive for the
+	// remainder of this session until releaseAll is called.
+	getDatabaseCache() *databaseCache
 }
 
 // isSupportedSchemaName returns whether this schema name is supported.
@@ -179,6 +183,13 @@ type dbCacheSubscriber interface {
 // See #44733.
 func isSupportedSchemaName(n tree.Name) bool {
 	return n == tree.PublicSchemaName || strings.HasPrefix(string(n), "pg_temp")
+}
+
+func (tc *TableCollection) maybeSetDatabaseCache() (haveDatabaseCache bool) {
+	if tc.databaseCache == nil && tc.dbCacheSubscriber != nil {
+		tc.databaseCache = tc.dbCacheSubscriber.getDatabaseCache()
+	}
+	return tc.databaseCache != nil
 }
 
 // getMutableTableDescriptor returns a mutable table descriptor.
@@ -202,7 +213,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		return nil, err
 	}
 
-	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
+	if dbID == sqlbase.InvalidID && tc.maybeSetDatabaseCache() {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
@@ -307,7 +318,7 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 
-	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
+	if dbID == sqlbase.InvalidID && tc.maybeSetDatabaseCache() {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
@@ -529,6 +540,7 @@ func (tc *TableCollection) releaseTables(ctx context.Context) {
 	tc.releaseLeases(ctx)
 	tc.uncommittedTables = nil
 	tc.uncommittedDatabases = nil
+	tc.databaseCache = nil
 	tc.releaseAllDescriptors()
 }
 

@@ -654,7 +654,6 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.tables = TableCollection{
 		leaseMgr:          s.cfg.LeaseManager,
-		databaseCache:     s.dbCache.getDatabaseCache(),
 		dbCacheSubscriber: s.dbCache,
 		settings:          s.cfg.Settings,
 	}
@@ -854,6 +853,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	if err := ex.resetExtraTxnState(ctx, ex.server.dbCache, txnEv); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
+	ex.planner.optPlanningCtx.reset()
 
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
 		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
@@ -1201,8 +1201,6 @@ func (ex *connExecutor) resetExtraTxnState(
 	}
 
 	ex.extraTxnState.tables.releaseTables(ctx)
-
-	ex.extraTxnState.tables.databaseCache = dbCacheHolder.getDatabaseCache()
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
@@ -2221,6 +2219,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if err := ex.resetExtraTxnState(ex.Ctx(), ex.server.dbCache, advInfo.txnEvent); err != nil {
 			return advanceInfo{}, err
 		}
+		ex.planner.optPlanningCtx.reset()
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))

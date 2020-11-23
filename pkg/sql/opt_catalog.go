@@ -40,7 +40,8 @@ type optCatalog struct {
 	planner *planner
 
 	// cfg is the gossiped and cached system config. It may be nil if the node
-	// does not yet have it available.
+	// does not yet have it available. cfg is initialized lazily from the
+	// planner's Gossip.
 	cfg *config.SystemConfig
 
 	// dataSources is a cache of table and view objects that's used to satisfy
@@ -61,6 +62,7 @@ var _ cat.Catalog = &optCatalog{}
 func (oc *optCatalog) init(planner *planner) {
 	oc.planner = planner
 	oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
+	oc.cfg = nil
 }
 
 // reset prepares the optCatalog to be used for a new query.
@@ -72,10 +74,7 @@ func (oc *optCatalog) reset() {
 		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
 	}
 
-	// Gossip can be nil in testing scenarios.
-	if oc.planner.execCfg.Gossip != nil {
-		oc.cfg = oc.planner.execCfg.Gossip.GetSystemConfig()
-	}
+	oc.cfg = nil
 }
 
 // optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the
@@ -394,7 +393,13 @@ func (oc *optCatalog) getZoneConfig(
 	// Lookup table's zone if system config is available (it may not be as node
 	// is starting up and before it's received the gossiped config). If it is
 	// not available, use an empty config that has no zone constraints.
-	if oc.cfg == nil || desc.IsVirtualTable() {
+	if desc.IsVirtualTable() {
+		return emptyZoneConfig, nil
+	}
+	if oc.cfg == nil && oc.planner.execCfg.Gossip != nil {
+		oc.cfg = oc.planner.execCfg.Gossip.GetSystemConfig()
+	}
+	if oc.cfg == nil {
 		return emptyZoneConfig, nil
 	}
 	zone, err := oc.cfg.GetZoneConfigForObject(uint32(desc.ID))
