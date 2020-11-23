@@ -12,6 +12,7 @@ package span
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,6 +57,10 @@ var _ = (*Builder).UnsetNeededColumns
 var _ = (*Builder).SetNeededFamilies
 var _ = (*Builder).UnsetNeededFamilies
 
+var builderPool = sync.Pool{
+	New: func() interface{} { return &Builder{} },
+}
+
 // MakeBuilder creates a Builder for a table and index.
 func MakeBuilder(
 	evalCtx *tree.EvalContext,
@@ -63,19 +68,29 @@ func MakeBuilder(
 	table *tabledesc.Immutable,
 	index *descpb.IndexDescriptor,
 ) *Builder {
-	s := &Builder{
+	s := builderPool.Get().(*Builder)
+	*s = Builder{
 		evalCtx:        evalCtx,
 		codec:          codec,
 		table:          table,
 		index:          index,
 		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table, index.ID),
-		interstices:    make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1),
 		neededFamilies: nil,
+	}
+	nInterstices := len(index.ColumnDirections) + len(index.ExtraColumnIDs) + 1
+	if cap(s.interstices) < nInterstices {
+		s.interstices = make([][]byte, nInterstices)
+	} else {
+		s.interstices = s.interstices[:nInterstices]
 	}
 
 	var columnIDs descpb.ColumnIDs
 	columnIDs, s.indexColDirs = index.FullColumnIDs()
-	s.indexColTypes = make([]*types.T, len(columnIDs))
+	if cap(s.indexColTypes) < len(columnIDs) {
+		s.indexColTypes = make([]*types.T, len(columnIDs))
+	} else {
+		s.indexColTypes = s.indexColTypes[:len(columnIDs)]
+	}
 	for i, colID := range columnIDs {
 		// TODO (rohany): do I need to look at table columns with mutations here as well?
 		for _, col := range table.Columns {
@@ -443,4 +458,18 @@ func (s *Builder) generateInvertedSpanKey(
 
 	span, _, err := s.SpanFromEncDatums(scratchRow, keyLen)
 	return span.Key, err
+}
+
+func (s *Builder) Release() {
+	for i := range s.indexColTypes {
+		s.indexColTypes[i] = nil
+	}
+	for i := range s.interstices {
+		s.interstices[i] = nil
+	}
+	*s = Builder{
+		indexColTypes: s.indexColTypes[:0],
+		interstices:   s.interstices[:0],
+	}
+	builderPool.Put(s)
 }
