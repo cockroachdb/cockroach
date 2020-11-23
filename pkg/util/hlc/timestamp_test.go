@@ -248,7 +248,9 @@ func TestAsOfSystemTime(t *testing.T) {
 	}
 }
 
-func TestTimestampString(t *testing.T) {
+// TestTimestampFormatParseRoundTrip tests the majority of timestamps that
+// round-trip through formatting then parsing.
+func TestTimestampFormatParseRoundTrip(t *testing.T) {
 	testCases := []struct {
 		ts  Timestamp
 		exp string
@@ -272,14 +274,52 @@ func TestTimestampString(t *testing.T) {
 		{makeTSWithFlags(1, 123, TimestampFlag_SYNTHETIC), "0.000000001,123[syn]"},
 	}
 	for _, c := range testCases {
-		assert.Equal(t, c.exp, c.ts.String())
-		parsed, err := ParseTimestamp(c.ts.String())
+		str := c.ts.String()
+		assert.Equal(t, c.exp, str)
+
+		parsed, err := ParseTimestamp(str)
 		assert.NoError(t, err)
 		assert.Equal(t, c.ts, parsed)
 	}
 }
 
-func TestParseTimestamp(t *testing.T) {
+// TestTimestampFormatParseNonRoundTrip tests the minority of timestamps that do
+// not round-trip through formatting then parsing.
+// TODO(nvanbenschoten): we'll need this in the next commit.
+
+// TestTimestampParseFormatNonRoundTrip tests the minority of timestamps that do
+// not round-trip through parsing then formatting.
+func TestTimestampParseFormatNonRoundTrip(t *testing.T) {
+	testCases := []struct {
+		s      string
+		exp    Timestamp
+		expStr string
+	}{
+		// Logical portion can be omitted.
+		{"0", makeTS(0, 0), "0,0"},
+		// Fractional portion can be omitted.
+		{"99,0", makeTS(99000000000, 0), "99.000000000,0"},
+		// Fractional and logical portion can be omitted.
+		{"99", makeTS(99000000000, 0), "99.000000000,0"},
+		// Other cases.
+		{"0.000000001", makeTS(1, 0), "0.000000001,0"},
+		{"99.000000001", makeTS(99000000001, 0), "99.000000001,0"},
+		{"0[syn]", makeTSWithFlags(0, 0, TimestampFlag_SYNTHETIC), "0,0[syn]"},
+		{"99[syn]", makeTSWithFlags(99000000000, 0, TimestampFlag_SYNTHETIC), "99.000000000,0[syn]"},
+		{"0.000000001[syn]", makeTSWithFlags(1, 0, TimestampFlag_SYNTHETIC), "0.000000001,0[syn]"},
+		{"99.000000001[syn]", makeTSWithFlags(99000000001, 0, TimestampFlag_SYNTHETIC), "99.000000001,0[syn]"},
+	}
+	for _, c := range testCases {
+		parsed, err := ParseTimestamp(c.s)
+		assert.NoError(t, err)
+		assert.Equal(t, c.exp, parsed)
+
+		str := parsed.String()
+		assert.Equal(t, c.expStr, str)
+	}
+}
+
+func TestTimestampParseError(t *testing.T) {
 	for _, c := range []struct {
 		s      string
 		expErr string

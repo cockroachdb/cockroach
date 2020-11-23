@@ -12,14 +12,14 @@ with ts=44 v=abc
   put  k=d/123
 ----
 >> at end:
-data: "a"/0.000000044,0 -> /BYTES/abc
-data: "a/123"/0.000000044,0 -> /BYTES/abc
-data: "b"/0.000000044,0 -> /BYTES/abc
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000044,0 -> /BYTES/abc
-data: "c/123"/0.000000044,0 -> /BYTES/abc
-data: "d"/0.000000044,0 -> /BYTES/abc
-data: "d/123"/0.000000044,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
+data: "c/123"/44.000000000,0 -> /BYTES/abc
+data: "d"/44.000000000,0 -> /BYTES/abc
+data: "d/123"/44.000000000,0 -> /BYTES/abc
 
 
 # A simple non-txn that deletes a range of keys.
@@ -30,16 +30,16 @@ del_range k=a end=b ts=45
 ----
 del_range: "a"-"b" -> deleted 2 key(s)
 >> at end:
-data: "a"/0.000000045,0 -> /<empty>
-data: "a"/0.000000044,0 -> /BYTES/abc
-data: "a/123"/0.000000045,0 -> /<empty>
-data: "a/123"/0.000000044,0 -> /BYTES/abc
-data: "b"/0.000000044,0 -> /BYTES/abc
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000044,0 -> /BYTES/abc
-data: "c/123"/0.000000044,0 -> /BYTES/abc
-data: "d"/0.000000044,0 -> /BYTES/abc
-data: "d/123"/0.000000044,0 -> /BYTES/abc
+data: "a"/45.000000000,0 -> /<empty>
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "a/123"/45.000000000,0 -> /<empty>
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
+data: "c/123"/44.000000000,0 -> /BYTES/abc
+data: "d"/44.000000000,0 -> /BYTES/abc
+data: "d/123"/44.000000000,0 -> /BYTES/abc
 
 
 # A simple txn that deletes a range of keys.
@@ -56,20 +56,20 @@ del_range: "b"-"c" -> deleted 2 key(s)
 del_range: returned "b"
 del_range: returned "b/123"
 >> at end:
-data: "a"/0.000000045,0 -> /<empty>
-data: "a"/0.000000044,0 -> /BYTES/abc
-data: "a/123"/0.000000045,0 -> /<empty>
-data: "a/123"/0.000000044,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
-data: "b"/0.000000046,0 -> /<empty>
-data: "b"/0.000000044,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
-data: "b/123"/0.000000046,0 -> /<empty>
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000044,0 -> /BYTES/abc
-data: "c/123"/0.000000044,0 -> /BYTES/abc
-data: "d"/0.000000044,0 -> /BYTES/abc
-data: "d/123"/0.000000044,0 -> /BYTES/abc
+data: "a"/45.000000000,0 -> /<empty>
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "a/123"/45.000000000,0 -> /<empty>
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0
+data: "b"/46.000000000,0 -> /<empty>
+data: "b"/44.000000000,0 -> /BYTES/abc
+meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0
+data: "b/123"/46.000000000,0 -> /<empty>
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
+data: "c/123"/44.000000000,0 -> /BYTES/abc
+data: "d"/44.000000000,0 -> /BYTES/abc
+data: "d/123"/44.000000000,0 -> /BYTES/abc
 
 
 # A limited non-txn that deletes a range of keys.
@@ -84,22 +84,22 @@ del_range: returned "c"
 del_range: returned "c/123"
 del_range: resume span ["d","z")
 >> at end:
-data: "a"/0.000000045,0 -> /<empty>
-data: "a"/0.000000044,0 -> /BYTES/abc
-data: "a/123"/0.000000045,0 -> /<empty>
-data: "a/123"/0.000000044,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
-data: "b"/0.000000046,0 -> /<empty>
-data: "b"/0.000000044,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
-data: "b/123"/0.000000046,0 -> /<empty>
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000047,0 -> /<empty>
-data: "c"/0.000000044,0 -> /BYTES/abc
-data: "c/123"/0.000000047,0 -> /<empty>
-data: "c/123"/0.000000044,0 -> /BYTES/abc
-data: "d"/0.000000044,0 -> /BYTES/abc
-data: "d/123"/0.000000044,0 -> /BYTES/abc
+data: "a"/45.000000000,0 -> /<empty>
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "a/123"/45.000000000,0 -> /<empty>
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0
+data: "b"/46.000000000,0 -> /<empty>
+data: "b"/44.000000000,0 -> /BYTES/abc
+meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0
+data: "b/123"/46.000000000,0 -> /<empty>
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/47.000000000,0 -> /<empty>
+data: "c"/44.000000000,0 -> /BYTES/abc
+data: "c/123"/47.000000000,0 -> /<empty>
+data: "c/123"/44.000000000,0 -> /BYTES/abc
+data: "d"/44.000000000,0 -> /BYTES/abc
+data: "d/123"/44.000000000,0 -> /BYTES/abc
 
 
 # A txn that performs a delete range at a lower timestamp returns a WriteTooOld error.
@@ -111,24 +111,24 @@ with t=A
   txn_remove
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000046,0 wto=false max=0,0
-data: "a"/0.000000045,0 -> /<empty>
-data: "a"/0.000000044,0 -> /BYTES/abc
-data: "a/123"/0.000000045,0 -> /<empty>
-data: "a/123"/0.000000044,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
-data: "b"/0.000000046,0 -> /<empty>
-data: "b"/0.000000044,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
-data: "b/123"/0.000000046,0 -> /<empty>
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000047,0 -> /<empty>
-data: "c"/0.000000044,0 -> /BYTES/abc
-data: "c/123"/0.000000047,0 -> /<empty>
-data: "c/123"/0.000000044,0 -> /BYTES/abc
-data: "d"/0.000000044,0 -> /BYTES/abc
-data: "d/123"/0.000000044,0 -> /BYTES/abc
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000046,0 too old; wrote at 0.000000047,1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 wto=false max=0,0
+data: "a"/45.000000000,0 -> /<empty>
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "a/123"/45.000000000,0 -> /<empty>
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0
+data: "b"/46.000000000,0 -> /<empty>
+data: "b"/44.000000000,0 -> /BYTES/abc
+meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0
+data: "b/123"/46.000000000,0 -> /<empty>
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/47.000000000,0 -> /<empty>
+data: "c"/44.000000000,0 -> /BYTES/abc
+data: "c/123"/47.000000000,0 -> /<empty>
+data: "c/123"/44.000000000,0 -> /BYTES/abc
+data: "d"/44.000000000,0 -> /BYTES/abc
+data: "d/123"/44.000000000,0 -> /BYTES/abc
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 46.000000000,0 too old; wrote at 47.000000000,1
 
 run ok
 txn_remove t=A
@@ -148,23 +148,23 @@ del_range: "c"-"z" -> deleted 2 key(s)
 del_range: returned "d"
 del_range: returned "d/123"
 >> at end:
-data: "a"/0.000000045,0 -> /<empty>
-data: "a"/0.000000044,0 -> /BYTES/abc
-data: "a/123"/0.000000045,0 -> /<empty>
-data: "a/123"/0.000000044,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
-data: "b"/0.000000046,0 -> /<empty>
-data: "b"/0.000000044,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
-data: "b/123"/0.000000046,0 -> /<empty>
-data: "b/123"/0.000000044,0 -> /BYTES/abc
-data: "c"/0.000000047,0 -> /<empty>
-data: "c"/0.000000044,0 -> /BYTES/abc
-data: "c/123"/0.000000047,0 -> /<empty>
-data: "c/123"/0.000000044,0 -> /BYTES/abc
-meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000048,0 min=0,0 seq=0} ts=0.000000048,0 del=true klen=12 vlen=0
-data: "d"/0.000000048,0 -> /<empty>
-data: "d"/0.000000044,0 -> /BYTES/abc
-meta: "d/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000048,0 min=0,0 seq=0} ts=0.000000048,0 del=true klen=12 vlen=0
-data: "d/123"/0.000000048,0 -> /<empty>
-data: "d/123"/0.000000044,0 -> /BYTES/abc
+data: "a"/45.000000000,0 -> /<empty>
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "a/123"/45.000000000,0 -> /<empty>
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0
+data: "b"/46.000000000,0 -> /<empty>
+data: "b"/44.000000000,0 -> /BYTES/abc
+meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0
+data: "b/123"/46.000000000,0 -> /<empty>
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/47.000000000,0 -> /<empty>
+data: "c"/44.000000000,0 -> /BYTES/abc
+data: "c/123"/47.000000000,0 -> /<empty>
+data: "c/123"/44.000000000,0 -> /BYTES/abc
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0
+data: "d"/48.000000000,0 -> /<empty>
+data: "d"/44.000000000,0 -> /BYTES/abc
+meta: "d/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0
+data: "d/123"/48.000000000,0 -> /<empty>
+data: "d/123"/44.000000000,0 -> /BYTES/abc
