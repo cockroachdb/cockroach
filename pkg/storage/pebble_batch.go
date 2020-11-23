@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -40,6 +41,11 @@ type pebbleBatch struct {
 	isDistinct       bool
 	distinctOpen     bool
 	parentBatch      *pebbleBatch
+
+	useWrappedIntentWriter bool
+	wrappedIntentWriter    intentDemuxWriter
+	// scratch space for wrappedIntentWriter.
+	scratch []byte
 }
 
 var _ Batch = &pebbleBatch{}
@@ -78,6 +84,7 @@ func newPebbleBatch(db *pebble.DB, batch *pebble.Batch) *pebbleBatch {
 			reusable:      true,
 		},
 	}
+	pb.wrappedIntentWriter, pb.useWrappedIntentWriter = tryWrapIntentWriter(pb)
 	return pb
 }
 
@@ -123,6 +130,17 @@ func (p *pebbleBatch) ExportMVCCToSst(
 
 // Get implements the Batch interface.
 func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
+	if len(key.Key) == 0 {
+		return nil, emptyKeyError()
+	}
+	if r, wrapped := tryWrapReader(p, MVCCKeyAndIntentsIterKind); wrapped {
+		return r.MVCCGet(key)
+	}
+	p.buf = EncodeKeyToBuf(p.buf[:0], key)
+	return p.rawGet(p.buf)
+}
+
+func (p *pebbleBatch) rawGet(key []byte) ([]byte, error) {
 	r := pebble.Reader(p.batch)
 	if !p.isDistinct {
 		if !p.batch.Indexed() {
@@ -134,11 +152,8 @@ func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
 	} else if !p.batch.Indexed() {
 		r = p.db
 	}
-	if len(key.Key) == 0 {
-		return nil, emptyKeyError()
-	}
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	ret, closer, err := r.Get(p.buf)
+
+	ret, closer, err := r.Get(key)
 	if closer != nil {
 		retCopy := make([]byte, len(ret))
 		copy(retCopy, ret)
@@ -155,35 +170,7 @@ func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
 func (p *pebbleBatch) MVCCGetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
-	r := pebble.Reader(p.batch)
-	if !p.isDistinct {
-		if !p.batch.Indexed() {
-			panic("write-only batch")
-		}
-		if p.distinctOpen {
-			panic("distinct batch open")
-		}
-	} else if !p.batch.Indexed() {
-		r = p.db
-	}
-	if len(key.Key) == 0 {
-		return false, 0, 0, emptyKeyError()
-	}
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	val, closer, err := r.Get(p.buf)
-	if closer != nil {
-		if msg != nil {
-			err = protoutil.Unmarshal(val, msg)
-		}
-		keyBytes = int64(len(p.buf))
-		valBytes = int64(len(val))
-		closer.Close()
-		return true, keyBytes, valBytes, err
-	}
-	if errors.Is(err, pebble.ErrNotFound) {
-		return false, 0, 0, nil
-	}
-	return false, 0, 0, err
+	return pebbleGetProto(p, key, msg)
 }
 
 // MVCCIterate implements the Batch interface.
@@ -193,7 +180,8 @@ func (p *pebbleBatch) MVCCIterate(
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
-	return iterateOnReader(p, start, end, iterKind, f)
+	r, _ := tryWrapReader(p, iterKind)
+	return iterateOnReader(r, start, end, iterKind, f)
 }
 
 // NewMVCCIterator implements the Batch interface.
@@ -207,6 +195,12 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	}
 	if p.distinctOpen {
 		panic("distinct batch open")
+	}
+
+	if iterKind == MVCCKeyAndIntentsIterKind {
+		if r, wrapped := tryWrapReader(p, iterKind); wrapped {
+			return r.NewMVCCIterator(iterKind, opts)
+		}
 	}
 
 	if !opts.MinTimestampHint.IsEmpty() {
@@ -295,7 +289,15 @@ func (p *pebbleBatch) ClearUnversioned(key roachpb.Key) error {
 }
 
 // ClearIntent implements the Batch interface.
-func (p *pebbleBatch) ClearIntent(key roachpb.Key) error {
+func (p *pebbleBatch) ClearIntent(
+	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+) error {
+	if p.useWrappedIntentWriter {
+		var err error
+		p.scratch, err =
+			p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
+		return err
+	}
 	return p.clear(MVCCKey{Key: key})
 }
 
@@ -343,6 +345,11 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
 
 // ClearMVCCRangeAndIntents implements the Batch interface.
 func (p *pebbleBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	if p.useWrappedIntentWriter {
+		var err error
+		p.scratch, err = p.wrappedIntentWriter.ClearMVCCRangeAndIntents(start, end, p.scratch)
+		return err
+	}
 	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
 }
 
@@ -418,7 +425,19 @@ func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
 }
 
 // PutIntent implements the Batch interface.
-func (p *pebbleBatch) PutIntent(key roachpb.Key, value []byte) error {
+func (p *pebbleBatch) PutIntent(
+	key roachpb.Key,
+	value []byte,
+	state PrecedingIntentState,
+	txnDidNotUpdateMeta bool,
+	txnUUID uuid.UUID,
+) error {
+	if p.useWrappedIntentWriter {
+		var err error
+		p.scratch, err =
+			p.wrappedIntentWriter.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
+		return err
+	}
 	return p.put(MVCCKey{Key: key}, value)
 }
 

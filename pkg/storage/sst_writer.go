@@ -15,6 +15,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 )
@@ -135,7 +136,13 @@ func (fw *SSTWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 // An error is returned if it is not greater than any previously added entry
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
-func (fw *SSTWriter) PutIntent(key roachpb.Key, value []byte) error {
+func (fw *SSTWriter) PutIntent(
+	key roachpb.Key,
+	value []byte,
+	state PrecedingIntentState,
+	txnDidNotUpdateMeta bool,
+	txnUUID uuid.UUID,
+) error {
 	return fw.put(MVCCKey{Key: key}, value)
 }
 
@@ -192,7 +199,9 @@ func (fw *SSTWriter) ClearUnversioned(key roachpb.Key) error {
 // not greater than any previous point key passed to this Writer (according to
 // the comparator configured during writer creation). `Close` cannot have been
 // called.
-func (fw *SSTWriter) ClearIntent(key roachpb.Key) error {
+func (fw *SSTWriter) ClearIntent(
+	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+) error {
 	panic("ClearIntent is unsupported")
 }
 
@@ -219,6 +228,11 @@ func (fw *SSTWriter) clear(key MVCCKey) error {
 	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
 	fw.DataSize += int64(len(key.Key))
 	return fw.fw.Delete(fw.scratch)
+}
+
+// SingleClearEngineKey implements the Writer interface.
+func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
+	panic("unimplemented")
 }
 
 // ClearIterRange implements the Writer interface.

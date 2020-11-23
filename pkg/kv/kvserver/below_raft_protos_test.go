@@ -62,11 +62,12 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			m := enginepb.NewPopulatedMVCCMetadata(r, false)
-			m.Txn = nil // never populated below Raft
+			m.Txn = nil                 // never populated below Raft
+			m.TxnDidNotUpdateMeta = nil // never populated below Raft
 			return m
 		},
 		emptySum:     7551962144604783939,
-		populatedSum: 5737658018003400959,
+		populatedSum: 11599955036265189084,
 	},
 	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {

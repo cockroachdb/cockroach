@@ -204,7 +204,8 @@ func TestIntentInterleavingIter(t *testing.T) {
 							}
 						} else {
 							ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}
-							if err := batch.PutEngineKey(ltKey.ToEngineKey(), val); err != nil {
+							eKey, _ := ltKey.ToEngineKey(nil)
+							if err := batch.PutEngineKey(eKey, val); err != nil {
 								return err.Error()
 							}
 						}
@@ -357,7 +358,8 @@ func writeRandomData(
 		if interleave {
 			require.NoError(t, batch.PutUnversioned(kv.key.Key, kv.val))
 		} else {
-			require.NoError(t, batch.PutEngineKey(kv.key.ToEngineKey(), kv.val))
+			eKey, _ := kv.key.ToEngineKey(nil)
+			require.NoError(t, batch.PutEngineKey(eKey, kv.val))
 		}
 	}
 	for _, kv := range mvcckv {
@@ -533,8 +535,9 @@ func writeBenchData(
 			val, err := protoutil.Marshal(&meta)
 			require.NoError(b, err)
 			if separated {
-				require.NoError(b, batch.PutEngineKey(
-					LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}.ToEngineKey(), val))
+				eKey, _ :=
+					LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}.ToEngineKey(nil)
+				require.NoError(b, batch.PutEngineKey(eKey, val))
 			} else {
 				require.NoError(b, batch.PutUnversioned(key, val))
 			}

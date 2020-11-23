@@ -17,6 +17,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
     ],
 )
