@@ -179,6 +179,7 @@ func (g *defaultSpanGenerator) memUsage() int64 {
 
 func (g *defaultSpanGenerator) close(ctx context.Context) {
 	g.memAcc.Close(ctx)
+	g.spanBuilder.Release()
 	*g = defaultSpanGenerator{}
 }
 
@@ -728,6 +729,7 @@ func (g *multiSpanGenerator) memUsage() int64 {
 
 func (g *multiSpanGenerator) close(ctx context.Context) {
 	g.memAcc.Close(ctx)
+	g.spanBuilder.Release()
 	*g = multiSpanGenerator{}
 }
 
