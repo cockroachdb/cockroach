@@ -61,12 +61,6 @@ func (ld *leasedDescriptors) add(desc catalog.Descriptor) {
 	ld.descs = append(ld.descs, desc)
 }
 
-func (ld *leasedDescriptors) releaseAll() (toRelease []catalog.Descriptor) {
-	toRelease = append(toRelease, ld.descs...)
-	ld.descs = ld.descs[:0]
-	return toRelease
-}
-
 func (ld *leasedDescriptors) release(ids []descpb.ID) (toRelease []catalog.Descriptor) {
 	// Sort the descriptors and leases to make it easy to find the leases to release.
 	leasedDescs := ld.descs
@@ -1056,12 +1050,12 @@ func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.
 // ReleaseLeases releases all leases. Errors are logged but ignored.
 func (tc *Collection) ReleaseLeases(ctx context.Context) {
 	log.VEventf(ctx, 2, "releasing %d descriptors", tc.leasedDescriptors.numDescriptors())
-	toRelease := tc.leasedDescriptors.releaseAll()
-	for _, desc := range toRelease {
+	for _, desc := range tc.leasedDescriptors.descs {
 		if err := tc.leaseMgr.Release(desc); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 	}
+	tc.leasedDescriptors.descs = tc.leasedDescriptors.descs[:0]
 }
 
 // ReleaseAll releases all state currently held by the Collection.
