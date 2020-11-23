@@ -44,36 +44,36 @@ prev
 prev
 next
 ----
-seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
-next: output: value k=a ts=20 v=a20
-next: output: value k=a ts=10 v=a10
-next: output: meta k=b ts=30 txn=2
-next: output: value k=b ts=30 v=b30
+seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
+next: output: value k=a ts=20.000000000,0 v=a20
+next: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=30.000000000,0 txn=2
+next: output: value k=b ts=30.000000000,0 v=b30
 next: output: meta k=c
-next: output: value k=d ts=25 v=d25
+next: output: value k=d ts=25.000000000,0 v=d25
 next: output: .
-prev: output: value k=d ts=25 v=d25
+prev: output: value k=d ts=25.000000000,0 v=d25
 prev: output: meta k=c
-prev: output: value k=b ts=30 v=b30
-prev: output: meta k=b ts=30 txn=2
-prev: output: value k=a ts=10 v=a10
-prev: output: value k=a ts=20 v=a20
-prev: output: meta k=a ts=20 txn=1
+prev: output: value k=b ts=30.000000000,0 v=b30
+prev: output: meta k=b ts=30.000000000,0 txn=2
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: value k=a ts=20.000000000,0 v=a20
+prev: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
 set-upper c
-seek-ge "b"/0,0: output: meta k=b ts=30 txn=2
-next: output: value k=b ts=30 v=b30
+seek-ge "b"/0,0: output: meta k=b ts=30.000000000,0 txn=2
+next: output: value k=b ts=30.000000000,0 v=b30
 next: output: .
-prev: output: value k=b ts=30 v=b30
-prev: output: meta k=b ts=30 txn=2
-prev: output: value k=a ts=10 v=a10
-seek-lt "b"/0,0: output: value k=a ts=10 v=a10
-next: output: meta k=b ts=30 txn=2
-prev: output: value k=a ts=10 v=a10
-prev: output: value k=a ts=20 v=a20
-prev: output: meta k=a ts=20 txn=1
+prev: output: value k=b ts=30.000000000,0 v=b30
+prev: output: meta k=b ts=30.000000000,0 txn=2
+prev: output: value k=a ts=10.000000000,0 v=a10
+seek-lt "b"/0,0: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=30.000000000,0 txn=2
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: value k=a ts=20.000000000,0 v=a20
+prev: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
-next: output: meta k=a ts=20 txn=1
+next: output: meta k=a ts=20.000000000,0 txn=1
 
 # Some callers iterate forward without explicitly setting an upper bound.
 # Confirm that the underlying iterator over the lock table key space does not
@@ -84,10 +84,10 @@ next
 next
 next
 ----
-seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
-next: output: value k=a ts=20 v=a20
-next: output: value k=a ts=10 v=a10
-next: output: meta k=b ts=30 txn=2
+seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
+next: output: value k=a ts=20.000000000,0 v=a20
+next: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=30.000000000,0 txn=2
 
 # More forward and reverse iteration. This confirms that the underlying
 # MVCCIterator does not iterate into the lock table key space despite no lower
@@ -104,16 +104,16 @@ prev
 prev
 next
 ----
-seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
-next: output: value k=a ts=20 v=a20
-next: output: value k=a ts=10 v=a10
+seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
+next: output: value k=a ts=20.000000000,0 v=a20
+next: output: value k=a ts=10.000000000,0 v=a10
 next: output: .
-prev: output: value k=a ts=10 v=a10
-prev: output: value k=a ts=20 v=a20
-prev: output: meta k=a ts=20 txn=1
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: value k=a ts=20.000000000,0 v=a20
+prev: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
 prev: output: .
-next: output: meta k=a ts=20 txn=1
+next: output: meta k=a ts=20.000000000,0 txn=1
 
 # Prefix iteration.
 iter prefix=true
@@ -129,12 +129,12 @@ seek-ge k=f
 seek-ge k=c
 next
 ----
-seek-ge "b"/0,0: output: meta k=b ts=30 txn=2
-next: output: value k=b ts=30 v=b30
+seek-ge "b"/0,0: output: meta k=b ts=30.000000000,0 txn=2
+next: output: value k=b ts=30.000000000,0 v=b30
 next: output: .
-seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
-next: output: value k=a ts=20 v=a20
-next: output: value k=a ts=10 v=a10
+seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
+next: output: value k=a ts=20.000000000,0 v=a20
+next: output: value k=a ts=10.000000000,0 v=a10
 next: output: .
 prev: output: err: pebble: unsupported reverse prefix iteration
 seek-ge "f"/0,0: output: .
@@ -152,13 +152,13 @@ seek-ge k=a
 next
 next-key
 ----
-seek-ge "d"/0,0: output: value k=d ts=25 v=d25
+seek-ge "d"/0,0: output: value k=d ts=25.000000000,0 v=d25
 next-key: output: .
-seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
-next-key: output: meta k=b ts=30 txn=2
-seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
-next: output: value k=a ts=20 v=a20
-next-key: output: meta k=b ts=30 txn=2
+seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
+next-key: output: meta k=b ts=30.000000000,0 txn=2
+seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
+next: output: value k=a ts=20.000000000,0 v=a20
+next-key: output: meta k=b ts=30.000000000,0 txn=2
 
 # Seek to particular timestamp.
 iter lower=a upper=f
@@ -193,36 +193,36 @@ prev
 prev
 next
 ----
-seek-ge "a"/0.000000010,0: output: value k=a ts=10 v=a10
-next: output: meta k=b ts=30 txn=2
-next: output: value k=b ts=30 v=b30
-seek-ge "a"/0.000000025,0: output: value k=a ts=20 v=a20
-next: output: value k=a ts=10 v=a10
-next: output: meta k=b ts=30 txn=2
-seek-lt "a"/0.000000001,0: output: value k=a ts=10 v=a10
-prev: output: value k=a ts=20 v=a20
-prev: output: meta k=a ts=20 txn=1
+seek-ge "a"/10.000000000,0: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=30.000000000,0 txn=2
+next: output: value k=b ts=30.000000000,0 v=b30
+seek-ge "a"/25.000000000,0: output: value k=a ts=20.000000000,0 v=a20
+next: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=30.000000000,0 txn=2
+seek-lt "a"/1.000000000,0: output: value k=a ts=10.000000000,0 v=a10
+prev: output: value k=a ts=20.000000000,0 v=a20
+prev: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
-next: output: meta k=a ts=20 txn=1
-next: output: value k=a ts=20 v=a20
-prev: output: meta k=a ts=20 txn=1
-next: output: value k=a ts=20 v=a20
-seek-lt "a"/0.000000015,0: output: value k=a ts=20 v=a20
-prev: output: meta k=a ts=20 txn=1
+next: output: meta k=a ts=20.000000000,0 txn=1
+next: output: value k=a ts=20.000000000,0 v=a20
+prev: output: meta k=a ts=20.000000000,0 txn=1
+next: output: value k=a ts=20.000000000,0 v=a20
+seek-lt "a"/15.000000000,0: output: value k=a ts=20.000000000,0 v=a20
+prev: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
-next: output: meta k=a ts=20 txn=1
-seek-lt "a"/0.000000025,0: output: meta k=a ts=20 txn=1
+next: output: meta k=a ts=20.000000000,0 txn=1
+seek-lt "a"/25.000000000,0: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
-next: output: meta k=a ts=20 txn=1
-seek-ge "a"/0.000000005,0: output: meta k=b ts=30 txn=2
-next: output: value k=b ts=30 v=b30
+next: output: meta k=a ts=20.000000000,0 txn=1
+seek-ge "a"/5.000000000,0: output: meta k=b ts=30.000000000,0 txn=2
+next: output: value k=b ts=30.000000000,0 v=b30
 next: output: meta k=c
-prev: output: value k=b ts=30 v=b30
-seek-lt "b"/0.000000040,0: output: meta k=b ts=30 txn=2
-prev: output: value k=a ts=10 v=a10
-prev: output: value k=a ts=20 v=a20
-prev: output: meta k=a ts=20 txn=1
-next: output: value k=a ts=20 v=a20
+prev: output: value k=b ts=30.000000000,0 v=b30
+seek-lt "b"/40.000000000,0: output: meta k=b ts=30.000000000,0 txn=2
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: value k=a ts=20.000000000,0 v=a20
+prev: output: meta k=a ts=20.000000000,0 txn=1
+next: output: value k=a ts=20.000000000,0 v=a20
 
 # Seek to particular timestamp and prefix iteration. What we will
 # see after the prefix is exhausted is undefined.
@@ -235,13 +235,13 @@ next
 seek-ge k=a ts=5
 seek-lt k=a ts=1
 ----
-seek-ge "a"/0.000000025,0: output: value k=a ts=20 v=a20
-next: output: value k=a ts=10 v=a10
+seek-ge "a"/25.000000000,0: output: value k=a ts=20.000000000,0 v=a20
+next: output: value k=a ts=10.000000000,0 v=a10
 next: output: .
-seek-ge "a"/0.000000015,0: output: value k=a ts=10 v=a10
+seek-ge "a"/15.000000000,0: output: value k=a ts=10.000000000,0 v=a10
 next: output: .
-seek-ge "a"/0.000000005,0: output: .
-seek-lt "a"/0.000000001,0: output: err: prefix iteration is not permitted with SeekLT
+seek-ge "a"/5.000000000,0: output: .
+seek-lt "a"/1.000000000,0: output: err: prefix iteration is not permitted with SeekLT
 
 # Exercise NextKey
 iter lower=a upper=f
@@ -260,19 +260,19 @@ next-key
 next-key
 next-key
 ----
-seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
-next-key: output: meta k=b ts=30 txn=2
-prev: output: value k=a ts=10 v=a10
+seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
+next-key: output: meta k=b ts=30.000000000,0 txn=2
+prev: output: value k=a ts=10.000000000,0 v=a10
 next-key: output: err: NextKey cannot be used to switch iteration direction
 next: output: err: NextKey cannot be used to switch iteration direction
-seek-ge "b"/0,0: output: meta k=b ts=30 txn=2
+seek-ge "b"/0,0: output: meta k=b ts=30.000000000,0 txn=2
 next-key: output: meta k=c
-prev: output: value k=b ts=30 v=b30
-prev: output: meta k=b ts=30 txn=2
-prev: output: value k=a ts=10 v=a10
-next: output: meta k=b ts=30 txn=2
+prev: output: value k=b ts=30.000000000,0 v=b30
+prev: output: meta k=b ts=30.000000000,0 txn=2
+prev: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=30.000000000,0 txn=2
 next-key: output: meta k=c
-next-key: output: value k=d ts=25 v=d25
+next-key: output: value k=d ts=25.000000000,0 v=d25
 next-key: output: .
 
 
@@ -322,32 +322,32 @@ prev
 prev
 prev
 ----
-seek-ge "a"/0,0: output: meta k=a ts=10 txn=1
-next: output: value k=a ts=10 v=a10
-next: output: meta k=b ts=20 txn=2
-prev: output: value k=a ts=10 v=a10
-prev: output: meta k=a ts=10 txn=1
+seek-ge "a"/0,0: output: meta k=a ts=10.000000000,0 txn=1
+next: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=20.000000000,0 txn=2
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: meta k=a ts=10.000000000,0 txn=1
 prev: output: .
-next: output: meta k=a ts=10 txn=1
-next: output: value k=a ts=10 v=a10
-next: output: meta k=b ts=20 txn=2
-next: output: value k=b ts=20 v=b20
-next: output: meta k=c ts=30 txn=3
-next: output: value k=c ts=30 v=c30
-next: output: meta k=d ts=40 txn=4
-next: output: value k=d ts=40 v=d40
-next: output: meta k=e ts=50 txn=5
+next: output: meta k=a ts=10.000000000,0 txn=1
+next: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=20.000000000,0 txn=2
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: meta k=c ts=30.000000000,0 txn=3
+next: output: value k=c ts=30.000000000,0 v=c30
+next: output: meta k=d ts=40.000000000,0 txn=4
+next: output: value k=d ts=40.000000000,0 v=d40
+next: output: meta k=e ts=50.000000000,0 txn=5
 next-key: output: .
-prev: output: value k=e ts=50 v=e50
-prev: output: meta k=e ts=50 txn=5
-prev: output: value k=d ts=40 v=d40
-prev: output: meta k=d ts=40 txn=4
-prev: output: value k=c ts=30 v=c30
-prev: output: meta k=c ts=30 txn=3
-prev: output: value k=b ts=20 v=b20
-prev: output: meta k=b ts=20 txn=2
-prev: output: value k=a ts=10 v=a10
-prev: output: meta k=a ts=10 txn=1
+prev: output: value k=e ts=50.000000000,0 v=e50
+prev: output: meta k=e ts=50.000000000,0 txn=5
+prev: output: value k=d ts=40.000000000,0 v=d40
+prev: output: meta k=d ts=40.000000000,0 txn=4
+prev: output: value k=c ts=30.000000000,0 v=c30
+prev: output: meta k=c ts=30.000000000,0 txn=3
+prev: output: value k=b ts=20.000000000,0 v=b20
+prev: output: meta k=b ts=20.000000000,0 txn=2
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: meta k=a ts=10.000000000,0 txn=1
 prev: output: .
 
 # Error case: Multiple separated intents with no provisional values
@@ -369,15 +369,15 @@ prev
 seek-lt k=e
 prev
 ----
-seek-ge "a"/0,0: output: meta k=b ts=20 txn=2
+seek-ge "a"/0,0: output: meta k=b ts=20.000000000,0 txn=2
 next: output: err: intentIter at intent, but iter not at provisional value
-seek-lt "e"/0,0: output: meta k=d ts=40 txn=4
+seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
 next: output: err: intent has no provisional value
-seek-ge "d"/0,0: output: meta k=d ts=40 txn=4
+seek-ge "d"/0,0: output: meta k=d ts=40.000000000,0 txn=4
 next-key: output: err: intentIter at intent, but iter not at provisional value
-seek-ge "d"/0,0: output: meta k=d ts=40 txn=4
+seek-ge "d"/0,0: output: meta k=d ts=40.000000000,0 txn=4
 prev: output: err: iter not at provisional value, cmp: -1
-seek-lt "e"/0,0: output: meta k=d ts=40 txn=4
+seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
 prev: output: err: reverse iteration discovered intent without provisional value
 
 # Local range keys. This exercises local keys having separated locks.
@@ -408,19 +408,19 @@ prev
 prev
 prev
 ----
-seek-ge "La"/0,0: output: meta k=La ts=10 txn=1
-next: output: value k=La ts=10 v=a10
-next: output: meta k=Lb ts=20 txn=2
-next: output: value k=Lb ts=20 v=b20
-next: output: meta k=Lc ts=30 txn=4
-next: output: value k=Lc ts=30 v=c30
+seek-ge "La"/0,0: output: meta k=La ts=10.000000000,0 txn=1
+next: output: value k=La ts=10.000000000,0 v=a10
+next: output: meta k=Lb ts=20.000000000,0 txn=2
+next: output: value k=Lb ts=20.000000000,0 v=b20
+next: output: meta k=Lc ts=30.000000000,0 txn=4
+next: output: value k=Lc ts=30.000000000,0 v=c30
 next: output: .
-prev: output: value k=Lc ts=30 v=c30
-prev: output: meta k=Lc ts=30 txn=4
-prev: output: value k=Lb ts=20 v=b20
-prev: output: meta k=Lb ts=20 txn=2
-prev: output: value k=La ts=10 v=a10
-prev: output: meta k=La ts=10 txn=1
+prev: output: value k=Lc ts=30.000000000,0 v=c30
+prev: output: meta k=Lc ts=30.000000000,0 txn=4
+prev: output: value k=Lb ts=20.000000000,0 v=b20
+prev: output: meta k=Lb ts=20.000000000,0 txn=2
+prev: output: value k=La ts=10.000000000,0 v=a10
+prev: output: meta k=La ts=10.000000000,0 txn=1
 prev: output: .
 
 # Confirm that the lock table iterator does not step out of the lock table
@@ -435,14 +435,14 @@ next
 next
 next
 ----
-seek-ge "La"/0,0: output: meta k=La ts=10 txn=1
-next: output: value k=La ts=10 v=a10
-prev: output: meta k=La ts=10 txn=1
+seek-ge "La"/0,0: output: meta k=La ts=10.000000000,0 txn=1
+next: output: value k=La ts=10.000000000,0 v=a10
+prev: output: meta k=La ts=10.000000000,0 txn=1
 prev: output: .
 prev: output: .
-next: output: meta k=La ts=10 txn=1
-next: output: value k=La ts=10 v=a10
-next: output: meta k=Lb ts=20 txn=2
+next: output: meta k=La ts=10.000000000,0 txn=1
+next: output: value k=La ts=10.000000000,0 v=a10
+next: output: meta k=Lb ts=20.000000000,0 txn=2
 
 # Confirm that the underlying MVCCIterator does not iterate into the lock
 # table key space despite no upper bound.
@@ -464,22 +464,22 @@ next
 next
 prev
 ----
-seek-lt "Ld"/0,0: output: value k=Lc ts=30 v=c30
-prev: output: meta k=Lc ts=30 txn=4
-prev: output: value k=Lb ts=20 v=b20
-prev: output: meta k=Lb ts=20 txn=2
-prev: output: value k=La ts=10 v=a10
-prev: output: meta k=La ts=10 txn=1
+seek-lt "Ld"/0,0: output: value k=Lc ts=30.000000000,0 v=c30
+prev: output: meta k=Lc ts=30.000000000,0 txn=4
+prev: output: value k=Lb ts=20.000000000,0 v=b20
+prev: output: meta k=Lb ts=20.000000000,0 txn=2
+prev: output: value k=La ts=10.000000000,0 v=a10
+prev: output: meta k=La ts=10.000000000,0 txn=1
 prev: output: .
-next: output: meta k=La ts=10 txn=1
-next: output: value k=La ts=10 v=a10
-next: output: meta k=Lb ts=20 txn=2
-next: output: value k=Lb ts=20 v=b20
-next: output: meta k=Lc ts=30 txn=4
-next: output: value k=Lc ts=30 v=c30
+next: output: meta k=La ts=10.000000000,0 txn=1
+next: output: value k=La ts=10.000000000,0 v=a10
+next: output: meta k=Lb ts=20.000000000,0 txn=2
+next: output: value k=Lb ts=20.000000000,0 v=b20
+next: output: meta k=Lc ts=30.000000000,0 txn=4
+next: output: value k=Lc ts=30.000000000,0 v=c30
 next: output: .
 next: output: .
-prev: output: value k=Lc ts=30 v=c30
+prev: output: value k=Lc ts=30.000000000,0 v=c30
 
 iter prefix=true
 seek-ge k=Lb
@@ -494,17 +494,17 @@ seek-ge k=Lb ts=25
 next
 seek-ge k=Lc ts=25
 ----
-seek-ge "Lb"/0,0: output: meta k=Lb ts=20 txn=2
-next: output: value k=Lb ts=20 v=b20
+seek-ge "Lb"/0,0: output: meta k=Lb ts=20.000000000,0 txn=2
+next: output: value k=Lb ts=20.000000000,0 v=b20
 next: output: .
-seek-ge "Lc"/0,0: output: meta k=Lc ts=30 txn=4
-next: output: value k=Lc ts=30 v=c30
+seek-ge "Lc"/0,0: output: meta k=Lc ts=30.000000000,0 txn=4
+next: output: value k=Lc ts=30.000000000,0 v=c30
 next: output: .
-seek-ge "La"/0.000000025,0: output: value k=La ts=10 v=a10
+seek-ge "La"/25.000000000,0: output: value k=La ts=10.000000000,0 v=a10
 next: output: .
-seek-ge "Lb"/0.000000025,0: output: value k=Lb ts=20 v=b20
+seek-ge "Lb"/25.000000000,0: output: value k=Lb ts=20.000000000,0 v=b20
 next: output: .
-seek-ge "Lc"/0.000000025,0: output: .
+seek-ge "Lc"/25.000000000,0: output: .
 
 # Keys with \x00 byte. To exercise the slow-path in UnsafeRawMVCCKey. The keys
 # that are length 8, 16 will exercise the slow-path. The len(key) < 8 does
@@ -545,21 +545,21 @@ prev
 prev
 prev
 ----
-seek-ge "a"/0,0: output: meta k=abcdefg\0 ts=20 txn=1
-next: output: value k=abcdefg\0 ts=20 v=a
-next: output: meta k=b\0c\0d ts=20 txn=1
-next: output: value k=b\0c\0d ts=20 v=b1
-next: output: meta k=bcdefgh\0 ts=20 txn=1
-next: output: value k=bcdefgh\0 ts=20 v=b2
-next: output: meta k=cdefghijklmnopq\0 ts=20 txn=1
-next: output: value k=cdefghijklmnopq\0 ts=20 v=c
+seek-ge "a"/0,0: output: meta k=abcdefg\0 ts=20.000000000,0 txn=1
+next: output: value k=abcdefg\0 ts=20.000000000,0 v=a
+next: output: meta k=b\0c\0d ts=20.000000000,0 txn=1
+next: output: value k=b\0c\0d ts=20.000000000,0 v=b1
+next: output: meta k=bcdefgh\0 ts=20.000000000,0 txn=1
+next: output: value k=bcdefgh\0 ts=20.000000000,0 v=b2
+next: output: meta k=cdefghijklmnopq\0 ts=20.000000000,0 txn=1
+next: output: value k=cdefghijklmnopq\0 ts=20.000000000,0 v=c
 next: output: .
-prev: output: value k=cdefghijklmnopq\0 ts=20 v=c
-prev: output: meta k=cdefghijklmnopq\0 ts=20 txn=1
-prev: output: value k=bcdefgh\0 ts=20 v=b2
-prev: output: meta k=bcdefgh\0 ts=20 txn=1
-prev: output: value k=b\0c\0d ts=20 v=b1
-prev: output: meta k=b\0c\0d ts=20 txn=1
-prev: output: value k=abcdefg\0 ts=20 v=a
-prev: output: meta k=abcdefg\0 ts=20 txn=1
+prev: output: value k=cdefghijklmnopq\0 ts=20.000000000,0 v=c
+prev: output: meta k=cdefghijklmnopq\0 ts=20.000000000,0 txn=1
+prev: output: value k=bcdefgh\0 ts=20.000000000,0 v=b2
+prev: output: meta k=bcdefgh\0 ts=20.000000000,0 txn=1
+prev: output: value k=b\0c\0d ts=20.000000000,0 v=b1
+prev: output: meta k=b\0c\0d ts=20.000000000,0 txn=1
+prev: output: value k=abcdefg\0 ts=20.000000000,0 v=a
+prev: output: meta k=abcdefg\0 ts=20.000000000,0 txn=1
 prev: output: .

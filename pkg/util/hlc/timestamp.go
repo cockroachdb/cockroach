@@ -138,7 +138,7 @@ func (Timestamp) SafeValue() {}
 
 var (
 	timestampRegexp = regexp.MustCompile(
-		`^(?P<sign>-)?(?P<secs>\d{1,19})(?:\.(?P<nanos>\d{1,20}))?,(?P<logical>-?\d{1,10})(?:\[(?P<flags>[\w,]+)\])?$`)
+		`^(?P<sign>-)?(?P<secs>\d{1,19})(?:\.(?P<nanos>\d{1,20}))?(?:,(?P<logical>-?\d{1,10}))?(?:\[(?P<flags>[\w,]+)\])?$`)
 	signSubexp    = 1
 	secsSubexp    = 2
 	nanosSubexp   = 3
@@ -169,13 +169,16 @@ func ParseTimestamp(str string) (_ Timestamp, err error) {
 			return Timestamp{}, err
 		}
 	}
-	logical, err := strconv.ParseInt(matches[logicalSubexp], 10, 32)
-	if err != nil {
-		return Timestamp{}, err
-	}
 	wallTime := seconds*time.Second.Nanoseconds() + nanos
 	if matches[signSubexp] == "-" {
 		wallTime *= -1
+	}
+	var logical int64
+	if logicalMatch := matches[logicalSubexp]; logicalMatch != "" {
+		logical, err = strconv.ParseInt(logicalMatch, 10, 32)
+		if err != nil {
+			return Timestamp{}, err
+		}
 	}
 	t := Timestamp{
 		WallTime: wallTime,
