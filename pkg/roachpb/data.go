@@ -1738,13 +1738,13 @@ func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 		}
 	}
 	if len(added) > 0 {
-		w.Printf("%s%s", ADD_VOTER, added)
+		w.Printf("%s", added)
 	}
 	if len(removed) > 0 {
 		if len(added) > 0 {
 			w.SafeString(", ")
 		}
-		w.Printf("%s%s", REMOVE_VOTER, removed)
+		w.Printf("%s", removed)
 	}
 	w.Printf(": after=%s next=%d", afterReplicas, nextReplicaID)
 }
