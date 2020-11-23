@@ -1,13 +1,13 @@
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
-query TTTT
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb  root  {}  NULL
-postgres   root  {}  NULL
-system     node  {}  NULL
-test       root  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
 
 query TTTT
 SHOW GRANTS ON DATABASE test
@@ -56,13 +56,13 @@ SELECT * FROM kv
 statement error target database or schema does not exist
 SHOW GRANTS ON DATABASE test
 
-query TTTT
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb  root  {}  NULL
-postgres   root  {}  NULL
-system     node  {}  NULL
-u          root  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+u          root  NULL  {}  NULL
 
 # check the name in descriptor is also changed
 query TTTT
@@ -113,10 +113,10 @@ user testuser
 statement error must be owner of database t
 ALTER DATABASE t RENAME TO v
 
-query TTTT
+query TTTTT
 SHOW DATABASES
 ----
-t  root  {}  NULL
+t  root  NULL  {}  NULL
 
 # Test that owners can rename databases as long as they have the CREATEDB
 # privilege.
@@ -180,14 +180,14 @@ ALTER DATABASE defaultdb RENAME TO w;
   ALTER DATABASE postgres RENAME TO defaultdb;
   ALTER DATABASE w RENAME TO postgres
 
-query TTTT
+query TTTTT
 SHOW DATABASES
 ----
-defaultdb  root  {}  NULL
-postgres   root  {}  NULL
-system     node  {}  NULL
-t          root  {}  NULL
-v          root  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+t          root  NULL  {}  NULL
+v          root  NULL  {}  NULL
 
 query T
 EXPLAIN ALTER DATABASE v RENAME TO x
@@ -198,15 +198,15 @@ vectorized: false
 • rename database
 
 # Verify that the EXPLAIN above does not actually rename the database (#30543)
-query TTTT colnames
+query TTTTT colnames
 SHOW DATABASES
 ----
-database_name  owner  regions  survival_goal
-defaultdb      root   {}       NULL
-postgres       root   {}       NULL
-system         node   {}       NULL
-t              root   {}       NULL
-v              root   {}       NULL
+database_name  owner  primary_region  regions  survival_goal
+defaultdb      root   NULL            {}       NULL
+postgres       root   NULL            {}       NULL
+system         node   NULL            {}       NULL
+t              root   NULL            {}       NULL
+v              root   NULL            {}       NULL
 
 # Test dependent sequences on different databases upon renames
 # return the appropriate error message, as well as testing
