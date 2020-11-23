@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -147,7 +148,7 @@ func getTableCreateParams(
 					errors.WithHint(
 						errors.WithIssueLink(
 							errors.Newf("temporary tables are only supported experimentally"),
-							errors.IssueLink{IssueURL: unimplemented.MakeURL(46260)},
+							errors.IssueLink{IssueURL: build.MakeIssueURL(46260)},
 						),
 						"You can enable temporary tables by running `SET experimental_enable_temp_tables = 'on'`.",
 					),
@@ -220,6 +221,13 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	if n.n.Interleave != nil {
 		telemetry.Inc(sqltelemetry.CreateInterleavedTableCounter)
+		params.p.BufferClientNotice(
+			params.ctx,
+			errors.WithIssueLink(
+				pgnotice.Newf("interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2"),
+				errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
+			),
+		)
 	}
 	if n.n.Persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
