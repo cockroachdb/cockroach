@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // MVCCIterator wraps an storage.MVCCIterator and ensures that it can
@@ -463,11 +464,13 @@ func (s spanSetWriter) ClearUnversioned(key roachpb.Key) error {
 	return s.w.ClearUnversioned(key)
 }
 
-func (s spanSetWriter) ClearIntent(key roachpb.Key) error {
+func (s spanSetWriter) ClearIntent(
+	key roachpb.Key, state storage.PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+) error {
 	if err := s.checkAllowed(key); err != nil {
 		return err
 	}
-	return s.w.ClearIntent(key)
+	return s.w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)
 }
 
 func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
@@ -478,6 +481,12 @@ func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
 		return err
 	}
 	return s.w.ClearEngineKey(key)
+}
+
+func (s spanSetWriter) SingleClearEngineKey(key storage.EngineKey) error {
+	// Pass-through, since single clear is only used for the lock table, which
+	// is not in the spans.
+	return s.w.SingleClearEngineKey(key)
 }
 
 func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
@@ -548,11 +557,17 @@ func (s spanSetWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 	return s.w.PutUnversioned(key, value)
 }
 
-func (s spanSetWriter) PutIntent(key roachpb.Key, value []byte) error {
+func (s spanSetWriter) PutIntent(
+	key roachpb.Key,
+	value []byte,
+	state storage.PrecedingIntentState,
+	txnDidNotUpdateMeta bool,
+	txnUUID uuid.UUID,
+) error {
 	if err := s.checkAllowed(key); err != nil {
 		return err
 	}
-	return s.w.PutIntent(key, value)
+	return s.w.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID)
 }
 
 func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
@@ -620,10 +635,6 @@ type spanSetBatch struct {
 }
 
 var _ storage.Batch = spanSetBatch{}
-
-func (s spanSetBatch) SingleClearEngineKey(key storage.EngineKey) error {
-	return s.b.SingleClearEngineKey(key)
-}
 
 func (s spanSetBatch) Commit(sync bool) error {
 	return s.b.Commit(sync)
