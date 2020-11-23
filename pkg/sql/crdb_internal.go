@@ -226,6 +226,7 @@ CREATE TABLE crdb_internal.databases (
 	id INT NOT NULL,
 	name STRING NOT NULL,
 	owner NAME NOT NULL,
+	primary_region STRING,
 	regions STRING[],
 	survival_goal STRING
 )`,
@@ -243,6 +244,10 @@ CREATE TABLE crdb_internal.databases (
 						return errors.Newf("unknown survival goal: %d", db.RegionConfig.SurvivalGoal)
 					}
 				}
+				var primaryRegion tree.Datum = tree.DNull
+				if db.RegionConfig.PrimaryRegion != "" {
+					primaryRegion = tree.NewDString(db.RegionConfig.PrimaryRegion)
+				}
 
 				regions := tree.NewDArray(types.String)
 				for _, region := range db.RegionConfig.Regions {
@@ -255,8 +260,9 @@ CREATE TABLE crdb_internal.databases (
 					tree.NewDInt(tree.DInt(db.GetID())),            // id
 					tree.NewDString(db.GetName()),                  // name
 					tree.NewDName(getOwnerOfDesc(db).Normalized()), // owner
-					regions,      // regions
-					survivalGoal, // survival_goal
+					primaryRegion, // primary_region
+					regions,       // regions
+					survivalGoal,  // survival_goal
 				)
 			})
 	},
