@@ -113,6 +113,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 	scan.index = scan.specifiedIndex
 	sb := span.MakeBuilder(params.EvalContext(), params.ExecCfg().Codec, o.tableDesc, o.indexDesc)
+	defer sb.Release()
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return err
