@@ -68,6 +68,11 @@ const (
 type joinReader struct {
 	joinerBase
 	strategy joinReaderStrategy
+	// spanBuilder is used by the strategy, but the joinReader is responsible
+	// for Release()'ing it (this is needed because the
+	// localityOptimizedSpanGenerator uses the same builder in both of its
+	// generators).
+	spanBuilder *span.Builder
 
 	// runningState represents the state of the joinReader. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
@@ -430,8 +435,8 @@ func (jr *joinReader) initJoinReaderStrategy(
 	neededRightCols util.FastIntSet,
 	readerType joinReaderType,
 ) error {
-	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
-	spanBuilder.SetNeededColumns(neededRightCols)
+	jr.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
+	jr.spanBuilder.SetNeededColumns(neededRightCols)
 
 	strategyMemAcc := jr.MemMonitor.MakeBoundAccount()
 	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
@@ -444,7 +449,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			keyToInputRowIndices = make(map[string][]int)
 		}
 		generator = &defaultSpanGenerator{
-			spanBuilder:          spanBuilder,
+			spanBuilder:          jr.spanBuilder,
 			keyToInputRowIndices: keyToInputRowIndices,
 			numKeyCols:           numKeyCols,
 			lookupCols:           jr.lookupCols,
@@ -466,7 +471,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		if jr.remoteLookupExpr.Expr == nil {
 			multiSpanGen := &multiSpanGenerator{}
 			if err := multiSpanGen.init(
-				spanBuilder,
+				jr.spanBuilder,
 				numKeyCols,
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,
@@ -480,7 +485,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			localityOptSpanGen := &localityOptimizedSpanGenerator{}
 			remoteSpanGenMemAcc := jr.MemMonitor.MakeBoundAccount()
 			if err := localityOptSpanGen.init(
-				spanBuilder,
+				jr.spanBuilder,
 				numKeyCols,
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,
@@ -930,6 +935,9 @@ func (jr *joinReader) close() {
 	if jr.InternalClose() {
 		if jr.fetcher != nil {
 			jr.fetcher.Close(jr.Ctx)
+		}
+		if jr.spanBuilder != nil {
+			jr.spanBuilder.Release()
 		}
 		jr.strategy.close(jr.Ctx)
 		jr.memAcc.Close(jr.Ctx)
