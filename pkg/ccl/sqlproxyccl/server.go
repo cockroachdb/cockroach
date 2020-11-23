@@ -136,13 +136,18 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 // relayed to the configured backend server.
 func (s *Server) Serve(ln net.Listener) error {
 	for {
-		conn, err := ln.Accept()
+		origConn, err := ln.Accept()
 		if err != nil {
 			return err
 		}
+		conn := &Conn{
+			Conn: origConn,
+		}
+		conn.mu.closedCh = make(chan struct{})
+
 		go func() {
 			s.metrics.CurConnCount.Inc(1)
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 			defer s.metrics.CurConnCount.Dec(1)
 			tBegin := timeutil.Now()
 			log.Infof(context.Background(), "handling client %s", conn.RemoteAddr())
@@ -151,4 +156,36 @@ func (s *Server) Serve(ln net.Listener) error {
 				conn.RemoteAddr(), timeutil.Since(tBegin).Seconds(), err)
 		}()
 	}
+}
+
+var _ = (*Conn)(nil).Done // silence unused lint
+
+// Conn is a SQL connection into the proxy.
+type Conn struct {
+	net.Conn
+
+	mu struct {
+		syncutil.Mutex
+		closed   bool
+		closedCh chan struct{}
+	}
+}
+
+// Done returns a channel that's closed when the connection is closed.
+func (c *Conn) Done() <-chan struct{} {
+	return c.mu.closedCh
+}
+
+// Close closes the connection.
+// Any blocked Read or Write operations will be unblocked and return errors.
+// The connection's Done channel will be closed.
+func (c *Conn) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.mu.closed {
+		return nil
+	}
+	close(c.mu.closedCh)
+	c.mu.closed = true
+	return c.Conn.Close()
 }
