@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -69,9 +70,12 @@ func (s *OptionalNodesStatusServer) OptionalNodesStatusServer(
 // These latencies are displayed on the streams of EXPLAIN ANALYZE diagrams.
 // This struct is put here to avoid import cycles.
 type LatencyGetter struct {
-	latencyMap        map[roachpb.NodeID]map[roachpb.NodeID]int64
 	lastUpdatedTime   time.Time
 	NodesStatusServer *OptionalNodesStatusServer
+	mu                struct {
+		syncutil.RWMutex
+		latencyMap map[roachpb.NodeID]map[roachpb.NodeID]int64
+	}
 }
 
 const updateThreshold = 5 * time.Second
@@ -83,7 +87,9 @@ func (lg *LatencyGetter) GetLatency(
 	ctx context.Context, originNodeID roachpb.NodeID, targetNodeID roachpb.NodeID,
 ) int64 {
 	if timeutil.Since(lg.lastUpdatedTime) < updateThreshold {
-		return lg.latencyMap[originNodeID][targetNodeID]
+		lg.mu.RLock()
+		defer lg.mu.RUnlock()
+		return lg.mu.latencyMap[originNodeID][targetNodeID]
 	}
 	// Update latencies in latencyMap.
 	ss, err := lg.NodesStatusServer.OptionalNodesStatusServer(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
@@ -91,26 +97,28 @@ func (lg *LatencyGetter) GetLatency(
 		// When latency is 0, it is not shown on EXPLAIN ANALYZE diagrams.
 		return 0
 	}
-	if lg.latencyMap == nil {
-		lg.latencyMap = make(map[roachpb.NodeID]map[roachpb.NodeID]int64)
+	lg.mu.Lock()
+	defer lg.mu.Unlock()
+	if lg.mu.latencyMap == nil {
+		lg.mu.latencyMap = make(map[roachpb.NodeID]map[roachpb.NodeID]int64)
 	}
 	response, err := ss.Nodes(ctx, &NodesRequest{})
 	if err != nil {
 		// When latency is 0, it is not shown on EXPLAIN ANALYZE diagrams.
 		return 0
 	}
-	for _, sendingNode := range response.Nodes {
-		sendingNodeID := sendingNode.Desc.NodeID
-		if lg.latencyMap[sendingNodeID] == nil {
-			lg.latencyMap[sendingNodeID] = make(map[roachpb.NodeID]int64)
+	for i := 0; i < len(response.Nodes); i++ {
+		sendingNodeID := response.Nodes[i].Desc.NodeID
+		if lg.mu.latencyMap[sendingNodeID] == nil {
+			lg.mu.latencyMap[sendingNodeID] = make(map[roachpb.NodeID]int64)
 		}
-		for _, receivingNode := range response.Nodes {
-			receivingNodeID := receivingNode.Desc.NodeID
+		for j := 0; j < len(response.Nodes); j++ {
+			receivingNodeID := response.Nodes[i].Desc.NodeID
 			if sendingNodeID != receivingNodeID {
-				lg.latencyMap[sendingNodeID][receivingNodeID] = sendingNode.Activity[receivingNodeID].Latency
+				lg.mu.latencyMap[sendingNodeID][receivingNodeID] = response.Nodes[i].Activity[receivingNodeID].Latency
 			}
 		}
 	}
 	lg.lastUpdatedTime = timeutil.Now()
-	return lg.latencyMap[originNodeID][targetNodeID]
+	return lg.mu.latencyMap[originNodeID][targetNodeID]
 }

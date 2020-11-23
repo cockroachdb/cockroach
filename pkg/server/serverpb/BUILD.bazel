@@ -33,6 +33,7 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/log/logpb",
         "//pkg/util/metric",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "//vendor/github.com/gogo/protobuf/proto",
