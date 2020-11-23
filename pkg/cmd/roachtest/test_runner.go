@@ -642,19 +642,24 @@ func (r *testRunner) runTest(
 					branch, cloud, output)
 				artifacts := fmt.Sprintf("/%s", t.Name())
 
+				// Issues posted from roachtest are identifiable as such and
+				// they are also release blockers (this label may be removed
+				// by a human upon closer investigation).
+				labels := []string{"O-roachtest"}
+				if !t.spec.NonReleaseBlocker {
+					labels = append(labels, "release-blocker")
+				}
+
 				req := issues.PostRequest{
 					// TODO(tbg): actually use this as a template.
 					TitleTemplate: fmt.Sprintf("roachtest: %s failed", t.Name()),
 					// TODO(tbg): make a template better adapted to roachtest.
-					BodyTemplate: issues.UnitTestFailureBody,
-					PackageName:  "roachtest",
-					TestName:     t.Name(),
-					Message:      msg,
-					Artifacts:    artifacts,
-					// Issues posted from roachtest are identifiable as such and
-					// they are also release blockers (this label may be removed
-					// by a human upon closer investigation).
-					ExtraLabels:     []string{"O-roachtest", "release-blocker"},
+					BodyTemplate:    issues.UnitTestFailureBody,
+					PackageName:     "roachtest",
+					TestName:        t.Name(),
+					Message:         msg,
+					Artifacts:       artifacts,
+					ExtraLabels:     labels,
 					ProjectColumnID: projectColumnID,
 				}
 				if err := issues.Post(
