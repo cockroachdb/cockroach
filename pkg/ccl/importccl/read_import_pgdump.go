@@ -15,7 +15,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -309,7 +311,7 @@ func readPostgresCreateTable(
 		if err != nil {
 			return nil, errors.Wrap(err, "postgres parse error")
 		}
-		if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, stmt); err != nil {
+		if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, stmt, p, parentID); err != nil {
 			return nil, err
 		}
 	}
@@ -324,6 +326,8 @@ func readPostgresStmt(
 	createSeq map[string]*tree.CreateSequence,
 	tableFKs map[string][]*tree.ForeignKeyConstraintTableDef,
 	stmt interface{},
+	p sql.JobExecContext,
+	parentID descpb.ID,
 ) error {
 	switch stmt := stmt.(type) {
 	case *tree.CreateTable:
@@ -490,7 +494,7 @@ func readPostgresStmt(
 					for _, fnStmt := range fnStmts {
 						switch ast := fnStmt.AST.(type) {
 						case *tree.AlterTable:
-							if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, ast); err != nil {
+							if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, ast, p, parentID); err != nil {
 								return err
 							}
 						default:
@@ -504,6 +508,32 @@ func readPostgresStmt(
 			}
 		default:
 			return errors.Errorf("unsupported %T SELECT: %s", sel, sel)
+		}
+	case *tree.DropTable:
+		names := stmt.Names
+
+		// If we find a table with the same name in the target DB we are importing
+		// into and same public schema, then we throw an error telling the user to
+		// drop the conflicting existing table to proceed.
+		// Otherwise, we silently ignore the drop statement and continue with the import.
+		for _, name := range names {
+			tableName := name.ToUnresolvedObjectName().String()
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				err := backupccl.CheckObjectExists(
+					ctx,
+					txn,
+					p.ExecCfg().Codec,
+					parentID,
+					keys.PublicSchemaID,
+					tableName,
+				)
+				if err != nil {
+					return errors.Wrapf(err, `drop table "%s" and then retry the import`, tableName)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
 		}
 	case *tree.BeginTransaction, *tree.CommitTransaction:
 		// ignore txns.
@@ -870,7 +900,7 @@ func (m *pgDumpReader) readFile(
 			}
 		case *tree.SetVar, *tree.BeginTransaction, *tree.CommitTransaction, *tree.Analyze:
 			// ignored.
-		case *tree.CreateTable, *tree.AlterTable, *tree.CreateIndex, *tree.CreateSequence:
+		case *tree.CreateTable, *tree.AlterTable, *tree.CreateIndex, *tree.CreateSequence, *tree.DropTable:
 			// handled during schema extraction.
 		case *tree.Delete:
 			switch stmt := i.Table.(type) {
