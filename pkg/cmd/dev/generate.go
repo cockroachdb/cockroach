@@ -11,26 +11,64 @@
 package main
 
 import (
+	"context"
+
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
 // generateCmd generates the specified files.
 var generateCmd = &cobra.Command{
-	Use:     "generate <target>",
+	Use:     "generate [target..]",
 	Aliases: []string{"gen"},
 	Short:   `Generate the specified files`,
 	Long:    `Generate the specified files.`,
 	Example: `
-	dev gen bazel
+	dev generate
+	dev generate bazel
 	dev generate protobuf
-	dev generate {exec,opt}gen
-`,
-	Args: cobra.NoArgs,
+	dev generate {exec,opt}gen`,
+	Args: cobra.MinimumNArgs(0),
 	RunE: runGenerate,
 }
 
-func runGenerate(cmd *cobra.Command, args []string) error {
-	// TODO(irfansharif): Flesh out the example usage patterns.
-	return errors.New("unimplemented")
+// TODO(irfansharif): Flesh out the remaining targets.
+type generator func(ctx context.Context, cmd *cobra.Command) error
+
+var generators = []generator{
+	generateBazel,
+}
+
+func runGenerate(cmd *cobra.Command, targets []string) error {
+	ctx := context.Background()
+
+	if len(targets) == 0 {
+		// Generate all targets.
+		for _, gen := range generators {
+			if err := gen(ctx, cmd); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	for _, target := range targets {
+		var gen generator
+		switch target {
+		case "bazel":
+			gen = generateBazel
+		default:
+			return errors.Newf("unrecognized target: %s", target)
+		}
+
+		if err := gen(ctx, cmd); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func generateBazel(ctx context.Context, cmd *cobra.Command) error {
+	return execute(ctx, "bazel", "run", "@cockroach//:gazelle", "--color=yes")
 }

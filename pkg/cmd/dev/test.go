@@ -11,16 +11,13 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -115,8 +112,8 @@ func runUnitTest(ctx context.Context, cmd *cobra.Command, pkgs []string) error {
 	if race {
 		args = append(args, "--features", "race")
 	}
-
 	args = append(args, "--color=yes")
+
 	for _, pkg := range pkgs {
 		if strings.HasSuffix(pkg, "...") {
 			args = append(args, fmt.Sprintf("@cockroach//%s", pkg))
@@ -142,33 +139,7 @@ func runUnitTest(ctx context.Context, cmd *cobra.Command, pkgs []string) error {
 		args = append(args, "--test_output", "all", "--test_arg", "-test.v")
 	}
 
-	bazelCmd := exec.CommandContext(ctx, "bazel", args...)
-
-	log.Infof(ctx, "executing: %s", log.Safe(bazelCmd.String()))
-
-	stdout, err := bazelCmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	bazelCmd.Stderr = bazelCmd.Stdout
-
-	if err := bazelCmd.Start(); err != nil {
-		return err
-	}
-
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		line := scanner.Text()
-		log.Infof(ctx, "-- %s\n", redact.Safe(line))
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	if err := bazelCmd.Wait(); err != nil {
-		return err
-	}
-
-	return nil
+	return execute(ctx, "bazel", args...)
 }
 
 func runLogicTest(ctx context.Context, cmd *cobra.Command) error {
