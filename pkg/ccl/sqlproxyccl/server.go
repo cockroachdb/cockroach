@@ -12,6 +12,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -136,10 +137,15 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 // relayed to the configured backend server.
 func (s *Server) Serve(ln net.Listener) error {
 	for {
-		conn, err := ln.Accept()
+		origConn, err := ln.Accept()
 		if err != nil {
 			return err
 		}
+		conn := &Conn{
+			Conn:     origConn,
+			closedCh: make(chan struct{}),
+		}
+
 		go func() {
 			s.metrics.CurConnCount.Inc(1)
 			defer conn.Close()
@@ -151,4 +157,31 @@ func (s *Server) Serve(ln net.Listener) error {
 				conn.RemoteAddr(), timeutil.Since(tBegin).Seconds(), err)
 		}()
 	}
+}
+
+// Conn is a SQL connection into the proxy.
+type Conn struct {
+	net.Conn
+
+	mu       sync.Mutex
+	closed   bool
+	closedCh chan struct{}
+}
+
+// Done returns a channel that's closed when the connection is closed.
+func (c *Conn) Done() <-chan struct{} {
+	return c.closedCh
+}
+
+// Close closes the connection.
+// Any blocked Read or Write operations will be unblocked and return errors.
+// The connection's Done channel will be closed.
+func (c *Conn) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.closed {
+		close(c.closedCh)
+		c.closed = true
+	}
+	return c.Conn.Close()
 }
