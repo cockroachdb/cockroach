@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -101,6 +102,8 @@ type PlanHookState interface {
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc *tabledesc.Immutable, displayOptions ShowCreateDisplayOptions,
 	) (string, error)
+	CreateSchemaNamespaceEntry(ctx context.Context, schemaNameKey roachpb.Key,
+		schemaID descpb.ID) error
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
