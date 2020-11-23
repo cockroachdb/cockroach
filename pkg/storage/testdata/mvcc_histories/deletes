@@ -8,7 +8,7 @@ with t=A
   txn_remove
 ----
 >> at end:
-data: "a"/0.000000044,0 -> /<empty>
+data: "a"/44.000000000,0 -> /<empty>
 
 # Show the value disappears from gets.
 
@@ -29,5 +29,5 @@ with t=A
   get k=a tombstones
   txn_remove
 ----
-get: "a" -> /<empty> @0.000000044,0
+get: "a" -> /<empty> @44.000000000,0
 >> at end:
