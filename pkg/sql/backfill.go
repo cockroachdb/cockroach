@@ -999,9 +999,7 @@ func (sc *SchemaChanger) distBackfill(
 				tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 				sc.rangeDescriptorCache,
 				nil, /* txn - the flow does not run wholly in a txn */
-				func(ts hlc.Timestamp) {
-					sc.clock.Update(ts)
-				},
+				sc.clock,
 				evalCtx.Tracing,
 			)
 			defer recv.Release()
