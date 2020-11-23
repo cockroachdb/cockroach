@@ -1978,7 +1978,7 @@ message BatchResponse {
     // checked nor populated (it is reset by the DistSender, which extracts this
     // error and returns it separately). In effect, nearly no usage of
     // BatchResponse needs to care about this field.
-    Error error = 1;
+    kv.kvpb.Error error = 1;
     // timestamp denotes the timestamp at which the batch's reads executed. The
     // timestamp cache is updated at this timestamp.
     //
@@ -2034,7 +2034,7 @@ message RangeLookupResponse {
   repeated RangeDescriptor descriptors            = 1 [(gogoproto.nullable) = false];
   repeated RangeDescriptor prefetched_descriptors = 2 [(gogoproto.nullable) = false];
   // If non-nil, the other fields will be empty.
-  Error error = 3;
+  kv.kvpb.Error error = 3;
 }
 
 // RangeFeedRequest is a request that expresses the intention to establish a
@@ -2077,7 +2077,7 @@ message RangeFeedCheckpoint {
 // event will always be the final event on a RangeFeed response stream before
 // it is torn down.
 message RangeFeedError {
-  Error error = 1 [(gogoproto.nullable) = false];
+  kv.kvpb.Error error = 1 [(gogoproto.nullable) = false];
 }
 
 // RangeFeedEvent is a union of all event types that may be returned on a
@@ -2110,7 +2110,7 @@ message GossipSubscriptionEvent {
   string pattern_matched = 3;
   // If non-nil, the other fields will be empty and this will be the final event
   // send on the stream before it is terminated.
-  Error error = 4;
+  kv.kvpb.Error error = 4;
 }
 
 // JoinNodeRequest is used to specify to the server node what the client's

@@ -9,7 +9,21 @@
 // licenses/APL.txt.
 
 syntax = "proto2";
-package cockroach.roachpb;
+// NB: this file (along with most things in api.proto and metadata.proto)
+// really ought to live in a ./pkg/kv/kvpb package. However, moving them
+// there is a larger undertaking because import cycles require a large
+// amount of refactoring. Essentially, all references to `kvpb` from the
+// `roachpb` package will need to be avoided, and it takes time to make
+// these changes. Second, proto renames are tricky as the paths leak into
+// uses of protobuf.Any.
+//
+// It is for this second reason that this package was renamed preemptively
+// (but not moved yet for the first reason): we use EncodedError in Error,
+// and once that is released in even an alpha version, migration concerns
+// arise that are not trivial to address. Since the package already has the
+// correct name, the files can be moved into a newly created `kvpb` package
+// at leisure.
+package cockroach.kv.kvpb;
 option go_package = "roachpb";
 
 import "errorspb/errors.proto";
@@ -29,9 +43,9 @@ import "gogoproto/gogo.proto";
 message NotLeaseHolderError {
   // The replica the error originated from. Used in the error's string
   // representation, if known.
-  optional ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
   // The lease holder, if known.
-  optional ReplicaDescriptor lease_holder = 2;
+  optional roachpb.ReplicaDescriptor lease_holder = 2;
   // The current lease, if known. This might be nil even when lease_holder is
   // set, as sometimes one can create this error without actually knowing the
   // current lease, but having a guess about who the leader is.
@@ -39,7 +53,7 @@ message NotLeaseHolderError {
   // It's possible for leases returned here to represent speculative leases, not
   // actual committed leases. In this case, the lease will not have its Sequence
   // set.
-  optional Lease lease = 4;
+  optional roachpb.Lease lease = 4;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   // If set, the Error() method will return this instead of composing its
@@ -78,11 +92,11 @@ message RangeKeyMismatchError {
 
   // deprecated_mismatched_range is an older version of mismatched_range. Can go
   // away in 21.1, when we don't worry about 20.1 kvservers not populating rangesInternal.
-  optional RangeDescriptor deprecated_mismatched_range = 3 [(gogoproto.nullable) = false];
+  optional roachpb.RangeDescriptor deprecated_mismatched_range = 3 [(gogoproto.nullable) = false];
   // deprecated_suggested_range is an older version of suggested_range. Can go
   // away in 21.1, when we don't worry about 20.1 kvservers not populating
   // rangesInternal.
-  optional RangeDescriptor deprecated_suggested_range = 4;
+  optional roachpb.RangeDescriptor deprecated_suggested_range = 4;
 
   // ranges contains information intended for the client's range cache. The
   // server populates it with info on the range with the ID addressed by the
@@ -91,7 +105,7 @@ message RangeKeyMismatchError {
   // the requested key range.
   //
   // In 21.1 the customname can be removed, together with the Ranges() accessor.
-  repeated RangeInfo ranges = 5 [(gogoproto.customname) = "rangesInternal",
+  repeated roachpb.RangeInfo ranges = 5 [(gogoproto.customname) = "rangesInternal",
                                  (gogoproto.nullable) = false];
 
 }
@@ -112,7 +126,7 @@ message ReadWithinUncertaintyIntervalError {
   // The remaining fields may be missing when running in clusters that have
   // members at below CockroachDB v2.0.
   optional util.hlc.Timestamp max_timestamp = 3;
-  repeated ObservedTimestamp observed_timestamps = 4 [(gogoproto.nullable) = false];
+  repeated roachpb.ObservedTimestamp observed_timestamps = 4 [(gogoproto.nullable) = false];
 }
 
 // TransactionAbortedReason specifies what caused a TransactionAbortedError.
@@ -202,7 +216,7 @@ message TransactionAbortedError {
 // continue because it encountered a write intent from another
 // transaction which it was unable to push.
 message TransactionPushError {
-  optional Transaction pushee_txn = 1 [(gogoproto.nullable) = false];
+  optional roachpb.Transaction pushee_txn = 1 [(gogoproto.nullable) = false];
 }
 
 // TransactionRetryReason specifies what caused a transaction retry.
@@ -255,7 +269,7 @@ message TransactionStatusError {
 // was encountered are set, as are the txn records for the intents'
 // transactions.
 message WriteIntentError {
-  repeated Intent intents = 1 [(gogoproto.nullable) = false];
+  repeated roachpb.Intent intents = 1 [(gogoproto.nullable) = false];
   reserved 2;
 }
 
@@ -287,15 +301,15 @@ message OpRequiresTxnError {
 // because it was missing or was not equal. The error will
 // contain the actual value found.
 message ConditionFailedError {
-  optional Value actual_value = 1;
+  optional roachpb.Value actual_value = 1;
 }
 
 // A LeaseRejectedError indicates that the requested replica could
 // not acquire the desired lease because of an existing range lease.
 message LeaseRejectedError {
   optional string message = 1 [(gogoproto.nullable) = false];
-  optional Lease requested = 2 [(gogoproto.nullable) = false];
-  optional Lease existing = 3 [(gogoproto.nullable) = false];
+  optional roachpb.Lease requested = 2 [(gogoproto.nullable) = false];
+  optional roachpb.Lease existing = 3 [(gogoproto.nullable) = false];
 }
 
 // An AmbiguousResultError indicates that a request may have succeeded or
@@ -381,7 +395,7 @@ message TransactionRetryWithProtoRefreshError {
   // original cause of this method, this can either be the same Transaction as
   // before, but with an incremented epoch and timestamp, or a completely new
   // Transaction.
-  optional Transaction transaction = 3 [(gogoproto.nullable) = false];
+  optional roachpb.Transaction transaction = 3 [(gogoproto.nullable) = false];
 }
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
@@ -413,7 +427,7 @@ message BatchTimestampBeforeGCError {
 // not there.
 message IntentMissingError {
   // The non-matching intent that was found at that key, if any.
-  optional Intent wrong_intent = 1;
+  optional roachpb.Intent wrong_intent = 1;
   // The key where the intent was expected.
   optional bytes key = 2 [(gogoproto.casttype) = "Key"];
 }
@@ -455,7 +469,7 @@ message RangeFeedRetryError {
 // process makes a ruling on the final state of the transaction based on the
 // outcome of its in-flight writes at the time of staging.
 message IndeterminateCommitError {
-  optional Transaction staging_txn = 1 [(gogoproto.nullable) = false];
+  optional roachpb.Transaction staging_txn = 1 [(gogoproto.nullable) = false];
 }
 
 // ErrorDetail is a union type containing all available errors.
@@ -545,7 +559,7 @@ message Error {
   // of retryable errors.
   //
   // Not to be accessed directly - use Error.GetTxn() and Error.SetTxn().
-  optional Transaction unexposed_txn = 4;
+  optional roachpb.Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
   optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID"];
