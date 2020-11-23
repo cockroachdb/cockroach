@@ -1108,10 +1108,10 @@ GRANT GRANT,SELECT ON privatedb.publictable TO public
 
 user testuser
 
-query TT
+query TTTT
 SHOW DATABASES
 ----
-publicdb   root
+publicdb  root  {}  NULL
 
 query TTTTI
 SHOW TABLES FROM publicdb
