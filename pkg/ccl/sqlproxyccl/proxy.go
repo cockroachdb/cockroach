@@ -72,7 +72,9 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	}
 
 	var conn net.Conn = proxyConn
-	{
+	// If we have an incoming TLS Config, require that the client initiates
+	// with a TLS connection.
+	if s.opts.IncomingTLSConfig != nil {
 		m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 		if err != nil {
 			return NewErrorf(CodeClientReadFailed, "while receiving startup message")
@@ -154,25 +156,27 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		return NewErrorf(code, "dialing backend server: %v", err)
 	}
 
-	// Send SSLRequest.
-	if err := binary.Write(crdbConn, binary.BigEndian, pgSSLRequest); err != nil {
-		s.metrics.BackendDownCount.Inc(1)
-		return NewErrorf(CodeBackendDown, "sending SSLRequest to target server: %v", err)
-	}
+	if backendConfig.TLSConf != nil {
+		// Send SSLRequest.
+		if err := binary.Write(crdbConn, binary.BigEndian, pgSSLRequest); err != nil {
+			s.metrics.BackendDownCount.Inc(1)
+			return NewErrorf(CodeBackendDown, "sending SSLRequest to target server: %v", err)
+		}
 
-	response := make([]byte, 1)
-	if _, err = io.ReadFull(crdbConn, response); err != nil {
-		s.metrics.BackendDownCount.Inc(1)
-		return NewErrorf(CodeBackendDown, "reading response to SSLRequest")
-	}
+		response := make([]byte, 1)
+		if _, err = io.ReadFull(crdbConn, response); err != nil {
+			s.metrics.BackendDownCount.Inc(1)
+			return NewErrorf(CodeBackendDown, "reading response to SSLRequest")
+		}
 
-	if response[0] != pgAcceptSSLRequest {
-		s.metrics.BackendDownCount.Inc(1)
-		return NewErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
-	}
+		if response[0] != pgAcceptSSLRequest {
+			s.metrics.BackendDownCount.Inc(1)
+			return NewErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
+		}
 
-	outCfg := backendConfig.TLSConf.Clone()
-	crdbConn = tls.Client(crdbConn, outCfg)
+		outCfg := backendConfig.TLSConf.Clone()
+		crdbConn = tls.Client(crdbConn, outCfg)
+	}
 
 	if s.opts.ModifyRequestParams != nil {
 		s.opts.ModifyRequestParams(msg.Parameters)

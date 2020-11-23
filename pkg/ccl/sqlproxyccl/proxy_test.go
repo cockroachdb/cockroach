@@ -298,6 +298,87 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	require.EqualValues(t, 1, n)
 }
 
+func newInsecureProxyServer(
+	t *testing.T, outgoingAddr string, outgoingTLSConfig *tls.Config,
+) (addr string, cleanup func()) {
+	s := NewServer(Options{
+		BackendConfigFromParams: func(params map[string]string, _ *Conn) (*BackendConfig, error) {
+			return &BackendConfig{
+				OutgoingAddress: outgoingAddr,
+				TLSConf:         outgoingTLSConfig,
+			}, nil
+		},
+	})
+	const listenAddress = "127.0.0.1:0"
+	ln, err := net.Listen("tcp", listenAddress)
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = s.Serve(ln)
+	}()
+	return ln.Addr().String(), func() {
+		_ = ln.Close()
+		wg.Wait()
+	}
+}
+
+func TestInsecureProxy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	outgoingTLSConfig, err := tc.Server(0).RPCContext().GetClientTLSConfig()
+	require.NoError(t, err)
+	outgoingTLSConfig.InsecureSkipVerify = true
+
+	addr, cleanup := newInsecureProxyServer(t, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig)
+	defer cleanup()
+
+	u := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable", addr)
+	conn, err := pgx.Connect(ctx, u)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, conn.Close(ctx))
+	}()
+
+	var n int
+	err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+}
+
+func TestInsecureDoubleProxy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{Insecure: true},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Test multiple proxies:  proxyB -> proxyA -> tc
+	proxyA, cleanupA := newInsecureProxyServer(t, tc.Server(0).ServingSQLAddr(), nil /* tls config */)
+	defer cleanupA()
+	proxyB, cleanupB := newInsecureProxyServer(t, proxyA, nil /* tls config */)
+	defer cleanupB()
+
+	u := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable", proxyB)
+	conn, err := pgx.Connect(ctx, u)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, conn.Close(ctx))
+	}()
+
+	var n int
+	err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+}
+
 func TestProxyRefuseConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
