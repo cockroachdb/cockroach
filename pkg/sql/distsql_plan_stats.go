@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -278,9 +277,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		tree.DDL,
 		evalCtx.ExecCfg.RangeDescriptorCache,
 		txn,
-		func(ts hlc.Timestamp) {
-			evalCtx.ExecCfg.Clock.Update(ts)
-		},
+		evalCtx.ExecCfg.Clock,
 		evalCtx.Tracing,
 	)
 	defer recv.Release()

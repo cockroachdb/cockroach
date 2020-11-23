@@ -128,9 +128,7 @@ func (dsp *DistSQLPlanner) Exec(
 		stmt.AST.StatementType(),
 		execCfg.RangeDescriptorCache,
 		p.txn,
-		func(ts hlc.Timestamp) {
-			execCfg.Clock.Update(ts)
-		},
+		execCfg.Clock,
 		p.ExtendedEvalContext().Tracing,
 	)
 	defer recv.Release()
