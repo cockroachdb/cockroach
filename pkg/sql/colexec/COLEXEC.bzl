@@ -21,6 +21,7 @@ def _generate_impl(ctx):
             outputs = [generated_file],
             progress_message = "Generating pkg/cmd/colexec/%s" % generated_file_name,
             command = """
+            ln -s external/cockroach/pkg pkg
             %s -fmt=false pkg/sql/colexec/%s > %s
             %s -w %s
             """ % (execgen_binary.path, generated_file_name, generated_file.path, goimports_binary.path, generated_file.path),

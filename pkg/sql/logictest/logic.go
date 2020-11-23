@@ -18,7 +18,7 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"go/build"
+	gobuild "go/build"
 	"io"
 	"math"
 	"math/rand"
@@ -38,6 +38,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -61,7 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -144,6 +144,8 @@ import (
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
+//  - statement notice <regexp>
+//    Like "statement ok" but expects a notice that matches the given regexp.
 //
 //  - statement count N
 //    Like "statement ok" but expect a final RowsAffected count of N.
@@ -358,6 +360,7 @@ import (
 
 var (
 	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	noticeRE  = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
 	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
 	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
 
@@ -746,6 +749,8 @@ type logicStatement struct {
 	pos string
 	// SQL string to be sent to the database.
 	sql string
+	// expected notice, if any.
+	expectNotice string
 	// expected error, if any. "" indicates the statement should
 	// succeed.
 	expectErr string
@@ -781,6 +786,12 @@ func (ls *logicStatement) readSQL(
 		}
 		if line == "----" {
 			separator = true
+			if ls.expectNotice != "" {
+				return false, errors.Errorf(
+					"%s: invalid ---- separator after a statement expecting a notice: %s",
+					ls.pos, ls.expectNotice,
+				)
+			}
 			if ls.expectErr != "" {
 				return false, errors.Errorf(
 					"%s: invalid ---- separator after a statement or query expecting an error: %s",
@@ -1594,7 +1605,7 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 
 		blockedConfig, issueNo := getBlocklistIssueNo(configName[1:])
 		if *printBlocklistIssues && issueNo != 0 {
-			t.Logf("will skip %s config in test %s due to issue: %s", blockedConfig, path, unimplemented.MakeURL(issueNo))
+			t.Logf("will skip %s config in test %s due to issue: %s", blockedConfig, path, build.MakeIssueURL(issueNo))
 		}
 		blocklist[blockedConfig] = issueNo
 	}
@@ -1848,8 +1859,10 @@ func (t *logicTest) processSubtest(
 				pos:         fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
 				expectCount: -1,
 			}
-			// Parse "statement error <regexp>"
-			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
+			// Parse "statement (notice|error) <regexp>"
+			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
+				stmt.expectNotice = m[1]
+			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
 			}
@@ -2281,14 +2294,16 @@ func (t *logicTest) processSubtest(
 	return s.Err()
 }
 
-// verifyError checks that either no error was found where none was
-// expected, or that an error was found when one was expected.
+// verifyError checks that either:
+// - no error was found when none was expected, or
+// - in case no error was found, a notice was found when one was expected, or
+// - an error was found when one was expected.
 // Returns a nil error to indicate the behavior was as expected.  If
 // non-nil, returns also true in the boolean flag whether it is safe
 // to continue (i.e. an error was expected, an error was obtained, and
 // the errors didn't match).
 func (t *logicTest) verifyError(
-	sql, pos, expectErr, expectErrCode string, err error,
+	sql, pos, expectNotice, expectErr, expectErrCode string, err error,
 ) (bool, error) {
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		cont := t.unexpectedError(sql, pos, err)
@@ -2297,6 +2312,14 @@ func (t *logicTest) verifyError(
 			err = nil
 		}
 		return cont, err
+	}
+	if expectNotice != "" {
+		foundNotice := strings.Join(t.noticeBuffer, "\n")
+		match, _ := regexp.MatchString(expectNotice, foundNotice)
+		if !match {
+			return false, errors.Errorf("%s: %s\nexpected notice pattern:\n%s\n\ngot:\n%s", pos, sql, expectNotice, foundNotice)
+		}
+		return true, nil
 	}
 	if !testutils.IsError(err, expectErr) {
 		if err == nil {
@@ -2430,7 +2453,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	//   the database in an improper state, so we stop there;
 	// - error on expected error is worth going further, even
 	//   if the obtained error does not match the expected error.
-	cont, err := t.verifyError("", stmt.pos, stmt.expectErr, stmt.expectErrCode, err)
+	cont, err := t.verifyError("", stmt.pos, stmt.expectNotice, stmt.expectErr, stmt.expectErrCode, err)
 	if err != nil {
 		t.finishOne("OK")
 	}
@@ -2473,7 +2496,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			err = rows.Err()
 		}
 	}
-	if _, err := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); err != nil {
+	if _, err := t.verifyError(query.sql, query.pos, "", query.expectErr, query.expectErrCode, err); err != nil {
 		return err
 	}
 	if err != nil {
@@ -3194,7 +3217,7 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 		skip.IgnoreLint(t, "-bigtest flag must be specified to run this test")
 	}
 
-	logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
+	logicTestPath := gobuild.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
 	if _, err := os.Stat(logicTestPath); oserror.IsNotExist(err) {
 		fullPath, err := filepath.Abs(logicTestPath)
 		if err != nil {

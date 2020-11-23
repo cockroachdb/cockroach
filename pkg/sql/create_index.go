@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -388,6 +389,16 @@ func (n *createIndexNode) startExec(params runParams) error {
 			errors.WithHint(
 				pgnotice.Newf("creating non-partitioned index on partitioned table may not be performant"),
 				"Consider modifying the index such that it is also partitioned.",
+			),
+		)
+	}
+
+	if n.n.Interleave != nil {
+		params.p.BufferClientNotice(
+			params.ctx,
+			errors.WithIssueLink(
+				pgnotice.Newf("interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2"),
+				errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
 			),
 		)
 	}
