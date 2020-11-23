@@ -6,14 +6,14 @@ with k=k
 ----
 get: "k" -> /BYTES/v @0,1
 >> at end:
-data: "k"/0.000000002,0 -> /BYTES/v2
+data: "k"/2.000000000,0 -> /BYTES/v2
 data: "k"/0,1 -> /BYTES/v
 
 # Read the latest version.
 run ok
 get k=k ts=3
 ----
-get: "k" -> /BYTES/v2 @0.000000002,0
+get: "k" -> /BYTES/v2 @2.000000000,0
 
 # Read the old version.
 run ok
