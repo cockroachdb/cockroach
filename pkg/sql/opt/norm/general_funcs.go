@@ -112,6 +112,17 @@ func (c *CustomFuncs) IsConstArray(scalar opt.ScalarExpr) bool {
 	return false
 }
 
+// IsConstArrayWithNulls returns true if the given constant is an array that
+// contains nulls.
+func (c *CustomFuncs) IsConstArrayWithNulls(scalar opt.ScalarExpr) bool {
+	if cnst, ok := scalar.(*memo.ConstExpr); ok {
+		if arr, ok := cnst.Value.(*tree.DArray); ok {
+			return arr.HasNulls
+		}
+	}
+	return false
+}
+
 // IsAdditiveType returns true if the given type supports addition and
 // subtraction in the natural way. This differs from "has a +/- Numeric
 // implementation" because JSON has an implementation for "- INT" which doesn't
