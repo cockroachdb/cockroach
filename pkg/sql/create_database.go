@@ -81,10 +81,6 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		)
 	}
 
-	if n.SurvivalGoal != tree.SurvivalGoalDefault {
-		return nil, unimplemented.New("create database survive", "implementation pending")
-	}
-
 	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
 	if err != nil {
 		return nil, err

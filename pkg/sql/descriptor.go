@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -87,12 +86,17 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
+	var regionConfig descpb.DatabaseRegionConfig
+	regionConfig.SurvivalGoal, err = translateSurvivalGoal(database.SurvivalGoal)
+	if err != nil {
+		return nil, false, err
+	}
 	if len(database.Regions) > 0 {
 		liveRegions, err := p.getLiveClusterRegions()
 		if err != nil {
 			return nil, false, err
 		}
-		regions := make([]string, 0, len(database.Regions))
+		regionConfig.Regions = make([]string, 0, len(database.Regions))
 		seenRegions := make(map[string]struct{}, len(database.Regions))
 		for _, r := range database.Regions {
 			region := string(r)
@@ -100,9 +104,6 @@ func (p *planner) createDatabase(
 				return nil, false, err
 			}
 
-			// Check names are not duplicated.
-			// This check makes this function O(regions^2), but we expect the number of regions to
-			// be added to be small.
 			if _, ok := seenRegions[region]; ok {
 				return nil, false, pgerror.Newf(
 					pgcode.InvalidName,
@@ -111,14 +112,19 @@ func (p *planner) createDatabase(
 				)
 			}
 			seenRegions[region] = struct{}{}
-			regions = append(regions, region)
+			regionConfig.Regions = append(regionConfig.Regions, region)
 		}
-		// regions is not currently stored anywhere.
-		_ = regions
-		return nil, false, unimplemented.New("create database with region", "implementation pending")
+	}
+	if err := validateDatabaseRegionConfig(regionConfig); err != nil {
+		return nil, false, err
 	}
 
-	desc := dbdesc.NewInitial(id, string(database.Name), p.SessionData().User())
+	desc := dbdesc.NewInitial(
+		id,
+		string(database.Name),
+		p.SessionData().User(),
+		dbdesc.NewInitialOptionDatabaseRegionConfig(regionConfig),
+	)
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}
@@ -228,6 +234,32 @@ func (p *planner) createDescriptorWithID(
 			descpb.InvalidMutationID); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// translateSurvivalGoal translates a tree.SurvivalGoal into a
+// descpb.SurvivalGoal.
+func translateSurvivalGoal(g tree.SurvivalGoal) (descpb.SurvivalGoal, error) {
+	switch g {
+	case tree.SurvivalGoalDefault:
+		return descpb.SurvivalGoal_ZONE_FAILURE, nil
+	case tree.SurvivalGoalZoneFailure:
+		return descpb.SurvivalGoal_ZONE_FAILURE, nil
+	case tree.SurvivalGoalRegionFailure:
+		return descpb.SurvivalGoal_REGION_FAILURE, nil
+	default:
+		return 0, errors.Newf("unknown survival goal: %d", g)
+	}
+}
+
+// validateDatabaseRegionConfig validates that a descpb.DatabaseRegionConfig is valid.
+func validateDatabaseRegionConfig(regionConfig descpb.DatabaseRegionConfig) error {
+	if regionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE && len(regionConfig.Regions) < 3 {
+		return pgerror.New(
+			pgcode.InvalidParameterValue,
+			"at least 3 regions are required for surviving a region failure",
+		)
 	}
 	return nil
 }
