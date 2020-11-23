@@ -334,13 +334,51 @@ message Transaction {
   // successful refresh or, if the refresh is unsuccessful, after a transaction
   // restart.
   util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false];
-  // Initial Timestamp + clock skew. Reads which encounter values with
-  // timestamps between timestamp and max_timestamp trigger a txn
-  // retry error, unless the node being read is listed in observed_timestamps
-  // (in which case no more read uncertainty can occur).
+  // The transaction's max timestamp is its initial timestamp + maximum
+  // cluster-wide clock skew. This value defines the upper bound of the
+  // transaction's uncertainty interval.
+  //
+  // Reads which encounter values with timestamps between read_timestamp and
+  // max_timestamp ("within the uncertainty interval") trigger a retry error
+  // (ReadWithinUncertaintyIntervalError). This forces the transaction to
+  // increase its read timestamp, either through a refresh or a retry, in order
+  // to ensure that the transaction observes the "uncertain" value.
+  //
+  // However, the effective max timestamp applied to values can be reduced when
+  // evaluating a request on a node from which the transaction has acquired an
+  // observed timestamp. This reduced max timestamp is reflected in the
+  // observed_max_timestamp field at the time of request evaluation.
+  //
+  // See pkg/kv/kvserver/observedts for more details.
+  //
   // The case max_timestamp < timestamp is possible for transactions which have
   // been pushed; in this case, max_timestamp should be ignored.
   util.hlc.Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
+  // The transaction's observed max timestamp is its max timestamp, reduce by
+  // any observed timestamp that the transaction has acquired from the node that
+  // holds the lease for the range that the transaction is evaluating on. As
+  // such, the field is only set on the server in the context of an evaluating
+  // request on a specific range.
+  //
+  // The observed_max_timestamp can reduce the uncertainty interval applied to
+  // most values on a range. This can lead to values that would otherwise be
+  // considered uncertain by the original max_timestamp to be considered
+  // "certainly concurrent" with the transaction due to observed timestamps.
+  //
+  // However, the observed_max_timestamp does not apply to all values on a
+  // range. Specifically, values with "synthetic timestamps" must use the
+  // transaction's original max_timestamp for the purposes of uncertainty,
+  // because observed timestamps do not apply to values with synthetic
+  // timestamps.
+  //
+  // See pkg/kv/kvserver/observedts for more details.
+  //
+  // The case observed_max_timestamp < timestamp is possible for transactions
+  // which have been pushed; in this case, observed_max_timestamp should be
+  // ignored.
+  //
+  // If observed_max_timestamp is set, observed_max_timestamp <= max_timestamp.
+  util.hlc.Timestamp observed_max_timestamp = 19 [(gogoproto.nullable) = false];
   // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
   // as observed from their local clock during this transaction. The purpose of
   // this list is to avoid uncertainty related restarts which normally occur

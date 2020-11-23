@@ -472,6 +472,7 @@ var nonZeroTxn = Transaction{
 	LastHeartbeat:        makeTSWithFlag(1, 2),
 	ReadTimestamp:        makeTSWithFlag(20, 22),
 	MaxTimestamp:         makeTSWithFlag(40, 41),
+	ObservedMaxTimestamp: makeTSWithFlag(30, 31),
 	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeTSWithFlag(1, 2)}},
 	WriteTooOld:          true,
 	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},

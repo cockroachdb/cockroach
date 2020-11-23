@@ -1144,8 +1144,9 @@ func (t *Transaction) Update(o *Transaction) {
 	// Forward each of the transaction timestamps.
 	t.WriteTimestamp.Forward(o.WriteTimestamp)
 	t.LastHeartbeat.Forward(o.LastHeartbeat)
-	t.MaxTimestamp.Forward(o.MaxTimestamp)
 	t.ReadTimestamp.Forward(o.ReadTimestamp)
+	t.MaxTimestamp.Forward(o.MaxTimestamp)
+	t.ObservedMaxTimestamp.Forward(o.ObservedMaxTimestamp)
 
 	// On update, set lower bound timestamps to the minimum seen by either txn.
 	// These shouldn't differ unless one of them is empty, but we're careful
@@ -1471,6 +1472,8 @@ func readWithinUncertaintyIntervalRetryTimestamp(
 	// If the reader encountered a newer write within the uncertainty
 	// interval, we advance the txn's timestamp just past the last observed
 	// timestamp from the node.
+	//
+	// TODO(nvanbenschoten): how is this supposed to work for follower reads?
 	ts, ok := txn.GetObservedTimestamp(origin)
 	if !ok {
 		log.Fatalf(ctx,

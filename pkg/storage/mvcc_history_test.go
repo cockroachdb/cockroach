@@ -37,7 +37,7 @@ import (
 //
 // The input files use the following DSL:
 //
-// txn_begin      t=<name> [ts=<int>[,<int>]] [maxTs=<int>[,<int>]]
+// txn_begin      t=<name> [ts=<int>[,<int>]] [maxTs=<int>[,<int>]] [obsMaxTs=<int>[,<int>]]
 // txn_remove     t=<name>
 // txn_restart    t=<name>
 // txn_update     t=<name> t2=<name>
@@ -410,11 +410,12 @@ func cmdTxnBegin(e *evalCtx) error {
 	e.scanArg("t", &txnName)
 	ts := e.getTs(nil)
 	maxTs := e.getTsWithName(nil, "maxTs")
+	obsMaxTs := e.getTsWithName(nil, "obsMaxTs")
 	key := roachpb.KeyMin
 	if e.hasArg("k") {
 		key = e.getKey()
 	}
-	txn, err := e.newTxn(txnName, ts, maxTs, key)
+	txn, err := e.newTxn(txnName, ts, maxTs, obsMaxTs, key)
 	e.results.txn = txn
 	return err
 }
@@ -943,7 +944,7 @@ func (e *evalCtx) getKeyRange() (sk, ek roachpb.Key) {
 }
 
 func (e *evalCtx) newTxn(
-	txnName string, ts, maxTs hlc.Timestamp, key roachpb.Key,
+	txnName string, ts, maxTs, obsMaxTs hlc.Timestamp, key roachpb.Key,
 ) (*roachpb.Transaction, error) {
 	if _, ok := e.txns[txnName]; ok {
 		e.Fatalf("txn %s already open", txnName)
@@ -955,10 +956,11 @@ func (e *evalCtx) newTxn(
 			WriteTimestamp: ts,
 			Sequence:       0,
 		},
-		Name:          txnName,
-		ReadTimestamp: ts,
-		MaxTimestamp:  maxTs,
-		Status:        roachpb.PENDING,
+		Name:                 txnName,
+		ReadTimestamp:        ts,
+		MaxTimestamp:         maxTs,
+		ObservedMaxTimestamp: obsMaxTs,
+		Status:               roachpb.PENDING,
 	}
 	e.txnCounter = e.txnCounter.Add(1)
 	e.txns[txnName] = txn

@@ -911,6 +911,8 @@ var _ transactionRestartError = &WriteTooOldError{}
 // NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
 // The read and existing timestamps as well as the txn are purely informational
 // and used for formatting the error message.
+// TODO(nvanbenschoten): what should these fields be after the introduction of
+// the observed max timestamp?
 func NewReadWithinUncertaintyIntervalError(
 	readTS, existingTS hlc.Timestamp, txn *Transaction,
 ) *ReadWithinUncertaintyIntervalError {
