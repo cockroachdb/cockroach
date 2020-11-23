@@ -9,11 +9,14 @@ go_library(
         "lint.go",
         "main.go",
         "test.go",
+        "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/dev",
     visibility = ["//visibility:private"],
     deps = [
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_spf13_cobra//:cobra",
     ],
 )
