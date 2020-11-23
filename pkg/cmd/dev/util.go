@@ -11,8 +11,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"os/exec"
 	"time"
+
+	"github.com/cockroachdb/redact"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
@@ -40,4 +44,33 @@ func mustGetFlagDuration(cmd *cobra.Command, name string) time.Duration {
 		log.Fatalf(context.Background(), "unexpected error: %v", err)
 	}
 	return val
+}
+
+func execute(ctx context.Context, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	log.Infof(ctx, "executing: %s", log.Safe(cmd.String()))
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	cmd.Stderr = cmd.Stdout
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		log.Infof(ctx, "-- %s\n", redact.Safe(line))
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if err := cmd.Wait(); err != nil {
+		return err
+	}
+
+	return nil
 }
