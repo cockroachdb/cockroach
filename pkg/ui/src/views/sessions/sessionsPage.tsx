@@ -30,7 +30,7 @@ import {createSelector} from "reselect";
 import {SessionsResponseMessage} from "src/util/api";
 import TerminateSessionModal, {TerminateSessionModalRef} from "src/views/sessions/terminateSessionModal";
 import TerminateQueryModal, {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
-import {showSessions} from "src/util/docs";
+import { sessionsTable } from "src/util/docs";
 import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/admin-ui-components";
 import emptyTableResultsIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
 import { Anchor } from "src/components";
@@ -169,8 +169,7 @@ export class SessionsPage extends React.Component<SessionsPageProps, SessionsPag
                 message="Sessions show you which statements and transactions are running for the active session."
                 footer={
                   <Anchor
-                    // TODO(jordan): point this to a more appropriate page.
-                    href={showSessions}
+                    href={sessionsTable}
                     target="_blank"
                   >
                     Learn more about sessions
