@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,7 +42,14 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	c.Put(ctx, cockroach, "./cockroach")
 
 	t.Status("restoring fixture")
-	c.Start(ctx, t)
+	// Randomize starting with encryption-at-rest enabled.
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	if rng.Intn(2) == 1 {
+		c.l.Printf("starting with encryption at rest enabled")
+		c.Start(ctx, t, startArgs("--encrypt"))
+	} else {
+		c.Start(ctx, t)
+	}
 
 	// NB: on a 10 node cluster, this should take well below 3h.
 	tBegin := timeutil.Now()
