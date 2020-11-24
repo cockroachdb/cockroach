@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -712,7 +713,10 @@ UPDATE system.jobs
 		}
 		timer := timeutil.NewTimer()
 		lastGC := timeutil.Now()
-		timer.Reset(gcInterval())
+		// We'll jitter the first cleanup run to avoid contention in case multiple
+		// nodes restart at once.
+		jitterFraction := rand.Float64() / 6
+		timer.Reset(time.Duration(float64(gcInterval()) * jitterFraction))
 		defer cancel()
 		for {
 			select {
