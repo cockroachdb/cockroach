@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -1899,37 +1898,18 @@ func (r *restoreResumer) restoreSystemTables(
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
-			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTableName)
-			// Don't clear the jobs table as to not delete the jobs that are performing
-			// the restore.
-			if systemTableName == systemschema.SettingsTable.Name {
-				// Don't delete the cluster version.
-				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE name <> 'version';", systemTableName)
-				_, err = executor.Exec(ctx, stmtDebugName+"-data-deletion", txn, deleteQuery)
-				if err != nil {
-					return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
-				}
-			} else if systemTableName != systemschema.JobsTable.Name {
-				// Don't clear the jobs table as to not delete the jobs that are
-				// performing the restore.
-				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTableName)
-				_, err = executor.Exec(ctx, stmtDebugName+"-data-deletion", txn, deleteQuery)
-				if err != nil {
-					return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
-				}
+			config, ok := systemTableBackupConfiguration[systemTableName]
+			if !ok {
+				log.Warningf(ctx, "no configuration specified for table %s... skipping restoration",
+					systemTableName)
 			}
 
-			restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s);", systemTableName,
-				restoreTempSystemDB, systemTableName)
-			if systemTableName == systemschema.SettingsTable.Name {
-				// Don't overwrite the cluster version.
-				restoreQuery = fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s WHERE name <> 'version');",
-					systemTableName, restoreTempSystemDB, systemTableName)
+			restoreFunc := defaultRestoreFunc
+			if config.customRestoreFunc != nil {
+				restoreFunc = config.customRestoreFunc
 			}
-			if _, err := executor.Exec(ctx, stmtDebugName+"-data-insert", txn, restoreQuery); err != nil {
-				return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
-			}
-			return nil
+
+			return restoreFunc(ctx, r.execCfg, txn, systemTableName, restoreTempSystemDB+"."+systemTableName)
 		}); err != nil {
 			return err
 		}
