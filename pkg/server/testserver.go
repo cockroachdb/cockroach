@@ -679,7 +679,7 @@ func StartTenant(
 				return
 			}
 		})
-		f := varsHandler{metricSource: args.recorder}.handleVars
+		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
 		_ = http.Serve(httpL, mux)
 	})
