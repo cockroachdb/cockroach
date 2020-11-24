@@ -180,6 +180,10 @@ var D5 = roachpb.Transaction{}.ObservedTimestamps
 // from. Similarly, observed timestamps can also assist a transaction even on
 // its first visit to a node in cases where it gets stuck waiting on locks for
 // long periods of time.
+//
+// TODO(nvanbenschoten): update this documentation to discuss the observed max
+// timestamp in place of the "effective max timestamp" once we start setting
+// that field instead of updating the max timestamp field.
 var D6 = LimitTxnMaxTimestamp
 
 // Ignore unused warnings.
