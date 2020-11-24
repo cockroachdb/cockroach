@@ -109,43 +109,7 @@ func (n mvccKeys) Len() int           { return len(n) }
 func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 
-// mvccGetGo is identical to MVCCGet except that it uses mvccGetInternal
-// instead of the C++ MVCCIterator.MVCCGet. It is used to test mvccGetInternal
-// which is used by mvccPutInternal to avoid Cgo crossings. Simply using the
-// C++ MVCCGet in mvccPutInternal causes a significant performance hit to
-// conditional put operations.
-func mvccGetGo(
-	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-) (*roachpb.Value, *roachpb.Intent, error) {
-	if len(key) == 0 {
-		return nil, nil, emptyKeyError()
-	}
-
-	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
-	defer iter.Close()
-
-	buf := newGetBuffer()
-	defer buf.release()
-
-	metaKey := MakeMVCCMetadataKey(key)
-	ok, _, _, err := mvccGetMetadata(iter, metaKey, &buf.meta)
-	if !ok || err != nil {
-		return nil, nil, err
-	}
-
-	value, intent, _, err := mvccGetInternal(ctx, iter, metaKey,
-		timestamp, !opts.Inconsistent, safeValue, opts.Txn, buf)
-	if !value.IsPresent() {
-		value = nil
-	}
-	if value == &buf.value {
-		value = &roachpb.Value{}
-		*value = buf.value
-		buf.value.Reset()
-	}
-	return value, intent, err
-}
-
+// TODO(nvanbenschoten): remove this.
 var mvccGetImpls = []struct {
 	name string
 	fn   func(
@@ -157,7 +121,6 @@ var mvccGetImpls = []struct {
 	) (*roachpb.Value, *roachpb.Intent, error)
 }{
 	{"cpp", MVCCGet},
-	{"go", mvccGetGo},
 }
 
 func TestMVCCStatsAddSubForward(t *testing.T) {
