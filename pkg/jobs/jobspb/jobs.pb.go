@@ -3,26 +3,28 @@
 
 package jobspb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import errorspb "github.com/cockroachdb/errors/errorspb"
-import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-import descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	fmt "fmt"
+	math "math"
 
-import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
-import github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-import github_com_cockroachdb_cockroach_pkg_sql_sem_tree "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-import github_com_cockroachdb_cockroach_pkg_security "github.com/cockroachdb/cockroach/pkg/security"
-
-import bytes "bytes"
-
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-import encoding_binary "encoding/binary"
-
-import io "io"
+	bytes "bytes"
+	encoding_binary "encoding/binary"
+	fmt "fmt"
+	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	github_com_cockroachdb_cockroach_pkg_security "github.com/cockroachdb/cockroach/pkg/security"
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	github_com_cockroachdb_cockroach_pkg_sql_sem_tree "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+	errorspb "github.com/cockroachdb/errors/errorspb"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+	io "io"
+	math "math"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -274,7 +276,9 @@ func (*BackupEncryptionOptions_KMSInfo) Descriptor() ([]byte, []int) {
 func (m *BackupEncryptionOptions_KMSInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *BackupEncryptionOptions_KMSInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *BackupEncryptionOptions_KMSInfo) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -500,7 +504,9 @@ func (*RestoreDetails_DescriptorRewrite) Descriptor() ([]byte, []int) {
 func (m *RestoreDetails_DescriptorRewrite) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *RestoreDetails_DescriptorRewrite) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RestoreDetails_DescriptorRewrite) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -533,7 +539,9 @@ func (*RestoreDetails_BackupLocalityInfo) Descriptor() ([]byte, []int) {
 func (m *RestoreDetails_BackupLocalityInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *RestoreDetails_BackupLocalityInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RestoreDetails_BackupLocalityInfo) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -935,7 +943,9 @@ func (*SchemaChangeGCDetails_DroppedIndex) Descriptor() ([]byte, []int) {
 func (m *SchemaChangeGCDetails_DroppedIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SchemaChangeGCDetails_DroppedIndex) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SchemaChangeGCDetails_DroppedIndex) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -969,7 +979,9 @@ func (*SchemaChangeGCDetails_DroppedID) Descriptor() ([]byte, []int) {
 func (m *SchemaChangeGCDetails_DroppedID) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SchemaChangeGCDetails_DroppedID) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SchemaChangeGCDetails_DroppedID) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -1135,7 +1147,9 @@ func (*SchemaChangeGCProgress_IndexProgress) Descriptor() ([]byte, []int) {
 func (m *SchemaChangeGCProgress_IndexProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SchemaChangeGCProgress_IndexProgress) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SchemaChangeGCProgress_IndexProgress) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -1169,7 +1183,9 @@ func (*SchemaChangeGCProgress_TableProgress) Descriptor() ([]byte, []int) {
 func (m *SchemaChangeGCProgress_TableProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SchemaChangeGCProgress_TableProgress) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SchemaChangeGCProgress_TableProgress) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -1641,7 +1657,12 @@ func (m *Payload) GetTypeSchemaChange() *TypeSchemaChangeDetails {
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*Payload) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+func (*Payload) XXX_OneofFuncs() (
+	func(msg proto.Message, b *proto.Buffer) error,
+	func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error),
+	func(msg proto.Message) (n int),
+	[]interface{},
+) {
 	return _Payload_OneofMarshaler, _Payload_OneofUnmarshaler, _Payload_OneofSizer, []interface{}{
 		(*Payload_Backup)(nil),
 		(*Payload_Restore)(nil),
@@ -2013,7 +2034,12 @@ func (m *Progress) GetTypeSchemaChange() *TypeSchemaChangeProgress {
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*Progress) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+func (*Progress) XXX_OneofFuncs() (
+	func(msg proto.Message, b *proto.Buffer) error,
+	func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error),
+	func(msg proto.Message) (n int),
+	[]interface{},
+) {
 	return _Progress_OneofMarshaler, _Progress_OneofUnmarshaler, _Progress_OneofSizer, []interface{}{
 		(*Progress_FractionCompleted)(nil),
 		(*Progress_HighWater)(nil),

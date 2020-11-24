@@ -6,9 +6,15 @@ import (
 )
 
 type Op interface {
+	op()
 }
 
+type baseOp struct{}
+
+func (baseOp) op() {}
+
 type AddIndexDescriptor struct {
+	baseOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
 
@@ -21,23 +27,27 @@ type AddIndexDescriptor struct {
 }
 
 type IndexDescriptorStateChange struct {
+	baseOp
 	TableID   descpb.ID
 	IndexID   descpb.IndexID
 	NextState targets.State
 }
 
 type IndexBackfill struct {
+	baseOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
 
 type UniqueIndexValidation struct {
+	baseOp
 	TableID        descpb.ID
-	PrimaryIndexID descpb.ID
+	PrimaryIndexID descpb.IndexID
 	IndexID        descpb.IndexID
 }
 
 type AddColumnDescriptor struct {
+	baseOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 
@@ -45,12 +55,14 @@ type AddColumnDescriptor struct {
 }
 
 type ColumnDescriptorStateChange struct {
+	baseOp
 	TableID   descpb.ID
 	ColumnID  descpb.ColumnID
 	NextState targets.State
 }
 
 type AddCheckConstraint struct {
+	baseOp
 	TableID   descpb.ID
 	Name      string
 	Expr      string
@@ -58,11 +70,13 @@ type AddCheckConstraint struct {
 }
 
 type ValidateCheckConstraint struct {
+	baseOp
 	TableID descpb.ID
 	Name    string
 }
 
 type CheckConstraintStateChange struct {
+	baseOp
 	TableID descpb.ID
 	Name    string
 
