@@ -28,6 +28,13 @@ type alterSequenceNode struct {
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.
 func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER SEQUENCE",
+	); err != nil {
+		return nil, err
+	}
+
 	seqDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Name, !n.IfExists, tree.ResolveRequireSequenceDesc,
 	)

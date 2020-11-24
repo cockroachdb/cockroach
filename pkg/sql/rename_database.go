@@ -43,6 +43,13 @@ type renameDatabaseNode struct {
 // Privileges: superuser + DROP or ownership + CREATEDB privileges
 //   Notes: mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
 	}

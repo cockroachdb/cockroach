@@ -41,6 +41,13 @@ type reparentDatabaseNode struct {
 func (p *planner) ReparentDatabase(
 	ctx context.Context, n *tree.ReparentDatabase,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"REPARENT DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
 	// We'll only allow the admin to perform this reparenting action.
 	if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... CONVERT TO SCHEMA"); err != nil {
 		return nil, err

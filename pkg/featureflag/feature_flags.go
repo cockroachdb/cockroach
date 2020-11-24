@@ -25,7 +25,7 @@ const FeatureFlagEnabledDefault = true
 func CheckEnabled(s *settings.BoolSetting, sv *settings.Values, featureName string) error {
 	if enabled := s.Get(sv); !enabled {
 		return pgerror.Newf(pgcode.OperatorIntervention,
-			"%s feature was disabled by the database administrator",
+			"feature %s was disabled by the database administrator",
 			featureName)
 	}
 	return nil

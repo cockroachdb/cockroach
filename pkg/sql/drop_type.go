@@ -36,6 +36,13 @@ type dropTypeNode struct {
 var _ planNode = &dropTypeNode{n: nil}
 
 func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"DROP TYPE",
+	); err != nil {
+		return nil, err
+	}
+
 	node := &dropTypeNode{
 		n:  n,
 		td: make(map[descpb.ID]*typedesc.Mutable),

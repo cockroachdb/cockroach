@@ -153,6 +153,7 @@ go_library(
         "scan.go",
         "scatter.go",
         "schema.go",
+        "schema_change_cluster_setting.go",
         "schema_changer.go",
         "schema_changer_metrics.go",
         "scrub.go",
