@@ -21,7 +21,7 @@ import (
 
 // Configuration information for enabling/disabling separated intents. Eventually, these
 // will not be constants defined in this file, and will be externally configurable.
-// For now, our goal is make all tests pass with disallowSeparatedIntents=true.
+// For now, our goal is make all tests pass with DisallowSeparatedIntents=true.
 //
 // TODO(sumeer): once all integration changes are complete, ensure all tests pass
 // with (disallow=false, enabled=false), (disallow=false, enabled=true) and with
@@ -41,7 +41,10 @@ import (
 // force all remaining interleaved intents to be rewritten (these may
 // potentially be of committed transactions whose intent resolution did not
 // happen yet).
-const disallowSeparatedIntents = true
+
+// DisallowSeparatedIntents is true when separated intents have never been allowed.
+const DisallowSeparatedIntents = true
+
 const enabledSeparatedIntents = false
 
 // This file defines wrappers for Reader and Writer, and functions to do the
@@ -55,7 +58,7 @@ type intentDemuxWriter struct {
 }
 
 func tryWrapIntentWriter(w Writer) (idw intentDemuxWriter, wrapped bool) {
-	if disallowSeparatedIntents {
+	if DisallowSeparatedIntents {
 		return intentDemuxWriter{}, false
 	}
 	return intentDemuxWriter{w: w, enabledSeparatedIntents: enabledSeparatedIntents}, true
@@ -173,7 +176,7 @@ type wrappableReader interface {
 }
 
 func tryWrapReader(r wrappableReader, iterKind MVCCIterKind) (reader Reader, wrapped bool) {
-	if disallowSeparatedIntents || iterKind == MVCCKeyIterKind {
+	if DisallowSeparatedIntents || iterKind == MVCCKeyIterKind {
 		return r, false
 	}
 	return intentInterleavingReader{wrappableReader: r}, true

@@ -3082,6 +3082,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			inSnap.State.Desc.RangeID != roachpb.RangeID(2) {
 			return nil
 		}
+		// TODO(sumeer): fix this test (and others in this file) when
+		// DisallowSeparatedIntents=false
+
 		// The seven SSTs we are expecting to ingest are in the following order:
 		// 1. Replicated range-id local keys of the range in the snapshot.
 		// 2. Range-local keys of the range in the snapshot.
@@ -3134,7 +3137,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if !valid || r.End.Key.Compare(it.Key().Key) <= 0 {
+				if !valid || r.End.Key.Compare(it.UnsafeKey().Key) <= 0 {
 					if err := sst.Finish(); err != nil {
 						return err
 					}
@@ -3142,7 +3145,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					expectedSSTs = append(expectedSSTs, sstFile.Data())
 					break
 				}
-				if err := sst.PutEngineKey(it.Key(), it.Value()); err != nil {
+				if err := sst.PutEngineKey(it.UnsafeKey(), it.Value()); err != nil {
 					return err
 				}
 			}

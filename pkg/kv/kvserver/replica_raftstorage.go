@@ -1038,14 +1038,11 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	subsumedRepls []*Replica,
 	subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
-	getKeyRanges := func(desc *roachpb.RangeDescriptor) [2]rditer.KeyRange {
-		return [...]rditer.KeyRange{
-			rditer.MakeRangeLocalKeyRange(desc),
-			rditer.MakeUserKeyRange(desc),
-		}
-	}
+	// NB: we don't clear RangeID local key ranges here. That happens
+	// via the call to preDestroyRaftMuLocked.
+	getKeyRanges := rditer.MakeReplicatedKeyRangesExceptRangeID
 	keyRanges := getKeyRanges(desc)
-	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)
+	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges...)
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch

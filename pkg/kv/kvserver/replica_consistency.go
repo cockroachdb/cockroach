@@ -628,13 +628,13 @@ func (r *Replica) sha512(
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
 	// all of the replicated key space.
 	if !statsOnly {
-		// TODO(sumeer): remember that this caller of MakeReplicatedKeyRanges does
-		// not want the lock table ranges since the iter has been constructed using
-		// MVCCKeyAndIntentsIterKind. By the time we have replicated locks
-		// other than exclusive locks, we will probably not have any interleaved
-		// intents so we could stop using MVCCKeyAndIntentsIterKind and
-		// consider all locks here.
-		for _, span := range rditer.MakeReplicatedKeyRanges(&desc) {
+		// Do not want the lock table ranges since the iter has been constructed
+		// using MVCCKeyAndIntentsIterKind.
+		//
+		// TODO(sumeer): When we have replicated locks other than exclusive locks,
+		// we will probably not have any interleaved intents so we could stop
+		// using MVCCKeyAndIntentsIterKind and consider all locks here.
+		for _, span := range rditer.MakeReplicatedKeyRangesExceptLockTable(&desc) {
 			spanMS, err := storage.ComputeStatsForRange(
 				iter, span.Start.Key, span.End.Key, 0 /* nowNanos */, visitor,
 			)

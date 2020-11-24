@@ -33,11 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO(sumeer):
-// - randomized test with random intents that are interleaved and
-//   compare with no interleaved intents without using intentInterleavingIter.
-// - microbenchmarks to compare with non-interleaved intents.
-
 func scanRoachKey(t *testing.T, td *datadriven.TestData, field string) roachpb.Key {
 	var k string
 	td.ScanArgs(t, field, &k)
