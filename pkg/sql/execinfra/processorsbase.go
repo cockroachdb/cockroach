@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -343,7 +344,7 @@ func (h *ProcOutputHelper) consumerClosed() {
 // Stats returns output statistics.
 func (h *ProcOutputHelper) Stats() execinfrapb.OutputStats {
 	return execinfrapb.OutputStats{
-		NumTuples: execinfrapb.MakeIntValue(h.rowIdx),
+		NumTuples: optional.MakeUint(h.rowIdx),
 	}
 }
 

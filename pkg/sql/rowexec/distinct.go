@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -352,7 +353,7 @@ func (d *distinct) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem: execinfrapb.MakeIntValue(uint64(d.MemMonitor.MaximumBytes())),
+			MaxAllocatedMem: optional.MakeUint(uint64(d.MemMonitor.MaximumBytes())),
 		},
 		Output: d.Out.Stats(),
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -846,8 +847,8 @@ func (w *windower) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(w.MemMonitor.MaximumBytes())),
-			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(w.diskMonitor.MaximumBytes())),
+			MaxAllocatedMem:  optional.MakeUint(uint64(w.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: optional.MakeUint(uint64(w.diskMonitor.MaximumBytes())),
 		},
 		Output: w.Out.Stats(),
 	}

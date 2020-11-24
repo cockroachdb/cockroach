@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -134,8 +135,8 @@ func (s *sorterBase) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(s.MemMonitor.MaximumBytes())),
-			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(s.diskMonitor.MaximumBytes())),
+			MaxAllocatedMem:  optional.MakeUint(uint64(s.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: optional.MakeUint(uint64(s.diskMonitor.MaximumBytes())),
 		},
 		Output: s.Out.Stats(),
 	}

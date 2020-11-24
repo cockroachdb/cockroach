@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -567,8 +568,8 @@ func (h *hashJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{lis, ris},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(h.MemMonitor.MaximumBytes())),
-			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(h.diskMonitor.MaximumBytes())),
+			MaxAllocatedMem:  optional.MakeUint(uint64(h.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: optional.MakeUint(uint64(h.diskMonitor.MaximumBytes())),
 		},
 		Output: h.Out.Stats(),
 	}
