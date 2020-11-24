@@ -488,6 +488,7 @@ func descriptorsMatchingTargets(
 // a descriptor the the ID by which it was previously known (e.g pre-TRUNCATE).
 func getRelevantDescChanges(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	db *kv.DB,
 	startTime, endTime hlc.Timestamp,
 	descs []catalog.Descriptor,
@@ -496,7 +497,7 @@ func getRelevantDescChanges(
 	descriptorCoverage tree.DescriptorCoverage,
 ) ([]BackupManifest_DescriptorRevision, error) {
 
-	allChanges, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
+	allChanges, err := getAllDescChanges(ctx, codec, db, startTime, endTime, priorIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +539,7 @@ func getRelevantDescChanges(
 	}
 
 	if !startTime.IsEmpty() {
-		starting, err := loadAllDescs(ctx, db, startTime)
+		starting, err := loadAllDescs(ctx, codec, db, startTime)
 		if err != nil {
 			return nil, err
 		}
@@ -611,11 +612,12 @@ func getRelevantDescChanges(
 // nil content).
 func getAllDescChanges(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	db *kv.DB,
 	startTime, endTime hlc.Timestamp,
 	priorIDs map[descpb.ID]descpb.ID,
 ) ([]BackupManifest_DescriptorRevision, error) {
-	startKey := keys.TODOSQLCodec.TablePrefix(keys.DescriptorTableID)
+	startKey := codec.TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
 
 	allRevs, err := storageccl.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
@@ -692,14 +694,14 @@ func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
 }
 
 func loadAllDescs(
-	ctx context.Context, db *kv.DB, asOf hlc.Timestamp,
+	ctx context.Context, codec keys.SQLCodec, db *kv.DB, asOf hlc.Timestamp,
 ) ([]catalog.Descriptor, error) {
 	var allDescs []catalog.Descriptor
 	if err := db.Txn(
 		ctx,
 		func(ctx context.Context, txn *kv.Txn) (err error) {
 			txn.SetFixedTimestamp(ctx, asOf)
-			allDescs, err = catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec, true /* validate */)
+			allDescs, err = catalogkv.GetAllDescriptors(ctx, txn, codec, true /* validate */)
 			return err
 		}); err != nil {
 		return nil, err
@@ -712,7 +714,7 @@ func loadAllDescs(
 func ResolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.TargetList,
 ) ([]catalog.Descriptor, []descpb.ID, error) {
-	allDescs, err := loadAllDescs(ctx, p.ExecCfg().DB, endTime)
+	allDescs, err := loadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
 	if err != nil {
 		return nil, nil, err
 	}
