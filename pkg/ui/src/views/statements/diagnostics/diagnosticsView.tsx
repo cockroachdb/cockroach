@@ -13,7 +13,6 @@ import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 import moment from "moment";
 import Long from "long";
-import emptyTracingBackground from "assets/statementsPage/emptyTracingBackground.svg";
 import classnames from "classnames/bind";
 
 import {
@@ -24,6 +23,7 @@ import {
   ColumnsConfig,
   DownloadFile,
   DownloadFileRef,
+  Anchor,
 } from "src/components";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
@@ -36,7 +36,8 @@ import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { trustIcon } from "src/util/trust";
 
 import { DiagnosticStatusBadge } from "./diagnosticStatusBadge";
-import DownloadIcon from "!!raw-loader!assets/download.svg";
+import DownloadIcon from "!!url-loader!assets/download.svg";
+import EmptyListIcon from "!!url-loader!assets/emptyState/empty-list-results.svg";
 import styles from "./diagnosticsView.module.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -45,7 +46,7 @@ import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } fr
 import { statementDiagnostics } from "src/util/docs";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { trackActivateDiagnostics, trackDownloadDiagnosticsBundle } from "src/util/analytics";
-import { Empty } from "src/components/empty";
+import { EmptyTable } from "@cockroachlabs/admin-ui-components";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
@@ -141,7 +142,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
   }
 
   render() {
-    const { hasData, diagnosticsReports } = this.props;
+    const { diagnosticsReports } = this.props;
 
     const canRequestDiagnostics = diagnosticsReports.every(diagnostic => diagnostic.completed);
 
@@ -150,13 +151,6 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
       key: idx,
     }));
 
-    if (!hasData) {
-      return (
-        <SummaryCard className={cx("summary--card__empty-state")}>
-          <EmptyDiagnosticsView {...this.props} />
-        </SummaryCard>
-      );
-    }
     return (
       <SummaryCard>
         <div
@@ -181,6 +175,26 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
           }
         </div>
         <Table
+          noDataMessage={
+            <EmptyTable
+              title="Activate Statement Diagnostics"
+              icon={EmptyListIcon}
+              message={
+                <>
+                  <span>{"When you activate statement diagnostics, CockroachDB will wait for the next query that" +
+                  " matches this statement fingerprint. A download button will appear on the statement list and" +
+                  " detail pages when the query is ready. The statement diagnostic will include EXPLAIN plans, table" +
+                  " statistics, and traces. "}</span>
+                  <Anchor href={statementDiagnostics} target="_blank">
+                    Learn More
+                  </Anchor>
+                </>
+              }
+              footer={
+                <Button onClick={this.onActivateButtonClick}>Activate Diagnostics</Button>
+              }
+            />
+          }
           dataSource={dataSource}
           columns={this.columns}
         />
@@ -192,27 +206,6 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     );
   }
 }
-
-export const EmptyDiagnosticsView = ({ activate, statementFingerprint }: DiagnosticsViewProps) => {
-  const onActivateButtonClick = () => {
-    activate(statementFingerprint);
-    trackActivateDiagnostics(statementFingerprint);
-  };
-  return (
-    <Empty
-      title="Activate statement diagnostics"
-      description="When you activate statement diagnostics, CockroachDB will wait for the next query that matches
-      this statement fingerprint. A download button will appear on the statement list and detail pages
-      when the query is ready. The statement diagnostic will include EXPLAIN plans,
-      table statistics, and traces."
-      anchor="Learn More"
-      link={statementDiagnostics}
-      label="Activate"
-      onClick={onActivateButtonClick}
-      backgroundImage={emptyTracingBackground}
-    />
-  );
-};
 
 interface MapStateToProps {
   hasData: boolean;

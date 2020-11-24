@@ -21,7 +21,6 @@ import { trackTableSort } from "src/util/analytics";
 import styles from "./sortabletable.module.styl";
 import { Spin, Icon } from "antd";
 import SpinIcon from "src/components/icon/spin";
-import { Empty, EmptyProps } from "src/components/empty";
 
 const cx = classNames.bind(styles);
 /**
@@ -82,9 +81,6 @@ interface TableProps {
   renderNoResult?: React.ReactNode;
   loading?: boolean;
   loadingLabel?: string;
-  // empty state for table
-  empty?: boolean;
-  emptyProps?: EmptyProps;
 }
 
 export interface ExpandableConfig {
@@ -256,11 +252,8 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, className, loading, loadingLabel, empty, emptyProps } = this.props;
+    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, className, loading, loadingLabel } = this.props;
     const { visible, drawerData } = this.state;
-    if (empty) {
-      return <Empty {...emptyProps}/>;
-    }
     return (
       <div className={cx("cl-table-wrapper")}>
         <table className={cx("sort-table", className)}>
