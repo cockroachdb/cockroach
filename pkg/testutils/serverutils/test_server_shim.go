@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // TestServerInterface defines test server functionality that tests need; it is
@@ -100,6 +101,9 @@ type TestServerInterface interface {
 	// The real return type is *kv.DistSender.
 	DistSenderI() interface{}
 
+	// MigrationServer returns the internal *migrationServer as in interface{}
+	MigrationServer() interface{}
+
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}
 
@@ -112,8 +116,8 @@ type TestServerInterface interface {
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
 
-	// MigrationManager returns the *jobs.Registry as an interface{}.
-	MigrationManager() interface{}
+	// SQLMigrationsManager returns the *sqlmigrations.Manager as an interface{}.
+	SQLMigrationsManager() interface{}
 
 	// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
 	// interface{}.
@@ -222,7 +226,7 @@ type TestServerInterface interface {
 // service.
 type TestServerFactory interface {
 	// New instantiates a test server.
-	New(params base.TestServerArgs) interface{}
+	New(params base.TestServerArgs) (interface{}, error)
 }
 
 var srvFactoryImpl TestServerFactory
@@ -240,7 +244,10 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
-	server := NewServer(params)
+	server, err := NewServer(params)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
 	if err := server.Start(); err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -249,28 +256,36 @@ func StartServer(
 }
 
 // NewServer creates a test server.
-func NewServer(params base.TestServerArgs) TestServerInterface {
+func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	if srvFactoryImpl == nil {
-		panic("TestServerFactory not initialized. One needs to be injected " +
+		return nil, errors.AssertionFailedf("TestServerFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")
 	}
 
-	return srvFactoryImpl.New(params).(TestServerInterface)
+	srv, err := srvFactoryImpl.New(params)
+	if err != nil {
+		return nil, err
+	}
+	return srv.(TestServerInterface), nil
 }
 
-// OpenDBConn sets up a gosql DB connection to the given server.
-func OpenDBConn(
-	t testing.TB, server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
-) *gosql.DB {
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, server.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+// OpenDBConnE is like OpenDBConn, but returns an error.
+func OpenDBConnE(
+	server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
+) (*gosql.DB, error) {
+	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+		server.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+	if err != nil {
+		return nil, err
+	}
+
 	pgURL.Path = params.UseDatabase
 	if params.Insecure {
 		pgURL.RawQuery = "sslmode=disable"
 	}
 	goDB, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	stopper.AddCloser(
@@ -278,14 +293,28 @@ func OpenDBConn(
 			_ = goDB.Close()
 			cleanupGoDB()
 		}))
-	return goDB
+	return goDB, nil
+}
+
+// OpenDBConn sets up a gosql DB connection to the given server.
+func OpenDBConn(
+	t testing.TB, server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
+) *gosql.DB {
+	conn, err := OpenDBConnE(server, params, stopper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return conn
 }
 
 // StartServerRaw creates and starts a TestServer.
 // Generally StartServer() should be used. However this function can be used
 // directly when opening a connection to the server is not desired.
 func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
-	server := NewServer(args)
+	server, err := NewServer(args)
+	if err != nil {
+		return nil, err
+	}
 	if err := server.Start(); err != nil {
 		return nil, err
 	}
@@ -308,7 +337,11 @@ func StartTenant(t testing.TB, ts TestServerInterface, params base.TestTenantArg
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts.Stopper().AddCloser(stop.CloserFn(func() {
+	stopper := params.Stopper
+	if stopper == nil {
+		stopper = ts.Stopper()
+	}
+	stopper.AddCloser(stop.CloserFn(func() {
 		cleanupGoDB()
 	}))
 	return db

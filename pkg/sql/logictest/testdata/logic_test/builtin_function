@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant(49854)
+# LogicTest: !3node-tenant(49854) !fakedist-spec-planning
 # TODO(asubiotto): Possibly split out the test that attempts to set a zone
 # config in order to run the other ones.
 
@@ -408,9 +408,19 @@ SELECT sha1('abc')
 a9993e364706816aba3e25717850c26c9cd0d89d
 
 query T
+SELECT sha224('abc')
+----
+23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7
+
+query T
 SELECT sha256('abc')
 ----
 ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+
+query T
+SELECT sha384('abc')
+----
+cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7
 
 query IIII
 SELECT fnv32('abc'), fnv32a('abc'), fnv64('abc'), fnv64a('abc')
@@ -444,7 +454,17 @@ SELECT sha1(NULL::STRING)
 NULL
 
 query T
+SELECT sha224(NULL::STRING)
+----
+NULL
+
+query T
 SELECT sha256(NULL::STRING)
+----
+NULL
+
+query T
+SELECT sha384(NULL::STRING)
 ----
 NULL
 
@@ -2193,17 +2213,21 @@ CREATE TABLE test.pg_constraintdef_test (
   d string,
   UNIQUE INDEX (a) WHERE d = 'foo',
   FOREIGN KEY(a) REFERENCES test.pg_indexdef_test(a) ON DELETE CASCADE
-)
+);
+ALTER TABLE test.pg_constraintdef_test ADD CONSTRAINT c CHECK (c > 0) NOT VALID;
+ALTER TABLE test.pg_constraintdef_test ADD CONSTRAINT fk FOREIGN KEY (c) REFERENCES test.pg_indexdef_test(a) NOT VALID;
 
 query T rowsort
 SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
+FOREIGN KEY (c) REFERENCES pg_indexdef_test(a) NOT VALID
+CHECK ((c > a))
+CHECK ((c > 0)) NOT VALID
 UNIQUE (b ASC)
 UNIQUE (a ASC) WHERE (d = 'foo'::STRING)
 FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
-CHECK ((c > a))
 
 # These functions always return NULL since we don't support comments on vtable columns and databases.
 query TT

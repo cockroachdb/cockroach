@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 const (
@@ -95,6 +95,7 @@ func newUnloadedReplica(
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
 	r.mu.proposalBuf.Init((*replicaProposer)(r))
+	r.mu.proposalBuf.testing.allowLeaseProposalWhenNotLeader = store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader
 
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
@@ -204,10 +205,10 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	return nil
 }
 
-// IsInitialized is true if we know the metadata of this range, either
-// because we created it or we have received an initial snapshot from
-// another node. It is false when a range has been created in response
-// to an incoming message but we are waiting for our initial snapshot.
+// IsInitialized is true if we know the metadata of this replica's range, either
+// because we created it or we have received an initial snapshot from another
+// node. It is false when a replica has been created in response to an incoming
+// message but we are waiting for our initial snapshot.
 func (r *Replica) IsInitialized() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

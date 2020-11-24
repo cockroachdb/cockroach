@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -56,7 +57,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 const (
@@ -483,11 +484,6 @@ type Replica struct {
 		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
 
-		// draining specifies whether this replica is draining. Raft leadership
-		// transfers due to a lease change will be attempted even if the target does
-		// not have all the log entries.
-		draining bool
-
 		// cachedProtectedTS provides the state of the protected timestamp
 		// subsystem as used on the request serving path to determine the effective
 		// gc threshold given the current TTL when using strict GC enforcement.
@@ -723,7 +719,7 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 
 // NodeID returns the ID of the node this replica belongs to.
 func (r *Replica) NodeID() roachpb.NodeID {
-	return r.store.nodeDesc.NodeID
+	return r.store.NodeID()
 }
 
 // GetNodeLocality returns the locality of the node this replica belongs to.
@@ -1577,22 +1573,22 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 	return err
 }
 
-func (r *Replica) maybeTransferRaftLeadership(ctx context.Context) {
+func (r *Replica) maybeTransferRaftLeadershipToLeaseholder(ctx context.Context) {
 	r.mu.Lock()
-	r.maybeTransferRaftLeadershipLocked(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
 	r.mu.Unlock()
 }
 
-// maybeTransferRaftLeadershipLocked attempts to transfer the leadership away
-// from this node to the leaseholder, if this node is the current raft leader
-// but not the leaseholder. We don't attempt to transfer leadership if the
-// leaseholder is behind on applying the log.
+// maybeTransferRaftLeadershipToLeaseholderLocked attempts to transfer the
+// leadership away from this node to the leaseholder, if this node is the
+// current raft leader but not the leaseholder. We don't attempt to transfer
+// leadership if the leaseholder is behind on applying the log.
 //
 // We like it when leases and raft leadership are collocated because that
 // facilitates quick command application (requests generally need to make it to
 // both the lease holder and the raft leader before being applied by other
 // replicas).
-func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
+func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(ctx context.Context) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
@@ -1606,7 +1602,7 @@ func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
 	}
 	lhReplicaID := uint64(lease.Replica.ReplicaID)
 	lhProgress, ok := raftStatus.Progress[lhReplicaID]
-	if (ok && lhProgress.Match >= raftStatus.Commit) || r.mu.draining {
+	if (ok && lhProgress.Match >= raftStatus.Commit) || r.store.IsDraining() {
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)
 		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
 		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
@@ -1692,7 +1688,7 @@ func (r *Replica) GetExternalStorage(
 
 // GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
 func (r *Replica) GetExternalStorageFromURI(
-	ctx context.Context, uri string, user string,
+	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
 	return r.store.cfg.ExternalStorageFromURI(ctx, uri, user)
 }

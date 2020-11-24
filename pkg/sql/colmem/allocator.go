@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -24,6 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
+
+// TODO(yuzefovich): audit all Operators to make sure that all static
+// (internal) memory is accounted for.
 
 // Allocator is a memory management tool for vectorized components. It provides
 // new batches (and appends to existing ones) within a fixed memory budget. If
@@ -41,8 +45,13 @@ func selVectorSize(capacity int) int64 {
 }
 
 func getVecMemoryFootprint(vec coldata.Vec) int64 {
-	if vec.CanonicalTypeFamily() == types.BytesFamily {
+	switch vec.CanonicalTypeFamily() {
+	case types.BytesFamily:
 		return int64(vec.Bytes().Size())
+	case types.DecimalFamily:
+		return int64(sizeOfDecimals(vec.Decimal()))
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return int64(vec.Datum().Size())
 	}
 	return int64(EstimateBatchSizeBytes([]*types.T{vec.Type()}, vec.Capacity()))
 }
@@ -322,7 +331,17 @@ const (
 	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
 	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
 	sizeOfDatum    = int(unsafe.Sizeof(tree.Datum(nil)))
+	sizeOfDecimal  = unsafe.Sizeof(apd.Decimal{})
 )
+
+func sizeOfDecimals(decimals coldata.Decimals) uintptr {
+	var size uintptr
+	for _, d := range decimals {
+		size += tree.SizeOfDecimal(d)
+	}
+	size += uintptr(cap(decimals)-len(decimals)) * sizeOfDecimal
+	return size
+}
 
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
 // coldata.BatchSize() length.
@@ -377,7 +396,10 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			// In datum vec we need to account for memory underlying the struct
 			// that is the implementation of tree.Datum interface (for example,
 			// tree.DBoolFalse) as well as for the overhead of storing that
-			// implementation in the slice of tree.Datums.
+			// implementation in the slice of tree.Datums. Note that if t is of
+			// variable size, the memory will be properly accounted in
+			// getVecMemoryFootprint.
+			// Note: keep the calculation here in line with datumVec.Size.
 			implementationSize, _ := tree.DatumTypeSize(t)
 			acc += int(implementationSize) + sizeOfDatum
 		default:

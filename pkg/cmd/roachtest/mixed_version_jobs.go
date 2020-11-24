@@ -104,15 +104,10 @@ func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgrade
 	}
 }
 
-func backgroundTPCCWorkload(t *test, warehouses int, tpccDB string) backgroundStepper {
+func backgroundTPCCWorkload(t *test, warehouses int) backgroundStepper {
 	return makeBackgroundStepper(func(ctx context.Context, u *versionUpgradeTest) error {
-		cmd := []string{
-			"./workload fixtures load tpcc",
-			fmt.Sprintf("--warehouses=%d", warehouses),
-			fmt.Sprintf("--db=%s", tpccDB),
-		}
 		// The workload has to run on one of the nodes of the cluster.
-		err := u.c.RunE(ctx, u.c.Node(1), cmd...)
+		err := u.c.RunE(ctx, u.c.Node(1), tpccImportCmd(warehouses))
 		if ctx.Err() != nil {
 			// If the context is canceled, that's probably why the workload returned
 			// so swallow error. (This is how the harness tells us to shut down the
@@ -181,8 +176,11 @@ func checkForFailedJobsStep(ctx context.Context, t *test, u *versionUpgradeTest)
 	t.l.Printf("Checking for failed jobs.")
 
 	db := u.conn(ctx, t, 1)
+	// The ifnull is because the move to session-based job claims in 20.2 has left
+	// us without a populated coordinator_id in crdb_internal.jobs. We may start
+	// populating it with the claim_instance_id.
 	rows, err := db.Query(`
-SELECT job_id, job_type, description, status, error, coordinator_id
+SELECT job_id, job_type, description, status, error, ifnull(coordinator_id, 0)
 FROM [SHOW JOBS] WHERE status = $1 OR status = $2`,
 		jobs.StatusFailed, jobs.StatusReverting,
 	)
@@ -220,7 +218,7 @@ func runJobsMixedVersions(
 	// `cockroach` will be used.
 	const mainVersion = ""
 	roachNodes := c.All()
-	backgroundTPCC := backgroundTPCCWorkload(t, warehouses, "tpcc")
+	backgroundTPCC := backgroundTPCCWorkload(t, warehouses)
 	resumeAllJobsAndWaitStep := makeResumeAllJobsAndWaitStep(10 * time.Second)
 	c.Put(ctx, workload, "./workload", c.Node(1))
 

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -56,18 +57,18 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	chunkSize int64,
 	spans []roachpb.Span,
 	readAsOf hlc.Timestamp,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, readAsOf)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
-	p := MakePhysicalPlan(dsp.gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ib := &execinfrapb.BackfillerSpec{}
@@ -80,14 +81,15 @@ func (dsp *DistSQLPlanner) createBackfiller(
 		proc := physicalplan.Processor{
 			Node: sp.Node,
 			Spec: execinfrapb.ProcessorSpec{
-				Core:   execinfrapb.ProcessorCoreUnion{Backfiller: ib},
-				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				Core:        execinfrapb.ProcessorCoreUnion{Backfiller: ib},
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				ResultTypes: []*types.T{},
 			},
 		}
 
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
 	}
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 	return p, nil
 }

@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -46,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -54,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -263,7 +265,7 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 //
 // If the argument startSingleNode is set the replication factor
 // will be set to 1 all zone configs (see initial_sql.go).
-func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
+func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnErr error) {
 	tBegin := timeutil.Now()
 
 	// First things first: if the user wants background processing,
@@ -322,8 +324,8 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	// has completed.
 	// TODO(andrei): we don't close the span on the early returns below.
 	tracer := serverCfg.Settings.Tracer
-	sp := tracer.StartRootSpan("server start", nil /* logTags */, tracing.NonRecordableSpan)
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	sp := tracer.StartSpan("server start")
+	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	// Set up the logging and profiling output.
 	//
@@ -345,12 +347,12 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	// If any store has something to say against a server start-up
 	// (e.g. previously detected corruption), listen to them now.
 	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
-		return err
+		return &cliError{exitCode: exit.FatalError(), cause: err}
 	}
 
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
-	grpcutil.SetSeverity(log.Severity_WARNING)
+	grpcutil.LowerSeverity(severity.WARNING)
 
 	// Check the --join flag.
 	if !flagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
@@ -403,13 +405,6 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	// registered.
 	reportConfiguration(ctx)
 
-	// Until/unless CockroachDB embeds its own tz database, we want
-	// an early sanity check. It's better to inform the user early
-	// than to get surprising errors during SQL queries.
-	if err := checkTzDatabaseAvailability(ctx); err != nil {
-		return errors.Wrap(err, "failed to initialize node")
-	}
-
 	// ReadyFn will be called when the server has started listening on
 	// its network sockets, but perhaps before it has done bootstrapping
 	// and thus before Start() completes.
@@ -455,7 +450,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 		}
 
 		if waitForInit {
-			log.Shout(ctx, log.Severity_INFO,
+			log.Shout(ctx, severity.INFO,
 				"initial startup completed\n"+
 					"Node will now attempt to join a running cluster, or wait for `cockroach init`.\n"+
 					"Client connections will be accepted after this completes successfully.\n"+
@@ -484,9 +479,9 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 - running the 'cockroach init' command if you are trying to initialize a new cluster.
 
 If problems persist, please see %s.`
-		docLink := base.DocsURL("cluster-setup-troubleshooting.html")
+		docLink := docs.URL("cluster-setup-troubleshooting.html")
 		if !startCtx.inBackground {
-			log.Shoutf(context.Background(), log.Severity_WARNING, msg, docLink)
+			log.Shoutf(context.Background(), severity.WARNING, msg, docLink)
 		} else {
 			// Don't shout to stderr since the server will have detached by
 			// the time this function gets called.
@@ -675,7 +670,7 @@ If problems persist, please see %s.`
 			}
 			msgS := msg.ToString()
 			log.Infof(ctx, "node startup completed:\n%s", msgS)
-			if !startCtx.inBackground && !log.LoggingToStderr(log.Severity_INFO) {
+			if !startCtx.inBackground && !log.LoggingToStderr(severity.INFO) {
 				fmt.Print(msgS.StripMarkers())
 			}
 
@@ -696,11 +691,7 @@ If problems persist, please see %s.`
 	// We'll want to log any shutdown activity against a separate span.
 	shutdownSpan := tracer.StartSpan("server shutdown")
 	defer shutdownSpan.Finish()
-	shutdownCtx := opentracing.ContextWithSpan(context.Background(), shutdownSpan)
-
-	// returnErr will be populated with the error to use to exit the
-	// process (reported to the shell).
-	var returnErr error
+	shutdownCtx := tracing.ContextWithSpan(context.Background(), shutdownSpan)
 
 	stopWithoutDrain := make(chan struct{}) // closed if interrupted very early
 
@@ -709,15 +700,15 @@ If problems persist, please see %s.`
 	select {
 	case err := <-errChan:
 		// SetSync both flushes and ensures that subsequent log writes are flushed too.
-		log.SetSync(true)
+		log.StartSync()
 		return err
 
 	case <-stopper.ShouldStop():
 		// Server is being stopped externally and our job is finished
 		// here since we don't know if it's a graceful shutdown or not.
 		<-stopper.IsStopped()
-		// SetSync both flushes and ensures that subsequent log writes are flushed too.
-		log.SetSync(true)
+		// StartSync both flushes and ensures that subsequent log writes are flushed too.
+		log.StartSync()
 		return nil
 
 	case sig := <-signalCh:
@@ -725,9 +716,10 @@ If problems persist, please see %s.`
 		// signal was received there is a non-zero chance the sender of
 		// this signal will follow up with SIGKILL if the shutdown is not
 		// timely, and we don't want logs to be lost.
-		log.SetSync(true)
+		log.StartSync()
 
 		log.Infof(shutdownCtx, "received signal '%s'", sig)
+
 		switch sig {
 		case os.Interrupt:
 			// Graceful shutdown after an interrupt should cause the process
@@ -735,9 +727,9 @@ If problems persist, please see %s.`
 			// "legitimate" and should be acknowledged with a success exit
 			// code. So we keep the error state here for later.
 			returnErr = &cliError{
-				exitCode: 1,
+				exitCode: exit.Interrupted(),
 				// INFO because a single interrupt is rather innocuous.
-				severity: log.Severity_INFO,
+				severity: severity.INFO,
 				cause:    errors.New("interrupted"),
 			}
 			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
@@ -855,7 +847,7 @@ If problems persist, please see %s.`
 
 			// This new signal is not welcome, as it interferes with the graceful
 			// shutdown process.
-			log.Shoutf(shutdownCtx, log.Severity_ERROR,
+			log.Shoutf(shutdownCtx, severity.ERROR,
 				"received signal '%s' during shutdown, initiating hard shutdown%s",
 				log.Safe(sig), log.Safe(hardShutdownHint))
 			handleSignalDuringShutdown(sig)
@@ -901,7 +893,7 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 
 	if !listenAddrSpecified && !advAddrSpecified {
 		host, _, _ := net.SplitHostPort(serverCfg.AdvertiseAddr)
-		log.Shoutf(ctx, log.Severity_WARNING,
+		log.Shoutf(ctx, severity.WARNING,
 			"neither --listen-addr nor --advertise-addr was specified.\n"+
 				"The server will advertise %q to other nodes, is this routable?\n\n"+
 				"Consider using:\n"+
@@ -921,35 +913,6 @@ func clientFlagsRPC() string {
 		flags = append(flags, "--certs-dir="+startCtx.serverSSLCertsDir)
 	}
 	return strings.Join(flags, " ")
-}
-
-func checkTzDatabaseAvailability(ctx context.Context) error {
-	if _, err := timeutil.LoadLocation("America/New_York"); err != nil {
-		log.Errorf(ctx, "timeutil.LoadLocation: %v", err)
-		reportedErr := errors.WithHint(
-			errors.WithIssueLink(
-				errors.New("unable to load named timezones"),
-				errors.IssueLink{IssueURL: unimplemented.MakeURL(36864)}),
-			"Check that the time zone database is installed on your system, or\n"+
-				"set the ZONEINFO environment variable to a Go time zone .zip archive.")
-
-		if envutil.EnvOrDefaultBool("COCKROACH_INCONSISTENT_TIME_ZONES", false) {
-			// The user tells us they really know what they want.
-			reportedErr := &formattedError{err: reportedErr}
-			log.Shoutf(ctx, log.Severity_WARNING, "%v", reportedErr)
-		} else {
-			// Prevent a successful start.
-			//
-			// In the past, we were simply using log.Shout to emit an error,
-			// informing the user that startup could continue with degraded
-			// behavior.  However, usage demonstrated that users typically do
-			// not see the error and instead run into silently incorrect SQL
-			// results. To avoid this situation altogether, it's better to
-			// stop early.
-			return reportedErr
-		}
-	}
-	return nil
 }
 
 func reportConfiguration(ctx context.Context) {
@@ -985,7 +948,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		requestedMem := serverCfg.CacheSize + serverCfg.MemoryPoolSize
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
-			log.Shoutf(ctx, log.Severity_WARNING,
+			log.Shoutf(ctx, severity.WARNING,
 				"the sum of --max-sql-memory (%s) and --cache (%s) is larger than 75%% of total RAM (%s).\nThis server is running at increased risk of memory-related failures.",
 				sqlSizeValue, cacheSizeValue, humanizeutil.IBytes(maxRecommendedMem))
 		}
@@ -1040,7 +1003,7 @@ func setupAndInitializeLoggingAndProfiling(
 		if !ls.Changed {
 			// Unless the settings were overridden by the user, silence
 			// logging to stderr because the messages will go to a log file.
-			if err := ls.Value.Set(log.Severity_NONE.String()); err != nil {
+			if err := ls.Value.Set(severity.NONE.String()); err != nil {
 				return nil, err
 			}
 		}
@@ -1071,17 +1034,23 @@ func setupAndInitializeLoggingAndProfiling(
 			}
 		}
 
-		// Start the log file GC daemon to remove files that make the log
-		// directory too large.
-		log.StartGCDaemon(ctx)
-
 		defer func() {
+			// Start the log file GC daemon to remove files that make the log
+			// directory too large.
+			//
+			// Note that as per the comment on this function, this must be
+			// called after command-line parsing has completed and the
+			// configuration was effected, so that no data is lost when the user
+			// configures larger max sizes than the defaults.
+			// This is why we defer this call here, to ensure it only occurs
+			// after SetupRedactionAndStderrRedirects() has been called.
+			log.StartGCDaemon(ctx)
+
 			if stopper != nil {
 				// When the function complete successfully, start the loggers
 				// for the storage engines. We need to do this at the end
 				// because we need to register the loggers.
 				stopper.AddCloser(storage.InitPebbleLogger(ctx))
-				stopper.AddCloser(storage.InitRocksDBLogger(ctx))
 			}
 		}()
 	}
@@ -1113,7 +1082,7 @@ func setupAndInitializeLoggingAndProfiling(
 	if ambiguousLogDirs {
 		// Note that we can't report this message earlier, because the log directory
 		// may not have been ready before the call to MkdirAll() above.
-		log.Shout(ctx, log.Severity_WARNING, "multiple stores configured"+
+		log.Shout(ctx, severity.WARNING, "multiple stores configured"+
 			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
 	}
 
@@ -1133,7 +1102,7 @@ func setupAndInitializeLoggingAndProfiling(
 		if addr == "" {
 			addr = "any of your IP addresses"
 		}
-		log.Shoutf(context.Background(), log.Severity_WARNING,
+		log.Shoutf(context.Background(), severity.WARNING,
 			"ALL SECURITY CONTROLS HAVE BEEN DISABLED!\n\n"+
 				"This mode is intended for non-production testing only.\n"+
 				"\n"+
@@ -1143,13 +1112,13 @@ func setupAndInitializeLoggingAndProfiling(
 				"- Intruders can log in without password and read or write any data in the cluster.\n"+
 				"- Intruders can consume all your server's resources and cause unavailability.",
 			addr)
-		log.Shoutf(context.Background(), log.Severity_INFO,
+		log.Shoutf(context.Background(), severity.INFO,
 			"To start a secure server without mandating TLS for clients,\n"+
 				"consider --accept-sql-without-tls instead. For other options, see:\n\n"+
 				"- %s\n"+
 				"- %s",
 			unimplemented.MakeURL(53404),
-			log.Safe(base.DocsURL("secure-a-cluster.html")),
+			log.Safe(docs.URL("secure-a-cluster.html")),
 		)
 	}
 

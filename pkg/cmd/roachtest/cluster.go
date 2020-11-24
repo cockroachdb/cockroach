@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -136,6 +137,9 @@ func findLibrary(libraryName string) (string, error) {
 	if local {
 		switch runtime.GOOS {
 		case "linux":
+		case "freebsd":
+		case "openbsd":
+		case "dragonfly":
 		case "windows":
 			suffix = ".dll"
 		case "darwin":
@@ -885,16 +889,9 @@ func (s *clusterSpec) args() []string {
 
 	switch cloud {
 	case aws:
-		if s.Zones != "" {
-			fmt.Fprintf(os.Stderr, "zones spec not yet supported on AWS: %s\n", s.Zones)
-			os.Exit(1)
-		}
-		if s.Geo {
-			fmt.Fprintf(os.Stderr, "geo-distributed clusters not yet supported on AWS\n")
-			os.Exit(1)
-		}
-
 		args = append(args, "--clouds=aws")
+	case gce:
+		args = append(args, "--clouds=gce")
 	case azure:
 		args = append(args, "--clouds=azure")
 	}
@@ -1986,6 +1983,28 @@ func (c *cluster) PutLibraries(ctx context.Context, libraryDir string) error {
 	return nil
 }
 
+// Stage stages a binary to the cluster.
+func (c *cluster) Stage(
+	ctx context.Context, l *logger, application, versionOrSHA, dir string, opts ...option,
+) error {
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Stage")
+	}
+
+	c.status("staging binary")
+	defer c.status("")
+
+	args := []string{roachprod, "stage", c.makeNodes(opts...), application, versionOrSHA}
+	if dir != "" {
+		args = append(args, fmt.Sprintf("--dir='%s'", dir))
+	}
+	err := execCmd(ctx, c.l, args...)
+	if err != nil {
+		return errors.Wrap(err, "cluster.Stage")
+	}
+	return nil
+}
+
 // Get gets files from remote hosts.
 func (c *cluster) Get(ctx context.Context, l *logger, src, dest string, opts ...option) error {
 	if ctx.Err() != nil {
@@ -2537,8 +2556,12 @@ func getDiskUsageInBytes(
 		// TODO(bdarnell): Refactor this stack to not combine stdout and
 		// stderr so we don't need to do this (and the Warning check
 		// below).
-		out, err = c.RunWithBuffer(ctx, logger, c.Node(nodeIdx),
-			fmt.Sprint("du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'"))
+		out, err = c.RunWithBuffer(
+			ctx,
+			logger,
+			c.Node(nodeIdx),
+			"du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'",
+		)
 		if err != nil {
 			if ctx.Err() != nil {
 				return 0, ctx.Err()
@@ -2761,8 +2784,10 @@ func (m *monitor) wait(args ...string) error {
 	return err
 }
 
+// TODO(nvanbenschoten): this function should take a context and be responsive
+// to context cancellation.
 func waitForFullReplication(t *test, db *gosql.DB) {
-	t.l.Printf("waiting for up-replication...\n")
+	t.l.Printf("waiting for up-replication...")
 	tStart := timeutil.Now()
 	for ok := false; !ok; time.Sleep(time.Second) {
 		if err := db.QueryRow(
@@ -2772,6 +2797,45 @@ func waitForFullReplication(t *test, db *gosql.DB) {
 		}
 		if timeutil.Since(tStart) > 30*time.Second {
 			t.l.Printf("still waiting for full replication")
+		}
+	}
+}
+
+func waitForUpdatedReplicationReport(ctx context.Context, t *test, db *gosql.DB) {
+	t.l.Printf("waiting for updated replication report...")
+
+	// Temporarily drop the replication report interval down.
+	if _, err := db.ExecContext(
+		ctx, `SET CLUSTER setting kv.replication_reports.interval = '2s'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := db.ExecContext(
+			ctx, `RESET CLUSTER setting kv.replication_reports.interval`,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	// Wait for a new report with a timestamp after tStart to ensure
+	// that the report picks up any new tables or zones.
+	tStart := timeutil.Now()
+	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+		var gen time.Time
+		if err := db.QueryRowContext(
+			ctx, `SELECT generated FROM system.reports_meta ORDER BY 1 DESC LIMIT 1`,
+		).Scan(&gen); err != nil {
+			if !errors.Is(err, gosql.ErrNoRows) {
+				t.Fatal(err)
+			}
+			// No report generated yet.
+		} else if tStart.Before(gen) {
+			// New report generated.
+			return
+		}
+		if timeutil.Since(tStart) > 30*time.Second {
+			t.l.Printf("still waiting for updated replication report")
 		}
 	}
 }

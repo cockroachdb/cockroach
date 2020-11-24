@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -852,9 +853,9 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 		return false
 	}
 
-	primaryIndexColumnIds := make(map[descpb.ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
+	var primaryIndexColumnIDs catalog.TableColSet
 	for _, colID := range desc.PrimaryIndex.ColumnIDs {
-		primaryIndexColumnIds[colID] = struct{}{}
+		primaryIndexColumnIDs.Add(colID)
 	}
 
 	desc.Families = []descpb.ColumnFamilyDescriptor{
@@ -862,7 +863,7 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 	}
 	desc.NextFamilyID = desc.Families[0].ID + 1
 	addFamilyForCol := func(col *descpb.ColumnDescriptor) {
-		if _, ok := primaryIndexColumnIds[col.ID]; ok {
+		if primaryIndexColumnIDs.Contains(col.ID) {
 			desc.Families[0].ColumnNames = append(desc.Families[0].ColumnNames, col.Name)
 			desc.Families[0].ColumnIDs = append(desc.Families[0].ColumnIDs, col.ID)
 			return
@@ -1171,11 +1172,11 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		allocateIndexName(desc, index)
 	}
 
-	isCompositeColumn := make(map[descpb.ColumnID]struct{})
+	var compositeColIDs catalog.TableColSet
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
 		if colinfo.HasCompositeKeyEncoding(col.Type) {
-			isCompositeColumn[col.ID] = struct{}{}
+			compositeColIDs.Add(col.ID)
 		}
 	}
 
@@ -1239,12 +1240,12 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 
 		index.CompositeColumnIDs = nil
 		for _, colID := range index.ColumnIDs {
-			if _, ok := isCompositeColumn[colID]; ok {
+			if compositeColIDs.Contains(colID) {
 				index.CompositeColumnIDs = append(index.CompositeColumnIDs, colID)
 			}
 		}
 		for _, colID := range index.ExtraColumnIDs {
-			if _, ok := isCompositeColumn[colID]; ok {
+			if compositeColIDs.Contains(colID) {
 				index.CompositeColumnIDs = append(index.CompositeColumnIDs, colID)
 			}
 		}
@@ -1262,7 +1263,7 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 		desc.NextFamilyID = 1
 	}
 
-	columnsInFamilies := make(map[descpb.ColumnID]struct{}, len(desc.Columns))
+	var columnsInFamilies catalog.TableColSet
 	for i := range desc.Families {
 		family := &desc.Families[i]
 		if family.ID == 0 && i != 0 {
@@ -1277,22 +1278,22 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 			if family.ColumnIDs[j] == 0 {
 				family.ColumnIDs[j] = columnNames[colName]
 			}
-			columnsInFamilies[family.ColumnIDs[j]] = struct{}{}
+			columnsInFamilies.Add(family.ColumnIDs[j])
 		}
 
 		desc.Families[i] = *family
 	}
 
-	primaryIndexColIDs := make(map[descpb.ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
+	var primaryIndexColIDs catalog.TableColSet
 	for _, colID := range desc.PrimaryIndex.ColumnIDs {
-		primaryIndexColIDs[colID] = struct{}{}
+		primaryIndexColIDs.Add(colID)
 	}
 
 	ensureColumnInFamily := func(col *descpb.ColumnDescriptor) {
-		if _, ok := columnsInFamilies[col.ID]; ok {
+		if columnsInFamilies.Contains(col.ID) {
 			return
 		}
-		if _, ok := primaryIndexColIDs[col.ID]; ok {
+		if primaryIndexColIDs.Contains(col.ID) {
 			// Primary index columns are required to be assigned to family 0.
 			desc.Families[0].ColumnNames = append(desc.Families[0].ColumnNames, col.Name)
 			desc.Families[0].ColumnIDs = append(desc.Families[0].ColumnIDs, col.ID)
@@ -1346,7 +1347,7 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 		if family.DefaultColumnID == 0 {
 			defaultColumnID := descpb.ColumnID(0)
 			for _, colID := range family.ColumnIDs {
-				if _, ok := primaryIndexColIDs[colID]; !ok {
+				if !primaryIndexColIDs.Contains(colID) {
 					if defaultColumnID == 0 {
 						defaultColumnID = colID
 					} else {
@@ -1443,7 +1444,7 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	if desc.Dropped() {
 		return nil
 	}
-	return desc.validateCrossReferences(ctx, dg)
+	return errors.Wrapf(desc.validateCrossReferences(ctx, dg), "desc %d", desc.GetID())
 }
 
 // validateTableIfTesting is similar to validateTable, except it is only invoked
@@ -1708,40 +1709,8 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
 	columnIDs := make(map[descpb.ColumnID]string, len(desc.Columns))
-	for _, column := range desc.AllNonDropColumns() {
-		if err := catalog.ValidateName(column.Name, "column"); err != nil {
-			return err
-		}
-		if column.ID == 0 {
-			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.ID))
-		}
-
-		if _, columnNameExists := columnNames[column.Name]; columnNameExists {
-			for i := range desc.Columns {
-				if desc.Columns[i].Name == column.Name {
-					return pgerror.Newf(pgcode.DuplicateColumn,
-						"duplicate column name: %q", column.Name)
-				}
-			}
-			return pgerror.Newf(pgcode.DuplicateColumn,
-				"duplicate: column %q in the middle of being added, not yet public", column.Name)
-		}
-		if colinfo.IsSystemColumnName(column.Name) {
-			return pgerror.Newf(pgcode.DuplicateColumn,
-				"column name %q conflicts with a system column name", column.Name)
-		}
-		columnNames[column.Name] = column.ID
-
-		if other, ok := columnIDs[column.ID]; ok {
-			return fmt.Errorf("column %q duplicate ID of column %q: %d",
-				column.Name, other, column.ID)
-		}
-		columnIDs[column.ID] = column.Name
-
-		if column.ID >= desc.NextColumnID {
-			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
-				column.Name, errors.Safe(column.ID), errors.Safe(desc.NextColumnID))
-		}
+	if err := desc.validateColumns(columnNames, columnIDs); err != nil {
+		return err
 	}
 
 	for _, m := range desc.Mutations {
@@ -1792,16 +1761,21 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	// TODO(dt): Validate each column only appears at-most-once in any FKs.
 
-	// Only validate column families and indexes if this is actually a table, not
-	// if it's just a view.
+	// Only validate column families, check constraints, and indexes if this is
+	// actually a table, not if it's just a view.
 	if desc.IsPhysicalTable() {
 		if err := desc.validateColumnFamilies(columnIDs); err != nil {
+			return err
+		}
+
+		if err := desc.validateCheckConstraints(columnIDs); err != nil {
 			return err
 		}
 
 		if err := desc.validateTableIndexes(columnNames); err != nil {
 			return err
 		}
+
 		if err := desc.validatePartitioning(); err != nil {
 			return err
 		}
@@ -1863,6 +1837,63 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID(), privilege.Table)
+}
+
+func (desc *Immutable) validateColumns(
+	columnNames map[string]descpb.ColumnID, columnIDs map[descpb.ColumnID]string,
+) error {
+	for _, column := range desc.AllNonDropColumns() {
+		if err := catalog.ValidateName(column.Name, "column"); err != nil {
+			return err
+		}
+		if column.ID == 0 {
+			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.ID))
+		}
+
+		if _, columnNameExists := columnNames[column.Name]; columnNameExists {
+			for i := range desc.Columns {
+				if desc.Columns[i].Name == column.Name {
+					return pgerror.Newf(pgcode.DuplicateColumn,
+						"duplicate column name: %q", column.Name)
+				}
+			}
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"duplicate: column %q in the middle of being added, not yet public", column.Name)
+		}
+		if colinfo.IsSystemColumnName(column.Name) {
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"column name %q conflicts with a system column name", column.Name)
+		}
+		columnNames[column.Name] = column.ID
+
+		if other, ok := columnIDs[column.ID]; ok {
+			return fmt.Errorf("column %q duplicate ID of column %q: %d",
+				column.Name, other, column.ID)
+		}
+		columnIDs[column.ID] = column.Name
+
+		if column.ID >= desc.NextColumnID {
+			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
+				column.Name, errors.Safe(column.ID), errors.Safe(desc.NextColumnID))
+		}
+
+		if column.IsComputed() {
+			// Verify that the computed column expression is valid.
+			expr, err := parser.ParseExpr(*column.ComputeExpr)
+			if err != nil {
+				return err
+			}
+			valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return fmt.Errorf("computed column %q refers to unknown columns in expression: %s",
+					column.Name, *column.ComputeExpr)
+			}
+		}
+	}
+	return nil
 }
 
 func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]string) error {
@@ -1938,6 +1969,36 @@ func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]stri
 	return nil
 }
 
+// validateCheckConstraints validates that check constraints are well formed.
+// Checks include validating the column IDs and verifying that check expressions
+// do not reference non-existent columns.
+func (desc *Immutable) validateCheckConstraints(columnIDs map[descpb.ColumnID]string) error {
+	for _, chk := range desc.AllActiveAndInactiveChecks() {
+		// Verify that the check's column IDs are valid.
+		for _, colID := range chk.ColumnIDs {
+			_, ok := columnIDs[colID]
+			if !ok {
+				return fmt.Errorf("check constraint %q contains unknown column \"%d\"", chk.Name, colID)
+			}
+		}
+
+		// Verify that the check's expression is valid.
+		expr, err := parser.ParseExpr(chk.Expr)
+		if err != nil {
+			return err
+		}
+		valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return fmt.Errorf("check constraint %q refers to unknown columns in expression: %s",
+				chk.Name, chk.Expr)
+		}
+	}
+	return nil
+}
+
 // validateTableIndexes validates that indexes are well formed. Checks include
 // validating the columns involved in the index, verifying the index names and
 // IDs are unique, and the family of the primary key is 0. This does not check
@@ -1995,7 +2056,7 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 			return fmt.Errorf("index %q must contain at least 1 column", index.Name)
 		}
 
-		validateIndexDup := make(map[descpb.ColumnID]struct{})
+		var validateIndexDup catalog.TableColSet
 		for i, name := range index.ColumnNames {
 			colID, ok := columnNames[name]
 			if !ok {
@@ -2005,10 +2066,10 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
 					index.Name, name, colID, index.ColumnIDs[i])
 			}
-			if _, ok := validateIndexDup[colID]; ok {
+			if validateIndexDup.Contains(colID) {
 				return fmt.Errorf("index %q contains duplicate column %q", index.Name, name)
 			}
-			validateIndexDup[colID] = struct{}{}
+			validateIndexDup.Add(colID)
 		}
 		if index.IsSharded() {
 			if err := desc.ensureShardedIndexNotComputed(index); err != nil {
@@ -2017,6 +2078,20 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 			if _, exists := columnNames[index.Sharded.Name]; !exists {
 				return fmt.Errorf("index %q refers to non-existent shard column %q",
 					index.Name, index.Sharded.Name)
+			}
+		}
+		if index.IsPartial() {
+			expr, err := parser.ParseExpr(index.Predicate)
+			if err != nil {
+				return err
+			}
+			valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return fmt.Errorf("partial index %q refers to unknown columns in predicate: %s",
+					index.Name, index.Predicate)
 			}
 		}
 	}
@@ -2282,15 +2357,13 @@ func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error
 }
 
 func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []string) error {
-	if len((indexColNames)) > 1 {
-		return unimplemented.NewWithIssue(48100,
-			"indexing more than one column with an inverted index is not supported")
-	}
 	invalidColumns := make([]descpb.ColumnDescriptor, 0, len(indexColNames))
-	for _, indexCol := range indexColNames {
+	for i, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !colinfo.ColumnTypeIsInvertedIndexable(col.Type) {
+				lastCol := len(indexColNames) - 1
+				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.Type) ||
+					i < lastCol && !colinfo.ColumnTypeIsIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}
@@ -2454,25 +2527,35 @@ func (desc *Immutable) FindActiveColumnsByNames(
 	return cols, nil
 }
 
-// FindColumnByName finds the column with the specified name. It returns
-// an active column or a column from the mutation list. It returns true
-// if the column is being dropped.
-func (desc *Immutable) FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error) {
+// HasColumnWithName finds the column with the specified name. It returns
+// nil if there is no such column, and true if the column is being dropped.
+func (desc *Immutable) HasColumnWithName(name tree.Name) (*descpb.ColumnDescriptor, bool) {
 	for i := range desc.Columns {
 		c := &desc.Columns[i]
 		if c.Name == string(name) {
-			return c, false, nil
+			return c, false
 		}
 	}
 	for i := range desc.Mutations {
 		m := &desc.Mutations[i]
 		if c := m.GetColumn(); c != nil {
 			if c.Name == string(name) {
-				return c, m.Direction == descpb.DescriptorMutation_DROP, nil
+				return c, m.Direction == descpb.DescriptorMutation_DROP
 			}
 		}
 	}
-	return nil, false, colinfo.NewUndefinedColumnError(string(name))
+	return nil, false
+}
+
+// FindColumnByName finds the column with the specified name. It returns
+// an active column or a column from the mutation list. It returns true
+// if the column is being dropped.
+func (desc *Immutable) FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error) {
+	ret, ok := desc.HasColumnWithName(name)
+	if ret == nil {
+		return nil, false, colinfo.NewUndefinedColumnError(string(name))
+	}
+	return ret, ok, nil
 }
 
 // FindActiveOrNewColumnByName finds the column with the specified name.
@@ -2512,25 +2595,25 @@ func (desc *Immutable) FindColumnMutationByName(name tree.Name) *descpb.Descript
 
 // ColumnIdxMap returns a map from Column ID to the ordinal position of that
 // column.
-func (desc *Immutable) ColumnIdxMap() map[descpb.ColumnID]int {
+func (desc *Immutable) ColumnIdxMap() catalog.TableColMap {
 	return desc.ColumnIdxMapWithMutations(false)
 }
 
 // ColumnIdxMapWithMutations returns a map from Column ID to the ordinal
 // position of that column, optionally including mutation columns if the input
 // bool is true.
-func (desc *Immutable) ColumnIdxMapWithMutations(mutations bool) map[descpb.ColumnID]int {
-	colIdxMap := make(map[descpb.ColumnID]int, len(desc.Columns))
+func (desc *Immutable) ColumnIdxMapWithMutations(mutations bool) catalog.TableColMap {
+	var colIdxMap catalog.TableColMap
 	for i := range desc.Columns {
 		id := desc.Columns[i].ID
-		colIdxMap[id] = i
+		colIdxMap.Set(id, i)
 	}
 	if mutations {
 		idx := len(desc.Columns)
 		for i := range desc.Mutations {
 			col := desc.Mutations[i].GetColumn()
 			if col != nil {
-				colIdxMap[col.ID] = idx
+				colIdxMap.Set(col.ID, idx)
 				idx++
 			}
 		}
@@ -3566,7 +3649,7 @@ func (desc *Immutable) ColumnsUsed(
 			"could not parse check constraint %s", cc.Expr)
 	}
 
-	colIDsUsed := make(map[descpb.ColumnID]struct{})
+	var colIDsUsed catalog.TableColSet
 	visitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		if vBase, ok := expr.(tree.VarName); ok {
 			v, err := vBase.NormalizeVarName()
@@ -3580,7 +3663,7 @@ func (desc *Immutable) ColumnsUsed(
 						"column %q not found for constraint %q",
 						c.ColumnName, parsed.String())
 				}
-				colIDsUsed[col.ID] = struct{}{}
+				colIDsUsed.Add(col.ID)
 			}
 			return false, v, nil
 		}
@@ -3590,8 +3673,8 @@ func (desc *Immutable) ColumnsUsed(
 		return nil, err
 	}
 
-	cc.ColumnIDs = make([]descpb.ColumnID, 0, len(colIDsUsed))
-	for colID := range colIDsUsed {
+	cc.ColumnIDs = make([]descpb.ColumnID, 0, colIDsUsed.Len())
+	for colID, ok := colIDsUsed.Next(0); ok; colID, ok = colIDsUsed.Next(colID + 1) {
 		cc.ColumnIDs = append(cc.ColumnIDs, colID)
 	}
 	sort.Sort(descpb.ColumnIDs(cc.ColumnIDs))

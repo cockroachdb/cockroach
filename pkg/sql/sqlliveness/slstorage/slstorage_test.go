@@ -73,6 +73,7 @@ func TestStorage(t *testing.T) {
 
 	t.Run("basic-insert-is-alive", func(t *testing.T) {
 		clock, _, _, stopper, storage := setup(t)
+		storage.Start(ctx)
 		defer stopper.Stop(ctx)
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
@@ -218,6 +219,7 @@ func TestStorage(t *testing.T) {
 	t.Run("delete-expired-on-is-alive", func(t *testing.T) {
 		clock, timeSource, _, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
+		storage.Start(ctx)
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
 		const id = "asdf"
@@ -265,7 +267,6 @@ func TestStorage(t *testing.T) {
 		_, timeSource, settings, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
 		storage.Start(ctx)
-
 		waitForGCTimer := func() (timer time.Time) {
 			testutils.SucceedsSoon(t, func() error {
 				timers := timeSource.Timers()
@@ -284,6 +285,7 @@ func TestStorage(t *testing.T) {
 		}
 		jitter := slstorage.GCJitter.Get(&settings.SV)
 		interval := slstorage.GCInterval.Get(&settings.SV)
+		storage.Start(ctx)
 		minTime := t0.Add(time.Duration((1 - jitter) * float64(interval.Nanoseconds()) * N))
 		maxTime := t0.Add(time.Duration((1 + jitter) * float64(interval.Nanoseconds()) * N))
 		noJitterTime := t0.Add(interval * N)
@@ -317,9 +319,11 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	}, base.DefaultMaxClockOffset)
 	settings := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(&settings.SV, 10)
 	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
 		dbName, timeSource.NewTimer)
+	storage.Start(ctx)
 
 	const (
 		runsPerWorker   = 100
@@ -340,6 +344,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 			liveSessions: make(map[int]struct{}),
 		}
 		makeSession = func(t *testing.T) {
+			t.Helper()
 			state.Lock()
 			defer state.Unlock()
 			s := session{
@@ -351,6 +356,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 			state.sessions = append(state.sessions, s)
 		}
 		updateSession = func(t *testing.T) {
+			t.Helper()
 			state.Lock()
 			defer state.Unlock()
 			now := clock.Now()
@@ -399,6 +405,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		// checkIsAlive verifies that if false was returned that the session really
 		// no longer is alive.
 		checkIsAlive = func(t *testing.T, i int, isAlive bool) {
+			t.Helper()
 			state.RLock()
 			defer state.RUnlock()
 			now := clock.Now()

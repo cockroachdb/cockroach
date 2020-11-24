@@ -44,7 +44,7 @@ func assertEq(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginepb.MVC
 		t.Errorf("%s: diff(ms, expMS) nontrivial", debug)
 	}
 
-	it := rw.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
 
 	for _, mvccStatsTest := range mvccStatsTests {
@@ -168,7 +168,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 
 			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
 			mValSize := int64((&enginepb.MVCCMetadata{    // 44
-				Timestamp: hlc.LegacyTimestamp(ts1),
+				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
@@ -248,7 +248,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 
 			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
 			mValSize := int64((&enginepb.MVCCMetadata{    // 44
-				Timestamp: hlc.LegacyTimestamp(ts1),
+				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
@@ -335,14 +335,14 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			require.EqualValues(t, mKeySize, 2)
 
 			mVal1Size := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts1),
+				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mVal1Size, 46)
 
 			m1ValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts2),
+				Timestamp: ts2.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
@@ -379,7 +379,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			// sequence number. Also since there was a write previously on the same
 			// transaction, the IntentHistory will add a few bytes to the metadata.
 			m2ValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts2),
+				Timestamp: ts2.ToLegacyTimestamp(),
 				Txn:       &txn.TxnMeta,
 				IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 					{Sequence: 0, Value: value.RawBytes},
@@ -449,14 +449,14 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			require.EqualValues(t, mKeySize, 2)
 
 			mVal1Size := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts1),
+				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mVal1Size, 46)
 
 			m1ValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts2),
+				Timestamp: ts2.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
@@ -494,7 +494,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			// sequence number. Also the value is larger because the previous intent on the
 			// transaction is recorded in the IntentHistory.
 			m2ValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts2),
+				Timestamp: ts2.ToLegacyTimestamp(),
 				Txn:       &txn.TxnMeta,
 				IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 					{Sequence: 0, Value: []byte{}},
@@ -582,7 +582,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 			}
 
 			mValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts1),
+				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   true,
 				Txn:       &txn.TxnMeta,
 			}).Size())
@@ -729,7 +729,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			}
 
 			mValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts1),
+				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   true,
 				Txn:       &txn.TxnMeta,
 			}).Size())
@@ -758,7 +758,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			// Annoyingly, the new meta value is actually a little larger thanks to the
 			// sequence number.
 			m2ValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts3),
+				Timestamp: ts3.ToLegacyTimestamp(),
 				Txn:       &txn.TxnMeta,
 			}).Size())
 
@@ -810,7 +810,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				// Annoyingly, the new meta value is actually a little larger thanks to the
 				// sequence number.
 				m2ValSizeWithHistory := int64((&enginepb.MVCCMetadata{
-					Timestamp: hlc.LegacyTimestamp(ts3),
+					Timestamp: ts3.ToLegacyTimestamp(),
 					Txn:       &txn.TxnMeta,
 					IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 						{Sequence: 0, Value: []byte{}},
@@ -948,7 +948,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 
 			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
 			m1ValSize := int64((&enginepb.MVCCMetadata{   // 44
-				Timestamp: hlc.LegacyTimestamp(ts201),
+				Timestamp: ts201.ToLegacyTimestamp(),
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			vKeySize := MVCCVersionTimestampSize   // 12
@@ -979,7 +979,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			// Annoyingly, the new meta value is actually a little larger thanks to the
 			// sequence number.
 			m2ValSize := int64((&enginepb.MVCCMetadata{ // 46
-				Timestamp: hlc.LegacyTimestamp(ts201),
+				Timestamp: ts201.ToLegacyTimestamp(),
 				Txn:       &txn.TxnMeta,
 				IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 					{Sequence: 0, Value: value.RawBytes},
@@ -1133,7 +1133,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			require.EqualValues(t, mKeySize, 11)
 
 			mValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts1),
+				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
@@ -1164,7 +1164,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			// The value also grows as the older value is part of the same
 			// transaction and so contributes to the intent history.
 			mVal2Size := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts2),
+				Timestamp: ts2.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 				IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
@@ -1222,7 +1222,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 			require.EqualValues(t, mKeySize, 11)
 
 			mValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp(ts1),
+				Timestamp: ts1.ToLegacyTimestamp(),
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
@@ -1326,18 +1326,18 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 
 var mvccStatsTests = []struct {
 	name string
-	fn   func(Iterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
+	fn   func(MVCCIterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
 }{
 	{
 		name: "ComputeStats",
-		fn: func(iter Iterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
+		fn: func(iter MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 			return iter.ComputeStats(start, end, nowNanos)
 		},
 	},
 	{
-		name: "ComputeStatsGo",
-		fn: func(iter Iterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-			return ComputeStatsGo(iter, start, end, nowNanos)
+		name: "ComputeStatsForRange",
+		fn: func(iter MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
+			return ComputeStatsForRange(iter, start, end, nowNanos)
 		},
 	},
 }
@@ -1593,11 +1593,11 @@ func TestMVCCComputeStatsError(t *testing.T) {
 
 			// Write a MVCC metadata key where the value is not an encoded MVCCMetadata
 			// protobuf.
-			if err := engine.Put(mvccKey(roachpb.Key("garbage")), []byte("garbage")); err != nil {
+			if err := engine.PutUnversioned(roachpb.Key("garbage"), []byte("garbage")); err != nil {
 				t.Fatal(err)
 			}
 
-			iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {

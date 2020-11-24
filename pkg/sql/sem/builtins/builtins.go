@@ -33,15 +33,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -51,7 +54,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -81,6 +86,8 @@ var (
 	SequenceNameArg = "sequence_name"
 )
 
+const defaultFollowerReadDuration = -4800 * time.Millisecond
+
 const maxAllocatedStringSize = 128 * 1024 * 1024
 
 const errInsufficientArgsFmtString = "unknown signature: %s()"
@@ -101,6 +108,7 @@ const (
 	categorySpatial        = "Spatial"
 	categoryString         = "String and byte"
 	categorySystemInfo     = "System info"
+	categorySystemRepair   = "System repair"
 )
 
 func categorizeType(t *types.T) string {
@@ -919,7 +927,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				data, format := *args[0].(*tree.DBytes), string(tree.MustBeDString(args[1]))
-				be, ok := lex.BytesEncodeFormatFromString(format)
+				be, ok := sessiondatapb.BytesEncodeFormatFromString(format)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for encode()")
@@ -938,7 +946,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				data, format := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
-				be, ok := lex.BytesEncodeFormatFromString(format)
+				be, ok := sessiondatapb.BytesEncodeFormatFromString(format)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for decode()")
@@ -999,9 +1007,19 @@ var builtins = map[string]builtinDefinition{
 		"Calculates the SHA1 hash value of a set of values.",
 	),
 
+	"sha224": hashBuiltin(
+		func() hash.Hash { return sha256.New224() },
+		"Calculates the SHA224 hash value of a set of values.",
+	),
+
 	"sha256": hashBuiltin(
 		func() hash.Hash { return sha256.New() },
 		"Calculates the SHA256 hash value of a set of values.",
+	),
+
+	"sha384": hashBuiltin(
+		func() hash.Hash { return sha512.New384() },
+		"Calculates the SHA384 hash value of a set of values.",
 	),
 
 	"sha512": hashBuiltin(
@@ -1614,7 +1632,7 @@ var builtins = map[string]builtinDefinition{
 		stringOverload1(
 			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
 				var buf bytes.Buffer
-				lex.EncodeRestrictedSQLIdent(&buf, s, lex.EncNoFlags)
+				lexbase.EncodeRestrictedSQLIdent(&buf, s, lexbase.EncNoFlags)
 				return tree.NewDString(buf.String()), nil
 			},
 			types.String,
@@ -2088,18 +2106,34 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"val", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.TimestampDifference(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
+				return &tree.DInterval{
+					Duration: duration.Age(
+						ctx.GetTxnTimestamp(time.Microsecond).Time,
+						args[0].(*tree.DTimestampTZ).Time,
+					),
+				}, nil
 			},
-			Info:       "Calculates the interval between `val` and the current time.",
+			Info: "Calculates the interval between `val` and the current time, normalized into years, months and days." + `
+
+			Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context.
+			To avoid normalizing days into months and years, use ` + "`now() - timestamptz`" + `.`,
 			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"end", types.TimestampTZ}, {"begin", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.TimestampDifference(ctx, args[0], args[1])
+				return &tree.DInterval{
+					Duration: duration.Age(
+						args[0].(*tree.DTimestampTZ).Time,
+						args[1].(*tree.DTimestampTZ).Time,
+					),
+				}, nil
 			},
-			Info:       "Calculates the interval between `begin` and `end`.",
+			Info: "Calculates the interval between `begin` and `end`, normalized into years, months and days." + `
+
+			Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context.
+			To avoid normalizing days into months and years, use the timestamptz subtraction operator.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
@@ -2152,7 +2186,7 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn:         followerReadTimestamp,
-			Info: `Returns a timestamp which is very likely to be safe to perform
+			Info: fmt.Sprintf(`Returns a timestamp which is very likely to be safe to perform
 against a follower replica.
 
 This function is intended to be used with an AS OF SYSTEM TIME clause to perform
@@ -2161,7 +2195,9 @@ to be performed against the closest replica as opposed to the currently
 leaseholder for a given range.
 
 Note that this function requires an enterprise license on a CCL distribution to
-return without an error.`,
+return a result that is less likely the closest replica. It is otherwise
+hardcoded as %s from the statement time, which may not result in reading from the
+nearest replica.`, defaultFollowerReadDuration),
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -3005,6 +3041,22 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_array_length": makeBuiltin(jsonProps(), jsonArrayLengthImpl),
 
+	"jsonb_exists_any": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"json", types.Jsonb},
+				{"array", types.StringArray},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(e *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.JSONExistsAny(e, tree.MustBeDJSON(args[0]), tree.MustBeDArray(args[1]))
+			},
+			Info:       "Returns whether any of the strings in the text array exist as top-level keys or array elements",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"crdb_internal.pb_to_json": makeBuiltin(
 		jsonProps(),
 		tree.Overload{
@@ -3317,10 +3369,10 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if len(ctx.SessionData.User) == 0 {
+				if ctx.SessionData.User().Undefined() {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.SessionData.User), nil
+				return tree.NewDString(ctx.SessionData.User().Normalized()), nil
 			},
 			Info: "Returns the current user. This function is provided for " +
 				"compatibility with PostgreSQL.",
@@ -3601,9 +3653,9 @@ may increase either contention or retry errors, or both.`,
 
 				// Create a column id to row index map. In this case, each column ID
 				// just maps to the i'th ordinal.
-				colMap := make(map[descpb.ColumnID]int)
+				var colMap catalog.TableColMap
 				for i, id := range indexColIDs {
-					colMap[id] = i
+					colMap.Set(id, i)
 				}
 				// Finally, encode the index key using the provided datums.
 				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, indexDesc.ID)
@@ -4047,16 +4099,8 @@ may increase either contention or retry errors, or both.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Jsonb}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				arg := args[0]
-				if arg == tree.DNull {
-					return tree.DZero, nil
-				}
-				n, err := json.NumInvertedIndexEntries(tree.MustBeDJSON(arg).JSON)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(n)), nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return jsonNumInvertedIndexEntries(ctx, args[0])
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: tree.VolatilityStable,
@@ -4065,21 +4109,36 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"val", types.AnyArray}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				arg := args[0]
-				if arg == tree.DNull {
-					return tree.DZero, nil
-				}
-				arr := tree.MustBeDArray(arg)
-				if !arr.HasNonNulls {
-					// Inverted indexes on arrays don't contain entries for null array
-					// elements.
-					return tree.DZero, nil
-				}
-				keys, err := rowenc.EncodeInvertedIndexTableKeys(arr, nil)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(len(keys))), nil
+				return arrayNumInvertedIndexEntries(ctx, args[0], tree.DNull)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.Jsonb},
+				{"version", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// The version argument is currently ignored for JSON inverted indexes,
+				// since all prior versions of JSON inverted indexes include the same
+				// entries. (The version argument was introduced for array indexes,
+				// since prior versions of array indexes did not include keys for empty
+				// arrays.)
+				return jsonNumInvertedIndexEntries(ctx, args[0])
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.AnyArray},
+				{"version", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return arrayNumInvertedIndexEntries(ctx, args[0], args[1])
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: tree.VolatilityStable,
@@ -4232,6 +4291,139 @@ may increase either contention or retry errors, or both.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+	"crdb_internal.unsafe_upsert_descriptor": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"desc", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+					[]byte(*args[1].(*tree.DBytes))); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_delete_descriptor": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_upsert_namespace_entry": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+				{"force", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // descID
+					bool(*args[4].(*tree.DBool)),     // force
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // descID
+					false,                            // force
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.unsafe_delete_namespace_entry": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // descID
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 
 	// Returns true iff the given sqlliveness session is not expired.
 	"crdb_internal.sql_liveness_is_alive": makeBuiltin(
@@ -4249,6 +4441,31 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info:       "Checks is given sqlliveness session id is not expired",
 			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	"crdb_internal.gc_tenant": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categoryMultiTenancy,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				sTenID := int64(tree.MustBeDInt(args[0]))
+				if sTenID <= 0 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				}
+				if err := ctx.Tenant.GCTenant(ctx.Context, uint64(sTenID)); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Garbage collects a tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 
@@ -6312,7 +6529,7 @@ var errInsufficientPriv = pgerror.New(
 )
 
 func checkPrivilegedUser(ctx *tree.EvalContext) error {
-	if ctx.SessionData.User != security.RootUser {
+	if !ctx.SessionData.User().IsRootUser() {
 		return errInsufficientPriv
 	}
 	return nil
@@ -6326,12 +6543,32 @@ var EvalFollowerReadOffset func(clusterID uuid.UUID, _ *cluster.Settings) (time.
 
 func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 	if EvalFollowerReadOffset == nil {
-		return time.Time{}, pgerror.New(pgcode.FeatureNotSupported,
-			tree.FollowerReadTimestampFunctionName+
-				" is only available in ccl distribution")
+		telemetry.Inc(sqltelemetry.FollowerReadDisabledCCLCounter)
+		ctx.ClientNoticeSender.BufferClientNotice(
+			ctx.Context,
+			pgnotice.Newf(
+				tree.FollowerReadTimestampFunctionName+
+					" does not returns a value that is less likely to read from the closest replica "+
+					"in a non-CCL distribution, using %s from statement time instead",
+				defaultFollowerReadDuration,
+			),
+		)
+		return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
 	}
 	offset, err := EvalFollowerReadOffset(ctx.ClusterID, ctx.Settings)
 	if err != nil {
+		if code := pgerror.GetPGCode(err); code == pgcode.CCLValidLicenseRequired {
+			telemetry.Inc(sqltelemetry.FollowerReadDisabledNoEnterpriseLicense)
+			ctx.ClientNoticeSender.BufferClientNotice(
+				ctx.Context,
+				pgnotice.Newf(
+					"%s: using %s from current statement time instead",
+					defaultFollowerReadDuration,
+					err.Error(),
+				),
+			)
+			return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
+		}
 		return time.Time{}, err
 	}
 	return ctx.StmtTimestamp.Add(offset), nil
@@ -6350,4 +6587,41 @@ func followerReadTimestamp(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, er
 		return nil, err
 	}
 	return tree.MakeDTimestampTZ(ts, time.Microsecond)
+}
+
+func jsonNumInvertedIndexEntries(_ *tree.EvalContext, val tree.Datum) (tree.Datum, error) {
+	if val == tree.DNull {
+		return tree.DZero, nil
+	}
+	n, err := json.NumInvertedIndexEntries(tree.MustBeDJSON(val).JSON)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDInt(tree.DInt(n)), nil
+}
+
+func arrayNumInvertedIndexEntries(
+	ctx *tree.EvalContext, val, version tree.Datum,
+) (tree.Datum, error) {
+	if val == tree.DNull {
+		return tree.DZero, nil
+	}
+	arr := tree.MustBeDArray(val)
+
+	v := descpb.SecondaryIndexFamilyFormatVersion
+	if version == tree.DNull {
+		if ctx.Settings.Version.IsActive(
+			ctx.Context, clusterversion.VersionEmptyArraysInInvertedIndexes,
+		) {
+			v = descpb.EmptyArraysInInvertedIndexesVersion
+		}
+	} else {
+		v = descpb.IndexDescriptorVersion(tree.MustBeDInt(version))
+	}
+
+	keys, err := rowenc.EncodeInvertedIndexTableKeys(arr, nil, v)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDInt(tree.DInt(len(keys))), nil
 }

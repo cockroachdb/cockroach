@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -22,12 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // invertedFilterState represents the state of the processor.
@@ -68,7 +65,6 @@ type invertedFilterer struct {
 
 var _ execinfra.Processor = &invertedFilterer{}
 var _ execinfra.RowSource = &invertedFilterer{}
-var _ execinfrapb.MetadataSource = &invertedFilterer{}
 var _ execinfra.OpNode = &invertedFilterer{}
 
 const invertedFiltererProcName = "inverted filterer"
@@ -107,7 +103,7 @@ func newInvertedFilterer(
 			InputsToDrain: []execinfra.RowSource{ifr.input},
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 				ifr.close()
-				return ifr.generateMeta(ctx)
+				return nil
 			},
 		},
 	); err != nil {
@@ -127,9 +123,9 @@ func newInvertedFilterer(
 		ifr.diskMonitor,
 	)
 
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		ifr.input = newInputStatCollector(ifr.input)
-		ifr.FinishTrace = ifr.outputStatsToTrace
+		ifr.ExecStatsForTrace = ifr.execStatsForTrace
 	}
 
 	if spec.PreFiltererSpec != nil {
@@ -289,61 +285,21 @@ func (ifr *invertedFilterer) close() {
 	}
 }
 
-var _ execinfrapb.DistSQLSpanStats = (*InvertedFiltererStats)(nil)
-
-const invertedFiltererTagPrefix = "invertedfilterer."
-
-// Stats implements the SpanStats interface.
-func (ifs *InvertedFiltererStats) Stats() map[string]string {
-	statsMap := ifs.InputStats.Stats(invertedFiltererTagPrefix)
-	statsMap[invertedFiltererTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(ifs.MaxAllocatedMem)
-	statsMap[invertedFiltererTagPrefix+MaxDiskTagSuffix] = humanizeutil.IBytes(ifs.MaxAllocatedDisk)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (ifs *InvertedFiltererStats) StatsForQueryPlan() []string {
-	stats := ifs.InputStats.StatsForQueryPlan("" /* prefix */)
-	if ifs.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ifs.MaxAllocatedMem)))
-	}
-	if ifs.MaxAllocatedDisk != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ifs.MaxAllocatedDisk)))
-	}
-	return stats
-}
-
-// outputStatsToTrace outputs the collected invertedFilterer stats to the
+// execStatsForTrace outputs the collected invertedFilterer stats to the
 // trace. Will fail silently if the invertedFilterer is not collecting stats.
-func (ifr *invertedFilterer) outputStatsToTrace() {
-	is, ok := getInputStats(ifr.FlowCtx, ifr.input)
+func (ifr *invertedFilterer) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(ifr.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := opentracing.SpanFromContext(ifr.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
-			&InvertedFiltererStats{
-				InputStats:       is,
-				MaxAllocatedMem:  ifr.MemMonitor.MaximumBytes(),
-				MaxAllocatedDisk: ifr.diskMonitor.MaximumBytes(),
-			},
-		)
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(ifr.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(ifr.diskMonitor.MaximumBytes())),
+		},
+		Output: ifr.Out.Stats(),
 	}
-}
-
-func (ifr *invertedFilterer) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, ifr.FlowCtx.Txn); tfs != nil {
-		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
-	}
-	return nil
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (ifr *invertedFilterer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return ifr.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

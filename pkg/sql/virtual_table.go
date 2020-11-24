@@ -201,7 +201,7 @@ type vTableLookupJoinNode struct {
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
 	// indexes only support a single indexed column currently.
 	eqCol             int
-	virtualTableEntry virtualDefEntry
+	virtualTableEntry *virtualDefEntry
 
 	joinType descpb.JoinType
 
@@ -271,7 +271,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 	for {
 		// Check if there are any rows left to emit from the last input row.
 		if v.run.rows.Len() > 0 {
-			v.run.row = v.run.rows.At(0)
+			copy(v.run.row, v.run.rows.At(0))
 			v.run.rows.PopFirst(params.ctx)
 			return true, nil
 		}

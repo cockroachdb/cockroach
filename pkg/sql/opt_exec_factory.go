@@ -21,8 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -31,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -107,7 +108,7 @@ func (ef *execFactory) ConstructScan(
 	scan.reverse = params.Reverse
 	scan.parallelize = params.Parallelize
 	var err error
-	scan.spans, err = generateScanSpans(ef.planner.ExecCfg().Codec, tabDesc, indexDesc, params)
+	scan.spans, err = generateScanSpans(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc, params)
 	if err != nil {
 		return nil, err
 	}
@@ -128,14 +129,15 @@ func (ef *execFactory) ConstructScan(
 }
 
 func generateScanSpans(
+	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
 	tabDesc *tabledesc.Immutable,
 	indexDesc *descpb.IndexDescriptor,
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
-	sb := span.MakeBuilder(codec, tabDesc, indexDesc)
+	sb := span.MakeBuilder(evalCtx, codec, tabDesc, indexDesc)
 	if params.InvertedConstraint != nil {
-		return GenerateInvertedSpans(params.InvertedConstraint, sb)
+		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint)
 	}
 	return sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 }
@@ -439,11 +441,11 @@ func (ef *execFactory) ConstructGroupBy(
 	}
 	for _, col := range n.groupCols {
 		// TODO(radu): only generate the grouping columns we actually need.
-		f := n.newAggregateFuncHolder(
+		f := newAggregateFuncHolder(
 			builtins.AnyNotNull,
 			[]int{col},
-			nil, /* arguments */
-			ef.planner.EvalContext().Mon.MakeBoundAccount(),
+			nil,   /* arguments */
+			false, /* isDistinct */
 		)
 		n.funcs = append(n.funcs, f)
 	}
@@ -458,15 +460,12 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 		agg := &aggregations[i]
 		renderIdxs := convertOrdinalsToInts(agg.ArgCols)
 
-		f := n.newAggregateFuncHolder(
+		f := newAggregateFuncHolder(
 			agg.FuncName,
 			renderIdxs,
 			agg.ConstArgs,
-			ef.planner.EvalContext().Mon.MakeBoundAccount(),
+			agg.Distinct,
 		)
-		if agg.Distinct {
-			f.setDistinct()
-		}
 		f.filterRenderIdx = int(agg.Filter)
 
 		n.funcs = append(n.funcs, f)
@@ -574,6 +573,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	eqColsAreKey bool,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
+	isSecondJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 	locking *tree.LockingItem,
 ) (exec.Node, error) {
@@ -596,11 +596,12 @@ func (ef *execFactory) ConstructLookupJoin(
 	}
 
 	n := &lookupJoinNode{
-		input:        input.(planNode),
-		table:        tableScan,
-		joinType:     joinType,
-		eqColsAreKey: eqColsAreKey,
-		reqOrdering:  ReqOrdering(reqOrdering),
+		input:                      input.(planNode),
+		table:                      tableScan,
+		joinType:                   joinType,
+		eqColsAreKey:               eqColsAreKey,
+		isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
+		reqOrdering:                ReqOrdering(reqOrdering),
 	}
 	n.eqCols = make([]int, len(eqCols))
 	for i, c := range eqCols {
@@ -686,6 +687,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	index cat.Index,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
+	isFirstJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
@@ -704,11 +706,12 @@ func (ef *execFactory) ConstructInvertedJoin(
 	tableScan.index = indexDesc
 
 	n := &invertedJoinNode{
-		input:        input.(planNode),
-		table:        tableScan,
-		joinType:     joinType,
-		invertedExpr: invertedExpr,
-		reqOrdering:  ReqOrdering(reqOrdering),
+		input:                     input.(planNode),
+		table:                     tableScan,
+		joinType:                  joinType,
+		invertedExpr:              invertedExpr,
+		isFirstJoinInPairedJoiner: isFirstJoinInPairedJoiner,
+		reqOrdering:               ReqOrdering(reqOrdering),
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onExpr = onCond
@@ -716,12 +719,19 @@ func (ef *execFactory) ConstructInvertedJoin(
 	// Build the result columns.
 	inputCols := planColumns(input.(planNode))
 	var scanCols colinfo.ResultColumns
-	if joinType != descpb.LeftSemiJoin && joinType != descpb.LeftAntiJoin {
+	if joinType.ShouldIncludeRightColsInOutput() {
 		scanCols = planColumns(tableScan)
 	}
-	n.columns = make(colinfo.ResultColumns, 0, len(inputCols)+len(scanCols))
+	numCols := len(inputCols) + len(scanCols)
+	if isFirstJoinInPairedJoiner {
+		numCols++
+	}
+	n.columns = make(colinfo.ResultColumns, 0, numCols)
 	n.columns = append(n.columns, inputCols...)
 	n.columns = append(n.columns, scanCols...)
+	if isFirstJoinInPairedJoiner {
+		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
+	}
 	return n, nil
 }
 
@@ -1077,7 +1087,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 		return nil, err
 	}
 	return &valuesNode{
-		columns:          colinfo.ExplainOptColumns,
+		columns:          append(colinfo.ResultColumns(nil), colinfo.ExplainPlanColumns...),
 		tuples:           [][]tree.TypedExpr{{tree.NewDString(url.String())}},
 		specifiedInQuery: true,
 	}, nil
@@ -1100,7 +1110,7 @@ func (ef *execFactory) ConstructExplainOpt(
 	}
 
 	return &valuesNode{
-		columns:          colinfo.ExplainOptColumns,
+		columns:          append(colinfo.ResultColumns(nil), colinfo.ExplainPlanColumns...),
 		tuples:           rows,
 		specifiedInQuery: true,
 	}, nil
@@ -1108,9 +1118,9 @@ func (ef *execFactory) ConstructExplainOpt(
 
 // ConstructExplain is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExplain(
-	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
+	options *tree.ExplainOptions, analyze bool, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
-	return constructExplainDistSQLOrVecNode(options, stmtType, plan.(*planComponents), ef.planner)
+	return constructExplainDistSQLOrVecNode(options, analyze, stmtType, plan.(*planComponents), ef.planner)
 }
 
 // ConstructShowTrace is part of the exec.Factory interface.
@@ -1329,10 +1339,10 @@ func (ef *execFactory) ConstructUpdate(
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
+	var updateColsIdx catalog.TableColMap
 	for i := range ru.UpdateCols {
 		id := ru.UpdateCols[i].ID
-		updateColsIdx[id] = i
+		updateColsIdx.Set(id, i)
 	}
 
 	upd := updateNodePool.Get().(*updateNode)
@@ -1444,14 +1454,6 @@ func (ef *execFactory) ConstructUpsert(
 	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
 	// computed a correct set that can sometimes be smaller.
 	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
-
-	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
-	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
-	for i := range ru.UpdateCols {
-		id := ru.UpdateCols[i].ID
-		updateColsIdx[id] = i
-	}
 
 	// Instantiate the upsert node.
 	ups := upsertNodePool.Get().(*upsertNode)
@@ -1571,7 +1573,7 @@ func (ef *execFactory) ConstructDeleteRange(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := &tabDesc.PrimaryIndex
-	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
+	sb := span.MakeBuilder(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err
@@ -1815,11 +1817,6 @@ func (ef *execFactory) ConstructExplainPlan(
 	n := &explainPlanNode{
 		flags: flags,
 		plan:  plan.(*explain.Plan),
-	}
-	if flags.Verbose {
-		n.columns = colinfo.ExplainPlanVerboseColumns
-	} else {
-		n.columns = colinfo.ExplainPlanColumns
 	}
 	return n, nil
 }

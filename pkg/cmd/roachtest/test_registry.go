@@ -29,14 +29,14 @@ type Owner string
 
 // The allowable values of Owner.
 const (
-	OwnerAppDev       Owner = `appdev`
-	OwnerBulkIO       Owner = `bulkio`
-	OwnerCDC          Owner = `cdc`
-	OwnerKV           Owner = `kv`
-	OwnerPartitioning Owner = `partitioning`
-	OwnerSQLExec      Owner = `sql-exec`
-	OwnerSQLSchema    Owner = `sql-schema`
-	OwnerStorage      Owner = `storage`
+	OwnerSQLExperience Owner = `sql-experience`
+	OwnerBulkIO        Owner = `bulkio`
+	OwnerCDC           Owner = `cdc`
+	OwnerKV            Owner = `kv`
+	OwnerPartitioning  Owner = `partitioning`
+	OwnerSQLExec       Owner = `sql-exec`
+	OwnerSQLSchema     Owner = `sql-schema`
+	OwnerStorage       Owner = `storage`
 )
 
 // OwnerMetadata contains information about a roachtest owning team, such as
@@ -63,7 +63,7 @@ type OwnerMetadata struct {
 // roachtestOwners maps an owner in code (as specified on a roachtest spec) to
 // metadata used for github issue posting/slack rooms, etc.
 var roachtestOwners = map[Owner]OwnerMetadata{
-	OwnerAppDev: {SlackRoom: `app-dev`, ContactEmail: `rafi@cockroachlabs.com`,
+	OwnerSQLExperience: {SlackRoom: `sql-experience`, ContactEmail: `rafi@cockroachlabs.com`,
 		TriageColumnID: 7259065,
 	},
 	OwnerBulkIO: {SlackRoom: `bulk-io`, ContactEmail: `david@cockroachlabs.com`,

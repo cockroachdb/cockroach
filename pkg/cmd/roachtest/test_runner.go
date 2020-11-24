@@ -1171,8 +1171,9 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 	// (see runVersionUpgrade). The same is true for adding a new key to this
 	// map.
 	verMap := map[string]string{
-		"20.2": "20.1.4",
-		"20.1": "19.2.9",
+		"21.1": "20.2.0-rc.3",
+		"20.2": "20.1.8",
+		"20.1": "19.2.11",
 		"19.2": "19.1.11",
 		"19.1": "2.1.9",
 		"2.2":  "2.1.9",

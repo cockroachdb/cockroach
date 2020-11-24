@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -438,10 +439,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		assert.NoError(t, err)
 		defer cpEng.Close()
 
-		iter := cpEng.NewIterator(storage.IterOptions{UpperBound: []byte("\xff")})
+		iter := cpEng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: []byte("\xff")})
 		defer iter.Close()
 
-		ms, err := storage.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 0 /* nowNanos */)
+		ms, err := storage.ComputeStatsForRange(iter, roachpb.KeyMin, roachpb.KeyMax, 0 /* nowNanos */)
 		assert.NoError(t, err)
 
 		assert.NotZero(t, ms.KeyBytes)
@@ -566,14 +567,17 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	const sysCountGarbage = 123000
 
 	func() {
-		cache := storage.NewRocksDBCache(1 << 20)
-		defer cache.Release()
-		eng, err := storage.NewRocksDB(storage.RocksDBConfig{
+		cache := pebble.NewCache(1 << 20)
+		defer cache.Unref()
+		opts := storage.DefaultPebbleOptions()
+		opts.Cache = cache
+		eng, err := storage.NewPebble(ctx, storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Dir:       path,
 				MustExist: true,
 			},
-		}, cache)
+			Opts: opts,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -641,7 +645,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	for i := 1; i < numNodes; i++ {
 		targets = append(targets, tc.Target(i))
 	}
-	if _, err := tc.AddReplicas(key, targets...); err != nil {
+	if _, err := tc.AddVoters(key, targets...); err != nil {
 		t.Fatal(err)
 	}
 

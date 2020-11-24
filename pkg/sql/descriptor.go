@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -87,7 +87,38 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	desc := dbdesc.NewInitial(id, string(database.Name), p.SessionData().User)
+	if len(database.Regions) > 0 {
+		liveRegions, err := p.getLiveClusterRegions()
+		if err != nil {
+			return nil, false, err
+		}
+		regions := make([]string, 0, len(database.Regions))
+		seenRegions := make(map[string]struct{}, len(database.Regions))
+		for _, r := range database.Regions {
+			region := string(r)
+			if err := checkLiveClusterRegion(liveRegions, region); err != nil {
+				return nil, false, err
+			}
+
+			// Check names are not duplicated.
+			// This check makes this function O(regions^2), but we expect the number of regions to
+			// be added to be small.
+			if _, ok := seenRegions[region]; ok {
+				return nil, false, pgerror.Newf(
+					pgcode.InvalidName,
+					"region %q defined multiple times",
+					region,
+				)
+			}
+			seenRegions[region] = struct{}{}
+			regions = append(regions, region)
+		}
+		// regions is not currently stored anywhere.
+		_ = regions
+		return nil, false, unimplemented.New("create database with region", "implementation pending")
+	}
+
+	desc := dbdesc.NewInitial(id, string(database.Name), p.SessionData().User())
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}
@@ -173,12 +204,8 @@ func (p *planner) createDescriptorWithID(
 		if err := desc.Validate(); err != nil {
 			return err
 		}
-		if p.Descriptors().DatabaseLeasingUnsupported() {
-			p.Descriptors().AddUncommittedDatabaseDeprecated(desc.Name, desc.ID, descs.DBCreated)
-		} else {
-			if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
-				return err
-			}
+		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
+			return err
 		}
 	case *schemadesc.Mutable:
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {

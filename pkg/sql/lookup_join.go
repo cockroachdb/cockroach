@@ -22,7 +22,7 @@ type lookupJoinNode struct {
 	input planNode
 	table *scanNode
 
-	// joinType is either INNER or LEFT_OUTER.
+	// joinType is either INNER, LEFT_OUTER, LEFT_SEMI, or LEFT_ANTI.
 	joinType descpb.JoinType
 
 	// eqCols identifies the columns from the input which are used for the
@@ -40,6 +40,8 @@ type lookupJoinNode struct {
 	// onCond is any ON condition to be used in conjunction with the implicit
 	// equality condition on eqCols.
 	onCond tree.TypedExpr
+
+	isSecondJoinInPairedJoiner bool
 
 	reqOrdering ReqOrdering
 }

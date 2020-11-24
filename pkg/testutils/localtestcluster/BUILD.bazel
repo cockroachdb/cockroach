@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "localtestcluster",
+    srcs = ["local_test_cluster.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/clusterversion",
+        "//pkg/config",
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/liveness",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/storage",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+    ],
+)

@@ -94,7 +94,9 @@
 #
 # Similar to CommuteSemiJoin, this rule allows semi joins to be commuted. This
 # rule is also useful because it allows us to generate lookup joins and
-# inverted lookup joins for cases where the index is not covering.
+# inverted lookup joins for cases where the index is not covering. For inverted
+# lookup joins, the GenerateInvertedJoins* rules will also apply, and should
+# be lower cost since they avoid the DistinctOn operation.
 [ConvertSemiToInnerJoin, Explore]
 (SemiJoin
     $left:*
@@ -113,134 +115,6 @@
         )
         (MakeAggCols ConstAgg (NonKeyCols $newLeft))
         (MakeGrouping (KeyCols $newLeft) (EmptyOrdering))
-    )
-    []
-    (OutputCols $left)
-)
-
-# ConvertLeftToInnerJoin converts a left join to an inner join with the same
-# ON condition, and then wraps the expression in another left join with the
-# original left side. In order to avoid computing the left side of the join
-# twice, we create a With expression for the left side, and then reference it
-# with two WithScans. For example (assuming x is the primary key of a):
-#
-#   SELECT a.x, b.y FROM a LEFT JOIN b ON ST_Intersects(a.geom, b.geom);
-#
-# is converted to:
-#
-#   WITH a_buf AS (
-#     SELECT * FROM a
-#   )
-#   SELECT a_buf.x, inr.y FROM a_buf LEFT JOIN (
-#     SELECT * FROM a_buf JOIN b ON ST_Intersects(a_buf.geom, b.geom)
-#   ) AS inr
-#   ON a_buf.x = inr.x;
-#
-# Note that this transformation is not desirable in the general case, but it
-# is useful if there is a possibility of creating an inverted join (such as in
-# the above example). For this reason, we only perform this transformation if
-# CanGenerateInvertedJoin returns true.
-#
-# There is some added complexity due to the need to maintain the same output
-# column IDs. Therefore, the WithScan in the outer left join must retain the
-# original column IDs, but the binding expression of the With and the WithScan
-# in the inner join must have different column IDs. See the ReplaceOutputCols
-# and MakeWithScanUsingCols functions for details about how this works. Only
-# the columns from the outer left side and the inner right side are ultimately
-# projected.
-#
-# TODO(rytaft): This is a temporary solution to support index acceleration of
-# geospatial left joins. Eventually we would like to support index acceleration
-# of left joins directly by adding some extra bookkeeping to the execution
-# operators. See #53576.
-#
-# TODO(rytaft): It is possible that this transformation may be desirable in
-# more cases than just spatial queries. For example, it could enable the use
-# of a lookup join with a non-covering index.
-[ConvertLeftToInnerJoin, Explore]
-(LeftJoin
-    $left:*
-    $right:*
-    $on:* & (CanGenerateInvertedJoin $right $on)
-    $private:* & (NoJoinHints $private)
-)
-=>
-(With
-    $bindingExpr:(ReplaceOutputCols $newLeft:(EnsureKey $left))
-    (Project
-        (LeftJoin
-            $outerLeft:(MakeWithScanUsingCols
-                $id:(AddWithBinding $bindingExpr)
-                (OutputCols $newLeft)
-            )
-            (InnerJoin
-                $innerLeft:(MakeWithScan $id)
-                $right
-                (MapFilterCols
-                    $on
-                    (OutputCols $newLeft)
-                    (OutputCols $innerLeft)
-                )
-                (EmptyJoinPrivate)
-            )
-            (MakeWithScanKeyEqualityFilters
-                $outerLeft
-                $innerLeft
-            )
-            $private
-        )
-        []
-        (OutputCols2 $left $right)
-    )
-    (MakeWithPrivate $id)
-)
-
-# ConvertAntiToLeftJoin converts an anti join to a left join with the same
-# ON condition, wraps the expression in a Select to remove rows that matched
-# the ON condition, and then projects out the left side columns.
-# For example (assuming x is a not-null column in b):
-#
-#   SELECT * FROM a WHERE NOT EXISTS (
-#     SELECT * FROM b WHERE ST_Intersects(a.geom, b.geom)
-#   );
-#
-# is converted to:
-#
-#   SELECT a.* FROM a LEFT JOIN b ON ST_Intersects(a.geom, b.geom)
-#   WHERE b.x IS NULL;
-#
-# Note that this transformation is not desirable in the general case, but it
-# is useful if there is a possibility of creating an inverted join (such as in
-# the above example). For this reason, we only perform this transformation if
-# CanGenerateInvertedJoin returns true.
-#
-# TODO(rytaft): It is possible that this transformation may be desirable in
-# more cases than just spatial queries. For example, it could enable the use
-# of a lookup join with a non-covering index.
-[ConvertAntiToLeftJoin, Explore]
-(AntiJoin
-    $left:*
-    $right:*
-    $on:* & (CanGenerateInvertedJoin $right $on)
-    $private:* & (NoJoinHints $private)
-)
-=>
-(Project
-    (Select
-        (LeftJoin
-            $left
-            $newRight:(EnsureNotNullColFromFilteredScan $right)
-            $on
-            $private
-        )
-        [
-            (FiltersItem
-                (Is
-                    $variable:(Variable (NotNullCol $newRight))
-                    (Null (TypeOf $variable))
-                )
-            )
-        ]
     )
     []
     (OutputCols $left)
@@ -266,14 +140,15 @@
 =>
 (GenerateLookupJoins (OpName) $left $scanPrivate $on $private)
 
+# TODO(rytaft): The following uses paired-joins, in GenerateInvertedJoins.
+# Using paired-joins may be desirable in more cases than just spatial queries.
+# For example, it could enable the use of a lookup join with a non-covering index.
+
 # GenerateInvertedJoins creates InvertedJoin operators for all inverted
 # indexes (of the Scan table) which allow it. See the GenerateInvertedJoins
 # custom function for more details.
-# TODO(rytaft): Add support for LeftJoin, SemiJoin, and AntiJoin. Currently
-# these are supported by first converting them to InnerJoin using the rules
-# ConvertSemiToInnerJoin, ConvertLeftToInnerJoin, and ConvertAntiToLeftJoin.
 [GenerateInvertedJoins, Explore]
-(InnerJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     (Scan $scanPrivate:*) &
         (IsCanonicalScan $scanPrivate) &
@@ -287,7 +162,7 @@
 # GenerateInvertedJoinsFromSelect is similar to GenerateInvertedJoins, but
 # applies when the input is a Select.
 [GenerateInvertedJoinsFromSelect, Explore]
-(InnerJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     (Select
         (Scan $scanPrivate:*) &
@@ -306,48 +181,6 @@
     (ConcatFilters $on $filters)
     $private
 )
-
-# GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
-# Scan table) where the prefix column(s) of both indexes is/are fixed to
-# constant values in the filters. See comments in GenerateZigzagJoin and
-# distsqlrun/zigzagjoiner.go for more details on when a zigzag join can be
-# planned.
-#
-# Zigzag joins are prohibited when the source Scan operator has been configured
-# with a row-level locking mode. This is mostly out of convenience so that these
-# row-level locking modes don't need to added to the ZigzagJoin operator. There
-# doesn't seem to be a strong reason to support this, but if one comes up, it
-# should be possible to lift this restriction.
-[GenerateZigzagJoins, Explore]
-(Select
-    (Scan $scan:*) & (IsCanonicalScan $scan) & ^(IsLocking $scan)
-    $filters:*
-)
-=>
-(GenerateZigzagJoins $scan $filters)
-
-# GenerateInvertedIndexZigzagJoins creates ZigzagJoin operators for inverted
-# indexes that can be constrained with two or more distinct constant values.
-# Inverted indexes contain one row for each path-to-leaf in a JSON value, so one
-# row in the primary index could generate multiple inverted index keys. This
-# property can be exploited by zigzag joining on the same inverted index, fixed
-# at any two of the JSON paths we are querying for.
-#
-# Zigzag joins are prohibited when the source Scan operator has been configured
-# with a row-level locking mode. This is mostly out of convenience so that these
-# row-level locking modes don't need to added to the ZigzagJoin operator. There
-# doesn't seem to be a strong reason to support this, but if one comes up, it
-# should be possible to lift this restriction.
-[GenerateInvertedIndexZigzagJoins, Explore]
-(Select
-    (Scan $scan:*) &
-        (IsCanonicalScan $scan) &
-        ^(IsLocking $scan) &
-        (HasInvertedIndexes $scan)
-    $filters:*
-)
-=>
-(GenerateInvertedIndexZigzagJoins $scan $filters)
 
 # GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
 # has a Select->Scan combination as its right input. The filter can get merged

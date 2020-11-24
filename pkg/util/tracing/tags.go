@@ -14,63 +14,51 @@ import (
 	"context"
 
 	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
-// LogTagsOption is a StartSpanOption that uses log tags to populate the span tags.
+// LogTagsOption is a StartSpanOption that uses log tags to populate the Span tags.
 type logTagsOption logtags.Buffer
 
-var _ opentracing.StartSpanOption = &logTagsOption{}
+var _ SpanOption = &logTagsOption{}
 
-// Apply is part of the opentracing.StartSpanOption interface.
-//
-// The tags in the buffer go through the log tag -> span tag remapping (see
-// tagName()).
-//
-// Note that our tracer does not call Apply() for this options. Instead, it
-// recognizes it as a special case and treats it more efficiently, avoiding
-// allocations for each tag. Apply() is still used by shadow tracers.
-func (lt *logTagsOption) Apply(o *opentracing.StartSpanOptions) {
-	if lt == nil {
-		return
-	}
-	tags := (*logtags.Buffer)(lt).Get()
-	if len(tags) == 0 {
-		return
-	}
-	if o.Tags == nil {
-		o.Tags = make(map[string]interface{}, len(tags))
-	}
-	for i := range tags {
-		o.Tags[tagName(tags[i].Key())] = tags[i].ValueStr()
-	}
+func (lt *logTagsOption) apply(opts spanOptions) spanOptions {
+	opts.LogTags = (*logtags.Buffer)(lt)
+	return opts
 }
 
-// LogTags returns a StartSpanOption that sets the span tags to the given log
-// tags. When applied, the returned option will apply any logtag name->span tag
+// WithLogTags returns a SpanOption that sets the Span tags to the given log
+// tags. When applied, the returned option will apply any logtag name->Span tag
 // name remapping that has been registered via RegisterTagRemapping.
-func LogTags(tags *logtags.Buffer) opentracing.StartSpanOption {
+func WithLogTags(tags *logtags.Buffer) SpanOption {
 	return (*logTagsOption)(tags)
 }
 
-// LogTagsFromCtx returns a StartSpanOption that sets the span tags to the log
-// tags in the context.
-func LogTagsFromCtx(ctx context.Context) opentracing.StartSpanOption {
-	return (*logTagsOption)(logtags.FromContext(ctx))
+// WithCtxLogTags returns WithLogTags(logtags.FromContext(ctx)).
+func WithCtxLogTags(ctx context.Context) SpanOption {
+	return WithLogTags(logtags.FromContext(ctx))
 }
 
 // tagRemap is a map that records desired conversions
 var tagRemap = make(map[string]string)
 
-// RegisterTagRemapping sets the span tag name that corresponds to the given log
+// RegisterTagRemapping sets the Span tag name that corresponds to the given log
 // tag name. Should be called as part of an init() function.
 func RegisterTagRemapping(logTag, spanTag string) {
 	tagRemap[logTag] = spanTag
 }
 
-func tagName(logTag string) string {
-	if v, ok := tagRemap[logTag]; ok {
-		return v
+// setLogTags calls the provided function for each tag pair from the provided log tags.
+// It takes into account any prior calls to RegisterTagRemapping.
+func setLogTags(logTags []logtags.Tag, setTag func(remappedKey string, value *logtags.Tag)) {
+	tagName := func(logTag string) string {
+		if v, ok := tagRemap[logTag]; ok {
+			return v
+		}
+		return logTag
 	}
-	return logTag
+
+	for i := range logTags {
+		tag := &logTags[i]
+		setTag(tagName(tag.Key()), tag)
+	}
 }

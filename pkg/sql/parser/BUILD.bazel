@@ -1,0 +1,93 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "parser",
+    # We intentionally elide sql.go here (that's done through an exclude
+    # directive in the top-level BUILD.bazel) and instead list the generation
+    # that constructs sql.go on the fly. We pin it lest gazelle removes it
+    # during BUILD file re-generation.
+    srcs = [
+        "help.go",
+        "help_messages.go",  # keep
+        "lexer.go",
+        "parse.go",
+        "scan.go",
+        "show_syntax.go",
+        ":sql-goyacc",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/parser",
+    visibility = ["//visibility:public"],
+    # We pin some go dependencies that are present in auto-generated code, but
+    # are not visible to bazel/gazelle when generating BUILD files.
+    deps = [
+        "//pkg/docs",
+        "//pkg/geo/geopb",  # keep
+        "//pkg/roachpb",  # keep
+        "//pkg/security",  # keep
+        "//pkg/sql/lex",
+        "//pkg/sql/lexbase:lex",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",  # keep
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/lib/pq/oid",  # keep
+    ],
+)
+
+go_test(
+    name = "parser_test",
+    srcs = [
+        "help_test.go",
+        "helpmap_test.go",  # keep
+        "lexer_test.go",
+        "parse_internal_test.go",
+        "parse_test.go",
+        "scan_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":parser"],
+    deps = [
+        "//pkg/sql/lex",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/datadriven",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)
+
+sh_binary(
+    name = "sql-gen",
+    srcs = ["sql-gen.sh"],
+    data = ["sql-gen.sh"],
+)
+
+# Define the target to auto-generate sql.go from the grammar file.
+genrule(
+    name = "sql-goyacc",
+    srcs = [
+        "sql.y",
+        "replace_help_rules.awk",
+    ],
+    outs = ["sql.go"],
+    cmd = """
+      $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
+          $(location sql.go) $(location //vendor/golang.org/x/tools/cmd/goyacc) \
+          $(location //vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports)
+    """,
+    tools = [
+        ":sql-gen",
+        "//vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
+        "//vendor/golang.org/x/tools/cmd/goyacc",
+    ],
+)

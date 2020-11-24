@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -138,7 +139,7 @@ import (
 //
 // When Should a Zigzag Join Be Planned:
 //
-// The intuition behind when a zigzag join should be used is when the carnality
+// The intuition behind when a zigzag join should be used is when the cardinality
 // of the output is much smaller than the size of either side of the join. If
 // this is not the case, it may end up being slower than other joins because it
 // is constantly alternating between sides of the join. Alternatively, the
@@ -227,10 +228,9 @@ import (
 type zigzagJoiner struct {
 	joinerBase
 
-	evalCtx       *tree.EvalContext
 	cancelChecker *cancelchecker.CancelChecker
 
-	// numTables stored the number of tables involved in the join.
+	// numTables stores the number of tables involved in the join.
 	numTables int
 	// side keeps track of which side is being processed.
 	side int
@@ -240,25 +240,22 @@ type zigzagJoiner struct {
 	// more information.
 	infos []*zigzagJoinerInfo
 
-	// Base row stores the that the algorithm is compared against and is updated
-	// with every change of side.
+	// baseRow stores the row that the algorithm is compared against and is
+	// updated with every change of side.
 	baseRow rowenc.EncDatumRow
 
-	rowAlloc rowenc.EncDatumRowAlloc
-
-	// TODO(andrei): get rid of this field and move the actions it gates into the
-	// Start() method.
-	started bool
-
-	// returnedMeta contains all the metadata that zigzag joiner has emitted.
-	returnedMeta []execinfrapb.ProducerMetadata
+	rowAlloc           rowenc.EncDatumRowAlloc
+	fetchedInititalRow bool
 }
 
-// Batch size is a parameter which determines how many rows should be fetched
-// at a time. Increasing this will improve performance for when matched rows
-// are grouped together, but increasing this too much will result in fetching
-// too many rows and therefore skipping less rows.
-const zigzagJoinerBatchSize = 5
+// zigzagJoinerBatchSize is a parameter which determines how many rows should
+// be fetched at a time. Increasing this will improve performance for when
+// matched rows are grouped together, but increasing this too much will result
+// in fetching too many rows and therefore skipping less rows.
+var zigzagJoinerBatchSize = int64(util.ConstantWithMetamorphicTestValue(
+	5, /* defaultValue */
+	1, /* metamorphicValue */
+))
 
 var _ execinfra.Processor = &zigzagJoiner{}
 var _ execinfra.RowSource = &zigzagJoiner{}
@@ -277,6 +274,12 @@ func newZigzagJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*zigzagJoiner, error) {
+	if len(spec.Tables) != 2 {
+		return nil, errors.AssertionFailedf("zigzag joins only of two tables (or indexes) are supported, %d requested", len(spec.Tables))
+	}
+	if spec.Type != descpb.InnerJoin {
+		return nil, errors.AssertionFailedf("only inner zigzag joins are supported, %s requested", spec.Type)
+	}
 	z := &zigzagJoiner{}
 
 	// TODO(ajwerner): Utilize a cached copy of these tables.
@@ -298,17 +301,15 @@ func newZigzagJoiner(
 		spec.OnExpr,
 		leftEqCols,
 		rightEqCols,
-		0, /* numMerged */
+		false, /* outputContinuationColumn */
 		post,
 		output,
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-				// producerMeta appends any extra metadata to the z.returnedMeta
-				// field, so we can just return that afterwards.
-				z.producerMeta(nil /* err */)
-				return z.returnedMeta
+				z.close()
+				return z.generateMeta(ctx)
 			},
-		}, // zigzagJoiner doesn't have any inputs to drain.
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -316,8 +317,6 @@ func newZigzagJoiner(
 
 	z.numTables = len(spec.Tables)
 	z.infos = make([]*zigzagJoinerInfo, z.numTables)
-	z.returnedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
-
 	for i := range z.infos {
 		z.infos[i] = &zigzagJoinerInfo{}
 	}
@@ -364,7 +363,6 @@ func valuesSpecToEncDatum(
 // Start is part of the RowSource interface.
 func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
-	z.evalCtx = z.FlowCtx.NewEvalCtx()
 	z.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
 	return ctx
@@ -433,7 +431,7 @@ func (z *zigzagJoiner) setupInfo(
 	columnTypes := info.table.ColumnTypes()
 	colIdxMap := info.table.ColumnIdxMap()
 	for i, columnID := range columnIDs {
-		info.indexTypes[i] = columnTypes[colIdxMap[columnID]]
+		info.indexTypes[i] = columnTypes[colIdxMap.GetDefault(columnID)]
 	}
 
 	// Add the outputted columns.
@@ -446,7 +444,7 @@ func (z *zigzagJoiner) setupInfo(
 
 	// Add the fixed columns.
 	for i := 0; i < len(info.fixedValues); i++ {
-		neededCols.Add(colIdxMap[columnIDs[i]])
+		neededCols.Add(colIdxMap.GetDefault(columnIDs[i]))
 	}
 
 	// Add the equality columns.
@@ -457,7 +455,7 @@ func (z *zigzagJoiner) setupInfo(
 	// Setup the RowContainers.
 	info.container.Reset()
 
-	info.spanBuilder = span.MakeBuilder(flowCtx.Codec(), info.table, info.index)
+	info.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), info.table, info.index)
 
 	// Setup the Fetcher.
 	_, _, err := initRowFetcher(
@@ -494,32 +492,12 @@ func (z *zigzagJoiner) setupInfo(
 }
 
 func (z *zigzagJoiner) close() {
-	for i := range z.infos {
-		z.infos[i].fetcher.Close(z.Ctx)
-	}
-	log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
-}
-
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (z *zigzagJoiner) producerMeta(err error) *execinfrapb.ProducerMetadata {
-	var meta *execinfrapb.ProducerMetadata
 	if z.InternalClose() {
-		if err != nil {
-			meta = &execinfrapb.ProducerMetadata{Err: err}
-		} else if trace := execinfra.GetTraceData(z.Ctx); trace != nil {
-			meta = &execinfrapb.ProducerMetadata{TraceData: trace}
+		for i := range z.infos {
+			z.infos[i].fetcher.Close(z.Ctx)
 		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
-		z.close()
+		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}
-	if meta != nil {
-		z.returnedMeta = append(z.returnedMeta, *meta)
-	}
-	return meta
 }
 
 func findColumnID(s []descpb.ColumnID, t descpb.ColumnID) int {
@@ -583,7 +561,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 	// EncodeInvertedIndexKeys to generate the prefix. The rest of the
 	// index key containing the remaining neededDatums can be generated
 	// and appended using EncodeColumns.
-	colMap := make(map[descpb.ColumnID]int)
+	var colMap catalog.TableColMap
 	decodedDatums := make([]tree.Datum, len(datums))
 
 	// Ensure all EncDatums have been decoded.
@@ -595,11 +573,11 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 
 		decodedDatums[i] = encDatum.Datum
 		if i < len(info.index.ColumnIDs) {
-			colMap[info.index.ColumnIDs[i]] = i
+			colMap.Set(info.index.ColumnIDs[i], i)
 		} else {
 			// This column's value will be encoded in the second part (i.e.
 			// EncodeColumns).
-			colMap[info.index.ExtraColumnIDs[i-len(info.index.ColumnIDs)]] = i
+			colMap.Set(info.index.ExtraColumnIDs[i-len(info.index.ColumnIDs)], i)
 		}
 	}
 
@@ -751,18 +729,16 @@ func (z *zigzagJoiner) emitFromContainers() (rowenc.EncDatumRow, error) {
 // nextRow fetches the nextRow to emit from the join. It iterates through all
 // sides until a match is found then emits the results of the match one result
 // at a time.
-func (z *zigzagJoiner) nextRow(
-	ctx context.Context, txn *kv.Txn,
-) (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatumRow, error) {
 	for {
 		if err := z.cancelChecker.Check(); err != nil {
-			return nil, &execinfrapb.ProducerMetadata{Err: err}
+			return nil, err
 		}
 
 		// Check if there are any rows built up in the containers that need to be
 		// emitted.
 		if rowToEmit, err := z.emitFromContainers(); err != nil {
-			return nil, z.producerMeta(err)
+			return nil, err
 		} else if rowToEmit != nil {
 			return rowToEmit, nil
 		}
@@ -780,7 +756,7 @@ func (z *zigzagJoiner) nextRow(
 		// use it to jump to the next possible match on the current side.
 		span, err := z.produceSpanFromBaseRow()
 		if err != nil {
-			return nil, z.producerMeta(err)
+			return nil, err
 		}
 		curInfo.key = span.Key
 
@@ -793,12 +769,12 @@ func (z *zigzagJoiner) nextRow(
 			z.FlowCtx.TraceKV,
 		)
 		if err != nil {
-			return nil, z.producerMeta(err)
+			return nil, err
 		}
 
 		fetchedRow, err := z.fetchRow(ctx)
 		if err != nil {
-			return nil, z.producerMeta(err)
+			return nil, err
 		}
 		// If the next possible match on the current side that matches the previous
 		// row is `nil`, that means that there are no more matches in the join so
@@ -809,7 +785,7 @@ func (z *zigzagJoiner) nextRow(
 
 		matched, err := z.matchBase(fetchedRow, z.side)
 		if err != nil {
-			return nil, z.producerMeta(err)
+			return nil, err
 		}
 		if matched {
 			// We've detected a match! Now, we collect all subsequent matches on both
@@ -831,11 +807,11 @@ func (z *zigzagJoiner) nextRow(
 			// of the two rows.
 			prevNext, err := z.collectAllMatches(ctx, prevSide)
 			if err != nil {
-				return nil, z.producerMeta(err)
+				return nil, err
 			}
 			curNext, err := z.collectAllMatches(ctx, z.side)
 			if err != nil {
-				return nil, z.producerMeta(err)
+				return nil, err
 			}
 
 			// No more matches, so set the baseRow to nil to indicate that we should
@@ -850,12 +826,12 @@ func (z *zigzagJoiner) nextRow(
 			eqColTypes := curInfo.eqColTypes()
 			ordering, err := curInfo.eqOrdering()
 			if err != nil {
-				return nil, z.producerMeta(err)
+				return nil, err
 			}
 			da := &rowenc.DatumAlloc{}
 			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, currentEqCols)
 			if err != nil {
-				return nil, z.producerMeta(err)
+				return nil, err
 			}
 			// We want the new current side to be the one that has the latest key
 			// since we know that this key will not be able to match any previous
@@ -921,18 +897,16 @@ func (z *zigzagJoiner) collectAllMatches(
 	return row, nil
 }
 
-// Next is part of the RowSource interface.
-func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	txn := z.FlowCtx.Txn
-
-	if !z.started {
-		z.started = true
+// maybeFetchInitialRow checks whether we have already fetched an initial row
+// from one of the inputs and does so if we haven't.
+func (z *zigzagJoiner) maybeFetchInitialRow() error {
+	if !z.fetchedInititalRow {
+		z.fetchedInititalRow = true
 
 		curInfo := z.infos[z.side]
-		// Fetch initial batch.
 		err := curInfo.fetcher.StartScan(
 			z.Ctx,
-			txn,
+			z.FlowCtx.Txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
@@ -940,59 +914,59 @@ func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 		)
 		if err != nil {
 			log.Errorf(z.Ctx, "scan error: %s", err)
-			return nil, z.producerMeta(err)
+			return err
 		}
 		fetchedRow, err := z.fetchRow(z.Ctx)
 		if err != nil {
-			err = scrub.UnwrapScrubError(err)
-			return nil, z.producerMeta(err)
+			return scrub.UnwrapScrubError(err)
 		}
 		z.baseRow = z.rowAlloc.AllocRow(len(fetchedRow))
 		copy(z.baseRow, fetchedRow)
 		z.side = z.nextSide()
 	}
+	return nil
+}
 
-	if z.Closed {
-		return nil, z.producerMeta(nil /* err */)
-	}
-
-	for {
-		row, meta := z.nextRow(z.Ctx, txn)
-		if z.Closed || meta != nil {
-			if meta != nil {
-				z.returnedMeta = append(z.returnedMeta, *meta)
-			}
-			return nil, meta
+// Next is part of the RowSource interface.
+func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	for z.State == execinfra.StateRunning {
+		if err := z.maybeFetchInitialRow(); err != nil {
+			z.MoveToDraining(err)
+			break
+		}
+		row, err := z.nextRow(z.Ctx, z.FlowCtx.Txn)
+		if err != nil {
+			z.MoveToDraining(err)
+			break
 		}
 		if row == nil {
 			z.MoveToDraining(nil /* err */)
 			break
 		}
 
-		outRow := z.ProcessRowHelper(row)
-		if outRow == nil {
-			continue
+		if outRow := z.ProcessRowHelper(row); outRow != nil {
+			return outRow, nil
 		}
-		return outRow, nil
 	}
-	meta := z.DrainHelper()
-	if meta != nil {
-		z.returnedMeta = append(z.returnedMeta, *meta)
-	}
-	return nil, meta
+
+	return nil, z.DrainHelper()
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (z *zigzagJoiner) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	if z.InternalClose() {
-		z.close()
+	z.close()
+}
+
+func (z *zigzagJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	if tfs := execinfra.GetLeafTxnFinalState(ctx, z.FlowCtx.Txn); tfs != nil {
+		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
 	}
+	return nil
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (z *zigzagJoiner) DrainMeta(_ context.Context) []execinfrapb.ProducerMetadata {
-	return z.returnedMeta
+func (z *zigzagJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	return z.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

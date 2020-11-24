@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -102,7 +103,7 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 func ReadBackupManifestFromURI(
 	ctx context.Context,
 	uri string,
-	user string,
+	user security.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, error) {
@@ -256,6 +257,8 @@ func readBackupManifest(
 		// the ModificationTime for table descriptors. When performing a restore
 		// we no longer have access to that MVCC timestamp but we can set it
 		// to a value we know will be safe.
+		//
+		// nolint:descriptormarshal
 		if t := d.GetTable(); t == nil {
 			continue
 		} else if t.Version == 1 && t.ModificationTime.IsEmpty() {
@@ -501,7 +504,7 @@ func writeTableStatistics(
 func loadBackupManifests(
 	ctx context.Context,
 	uris []string,
-	user string,
+	user security.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 ) ([]BackupManifest, error) {
@@ -627,7 +630,7 @@ func resolveBackupManifests(
 	from [][]string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
-	user string,
+	user security.SQLUsername,
 ) (
 	defaultURIs []string,
 	mainBackupManifests []BackupManifest,
@@ -1028,7 +1031,7 @@ func checkForPreviousBackup(
 // enforce that this file be deleted.
 func verifyWriteableDestination(
 	ctx context.Context,
-	user string,
+	user security.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	baseURI string,
 ) error {

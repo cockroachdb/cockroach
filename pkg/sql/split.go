@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -69,12 +70,12 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 
 func (n *splitNode) Values() tree.Datums {
 	splitEnforcedUntil := tree.DNull
-	if (n.run.lastExpirationTime != hlc.Timestamp{}) {
+	if !n.run.lastExpirationTime.IsEmpty() {
 		splitEnforcedUntil = tree.TimestampToInexactDTimestamp(n.run.lastExpirationTime)
 	}
 	return tree.Datums{
 		tree.NewDBytes(tree.DBytes(n.run.lastSplitKey)),
-		tree.NewDString(keys.PrettyPrint(nil /* valDirs */, n.run.lastSplitKey)),
+		tree.NewDString(catalogkeys.PrettyKey(nil /* valDirs */, n.run.lastSplitKey, 2)),
 		splitEnforcedUntil,
 	}
 }
@@ -91,9 +92,9 @@ func getRowKey(
 	index *descpb.IndexDescriptor,
 	values []tree.Datum,
 ) ([]byte, error) {
-	colMap := make(map[descpb.ColumnID]int)
+	var colMap catalog.TableColMap
 	for i := range values {
-		colMap[index.ColumnIDs[i]] = i
+		colMap.Set(index.ColumnIDs[i], i)
 	}
 	prefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc, index.ID)
 	key, _, err := rowenc.EncodePartialIndexKey(

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +47,6 @@ func TestWindowFunctions(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOn
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
@@ -289,11 +287,17 @@ func TestWindowFunctions(t *testing.T) {
 				for i := range ct {
 					ct[i] = types.Int
 				}
+				resultType := types.Int
+				wf := tc.windowerSpec.WindowFns[0].Func.WindowFunc
+				if wf == &percentRankFn || wf == &cumeDistFn {
+					resultType = types.Float
+				}
 				spec := &execinfrapb.ProcessorSpec{
 					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: ct}},
 					Core: execinfrapb.ProcessorCoreUnion{
 						Windower: &tc.windowerSpec,
 					},
+					ResultTypes: append(ct, resultType),
 				}
 				sem := colexecbase.NewTestingSemaphore(maxNumberFDs)
 				args := &NewColOperatorArgs{

@@ -1,4 +1,7 @@
-# LogicTest: !3node-tenant(47895)
+# 3node-tenant is blocked from running this file due to heavy reliance on
+# unavailable node IDs in this test.
+# LogicTest: !3node-tenant
+
 query error database "crdb_internal" does not exist
 ALTER DATABASE crdb_internal RENAME TO not_crdb_internal
 
@@ -27,6 +30,7 @@ crdb_internal  gossip_liveness              table  NULL  NULL
 crdb_internal  gossip_network               table  NULL  NULL
 crdb_internal  gossip_nodes                 table  NULL  NULL
 crdb_internal  index_columns                table  NULL  NULL
+crdb_internal  invalid_objects              table  NULL  NULL
 crdb_internal  jobs                         table  NULL  NULL
 crdb_internal  kv_node_status               table  NULL  NULL
 crdb_internal  kv_store_status              table  NULL  NULL
@@ -79,11 +83,25 @@ SELECT * FROM crdb_internal.schema_changes
 table_id parent_id name type target_id target_name state direction
 
 # We don't select the modification time as it does not remain contant.
-query IITTITTTTTTT colnames
-SELECT table_id, parent_id, name, database_name, version, format_version, state, sc_lease_node_id, sc_lease_expiration_time, drop_time, audit_mode, schema_name FROM crdb_internal.tables WHERE NAME = 'descriptor'
+query IITTITTTTTTTI colnames
+SELECT
+  table_id,
+  parent_id,
+  name,
+  database_name,
+  version,
+  format_version,
+  state,
+  sc_lease_node_id,
+  sc_lease_expiration_time,
+  drop_time,
+  audit_mode,
+  schema_name,
+  parent_schema_id
+FROM crdb_internal.tables WHERE NAME = 'descriptor'
 ----
-table_id  parent_id  name       database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name
-3        1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public
+table_id  parent_id  name        database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name  parent_schema_id
+3         1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public       29
 
 # Verify that table names are not double escaped.
 
@@ -129,7 +147,7 @@ SELECT * FROM crdb_internal.leases WHERE node_id < 0
 ----
 node_id  table_id  name  parent_id  expiration  deleted
 
-query ITTTTIIITFFFFFFFFFFFFFFFFF colnames
+query ITTTTIIITRRRRRRRRRRRRRRRRR colnames
 SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
 node_id  application_name  flags  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  implicit_txn
@@ -303,7 +321,7 @@ select crdb_internal.set_vmodule('')
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-20.1
+20.2
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -456,7 +474,7 @@ select * from crdb_internal.gossip_alerts
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-20.1
+20.2
 
 user root
 
@@ -494,17 +512,22 @@ RESET application_name
 # reset to 0 between statements - a naive implementation could make
 # the counter increase forever, even between statements.
 #
+# TODO(radu): there should be a single fingerprint, with ::INTERVAL. The
+# different fingerprint on retries is caused by in-place mutation of the AST
+# (#22847).
+#
 query TIB
 SELECT key, max_retries, flags LIKE '!%' AS f
   FROM crdb_internal.node_statement_statistics
  WHERE application_name = 'test_max_retry'
 ORDER BY key, f
 ----
-CREATE SEQUENCE s                                           0  false
-DROP SEQUENCE s                                             0  false
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)  2  false
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)  1  true
-SET application_name = DEFAULT                              0  false
+CREATE SEQUENCE s                                                     0  false
+DROP SEQUENCE s                                                       0  false
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            2  false
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            1  true
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_::INTERVAL), _)  0  true
+SET application_name = DEFAULT                                        0  false
 
 
 # Testing split_enforced_until when truncating and dropping.
@@ -667,9 +690,9 @@ SELECT * FROM t_53504
 query ITTTI colnames
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
 ----
-node_id  application_name     key                               statement_ids                                                                                         count
-1        test_txn_statistics  02c92b698a5cb4c59708e7de50bdbf53  {7d5470c38539309ff3b933fec35fefad,7d5470c38539309ff3b933fec35fefad,7d5470c38539309ff3b933fec35fefad}  1
-1        test_txn_statistics  5a29a80adae483c4cfa89f5b228682fb  {94a482186de515de23eca3d1b443e033}                                                                    1
-1        test_txn_statistics  8199fcfefafda1121b286c08b21559c3  {7d5470c38539309ff3b933fec35fefad}                                                                    1
-1        test_txn_statistics  cb83bd7423a1016e148d2d9a6d89427d  {7d5470c38539309ff3b933fec35fefad,7d5470c38539309ff3b933fec35fefad}                                   2
-1        test_txn_statistics  cd8858558756fb4a4917ccfface8c12b  {ca672b3b015c5f7ca3b4d8488eb2f528}                                                                    1
+node_id  application_name     key                   statement_ids                                                     count
+1        test_txn_statistics  4572719807723346491   {14727561584397653505,14727561584397653505}                       2
+1        test_txn_statistics  6826443595058283584   {14727561584397653505,14727561584397653505,14727561584397653505}  1
+1        test_txn_statistics  7134109142904971730   {14727561584397653517}                                            1
+1        test_txn_statistics  7134109142904971742   {14727561584397653505}                                            1
+1        test_txn_statistics  10166963080898232577  {2484845987516053214}                                             1

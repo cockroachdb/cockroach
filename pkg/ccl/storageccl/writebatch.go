@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -40,7 +41,7 @@ func evalWriteBatch(
 	ms := cArgs.Stats
 
 	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("WriteBatch [%s,%s)", args.Key, args.EndKey))
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	if log.V(1) {
 		log.Infof(ctx, "writebatch [%s,%s)", args.Key, args.EndKey)
 	}
@@ -83,9 +84,9 @@ func clearExistingData(
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
-		if err := batch.Iterate(start, end, func(_ storage.MVCCKeyValue) (bool, error) {
+		if err := batch.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(_ storage.MVCCKeyValue) error {
 			isEmpty = false
-			return true, nil // stop right away
+			return iterutil.StopIteration() // stop right away
 		}); err != nil {
 			return enginepb.MVCCStats{}, errors.Wrap(err, "while checking for empty key space")
 		}
@@ -95,7 +96,7 @@ func clearExistingData(
 		}
 	}
 
-	iter := batch.NewIterator(storage.IterOptions{UpperBound: end})
+	iter := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end})
 	defer iter.Close()
 
 	iter.SeekGE(storage.MakeMVCCMetadataKey(start))
@@ -111,10 +112,10 @@ func clearExistingData(
 	}
 
 	log.Eventf(ctx, "target key range not empty, will clear existing data: %+v", existingStats)
-	// If this is a Iterator, we have to unwrap it because
+	// If this is a MVCCIterator, we have to unwrap it because
 	// ClearIterRange needs a plain rocksdb iterator (and can't unwrap
 	// it itself because of import cycles).
-	if ssi, ok := iter.(*spanset.Iterator); ok {
+	if ssi, ok := iter.(*spanset.MVCCIterator); ok {
 		iter = ssi.Iterator()
 	}
 	// TODO(dan): Ideally, this would use `batch.ClearRange` but it doesn't

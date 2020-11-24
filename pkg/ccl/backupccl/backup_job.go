@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -154,12 +155,20 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 		return 0, err
 	}
 	var nodes int
-	_ = g.IterateInfos(
+	err = g.IterateInfos(
 		gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
 			nodes++
 			return nil
 		},
 	)
+	if err != nil {
+		return 0, err
+	}
+	// If we somehow got 0 and return it, a caller may panic if they divide by
+	// such a nonsensical nodecount.
+	if nodes == 0 {
+		return 1, errors.New("failed to count nodes")
+	}
 	return nodes, nil
 }
 
@@ -172,7 +181,7 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 //   file.
 func backup(
 	ctx context.Context,
-	phs sql.PlanHookState,
+	execCtx sql.JobExecContext,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
 	db *kv.DB,
@@ -286,7 +295,7 @@ func backup(
 
 	if err := distBackup(
 		ctx,
-		phs,
+		execCtx,
 		spans,
 		introducedSpans,
 		pkIDs,
@@ -403,10 +412,10 @@ type backupResumer struct {
 
 // Resume is part of the jobs.Resumer interface.
 func (b *backupResumer) Resume(
-	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	details := b.job.Details().(jobspb.BackupDetails)
-	p := phs.(sql.PlanHookState)
+	p := execCtx.(sql.JobExecContext)
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
@@ -490,7 +499,11 @@ func (b *backupResumer) Resume(
 
 	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
 	if err != nil {
-		return err
+		if !build.IsRelease() {
+			return err
+		}
+		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
+		numClusterNodes = 1
 	}
 
 	statsCache := p.ExecCfg().TableStatsCache
@@ -609,7 +622,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 			ctx,
 			"lookup-schedule-info",
 			txn,
-			sessiondata.InternalExecutorOverride{User: security.NodeUser},
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 			fmt.Sprintf(
 				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
 				env.SystemJobsTableName()),
@@ -655,18 +668,18 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	defer b.maybeNotifyScheduledJobCompletion(
 		ctx,
 		jobs.StatusFailed,
-		phs.(sql.PlanHookState).ExecCfg(),
+		execCtx.(sql.JobExecContext).ExecCfg(),
 	)
 
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
 
-	p := phs.(sql.PlanHookState)
+	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
 	if err := b.clearStats(ctx, p.ExecCfg().DB); err != nil {
 		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)
@@ -678,7 +691,7 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 }
 
 func (b *backupResumer) deleteCheckpoint(
-	ctx context.Context, cfg *sql.ExecutorConfig, user string,
+	ctx context.Context, cfg *sql.ExecutorConfig, user security.SQLUsername,
 ) {
 	// Attempt to delete BACKUP-CHECKPOINT.
 	if err := func() error {

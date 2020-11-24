@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -43,7 +43,7 @@ import (
 )
 
 // testUser has valid client certs.
-var testUser = server.TestUser
+var testUser = security.TestUser
 
 // checkKVs verifies that a KeyValue slice contains the expected keys and
 // values. The values can be either integers or strings; the expected results
@@ -313,7 +313,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 	if err := db.GetProto(context.Background(), key, &readZoneConfig); err != nil {
 		t.Fatalf("unable to get proto: %s", err)
 	}
-	if !proto.Equal(&zoneConfig, &readZoneConfig) {
+	if !zoneConfig.Equal(&readZoneConfig) {
 		t.Errorf("expected %+v, but found %+v", zoneConfig, readZoneConfig)
 	}
 }
@@ -338,7 +338,7 @@ func TestClientGetAndPut(t *testing.T) {
 	if !bytes.Equal(value, gr.ValueBytes()) {
 		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
 	}
-	if gr.Value.Timestamp == (hlc.Timestamp{}) {
+	if gr.Value.Timestamp.IsEmpty() {
 		t.Fatalf("expected non-zero timestamp; got empty")
 	}
 }
@@ -361,7 +361,7 @@ func TestClientPutInline(t *testing.T) {
 	if !bytes.Equal(value, gr.ValueBytes()) {
 		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
 	}
-	if ts := gr.Value.Timestamp; ts != (hlc.Timestamp{}) {
+	if ts := gr.Value.Timestamp; !ts.IsEmpty() {
 		t.Fatalf("expected zero timestamp; got %s", ts)
 	}
 }

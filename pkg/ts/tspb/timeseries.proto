@@ -18,6 +18,7 @@ import "google/api/annotations.proto";
 // TimeSeriesDatapoint is a single point of time series data; a value associated
 // with a timestamp.
 message TimeSeriesDatapoint {
+  option (gogoproto.equal) = true;
   // The timestamp when this datapoint is located, expressed in nanoseconds
   // since the unix epoch.
   optional int64 timestamp_nanos = 1 [(gogoproto.nullable) = false];
@@ -30,6 +31,7 @@ message TimeSeriesDatapoint {
 // combination, uniquely identify the time series being measured. Measurement
 // data is represented as a repeated set of TimeSeriesDatapoint messages.
 message TimeSeriesData {
+  option (gogoproto.equal) = true;
   // A string which uniquely identifies the variable from which this data was
   // measured.
   optional string name = 1 [(gogoproto.nullable) = false];
@@ -83,6 +85,7 @@ enum TimeSeriesQueryDerivative {
 // Each Query defines a specific metric to query over the time span of
 // this request.
 message Query {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_getters) = true;
 
   // The name of the time series to query.
@@ -104,6 +107,7 @@ message Query {
 // TimeSeriesQueryRequest is the standard incoming time series query request
 // accepted from cockroach clients.
 message TimeSeriesQueryRequest {
+  option (gogoproto.equal) = true;
   // A timestamp in nanoseconds which defines the early bound of the time span
   // for this query.
   optional int64 start_nanos = 1 [(gogoproto.nullable) = false];
@@ -122,8 +126,10 @@ message TimeSeriesQueryRequest {
 // TimeSeriesQueryResponse is the standard response for time series queries
 // returned to cockroach clients.
 message TimeSeriesQueryResponse {
+  option (gogoproto.equal) = true;
   // Result is the data returned from a single metric query over a time span.
   message Result {
+    option (gogoproto.equal) = true;
     optional Query query = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
     repeated TimeSeriesDatapoint datapoints = 2 [(gogoproto.nullable) = false];
   }

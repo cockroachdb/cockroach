@@ -144,7 +144,7 @@ func (s *Statistics) String() string {
 // maintaining statistics on a few columns and column sets that are frequently
 // used in predicates, group by columns, etc.
 //
-// ColumnStatistiscs can be copied by value.
+// ColumnStatistics can be copied by value.
 type ColumnStatistic struct {
 	// Cols is the set of columns whose data are summarized by this
 	// ColumnStatistic struct. The ColSet is never modified in-place.

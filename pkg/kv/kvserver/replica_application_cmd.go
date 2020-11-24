@@ -21,8 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -60,7 +59,7 @@ type replicatedCmd struct {
 	// finishTracingSpan. This span "follows from" the proposer's span (even
 	// when the proposer is remote; we marshall tracing info through the
 	// proposal).
-	sp opentracing.Span
+	sp *tracing.Span
 
 	// The following fields are set in shouldApplyCommand when we validate that
 	// a command applies given the current lease and GC threshold. The process
@@ -182,7 +181,7 @@ func (c *replicatedCmd) FinishNonLocal(ctx context.Context) {
 }
 
 func (c *replicatedCmd) finishTracingSpan() {
-	tracing.FinishSpan(c.sp)
+	c.sp.Finish()
 	c.ctx, c.sp = nil, nil
 }
 

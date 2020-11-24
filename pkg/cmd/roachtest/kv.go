@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -168,7 +167,7 @@ func registerKV(r *testRegistry) {
 			nameParts = append(nameParts, fmt.Sprintf("splt=%d", computeNumSplits(opts)))
 		}
 		if opts.sequential {
-			nameParts = append(nameParts, fmt.Sprintf("seq"))
+			nameParts = append(nameParts, "seq")
 		}
 
 		minVersion := "v2.0.0"
@@ -328,6 +327,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				// other earlier kv invocation's footsteps.
 				run(kv+" --seed 2 {pgurl:1}", true)
 			})
+			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector, even if test fails below
 
 			if minFrac, actFrac := 0.8, qpsOneDown/qpsAllUp; actFrac < minFrac {
 				t.Fatalf(
@@ -336,19 +336,18 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				)
 			}
 			t.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
-			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector
 		},
 	})
 }
 
 func registerKVGracefulDraining(r *testRegistry) {
 	r.Add(testSpec{
-		Name:    "kv/gracefuldraining/nodes=3",
-		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(4),
+		Name:        "kv/gracefuldraining/nodes=3",
+		Owner:       OwnerKV,
+		Cluster:     makeClusterSpec(4),
+		Skip:        "flaky",
+		SkipDetails: "https://github.com/cockroachdb/cockroach/issues/53760",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			skip.UnderRace(t, "race builds make this test exceed its timeout")
-
 			nodes := c.spec.NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -586,7 +585,7 @@ func registerKVRangeLookups(r *testRegistry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
-			cmd := fmt.Sprintf("./workload init kv --splits=1000 {pgurl:1}")
+			cmd := "./workload init kv --splits=1000 {pgurl:1}"
 			if err := c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
 				return err
 			}

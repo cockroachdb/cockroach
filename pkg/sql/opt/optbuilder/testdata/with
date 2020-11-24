@@ -39,7 +39,7 @@ EXPLAIN
     SELECT * FROM x NATURAL JOIN t
 ----
 explain
- ├── columns: tree:9 field:10 description:11
+ ├── columns: info:9
  └── with &1 (t)
       ├── columns: a:4!null b:5
       ├── project
@@ -811,26 +811,20 @@ build
 WITH cte AS (EXPLAIN (VERBOSE) SELECT 1) SELECT * FROM cte
 ----
 with &1 (cte)
- ├── columns: tree:9 field:10 description:11 columns:12 ordering:13
- ├── project
- │    ├── columns: tree:2 field:5 description:6 columns:7 ordering:8
- │    └── explain
- │         ├── columns: tree:2 level:3 node_type:4 field:5 description:6 columns:7 ordering:8
- │         ├── mode: verbose
- │         └── project
- │              ├── columns: "?column?":1!null
- │              ├── values
- │              │    └── ()
- │              └── projections
- │                   └── 1 [as="?column?":1]
+ ├── columns: info:3
+ ├── explain
+ │    ├── columns: info:2
+ │    ├── mode: verbose
+ │    └── project
+ │         ├── columns: "?column?":1!null
+ │         ├── values
+ │         │    └── ()
+ │         └── projections
+ │              └── 1 [as="?column?":1]
  └── with-scan &1 (cte)
-      ├── columns: tree:9 field:10 description:11 columns:12 ordering:13
+      ├── columns: info:3
       └── mapping:
-           ├──  tree:2 => tree:9
-           ├──  field:5 => field:10
-           ├──  description:6 => description:11
-           ├──  columns:7 => columns:12
-           └──  ordering:8 => ordering:13
+           └──  info:2 => info:3
 
 # WITH RECURSIVE examples from postgres docs.
 
@@ -921,7 +915,7 @@ with &2 (included_parts)
  │              │    │         ├──  sub_part:6 => sub_part:9
  │              │    │         ├──  part:7 => part:10
  │              │    │         └──  quantity:8 => quantity:11
- │              │    ├── scan p
+ │              │    ├── scan parts [as=p]
  │              │    │    └── columns: p.part:12 p.sub_part:13 p.quantity:14 p.rowid:15!null p.crdb_internal_mvcc_timestamp:16
  │              │    └── filters (true)
  │              └── filters
@@ -972,7 +966,7 @@ with &2 (search_graph)
  │    │    └── columns: g.id:1 g.link:2 g.data:3 "?column?":5 array:6 bool:7
  │    ├── project
  │    │    ├── columns: "?column?":5!null array:6!null bool:7!null g.id:1!null g.link:2 g.data:3
- │    │    ├── scan g
+ │    │    ├── scan graph [as=g]
  │    │    │    └── columns: g.id:1!null g.link:2 g.data:3 crdb_internal_mvcc_timestamp:4
  │    │    └── projections
  │    │         ├── 1 [as="?column?":5]
@@ -984,7 +978,7 @@ with &2 (search_graph)
  │         │    ├── columns: g.id:14!null g.link:15 g.data:16 crdb_internal_mvcc_timestamp:17 id:18 link:19!null data:20 depth:21 path:22 cycle:23!null
  │         │    ├── inner-join (cross)
  │         │    │    ├── columns: g.id:14!null g.link:15 g.data:16 crdb_internal_mvcc_timestamp:17 id:18 link:19 data:20 depth:21 path:22 cycle:23
- │         │    │    ├── scan g
+ │         │    │    ├── scan graph [as=g]
  │         │    │    │    └── columns: g.id:14!null g.link:15 g.data:16 crdb_internal_mvcc_timestamp:17
  │         │    │    ├── with-scan &1 (search_graph)
  │         │    │    │    ├── columns: id:18 link:19 data:20 depth:21 path:22 cycle:23
@@ -1355,7 +1349,7 @@ build
 EXPLAIN WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo
 ----
 explain
- ├── columns: tree:7 field:8 description:9
+ ├── columns: info:7
  └── with &1 (foo)
       ├── columns: a:6!null
       ├── project
@@ -1515,3 +1509,55 @@ with &1 (t)
            │         └──  y.a:1 => a:8
            └── filters
                 └── x.a:4 = a:8
+
+# Verify that we don't incorrectly project a+1 again (#55196).
+build
+WITH cte AS (SELECT a+1 FROM x ORDER BY a+b LIMIT 10) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: "?column?":7
+ ├── project
+ │    ├── columns: "?column?":5
+ │    └── limit
+ │         ├── columns: "?column?":5 column6:6
+ │         ├── internal-ordering: +6
+ │         ├── sort
+ │         │    ├── columns: "?column?":5 column6:6
+ │         │    ├── ordering: +6
+ │         │    ├── limit hint: 10.00
+ │         │    └── project
+ │         │         ├── columns: "?column?":5 column6:6
+ │         │         ├── scan x
+ │         │         │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         │         └── projections
+ │         │              ├── a:1 + 1 [as="?column?":5]
+ │         │              └── a:1 + b:2 [as=column6:6]
+ │         └── 10
+ └── with-scan &1 (cte)
+      ├── columns: "?column?":7
+      └── mapping:
+           └──  "?column?":5 => "?column?":7
+
+build
+WITH cte AS (SELECT DISTINCT ON (b) a+1 FROM x) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: "?column?":6
+ ├── project
+ │    ├── columns: "?column?":5
+ │    └── distinct-on
+ │         ├── columns: b:2 "?column?":5
+ │         ├── grouping columns: b:2
+ │         ├── project
+ │         │    ├── columns: "?column?":5 b:2
+ │         │    ├── scan x
+ │         │    │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │         │    └── projections
+ │         │         └── a:1 + 1 [as="?column?":5]
+ │         └── aggregations
+ │              └── first-agg [as="?column?":5]
+ │                   └── "?column?":5
+ └── with-scan &1 (cte)
+      ├── columns: "?column?":6
+      └── mapping:
+           └──  "?column?":5 => "?column?":6

@@ -11,6 +11,9 @@
 package coldataext
 
 import (
+	"context"
+	"unsafe"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -80,11 +83,22 @@ func (d *Datum) Cast(dVec interface{}, toType *types.T) (tree.Datum, error) {
 // Hash returns the hash of the datum as a byte slice.
 func (d *Datum) Hash(da *rowenc.DatumAlloc) []byte {
 	ed := rowenc.EncDatum{Datum: maybeUnwrapDatum(d)}
-	b, err := ed.Fingerprint(d.ResolvedType(), da, nil /* appendTo */)
+	// We know that we have tree.Datum, so there will definitely be no need to
+	// decode ed for fingerprinting, so we pass in nil memory account.
+	b, err := ed.Fingerprint(context.TODO(), d.ResolvedType(), da, nil /* appendTo */, nil /* acc */)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
 	return b
+}
+
+// Size returns a lower bound on the total size of the receiver in bytes,
+// including memory that is pointed at (even if shared between Datum
+// instances) but excluding allocation overhead.
+//
+// It is assumed that d was obtained via datumVec.Get().
+func (d *Datum) Size() uintptr {
+	return d.Datum.Size()
 }
 
 // Get implements coldata.DatumVec interface.
@@ -154,11 +168,34 @@ func (dv *datumVec) MarshalAt(i int) ([]byte, error) {
 }
 
 // UnmarshalTo implements coldata.DatumVec interface.
-// index i.
 func (dv *datumVec) UnmarshalTo(i int, b []byte) error {
 	var err error
 	dv.data[i], _, err = rowenc.DecodeTableValue(&dv.da, dv.t, b)
 	return err
+}
+
+const sizeOfDatum = unsafe.Sizeof(tree.Datum(nil))
+
+// Size implements coldata.DatumVec interface.
+func (dv *datumVec) Size() uintptr {
+	// Note that we don't account for the overhead of datumVec struct, and the
+	// calculations are such that they are in line with
+	// colmem.EstimateBatchSizeBytes.
+	count := uintptr(dv.Cap())
+	size := sizeOfDatum * count
+	if datumSize, variable := tree.DatumTypeSize(dv.t); variable {
+		for _, d := range dv.data {
+			if d != nil {
+				size += d.Size()
+			}
+		}
+		// The elements in dv.data[len:cap] range are accounted with the
+		// default datum size for the type.
+		size += (count - uintptr(dv.Len())) * datumSize
+	} else {
+		size += datumSize * count
+	}
+	return size
 }
 
 // assertValidDatum asserts that the given datum is valid to be stored in this

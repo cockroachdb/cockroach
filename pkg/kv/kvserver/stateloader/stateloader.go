@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // StateLoader contains accessor methods to read or write the
@@ -290,7 +290,7 @@ func (rsl StateLoader) SetRangeAppliedState(
 		RangeStats:        newMS.ToPersistentStats(),
 	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
-	// in C.MVCCComputeStats and ComputeStatsGo.
+	// in C.MVCCComputeStats and ComputeStatsForRange.
 	ms := (*enginepb.MVCCStats)(nil)
 	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, nil, &as)
 }
@@ -400,7 +400,7 @@ func (rsl StateLoader) writeLegacyMVCCStatsInternal(
 	// enlarges the size of the struct itself. This is mostly fine - we persist
 	// MVCCStats under the RangeAppliedState key and don't account for the size of
 	// the MVCCStats struct itself when doing so (we ignore the RangeAppliedState key
-	// in ComputeStatsGo). This would not therefore not cause replica state divergence
+	// in ComputeStatsForRange). This would not therefore not cause replica state divergence
 	// in mixed version clusters (the enlarged struct does not contribute to a
 	// persisted stats difference on disk because we're not accounting for the size of
 	// the struct itself).
@@ -510,7 +510,8 @@ func (rsl StateLoader) SetGCThreshold(
 // LoadLastIndex loads the last index.
 func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader) (uint64, error) {
 	prefix := rsl.RaftLogPrefix()
-	iter := reader.NewIterator(storage.IterOptions{LowerBound: prefix})
+	// NB: raft log has no intents.
+	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
 	defer iter.Close()
 
 	var lastIndex uint64
@@ -574,7 +575,7 @@ func (rsl StateLoader) SetRaftTruncatedState(
 	if (*truncState == roachpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
-	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
+	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
@@ -604,7 +605,7 @@ func (rsl StateLoader) LoadHardState(
 func (rsl StateLoader) SetHardState(
 	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
 ) error {
-	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
+	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,

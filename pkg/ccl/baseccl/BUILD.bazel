@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "baseccl",
+    srcs = [
+        "encryption_options.pb.go",
+        "encryption_spec.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/baseccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/cliccl/cliflagsccl",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/spf13/pflag",
+    ],
+)
+
+go_test(
+    name = "baseccl_test",
+    srcs = ["encryption_spec_test.go"],
+    embed = [":baseccl"],
+    deps = ["//pkg/util/leaktest"],
+)

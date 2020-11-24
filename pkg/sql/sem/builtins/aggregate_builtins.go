@@ -166,15 +166,43 @@ var aggregates = map[string]builtinDefinition{
 		// supports parametric types.
 	),
 
-	"corr": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Float, types.Float}, types.Float, newCorrAggregate,
-			"Calculates the correlation coefficient of the selected values.", tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Int, types.Int}, types.Float, newCorrAggregate,
-			"Calculates the correlation coefficient of the selected values.", tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Float, types.Int}, types.Float, newCorrAggregate,
-			"Calculates the correlation coefficient of the selected values.", tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Int, types.Float}, types.Float, newCorrAggregate,
-			"Calculates the correlation coefficient of the selected values.", tree.VolatilityImmutable),
+	"corr": makeRegressionAggregateBuiltin(
+		newCorrAggregate,
+		"Calculates the correlation coefficient of the selected values.",
+	),
+
+	"covar_pop": makeRegressionAggregateBuiltin(
+		newCovarPopAggregate,
+		"Calculates the population covariance of the selected values.",
+	),
+
+	"covar_samp": makeRegressionAggregateBuiltin(
+		newCovarSampAggregate,
+		"Calculates the sample covariance of the selected values.",
+	),
+
+	"regr_intercept": makeRegressionAggregateBuiltin(
+		newRegressionInterceptAggregate, "Calculates y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs.",
+	),
+
+	"regr_r2": makeRegressionAggregateBuiltin(
+		newRegressionR2Aggregate, "Calculates square of the correlation coefficient.",
+	),
+
+	"regr_slope": makeRegressionAggregateBuiltin(
+		newRegressionSlopeAggregate, "Calculates slope of the least-squares-fit linear equation determined by the (X, Y) pairs.",
+	),
+
+	"regr_sxx": makeRegressionAggregateBuiltin(
+		newRegressionSXXAggregate, "Calculates sum of squares of the independent variable.",
+	),
+
+	"regr_sxy": makeRegressionAggregateBuiltin(
+		newRegressionSXYAggregate, "Calculates sum of products of independent times dependent variable.",
+	),
+
+	"regr_syy": makeRegressionAggregateBuiltin(
+		newRegressionSYYAggregate, "Calculates sum of squares of the dependent variable.",
 	),
 
 	"count": makeBuiltin(aggPropsNullableArgs(),
@@ -209,28 +237,18 @@ var aggregates = map[string]builtinDefinition{
 		func(t *types.T) tree.Overload {
 			info := "Identifies the maximum selected value."
 			vol := tree.VolatilityImmutable
-			// If t is an ambiguous type (like AnyCollatedString), then our aggregate
-			// does not have a fixed return type.
-			if t.IsAmbiguous() {
-				return makeAggOverloadWithReturnType(
-					[]*types.T{t}, tree.FirstNonNullReturnType(), newMaxAggregate, info, vol,
-				)
-			}
-			return makeAggOverload([]*types.T{t}, t, newMaxAggregate, info, vol)
+			return makeAggOverloadWithReturnType(
+				[]*types.T{t}, tree.IdentityReturnType(0), newMaxAggregate, info, vol,
+			)
 		}),
 
 	"min": collectOverloads(aggProps(), allMaxMinAggregateTypes,
 		func(t *types.T) tree.Overload {
 			info := "Identifies the minimum selected value."
 			vol := tree.VolatilityImmutable
-			// If t is an ambiguous type (like AnyCollatedString), then our aggregate
-			// does not have a fixed return type.
-			if t.IsAmbiguous() {
-				return makeAggOverloadWithReturnType(
-					[]*types.T{t}, tree.FirstNonNullReturnType(), newMinAggregate, info, vol,
-				)
-			}
-			return makeAggOverload([]*types.T{t}, t, newMinAggregate, info, vol)
+			return makeAggOverloadWithReturnType(
+				[]*types.T{t}, tree.IdentityReturnType(0), newMinAggregate, info, vol,
+			)
 		}),
 
 	"string_agg": makeBuiltin(aggPropsNullableArgs(),
@@ -641,6 +659,31 @@ func makeSTUnionBuiltin() builtinDefinition {
 	)
 }
 
+func makeRegressionAggregateBuiltin(
+	aggregateFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc, info string,
+) builtinDefinition {
+	return makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Float, types.Float}, types.Float, aggregateFunc,
+			info, tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Int}, types.Float, aggregateFunc,
+			info, tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal, types.Decimal}, types.Float, aggregateFunc,
+			info, tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float, types.Int}, types.Float, aggregateFunc,
+			info, tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float, types.Decimal}, types.Float, aggregateFunc,
+			info, tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Float}, types.Float, aggregateFunc,
+			info, tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Decimal}, types.Float, aggregateFunc,
+			info, tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal, types.Float}, types.Float, aggregateFunc,
+			info, tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal, types.Int}, types.Float, aggregateFunc,
+			info, tree.VolatilityImmutable),
+	)
+}
+
 type stMakeLineAgg struct {
 	flatCoords []float64
 	layout     geom.Layout
@@ -972,7 +1015,7 @@ func makeVarianceBuiltin() builtinDefinition {
 
 // builtinMustNotRun panics and indicates that a builtin cannot be run.
 func builtinMustNotRun(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
-	panic(fmt.Sprint("builtin must be overridden and cannot be run directly"))
+	panic("builtin must be overridden and cannot be run directly")
 }
 
 var _ tree.AggregateFunc = &arrayAggregate{}
@@ -1012,10 +1055,18 @@ var _ tree.AggregateFunc = &percentileContAggregate{}
 var _ tree.AggregateFunc = &stMakeLineAgg{}
 var _ tree.AggregateFunc = &stUnionAgg{}
 var _ tree.AggregateFunc = &stExtentAgg{}
+var _ tree.AggregateFunc = &covarPopAggregate{}
+var _ tree.AggregateFunc = &covarSampAggregate{}
+var _ tree.AggregateFunc = &regressionInterceptAggregate{}
+var _ tree.AggregateFunc = &regressionR2Aggregate{}
+var _ tree.AggregateFunc = &regressionSlopeAggregate{}
+var _ tree.AggregateFunc = &regressionSXXAggregate{}
+var _ tree.AggregateFunc = &regressionSXYAggregate{}
+var _ tree.AggregateFunc = &regressionSYYAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
-const sizeOfCorrAggregate = int64(unsafe.Sizeof(corrAggregate{}))
+const sizeOfRegressionAccumulatorBase = int64(unsafe.Sizeof(regressionAccumulatorBase{}))
 const sizeOfCountAggregate = int64(unsafe.Sizeof(countAggregate{}))
 const sizeOfCountRowsAggregate = int64(unsafe.Sizeof(countRowsAggregate{}))
 const sizeOfMaxAggregate = int64(unsafe.Sizeof(maxAggregate{}))
@@ -1736,38 +1787,33 @@ func (a *boolOrAggregate) Size() int64 {
 	return sizeOfBoolOrAggregate
 }
 
-// corrAggregate represents SQL:2003 correlation coefficient.
+// regressionAccumulatorBase is a base struct for the aggregate functions
+// for statistics. It represents a transition datatype for these functions.
+// Ported from Postgresql (see https://github.com/postgres/postgres/blob/bc1fbc960bf5efbb692f4d1bf91bf9bc6390425a/src/backend/utils/adt/float.c#L3277).
 //
-// n   be count of rows.
-// sx  be the sum of the column of values of <independent variable expression>
-// sx2 be the sum of the squares of values in the <independent variable expression> column
-// sy  be the sum of the column of values of <dependent variable expression>
-// sy2 be the sum of the squares of values in the <dependent variable expression> column
-// sxy be the sum of the row-wise products of the value in the <independent variable expression>
-//     column times the value in the <dependent variable expression> column.
+// The Youngs-Cramer algorithm is used to reduce rounding errors
+// in the aggregate final functions.
 //
-// result:
-//   1) If n*sx2 equals sx*sx, then the result is the null value.
-//   2) If n*sy2 equals sy*sy, then the result is the null value.
-//   3) Otherwise, the resut is SQRT(POWER(n*sxy-sx*sy,2) / ((n*sx2-sx*sx)*(n*sy2-sy*sy))).
-//      If the exponent of the approximate mathematical result of the operation is not within
-//      the implementation-defined exponent range for the result data type, then the result
-//      is the null value.
-type corrAggregate struct {
-	n   int
+// Note that Y is the first argument to all these aggregates!
+//
+// It might seem attractive to optimize this by having multiple accumulator
+// functions that only calculate the sums actually needed.  But on most
+// modern machines, a couple of extra floating-point multiplies will be
+// insignificant compared to the other per-tuple overhead, so I've chosen
+// to minimize code space instead.
+type regressionAccumulatorBase struct {
+	n   float64
 	sx  float64
-	sx2 float64
+	sxx float64
 	sy  float64
-	sy2 float64
+	syy float64
 	sxy float64
 }
 
-func newCorrAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &corrAggregate{}
-}
-
 // Add implements tree.AggregateFunc interface.
-func (a *corrAggregate) Add(_ context.Context, datumY tree.Datum, otherArgs ...tree.Datum) error {
+func (a *regressionAccumulatorBase) Add(
+	_ context.Context, datumY tree.Datum, otherArgs ...tree.Datum,
+) error {
 	if datumY == tree.DNull {
 		return nil
 	}
@@ -1787,22 +1833,114 @@ func (a *corrAggregate) Add(_ context.Context, datumY tree.Datum, otherArgs ...t
 		return err
 	}
 
-	a.n++
-	a.sx += x
-	a.sy += y
-	a.sx2 += x * x
-	a.sy2 += y * y
-	a.sxy += x * y
+	return a.add(y, x)
+}
 
-	if math.IsInf(a.sx, 0) ||
-		math.IsInf(a.sx2, 0) ||
-		math.IsInf(a.sy, 0) ||
-		math.IsInf(a.sy2, 0) ||
-		math.IsInf(a.sxy, 0) {
-		return tree.ErrFloatOutOfRange
+// Reset implements tree.AggregateFunc interface.
+func (a *regressionAccumulatorBase) Reset(context.Context) {
+	*a = regressionAccumulatorBase{}
+}
+
+// Close implements tree.AggregateFunc interface.
+func (a *regressionAccumulatorBase) Close(context.Context) {}
+
+// Size implements tree.AggregateFunc interface.
+func (a *regressionAccumulatorBase) Size() int64 {
+	return sizeOfRegressionAccumulatorBase
+}
+
+func (a *regressionAccumulatorBase) add(y float64, x float64) error {
+	n := a.n
+	sx := a.sx
+	sxx := a.sxx
+	sy := a.sy
+	syy := a.syy
+	sxy := a.sxy
+
+	// Use the Youngs-Cramer algorithm to incorporate the new values into the
+	// transition values.
+	n++
+	sx += x
+	sy += y
+
+	if a.n > 0 {
+		tmpX := x*n - sx
+		tmpY := y*n - sy
+		scale := 1.0 / (n * a.n)
+		sxx += tmpX * tmpX * scale
+		syy += tmpY * tmpY * scale
+		sxy += tmpX * tmpY * scale
+
+		// Overflow check.  We only report an overflow error when finite
+		// inputs lead to infinite results.  Note also that sxx, syy and Sxy
+		// should be NaN if any of the relevant inputs are infinite, so we
+		// intentionally prevent them from becoming infinite.
+		if math.IsInf(sx, 0) || math.IsInf(sxx, 0) || math.IsInf(sy, 0) || math.IsInf(syy, 0) || math.IsInf(sxy, 0) {
+			if ((math.IsInf(sx, 0) || math.IsInf(sxx, 0)) &&
+				!math.IsInf(a.sx, 0) && !math.IsInf(x, 0)) ||
+				((math.IsInf(sy, 0) || math.IsInf(syy, 0)) &&
+					!math.IsInf(a.sy, 0) && !math.IsInf(y, 0)) ||
+				(math.IsInf(sxy, 0) &&
+					!math.IsInf(a.sx, 0) && !math.IsInf(x, 0) &&
+					!math.IsInf(a.sy, 0) && !math.IsInf(y, 0)) {
+				return tree.ErrFloatOutOfRange
+			}
+
+			if math.IsInf(sxx, 0) {
+				sxx = math.NaN()
+			}
+			if math.IsInf(syy, 0) {
+				syy = math.NaN()
+			}
+			if math.IsInf(sxy, 0) {
+				sxy = math.NaN()
+			}
+		}
+	} else {
+		// At the first input, we normally can leave Sxx et al as 0.  However,
+		// if the first input is Inf or NaN, we'd better force the dependent
+		// sums to NaN; otherwise we will falsely report variance zero when
+		// there are no more inputs.
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			sxx = math.NaN()
+			sxy = math.NaN()
+		}
+		if math.IsNaN(y) || math.IsInf(y, 0) {
+			syy = math.NaN()
+			sxy = math.NaN()
+		}
 	}
 
+	a.n = n
+	a.sx = sx
+	a.sy = sy
+	a.sxx = sxx
+	a.syy = syy
+	a.sxy = sxy
+
 	return nil
+}
+
+func (a *regressionAccumulatorBase) float64Val(datum tree.Datum) (float64, error) {
+	switch val := datum.(type) {
+	case *tree.DFloat:
+		return float64(*val), nil
+	case *tree.DInt:
+		return float64(*val), nil
+	case *tree.DDecimal:
+		return val.Decimal.Float64()
+	default:
+		return 0, fmt.Errorf("invalid type %T (%v)", val, val)
+	}
+}
+
+// corrAggregate represents SQL:2003 correlation coefficient.
+type corrAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newCorrAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &corrAggregate{}
 }
 
 // Result implements tree.AggregateFunc interface.
@@ -1811,61 +1949,170 @@ func (a *corrAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 
-	if a.sx2 == 0 || a.sy2 == 0 {
+	if a.sxx == 0 || a.syy == 0 {
+		return tree.DNull, nil
+	}
+	return tree.NewDFloat(tree.DFloat(a.sxy / math.Sqrt(a.sxx*a.syy))), nil
+}
+
+// covarPopAggregate represents population covariance.
+type covarPopAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newCovarPopAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &covarPopAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *covarPopAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
 		return tree.DNull, nil
 	}
 
-	floatN := float64(a.n)
+	return tree.NewDFloat(tree.DFloat(a.sxy / a.n)), nil
+}
 
-	numeratorX := floatN*a.sx2 - a.sx*a.sx
-	if math.IsInf(numeratorX, 0) {
-		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	}
+// covarSampAggregate represents sample covariance.
+type covarSampAggregate struct {
+	regressionAccumulatorBase
+}
 
-	numeratorY := floatN*a.sy2 - a.sy*a.sy
-	if math.IsInf(numeratorY, 0) {
-		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	}
+func newCovarSampAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &covarSampAggregate{}
+}
 
-	numeratorXY := floatN*a.sxy - a.sx*a.sy
-	if math.IsInf(numeratorXY, 0) {
-		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	}
-
-	if numeratorX <= 0 || numeratorY <= 0 {
+// Result implements tree.AggregateFunc interface.
+func (a *covarSampAggregate) Result() (tree.Datum, error) {
+	if a.n < 2 {
 		return tree.DNull, nil
 	}
 
-	return tree.NewDFloat(tree.DFloat(numeratorXY / math.Sqrt(numeratorX*numeratorY))), nil
+	return tree.NewDFloat(tree.DFloat(a.sxy / (a.n - 1))), nil
 }
 
-// Reset implements tree.AggregateFunc interface.
-func (a *corrAggregate) Reset(context.Context) {
-	a.n = 0
-	a.sx = 0
-	a.sx2 = 0
-	a.sy = 0
-	a.sy2 = 0
-	a.sxy = 0
+// regressionInterceptAggregate represents y-intercept.
+type regressionInterceptAggregate struct {
+	regressionAccumulatorBase
 }
 
-// Close implements tree.AggregateFunc interface.
-func (a *corrAggregate) Close(context.Context) {}
-
-// Size implements tree.AggregateFunc interface.
-func (a *corrAggregate) Size() int64 {
-	return sizeOfCorrAggregate
+func newRegressionInterceptAggregate(
+	[]*types.T, *tree.EvalContext, tree.Datums,
+) tree.AggregateFunc {
+	return &regressionInterceptAggregate{}
 }
 
-func (a *corrAggregate) float64Val(datum tree.Datum) (float64, error) {
-	switch val := datum.(type) {
-	case *tree.DFloat:
-		return float64(*val), nil
-	case *tree.DInt:
-		return float64(*val), nil
-	default:
-		return 0, fmt.Errorf("invalid type %v", val)
+// Result implements tree.AggregateFunc interface.
+func (a *regressionInterceptAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
 	}
+	if a.sxx == 0 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat((a.sy - a.sx*a.sxy/a.sxx) / a.n)), nil
+}
+
+// regressionR2Aggregate represents square of the correlation coefficient.
+type regressionR2Aggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionR2Aggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionR2Aggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionR2Aggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+	if a.sxx == 0 {
+		return tree.DNull, nil
+	}
+	if a.syy == 0 {
+		return tree.NewDFloat(tree.DFloat(1.0)), nil
+	}
+
+	return tree.NewDFloat(tree.DFloat((a.sxy * a.sxy) / (a.sxx * a.syy))), nil
+}
+
+// regressionSlopeAggregate represents slope of the least-squares-fit linear
+// equation determined by the (X, Y) pairs.
+type regressionSlopeAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSlopeAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSlopeAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSlopeAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+	if a.sxx == 0 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sxy / a.sxx)), nil
+}
+
+// regressionSXXAggregate represents sum of squares of the independent variable.
+type regressionSXXAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSXXAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSXXAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSXXAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sxx)), nil
+}
+
+// regressionSXYAggregate represents sum of products of independent
+// times dependent variable.
+type regressionSXYAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSXYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSXYAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSXYAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sxy)), nil
+}
+
+// regressionSYYAggregate represents sum of squares of the dependent variable.
+type regressionSYYAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSYYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSYYAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSYYAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.syy)), nil
 }
 
 type countAggregate struct {
@@ -2552,7 +2799,8 @@ func (a *decimalSqrDiffAggregate) Result() (tree.Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
-	dd := &tree.DDecimal{Decimal: a.sqrDiff}
+	dd := &tree.DDecimal{}
+	dd.Set(&a.sqrDiff)
 	// Remove trailing zeros. Depending on the order in which the input
 	// is processed, some number of trailing zeros could be added to the
 	// output. Remove them so that the results are the same regardless of order.
@@ -3433,7 +3681,7 @@ func (a *percentileDiscAggregate) Result() (tree.Datum, error) {
 		}
 		return res, nil
 	}
-	panic(fmt.Sprint("input must either be a single fraction, or an array of fractions"))
+	panic("input must either be a single fraction, or an array of fractions")
 }
 
 // Reset implements tree.AggregateFunc interface.
@@ -3562,7 +3810,7 @@ func (a *percentileContAggregate) Result() (tree.Datum, error) {
 		}
 		return res, nil
 	}
-	panic(fmt.Sprint("input must either be a single fraction, or an array of fractions"))
+	panic("input must either be a single fraction, or an array of fractions")
 }
 
 // Reset implements tree.AggregateFunc interface.

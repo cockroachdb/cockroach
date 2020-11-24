@@ -164,7 +164,7 @@ func (p *Result) IsZero() bool {
 	if !p.Local.IsZero() {
 		return false
 	}
-	if !p.Replicated.Equal(kvserverpb.ReplicatedEvalResult{}) {
+	if !p.Replicated.IsZero() {
 		return false
 	}
 	if p.WriteBatch != nil {
@@ -279,15 +279,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		return errors.AssertionFailedf("conflicting AddSSTable")
 	}
 	q.Replicated.AddSSTable = nil
-
-	if q.Replicated.SuggestedCompactions != nil {
-		if p.Replicated.SuggestedCompactions == nil {
-			p.Replicated.SuggestedCompactions = q.Replicated.SuggestedCompactions
-		} else {
-			p.Replicated.SuggestedCompactions = append(p.Replicated.SuggestedCompactions, q.Replicated.SuggestedCompactions...)
-		}
-	}
-	q.Replicated.SuggestedCompactions = nil
 
 	if p.Replicated.PrevLeaseProposal == nil {
 		p.Replicated.PrevLeaseProposal = q.Replicated.PrevLeaseProposal

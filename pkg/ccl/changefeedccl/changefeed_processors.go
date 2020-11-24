@@ -161,7 +161,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 
 	if ca.sink, err = getSink(
 		ctx, ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
-		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User,
+		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User(),
 	); err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -254,6 +254,7 @@ func makeKVFeedCfg(
 		Sink:               buf,
 		Settings:           cfg.Settings,
 		DB:                 cfg.DB,
+		Codec:              cfg.Codec,
 		Clock:              cfg.DB.Clock(),
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
@@ -390,11 +391,6 @@ func (ca *changeAggregator) tick() error {
 		})
 	}
 	return nil
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (ca *changeAggregator) ConsumerDone() {
-	ca.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -549,7 +545,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	var nilOracle timestampLowerBoundOracle
 	if cf.sink, err = getSink(
 		ctx, cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets,
-		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI, cf.spec.User,
+		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI, cf.spec.User(),
 	); err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)
@@ -911,11 +907,6 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind boo
 		log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 	}
 	return true
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (cf *changeFrontier) ConsumerDone() {
-	cf.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

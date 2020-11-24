@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -32,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -214,7 +213,7 @@ func (c *conn) serveImpl(
 ) {
 	defer func() { _ = c.conn.Close() }()
 
-	if c.sessionArgs.User == security.RootUser || c.sessionArgs.User == security.NodeUser {
+	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
 		ctx = logtags.AddTag(ctx, "user", log.Safe(c.sessionArgs.User))
 	} else {
 		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
@@ -673,14 +672,14 @@ func (c *conn) sendInitialConnData(
 	}
 	// The two following status parameters have no equivalent session
 	// variable.
-	if err := c.sendParamStatus("session_authorization", c.sessionArgs.User); err != nil {
+	if err := c.sendParamStatus("session_authorization", c.sessionArgs.User.Normalized()); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 
 	// TODO(knz): this should retrieve the admin status during
 	// authentication using the roles table, instead of using a
 	// simple/naive username match.
-	isSuperUser := c.sessionArgs.User == security.RootUser
+	isSuperUser := c.sessionArgs.User.IsRootUser()
 	superUserVal := "off"
 	if isSuperUser {
 		superUserVal = "on"
@@ -1148,7 +1147,8 @@ func (c *conn) bufferRow(
 	ctx context.Context,
 	row tree.Datums,
 	formatCodes []pgwirebase.FormatCode,
-	conv sessiondata.DataConversionConfig,
+	conv sessiondatapb.DataConversionConfig,
+	sessionLoc *time.Location,
 	types []*types.T,
 ) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
@@ -1160,9 +1160,9 @@ func (c *conn) bufferRow(
 		}
 		switch fmtCode {
 		case pgwirebase.FormatText:
-			c.msgBuilder.writeTextDatum(ctx, col, conv, types[i])
+			c.msgBuilder.writeTextDatum(ctx, col, conv, sessionLoc, types[i])
 		case pgwirebase.FormatBinary:
-			c.msgBuilder.writeBinaryDatum(ctx, col, conv.Location, types[i])
+			c.msgBuilder.writeBinaryDatum(ctx, col, sessionLoc, types[i])
 		default:
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
@@ -1243,7 +1243,6 @@ func writeErr(
 func writeErrFields(
 	ctx context.Context, sv *settings.Values, err error, msgBuilder *writeBuffer, w io.Writer,
 ) error {
-	// Now send the error to the client.
 	pgErr := pgerror.Flatten(err)
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
@@ -1434,12 +1433,13 @@ func (c *conn) CreateStatementResult(
 	descOpt sql.RowDescOpt,
 	pos sql.CmdPos,
 	formatCodes []pgwirebase.FormatCode,
-	conv sessiondata.DataConversionConfig,
+	conv sessiondatapb.DataConversionConfig,
+	location *time.Location,
 	limit int,
 	portalName string,
 	implicitTxn bool,
 ) sql.CommandResult {
-	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, limit, portalName, implicitTxn)
+	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, limit, portalName, implicitTxn)
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.

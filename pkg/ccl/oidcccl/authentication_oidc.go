@@ -10,19 +10,14 @@ package oidcccl
 
 import (
 	"context"
-	crypto_rand "crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -37,11 +32,25 @@ const (
 	idTokenKey               = "id_token"
 	codeKey                  = "code"
 	stateKey                 = "state"
-	stateCookieName          = "oidc_state"
+	secretCookieName         = "oidc_secret"
 	oidcLoginPath            = "/oidc/v1/login"
 	oidcCallbackPath         = "/oidc/v1/callback"
 	genericCallbackHTTPError = "OIDC: unable to complete authentication"
 	genericLoginHTTPError    = "OIDC: unable to initiate authentication"
+	counterPrefix            = "auth.oidc."
+	beginAuthCounterName     = counterPrefix + "begin_auth"
+	beginCallbackCounterName = counterPrefix + "begin_callback"
+	loginSuccessCounterName  = counterPrefix + "login_success"
+	enableCounterName        = counterPrefix + "enable"
+	hmacKeySize              = 32
+	stateTokenSize           = 32
+)
+
+var (
+	beginAuthUseCounter     = telemetry.GetCounterOnce(beginAuthCounterName)
+	beginCallbackUseCounter = telemetry.GetCounterOnce(beginCallbackCounterName)
+	loginSuccessUseCounter  = telemetry.GetCounterOnce(loginSuccessCounterName)
+	enableUseCounter        = telemetry.GetCounterOnce(enableCounterName)
 )
 
 // oidcAuthenticationServer is an implementation of the OpenID Connect authentication code flow
@@ -101,11 +110,10 @@ const (
 //    manner, bypassing any password validation requirements, and redirect them to `/` so they can
 //    enjoy a logged-in experience in the Admin UI.
 type oidcAuthenticationServer struct {
-	mutex          syncutil.RWMutex
-	conf           oidcAuthenticationConf
-	oauth2Config   oauth2.Config
-	verifier       *oidc.IDTokenVerifier
-	stateValidator *stateValidator
+	mutex        syncutil.RWMutex
+	conf         oidcAuthenticationConf
+	oauth2Config oauth2.Config
+	verifier     *oidc.IDTokenVerifier
 	// enabled is used to store whether the user has flipped the enabled flag in the cluster settings
 	// if enabled is true and initialized is false, the code will continue to attempt to re-initialize
 	// the OIDC server every time a handler is invoked for the login or callback endpoints. This is
@@ -124,6 +132,7 @@ type oidcAuthenticationConf struct {
 	claimJSONKey   string
 	principalRegex *regexp.Regexp
 	buttonText     string
+	autoLogin      bool
 }
 
 // GetUIConf is used to extract certain parts of the OIDC
@@ -134,6 +143,7 @@ func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 	return ui.OIDCUIConf{
 		ButtonText: s.conf.buttonText,
 		Enabled:    s.enabled,
+		AutoLogin:  s.conf.autoLogin,
 	}
 }
 
@@ -157,11 +167,15 @@ func reloadConfigLocked(
 		// The success of this line is guaranteed by the validation of the setting
 		principalRegex: regexp.MustCompile(OIDCPrincipalRegex.Get(&st.SV)),
 		buttonText:     OIDCButtonText.Get(&st.SV),
+		autoLogin:      OIDCAutoLogin.Get(&st.SV),
+	}
+
+	if !server.conf.enabled && conf.enabled {
+		telemetry.Inc(enableUseCounter)
 	}
 
 	server.initialized = false
 	server.conf = conf
-	server.stateValidator = newStateValidator()
 	if server.conf.enabled {
 		// `enabled` stores the configuration state and records the operator's _intent_ that the feature
 		// be enabled. Since the call to `NewProvider` below makes an HTTP request and could fail for
@@ -211,8 +225,6 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
-	nodeDialer *nodedialer.Dialer,
-	nodeID roachpb.NodeID,
 ) (server.OIDC, error) {
 	oidcAuthentication := &oidcAuthenticationServer{}
 
@@ -235,53 +247,34 @@ var ConfigureOIDC = func(
 			return
 		}
 
+		// We trigger telemetry on this endpoint only when we pass through the enabled gate to maintain
+		// a useful signal.
+		telemetry.Inc(beginCallbackUseCounter)
+
 		state := r.URL.Query().Get(stateKey)
 
-		// First we check to see that the state matches the cookie, then make sure it matches one we
-		// stored server-side. Since we stored the entire encoded proto in the cookie, we can compare
-		// without deserialization.
-		stateCookie, err := r.Cookie(stateCookieName)
+		secretCookie, err := r.Cookie(secretCookieName)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
-		if stateCookie.Value != state {
-			log.Errorf(ctx, "OIDC: client side cookie and callback param do not match: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
-			return
+
+		kast := keyAndSignedToken{
+			secretCookie,
+			state,
 		}
 
-		statePb, err := decodeOIDCState(state)
+		valid, err := kast.validate()
 		if err != nil {
-			log.Errorf(ctx, "OIDC: failed to decode state proto: %v", err)
+			log.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
-
-		if statePb.NodeID == nodeID {
-			// Validate locally if same node.
-			err = oidcAuthentication.stateValidator.validateAndClear(string(statePb.Secret))
-			if err != nil {
-				log.Errorf(ctx, "OIDC: this node reported invalid state: %v", err)
-				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
-				return
-			}
-		} else {
-			//Ask another node if necessary.
-			conn, err := nodeDialer.Dial(ctx, statePb.NodeID, rpc.DefaultClass)
-			if err != nil {
-				log.Errorf(ctx, "OIDC: failed to dial node %d to validate state: %v", statePb.NodeID, err)
-				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
-				return
-			}
-			client := serverpb.NewLogInClient(conn)
-			_, err = client.ValidateOIDCState(ctx, &serverpb.ValidateOIDCStateRequest{State: statePb})
-			if err != nil {
-				log.Errorf(ctx, "OIDC: node %d reported invalid state: %v", statePb.NodeID, err)
-				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
-				return
-			}
+		if !valid {
+			log.Error(ctx, "OIDC: invalid client cooke and state token pair")
+			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
+			return
 		}
 
 		oauth2Token, err := oidcAuthentication.oauth2Config.Exchange(ctx, r.URL.Query().Get(codeKey))
@@ -300,7 +293,7 @@ var ConfigureOIDC = func(
 
 		idToken, err := oidcAuthentication.verifier.Verify(ctx, rawIDToken)
 		if err != nil {
-			log.Errorf(ctx, "OIDC: unable to verify token: %v", err)
+			log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -344,6 +337,8 @@ var ConfigureOIDC = func(
 
 		http.SetCookie(w, cookie)
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+
+		telemetry.Inc(loginSuccessUseCounter)
 	})
 
 	mux.HandleFunc(oidcLoginPath, func(w http.ResponseWriter, r *http.Request) {
@@ -361,36 +356,19 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		size := 16
-		state := make([]byte, size)
-		if _, err := crypto_rand.Read(state); err != nil {
-			log.Errorf(ctx, "OIDC: unable to generate oidc state cookie: %v", err)
-			http.Error(w, genericLoginHTTPError, http.StatusInternalServerError)
-			return
-		}
-		base64State := base64.URLEncoding.EncodeToString(state)
-		oidcAuthentication.stateValidator.add(base64State)
+		telemetry.Inc(beginAuthUseCounter)
 
-		encodedStateProto, err := encodeOIDCState(serverpb.OIDCState{
-			NodeID: nodeID,
-			Secret: []byte(base64State),
-		})
+		kast, err := newKeyAndSignedToken(hmacKeySize, stateTokenSize)
 		if err != nil {
-			log.Errorf(ctx, "OIDC: no state encoded: %v", err)
+			log.Errorf(ctx, "OIDC: unable to generate key and signed message: %v", err)
 			http.Error(w, genericLoginHTTPError, http.StatusInternalServerError)
 			return
 		}
 
-		oidcStateCookie := http.Cookie{
-			Name:     stateCookieName,
-			Value:    encodedStateProto,
-			Secure:   true,
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		}
-
-		http.SetCookie(w, &oidcStateCookie)
-		http.Redirect(w, r, oidcAuthentication.oauth2Config.AuthCodeURL(encodedStateProto), http.StatusFound)
+		http.SetCookie(w, kast.secretKeyCookie)
+		http.Redirect(
+			w, r, oidcAuthentication.oauth2Config.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound,
+		)
 	})
 
 	reloadConfig(serverCtx, oidcAuthentication, st)
@@ -458,14 +436,15 @@ var ConfigureOIDC = func(
 			st,
 		)
 	})
+	OIDCAutoLogin.SetOnChange(&st.SV, func() {
+		reloadConfig(
+			ambientCtx.AnnotateCtx(context.Background()),
+			oidcAuthentication,
+			st,
+		)
+	})
 
 	return oidcAuthentication, nil
-}
-
-func (s *oidcAuthenticationServer) ValidateOIDCState(state *serverpb.OIDCState) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.stateValidator.validateAndClear(string(state.Secret))
 }
 
 func init() {

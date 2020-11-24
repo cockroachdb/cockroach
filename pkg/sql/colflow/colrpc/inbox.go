@@ -14,17 +14,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -106,6 +108,10 @@ type Inbox struct {
 	// bytesRead contains the number of bytes sent to the Inbox.
 	bytesRead int64
 
+	// deserializationStopWatch records the time Inbox spends deserializing
+	// batches.
+	deserializationStopWatch *timeutil.StopWatch
+
 	scratch struct {
 		data []*array.Data
 		b    coldata.Batch
@@ -113,7 +119,7 @@ type Inbox struct {
 }
 
 var _ colexecbase.Operator = &Inbox{}
-var _ execinfra.IOReader = &Inbox{}
+var _ colexec.NetworkReader = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
@@ -128,16 +134,17 @@ func NewInbox(
 		return nil, err
 	}
 	i := &Inbox{
-		typs:       typs,
-		allocator:  allocator,
-		converter:  c,
-		serializer: s,
-		streamID:   streamID,
-		streamCh:   make(chan flowStreamServer, 1),
-		contextCh:  make(chan context.Context, 1),
-		timeoutCh:  make(chan error, 1),
-		errCh:      make(chan error, 1),
-		flowCtx:    ctx,
+		typs:                     typs,
+		allocator:                allocator,
+		converter:                c,
+		serializer:               s,
+		streamID:                 streamID,
+		streamCh:                 make(chan flowStreamServer, 1),
+		contextCh:                make(chan context.Context, 1),
+		timeoutCh:                make(chan error, 1),
+		errCh:                    make(chan error, 1),
+		flowCtx:                  ctx,
+		deserializationStopWatch: timeutil.NewStopWatch(),
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
 	return i, nil
@@ -267,8 +274,12 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		colexecerror.ExpectedError(err)
 	}
 
+	i.deserializationStopWatch.Start()
+	defer i.deserializationStopWatch.Stop()
 	for {
+		i.deserializationStopWatch.Stop()
 		m, err := i.stream.Recv()
+		i.deserializationStopWatch.Start()
 		if err != nil {
 			if err == io.EOF {
 				// Done.
@@ -307,15 +318,12 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		}
 		i.bytesRead += int64(len(m.Data.RawBytes))
 		i.scratch.data = i.scratch.data[:0]
-		if err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes); err != nil {
+		batchLength, err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes)
+		if err != nil {
 			colexecerror.InternalError(err)
 		}
-		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(
-			// We don't support type-less schema, so len(i.scratch.data) is
-			// always at least 1.
-			i.typs, i.scratch.b, i.scratch.data[0].Len(),
-		)
-		if err := i.converter.ArrowToBatch(i.scratch.data, i.scratch.b); err != nil {
+		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(i.typs, i.scratch.b, batchLength)
+		if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
 			colexecerror.InternalError(err)
 		}
 		i.rowsRead += int64(i.scratch.b.Length())
@@ -323,14 +331,19 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-// GetBytesRead is part of the execinfra.IOReader interface.
+// GetBytesRead is part of the colexec.NetworkReader interface.
 func (i *Inbox) GetBytesRead() int64 {
 	return i.bytesRead
 }
 
-// GetRowsRead is part of the execinfra.IOReader interface.
+// GetRowsRead is part of the colexec.NetworkReader interface.
 func (i *Inbox) GetRowsRead() int64 {
 	return i.rowsRead
+}
+
+// GetDeserializationTime is part of the colexec.NetworkReader interface.
+func (i *Inbox) GetDeserializationTime() time.Duration {
+	return i.deserializationStopWatch.Elapsed()
 }
 
 func (i *Inbox) sendDrainSignal(ctx context.Context) error {

@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -64,7 +65,7 @@ type scanNode struct {
 	resultColumns colinfo.ResultColumns
 
 	// Map used to get the index for columns in cols.
-	colIdxMap map[descpb.ColumnID]int
+	colIdxMap catalog.TableColMap
 
 	spans   []roachpb.Span
 	reverse bool
@@ -113,6 +114,10 @@ type scanColumnsConfig struct {
 	// can add more columns). Non public columns can only be added if allowed
 	// by the visibility flag below.
 	wantedColumns []tree.ColumnID
+	// wantedColumnsOrdinals contains the ordinals of all columns in
+	// wantedColumns. Note that if addUnwantedAsHidden flag is set, the hidden
+	// columns are not included here.
+	wantedColumnsOrdinals []uint32
 
 	// When set, the columns that are not in the wantedColumns list are added to
 	// the list of columns as hidden columns.
@@ -324,9 +329,8 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 
 	// Set up the rest of the scanNode.
 	n.resultColumns = colinfo.ResultColumnsFromColDescPtrs(n.desc.GetID(), n.cols)
-	n.colIdxMap = make(map[descpb.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
-		n.colIdxMap[c.ID] = i
+		n.colIdxMap.Set(c.ID, i)
 	}
 	return nil
 }

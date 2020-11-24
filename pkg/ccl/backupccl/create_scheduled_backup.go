@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -67,6 +68,7 @@ type scheduledBackupEval struct {
 	// backup statement in the schedule.
 	destination          func() ([]string, error)
 	encryptionPassphrase func() (string, error)
+	kmsURIs              func() ([]string, error)
 }
 
 func parseOnError(onError string, details *jobspb.ScheduleDetails) error {
@@ -245,6 +247,21 @@ func doCreateBackupSchedules(
 		backupNode.Options.EncryptionPassphrase = tree.NewDString(pw)
 	}
 
+	// Evaluate encryption KMS URIs if set.
+	// Only one of encryption passphrase and KMS URI should be set, but this check
+	// is done during backup planning so we do not need to worry about it here.
+	var kmsURIs []string
+	if eval.kmsURIs != nil {
+		kmsURIs, err = eval.kmsURIs()
+		if err != nil {
+			return errors.Wrapf(err, "failed to evaluate backup kms_uri")
+		}
+		for _, kmsURI := range kmsURIs {
+			backupNode.Options.EncryptionKMSURI = append(backupNode.Options.EncryptionKMSURI,
+				tree.NewDString(kmsURI))
+		}
+	}
+
 	// Evaluate required backup destinations.
 	destinations, err := eval.destination()
 	if err != nil {
@@ -329,7 +346,8 @@ func doCreateBackupSchedules(
 		if err := inc.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
 			return err
 		}
-		if err := emitSchedule(inc, tree.AsString(backupNode), resultsCh); err != nil {
+		if err := emitSchedule(inc, backupNode, destinations, nil /* incrementalFrom */, kmsURIs,
+			resultsCh); err != nil {
 			return err
 		}
 		unpauseOnSuccessID = inc.ScheduleID()
@@ -337,7 +355,6 @@ func doCreateBackupSchedules(
 
 	// Create FULL backup schedule.
 	backupNode.AppendToLatest = false
-	fullBackupStmt := tree.AsString(backupNode)
 	full, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel,
 		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
@@ -361,7 +378,8 @@ func doCreateBackupSchedules(
 		return err
 	}
 	collectScheduledBackupTelemetry(incRecurrence, firstRun, fullRecurrencePicked, details)
-	return emitSchedule(full, fullBackupStmt, resultsCh)
+	return emitSchedule(full, backupNode, destinations, nil /* incrementalFrom */, kmsURIs,
+		resultsCh)
 }
 
 // checkForExistingBackupsInCollection checks that there are no existing backups
@@ -408,7 +426,7 @@ func checkForExistingBackupsInCollection(
 
 func makeBackupSchedule(
 	env scheduledjobs.JobSchedulerEnv,
-	owner string,
+	owner security.SQLUsername,
 	label string,
 	recurrence *scheduleRecurrence,
 	details jobspb.ScheduleDetails,
@@ -452,7 +470,12 @@ func makeBackupSchedule(
 	return sj, nil
 }
 
-func emitSchedule(sj *jobs.ScheduledJob, backupStmt string, resultsCh chan<- tree.Datums) error {
+func emitSchedule(
+	sj *jobs.ScheduledJob,
+	backupNode *tree.Backup,
+	to, incrementalFrom, kmsURIs []string,
+	resultsCh chan<- tree.Datums,
+) error {
 	var nextRun tree.Datum
 	status := "ACTIVE"
 	if sj.IsPaused() {
@@ -469,13 +492,19 @@ func emitSchedule(sj *jobs.ScheduledJob, backupStmt string, resultsCh chan<- tre
 		nextRun = next
 	}
 
+	redactedBackupNode, err := GetRedactedBackupNode(backupNode, to, incrementalFrom, kmsURIs, "",
+		false /* hasBeenPlanned */)
+	if err != nil {
+		return err
+	}
+
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(sj.ScheduleID())),
 		tree.NewDString(sj.ScheduleLabel()),
 		tree.NewDString(status),
 		nextRun,
 		tree.NewDString(sj.ScheduleExpr()),
-		tree.NewDString(backupStmt),
+		tree.NewDString(tree.AsString(redactedBackupNode)),
 	}
 	return nil
 }
@@ -567,6 +596,14 @@ func makeScheduledBackupEval(
 	if schedule.BackupOptions.EncryptionPassphrase != nil {
 		eval.encryptionPassphrase, err =
 			p.TypeAsString(ctx, schedule.BackupOptions.EncryptionPassphrase, scheduleBackupOp)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if schedule.BackupOptions.EncryptionKMSURI != nil {
+		eval.kmsURIs, err = p.TypeAsStringArray(ctx, tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
+			scheduleBackupOp)
 		if err != nil {
 			return nil, err
 		}

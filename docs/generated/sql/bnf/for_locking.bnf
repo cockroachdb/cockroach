@@ -1,0 +1,9 @@
+for_locking_item ::=
+	'FOR' 'UPDATE' 'OF' table_name ( ( ',' table_name ) )* 'SKIP' 'LOCKED'
+	| 'FOR' 'UPDATE' 'OF' table_name ( ( ',' table_name ) )* 'NOWAIT'
+	| 'FOR' 'NO' 'KEY' 'UPDATE' 'OF' table_name ( ( ',' table_name ) )* 'SKIP' 'LOCKED'
+	| 'FOR' 'NO' 'KEY' 'UPDATE' 'OF' table_name ( ( ',' table_name ) )* 'NOWAIT'
+	| 'FOR' 'SHARE' 'OF' table_name ( ( ',' table_name ) )* 'SKIP' 'LOCKED'
+	| 'FOR' 'SHARE' 'OF' table_name ( ( ',' table_name ) )* 'NOWAIT'
+	| 'FOR' 'KEY' 'SHARE' 'OF' table_name ( ( ',' table_name ) )* 'SKIP' 'LOCKED'
+	| 'FOR' 'KEY' 'SHARE' 'OF' table_name ( ( ',' table_name ) )* 'NOWAIT'

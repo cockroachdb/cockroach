@@ -16,7 +16,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -29,8 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	crdberrors "github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 )
 
@@ -91,8 +89,7 @@ func assertStrategy(
 // kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
 // batches of KV pairs in the BatchRepr format.
 type kvBatchSnapshotStrategy struct {
-	raftCfg *base.RaftConfig
-	status  string
+	status string
 
 	// The size of the batches of PUT operations to send to the receiver of the
 	// snapshot. Only used on the sender side.
@@ -146,7 +143,8 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	}
 	newSST := storage.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
-	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
+	if err := msstw.currSST.ClearRawRange(
+		msstw.keyRanges[msstw.currRange].Start.Key, msstw.keyRanges[msstw.currRange].End.Key); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}
@@ -163,7 +161,7 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 	return nil
 }
 
-func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.MVCCKey, value []byte) error {
+func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
 	for msstw.keyRanges[msstw.currRange].End.Key.Compare(key.Key) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
@@ -175,9 +173,9 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.MVCCKey, value
 		}
 	}
 	if msstw.keyRanges[msstw.currRange].Start.Key.Compare(key.Key) > 0 {
-		return crdberrors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
+		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
 	}
-	if err := msstw.currSST.Put(key, value); err != nil {
+	if err := msstw.currSST.PutEngineKey(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
 	}
 	return nil
@@ -245,9 +243,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// All operations in the batch are guaranteed to be puts.
 			for batchReader.Next() {
 				if batchReader.BatchType() != storage.BatchTypeValue {
-					return noSnap, crdberrors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
+					return noSnap, errors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
 				}
-				key, err := batchReader.MVCCKey()
+				key, err := batchReader.EngineKey()
 				if err != nil {
 					return noSnap, errors.Wrap(err, "failed to decode mvcc key")
 				}
@@ -340,7 +338,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		if b == nil {
 			b = kvSS.newBatch()
 		}
-		if err := b.Put(unsafeKey, unsafeValue); err != nil {
+		if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
 			return 0, err
 		}
 
@@ -377,13 +375,13 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	logEntries := make([][]byte, 0, preallocSize)
 
 	var raftLogBytes int64
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+	scanFunc := func(kv roachpb.KeyValue) error {
 		bytes, err := kv.Value.GetBytes()
 		if err == nil {
 			logEntries = append(logEntries, bytes)
 			raftLogBytes += int64(len(bytes))
 		}
-		return false, err
+		return err
 	}
 
 	rangeID := header.State.Desc.RangeID
@@ -572,7 +570,7 @@ func (s *Store) canApplySnapshotLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
 	if snapHeader.IsPreemptive() {
-		return nil, crdberrors.AssertionFailedf(`expected a raft or learner snapshot`)
+		return nil, errors.AssertionFailedf(`expected a raft or learner snapshot`)
 	}
 
 	// TODO(tbg): see the comment on desc.Generation for what seems to be a much
@@ -705,7 +703,7 @@ func (s *Store) shouldAcceptSnapshotData(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) error {
 	if snapHeader.IsPreemptive() {
-		return crdberrors.AssertionFailedf(`expected a raft or learner snapshot`)
+		return errors.AssertionFailedf(`expected a raft or learner snapshot`)
 	}
 	pErr := s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest,
 		func(ctx context.Context, r *Replica) *roachpb.Error {
@@ -734,13 +732,13 @@ func (s *Store) receiveSnapshot(
 	}
 
 	if header.IsPreemptive() {
-		return crdberrors.AssertionFailedf(`expected a raft or learner snapshot`)
+		return errors.AssertionFailedf(`expected a raft or learner snapshot`)
 	}
 
 	// Defensive check that any snapshot contains this store in the	descriptor.
 	storeID := s.StoreID()
 	if _, ok := header.State.Desc.GetReplicaDescriptor(storeID); !ok {
-		return crdberrors.AssertionFailedf(
+		return errors.AssertionFailedf(
 			`snapshot of type %s was sent to s%d which did not contain it as a replica: %s`,
 			header.Type, storeID, header.State.Desc.Replicas())
 	}
@@ -781,7 +779,6 @@ func (s *Store) receiveSnapshot(
 		}
 
 		ss = &kvBatchSnapshotStrategy{
-			raftCfg:      &s.cfg.RaftConfig,
 			scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
 			sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
 		}
@@ -901,7 +898,6 @@ func (e *errMustRetrySnapshotDueToTruncation) Error() string {
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
-	raftCfg *base.RaftConfig,
 	st *cluster.Settings,
 	stream outgoingSnapshotStream,
 	storePool SnapshotStorePool,
@@ -976,7 +972,6 @@ func sendSnapshot(
 	switch header.Strategy {
 	case SnapshotRequest_KV_BATCH:
 		ss = &kvBatchSnapshotStrategy{
-			raftCfg:   raftCfg,
 			batchSize: batchSize,
 			limiter:   limiter,
 			newBatch:  newBatch,

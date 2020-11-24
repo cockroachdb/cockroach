@@ -117,12 +117,13 @@ id
 username
 species
 
-query TTT
+query T
 EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
 ----
-·            distribution  local
-·            vectorized    false
-alter table  ·             ·
+distribution: local
+vectorized: false
+·
+• alter table
 
 # Verify that EXPLAIN did not actually rename the column
 query T

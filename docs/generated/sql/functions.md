@@ -330,9 +330,13 @@
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><a name="age"></a><code>age(end: <a href="timestamp.html">timestamptz</a>, begin: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between <code>begin</code> and <code>end</code>.</p>
+<tr><td><a name="age"></a><code>age(end: <a href="timestamp.html">timestamptz</a>, begin: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between <code>begin</code> and <code>end</code>, normalized into years, months and days.</p>
+<pre><code>		Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context.
+		To avoid normalizing days into months and years, use the timestamptz subtraction operator.</code></pre>
 </span></td></tr>
-<tr><td><a name="age"></a><code>age(val: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between <code>val</code> and the current time.</p>
+<tr><td><a name="age"></a><code>age(val: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between <code>val</code> and the current time, normalized into years, months and days.</p>
+<pre><code>		Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context.
+		To avoid normalizing days into months and years, use `now() - timestamptz`.</code></pre>
 </span></td></tr>
 <tr><td><a name="clock_timestamp"></a><code>clock_timestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the current system time on one of the cluster nodes.</p>
 </span></td></tr>
@@ -442,7 +446,9 @@ historical reads against a time which is recent but sufficiently old for reads
 to be performed against the closest replica as opposed to the currently
 leaseholder for a given range.</p>
 <p>Note that this function requires an enterprise license on a CCL distribution to
-return without an error.</p>
+return a result that is less likely the closest replica. It is otherwise
+hardcoded as -4.8s from the statement time, which may not result in reading from the
+nearest replica.</p>
 </span></td></tr>
 <tr><td><a name="localtimestamp"></a><code>localtimestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
@@ -531,13 +537,13 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><a name="enum_first"></a><code>enum_first(val: anyenum) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the first value of the input enum type.</p>
+<tr><td><a name="enum_first"></a><code>enum_first(val: anyenum) &rarr; anyenum</code></td><td><span class="funcdesc"><p>Returns the first value of the input enum type.</p>
 </span></td></tr>
-<tr><td><a name="enum_last"></a><code>enum_last(val: anyenum) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the last value of the input enum type.</p>
+<tr><td><a name="enum_last"></a><code>enum_last(val: anyenum) &rarr; anyenum</code></td><td><span class="funcdesc"><p>Returns the last value of the input enum type.</p>
 </span></td></tr>
-<tr><td><a name="enum_range"></a><code>enum_range(lower: anyenum, upper: anyenum) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns all values of the input enum in an ordered array between the two arguments (inclusive).</p>
+<tr><td><a name="enum_range"></a><code>enum_range(lower: anyenum, upper: anyenum) &rarr; anyenum[]</code></td><td><span class="funcdesc"><p>Returns all values of the input enum in an ordered array between the two arguments (inclusive).</p>
 </span></td></tr>
-<tr><td><a name="enum_range"></a><code>enum_range(val: anyenum) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns all values of the input enum in an ordered array.</p>
+<tr><td><a name="enum_range"></a><code>enum_range(val: anyenum) &rarr; anyenum[]</code></td><td><span class="funcdesc"><p>Returns all values of the input enum in an ordered array.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -820,6 +826,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td></tr>
+<tr><td><a name="jsonb_exists_any"></a><code>jsonb_exists_any(json: jsonb, array: <a href="string.html">string</a>[]) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether any of the strings in the text array exist as top-level keys or array elements</p>
+</span></td></tr>
 <tr><td><a name="jsonb_extract_path"></a><code>jsonb_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
 </span></td></tr>
 <tr><td><a name="jsonb_insert"></a><code>jsonb_insert(target: jsonb, path: <a href="string.html">string</a>[], new_val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. <code>new_val</code> will be inserted before path target.</p>
@@ -980,7 +988,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="generate_subscripts"></a><code>generate_subscripts(array: anyelement[], dim: <a href="int.html">int</a>, reverse: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
 <p>When reverse is true, the series is returned in reverse order.</p>
 </span></td></tr>
-<tr><td><a name="information_schema._pg_expandarray"></a><code>information_schema._pg_expandarray(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows with an index</p>
+<tr><td><a name="information_schema._pg_expandarray"></a><code>information_schema._pg_expandarray(input: anyelement[]) &rarr; tuple{anyelement AS x, int AS n}</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows with an index</p>
 </span></td></tr>
 <tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
 </span></td></tr>
@@ -1078,7 +1086,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </tbody>
 </table>
 </span></td></tr>
-<tr><td><a name="unnest"></a><code>unnest(anyelement[], anyelement[], anyelement[]...) &rarr; tuple</code></td><td><span class="funcdesc"><p>Returns the input arrays as a set of rows</p>
+<tr><td><a name="unnest"></a><code>unnest(anyelement[], anyelement[], anyelement[]...) &rarr; tuple{anyelement AS unnest, anyelement AS unnest, anyelement AS unnest}</code></td><td><span class="funcdesc"><p>Returns the input arrays as a set of rows</p>
 </span></td></tr>
 <tr><td><a name="unnest"></a><code>unnest(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows</p>
 </span></td></tr></tbody>
@@ -1271,6 +1279,14 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_asbinary"></a><code>st_asbinary(geometry: geometry) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the WKB representation of a given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_asbinary"></a><code>st_asbinary(geometry: geometry, xdr_or_ndr: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the WKB representation of a given Geometry. This variant has a second argument denoting the encoding - <code>xdr</code> for big endian and <code>ndr</code> for little endian.</p>
+</span></td></tr>
+<tr><td><a name="st_asencodedpolyline"></a><code>st_asencodedpolyline(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the geometry as an Encoded Polyline.
+This format is used by Google Maps with precision=5 and by Open Source Routing Machine with precision=5 and 6.
+Preserves 5 decimal places.</p>
+</span></td></tr>
+<tr><td><a name="st_asencodedpolyline"></a><code>st_asencodedpolyline(geometry: geometry, precision: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the geometry as an Encoded Polyline.
+This format is used by Google Maps with precision=5 and by Open Source Routing Machine with precision=5 and 6.
+Precision specifies how many decimal places will be preserved in Encoded Polyline. Value should be the same on encoding and decoding, or coordinates will be incorrect.</p>
 </span></td></tr>
 <tr><td><a name="st_asewkb"></a><code>st_asewkb(geography: geography) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation of a given Geography.</p>
 </span></td></tr>
@@ -1816,6 +1832,14 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_linefromencodedpolyline"></a><code>st_linefromencodedpolyline(encoded_polyline: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a LineString from an Encoded Polyline string.</p>
+<p>Returns valid results only if the polyline was encoded with 5 decimal places.</p>
+<p>See <a href="http://developers.google.com/maps/documentation/utilities/polylinealgorithm" rel="nofollow">http://developers.google.com/maps/documentation/utilities/polylinealgorithm</a></p>
+</span></td></tr>
+<tr><td><a name="st_linefromencodedpolyline"></a><code>st_linefromencodedpolyline(encoded_polyline: <a href="string.html">string</a>, precision: int4) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a LineString from an Encoded Polyline string.</p>
+<p>Precision specifies how many decimal places will be preserved in Encoded Polyline. Value should be the same on encoding and decoding, or coordinates will be incorrect.</p>
+<p>See <a href="http://developers.google.com/maps/documentation/utilities/polylinealgorithm" rel="nofollow">http://developers.google.com/maps/documentation/utilities/polylinealgorithm</a></p>
+</span></td></tr>
 <tr><td><a name="st_linefrommultipoint"></a><code>st_linefrommultipoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a LineString from a MultiPoint geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_linefromtext"></a><code>st_linefromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not LineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
@@ -1836,6 +1860,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <tr><td><a name="st_lineinterpolatepoints"></a><code>st_lineinterpolatepoints(geometry: geometry, fraction: <a href="float.html">float</a>, repeat: <a href="bool.html">bool</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns one or more points along the LineString which is at an integral multiples of given fraction of LineString’s total length. If repeat is false (default true) then it returns first point.</p>
 <p>Note If the result has zero or one points, it will be returned as a POINT. If it has two or more points, it will be returned as a MULTIPOINT.</p>
 <p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_linelocatepoint"></a><code>st_linelocatepoint(line: geometry, point: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a float between 0 and 1 representing the location of the closest point on LineString to the given Point, as a fraction of total 2d line length.</p>
 </span></td></tr>
 <tr><td><a name="st_linemerge"></a><code>st_linemerge(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a LineString or MultiLineString by joining together constituents of a MultiLineString with matching endpoints. If the input is not a MultiLineString or LineString, an empty GeometryCollection is returned.</p>
 <p>This function utilizes the GEOS module.</p>
@@ -1863,6 +1889,14 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_maxdistance"></a><code>st_maxdistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum distance across every pair of points comprising the given geometries. Note if the geometries are the same, it will return the maximum distance between the geometry’s vertexes.</p>
+</span></td></tr>
+<tr><td><a name="st_memsize"></a><code>st_memsize(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the amount of memory space (in bytes) the geometry takes.</p>
+</span></td></tr>
+<tr><td><a name="st_minimumboundingcircle"></a><code>st_minimumboundingcircle(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the smallest circle polygon that can fully contain a geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_minimumboundingcircle"></a><code>st_minimumboundingcircle(geometry: geometry,  num_segs: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the smallest circle polygon that can fully contain a geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_minimumboundingradius"></a><code>st_minimumboundingradius(geometry: geometry) &rarr; tuple{geometry AS center, float AS radius}</code></td><td><span class="funcdesc"><p>Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_minimumclearance"></a><code>st_minimumclearance(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the minimum distance a vertex can move before producing an invalid geometry. Returns Infinity if no minimum clearance can be found (e.g. for a single point).</p>
 </span></td></tr>
@@ -1936,6 +1970,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_ndims"></a><code>st_ndims(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of coordinate dimensions of a given Geometry.</p>
 </span></td></tr>
+<tr><td><a name="st_node"></a><code>st_node(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Adds a node on a geometry for each intersection. Resulting geometry is always a MultiLineString.</p>
+</span></td></tr>
 <tr><td><a name="st_normalize"></a><code>st_normalize(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the geometry in its normalized form.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
@@ -1985,6 +2021,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <tr><td><a name="st_pointfromwkb"></a><code>st_pointfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not Point, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_pointfromwkb"></a><code>st_pointfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not Point, NULL is returned.</p>
+</span></td></tr>
+<tr><td><a name="st_pointinsidecircle"></a><code>st_pointinsidecircle(geometry: geometry, x_coord: <a href="float.html">float</a>, y_coord: <a href="float.html">float</a>, radius: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns the true if the geometry is a point and is inside the circle. Returns false otherwise.</p>
 </span></td></tr>
 <tr><td><a name="st_pointn"></a><code>st_pointn(geometry: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the n-th Point of a LineString (1-indexed). Returns NULL if out of bounds or not a LineString.</p>
 </span></td></tr>
@@ -2149,6 +2187,10 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <p>This function utilizes the PROJ library for coordinate projections.</p>
 </span></td></tr>
 <tr><td><a name="st_translate"></a><code>st_translate(g: geometry, delta_x: <a href="float.html">float</a>, delta_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry translated by the given deltas.</p>
+</span></td></tr>
+<tr><td><a name="st_transscale"></a><code>st_transscale(geometry: geometry, delta_x: <a href="float.html">float</a>, delta_y: <a href="float.html">float</a>, x_factor: <a href="float.html">float</a>, y_factor: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Translates the geometry using the deltaX and deltaY args, then scales it using the XFactor, YFactor args, working in 2D only.</p>
+</span></td></tr>
+<tr><td><a name="st_unaryunion"></a><code>st_unaryunion(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a union of the components for any geometry or geometry collection provided. Dissolves boundaries of a multipolygon.</p>
 </span></td></tr>
 <tr><td><a name="st_within"></a><code>st_within(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is completely inside geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>
@@ -2367,9 +2409,17 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="sha1"></a><code>sha1(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA1 hash value of a set of values.</p>
 </span></td></tr>
+<tr><td><a name="sha224"></a><code>sha224(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA224 hash value of a set of values.</p>
+</span></td></tr>
+<tr><td><a name="sha224"></a><code>sha224(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA224 hash value of a set of values.</p>
+</span></td></tr>
 <tr><td><a name="sha256"></a><code>sha256(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA256 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="sha256"></a><code>sha256(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA256 hash value of a set of values.</p>
+</span></td></tr>
+<tr><td><a name="sha384"></a><code>sha384(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA384 hash value of a set of values.</p>
+</span></td></tr>
+<tr><td><a name="sha384"></a><code>sha384(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA384 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="sha512"></a><code>sha512(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
 </span></td></tr>
@@ -2500,7 +2550,11 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: anyelement[], version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: jsonb, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.pretty_key"></a><code>crdb_internal.pretty_key(raw_key: <a href="bytes.html">bytes</a>, skip_fields: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
@@ -2726,6 +2780,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="has_type_privilege"></a><code>has_type_privilege(user: oid, type: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for type.</p>
 </span></td></tr>
 <tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
+</span></td></tr>
+<tr><td><a name="pg_column_size"></a><code>pg_column_size(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
 </span></td></tr>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
 </span></td></tr></tbody>

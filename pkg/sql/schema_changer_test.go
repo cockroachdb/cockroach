@@ -484,6 +484,20 @@ func TestRollbackOfAddingTable(t *testing.T) {
 	_, err = sqlDB.Exec(`CREATE MATERIALIZED VIEW d.v AS SELECT 1`)
 	require.EqualError(t, err, "pq: boom")
 
+	// Get the view descriptor we just created and verify that it's in the
+	// dropping state. We're unable to access the descriptor via the usual means
+	// because catalog.FilterDescriptorState filters out tables in the ADD state,
+	// and once we move the table to the DROP state we also remove the namespace
+	// entry. So we just get the most recent descriptor.
+	var descBytes []byte
+	row := sqlDB.QueryRow(`SELECT descriptor FROM system.descriptor ORDER BY id DESC LIMIT 1`)
+	require.NoError(t, row.Scan(&descBytes))
+	var desc descpb.Descriptor
+	require.NoError(t, protoutil.Unmarshal(descBytes, &desc))
+	viewDesc := desc.GetTable() //nolint:descriptormarshal
+	require.Equal(t, "v", viewDesc.GetName(), "read a different descriptor than expected")
+	require.Equal(t, descpb.DescriptorState_DROP, viewDesc.GetState())
+
 	// The view should be cleaned up after the failure, so we should be able
 	// to create a new view with the same name.
 	_, err = sqlDB.Exec(`CREATE MATERIALIZED VIEW d.v AS SELECT 1`)
@@ -1924,7 +1938,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 			status = jobs.StatusFailed
 		}
 		if err := jobutils.VerifySystemJob(t, &runner, migrationJobOffset+i, jobspb.TypeSchemaChange, status, jobs.Record{
-			Username:    security.RootUser,
+			Username:    security.RootUserName(),
 			Description: tc.sql,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.ID,
@@ -1939,7 +1953,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 
 	// Roll back job.
 	if err := jobutils.VerifySystemJob(t, &runner, len(testCases), jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
+		Username:    security.RootUserName(),
 		Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, testCases[jobRolledBack].sql),
 		DescriptorIDs: descpb.IDs{
 			tableDesc.ID,
@@ -3129,7 +3143,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Description:   "CLEANUP JOB for 'ALTER TABLE t.public.test ALTER PRIMARY KEY USING COLUMNS (k)'",
-			Username:      security.RootUser,
+			Username:      security.RootUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.ID},
 		})
 	})
@@ -3993,7 +4007,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
 			Description:   "GC for TRUNCATE TABLE t.public.test",
-			Username:      security.RootUser,
+			Username:      security.RootUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.ID},
 		})
 	})
@@ -4122,7 +4136,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	// most recent job instead.
 	schemaChangeJobOffset := 0
 	if err := jobutils.VerifySystemJob(t, sqlRun, schemaChangeJobOffset+2, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
+		Username:    security.RootUserName(),
 		Description: "TRUNCATE TABLE t.public.test",
 		DescriptorIDs: descpb.IDs{
 			tableDesc.ID,
@@ -4297,7 +4311,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
+		Username:    security.RootUserName(),
 		Description: add_column,
 		DescriptorIDs: descpb.IDs{
 			oldID,
@@ -4306,7 +4320,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUser,
+		Username:    security.RootUserName(),
 		Description: drop_column,
 		DescriptorIDs: descpb.IDs{
 			oldID,
@@ -4676,7 +4690,7 @@ func TestCancelSchemaChange(t *testing.T) {
 				t.Fatalf("unexpected %v", err)
 			}
 			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusCanceled, jobs.Record{
-				Username:    security.RootUser,
+				Username:    security.RootUserName(),
 				Description: tc.sql,
 				DescriptorIDs: descpb.IDs{
 					tableDesc.ID,
@@ -4687,7 +4701,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			jobID := jobutils.GetJobID(t, sqlDB, idx)
 			idx++
 			jobRecord := jobs.Record{
-				Username:    security.RootUser,
+				Username:    security.RootUserName(),
 				Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, tc.sql),
 				DescriptorIDs: descpb.IDs{
 					tableDesc.ID,
@@ -4705,7 +4719,7 @@ func TestCancelSchemaChange(t *testing.T) {
 		} else {
 			sqlDB.Exec(t, tc.sql)
 			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUser,
+				Username:    security.RootUserName(),
 				Description: tc.sql,
 				DescriptorIDs: descpb.IDs{
 					tableDesc.ID,
@@ -5748,7 +5762,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 		// TODO (lucy): Maybe this test API should use an offset starting
 		// from the most recent job instead.
 		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
-			Username:    security.RootUser,
+			Username:    security.RootUserName(),
 			Description: "ALTER TABLE t.public.test ADD COLUMN a INT8 AS (v - 1) STORED, ADD CHECK ((a < v) AND (a IS NOT NULL))",
 			DescriptorIDs: descpb.IDs{
 				tableDesc.ID,
@@ -6040,6 +6054,13 @@ CREATE UNIQUE INDEX i ON t.test(v);
 		testutils.SucceedsSoon(t, func() error {
 			return checkTableKeyCountExact(ctx, kvDB, 2)
 		})
+		var permanentErrors int
+		require.NoError(t, sqlDB.QueryRow(`
+SELECT value
+  FROM crdb_internal.node_metrics
+ WHERE name = 'sql.schema_changer.permanent_errors';
+`).Scan(&permanentErrors))
+		require.Equal(t, 1, permanentErrors)
 	}
 
 	t.Run("error-before-backfill", func(t *testing.T) {
@@ -6298,6 +6319,105 @@ func TestAddingTableResolution(t *testing.T) {
 	sqlRun.ExpectErr(t, `pq: relation "foo" does not exist`, `ALTER MATERIALIZED VIEW foo RENAME TO bar`)
 	// Regression test for #52829.
 	sqlRun.ExpectErr(t, `pq: relation "foo" does not exist`, `SHOW CREATE foo`)
+}
+
+// TestFailureToMarkCanceledReversalLeadsToCanceledStatus is a regression test
+// to ensure that when the job registry fails to mark a job as canceled but
+// after the mutation has been removed, that the OnFailOrCancel hook of the
+// schema change returns a nil error. In particular, this deals with the case
+// where the mutation corresponding to the job no longer exists on the
+// descriptor.
+func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	canProceed := make(chan struct{})
+	params, _ := tests.CreateTestServerParams()
+	jobCancellationsToFail := struct {
+		syncutil.Mutex
+		jobs map[int64]struct{}
+	}{
+		jobs: make(map[int64]struct{}),
+	}
+	withJobsToFail := func(f func(m map[int64]struct{})) {
+		jobCancellationsToFail.Lock()
+		defer jobCancellationsToFail.Unlock()
+		f(jobCancellationsToFail.jobs)
+	}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				<-canProceed
+				log.Infof(context.Background(), "went")
+				return nil
+			},
+		},
+		JobsTestingKnobs: &jobs.TestingKnobs{
+			BeforeUpdate: func(orig, updated jobs.JobMetadata) (err error) {
+				withJobsToFail(func(m map[int64]struct{}) {
+					log.Infof(context.Background(), "here %v %v", orig, m)
+					if _, ok := m[orig.ID]; ok && updated.Status == jobs.StatusCanceled {
+						delete(m, orig.ID)
+						err = errors.Errorf("boom")
+					}
+				})
+				return err
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (i INT PRIMARY KEY, j INT)`)
+	var schemaChangeWaitGroup sync.WaitGroup
+	var jobsErrGroup errgroup.Group
+	const numIndexes = 2                // number of indexes to add
+	jobIDs := make([]int64, numIndexes) // job IDs for the index additions
+	for i := 0; i < numIndexes; i++ {
+		idxName := "t_" + strconv.Itoa(i) + "_idx"
+		schemaChangeWaitGroup.Add(1)
+		i := i
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := sqlDB.Exec("CREATE INDEX " + idxName + " ON db.t (j)")
+			assert.Regexp(t, "job canceled by user", err)
+		}()
+		jobsErrGroup.Go(func() error {
+			return testutils.SucceedsSoonError(func() error {
+				return sqlDB.QueryRow(`
+SELECT job_id FROM crdb_internal.jobs 
+ WHERE description LIKE '%` + idxName + `%'`).Scan(&jobIDs[i])
+			})
+		})
+	}
+	require.NoError(t, jobsErrGroup.Wait())
+	withJobsToFail(func(m map[int64]struct{}) {
+		for _, id := range jobIDs {
+			m[id] = struct{}{}
+		}
+	})
+	for _, id := range jobIDs {
+		tdb.Exec(t, "CANCEL JOB $1", id)
+	}
+	close(canProceed)
+	schemaChangeWaitGroup.Wait()
+
+	// Verify that all the jobs reached the expected terminal state.
+	// Do this after the above change to ensure that all canceled states have
+	// been reached.
+	for _, id := range jobIDs {
+		var status jobs.Status
+		tdb.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", id).
+			Scan(&status)
+		require.Equal(t, jobs.StatusCanceled, status)
+	}
+	withJobsToFail(func(m map[int64]struct{}) {
+		require.Len(t, m, 0)
+	})
 }
 
 // TestCancelMultipleQueued tests that canceling schema changes when there are

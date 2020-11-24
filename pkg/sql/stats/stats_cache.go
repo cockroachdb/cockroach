@@ -318,7 +318,7 @@ func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID d
 	ctx, span := tracing.ForkCtxSpan(ctx, "refresh-table-stats")
 	// Perform an asynchronous refresh of the cache.
 	go func() {
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 		sc.refreshCacheEntry(ctx, tableID)
 	}()
 }
@@ -415,8 +415,6 @@ func (sc *TableStatisticsCache) parseStats(
 			return nil, err
 		}
 
-		// Decode the histogram data so that it's usable by the opt catalog.
-		res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets))
 		// Hydrate the type in case any user defined types are present.
 		// There are cases where typ is nil, so don't do anything if so.
 		if typ := res.HistogramData.ColumnType; typ != nil && typ.UserDefined() {
@@ -430,8 +428,7 @@ func (sc *TableStatisticsCache) parseStats(
 			// will need to start writing a timestamp on the stats objects and request
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
 			err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				collection := descs.NewCollection(ctx, sc.Settings, sc.LeaseMgr,
-					nil /* hydratedTables */)
+				collection := descs.NewCollection(sc.Settings, sc.LeaseMgr, nil /* hydratedTables */)
 				defer collection.ReleaseAll(ctx)
 				resolver := descs.NewDistSQLTypeResolver(collection, txn)
 				var err error
@@ -442,9 +439,30 @@ func (sc *TableStatisticsCache) parseStats(
 				return nil, err
 			}
 		}
+
+		var offset int
+		if res.NullCount > 0 {
+			// A bucket for NULL is not persisted, but we create a fake one to
+			// make histograms easier to work with. The length of res.Histogram
+			// is therefore 1 greater than the length of the histogram data
+			// buckets.
+			res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets)+1)
+			res.Histogram[0] = cat.HistogramBucket{
+				NumEq:         float64(res.NullCount),
+				NumRange:      0,
+				DistinctRange: 0,
+				UpperBound:    tree.DNull,
+			}
+			offset = 1
+		} else {
+			res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets))
+			offset = 0
+		}
+
+		// Decode the histogram data so that it's usable by the opt catalog.
 		var a rowenc.DatumAlloc
-		for i := range res.Histogram {
-			bucket := &res.HistogramData.Buckets[i]
+		for i := offset; i < len(res.Histogram); i++ {
+			bucket := &res.HistogramData.Buckets[i-offset]
 			datum, _, err := rowenc.DecodeTableKey(&a, res.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)
 			if err != nil {
 				return nil, err

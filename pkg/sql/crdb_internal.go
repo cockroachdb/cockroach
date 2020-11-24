@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -39,22 +40,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -120,6 +122,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTransactionStatsTableID:     crdbInternalTransactionStatisticsTable,
 		catconstants.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
 		catconstants.CrdbInternalZonesTableID:                crdbInternalZonesTable,
+		catconstants.CrdbInternalInvalidDescriptorsTableID:   crdbInternalInvalidDescriptorsTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -173,10 +176,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
 
 		node := p.ExecCfg().NodeInfo
 
-		dNodeID := tree.DNull
-		if nodeID, ok := node.NodeID.OptionalNodeID(); ok {
-			dNodeID = tree.NewDInt(tree.DInt(nodeID))
-		}
+		nodeID, _ := node.NodeID.OptionalNodeID() // zero if not available
 		dbURL, err := node.PGURL(url.User(security.RootUser))
 		if err != nil {
 			return err
@@ -206,7 +206,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
 			} {
 				k, v := kv[0], kv[1]
 				if err := addRow(
-					dNodeID,
+					tree.NewDInt(tree.DInt(nodeID)),
 					tree.NewDString(item.component),
 					tree.NewDString(k),
 					tree.NewDString(v),
@@ -231,9 +231,9 @@ CREATE TABLE crdb_internal.databases (
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
 				return addRow(
-					tree.NewDInt(tree.DInt(db.GetID())), // id
-					tree.NewDString(db.GetName()),       // name
-					tree.NewDName(getOwnerOfDesc(db)),   // owner
+					tree.NewDInt(tree.DInt(db.GetID())),            // id
+					tree.NewDString(db.GetName()),                  // name
+					tree.NewDName(getOwnerOfDesc(db).Normalized()), // owner
 				)
 			})
 	},
@@ -257,20 +257,26 @@ CREATE TABLE crdb_internal.tables (
   sc_lease_expiration_time TIMESTAMP,
   drop_time                TIMESTAMP,
   audit_mode               STRING NOT NULL,
-  schema_name              STRING NOT NULL
+  schema_name              STRING NOT NULL,
+  parent_schema_id         INT NOT NULL
 )`,
 	generator: func(ctx context.Context, p *planner, dbDesc *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
 		worker := func(pusher rowPusher) error {
-			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
 			if err != nil {
 				return err
 			}
 			dbNames := make(map[descpb.ID]string)
+			scNames := make(map[descpb.ID]string)
+			scNames[keys.PublicSchemaID] = sessiondata.PublicSchemaName
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
 				if dbDesc, ok := desc.(*dbdesc.Immutable); ok {
 					dbNames[dbDesc.GetID()] = dbDesc.GetName()
+				}
+				if scDesc, ok := desc.(*schemadesc.Immutable); ok {
+					scNames[scDesc.GetID()] = scDesc.GetName()
 				}
 			}
 
@@ -311,6 +317,7 @@ CREATE TABLE crdb_internal.tables (
 					dropTimeDatum,
 					tree.NewDString(table.GetAuditMode().String()),
 					tree.NewDString(scName),
+					tree.NewDInt(tree.DInt(int64(table.GetParentSchemaID()))),
 				)
 				return pusher.pushRow(row...)
 			}
@@ -330,7 +337,12 @@ CREATE TABLE crdb_internal.tables (
 					// effectively deleted.
 					dbName = fmt.Sprintf("[%d]", table.GetParentID())
 				}
-				if err := addDesc(table, tree.NewDString(dbName), "public"); err != nil {
+				schemaName := scNames[table.GetParentSchemaID()]
+				if schemaName == "" {
+					// The parent schema was deleted, possibly due to reasons mentioned above.
+					schemaName = fmt.Sprintf("[%d]", table.GetParentSchemaID())
+				}
+				if err := addDesc(table, tree.NewDString(dbName), schemaName); err != nil {
 					return err
 				}
 			}
@@ -375,7 +387,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
             GROUP BY s."tableID"`
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 			ctx, "crdb-internal-statistics-table", p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query)
 		if err != nil {
 			return err
@@ -425,7 +437,7 @@ CREATE TABLE crdb_internal.schema_changes (
   direction     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
 		if err != nil {
 			return err
 		}
@@ -489,10 +501,7 @@ CREATE TABLE crdb_internal.leases (
 	populate: func(
 		ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error,
 	) (err error) {
-		dNodeID := tree.DNull
-		if nodeID, ok := p.execCfg.NodeID.OptionalNodeID(); ok {
-			dNodeID = tree.NewDInt(tree.DInt(nodeID))
-		}
+		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 		p.LeaseMgr().VisitLeases(func(desc catalog.Descriptor, dropped bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
 			if p.CheckAnyPrivilege(ctx, desc) != nil {
 				// TODO(ajwerner): inspect what type of error got returned.
@@ -500,7 +509,7 @@ CREATE TABLE crdb_internal.leases (
 			}
 
 			err = addRow(
-				dNodeID,
+				tree.NewDInt(tree.DInt(nodeID)),
 				tree.NewDInt(tree.DInt(int64(desc.GetID()))),
 				tree.NewDString(desc.GetName()),
 				tree.NewDInt(tree.DInt(int64(desc.GetParentID()))),
@@ -544,7 +553,7 @@ CREATE TABLE crdb_internal.jobs (
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
-		currentUser := p.SessionData().User
+		currentUser := p.SessionData().User()
 		isAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -560,7 +569,7 @@ CREATE TABLE crdb_internal.jobs (
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
 		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query)
 		if err != nil {
 			return nil, nil, err
@@ -609,14 +618,16 @@ CREATE TABLE crdb_internal.jobs (
 				// We filter out masked rows before we allocate all the
 				// datums. Needless allocate when not necessary.
 				ownedByAdmin := false
+				var sqlUsername security.SQLUsername
 				if payload != nil {
-					ownedByAdmin, err = p.UserHasAdminRole(ctx, payload.Username)
+					sqlUsername = payload.UsernameProto.Decode()
+					ownedByAdmin, err = p.UserHasAdminRole(ctx, sqlUsername)
 					if err != nil {
 						errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
 					}
 				}
 
-				sameUser := payload != nil && payload.Username == currentUser
+				sameUser := payload != nil && sqlUsername == currentUser
 				// The user can access the row if the meet one of the conditions:
 				//  1. The user is an admin.
 				//  2. The job is owned by the user.
@@ -632,7 +643,7 @@ CREATE TABLE crdb_internal.jobs (
 					jobType = tree.NewDString(payload.Type().String())
 					description = tree.NewDString(payload.Description)
 					statement = tree.NewDString(payload.Statement)
-					username = tree.NewDString(payload.Username)
+					username = tree.NewDString(sqlUsername.Normalized())
 					descriptorIDsArr := tree.NewDArray(types.Int)
 					for _, descID := range payload.DescriptorIDs {
 						if err := descriptorIDsArr.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
@@ -875,6 +886,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 	},
 }
 
+// TODO(arul): Explore updating the schema below to have key be an INT and
+// statement_ids be INT[] now that we've moved to having uint64 as the type of
+// StmtID and TxnKey. Issue #55284
 var crdbInternalTransactionStatisticsTable = virtualSchemaTable{
 	comment: `finer-grained transaction statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
@@ -951,7 +965,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				}
 				stmtIDsDatum := tree.NewDArray(types.String)
 				for _, stmtID := range s.statementIDs {
-					if err := stmtIDsDatum.Append(tree.NewDString(string(stmtID))); err != nil {
+					if err := stmtIDsDatum.Append(tree.NewDString(strconv.FormatUint(uint64(stmtID), 10))); err != nil {
 						return err
 					}
 				}
@@ -961,7 +975,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				err := addRow(
 					tree.NewDInt(tree.DInt(nodeID)),
 					tree.NewDString(appName),
-					tree.NewDString(string(txnKey)),
+					tree.NewDString(strconv.FormatUint(uint64(txnKey), 10)),
 					stmtIDsDatum,
 					tree.NewDInt(tree.DInt(s.mu.data.Count)),
 					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),
@@ -1269,7 +1283,7 @@ CREATE TABLE crdb_internal.%s (
 )`
 
 func (p *planner) makeSessionsRequest(ctx context.Context) (serverpb.ListSessionsRequest, error) {
-	req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+	req := serverpb.ListSessionsRequest{Username: p.SessionData().User().Normalized()}
 	hasAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return serverpb.ListSessionsRequest{}, err
@@ -1650,11 +1664,11 @@ CREATE TABLE crdb_internal.create_type_statements (
 		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc *typedesc.Immutable) error {
 			switch typeDesc.Kind {
 			case descpb.TypeDescriptor_ENUM:
-				var enumLabels []string
+				var enumLabels tree.EnumValueList
 				enumLabelsDatum := tree.NewDArray(types.String)
 				for i := range typeDesc.EnumMembers {
 					rep := typeDesc.EnumMembers[i].LogicalRepresentation
-					enumLabels = append(enumLabels, rep)
+					enumLabels = append(enumLabels, tree.EnumValue(rep))
 					if err := enumLabelsDatum.Append(tree.NewDString(rep)); err != nil {
 						return err
 					}
@@ -1894,7 +1908,7 @@ func showCreateIndexWithInterleave(
 	semaCtx *tree.SemaContext,
 ) error {
 	f.WriteString("CREATE ")
-	idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, table, &tableName, idx, semaCtx)
+	idxStr, err := catformat.IndexForDisplay(ctx, table, &tableName, idx, semaCtx)
 	if err != nil {
 		return err
 	}
@@ -2160,7 +2174,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
 		interleaveDep := tree.NewDString("interleave")
-		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
+		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, true, /* validate */
 			/* virtual tables have no backward/forward dependencies*/
 			func(db *dbdesc.Immutable, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
@@ -2437,7 +2451,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, nil, err
 		}
-		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -2539,7 +2553,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			splitEnforcedUntil := tree.DNull
-			if (desc.GetStickyBit() != hlc.Timestamp{}) {
+			if !desc.GetStickyBit().IsEmpty() {
 				splitEnforcedUntil = tree.TimestampToInexactDTimestamp(*desc.StickyBit)
 			}
 
@@ -3014,7 +3028,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 		}
 
 		type nodeInfo struct {
-			liveness  kvserverpb.Liveness
+			liveness  livenesspb.Liveness
 			updatedAt int64
 		}
 
@@ -3026,7 +3040,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 					"failed to extract bytes for key %q", key)
 			}
 
-			var l kvserverpb.Liveness
+			var l livenesspb.Liveness
 			if err := protoutil.Unmarshal(bytes, &l); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
@@ -3651,5 +3665,49 @@ CREATE TABLE crdb_internal.predefined_comments (
 		}
 
 		return nil
+	},
+}
+
+var crdbInternalInvalidDescriptorsTable = virtualSchemaTable{
+	comment: `virtual table to validate descriptors`,
+	schema: `
+CREATE TABLE crdb_internal.invalid_objects (
+  id            INT,
+  database_name STRING,
+  schema_name   STRING,
+  obj_name      STRING,
+  error         STRING
+)`,
+	populate: func(
+		ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error,
+	) error {
+		// The internalLookupContext will only have descriptors in the current
+		// database. To deal with this, we fall through.
+		// TODO(spaskob): we can also validate type descriptors. Add a new function
+		// `forEachTypeDescAllWithTableLookup` and the results to this table.
+		return forEachTableDescAllWithTableLookup(
+			ctx, p, dbContext, hideVirtual, false, /* validate */
+			func(
+				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, fn tableLookupFn,
+			) error {
+				if descriptor == nil {
+					return nil
+				}
+				err := descriptor.Validate(ctx, fn)
+				if err == nil {
+					return nil
+				}
+				var dbName string
+				if dbDesc != nil {
+					dbName = dbDesc.GetName()
+				}
+				return addRow(
+					tree.NewDInt(tree.DInt(descriptor.GetID())),
+					tree.NewDString(dbName),
+					tree.NewDString(schema),
+					tree.NewDString(descriptor.GetName()),
+					tree.NewDString(err.Error()),
+				)
+			})
 	},
 }

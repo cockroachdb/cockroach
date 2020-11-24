@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -609,7 +610,7 @@ func (d *DBitArray) Format(ctx *FmtCtx) {
 	if f.HasFlags(fmtPgwireFormat) {
 		d.BitArray.Format(&ctx.Buffer)
 	} else {
-		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
+		withQuotes := !f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 		if withQuotes {
 			ctx.WriteString("B'")
 		}
@@ -1065,14 +1066,18 @@ func (d *DDecimal) Format(ctx *FmtCtx) {
 	}
 }
 
+// shallowDecimalSize is the size of the fixed-size part of apd.Decimal in
+// bytes.
+const shallowDecimalSize = unsafe.Sizeof(apd.Decimal{})
+
 // SizeOfDecimal returns the size in bytes of an apd.Decimal.
 func SizeOfDecimal(d apd.Decimal) uintptr {
-	return uintptr(cap(d.Coeff.Bits())) * unsafe.Sizeof(big.Word(0))
+	return shallowDecimalSize + uintptr(cap(d.Coeff.Bits()))*unsafe.Sizeof(big.Word(0))
 }
 
 // Size implements the Datum interface.
 func (d *DDecimal) Size() uintptr {
-	return unsafe.Sizeof(*d) + SizeOfDecimal(d.Decimal)
+	return SizeOfDecimal(d.Decimal)
 }
 
 var (
@@ -1285,7 +1290,7 @@ func (d *DCollatedString) Compare(ctx *EvalContext, other Datum) int {
 		return 1
 	}
 	v, ok := UnwrapDatum(ctx, other).(*DCollatedString)
-	if !ok || d.Locale != v.Locale {
+	if !ok || !d.ResolvedType().Equivalent(other.ResolvedType()) {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	return bytes.Compare(d.Key, v.Key)
@@ -1434,7 +1439,7 @@ func (d *DBytes) Format(ctx *FmtCtx) {
 		writeAsHexString(ctx, d)
 		ctx.WriteString(`"`)
 	} else {
-		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
+		withQuotes := !f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 		if withQuotes {
 			if f.HasFlags(fmtFormatByteLiterals) {
 				ctx.WriteByte('b')
@@ -1534,7 +1539,7 @@ func (*DUuid) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1696,7 +1701,7 @@ func (*DIPAddr) AmbiguousFormat() bool {
 // Format implements the NodeFormatter interface.
 func (d *DIPAddr) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1877,7 +1882,7 @@ func (*DDate) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1993,7 +1998,7 @@ func (*DTime) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTime) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2118,7 +2123,7 @@ func (*DTimeTZ) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimeTZ) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2162,10 +2167,12 @@ var dZeroTimestamp = &DTimestamp{}
 
 // time.Time formats.
 const (
-	// TimestampTZOutputFormat is used to output all TimestampTZs.
-	TimestampTZOutputFormat = "2006-01-02 15:04:05.999999-07:00"
-	// TimestampOutputFormat is used to output all Timestamps.
-	TimestampOutputFormat = "2006-01-02 15:04:05.999999"
+	// timestampTZOutputFormat is used to output all TimestampTZs.
+	// Note the second offset is missing here -- this is to maintain
+	// backward compatibility with casting timestamptz to strings.
+	timestampTZOutputFormat = "2006-01-02 15:04:05.999999-07:00"
+	// timestampOutputFormat is used to output all Timestamps.
+	timestampOutputFormat = "2006-01-02 15:04:05.999999"
 )
 
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
@@ -2348,11 +2355,11 @@ func (*DTimestamp) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.UTC().Format(TimestampOutputFormat))
+	ctx.WriteString(d.UTC().Format(timestampOutputFormat))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2505,11 +2512,22 @@ func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.Time.Format(TimestampTZOutputFormat))
+	ctx.WriteString(d.Time.Format(timestampTZOutputFormat))
+	_, offsetSecs := d.Time.Zone()
+	// Only output remaining seconds offsets if it is available.
+	// This is to maintain backward compatibility with older CRDB versions,
+	// where we only output HH:MM.
+	if secondOffset := offsetSecs % 60; secondOffset != 0 {
+		if secondOffset < 0 {
+			secondOffset = 60 + secondOffset
+		}
+		ctx.WriteByte(':')
+		ctx.WriteString(fmt.Sprintf("%02d", secondOffset))
+	}
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2706,7 +2724,7 @@ func (*DInterval) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DInterval) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2814,7 +2832,7 @@ func (*DGeography) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DGeography) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2922,7 +2940,7 @@ func (*DGeometry) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DGeometry) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -3031,7 +3049,7 @@ func (*DBox2D) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DBox2D) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -4281,12 +4299,12 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		ctx.WriteByte('(')
 		d.DInt.Format(ctx)
 		ctx.WriteByte(',')
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lex.EncNoFlags)
+		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncNoFlags)
 		ctx.WriteByte(')')
 	} else {
 		// This is used to print the name of pseudo-procedures in e.g.
 		// pg_catalog.pg_type.typinput
-		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lex.EncBareStrings)
+		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncBareStrings)
 	}
 }
 

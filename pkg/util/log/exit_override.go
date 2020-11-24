@@ -12,8 +12,10 @@ package log
 
 import (
 	"context"
-	"io"
-	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
 
 // SetExitFunc allows setting a function that will be called to exit
@@ -22,16 +24,16 @@ import (
 // callers wishing to keep the logs reasonably clean.
 //
 // Use ResetExitFunc() to reset.
-func SetExitFunc(hideStack bool, f func(int)) {
+func SetExitFunc(hideStack bool, f func(exit.Code)) {
 	if f == nil {
 		panic("nil exit func invalid")
 	}
-	setExitErrFunc(hideStack, func(x int, err error) { f(x) })
+	setExitErrFunc(hideStack, func(x exit.Code, err error) { f(x) })
 }
 
 // setExitErrFunc is like SetExitFunc but the function can also
 // observe the error that is triggering the exit.
-func setExitErrFunc(hideStack bool, f func(int, error)) {
+func setExitErrFunc(hideStack bool, f func(exit.Code, error)) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 
@@ -52,9 +54,9 @@ func ResetExitFunc() {
 // writing to stderr. It flushes the logs and exits the program; there's no
 // point in hanging around.
 //
-// l.mu is held; logging.mu is not held.
-func (l *loggerT) exitLocked(err error) {
-	l.mu.AssertHeld()
+// l.outputMu is held; l.fileSink.mu is not held; logging.mu is not held.
+func (l *loggerT) exitLocked(err error, code exit.Code) {
+	l.outputMu.AssertHeld()
 
 	l.reportErrorEverywhereLocked(context.Background(), err)
 
@@ -62,52 +64,39 @@ func (l *loggerT) exitLocked(err error) {
 	f := logging.mu.exitOverride.f
 	logging.mu.Unlock()
 	if f != nil {
-		// Avoid conflicting lock order between l.mu and locks in f.
-		l.mu.Unlock()
-		f(2, err)
-		// Avoid double unlock on l.mu.
-		l.mu.Lock()
+		f(code, err)
 	} else {
-		os.Exit(2)
+		exit.WithCode(code)
 	}
 }
 
 // reportErrorEverywhereLocked writes the error details to both the
 // process' original stderr and the log file if configured.
+//
+// This assumes l.outputMu is held, but l.fileSink.mu is not held.
 func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// Make a valid log entry for this error.
 	entry := MakeEntry(
-		ctx, Severity_ERROR, &l.logCounter, 1 /* depth */, l.redactableLogs.Get(),
+		ctx, severity.ERROR, &l.logCounter, 2 /* depth */, true, /* redactable */
 		"logging error: %v", err)
-
-	// Format the entry for output below. Note how this formatting is
-	// done just once here for both the stderr and file outputs below,
-	// and thus misses out on TTY colors if configured. We afford this
-	// simplification because we only arrive here in case of
-	// likely-unrecoverable error, and there's not much incentive to be
-	// overly aesthetic in this case.
-	buf := logging.formatLogEntry(entry, nil /*stacks*/, nil /*color profile*/)
-	defer putBuffer(buf)
 
 	// Either stderr or our log file is broken. Try writing the error to both
 	// streams in the hope that one still works or else the user will have no idea
 	// why we crashed.
-	outputs := make([]io.Writer, 2)
-	outputs[0] = OrigStderr
-	if f, ok := l.mu.file.(*syncBuffer); ok {
-		// Don't call syncBuffer's Write method, because it can call back into
-		// exitLocked. Go directly to syncBuffer's underlying writer.
-		outputs[1] = f.Writer
-	} else {
-		outputs[1] = l.mu.file
-	}
-	for _, w := range outputs {
-		if w == nil {
-			continue
+	//
+	// Note that we're already in error. If an additional error is encountered
+	// here, we can't do anything but raise our hands in the air.
+
+	// TODO(knz): we may want to push this information to more channels,
+	// e.g. to the OPS channel, if we are reporting an error while writing
+	// to a non-OPS channel.
+
+	for _, s := range l.sinkInfos {
+		sink := s.sink
+		if sink.activeAtSeverity(logpb.Severity_ERROR) {
+			buf := sink.getFormatter().formatEntry(entry, nil /*stack*/)
+			sink.emergencyOutput(buf.Bytes())
+			putBuffer(buf)
 		}
-		// We're already in error. If an additional error is encountered
-		// here, we can't do anything but raise our hands in the air.
-		_, _ = w.Write(buf.Bytes())
 	}
-	l.flushAndSyncLocked(true /*doSync*/)
 }

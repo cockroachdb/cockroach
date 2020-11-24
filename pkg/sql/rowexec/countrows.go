@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
 )
 
 // countAggregator is a simple processor that counts the number of rows it
@@ -36,8 +35,6 @@ var _ execinfra.RowSource = &countAggregator{}
 
 const countRowsProcName = "count rows"
 
-var outputTypes = []*types.T{types.Int}
-
 func newCountAggregator(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -48,15 +45,15 @@ func newCountAggregator(
 	ag := &countAggregator{}
 	ag.input = input
 
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		ag.input = newInputStatCollector(input)
-		ag.FinishTrace = ag.outputStatsToTrace
+		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
 
 	if err := ag.Init(
 		ag,
 		post,
-		outputTypes,
+		[]*types.T{types.Int},
 		flowCtx,
 		processorID,
 		output,
@@ -104,24 +101,18 @@ func (ag *countAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMeta
 	return nil, ag.DrainHelper()
 }
 
-func (ag *countAggregator) ConsumerDone() {
-	ag.MoveToDraining(nil /* err */)
-}
-
 func (ag *countAggregator) ConsumerClosed() {
 	ag.InternalClose()
 }
 
-// outputStatsToTrace outputs the collected distinct stats to the trace. Will
-// fail silently if the Distinct processor is not collecting stats.
-func (ag *countAggregator) outputStatsToTrace() {
-	is, ok := getInputStats(ag.FlowCtx, ag.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (ag *countAggregator) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(ag.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := opentracing.SpanFromContext(ag.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp, &AggregatorStats{InputStats: is},
-		)
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Output: ag.Out.Stats(),
 	}
 }

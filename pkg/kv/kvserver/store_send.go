@@ -108,7 +108,7 @@ func (s *Store) Send(
 			// can use it to shorten its uncertainty interval when it comes back to
 			// this node.
 			if pErr != nil {
-				pErr.OriginNode = ba.Replica.NodeID
+				pErr.OriginNode = s.NodeID()
 				if txn := pErr.GetTxn(); txn == nil {
 					pErr.SetTxn(ba.Txn)
 				}
@@ -150,9 +150,9 @@ func (s *Store) Send(
 		// updating the top end of our uncertainty timestamp would lead to a
 		// restart (at least in the absence of a prior observed timestamp from
 		// this node, in which case the following is a no-op).
-		if _, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID); !ok {
+		if _, ok := ba.Txn.GetObservedTimestamp(s.NodeID()); !ok {
 			txnClone := ba.Txn.Clone()
-			txnClone.UpdateObservedTimestamp(ba.Replica.NodeID, s.cfg.Clock.Now())
+			txnClone.UpdateObservedTimestamp(s.NodeID(), s.Clock().Now())
 			ba.Txn = txnClone
 		}
 	}
@@ -230,6 +230,7 @@ func (s *Store) Send(
 		if endKey.Less(rSpan.EndKey) {
 			endKey = rSpan.EndKey
 		}
+		var ris []roachpb.RangeInfo
 		s.VisitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, r KeyRange) bool {
 			var l roachpb.Lease
 			var desc roachpb.RangeDescriptor
@@ -243,9 +244,14 @@ func (s *Store) Send(
 			if desc.RangeID == skipRID {
 				return true // continue visiting
 			}
-			t.AppendRangeInfo(ctx, desc, l)
+			ris = append(ris, roachpb.RangeInfo{Desc: desc, Lease: l})
 			return true // continue visiting
 		})
+		for _, ri := range ris {
+			t.AppendRangeInfo(ctx, ri.Desc, ri.Lease)
+		}
+		// We have to write `t` back to `pErr` so that it picks up the changes.
+		pErr = roachpb.NewError(t)
 	case *roachpb.RaftGroupDeletedError:
 		// This error needs to be converted appropriately so that clients
 		// will retry.

@@ -21,8 +21,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -63,15 +61,10 @@ func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
 	}
 }
 
-func (c *noOIDCConfigured) ValidateOIDCState(state *serverpb.OIDCState) error {
-	return errors.New("OIDC is not enabled")
-}
-
 // OIDC is an interface that an OIDC-based authentication module should implement to integrate with
 // the rest of the node's functionality
 type OIDC interface {
 	ui.OIDCUI
-	ValidateOIDCState(state *serverpb.OIDCState) error
 }
 
 // ConfigureOIDC is a hook for the `oidcccl` library to add OIDC login support. It's called during
@@ -83,8 +76,6 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
-	nodeDialer *nodedialer.Dialer,
-	nodeID roachpb.NodeID,
 ) (OIDC, error) {
 	return &noOIDCConfigured{}, nil
 }
@@ -132,13 +123,19 @@ func (s *authenticationServer) RegisterGateway(
 func (s *authenticationServer) UserLogin(
 	ctx context.Context, req *serverpb.UserLoginRequest,
 ) (*serverpb.UserLoginResponse, error) {
-	username := req.Username
-	if username == "" {
+	if req.Username == "" {
 		return nil, status.Errorf(
 			codes.Unauthenticated,
 			"no username was provided",
 		)
 	}
+
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
+	username, _ := security.MakeSQLUsernameFromUserInput(req.Username, security.UsernameValidation)
 
 	// Verify the provided username/password pair.
 	verified, expired, err := s.verifyPassword(ctx, username, req.Password)
@@ -153,10 +150,7 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 	if !verified {
-		return nil, status.Errorf(
-			codes.Unauthenticated,
-			"the provided username and password did not match any credentials on the server",
-		)
+		return nil, errWebAuthenticationFailure
 	}
 
 	cookie, err := s.createSessionFor(ctx, username)
@@ -172,27 +166,26 @@ func (s *authenticationServer) UserLogin(
 	return &serverpb.UserLoginResponse{}, nil
 }
 
-var errUsernameDoesNotExist = errors.New("username for session does not exist")
-
-func (s *authenticationServer) ValidateOIDCState(
-	ctx context.Context, req *serverpb.ValidateOIDCStateRequest,
-) (*serverpb.ValidateOIDCStateResponse, error) {
-	err := s.server.oidc.ValidateOIDCState(req.State)
-	if err != nil {
-		return nil, err
-	}
-
-	return &serverpb.ValidateOIDCStateResponse{}, nil
-}
+var errWebAuthenticationFailure = status.Errorf(
+	codes.Unauthenticated,
+	"the provided credentials did not match any account on the server",
+)
 
 // UserLoginFromSSO checks for the existence of a given username and if it exists,
 // creates a session for the username in the `web_sessions` table.
 // The session's ID and secret are returned to the caller as an HTTP cookie,
 // added via a "Set-Cookie" header.
 func (s *authenticationServer) UserLoginFromSSO(
-	ctx context.Context, username string,
+	ctx context.Context, reqUsername string,
 ) (*http.Cookie, error) {
-	exists, _, _, _, err := sql.GetUserHashedPassword(
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
+	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
+
+	exists, canLogin, _, _, err := sql.GetUserHashedPassword(
 		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
 	)
 
@@ -200,15 +193,18 @@ func (s *authenticationServer) UserLoginFromSSO(
 		return nil, errors.Wrap(err, "failed creating session for username")
 	}
 
-	if !exists {
-		return nil, errUsernameDoesNotExist
+	if !exists || !canLogin {
+		return nil, errWebAuthenticationFailure
 	}
 
 	return s.createSessionFor(ctx, username)
 }
 
+// createSessionFor creates a login cookie for the given user.
+//
+// The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) createSessionFor(
-	ctx context.Context, username string,
+	ctx context.Context, username security.SQLUsername,
 ) (*http.Cookie, error) {
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.newAuthSession(ctx, username)
@@ -241,7 +237,9 @@ func (s *authenticationServer) UserLogout(
 
 	sessionID, err := strconv.Atoi(sessionIDs[0])
 	if err != nil {
-		return nil, fmt.Errorf("invalid session id: %d", sessionID)
+		return nil, status.Errorf(
+			codes.InvalidArgument,
+			"invalid session id: %d", sessionID)
 	}
 
 	// Revoke the session.
@@ -249,13 +247,15 @@ func (s *authenticationServer) UserLogout(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionID,
 	); err != nil {
 		return nil, apiInternalError(ctx, err)
 	} else if n == 0 {
-		err := errors.Newf("session with id %d nonexistent", sessionID)
+		err := status.Errorf(
+			codes.InvalidArgument,
+			"session with id %d nonexistent", sessionID)
 		log.Infof(ctx, "%v", err)
 		return nil, err
 	}
@@ -297,7 +297,7 @@ WHERE id = $1`
 		ctx,
 		"lookup-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		sessionQuery, cookie.ID)
 	if row == nil || err != nil {
 		return false, "", err
@@ -338,8 +338,11 @@ WHERE id = $1`
 // system.users table. The returned boolean indicates whether or not the
 // verification succeeded; an error is returned if the validation process could
 // not be completed.
+//
+// The caller is responsible for ensuring that the username is normalized.
+// (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) verifyPassword(
-	ctx context.Context, username string, password string,
+	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
 	exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(
 		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
@@ -383,8 +386,10 @@ func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
 
 // newAuthSession attempts to create a new authentication session for the given
 // user. If successful, returns the ID and secret value for the new session.
+//
+// The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) newAuthSession(
-	ctx context.Context, username string,
+	ctx context.Context, username security.SQLUsername,
 ) (int64, []byte, error) {
 	secret, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
@@ -404,10 +409,10 @@ RETURNING id
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		insertSessionStmt,
 		hashedSecret,
-		username,
+		username.Normalized(),
 		expiration,
 	)
 	if err != nil {
@@ -474,7 +479,9 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
 		req = req.WithContext(ctx)
 	} else if !am.allowAnonymous {
-		log.Infof(req.Context(), "web session error: %s", err)
+		if log.V(1) {
+			log.Infof(req.Context(), "web session error: %v", err)
+		}
 		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
 		return
 	}

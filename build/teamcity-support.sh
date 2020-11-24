@@ -67,9 +67,7 @@ function run_json_test() {
       # env var on PR builds, but we'll have it for builds that are triggered
       # from the release branches.
       echo "GITHUB_API_TOKEN must be set"
-      # TODO(tbg): let this bake for a few days and if all looks good make it
-      # an error to not have the token specified when it's needed.
-      # exit 1
+      exit 1
     else
       tc_start_block "post issues"
       github-post < "${tmpfile}"

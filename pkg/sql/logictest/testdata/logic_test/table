@@ -548,6 +548,7 @@ gossip_liveness                    NULL
 gossip_network                     NULL
 gossip_nodes                       NULL
 index_columns                      NULL
+invalid_objects                    NULL
 jobs                               NULL
 kv_node_status                     NULL
 kv_store_status                    NULL
@@ -625,6 +626,7 @@ pg_language                        NULL
 pg_locks                           NULL
 pg_matviews                        NULL
 pg_namespace                       NULL
+pg_opclass                         NULL
 pg_operator                        NULL
 pg_prepared_statements             NULL
 pg_prepared_xacts                  NULL

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -28,14 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // replicaRaftStorage implements the raft.Storage interface.
@@ -130,13 +132,13 @@ func entries(
 	canCache := true
 
 	var ent raftpb.Entry
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+	scanFunc := func(kv roachpb.KeyValue) error {
 		if err := kv.Value.GetProto(&ent); err != nil {
-			return false, err
+			return err
 		}
 		// Exit early if we have any gaps or it has been compacted.
 		if ent.Index != expectedIndex {
-			return true, nil
+			return iterutil.StopIteration()
 		}
 		expectedIndex++
 
@@ -147,7 +149,7 @@ func entries(
 					ctx, rangeID, ent, sideloaded, eCache,
 				)
 				if err != nil {
-					return true, err
+					return err
 				}
 				if newEnt != nil {
 					ent = *newEnt
@@ -160,11 +162,17 @@ func entries(
 		if size > maxBytes {
 			exceededMaxBytes = true
 			if len(ents) > 0 {
-				return exceededMaxBytes, nil
+				if exceededMaxBytes {
+					return iterutil.StopIteration()
+				}
+				return nil
 			}
 		}
 		ents = append(ents, ent)
-		return exceededMaxBytes, nil
+		if exceededMaxBytes {
+			return iterutil.StopIteration()
+		}
+		return nil
 	}
 
 	if err := iterateEntries(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
@@ -223,7 +231,7 @@ func iterateEntries(
 	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	lo, hi uint64,
-	scanFunc func(roachpb.KeyValue) (bool, error),
+	scanFunc func(roachpb.KeyValue) error,
 ) error {
 	_, err := storage.MVCCIterate(
 		ctx, reader,
@@ -456,7 +464,7 @@ type OutgoingSnapshot struct {
 	// The RocksDB snapshot that will be streamed from.
 	EngineSnap storage.Reader
 	// The complete range iterator for the snapshot to stream.
-	Iter *rditer.ReplicaDataIterator
+	Iter *rditer.ReplicaEngineDataIterator
 	// The replica state within the snapshot.
 	State kvserverpb.ReplicaState
 	// Allows access the the original Replica's sideloaded storage. Note that
@@ -562,8 +570,7 @@ func snapshot(
 
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
-	iter := rditer.NewReplicaDataIterator(&desc, snap,
-		true /* replicatedOnly */, false /* seekEnd */)
+	iter := rditer.NewReplicaEngineDataIterator(&desc, snap, true /* replicatedOnly */)
 
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,
@@ -715,7 +722,7 @@ func clearRangeData(
 	var clearRangeFn func(storage.Reader, storage.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
 		clearRangeFn = func(reader storage.Reader, writer storage.Writer, start, end roachpb.Key) error {
-			return writer.ClearRange(storage.MakeMVCCMetadataKey(start), storage.MakeMVCCMetadataKey(end))
+			return writer.ClearRawRange(start, end)
 		}
 	} else {
 		clearRangeFn = storage.ClearRangeWithHeuristic
@@ -756,14 +763,29 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
 	}
 
-	snapType := inSnap.snapType
+	isInitialSnap := !r.IsInitialized()
 	defer func() {
 		if err == nil {
-			switch snapType {
-			case SnapshotRequest_RAFT:
-				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
-			case SnapshotRequest_LEARNER:
-				r.store.metrics.RangeSnapshotsLearnerApplied.Inc(1)
+			desc, err := r.GetReplicaDescriptor()
+			if err != nil {
+				log.Fatalf(ctx, "could not fetch replica descriptor for range after applying snapshot")
+			}
+			if isInitialSnap {
+				r.store.metrics.RangeSnapshotsAppliedForInitialUpreplication.Inc(1)
+			} else {
+				switch typ := desc.GetType(); typ {
+				// NB: A replica of type LEARNER can receive a non-initial snapshot (via
+				// the snapshot queue) if we end up truncating the raft log before it
+				// gets promoted to a voter. We count such snapshot applications as
+				// "applied by voters" here.
+				case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING,
+					roachpb.VOTER_OUTGOING, roachpb.LEARNER:
+					r.store.metrics.RangeSnapshotsAppliedByVoters.Inc(1)
+				case roachpb.NON_VOTER:
+					r.store.metrics.RangeSnapshotsAppliedByNonVoters.Inc(1)
+				default:
+					log.Fatalf(ctx, "unexpected replica type %s while applying snapshot", typ)
+				}
 			}
 		}
 	}()
@@ -795,8 +817,8 @@ func (r *Replica) applySnapshot(
 		// Time to ingest SSTs.
 		ingestion time.Time
 	}
-	log.Infof(ctx, "applying %s snapshot [id=%s index=%d]",
-		snapType, inSnap.SnapUUID.Short(), snap.Metadata.Index)
+	log.Infof(ctx, "applying snapshot of type %s [id=%s index=%d]", inSnap.snapType,
+		inSnap.SnapUUID.Short(), snap.Metadata.Index)
 	defer func(start time.Time) {
 		now := timeutil.Now()
 		totalLog := fmt.Sprintf(
@@ -816,9 +838,10 @@ func (r *Replica) applySnapshot(
 			len(inSnap.SSTStorageScratch.SSTs()),
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000,
 		)
-		log.Infof(ctx, "applied %s snapshot [%s%s%sid=%s index=%d]",
-			snapType, totalLog, subsumedReplicasLog, ingestionLog,
-			inSnap.SnapUUID.Short(), snap.Metadata.Index)
+		log.Infof(
+			ctx, "applied snapshot of type %s [%s%s%sid=%s index=%d]", inSnap.snapType, totalLog,
+			subsumedReplicasLog, ingestionLog, inSnap.SnapUUID.Short(), snap.Metadata.Index,
+		)
 	}(timeutil.Now())
 
 	unreplicatedSSTFile := &storage.MemFile{}
@@ -827,9 +850,9 @@ func (r *Replica) applySnapshot(
 
 	// Clearing the unreplicated state.
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
-	unreplicatedStart := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey)
-	unreplicatedEnd := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey.PrefixEnd())
-	if err = unreplicatedSST.ClearRange(unreplicatedStart, unreplicatedEnd); err != nil {
+	unreplicatedStart := unreplicatedPrefixKey
+	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
+	if err = unreplicatedSST.ClearRawRange(unreplicatedStart, unreplicatedEnd); err != nil {
 		return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 	}
 
@@ -923,7 +946,7 @@ func (r *Replica) applySnapshot(
 
 	// Ingest all SSTs atomically.
 	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
-		if err := fn(inSnap, snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		if err := fn(inSnap, inSnap.snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
 			return err
 		}
 	}
@@ -1024,6 +1047,15 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	keyRanges := getKeyRanges(desc)
 	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)
 	for _, sr := range subsumedRepls {
+		// We mark the replica as destroyed so that new commands are not
+		// accepted. This destroy status will be detected after the batch
+		// commits by clearSubsumedReplicaInMemoryData() to finish the removal.
+		sr.mu.Lock()
+		sr.mu.destroyStatus.Set(
+			roachpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
+			destroyReasonRemoved)
+		sr.mu.Unlock()
+
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
@@ -1138,7 +1170,8 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// replicas themselves is protected by their raftMus, which are held from
 		// start to finish.
 		if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, sr, subsumedNextReplicaID, RemoveOptions{
-			DestroyData: false, // data is already destroyed
+			// The data was already destroyed by clearSubsumedReplicaDiskData.
+			DestroyData: false,
 		}); err != nil {
 			return err
 		}
@@ -1163,8 +1196,8 @@ func extractRangeFromEntries(logEntries [][]byte) (string, error) {
 			return "", err
 		}
 
-		firstIndex = string(firstAndLastLogEntries[0].Index)
-		lastIndex = string(firstAndLastLogEntries[1].Index)
+		firstIndex = strconv.FormatUint(firstAndLastLogEntries[0].Index, 10)
+		lastIndex = strconv.FormatUint(firstAndLastLogEntries[1].Index, 10)
 	}
 	return fmt.Sprintf("[%s, %s]", firstIndex, lastIndex), nil
 }

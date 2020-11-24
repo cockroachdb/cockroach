@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pgtest",
+    srcs = [
+        "datadriven.go",
+        "pgtest.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/pgtest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/testutils/skip",
+        "//vendor/github.com/cockroachdb/datadriven",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/jackc/pgproto3/v2:pgproto3",
+    ],
+)

@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -46,11 +46,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -142,34 +142,17 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 
 	var db storage.Engine
 
-	switch storage.DefaultStorageEngine {
-	case enginepb.EngineTypeDefault:
-		fallthrough
-	case enginepb.EngineTypePebble:
-		cfg := storage.PebbleConfig{
-			StorageConfig: storageConfig,
-			Opts:          storage.DefaultPebbleOptions(),
-		}
-		cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
-		defer cfg.Opts.Cache.Unref()
-
-		cfg.Opts.MaxOpenFiles = int(maxOpenFiles)
-		cfg.Opts.ReadOnly = opts.ReadOnly
-
-		db, err = storage.NewPebble(context.Background(), cfg)
-
-	case enginepb.EngineTypeRocksDB:
-		cache := storage.NewRocksDBCache(server.DefaultCacheSize)
-		defer cache.Release()
-
-		cfg := storage.RocksDBConfig{
-			StorageConfig: storageConfig,
-			MaxOpenFiles:  maxOpenFiles,
-			ReadOnly:      opts.ReadOnly,
-		}
-
-		db, err = storage.NewRocksDB(cfg, cache)
+	cfg := storage.PebbleConfig{
+		StorageConfig: storageConfig,
+		Opts:          storage.DefaultPebbleOptions(),
 	}
+	cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
+	defer cfg.Opts.Cache.Unref()
+
+	cfg.Opts.MaxOpenFiles = int(maxOpenFiles)
+	cfg.Opts.ReadOnly = opts.ReadOnly
+
+	db, err = storage.NewPebble(context.Background(), cfg)
 
 	if err != nil {
 		return nil, err
@@ -232,13 +215,19 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, func(kv storage.MVCCKeyValue) (bool, error) {
+	return db.MVCCIterate(debugCtx.startKey.Key, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
 		done, err := printer(kv)
-		if done || err != nil {
-			return done, err
+		if err != nil {
+			return err
+		}
+		if done {
+			return iterutil.StopIteration()
 		}
 		results++
-		return results == debugCtx.maxResults, nil
+		if results == debugCtx.maxResults {
+			return iterutil.StopIteration()
+		}
+		return nil
 	})
 }
 
@@ -327,7 +316,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	iter := rditer.NewReplicaDataIterator(&desc, db, debugCtx.replicated, false /* seekEnd */)
+	iter := rditer.NewReplicaEngineDataIterator(&desc, db, debugCtx.replicated)
 	defer iter.Close()
 	results := 0
 	for ; ; iter.Next() {
@@ -336,10 +325,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		} else if !ok {
 			break
 		}
-		kvserver.PrintKeyValue(storage.MVCCKeyValue{
-			Key:   iter.Key(),
-			Value: iter.Value(),
-		})
+		kvserver.PrintEngineKeyValue(iter.UnsafeKey(), iter.UnsafeValue())
 		results++
 		if results == debugCtx.maxResults {
 			break
@@ -362,25 +348,28 @@ func loadRangeDescriptor(
 	db storage.Engine, rangeID roachpb.RangeID,
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
-	handleKV := func(kv storage.MVCCKeyValue) (bool, error) {
-		if kv.Key.Timestamp == (hlc.Timestamp{}) {
+	handleKV := func(kv storage.MVCCKeyValue) error {
+		if kv.Key.Timestamp.IsEmpty() {
 			// We only want values, not MVCCMetadata.
-			return false, nil
+			return nil
 		}
 		if err := kvserver.IsRangeDescriptorKey(kv.Key); err != nil {
 			// Range descriptor keys are interleaved with others, so if it
 			// doesn't parse as a range descriptor just skip it.
-			return false, nil //nolint:returnerrcheck
+			return nil //nolint:returnerrcheck
 		}
 		if len(kv.Value) == 0 {
 			// RangeDescriptor was deleted (range merged away).
-			return false, nil
+			return nil
 		}
 		if err := (roachpb.Value{RawBytes: kv.Value}).GetProto(&desc); err != nil {
 			log.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
-			return false, nil
+			return nil
 		}
-		return desc.RangeID == rangeID, nil
+		if desc.RangeID == rangeID {
+			return iterutil.StopIteration()
+		}
+		return nil
 	}
 
 	// Range descriptors are stored by key, so we have to scan over the
@@ -388,7 +377,8 @@ func loadRangeDescriptor(
 	start := keys.LocalRangePrefix
 	end := keys.LocalRangeMax
 
-	if err := db.Iterate(start, end, handleKV); err != nil {
+	// NB: Range descriptor keys can have intents.
+	if err := db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.RangeID == rangeID {
@@ -409,12 +399,13 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	start := keys.LocalRangePrefix
 	end := keys.LocalRangeMax
 
-	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) (bool, error) {
+	// NB: Range descriptor keys can have intents.
+	return db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
 		if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
-			return false, nil
+			return nil
 		}
 		kvserver.PrintKeyValue(kv)
-		return false, nil
+		return nil
 	})
 }
 
@@ -467,9 +458,14 @@ Decode and print a hexadecimal-encoded key-value pair.
 		isTS := bytes.HasPrefix(bs[0], keys.TimeseriesPrefix)
 		k, err := storage.DecodeMVCCKey(bs[0])
 		if err != nil {
-			// Older versions of the consistency checker give you diffs with a raw_key that
-			// is already a roachpb.Key, so make a half-assed attempt to support both.
+			// - Could be an EngineKey.
+			// - Older versions of the consistency checker give you diffs with a raw_key that
+			//   is already a roachpb.Key, so make a half-assed attempt to support both.
 			if !isTS {
+				if k, ok := storage.DecodeEngineKey(bs[0]); ok {
+					kvserver.PrintEngineKeyValue(k, bs[1])
+					return nil
+				}
 				fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
 					"if the result below looks like garbage, then it likely is:\n\n", err)
 			}
@@ -539,9 +535,10 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(start))),
 		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(end))))
 
-	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) (bool, error) {
+	// NB: raft log does not have intents.
+	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, func(kv storage.MVCCKeyValue) error {
 		kvserver.PrintKeyValue(kv)
-		return false, nil
+		return nil
 	})
 }
 
@@ -595,22 +592,25 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	var descs []roachpb.RangeDescriptor
 
 	if _, err := storage.MVCCIterate(context.Background(), db, start, end, hlc.MaxTimestamp,
-		storage.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) (bool, error) {
+		storage.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) error {
 			var desc roachpb.RangeDescriptor
 			_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
 			if err != nil {
-				return false, err
+				return err
 			}
 			if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
-				return false, nil
+				return nil
 			}
 			if err := kv.Value.GetProto(&desc); err != nil {
-				return false, err
+				return err
 			}
 			if desc.RangeID == rangeID || rangeID == 0 {
 				descs = append(descs, desc)
 			}
-			return desc.RangeID == rangeID, nil
+			if desc.RangeID == rangeID {
+				return iterutil.StopIteration()
+			}
+			return nil
 		}); err != nil {
 		return err
 	}
@@ -642,44 +642,12 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugRocksDBCmd = &cobra.Command{
-	Use:   "rocksdb",
-	Short: "run the RocksDB 'ldb' tool",
-	Long: `
-Runs the RocksDB 'ldb' tool, which provides various subcommands for examining
-raw store data. 'cockroach debug rocksdb' accepts the same arguments and flags
-as 'ldb'.
-
-https://github.com/facebook/rocksdb/wiki/Administration-and-Data-Access-Tool#ldb-tool
-`,
-	// LDB does its own flag parsing.
-	// TODO(mberhault): support encrypted stores.
-	DisableFlagParsing: true,
-	Run: func(cmd *cobra.Command, args []string) {
-		storage.RunLDB(args)
-	},
-}
-
 var debugPebbleCmd = &cobra.Command{
 	Use:   "pebble [command]",
 	Short: "run a Pebble introspection tool command",
 	Long: `
 Allows the use of pebble tools, such as to introspect manifests, SSTables, etc.
 `,
-}
-
-var debugSSTDumpCmd = &cobra.Command{
-	Use:   "sst_dump",
-	Short: "run the RocksDB 'sst_dump' tool",
-	Long: `
-Runs the RocksDB 'sst_dump' tool
-`,
-	// sst_dump does its own flag parsing.
-	// TODO(mberhault): support encrypted stores.
-	DisableFlagParsing: true,
-	Run: func(cmd *cobra.Command, args []string) {
-		storage.RunSSTDump(args)
-	},
 }
 
 var debugEnvCmd = &cobra.Command{
@@ -828,7 +796,7 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, desc))
 		} else if strings.HasPrefix(key, gossip.KeyNodeLivenessPrefix) {
-			var liveness kvserverpb.Liveness
+			var liveness livenesspb.Liveness
 			if err := protoutil.Unmarshal(bytes, &liveness); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
@@ -983,7 +951,7 @@ func removeDeadReplicas(
 
 	var newDescs []roachpb.RangeDescriptor
 
-	err = kvserver.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) (bool, error) {
+	err = kvserver.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) error {
 		hasSelf := false
 		numDeadPeers := 0
 		allReplicas := desc.Replicas().All()
@@ -1006,7 +974,7 @@ func removeDeadReplicas(
 				return !ok
 			})
 			if canMakeProgress {
-				return false, nil
+				return nil
 			}
 
 			// Rewrite the range as having a single replica. The winning
@@ -1034,7 +1002,7 @@ func removeDeadReplicas(
 			fmt.Printf("Replica %s -> %s\n", &desc, &newDesc)
 			newDescs = append(newDescs, newDesc)
 		}
-		return false, nil
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -1202,8 +1170,6 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugDecodeKeyCmd,
 	debugDecodeValueCmd,
 	debugDecodeProtoCmd,
-	debugRocksDBCmd,
-	debugSSTDumpCmd,
 	debugGossipValuesCmd,
 	debugTimeSeriesDumpCmd,
 	debugSyncBenchCmd,
@@ -1246,7 +1212,8 @@ func init() {
 
 	// Note: we hook up FormatValue here in order to avoid a circular dependency
 	// between kvserver and storage.
-	storage.MVCCComparer.FormatValue = func(key, value []byte) fmt.Formatter {
+	// TODO(sumeer): fix this to also format EngineKey KVs.
+	storage.EngineComparer.FormatValue = func(key, value []byte) fmt.Formatter {
 		decoded, err := storage.DecodeMVCCKey(key)
 		if err != nil {
 			return mvccValueFormatter{err: err}
@@ -1258,7 +1225,7 @@ func init() {
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
 	pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
-		tool.DefaultComparer(storage.MVCCComparer))
+		tool.DefaultComparer(storage.EngineComparer))
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 

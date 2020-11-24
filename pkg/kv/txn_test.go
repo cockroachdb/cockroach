@@ -56,7 +56,7 @@ func TestTxnSnowballTrace(t *testing.T) {
 	}
 	log.Event(ctx, "txn complete")
 	sp.Finish()
-	collectedSpans := tracing.GetRecording(sp)
+	collectedSpans := sp.GetRecording()
 	dump := collectedSpans.String()
 	// dump:
 	//    0.105ms      0.000ms    event:inside txn
@@ -287,11 +287,11 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 								pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
 							}
 
-							if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+							if pErr.TransactionRestart() != roachpb.TransactionRestart_NONE {
 								// HACK ALERT: to do without a TxnCoordSender, we jump through
 								// hoops to get the retryable error expected by db.Txn().
 								return nil, roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-									pErr.Message, ba.Txn.ID, *ba.Txn))
+									"foo", ba.Txn.ID, *ba.Txn))
 							}
 							return nil, pErr
 						}

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -38,13 +39,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -81,7 +80,6 @@ type createTableRun struct {
 // minimumTypeUsageVersions defines the minimum version needed for a new
 // data type.
 var minimumTypeUsageVersions = map[types.Family]clusterversion.VersionKey{
-	types.TimeTZFamily:    clusterversion.VersionTimeTZType,
 	types.GeographyFamily: clusterversion.VersionGeospatialType,
 	types.GeometryFamily:  clusterversion.VersionGeospatialType,
 	types.Box2DFamily:     clusterversion.VersionBox2DType,
@@ -95,21 +93,6 @@ func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) (bool
 		t = t.ArrayContents()
 	}
 
-	switch t.Family() {
-	case types.TimeFamily, types.TimestampFamily, types.TimestampTZFamily, types.TimeTZFamily:
-		if t.Precision() != 6 && !v.IsActive(clusterversion.VersionTimePrecision) {
-			return false, nil
-		}
-	case types.IntervalFamily:
-		itm, err := t.IntervalTypeMetadata()
-		if err != nil {
-			return false, err
-		}
-		if (t.Precision() != 6 || itm.DurationField != types.IntervalDurationField{}) &&
-			!v.IsActive(clusterversion.VersionTimePrecision) {
-			return false, nil
-		}
-	}
 	minVersion, ok := minimumTypeUsageVersions[t.Family()]
 	if !ok {
 		return true, nil
@@ -203,7 +186,8 @@ func getTableCreateParams(
 	}
 
 	// Check permissions on the schema.
-	if err := params.p.canCreateOnSchema(params.ctx, schemaID, params.p.User()); err != nil {
+	if err := params.p.canCreateOnSchema(
+		params.ctx, schemaID, dbID, params.p.User(), skipCheckPublicSchema); err != nil {
 		return nil, 0, err
 	}
 
@@ -279,7 +263,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
+	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User())
 
 	var asCols colinfo.ResultColumns
 	var desc *tabledesc.Mutable
@@ -387,7 +371,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			TableName string
 			Statement string
 			User      string
-		}{n.n.Table.FQString(), n.n.String(), params.SessionData().User},
+		}{n.n.Table.FQString(), n.n.String(), params.p.User().Normalized()},
 	); err != nil {
 		return err
 	}
@@ -624,8 +608,8 @@ func ResolveFK(
 	validationBehavior tree.ValidationBehavior,
 	evalCtx *tree.EvalContext,
 ) error {
+	var originColSet catalog.TableColSet
 	originCols := make([]*descpb.ColumnDescriptor, len(d.FromCols))
-	originColMap := make(map[descpb.ColumnID]struct{}, len(d.FromCols))
 	for i, col := range d.FromCols {
 		col, err := tbl.FindActiveOrNewColumnByName(col)
 		if err != nil {
@@ -635,11 +619,11 @@ func ResolveFK(
 			return err
 		}
 		// Ensure that the origin columns don't have duplicates.
-		if _, ok := originColMap[col.ID]; ok {
+		if originColSet.Contains(col.ID) {
 			return pgerror.Newf(pgcode.InvalidForeignKey,
 				"foreign key contains duplicate column %q", col.Name)
 		}
-		originColMap[col.ID] = struct{}{}
+		originColSet.Add(col.ID)
 		originCols[i] = col
 	}
 
@@ -1238,15 +1222,14 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	// If all nodes in the cluster know how to handle secondary indexes with column families,
-	// write the new version into new index descriptors.
-	indexEncodingVersion := descpb.BaseIndexFormatVersion
+	indexEncodingVersion := descpb.SecondaryIndexFamilyFormatVersion
 	// We can't use st.Version.IsActive because this method is used during
 	// server setup before the cluster version has been initialized.
 	version := st.Version.ActiveVersionOrEmpty(ctx)
-	if version != (clusterversion.ClusterVersion{}) &&
-		version.IsActive(clusterversion.VersionSecondaryIndexColumnFamilies) {
-		indexEncodingVersion = descpb.SecondaryIndexFamilyFormatVersion
+	if version != (clusterversion.ClusterVersion{}) {
+		if version.IsActive(clusterversion.VersionEmptyArraysInInvertedIndexes) {
+			indexEncodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
+		}
 	}
 
 	for i, def := range n.Defs {
@@ -1277,18 +1260,6 @@ func NewTableDesc(
 				)
 			}
 			if d.PrimaryKey.Sharded {
-				// This function can sometimes be called when `st` is nil,
-				// and also before the version has been initialized. We only
-				// allow hash sharded indexes to be created if we know for
-				// certain that it supported by the cluster.
-				if st == nil {
-					return nil, invalidClusterForShardedIndexError
-				}
-				if version == (clusterversion.ClusterVersion{}) ||
-					!version.IsActive(clusterversion.VersionHashShardedIndexes) {
-					return nil, invalidClusterForShardedIndexError
-				}
-
 				if !sessionData.HashShardedIndexesEnabled {
 					return nil, hashShardedIndexesDisabledError
 				}
@@ -1422,6 +1393,9 @@ func NewTableDesc(
 				Version:          indexEncodingVersion,
 			}
 			if d.Inverted {
+				if !sessionData.EnableMultiColumnInvertedIndexes && len(d.Columns) > 1 {
+					return nil, pgerror.New(pgcode.FeatureNotSupported, "indexing more than one column with an inverted index is not supported")
+				}
 				idx.Type = descpb.IndexDescriptor_INVERTED
 			}
 			if d.Sharded != nil {
@@ -1436,7 +1410,7 @@ func NewTableDesc(
 				return nil, err
 			}
 			if d.Inverted {
-				columnDesc, _, err := desc.FindColumnByName(tree.Name(idx.ColumnNames[0]))
+				columnDesc, _, err := desc.FindColumnByName(tree.Name(idx.InvertedColumnName()))
 				if err != nil {
 					return nil, err
 				}
@@ -1483,6 +1457,11 @@ func NewTableDesc(
 				return nil, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *tree.UniqueConstraintTableDef:
+			if d.WithoutIndex {
+				return nil, pgerror.New(pgcode.FeatureNotSupported,
+					"unique constraints without an index are not yet supported",
+				)
+			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
@@ -1592,23 +1571,6 @@ func NewTableDesc(
 
 	if err := desc.AllocateIDs(ctx); err != nil {
 		return nil, err
-	}
-
-	// If any nodes are not at version VersionPrimaryKeyColumnsOutOfFamilyZero, then return an error
-	// if a primary key column is not in column family 0.
-	if st != nil {
-		if version := st.Version.ActiveVersionOrEmpty(ctx); version != (clusterversion.ClusterVersion{}) &&
-			!version.IsActive(clusterversion.VersionPrimaryKeyColumnsOutOfFamilyZero) {
-			var colsInFamZero util.FastIntSet
-			for _, colID := range desc.Families[0].ColumnIDs {
-				colsInFamZero.Add(int(colID))
-			}
-			for _, colID := range desc.PrimaryIndex.ColumnIDs {
-				if !colsInFamZero.Contains(int(colID)) {
-					return nil, errors.Errorf("primary key column %d is not in column family 0", colID)
-				}
-			}
-		}
 	}
 
 	for i := range desc.Indexes {
@@ -2091,20 +2053,24 @@ func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescr
 	if desc.HasDefault() {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("default_expr"))
 	}
-	if def.Unique {
-		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
+	if def.Unique.IsUnique {
+		if def.Unique.WithoutIndex {
+			telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique_without_index"))
+		} else {
+			telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
+		}
 	}
 }
 
 // CreateInheritedPrivilegesFromDBDesc creates privileges with the appropriate
 // owner (node for system, the restoring user otherwise.)
 func CreateInheritedPrivilegesFromDBDesc(
-	dbDesc catalog.DatabaseDescriptor, user string,
+	dbDesc catalog.DatabaseDescriptor, user security.SQLUsername,
 ) *descpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
 	if dbDesc.GetID() == keys.SystemDatabaseID {
-		return descpb.NewDefaultPrivilegeDescriptor(security.NodeUser)
+		return descpb.NewDefaultPrivilegeDescriptor(security.NodeUserName())
 	}
 
 	privs := dbDesc.GetPrivileges()

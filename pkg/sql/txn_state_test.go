@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 var noRewindExpected = CmdPos(-1)
@@ -43,7 +42,7 @@ type testContext struct {
 	clock       *hlc.Clock
 	mockDB      *kv.DB
 	mon         *mon.BytesMonitor
-	tracer      opentracing.Tracer
+	tracer      *tracing.Tracer
 	// ctx is mimicking the spirit of a client connection's context
 	ctx      context.Context
 	settings *cluster.Settings
@@ -82,7 +81,7 @@ func makeTestContext(stopper *stop.Stopper) testContext {
 // createOpenState returns a txnState initialized with an open txn.
 func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	sp := tc.tracer.StartSpan("createOpenState")
-	ctx := opentracing.ContextWithSpan(tc.ctx, sp)
+	ctx := tracing.ContextWithSpan(tc.ctx, sp)
 	ctx, cancel := context.WithCancel(ctx)
 
 	txnStateMon := mon.NewMonitor("test mon",
@@ -326,8 +325,8 @@ func TestTransitions(t *testing.T) {
 				}
 				return s, ts, nil
 			},
-			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: true},
+			ev:        eventTxnFinishCommitted{},
+			evPayload: nil,
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -347,8 +346,8 @@ func TestTransitions(t *testing.T) {
 				}
 				return s, ts, nil
 			},
-			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: true},
+			ev:        eventTxnFinishCommitted{},
+			evPayload: nil,
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -552,9 +551,8 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createAbortedState()
 				return s, ts, nil
 			},
-			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: false},
-			expState:  stateNoTxn{},
+			ev:       eventTxnFinishAborted{},
+			expState: stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnRollback,
@@ -623,12 +621,11 @@ func TestTransitions(t *testing.T) {
 			init: func() (fsm.State, *txnState, error) {
 				return testCon.createCommitWaitState()
 			},
-			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: true},
-			expState:  stateNoTxn{},
+			ev:       eventTxnFinishCommitted{},
+			expState: stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
-				expEv:   txnCommit,
+				expEv:   noEvent,
 			},
 			expTxn: nil,
 		},

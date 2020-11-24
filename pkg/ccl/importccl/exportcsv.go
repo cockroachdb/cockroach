@@ -167,7 +167,7 @@ func (sp *csvWriter) OutputTypes() []*types.T {
 
 func (sp *csvWriter) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 
 	err := func() error {
 		typs := sp.input.OutputTypes()
@@ -178,7 +178,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 		writer := newCSVExporter(sp.spec)
 
-		nullsAs := ""
+		var nullsAs string
 		if sp.spec.Options.NullEncoding != nil {
 			nullsAs = *sp.spec.Options.NullEncoding
 		}
@@ -208,8 +208,13 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 				for i, ed := range row {
 					if ed.IsNull() {
-						csvRow[i] = nullsAs
-						continue
+						if sp.spec.Options.NullEncoding != nil {
+							csvRow[i] = nullsAs
+							continue
+						} else {
+							return errors.New("NULL value encountered during EXPORT, " +
+								"use `WITH nullas` to specify the string representation of NULL")
+						}
 					}
 					if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
 						return err
@@ -229,7 +234,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				return errors.Wrap(err, "failed to flush csv writer")
 			}
 
-			conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User)
+			conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
 			if err != nil {
 				return err
 			}

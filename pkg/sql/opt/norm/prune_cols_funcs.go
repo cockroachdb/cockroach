@@ -43,7 +43,7 @@ func (c *CustomFuncs) NeededExplainCols(private *memo.ExplainPrivate) opt.ColSet
 // referenced by it. Other rules filter the FetchCols, CheckCols, etc. and can
 // in turn trigger the PruneMutationInputCols rule.
 func (c *CustomFuncs) NeededMutationCols(
-	private *memo.MutationPrivate, checks memo.FKChecksExpr,
+	private *memo.MutationPrivate, uniqueChecks memo.UniqueChecksExpr, fkChecks memo.FKChecksExpr,
 ) opt.ColSet {
 	var cols opt.ColSet
 
@@ -69,8 +69,12 @@ func (c *CustomFuncs) NeededMutationCols(
 	}
 
 	if private.WithID != 0 {
-		for i := range checks {
-			withUses := memo.WithUses(checks[i].Check)
+		for i := range uniqueChecks {
+			withUses := memo.WithUses(uniqueChecks[i].Check)
+			cols.UnionWith(withUses[private.WithID].UsedCols)
+		}
+		for i := range fkChecks {
+			withUses := memo.WithUses(fkChecks[i].Check)
 			cols.UnionWith(withUses[private.WithID].UsedCols)
 		}
 	}
@@ -149,19 +153,24 @@ func neededMutationFetchCols(
 
 		// Make sure to consider indexes that are being added or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
-			indexCols := tabMeta.IndexColumns(i)
-
 			// If the columns being updated are not part of the index and the
 			// index is not a partial index, then the update does not require
 			// changes to the index. Partial indexes may be updated (even when a
 			// column in the index is not changing) when rows that were not
 			// previously in the index must be added to the index because they
 			// now satisfy the partial index predicate.
+			//
+			// Note that we use the set of index columns where the virtual
+			// columns have been mapped to their source columns. Virtual columns
+			// are never part of the updated columns. Updates to source columns
+			// trigger index changes.
+			//
 			// TODO(mgartner): Index columns are not necessary when neither the
 			// index columns nor the columns referenced in the partial index
 			// predicate are being updated. We should prune mutation fetch
 			// columns when this is the case, rather than always marking index
 			// columns of partial indexes as "needed".
+			indexCols := tabMeta.IndexColumnsMapVirtual(i)
 			_, isPartialIndex := tabMeta.Table.Index(i).Predicate()
 			if !indexCols.Intersects(updateCols) && !isPartialIndex {
 				continue

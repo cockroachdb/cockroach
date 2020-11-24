@@ -94,7 +94,7 @@ func SplitTable(
 	for _, rkt := range rkts {
 		kts = append(kts, rkt.KT)
 	}
-	descs, errs := tc.AddReplicasMulti(kts...)
+	descs, errs := tc.AddVotersMulti(kts...)
 	for _, err := range errs {
 		if err != nil && !testutils.IsError(err, "is already present") {
 			t.Fatal(err)
@@ -160,18 +160,9 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 				return
 			default:
 				// Split the table at a random row.
-				var tableDesc *tabledesc.Immutable
-				require.NoError(t, cdb.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					desc, err := catalogkv.UncachedPhysicalAccessor{}.GetObjectDesc(ctx,
-						txn, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec,
-						"test", "public", "t",
-						tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind))
-					if err != nil {
-						return err
-					}
-					tableDesc = desc.(*tabledesc.Immutable)
-					return nil
-				}))
+				tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(
+					cdb, keys.SystemSQLCodec, "test", "public", "t",
+				)
 
 				val := rng.Intn(n)
 				t.Logf("splitting at %d", val)
@@ -270,7 +261,9 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 
 	size := func() int64 { return 2 << 10 }
 	st := cluster.MakeTestingClusterSettings()
-	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size, stop.NewStopper())
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size, stopper)
 	r := MakeDistSQLReceiver(
 		ctx, nil /* resultWriter */, tree.Rows,
 		rangeCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})

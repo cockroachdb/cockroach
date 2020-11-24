@@ -100,6 +100,11 @@ func NewRowContainerWithCapacity(
 	return c
 }
 
+var rowsPerChunkShift = uint(util.ConstantWithMetamorphicTestValue(
+	6, /* defaultValue */
+	1, /* metamorphicValue */
+))
+
 // Init can be used instead of NewRowContainer if we have a RowContainer that is
 // already part of an on-heap structure.
 func (c *RowContainer) Init(acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCapacity int) {
@@ -117,7 +122,7 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCap
 		c.rowsPerChunkShift = 64 - uint(bits.LeadingZeros64(uint64(rowCapacity-1)))
 	} else if nCols != 0 {
 		// If the rows have columns, we use 64 rows per chunk.
-		c.rowsPerChunkShift = 6
+		c.rowsPerChunkShift = rowsPerChunkShift
 	} else {
 		// If there are no columns, every row gets mapped to the first chunk,
 		// which ends up being a zero-length slice because each row contains no
@@ -234,6 +239,8 @@ func (c *RowContainer) AddRow(ctx context.Context, row tree.Datums) (tree.Datums
 		c.numRows++
 		return nil, nil
 	}
+	// Note that it is important that we perform the memory accounting before
+	// actually adding the row.
 	if err := c.memAcc.Grow(ctx, c.rowSize(row)); err != nil {
 		return nil, err
 	}
@@ -260,7 +267,8 @@ func (c *RowContainer) NumCols() int {
 	return c.numCols
 }
 
-// At accesses a row at a specific index.
+// At accesses a row at a specific index. Note that it does *not* copy the row:
+// callers must copy the row if they wish to mutate it.
 func (c *RowContainer) At(i int) tree.Datums {
 	// This is a hot-path: do not add additional checks here.
 	chunk, pos := c.getChunkAndPos(i)
@@ -314,9 +322,4 @@ func (c *RowContainer) Replace(ctx context.Context, i int, newRow tree.Datums) e
 	}
 	copy(row, newRow)
 	return nil
-}
-
-// MemUsage returns the current accounted memory usage.
-func (c *RowContainer) MemUsage() int64 {
-	return c.memAcc.Used()
 }

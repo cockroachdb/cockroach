@@ -24,11 +24,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
 )
@@ -42,6 +44,8 @@ type CreateDatabase struct {
 	Collate         string
 	CType           string
 	ConnectionLimit int32
+	Regions         NameList
+	SurvivalGoal    SurvivalGoal
 }
 
 // Format implements the NodeFormatter interface.
@@ -71,18 +75,43 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 		ctx.WriteString(" CONNECTION LIMIT = ")
 		ctx.WriteString(strconv.Itoa(int(node.ConnectionLimit)))
 	}
+	if node.Regions != nil {
+		ctx.WriteString(" REGIONS = ")
+		node.Regions.Format(ctx)
+	}
+	if node.SurvivalGoal != SurvivalGoalDefault {
+		ctx.WriteString(" ")
+		node.SurvivalGoal.Format(ctx)
+	}
 }
 
 // IndexElem represents a column with a direction in a CREATE INDEX statement.
 type IndexElem struct {
-	Column     Name
+	// Column is set if this is a simple column reference (the common case).
+	Column Name
+	// Expr is set if the index element is an expression (part of an
+	// expression-based index). If set, Column is empty.
+	Expr       Expr
 	Direction  Direction
 	NullsOrder NullsOrder
 }
 
 // Format implements the NodeFormatter interface.
 func (node *IndexElem) Format(ctx *FmtCtx) {
-	ctx.FormatNode(&node.Column)
+	if node.Expr == nil {
+		ctx.FormatNode(&node.Column)
+	} else {
+		// Expressions in indexes need an extra set of parens, unless they are a
+		// simple function call.
+		_, isFunc := node.Expr.(*FuncExpr)
+		if !isFunc {
+			ctx.WriteByte('(')
+		}
+		ctx.FormatNode(node.Expr)
+		if !isFunc {
+			ctx.WriteByte(')')
+		}
+	}
 	if node.Direction != DefaultDirection {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.Direction.String())
@@ -91,6 +120,27 @@ func (node *IndexElem) Format(ctx *FmtCtx) {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.NullsOrder.String())
 	}
+}
+
+func (node *IndexElem) doc(p *PrettyCfg) pretty.Doc {
+	var d pretty.Doc
+	if node.Expr == nil {
+		d = p.Doc(&node.Column)
+	} else {
+		// Expressions in indexes need an extra set of parens, unless they are a
+		// simple function call.
+		d = p.Doc(node.Expr)
+		if _, isFunc := node.Expr.(*FuncExpr); !isFunc {
+			d = p.bracket("(", d, ")")
+		}
+	}
+	if node.Direction != DefaultDirection {
+		d = pretty.ConcatSpace(d, pretty.Keyword(node.Direction.String()))
+	}
+	if node.NullsOrder != DefaultNullsOrder {
+		d = pretty.ConcatSpace(d, pretty.Keyword(node.NullsOrder.String()))
+	}
+	return d
 }
 
 // IndexElemList is list of IndexElem.
@@ -105,6 +155,18 @@ func (l *IndexElemList) Format(ctx *FmtCtx) {
 		}
 		ctx.FormatNode(&(*l)[i])
 	}
+}
+
+// doc is part of the docer interface.
+func (l *IndexElemList) doc(p *PrettyCfg) pretty.Doc {
+	if l == nil || len(*l) == 0 {
+		return pretty.Nil
+	}
+	d := make([]pretty.Doc, len(*l))
+	for i := range *l {
+		d[i] = p.Doc(&(*l)[i])
+	}
+	return p.commaSeparated(d...)
 }
 
 // CreateIndex represents a CREATE INDEX statement.
@@ -210,12 +272,38 @@ const (
 	Domain
 )
 
+// EnumValue represents a single enum value.
+type EnumValue string
+
+// Format implements the NodeFormatter interface.
+func (n *EnumValue) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	if f.HasFlags(FmtAnonymize) {
+		ctx.WriteByte('_')
+	} else {
+		lex.EncodeSQLString(&ctx.Buffer, string(*n))
+	}
+}
+
+// EnumValueList represents a list of enum values.
+type EnumValueList []EnumValue
+
+// Format implements the NodeFormatter interface.
+func (l *EnumValueList) Format(ctx *FmtCtx) {
+	for i := range *l {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNode(&(*l)[i])
+	}
+}
+
 // CreateType represents a CREATE TYPE statement.
 type CreateType struct {
 	TypeName *UnresolvedObjectName
 	Variety  CreateTypeVariety
 	// EnumLabels is set when this represents a CREATE TYPE ... AS ENUM statement.
-	EnumLabels []string
+	EnumLabels EnumValueList
 }
 
 var _ Statement = &CreateType{}
@@ -223,17 +311,12 @@ var _ Statement = &CreateType{}
 // Format implements the NodeFormatter interface.
 func (node *CreateType) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TYPE ")
-	ctx.WriteString(node.TypeName.String())
+	ctx.FormatNode(node.TypeName)
 	ctx.WriteString(" ")
 	switch node.Variety {
 	case Enum:
 		ctx.WriteString("AS ENUM (")
-		for i := range node.EnumLabels {
-			if i > 0 {
-				ctx.WriteString(", ")
-			}
-			lex.EncodeSQLString(&ctx.Buffer, node.EnumLabels[i])
-		}
+		ctx.FormatNode(&node.EnumLabels)
 		ctx.WriteString(")")
 	}
 }
@@ -297,9 +380,12 @@ type ColumnTableDef struct {
 		Sharded      bool
 		ShardBuckets Expr
 	}
-	Unique               bool
-	UniqueConstraintName Name
-	DefaultExpr          struct {
+	Unique struct {
+		IsUnique       bool
+		WithoutIndex   bool
+		ConstraintName Name
+	}
+	DefaultExpr struct {
 		Expr           Expr
 		ConstraintName Name
 	}
@@ -374,15 +460,21 @@ func NewColumnTableDef(
 		switch t := c.Qualification.(type) {
 		case ColumnCollation:
 			locale := string(t)
-			_, err := language.Parse(locale)
-			if err != nil {
-				return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
+			// In postgres, all strings have collations defaulting to "default".
+			// In CRDB, collated strings are treated separately to string family types.
+			// To most behave like postgres, set the CollatedString type if a non-"default"
+			// collation is used.
+			if locale != DefaultCollationTag {
+				_, err := language.Parse(locale)
+				if err != nil {
+					return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
+				}
+				collatedTyp, err := processCollationOnType(name, d.Type, t)
+				if err != nil {
+					return nil, err
+				}
+				d.Type = collatedTyp
 			}
-			collatedTyp, err := processCollationOnType(name, d.Type, t)
-			if err != nil {
-				return nil, err
-			}
-			d.Type = collatedTyp
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
 				return nil, pgerror.Newf(pgcode.Syntax,
@@ -406,16 +498,17 @@ func NewColumnTableDef(
 			d.Nullable.ConstraintName = c.Name
 		case PrimaryKeyConstraint:
 			d.PrimaryKey.IsPrimaryKey = true
-			d.UniqueConstraintName = c.Name
+			d.Unique.ConstraintName = c.Name
 		case ShardedPrimaryKeyConstraint:
 			d.PrimaryKey.IsPrimaryKey = true
 			constraint := c.Qualification.(ShardedPrimaryKeyConstraint)
 			d.PrimaryKey.Sharded = true
 			d.PrimaryKey.ShardBuckets = constraint.ShardBuckets
-			d.UniqueConstraintName = c.Name
+			d.Unique.ConstraintName = c.Name
 		case UniqueConstraint:
-			d.Unique = true
-			d.UniqueConstraintName = c.Name
+			d.Unique.IsUnique = true
+			d.Unique.WithoutIndex = t.WithoutIndex
+			d.Unique.ConstraintName = c.Name
 		case *ColumnCheckConstraint:
 			d.CheckExprs = append(d.CheckExprs, ColumnTableDefCheckExpr{
 				Expr:           t.Expr,
@@ -490,10 +583,10 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	case NotNull:
 		ctx.WriteString(" NOT NULL")
 	}
-	if node.PrimaryKey.IsPrimaryKey || node.Unique {
-		if node.UniqueConstraintName != "" {
+	if node.PrimaryKey.IsPrimaryKey || node.Unique.IsUnique {
+		if node.Unique.ConstraintName != "" {
 			ctx.WriteString(" CONSTRAINT ")
-			ctx.FormatNode(&node.UniqueConstraintName)
+			ctx.FormatNode(&node.Unique.ConstraintName)
 		}
 		if node.PrimaryKey.IsPrimaryKey {
 			ctx.WriteString(" PRIMARY KEY")
@@ -501,8 +594,11 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 				ctx.WriteString(" USING HASH WITH BUCKET_COUNT=")
 				ctx.FormatNode(node.PrimaryKey.ShardBuckets)
 			}
-		} else if node.Unique {
+		} else if node.Unique.IsUnique {
 			ctx.WriteString(" UNIQUE")
+			if node.Unique.WithoutIndex {
+				ctx.WriteString(" WITHOUT INDEX")
+			}
 		}
 	}
 	if node.HasDefaultExpr() {
@@ -628,7 +724,9 @@ type ShardedPrimaryKeyConstraint struct {
 }
 
 // UniqueConstraint represents UNIQUE on a column.
-type UniqueConstraint struct{}
+type UniqueConstraint struct {
+	WithoutIndex bool
+}
 
 // ColumnCheckConstraint represents either a check on a column.
 type ColumnCheckConstraint struct {
@@ -727,7 +825,8 @@ func (*CheckConstraintTableDef) constraintTableDef()      {}
 // TABLE statement.
 type UniqueConstraintTableDef struct {
 	IndexTableDef
-	PrimaryKey bool
+	PrimaryKey   bool
+	WithoutIndex bool
 }
 
 // SetName implements the TableDef interface.
@@ -746,6 +845,9 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString("PRIMARY KEY ")
 	} else {
 		ctx.WriteString("UNIQUE ")
+	}
+	if node.WithoutIndex {
+		ctx.WriteString("WITHOUT INDEX ")
 	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)
@@ -1226,8 +1328,10 @@ func (node *CreateTable) HoistConstraints() {
 // CreateSchema represents a CREATE SCHEMA statement.
 type CreateSchema struct {
 	IfNotExists bool
-	Schema      string
-	AuthRole    string
+	// TODO(solon): Adjust this, see
+	// https://github.com/cockroachdb/cockroach/issues/54696
+	AuthRole security.SQLUsername
+	Schema   ObjectNamePrefix
 }
 
 // Format implements the NodeFormatter interface.
@@ -1238,14 +1342,14 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 		ctx.WriteString(" IF NOT EXISTS")
 	}
 
-	if node.Schema != "" {
+	if node.Schema.ExplicitSchema {
 		ctx.WriteString(" ")
-		ctx.WriteString(node.Schema)
+		ctx.FormatNode(&node.Schema)
 	}
 
-	if node.AuthRole != "" {
+	if !node.AuthRole.Undefined() {
 		ctx.WriteString(" AUTHORIZATION ")
-		ctx.WriteString(node.AuthRole)
+		ctx.FormatUsername(node.AuthRole)
 	}
 }
 

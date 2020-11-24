@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -35,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 func makeTS(walltime int64, logical int32) hlc.Timestamp {
@@ -43,6 +45,10 @@ func makeTS(walltime int64, logical int32) hlc.Timestamp {
 		WallTime: walltime,
 		Logical:  logical,
 	}
+}
+
+func makeTSWithFlag(walltime int64, logical int32) hlc.Timestamp {
+	return makeTS(walltime, logical).SetFlag(hlc.TimestampFlag_SYNTHETIC)
 }
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -456,17 +462,17 @@ var nonZeroTxn = Transaction{
 		Key:            Key("foo"),
 		ID:             uuid.MakeV4(),
 		Epoch:          2,
-		WriteTimestamp: makeTS(20, 21),
-		MinTimestamp:   makeTS(10, 11),
+		WriteTimestamp: makeTSWithFlag(20, 21),
+		MinTimestamp:   makeTSWithFlag(10, 11),
 		Priority:       957356782,
 		Sequence:       123,
 	},
 	Name:                 "name",
 	Status:               COMMITTED,
-	LastHeartbeat:        makeTS(1, 2),
-	ReadTimestamp:        makeTS(20, 22),
-	MaxTimestamp:         makeTS(40, 41),
-	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
+	LastHeartbeat:        makeTSWithFlag(1, 2),
+	ReadTimestamp:        makeTSWithFlag(20, 22),
+	MaxTimestamp:         makeTSWithFlag(40, 41),
+	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeTSWithFlag(1, 2)}},
 	WriteTooOld:          true,
 	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:       []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
@@ -563,7 +569,7 @@ func TestTransactionUpdate(t *testing.T) {
 
 	// Updating a different transaction fatals.
 	var exited bool
-	log.SetExitFunc(true /* hideStack */, func(int) { exited = true })
+	log.SetExitFunc(true /* hideStack */, func(exit.Code) { exited = true })
 	defer log.ResetExitFunc()
 
 	var txn6 Transaction
@@ -1124,7 +1130,7 @@ func TestSpanCombine(t *testing.T) {
 		{sCtoA, sBtoD, Span{}},
 	}
 	for i, test := range testData {
-		if combined := test.s1.Combine(test.s2); !combined.Equal(test.combined) {
+		if combined := test.s1.Combine(test.s2); !reflect.DeepEqual(combined, test.combined) {
 			t.Errorf("%d: expected combined %s; got %s between %s vs. %s", i, test.combined, combined, test.s1, test.s2)
 		}
 	}
@@ -1207,11 +1213,11 @@ func TestSpanSplitOnKey(t *testing.T) {
 	for testIdx, test := range testData {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
 			actualL, actualR := s.SplitOnKey(test.split)
-			if !test.left.EqualValue(actualL) {
+			if !test.left.Equal(actualL) {
 				t.Fatalf("expected left span after split to be %v, got %v", test.left, actualL)
 			}
 
-			if !test.right.EqualValue(actualR) {
+			if !test.right.Equal(actualR) {
 				t.Fatalf("expected right span after split to be %v, got %v", test.right, actualL)
 			}
 		})
@@ -1596,6 +1602,16 @@ func TestValuePrettyPrint(t *testing.T) {
 	}
 }
 
+func TestKeyFormat(t *testing.T) {
+	const sample = "\xbd\xb2\x3d\xbc\x20\xe2\x8c\x98"
+	k := Key(sample)
+	expected := ` /Table/53/42/"=\xbc ⌘"`
+	actual := fmt.Sprintf(" %s", k)
+	if expected != actual {
+		t.Errorf("String formatting of key: got %q expected %q", actual, expected)
+	}
+}
+
 func TestUpdateObservedTimestamps(t *testing.T) {
 	f := func(nodeID NodeID, walltime int64) ObservedTimestamp {
 		return ObservedTimestamp{
@@ -1686,8 +1702,8 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 		},
 	}
 	act := crt.String()
-	exp := "ENTER_JOINT(r6 r12 l12 v3) ADD_REPLICA[(n1,s2):3VOTER_INCOMING], " +
-		"REMOVE_REPLICA[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING]: " +
+	exp := "ENTER_JOINT(r6 r12 l12 v3) ADD_VOTER[(n1,s2):3VOTER_INCOMING], " +
+		"REMOVE_VOTER[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING]: " +
 		"after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER " +
 		"(n10,s11):12VOTER_DEMOTING] next=10"
 	require.Equal(t, exp, act)
@@ -1853,11 +1869,11 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 
 		// Run a more complex change (necessarily) via the V2 path.
 		{crt: mk(in{
-			add: sl( // Additions.
+			add: sl( // Voter additions.
 				VOTER_INCOMING, 6, LEARNER, 4, VOTER_INCOMING, 3,
 			),
 			del: sl(
-				// Removals.
+				// Voter removals.
 				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_DEMOTING, 9,
 			),
 			repls: sl(

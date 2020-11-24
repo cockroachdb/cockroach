@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -388,7 +389,7 @@ func checkAndMaybeShoutTo(
 	if err == nil {
 		return nil
 	}
-	severity := log.Severity_ERROR
+	severity := severity.ERROR
 	cause := err
 	var ec *cliError
 	if errors.As(err, &ec) {

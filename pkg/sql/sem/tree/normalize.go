@@ -978,10 +978,11 @@ func init() {
 	DecimalOne.SetInt64(1)
 }
 
-// ReType ensures that the given numeric expression evaluates
+// ReType ensures that the given expression evaluates
 // to the requested type, inserting a cast if necessary.
 func ReType(expr TypedExpr, wantedType *types.T) TypedExpr {
-	if wantedType.Family() == types.AnyFamily || expr.ResolvedType().Identical(wantedType) {
+	resolvedType := expr.ResolvedType()
+	if wantedType.Family() == types.AnyFamily || resolvedType.Identical(wantedType) {
 		return expr
 	}
 	res := &CastExpr{Expr: expr, Type: wantedType}

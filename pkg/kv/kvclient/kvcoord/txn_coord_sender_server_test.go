@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
 )
 
 // Test that a transaction gets cleaned up when the heartbeat loop finds out
@@ -152,9 +151,9 @@ func TestNoDuplicateHeartbeatLoops(t *testing.T) {
 	key := roachpb.Key("a")
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("test", tracing.Recordable)
-	tracing.StartRecording(sp, tracing.SingleNodeRecording)
-	txnCtx := opentracing.ContextWithSpan(context.Background(), sp)
+	sp := tracer.StartSpan("test", tracing.WithForceRealSpan())
+	sp.StartRecording(tracing.SingleNodeRecording)
+	txnCtx := tracing.ContextWithSpan(context.Background(), sp)
 
 	push := func(ctx context.Context, key roachpb.Key) error {
 		return db.Put(ctx, key, "push")
@@ -180,7 +179,7 @@ func TestNoDuplicateHeartbeatLoops(t *testing.T) {
 		t.Fatalf("expected 2 attempts, got: %d", attempts)
 	}
 	sp.Finish()
-	recording := tracing.GetRecording(sp)
+	recording := sp.GetRecording()
 	var foundHeartbeatLoop bool
 	for _, sp := range recording {
 		if strings.Contains(sp.Operation, "heartbeat loop") {

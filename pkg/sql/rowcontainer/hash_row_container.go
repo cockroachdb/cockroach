@@ -37,7 +37,7 @@ type RowMarkerIterator interface {
 	// row. This will cause RowIterator.Rewind to rewind to the front of the
 	// input row's bucket.
 	Reset(ctx context.Context, row rowenc.EncDatumRow) error
-	Mark(ctx context.Context, mark bool) error
+	Mark(ctx context.Context) error
 	IsMarked(ctx context.Context) bool
 }
 
@@ -60,10 +60,11 @@ type HashRowContainer interface {
 	//	- encodeNull indicates whether rows with NULL equality columns should be
 	//	  stored or skipped.
 	Init(
-		ctx context.Context, shouldMark bool, types []*types.T, storedEqCols columns,
-		encodeNull bool,
+		ctx context.Context, shouldMark bool, types []*types.T, storedEqCols columns, encodeNull bool,
 	) error
 	AddRow(context.Context, rowenc.EncDatumRow) error
+	// IsEmpty returns true if no rows have been added to the container so far.
+	IsEmpty() bool
 
 	// NewBucketIterator returns a RowMarkerIterator that iterates over a bucket
 	// of rows that match the given row on equality columns. This iterator can
@@ -156,6 +157,20 @@ func (e *columnEncoder) encodeEqualityCols(
 	return encoded, nil
 }
 
+// storedEqColsToOrdering returns an ordering based on storedEqCols to be used
+// by the row containers (this will result in rows with the same equality
+// columns occurring contiguously in the keyspace).
+func storedEqColsToOrdering(storedEqCols columns) colinfo.ColumnOrdering {
+	ordering := make(colinfo.ColumnOrdering, len(storedEqCols))
+	for i := range ordering {
+		ordering[i] = colinfo.ColumnOrderInfo{
+			ColIdx:    int(storedEqCols[i]),
+			Direction: encoding.Ascending,
+		}
+	}
+	return ordering
+}
+
 const sizeOfBucket = int64(unsafe.Sizeof([]int{}))
 const sizeOfRowIdx = int64(unsafe.Sizeof(int(0)))
 const sizeOfBoolSlice = int64(unsafe.Sizeof([]bool{}))
@@ -199,44 +214,51 @@ type HashMemRowContainer struct {
 
 var _ HashRowContainer = &HashMemRowContainer{}
 
-// MakeHashMemRowContainer creates a HashMemRowContainer from the given
-// rowContainer. This rowContainer must still be Close()d by the caller.
-func MakeHashMemRowContainer(rowContainer *MemRowContainer) HashMemRowContainer {
+// MakeHashMemRowContainer creates a HashMemRowContainer. This rowContainer
+// must still be Close()d by the caller.
+func MakeHashMemRowContainer(
+	evalCtx *tree.EvalContext, memMonitor *mon.BytesMonitor, typs []*types.T, storedEqCols columns,
+) HashMemRowContainer {
+	mrc := &MemRowContainer{}
+	mrc.InitWithMon(storedEqColsToOrdering(storedEqCols), typs, evalCtx, memMonitor)
 	return HashMemRowContainer{
-		MemRowContainer: rowContainer,
+		MemRowContainer: mrc,
 		buckets:         make(map[string][]int),
-		bucketsAcc:      rowContainer.evalCtx.Mon.MakeBoundAccount(),
+		bucketsAcc:      memMonitor.MakeBoundAccount(),
 	}
 }
 
 // Init implements the HashRowContainer interface. types is ignored because the
 // schema is inferred from the MemRowContainer.
 func (h *HashMemRowContainer) Init(
-	ctx context.Context, shouldMark bool, _ []*types.T, storedEqCols columns, encodeNull bool,
+	_ context.Context, shouldMark bool, typs []*types.T, storedEqCols columns, encodeNull bool,
 ) error {
 	if h.storedEqCols != nil {
 		return errors.New("HashMemRowContainer has already been initialized")
 	}
-	h.columnEncoder.init(h.MemRowContainer.types, storedEqCols, encodeNull)
+	h.columnEncoder.init(typs, storedEqCols, encodeNull)
 	h.shouldMark = shouldMark
 	h.storedEqCols = storedEqCols
-
-	// Build buckets from the rowContainer.
-	for rowIdx := 0; rowIdx < h.Len(); rowIdx++ {
-		if err := h.addRowToBucket(ctx, h.EncRow(rowIdx), rowIdx); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
 // AddRow adds a row to the HashMemRowContainer. This row is unmarked by default.
 func (h *HashMemRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	rowIdx := h.Len()
-	if err := h.MemRowContainer.AddRow(ctx, row); err != nil {
+	// Note that it is important that we add the row to a bucket first before
+	// adding it to the row container because we want to make sure that if an
+	// error is encountered in addRowToBucket, the row hasn't been added to the
+	// container - this will allow us to fall back to disk if necessary without
+	// erroneously adding the same row twice.
+	if err := h.addRowToBucket(ctx, row, rowIdx); err != nil {
 		return err
 	}
-	return h.addRowToBucket(ctx, row, rowIdx)
+	return h.MemRowContainer.AddRow(ctx, row)
+}
+
+// IsEmpty implements the HashRowContainer interface.
+func (h *HashMemRowContainer) IsEmpty() bool {
+	return h.Len() == 0
 }
 
 // Close implements the HashRowContainer interface.
@@ -344,7 +366,7 @@ func (i *hashMemRowBucketIterator) IsMarked(ctx context.Context) bool {
 }
 
 // Mark implements the RowMarkerIterator interface.
-func (i *hashMemRowBucketIterator) Mark(ctx context.Context, mark bool) error {
+func (i *hashMemRowBucketIterator) Mark(ctx context.Context) error {
 	if !i.shouldMark {
 		log.Fatal(ctx, "hash mem row container not set up for marking")
 	}
@@ -355,7 +377,7 @@ func (i *hashMemRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 		i.marked = make([]bool, i.Len())
 	}
 
-	i.marked[i.rowIdxs[i.curIdx]] = mark
+	i.marked[i.rowIdxs[i.curIdx]] = true
 	return nil
 }
 
@@ -475,10 +497,7 @@ type HashDiskRowContainer struct {
 
 var _ HashRowContainer = &HashDiskRowContainer{}
 
-var (
-	encodedTrue  = encoding.EncodeBoolValue(nil, encoding.NoColumnID, true)
-	encodedFalse = encoding.EncodeBoolValue(nil, encoding.NoColumnID, false)
-)
+var encodedTrue = encoding.EncodeBoolValue(nil, encoding.NoColumnID, true)
 
 // MakeHashDiskRowContainer creates a HashDiskRowContainer with the given engine
 // as the underlying store that rows are stored on. shouldMark specifies whether
@@ -497,19 +516,7 @@ func (h *HashDiskRowContainer) Init(
 	_ context.Context, shouldMark bool, typs []*types.T, storedEqCols columns, encodeNull bool,
 ) error {
 	h.columnEncoder.init(typs, storedEqCols, encodeNull)
-	// Provide the DiskRowContainer with an ordering on the equality columns of
-	// the rows that we will store. This will result in rows with the
-	// same equality columns occurring contiguously in the keyspace.
-	ordering := make(colinfo.ColumnOrdering, len(storedEqCols))
-	for i := range ordering {
-		ordering[i] = colinfo.ColumnOrderInfo{
-			ColIdx:    int(storedEqCols[i]),
-			Direction: encoding.Ascending,
-		}
-	}
-
 	h.shouldMark = shouldMark
-
 	storedTypes := typs
 	if h.shouldMark {
 		// Add a boolean column to the end of the rows to implement marking rows.
@@ -526,7 +533,7 @@ func (h *HashDiskRowContainer) Init(
 		)
 	}
 
-	h.DiskRowContainer = MakeDiskRowContainer(h.diskMonitor, storedTypes, ordering, h.engine)
+	h.DiskRowContainer = MakeDiskRowContainer(h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
 	return nil
 }
 
@@ -543,6 +550,11 @@ func (h *HashDiskRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRo
 		err = h.DiskRowContainer.AddRow(ctx, row)
 	}
 	return err
+}
+
+// IsEmpty implements the HashRowContainer interface.
+func (h *HashDiskRowContainer) IsEmpty() bool {
+	return h.DiskRowContainer.Len() == 0
 }
 
 // hashDiskRowBucketIterator iterates over the rows in a bucket.
@@ -639,15 +651,12 @@ func (i *hashDiskRowBucketIterator) IsMarked(ctx context.Context) bool {
 }
 
 // Mark implements the RowMarkerIterator interface.
-func (i *hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
+func (i *hashDiskRowBucketIterator) Mark(ctx context.Context) error {
 	if !i.HashDiskRowContainer.shouldMark {
 		log.Fatal(ctx, "hash disk row container not set up for marking")
 	}
 	i.haveMarkedRows = true
-	markBytes := encodedFalse
-	if mark {
-		markBytes = encodedTrue
-	}
+	markBytes := encodedTrue
 	// rowVal are the non-equality encoded columns, the last of which is the
 	// column we use to mark a row.
 	rowVal := append(i.tmpBuf[:0], i.UnsafeValue()...)
@@ -750,9 +759,6 @@ type HashDiskBackedRowContainer struct {
 	storedEqCols columns
 	encodeNull   bool
 
-	// mrc is used to build HashMemRowContainer upon.
-	mrc *MemRowContainer
-
 	evalCtx       *tree.EvalContext
 	memoryMonitor *mon.BytesMonitor
 	diskMonitor   *mon.BytesMonitor
@@ -769,21 +775,13 @@ type HashDiskBackedRowContainer struct {
 var _ HashRowContainer = &HashDiskBackedRowContainer{}
 
 // NewHashDiskBackedRowContainer makes a HashDiskBackedRowContainer.
-// mrc (the first argument) can either be nil (in which case
-// HashMemRowContainer will be built upon an empty MemRowContainer) or non-nil
-// (in which case mrc is used as underlying MemRowContainer under
-// HashMemRowContainer). The latter case is used by the hashJoiner since when
-// initializing HashDiskBackedRowContainer it will have accumulated rows from
-// both sides of the join in MemRowContainers, and we can reuse one of them.
 func NewHashDiskBackedRowContainer(
-	mrc *MemRowContainer,
 	evalCtx *tree.EvalContext,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 	engine diskmap.Factory,
 ) *HashDiskBackedRowContainer {
 	return &HashDiskBackedRowContainer{
-		mrc:              mrc,
 		evalCtx:          evalCtx,
 		memoryMonitor:    memoryMonitor,
 		diskMonitor:      diskMonitor,
@@ -806,21 +804,7 @@ func (h *HashDiskBackedRowContainer) Init(
 		h.scratchEncRow = make(rowenc.EncDatumRow, len(types)+1)
 	}
 
-	// Provide the MemRowContainer with an ordering on the equality columns of
-	// the rows that we will store. This will result in rows with the
-	// same equality columns occurring contiguously in the keyspace.
-	ordering := make(colinfo.ColumnOrdering, len(storedEqCols))
-	for i := range ordering {
-		ordering[i] = colinfo.ColumnOrderInfo{
-			ColIdx:    int(storedEqCols[i]),
-			Direction: encoding.Ascending,
-		}
-	}
-	if h.mrc == nil {
-		h.mrc = &MemRowContainer{}
-		h.mrc.InitWithMon(ordering, types, h.evalCtx, h.memoryMonitor)
-	}
-	hmrc := MakeHashMemRowContainer(h.mrc)
+	hmrc := MakeHashMemRowContainer(h.evalCtx, h.memoryMonitor, types, storedEqCols)
 	h.hmrc = &hmrc
 	h.src = h.hmrc
 	if err := h.hmrc.Init(ctx, shouldMark, types, storedEqCols, encodeNull); err != nil {
@@ -852,7 +836,12 @@ func (h *HashDiskBackedRowContainer) AddRow(ctx context.Context, row rowenc.EncD
 	return nil
 }
 
-// Close implements the hashRowContainer interface.
+// IsEmpty implements the HashRowContainer interface.
+func (h *HashDiskBackedRowContainer) IsEmpty() bool {
+	return h.src.IsEmpty()
+}
+
+// Close implements the HashRowContainer interface.
 func (h *HashDiskBackedRowContainer) Close(ctx context.Context) {
 	if h.hdrc != nil {
 		h.hdrc.Close(ctx)
@@ -955,19 +944,6 @@ func (h *HashDiskBackedRowContainer) NewBucketIterator(
 // NewUnmarkedIterator implements the hashRowContainer interface.
 func (h *HashDiskBackedRowContainer) NewUnmarkedIterator(ctx context.Context) RowIterator {
 	return h.src.NewUnmarkedIterator(ctx)
-}
-
-// UnsafeReset resets the container for reuse. The HashDiskBackedRowContainer
-// will reset to using memory if it is using disk.
-func (h *HashDiskBackedRowContainer) UnsafeReset(ctx context.Context) error {
-	h.allRowsIterators = h.allRowsIterators[:0]
-	if h.hdrc != nil {
-		h.hdrc.Close(ctx)
-		h.src = h.hmrc
-		h.hdrc = nil
-		return nil
-	}
-	return h.hmrc.UnsafeReset(ctx)
 }
 
 // Sort sorts the underlying row container based on stored equality columns

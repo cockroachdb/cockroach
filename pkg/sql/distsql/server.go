@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -40,9 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"github.com/opentracing/opentracing-go"
 )
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
@@ -179,7 +177,7 @@ func FlowVerIsCompatible(
 // must be finished through Flow.Cleanup.
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context,
-	parentSpan opentracing.Span,
+	parentSpan *tracing.Span,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
 	syncFlowConsumer execinfra.RowReceiver,
@@ -195,30 +193,27 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	const opName = "flow"
-	var sp opentracing.Span
+	var sp *tracing.Span
 	if parentSpan == nil {
-		sp = ds.Tracer.(*tracing.Tracer).StartRootSpan(
-			opName, logtags.FromContext(ctx), tracing.NonRecordableSpan)
+		sp = ds.Tracer.StartSpan(opName, tracing.WithCtxLogTags(ctx))
 	} else if localState.IsLocal {
 		// If we're a local flow, we don't need a "follows from" relationship: we're
 		// going to run this flow synchronously.
 		// TODO(andrei): localState.IsLocal is not quite the right thing to use.
 		//  If that field is unset, we might still want to create a child span if
 		//  this flow is run synchronously.
-		sp = tracing.StartChildSpan(opName, parentSpan, logtags.FromContext(ctx), false /* separateRecording */)
+		sp = ds.Tracer.StartSpan(opName, tracing.WithParent(parentSpan), tracing.WithCtxLogTags(ctx))
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
-		// TODO(andrei): We should use something more efficient than StartSpan; we
-		// should use AmbientContext.AnnotateCtxWithSpan() but that interface
-		// doesn't currently support FollowsFrom relationships.
 		sp = ds.Tracer.StartSpan(
 			opName,
-			opentracing.FollowsFrom(parentSpan.Context()),
-			tracing.LogTagsFromCtx(ctx),
+			tracing.WithParent(parentSpan),
+			tracing.WithFollowsFrom(),
+			tracing.WithCtxLogTags(ctx),
 		)
 	}
 	// sp will be Finish()ed by Flow.Cleanup().
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	// The monitor opened here is closed in Flow.Cleanup().
 	monitor := mon.NewMonitor(
@@ -259,43 +254,10 @@ func (ds *ServerImpl) setupFlow(
 				"EvalContext expected to be populated when IsLocal is set")
 		}
 
-		location, err := timeutil.TimeZoneStringToLocation(
-			req.EvalContext.Location,
-			timeutil.TimeZoneStringToLocationISO8601Standard,
-		)
+		sd, err := sessiondata.UnmarshalNonLocal(req.EvalContext.SessionData)
 		if err != nil {
-			tracing.FinishSpan(sp)
+			sp.Finish()
 			return ctx, nil, err
-		}
-
-		var be lex.BytesEncodeFormat
-		switch req.EvalContext.BytesEncodeFormat {
-		case execinfrapb.BytesEncodeFormat_HEX:
-			be = lex.BytesEncodeHex
-		case execinfrapb.BytesEncodeFormat_ESCAPE:
-			be = lex.BytesEncodeEscape
-		case execinfrapb.BytesEncodeFormat_BASE64:
-			be = lex.BytesEncodeBase64
-		default:
-			return nil, nil, errors.AssertionFailedf("unknown byte encode format: %s",
-				errors.Safe(req.EvalContext.BytesEncodeFormat))
-		}
-		sd := &sessiondata.SessionData{
-			ApplicationName: req.EvalContext.ApplicationName,
-			Database:        req.EvalContext.Database,
-			User:            req.EvalContext.User,
-			SearchPath: sessiondata.MakeSearchPath(
-				req.EvalContext.SearchPath,
-			).WithTemporarySchemaName(
-				req.EvalContext.TemporarySchemaName,
-			).WithUserSchemaName(req.EvalContext.User),
-			SequenceState: sessiondata.NewSequenceState(),
-			DataConversion: sessiondata.DataConversionConfig{
-				Location:          location,
-				BytesEncodeFormat: be,
-				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
-			},
-			VectorizeMode: sessiondata.VectorizeExecMode(req.EvalContext.Vectorize),
 		}
 		ie := &lazyInternalExecutor{
 			newInternalExecutor: func() sqlutil.InternalExecutor {
@@ -334,15 +296,6 @@ func (ds *ServerImpl) setupFlow(
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
-		var haveSequences bool
-		for _, seq := range req.EvalContext.SeqState.Seqs {
-			evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)
-			haveSequences = true
-		}
-		if haveSequences {
-			evalCtx.SessionData.SequenceState.SetLastSequenceIncremented(
-				*req.EvalContext.SeqState.LastSeqIncremented)
-		}
 	}
 
 	// Create the FlowCtx for the flow.
@@ -352,7 +305,7 @@ func (ds *ServerImpl) setupFlow(
 	// have non-nil localState.EvalContext. We don't want to update EvalContext
 	// itself when the vectorize mode needs to be changed because we would need
 	// to restore the original value which can have data races under stress.
-	isVectorized := sessiondata.VectorizeExecMode(req.EvalContext.Vectorize) != sessiondata.VectorizeOff
+	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
 	opt := flowinfra.FuseNormally
 	if localState.IsLocal {
@@ -369,8 +322,8 @@ func (ds *ServerImpl) setupFlow(
 		// Flow.Cleanup will not be called, so we have to close the memory monitor
 		// and finish the span manually.
 		monitor.Stop(ctx)
-		tracing.FinishSpan(sp)
-		ctx = opentracing.ContextWithSpan(ctx, nil)
+		sp.Finish()
+		ctx = tracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err
 	}
 	if !f.IsLocal() {
@@ -444,9 +397,7 @@ func (ds *ServerImpl) NewFlowContext(
 		// If we weren't passed a descs.Collection, then make a new one. We are
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
-		collection := descs.NewCollection(ctx, ds.ServerConfig.Settings,
-			ds.ServerConfig.LeaseManager.(*lease.Manager),
-			ds.ServerConfig.HydratedTables)
+		collection := descs.NewCollection(ds.ServerConfig.Settings, ds.ServerConfig.LeaseManager.(*lease.Manager), ds.ServerConfig.HydratedTables)
 		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
 			Descriptors: collection,
 			CleanupFunc: func(ctx context.Context) {
@@ -483,7 +434,7 @@ func (ds *ServerImpl) SetupSyncFlow(
 	output execinfra.RowReceiver,
 ) (context.Context, flowinfra.Flow, error) {
 	ctx, f, err := ds.setupFlow(
-		ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{},
+		ds.AnnotateCtx(ctx), tracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{},
 	)
 	if err != nil {
 		return nil, nil, err
@@ -526,7 +477,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, error) {
 	ctx, f, err := ds.setupFlow(
-		ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
+		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -575,7 +526,7 @@ func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
 	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
-	parentSpan := opentracing.SpanFromContext(ctx)
+	parentSpan := tracing.SpanFromContext(ctx)
 
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.

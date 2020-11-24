@@ -1190,7 +1190,7 @@ func (t *T) TypeModifier() int32 {
 	}
 	if width := t.Width(); width != 0 {
 		switch t.Family() {
-		case StringFamily:
+		case StringFamily, CollatedStringFamily:
 			// Postgres adds 4 to the attypmod for bounded string types, the
 			// var header size.
 			typeModifier = width + 4
@@ -1758,8 +1758,12 @@ func (t *T) Equivalent(other *T) bool {
 
 	switch t.Family() {
 	case CollatedStringFamily:
-		if t.Locale() != "" && other.Locale() != "" && t.Locale() != other.Locale() {
-			return false
+		// CockroachDB differs from Postgres by comparing collation names
+		// case-insensitively and equating hyphens/underscores.
+		if t.Locale() != "" && other.Locale() != "" {
+			if !lex.LocaleNamesAreEqual(t.Locale(), other.Locale()) {
+				return false
+			}
 		}
 
 	case TupleFamily:

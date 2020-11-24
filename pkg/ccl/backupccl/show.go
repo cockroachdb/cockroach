@@ -95,7 +95,7 @@ func showBackupPlanHook(
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		str, err := toFn()
 		if err != nil {
@@ -318,9 +318,11 @@ func backupShowerDefault(
 						createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
 							tabledesc.NewImmutable(*desc.TableDesc()), displayOptions)
 						if err != nil {
-							continue
+							// We expect that we might get an error here due to X-DB
+							// references, which were possible on 20.2 betas and rcs.
+							log.Errorf(ctx, "error while generating create statement: %+v", err)
 						}
-						createStmtDatum = tree.NewDString(createStmt)
+						createStmtDatum = nullIfEmpty(createStmt)
 					default:
 						descriptorType = "unknown"
 					}
@@ -399,7 +401,6 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 		return ""
 	}
 	for _, userPriv := range privDesc.Show(objectType) {
-		user := userPriv.User
 		privs := userPriv.Privileges
 		if len(privs) == 0 {
 			continue
@@ -415,7 +416,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 		privStringBuilder.WriteString(" ON ")
 		privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
 		privStringBuilder.WriteString(" TO ")
-		privStringBuilder.WriteString(user)
+		privStringBuilder.WriteString(userPriv.User.SQLIdentifier())
 		privStringBuilder.WriteString("; ")
 	}
 
@@ -486,7 +487,7 @@ func showBackupsInCollectionPlanHook(
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, backup.StatementTag())
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		collection, err := collectionFn()
 		if err != nil {

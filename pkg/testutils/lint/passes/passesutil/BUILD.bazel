@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "passesutil",
+    srcs = ["passes_util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/golang.org/x/tools/go/analysis",
+        "//vendor/golang.org/x/tools/go/ast/astutil",
+    ],
+)
+
+go_test(
+    name = "passesutil_test",
+    srcs = ["passes_util_test.go"],
+    deps = [
+        "//pkg/testutils/lint/passes/descriptormarshal",
+        "//pkg/testutils/lint/passes/unconvert",
+        "//pkg/testutils/skip",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/golang.org/x/tools/go/analysis/analysistest",
+    ],
+)

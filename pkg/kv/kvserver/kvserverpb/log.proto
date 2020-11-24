@@ -23,10 +23,14 @@ enum RangeLogEventType {
   split = 0;
   // Merge is the event type recorded when a range merges.
   merge = 3;
-  // Add is the event type recorded when a range adds a new replica.
-  add = 1;
-  // Remove is the event type recorded when a range removed an existing replica.
-  remove = 2;
+  // AddVoter is the event type recorded when a range adds a new voting replica.
+  add_voter = 1;
+  // RemoveVoter is the event type recorded when a range removes an existing voting replica.
+  remove_voter = 2;
+  // AddNonVoter is the event type recorded when a range adds a new non-voting replica.
+  add_non_voter = 4;
+  // RemoveNonVoter is the event type recorded when a range removes an existing non-voting replica.
+  remove_non_voter = 5;
 }
 
 message RangeLogEvent {

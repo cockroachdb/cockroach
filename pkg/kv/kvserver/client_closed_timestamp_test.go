@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -65,7 +65,7 @@ func TestClosedTimestampWorksWhenRequestsAreSentToNonLeaseHolders(t *testing.T) 
 	// To make node3 have a large epoch, synthesize a liveness record for with
 	// epoch 1000 before starting the node.
 	require.NoError(t, db1.Put(ctx, keys.NodeLivenessKey(3),
-		&kvserverpb.Liveness{
+		&livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      1000,
 			Expiration: hlc.LegacyTimestamp{WallTime: 1},
@@ -74,7 +74,7 @@ func TestClosedTimestampWorksWhenRequestsAreSentToNonLeaseHolders(t *testing.T) 
 
 	// Create our scratch range and up-replicate it.
 	k := tc.ScratchRange(t)
-	_, err := tc.AddReplicas(k, tc.Target(1), tc.Target(2))
+	_, err := tc.AddVoters(k, tc.Target(1), tc.Target(2))
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
 

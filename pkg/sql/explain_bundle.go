@@ -25,64 +25,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 )
 
-// setExplainBundleResult creates the diagnostics and returns the bundle
-// information for an EXPLAIN ANALYZE (DEBUG) statement.
+// setExplainBundleResult sets the result of an EXPLAIN ANALYZE (DEBUG)
+// statement.
+//
+// Note: bundle.insert() must have been called.
 //
 // Returns an error if information rows couldn't be added to the result.
 func setExplainBundleResult(
 	ctx context.Context,
 	res RestrictedCommandResult,
-	ast tree.Statement,
-	trace tracing.Recording,
-	plan *planTop,
-	placeholders *tree.PlaceholderInfo,
-	ie *InternalExecutor,
+	bundle diagnosticsBundle,
 	execCfg *ExecutorConfig,
 ) error {
-	res.ResetStmtType(&tree.ExplainAnalyzeDebug{})
-	res.SetColumns(ctx, colinfo.ExplainAnalyzeDebugColumns)
+	res.ResetStmtType(&tree.ExplainAnalyze{})
+	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
 
 	var text []string
-	func() {
-		bundle, err := buildStatementBundle(ctx, execCfg.DB, ie, plan, trace, placeholders)
-		if err != nil {
-			// TODO(radu): we cannot simply set an error on the result here without
-			// changing the executor logic (e.g. an implicit transaction could have
-			// committed already). Just show the error in the result.
-			text = []string{fmt.Sprintf("Error generating bundle: %v", err)}
-			return
-		}
-
-		fingerprint := tree.AsStringWithFlags(ast, tree.FmtHideConstants)
-		stmtStr := tree.AsString(ast)
-
-		diagID, err := execCfg.StmtDiagnosticsRecorder.InsertStatementDiagnostics(
-			ctx,
-			fingerprint,
-			stmtStr,
-			bundle.trace,
-			bundle.zip,
-		)
-		if err != nil {
-			text = []string{fmt.Sprintf("Error recording bundle: %v", err)}
-			return
-		}
-
+	if bundle.collectionErr != nil {
+		// TODO(radu): we cannot simply set an error on the result here without
+		// changing the executor logic (e.g. an implicit transaction could have
+		// committed already). Just show the error in the result.
+		text = []string{fmt.Sprintf("Error generating bundle: %v", bundle.collectionErr)}
+	} else {
 		text = []string{
 			"Statement diagnostics bundle generated. Download from the Admin UI (Advanced",
 			"Debug -> Statement Diagnostics History), via the direct link below, or using",
 			"the command line.",
 			fmt.Sprintf("Admin UI: %s", execCfg.AdminURL()),
-			fmt.Sprintf("Direct link: %s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), diagID),
+			fmt.Sprintf("Direct link: %s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), bundle.diagID),
 			"Command line: cockroach statement-diag list / download",
 		}
-	}()
+	}
 
 	if err := res.Err(); err != nil {
 		// Add the bundle information as a detail to the query error.
@@ -126,8 +108,8 @@ func traceToJSON(trace tracing.Recording) (tree.Datum, string, error) {
 	return d, str, nil
 }
 
-func normalizeSpan(s tracing.RecordedSpan, trace tracing.Recording) tracing.NormalizedSpan {
-	var n tracing.NormalizedSpan
+func normalizeSpan(s tracingpb.RecordedSpan, trace tracing.Recording) tracingpb.NormalizedSpan {
+	var n tracingpb.NormalizedSpan
 	n.Operation = s.Operation
 	n.StartTime = s.StartTime
 	n.Duration = s.Duration
@@ -145,29 +127,39 @@ func normalizeSpan(s tracing.RecordedSpan, trace tracing.Recording) tracing.Norm
 
 // diagnosticsBundle contains diagnostics information collected for a statement.
 type diagnosticsBundle struct {
-	zip   []byte
-	trace tree.Datum
+	// Zip file binary data.
+	zip []byte
+
+	// Tracing data, as DJson (or DNull if it is not available).
+	traceJSON tree.Datum
+
+	// Stores any error in the collection, building, or insertion of the bundle.
+	collectionErr error
+
+	// diagID is the diagnostics instance ID, populated by insert().
+	diagID stmtdiagnostics.CollectedInstanceID
 }
 
-// buildStatementBundle collects metadata related the planning and execution of
-// the statement. It generates a bundle for storage in
+// buildStatementBundle collects metadata related to the planning and execution
+// of the statement. It generates a bundle for storage in
 // system.statement_diagnostics.
 func buildStatementBundle(
 	ctx context.Context,
 	db *kv.DB,
 	ie *InternalExecutor,
 	plan *planTop,
+	planString string,
 	trace tracing.Recording,
 	placeholders *tree.PlaceholderInfo,
-) (diagnosticsBundle, error) {
+) diagnosticsBundle {
 	if plan == nil {
-		return diagnosticsBundle{}, errors.AssertionFailedf("execution terminated early")
+		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
 	b := makeStmtBundleBuilder(db, ie, plan, trace, placeholders)
 
 	b.addStatement()
 	b.addOptPlans()
-	b.addExecPlan()
+	b.addExecPlan(planString)
 	// TODO(yuzefovich): consider adding some variant of EXPLAIN (VEC) output
 	// of the query to the bundle.
 	b.addDistSQLDiagrams()
@@ -176,9 +168,39 @@ func buildStatementBundle(
 
 	buf, err := b.finalize()
 	if err != nil {
-		return diagnosticsBundle{}, err
+		return diagnosticsBundle{collectionErr: err}
 	}
-	return diagnosticsBundle{trace: traceJSON, zip: buf.Bytes()}, nil
+	return diagnosticsBundle{traceJSON: traceJSON, zip: buf.Bytes()}
+}
+
+// insert the bundle in statements diagnostics. Sets bundle.diagID and (in error
+// cases) bundle.collectionErr.
+//
+// diagRequestID should be the ID returned by ShouldCollectDiagnostics, or zero
+// if diagnostics were triggered by EXPLAIN ANALYZE (DEBUG).
+func (bundle *diagnosticsBundle) insert(
+	ctx context.Context,
+	fingerprint string,
+	ast tree.Statement,
+	stmtDiagRecorder *stmtdiagnostics.Registry,
+	diagRequestID stmtdiagnostics.RequestID,
+) {
+	var err error
+	bundle.diagID, err = stmtDiagRecorder.InsertStatementDiagnostics(
+		ctx,
+		diagRequestID,
+		fingerprint,
+		tree.AsString(ast),
+		bundle.traceJSON,
+		bundle.zip,
+		bundle.collectionErr,
+	)
+	if err != nil {
+		log.Warningf(ctx, "failed to report statement diagnostics: %s", err)
+		if bundle.collectionErr != nil {
+			bundle.collectionErr = err
+		}
+	}
 }
 
 // stmtBundleBuilder is a helper for building a statement bundle.
@@ -214,7 +236,16 @@ func (b *stmtBundleBuilder) addStatement() {
 	cfg.Simplify = true
 	cfg.Align = tree.PrettyNoAlign
 	cfg.JSONFmt = true
-	output := cfg.Pretty(b.plan.stmt.AST)
+	var output string
+	// If we hit an early error, stmt or stmt.AST might not be initialized yet.
+	switch {
+	case b.plan.stmt == nil:
+		output = "No Statement."
+	case b.plan.stmt.AST == nil:
+		output = "No AST."
+	default:
+		output = cfg.Pretty(b.plan.stmt.AST)
+	}
 
 	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
 		var buf bytes.Buffer
@@ -245,16 +276,16 @@ func (b *stmtBundleBuilder) addOptPlans() {
 }
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
-func (b *stmtBundleBuilder) addExecPlan() {
-	if plan := b.plan.planString; plan != "" {
+func (b *stmtBundleBuilder) addExecPlan(plan string) {
+	if plan != "" {
 		b.z.AddFile("plan.txt", plan)
 	}
 }
 
 func (b *stmtBundleBuilder) addDistSQLDiagrams() {
-	for i, d := range b.plan.distSQLDiagrams {
-		d.AddSpans(b.trace)
-		_, url, err := d.ToURL()
+	for i, d := range b.plan.distSQLFlowInfos {
+		d.diagram.AddSpans(b.trace)
+		_, url, err := d.diagram.ToURL()
 
 		var contents string
 		if err != nil {
@@ -264,12 +295,10 @@ func (b *stmtBundleBuilder) addDistSQLDiagrams() {
 		}
 
 		var filename string
-		if len(b.plan.distSQLDiagrams) == 1 {
+		if len(b.plan.distSQLFlowInfos) == 1 {
 			filename = "distsql.html"
 		} else {
-			// TODO(radu): it would be great if we could distinguish between
-			// subqueries/main query/postqueries here.
-			filename = fmt.Sprintf("distsql-%d.html", i+1)
+			filename = fmt.Sprintf("distsql-%d-%s.html", i+1, d.typ)
 		}
 		b.z.AddFile(filename, contents)
 	}

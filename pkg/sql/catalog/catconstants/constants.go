@@ -74,6 +74,7 @@ const (
 	CrdbInternalTransactionStatsTableID
 	CrdbInternalTxnStatsTableID
 	CrdbInternalZonesTableID
+	CrdbInternalInvalidDescriptorsTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
@@ -129,6 +130,7 @@ const (
 	PgCatalogLocksTableID
 	PgCatalogMatViewsTableID
 	PgCatalogNamespaceTableID
+	PgCatalogOpclassTableID
 	PgCatalogOperatorTableID
 	PgCatalogPreparedStatementsTableID
 	PgCatalogPreparedXactsTableID

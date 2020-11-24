@@ -52,8 +52,9 @@ var (
 	// key suffixes.
 	localSuffixLength = 4
 
-	// There are four types of local key data enumerated below: replicated
-	// range-ID, unreplicated range-ID, range local, and store-local keys.
+	// There are five types of local key data enumerated below: replicated
+	// range-ID, unreplicated range-ID, range local, range lock, and
+	// store-local keys.
 
 	// 1. Replicated Range-ID keys
 	//
@@ -63,9 +64,6 @@ var (
 	// metadata is identified by one of the suffixes listed below, along
 	// with potentially additional encoded key info, for instance in the
 	// case of AbortSpan entry.
-	//
-	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
-	// in storage/engine/rocksdb/db.cc.
 	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
 	// LocalRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
 	// replicated per-range data. By appending this after the Range ID, these
@@ -134,9 +132,6 @@ var (
 	// specific sort of per-range metadata is identified by one of the
 	// suffixes listed below, along with potentially additional encoded
 	// key info, such as the txn ID in the case of a transaction record.
-	//
-	// NOTE: LocalRangePrefix must be kept in sync with the value in
-	// storage/engine/rocksdb/db.cc.
 	LocalRangePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("k")))
 	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
 	// LocalQueueLastProcessedSuffix is the suffix for replica queue state keys.
@@ -151,11 +146,28 @@ var (
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
-	// NOTE: if this value changes, it must be updated in C++
-	// (storage/engine/rocksdb/db.cc).
 	LocalTransactionSuffix = roachpb.RKey("txn-")
 
-	// 4. Store local keys
+	// 4. Lock table keys
+	//
+	// LocalRangeLockTablePrefix specifies the key prefix for the lock
+	// table. It is immediately followed by the LockTableSingleKeyInfix,
+	// and then the key being locked.
+	//
+	// The lock strength and txn UUID are not in the part of the key that
+	// the keys package deals with. They are in the versioned part of the
+	// key (see EngineKey.Version). This permits the storage engine to use
+	// bloom filters when searching for all locks for a lockable key.
+	//
+	// Different lock strengths may use different value types. The exclusive
+	// lock strength uses MVCCMetadata as the value type, since it does
+	// double duty as a reference to a provisional MVCC value.
+	// TODO(sumeer): remember to adjust this comment when adding locks of
+	// other strengths, or range locks.
+	LocalRangeLockTablePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("l")))
+	LockTableSingleKeyInfix   = []byte("k")
+
+	// 5. Store local keys
 	//
 	// localStorePrefix is the prefix identifying per-store data.
 	localStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
@@ -175,6 +187,9 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
+	// localStoreNodeTombstoneSuffix stores key value pairs that map
+	// nodeIDs to time of removal from cluster.
+	localStoreNodeTombstoneSuffix = []byte("ntmb")
 	// localStoreLastUpSuffix stores the last timestamp that a store's node
 	// acknowledged that it was still running. This value will be regularly
 	// refreshed on all stores for a running node; the intention of this value
@@ -184,12 +199,12 @@ var (
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
-	// LocalStoreSuggestedCompactionsMin is the start of the span of
-	// possible suggested compaction keys for a store.
-	LocalStoreSuggestedCompactionsMin = MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
-	// LocalStoreSuggestedCompactionsMax is the end of the span of
-	// possible suggested compaction keys for a store.
-	LocalStoreSuggestedCompactionsMax = LocalStoreSuggestedCompactionsMin.PrefixEnd()
+	// localStoreCachedSettingsSuffix stores the cached settings for node.
+	localStoreCachedSettingsSuffix = []byte("stng")
+	// LocalStoreCachedSettingsKeyMin is the start of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMin = MakeStoreKey(localStoreCachedSettingsSuffix, nil)
+	// LocalStoreCachedSettingsKeyMax is the end of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
 	// keys, and non-system tenant SQL keys.

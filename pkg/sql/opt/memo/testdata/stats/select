@@ -1488,10 +1488,10 @@ with &1 (t)
  │    ├── left-join (cross)
  │    │    ├── columns: t1.x:1(bool) t2.x:4(bool)
  │    │    ├── stats: [rows=4e+20, distinct(1,4)=1, null(1,4)=4e+20]
- │    │    ├── scan t1
+ │    │    ├── scan t38344 [as=t1]
  │    │    │    ├── columns: t1.x:1(bool)
  │    │    │    └── stats: [rows=2e+10, distinct(1)=1, null(1)=2e+10]
- │    │    ├── scan t2
+ │    │    ├── scan t38344 [as=t2]
  │    │    │    ├── columns: t2.x:4(bool)
  │    │    │    └── stats: [rows=2e+10, distinct(4)=1, null(4)=2e+10]
  │    │    └── filters (true)

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -38,29 +39,39 @@ type alterSchemaNode struct {
 var _ planNode = &alterSchemaNode{n: nil}
 
 func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNode, error) {
-	db, err := p.ResolveMutableDatabaseDescriptor(ctx, p.CurrentDatabase(), true /* required */)
+	dbName := p.CurrentDatabase()
+	if n.Schema.ExplicitCatalog {
+		dbName = n.Schema.Catalog()
+	}
+	db, err := p.ResolveMutableDatabaseDescriptor(ctx, dbName, true /* required */)
 	if err != nil {
 		return nil, err
 	}
-	found, schema, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, n.Schema, true /* required */)
+	found, schema, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, string(n.Schema.SchemaName), true /* required */)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "schema %q does not exist", n.Schema)
+		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "schema %q does not exist", n.Schema.String())
 	}
 	switch schema.Kind {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
-		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema)
+		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
 	case catalog.SchemaUserDefined:
 		desc := schema.Desc.(*schemadesc.Mutable)
-		// The user must be the owner of the schema to modify it.
-		hasOwnership, err := p.HasOwnership(ctx, desc)
+		// The user must be a superuser or the owner of the schema to modify it.
+		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if !hasOwnership {
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "must be owner of schema %q", desc.Name)
+		if !hasAdmin {
+			hasOwnership, err := p.HasOwnership(ctx, desc)
+			if err != nil {
+				return nil, err
+			}
+			if !hasOwnership {
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "must be owner of schema %q", desc.Name)
+			}
 		}
 		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaAlter)
 		return &alterSchemaNode{n: n, db: db, desc: desc}, nil
@@ -72,9 +83,44 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 func (n *alterSchemaNode) startExec(params runParams) error {
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterSchemaRename:
-		return params.p.renameSchema(params.ctx, n.db, n.desc, t.NewName, tree.AsStringWithFQNames(n.n, params.Ann()))
+		oldName := n.desc.Name
+		newName := string(t.NewName)
+		if err := params.p.renameSchema(
+			params.ctx, n.db, n.desc, newName, tree.AsStringWithFQNames(n.n, params.Ann()),
+		); err != nil {
+			return err
+		}
+		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+			params.ctx,
+			params.p.txn,
+			EventLogRenameSchema,
+			int32(n.desc.ID),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+			struct {
+				SchemaName    string
+				NewSchemaName string
+				User          string
+			}{oldName, newName, params.p.User().Normalized()},
+		)
 	case *tree.AlterSchemaOwner:
-		return params.p.alterSchemaOwner(params.ctx, n.db, n.desc, t.Owner, tree.AsStringWithFQNames(n.n, params.Ann()))
+		newOwner := t.Owner
+		if err := params.p.alterSchemaOwner(
+			params.ctx, n.desc, newOwner, tree.AsStringWithFQNames(n.n, params.Ann()),
+		); err != nil {
+			return err
+		}
+		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+			params.ctx,
+			params.p.txn,
+			EventLogAlterSchemaOwner,
+			int32(n.desc.ID),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+			struct {
+				SchemaName string
+				Owner      string
+				User       string
+			}{n.desc.Name, newOwner.Normalized(), params.p.User().Normalized()},
+		)
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)
 	}
@@ -82,36 +128,47 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 
 func (p *planner) alterSchemaOwner(
 	ctx context.Context,
-	db *dbdesc.Mutable,
 	scDesc *schemadesc.Mutable,
-	newOwner string,
-	jobDesc string,
+	newOwner security.SQLUsername,
+	jobDescription string,
 ) error {
 	privs := scDesc.GetPrivileges()
 
-	hasOwnership, err := p.HasOwnership(ctx, scDesc)
-	if err != nil {
-		return err
-	}
-
-	if err := p.checkCanAlterToNewOwner(ctx, scDesc, privs, newOwner, hasOwnership); err != nil {
-		return err
-	}
-
-	// The new owner must also have CREATE privilege on the schema's database.
-	if err := p.CheckPrivilegeForUser(ctx, db, privilege.CREATE, newOwner); err != nil {
-		return err
-	}
-
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
+	if newOwner == privs.Owner() {
 		return nil
 	}
 
+	if err := p.checkCanAlterSchemaAndSetNewOwner(ctx, scDesc, newOwner); err != nil {
+		return err
+	}
+
+	return p.writeSchemaDescChange(ctx, scDesc, jobDescription)
+}
+
+// checkCanAlterSchemaAndSetNewOwner handles privilege checking and setting new owner.
+// Called in ALTER SCHEMA and REASSIGN OWNED BY.
+func (p *planner) checkCanAlterSchemaAndSetNewOwner(
+	ctx context.Context, scDesc *schemadesc.Mutable, newOwner security.SQLUsername,
+) error {
+	if err := p.checkCanAlterToNewOwner(ctx, scDesc, newOwner); err != nil {
+		return err
+	}
+
+	// The user must also have CREATE privilege on the schema's database.
+	parentDBDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, scDesc.GetParentID(), p.txn)
+	if err != nil {
+		return err
+	}
+	if err := p.CheckPrivilege(ctx, parentDBDesc, privilege.CREATE); err != nil {
+		return err
+	}
+
 	// Update the owner of the schema.
+	privs := scDesc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
-	return p.writeSchemaDescChange(ctx, scDesc, jobDesc)
+	return nil
 }
 
 func (p *planner) renameSchema(

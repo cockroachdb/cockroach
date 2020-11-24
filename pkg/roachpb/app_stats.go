@@ -11,28 +11,34 @@
 package roachpb
 
 import (
-	"fmt"
-	"hash/fnv"
 	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // StmtID is the type of a Statement ID.
-type StmtID string
+type StmtID uint64
 
 // ConstructStatementID constructs an ID by hashing an anonymized query, it's
 // failure status, and if it was part of an implicit txn. At the time of writing,
 // these are the axis' we use to bucket queries for stats collection
 // (see stmtKey).
 func ConstructStatementID(anonymizedStmt string, failed bool, implicitTxn bool) StmtID {
-	h := fnv.New128()
-	h.Write([]byte(anonymizedStmt))
+	fnv := util.MakeFNV64()
+	for _, c := range anonymizedStmt {
+		fnv.Add(uint64(c))
+	}
 	if failed {
-		h.Write([]byte("failed"))
+		fnv.Add('F')
+	} else {
+		fnv.Add('S')
 	}
 	if implicitTxn {
-		h.Write([]byte("implicit_txn"))
+		fnv.Add('I')
+	} else {
+		fnv.Add('E')
 	}
-	return StmtID(fmt.Sprintf("%x", h.Sum(nil)))
+	return StmtID(fnv.Sum())
 }
 
 // GetVariance retrieves the variance of the values.
@@ -123,6 +129,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
+	s.BytesSentOverNetwork.Add(other.BytesSentOverNetwork, s.Count, other.Count)
 
 	if other.SensitiveInfo.LastErr != "" {
 		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
@@ -149,5 +156,6 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.OverheadLat.AlmostEqual(other.OverheadLat, eps) &&
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
-		s.RowsRead.AlmostEqual(other.RowsRead, eps)
+		s.RowsRead.AlmostEqual(other.RowsRead, eps) &&
+		s.BytesSentOverNetwork.AlmostEqual(other.BytesSentOverNetwork, eps)
 }

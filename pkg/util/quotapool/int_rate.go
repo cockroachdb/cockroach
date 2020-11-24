@@ -206,8 +206,6 @@ func (i *rateRequest) Acquire(
 }
 
 func (r *rateBucket) update(now time.Time) {
-	// TODO(ajwerner): Consider instituting a minimum update frequency to avoid
-	// spinning too fast on timers for tons of tiny allocations at a fast rate.
 	if since := now.Sub(r.lastUpdated); since > 0 {
 		r.cur += float64(r.rate) * since.Seconds()
 		if r.cur > float64(r.burst) {

@@ -18,17 +18,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -174,8 +175,12 @@ func MakeIndexDescriptor(
 		if n.Unique {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique")
 		}
+
+		if !params.SessionData().EnableMultiColumnInvertedIndexes && len(n.Columns) > 1 {
+			return nil, pgerror.New(pgcode.FeatureNotSupported, "indexing more than one column with an inverted index is not supported")
+		}
 		indexDesc.Type = descpb.IndexDescriptor_INVERTED
-		columnDesc, _, err := tableDesc.FindColumnByName(n.Columns[0].Column)
+		columnDesc, _, err := tableDesc.FindColumnByName(n.Columns[len(n.Columns)-1].Column)
 		if err != nil {
 			return nil, err
 		}
@@ -253,6 +258,9 @@ func MakeIndexDescriptor(
 // in the table and are not being dropped prior to attempting to add the index.
 func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemList) error {
 	for _, column := range columns {
+		if column.Expr != nil {
+			return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+		}
 		_, dropping, err := desc.FindColumnByName(column.Column)
 		if err != nil {
 			return err
@@ -269,9 +277,6 @@ func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemLi
 // and expects to see its own writes.
 func (n *createIndexNode) ReadingOwnWrites() {}
 
-var invalidClusterForShardedIndexError = pgerror.Newf(pgcode.FeatureNotSupported,
-	"hash sharded indexes can only be created on a cluster that has fully migrated to version 20.1")
-
 var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
 	"hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable")
 
@@ -286,10 +291,6 @@ func setupShardedIndex(
 	indexDesc *descpb.IndexDescriptor,
 	isNewTable bool,
 ) (shard *descpb.ColumnDescriptor, newColumn bool, err error) {
-	st := evalCtx.Settings
-	if !st.Version.IsActive(ctx, clusterversion.VersionHashShardedIndexes) {
-		return nil, false, invalidClusterForShardedIndexError
-	}
 	if !shardedIndexEnabled {
 		return nil, false, hashShardedIndexesDisabledError
 	}
@@ -401,11 +402,9 @@ func (n *createIndexNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 	}
 
-	// If all nodes in the cluster know how to handle secondary indexes with column families,
-	// write the new version into the index descriptor.
-	encodingVersion := descpb.BaseIndexFormatVersion
-	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionSecondaryIndexColumnFamilies) {
-		encodingVersion = descpb.SecondaryIndexFamilyFormatVersion
+	encodingVersion := descpb.SecondaryIndexFamilyFormatVersion
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionEmptyArraysInInvertedIndexes) {
+		encodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
 	}
 	indexDesc.Version = encodingVersion
 
@@ -468,7 +467,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 			MutationID uint32
 		}{
 			n.n.Table.FQString(), indexName, n.n.String(),
-			params.SessionData().User, uint32(mutationID),
+			params.p.User().Normalized(), uint32(mutationID),
 		},
 	)
 }

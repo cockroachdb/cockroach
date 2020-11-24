@@ -72,641 +72,641 @@ false
 
 # Boolean filters
 
-predtest vars=(bool)
-@1
+predtest vars=(a bool)
+a
 =>
-@1
+a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(bool)
-NOT @1
+predtest vars=(a bool)
+NOT a
 =>
-NOT @1
+NOT a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(bool)
-@1
+predtest vars=(a bool)
+a
 =>
-@1 = true
+a = true
 ----
 true
 └── remaining filters: none
 
-predtest vars=(bool)
-@1
+predtest vars=(a bool)
+a
 =>
-@1 IN (true)
+a IN (true)
 ----
 true
 └── remaining filters: none
 
-predtest vars=(bool)
+predtest vars=(a bool)
 false
 =>
-@1
+a
 ----
 true
 └── remaining filters: false
 
-predtest vars=(bool)
+predtest vars=(a bool)
 NULL
 =>
-@1
+a
 ----
 true
 └── remaining filters: false
 
-predtest vars=(bool)
-NOT @1
+predtest vars=(a bool)
+NOT a
 =>
-@1
+a
 ----
 false
 
-predtest vars=(bool)
-@1
+predtest vars=(a bool)
+a
 =>
 false
 ----
 false
 
-predtest vars=(bool)
-@1
+predtest vars=(a bool)
+a
 =>
 NULL
 ----
 false
 
-predtest vars=(bool)
+predtest vars=(a bool)
 true
 =>
-@1
+a
 ----
 false
 
 # Equality filters
 
-predtest vars=(string)
-@1 = 'foo'
+predtest vars=(a string)
+a = 'foo'
 =>
-@1 = 'foo'
+a = 'foo'
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 = 10
+predtest vars=(a int)
+a = 10
 =>
-@1 = 10
+a = 10
 ----
 true
 └── remaining filters: none
 
-predtest vars=(string)
-@1 = 'foo'
+predtest vars=(a string)
+a = 'foo'
 =>
-@1 = 'bar'
+a = 'bar'
 ----
 false
 
-predtest vars=(int)
-@1 = 2
+predtest vars=(a int)
+a = 2
 =>
-@1 IN (0, 2, 4)
+a IN (0, 2, 4)
 ----
 true
-└── remaining filters: @1 = 2
+└── remaining filters: a = 2
 
-predtest vars=(int)
-@1 = 2
+predtest vars=(a int)
+a = 2
 =>
-@1 > 1
+a > 1
 ----
 true
-└── remaining filters: @1 = 2
+└── remaining filters: a = 2
 
-predtest vars=(int, int)
-@1 = @2
+predtest vars=(a int, b int)
+a = b
 =>
-@1 = @2
-----
-true
-└── remaining filters: none
-
-predtest vars=(int, int)
-@1 = @2
-=>
-@2 = @1
+a = b
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int, int)
-@1 = @2
+predtest vars=(a int, b int)
+a = b
 =>
-@1 <= @2
+b = a
 ----
 true
-└── remaining filters: @1 = @2
+└── remaining filters: none
 
-predtest vars=(int, int)
-@1 = @2
+predtest vars=(a int, b int)
+a = b
 =>
-@1 >= @2
+a <= b
 ----
 true
-└── remaining filters: @1 = @2
+└── remaining filters: a = b
 
-predtest vars=(int)
-@1 = 1
+predtest vars=(a int, b int)
+a = b
 =>
-@1 > 1
+a >= b
+----
+true
+└── remaining filters: a = b
+
+predtest vars=(a int)
+a = 1
+=>
+a > 1
 ----
 false
 
 # Inequality filters
 
-predtest vars=(int)
-@1 > 10
+predtest vars=(a int)
+a > 10
 =>
-@1 > 10
+a > 10
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 > 10
+predtest vars=(a int)
+a > 10
 =>
-@1 > 0
+a > 0
 ----
 true
-└── remaining filters: @1 > 10
+└── remaining filters: a > 10
 
-predtest vars=(int)
-@1 > 17
+predtest vars=(a int)
+a > 17
 =>
-@1 >= 18
-----
-true
-└── remaining filters: none
-
-predtest vars=(int, int)
-@1 > @2
-=>
-@1 > @2
+a >= 18
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int, int)
-@1 < @2
+predtest vars=(a int, b int)
+a > b
 =>
-@2 > @1
+a > b
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int, int)
-@1 < @2
+predtest vars=(a int, b int)
+a < b
 =>
-@1 <= @2
-----
-true
-└── remaining filters: @1 < @2
-
-predtest vars=(int, int)
-@1 < @2
-=>
-@2 >= @1
-----
-true
-└── remaining filters: @1 < @2
-
-predtest vars=(int, int)
-@1 < @2
-=>
-@1 != @2
-----
-true
-└── remaining filters: @1 < @2
-
-predtest vars=(int, int)
-@1 < @2
-=>
-@2 != @1
-----
-true
-└── remaining filters: @1 < @2
-
-predtest vars=(int, int)
-@1 <= @2
-=>
-@2 >= @1
+b > a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int, int)
-@1 > @2
+predtest vars=(a int, b int)
+a < b
 =>
-@2 < @1
+a <= b
+----
+true
+└── remaining filters: a < b
+
+predtest vars=(a int, b int)
+a < b
+=>
+b >= a
+----
+true
+└── remaining filters: a < b
+
+predtest vars=(a int, b int)
+a < b
+=>
+a != b
+----
+true
+└── remaining filters: a < b
+
+predtest vars=(a int, b int)
+a < b
+=>
+b != a
+----
+true
+└── remaining filters: a < b
+
+predtest vars=(a int, b int)
+a <= b
+=>
+b >= a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int, int)
-@1 > @2
+predtest vars=(a int, b int)
+a > b
 =>
-@1 >= @2
-----
-true
-└── remaining filters: @1 > @2
-
-predtest vars=(int, int)
-@1 > @2
-=>
-@2 <= @1
-----
-true
-└── remaining filters: @1 > @2
-
-predtest vars=(int, int)
-@1 > @2
-=>
-@1 != @2
-----
-true
-└── remaining filters: @1 > @2
-
-predtest vars=(int, int)
-@1 > @2
-=>
-@2 != @1
-----
-true
-└── remaining filters: @1 > @2
-
-predtest vars=(int, int)
-@1 >= @2
-=>
-@2 <= @1
+b < a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int, int)
-@1 != @2
+predtest vars=(a int, b int)
+a > b
 =>
-@2 != @1
+a >= b
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a > b
+=>
+b <= a
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a > b
+=>
+a != b
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a > b
+=>
+b != a
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a >= b
+=>
+b <= a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 > 10
+predtest vars=(a int, b int)
+a != b
 =>
-@1 > 15
+b != a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a > 10
+=>
+a > 15
 ----
 false
 
-predtest vars=(int)
-@1 > 1
+predtest vars=(a int)
+a > 1
 =>
-@1 = 1
+a = 1
 ----
 false
 
-predtest vars=(int, int)
-@1 >= 2
+predtest vars=(a int, b int)
+a >= 2
 =>
-(@1, @2) > (2, 0)
+(a, b) > (2, 0)
 ----
 false
 
 # IS (NOT) NULL
 
-predtest vars=(int)
-@1 IS NULL
+predtest vars=(a int)
+a IS NULL
 =>
-@1 IS NULL
+a IS NULL
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 IS NOT NULL
+predtest vars=(a int)
+a IS NOT NULL
 =>
-@1 IS NOT NULL
+a IS NOT NULL
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 < 5
+predtest vars=(a int)
+a < 5
 =>
-@1 IS NOT NULL
+a IS NOT NULL
 ----
 true
-└── remaining filters: @1 < 5
+└── remaining filters: a < 5
 
-predtest vars=(string)
-@1 = 'foo'
+predtest vars=(a string)
+a = 'foo'
 =>
-@1 IS NOT NULL
+a IS NOT NULL
 ----
 true
-└── remaining filters: @1 = 'foo'
+└── remaining filters: a = 'foo'
 
-predtest vars=(int)
-@1 IS NULL
+predtest vars=(a int)
+a IS NULL
 =>
-@1 IS NOT NULL
+a IS NOT NULL
 ----
 false
 
 # Functions
 
-predtest vars=(string)
-lower(@1) = 'foo'
+predtest vars=(a string)
+lower(a) = 'foo'
 =>
-lower(@1) = 'foo'
+lower(a) = 'foo'
 ----
 true
 └── remaining filters: none
 
-predtest vars=(string)
-lower(@1) = 'foo'
+predtest vars=(a string)
+lower(a) = 'foo'
 =>
-lower(@1) = 'bar'
+lower(a) = 'bar'
 ----
 false
 
 # LIKE
 
-predtest vars=(string)
-@1 LIKE '%foo%'
+predtest vars=(a string)
+a LIKE '%foo%'
 =>
-@1 LIKE '%foo%'
+a LIKE '%foo%'
 ----
 true
 └── remaining filters: none
 
-predtest vars=(string)
-@1 LIKE '%foo%'
+predtest vars=(a string)
+a LIKE '%foo%'
 =>
-@1 LIKE 'foo'
+a LIKE 'foo'
 ----
 false
 
 # IN filters
 
-predtest vars=(int)
-@1 IN (1, 2, 3)
+predtest vars=(a int)
+a IN (1, 2, 3)
 =>
-@1 IN (1, 2, 3)
+a IN (1, 2, 3)
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int)
-@1 IN (2, 6)
+predtest vars=(a int)
+a IN (2, 6)
 =>
-@1 IN (0, 2, 5, 6)
+a IN (0, 2, 5, 6)
 ----
 true
-└── remaining filters: @1 IN (2, 6)
+└── remaining filters: a IN (2, 6)
 
-predtest vars=(int)
-@1 IN (2, 3)
+predtest vars=(a int)
+a IN (2, 3)
 =>
-@1 > 1
+a > 1
 ----
 true
-└── remaining filters: @1 IN (2, 3)
+└── remaining filters: a IN (2, 3)
 
-predtest vars=(int)
-@1 IN (2, 6)
+predtest vars=(a int)
+a IN (2, 6)
 =>
-@1 IN (2, 4)
+a IN (2, 4)
 ----
 false
 
-predtest vars=(int)
-@1 IN (1, 2, 3)
+predtest vars=(a int)
+a IN (1, 2, 3)
 =>
-@1 IN (1, 2)
+a IN (1, 2)
 ----
 false
 
 # Tuple filters
 
-predtest vars=(int, int)
-(@1, @2) = (2, 0)
+predtest vars=(a int, b int)
+(a, b) = (2, 0)
 =>
-(@1, @2) = (2, 0)
+(a, b) = (2, 0)
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int, int)
-(@1, @2) > (2, 0)
+predtest vars=(a int, b int)
+(a, b) > (2, 0)
 =>
-(@1, @2) > (2, 0)
+(a, b) > (2, 0)
 ----
 true
 └── remaining filters: none
 
-predtest vars=(int, int)
-(@1, @2) > (2, 0)
+predtest vars=(a int, b int)
+(a, b) > (2, 0)
 =>
-(@1, @2) > (1, 3)
+(a, b) > (1, 3)
 ----
 true
-└── remaining filters: (@1, @2) > (2, 0)
+└── remaining filters: (a, b) > (2, 0)
 
-predtest vars=(int, int)
-(@1, @2) > (2, 0)
+predtest vars=(a int, b int)
+(a, b) > (2, 0)
 =>
-@1 >= 2
+a >= 2
 ----
 true
-└── remaining filters: (@1, @2) > (2, 0)
+└── remaining filters: (a, b) > (2, 0)
 
-predtest vars=(int, int)
-(@1, @2) > (2, 0)
+predtest vars=(a int, b int)
+(a, b) > (2, 0)
 =>
-@1 > 2
+a > 2
 ----
 false
 
-predtest vars=(int, int)
-(@1, @2) = (2, 0)
+predtest vars=(a int, b int)
+(a, b) = (2, 0)
 =>
-(@1, @2) = (1, 3)
+(a, b) = (1, 3)
 ----
 false
 
-predtest vars=(int, int)
-(@1, @2) > (2, 1)
+predtest vars=(a int, b int)
+(a, b) > (2, 1)
 =>
-(@1, @2) > (3, 0)
+(a, b) > (3, 0)
 ----
 false
 
 # Conjunction filters
 
-predtest vars=(bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool)
+a AND b
 =>
-@1
+a
 ----
 true
-└── remaining filters: @2
+└── remaining filters: b
 
-predtest vars=(bool, bool)
-@1 AND @2
+predtest vars=(a bool, b bool)
+a AND b
 =>
-@2
+b
 ----
 true
-└── remaining filters: @1
+└── remaining filters: a
 
-predtest vars=(bool, bool)
-@1 AND @1 AND @2
+predtest vars=(a bool, b bool)
+a AND a AND b
 =>
-@1
+a
 ----
 true
-└── remaining filters: @2
+└── remaining filters: b
 
-predtest vars=(string, string, string)
-@1 = @2 AND @3 = 'foo'
+predtest vars=(a string, b string, c string)
+a = b AND c = 'foo'
 =>
-@2 = @1
+b = a
 ----
 true
-└── remaining filters: @3 = 'foo'
+└── remaining filters: c = 'foo'
 
-predtest vars=(string, string, string)
-@1 = @2 AND @3 = @1
+predtest vars=(a string, b string, c string)
+a = b AND c = a
 =>
-@1 = @3
+a = c
 ----
 true
-└── remaining filters: @1 = @2
+└── remaining filters: a = b
 
-predtest vars=(bool, bool)
-@1 AND NOT @2
+predtest vars=(a bool, b bool)
+a AND NOT b
 =>
-@2
+b
 ----
 false
 
 # Range filters
 
-predtest vars=(int)
-@1 > 10 AND @1 < 100
+predtest vars=(a int)
+a > 10 AND a < 100
 =>
-@1 > 10
+a > 10
 ----
 true
-└── remaining filters: @1 < 100
+└── remaining filters: a < 100
 
-predtest vars=(int)
-@1 > 10 AND @1 < 100
+predtest vars=(a int)
+a > 10 AND a < 100
 =>
-@1 > 0
+a > 0
 ----
 true
-└── remaining filters: (@1 > 10) AND (@1 < 100)
+└── remaining filters: (a > 10) AND (a < 100)
 
-predtest vars=(int, bool)
-@1 > 10 AND @2 AND @1 < 100
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
 =>
-@2
+b
 ----
 true
-└── remaining filters: (@1 > 10) AND (@1 < 100)
+└── remaining filters: (a > 10) AND (a < 100)
 
-predtest vars=(int, bool)
-@1 > 10 AND @2 AND @1 < 100
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
 =>
-@1 > 0
+a > 0
 ----
 true
-└── remaining filters: ((@1 > 10) AND (@1 < 100)) AND @2
+└── remaining filters: ((a > 10) AND (a < 100)) AND b
 
-predtest vars=(int)
-@1 > 15 AND @1 < 100
+predtest vars=(a int)
+a > 15 AND a < 100
 =>
-@1 > 10
+a > 10
 ----
 true
-└── remaining filters: (@1 > 15) AND (@1 < 100)
+└── remaining filters: (a > 15) AND (a < 100)
 
-predtest vars=(int)
-@1 > 10 AND @1 < 100
+predtest vars=(a int)
+a > 10 AND a < 100
 =>
-@1 > 20
+a > 20
 ----
 false
 
-predtest vars=(int, bool)
-@1 > 10 AND @2 AND @1 < 100
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
 =>
-@1 > 20
+a > 20
 ----
 false
 
 # Disjunction filters
 
-predtest vars=(bool)
-@1 OR @1
+predtest vars=(a bool)
+a OR a
 =>
-@1
+a
 ----
 true
 └── remaining filters: none
 
-predtest vars=(string)
-@1 = 'foo' OR @1 = 'bar'
+predtest vars=(a string)
+a = 'foo' OR a = 'bar'
 =>
-@1 IN ('foo', 'bar')
+a IN ('foo', 'bar')
 ----
 true
-└── remaining filters: (@1 = 'foo') OR (@1 = 'bar')
+└── remaining filters: (a = 'foo') OR (a = 'bar')
 
 # Regression tests for #54649. Atoms that are contradictions, like NULL, should
 # not cause panics.
-predtest vars=(bool)
-(@1 OR NULL) OR @1
+predtest vars=(a bool)
+(a OR NULL) OR a
 =>
-@1
+a
 ----
 true
-└── remaining filters: (@1 OR CAST(NULL AS BOOL)) OR @1
+└── remaining filters: (a OR CAST(NULL AS BOOL)) OR a
 
-predtest vars=(bool, bool)
-(@1 OR NULL) OR @1
+predtest vars=(a bool, b bool)
+(a OR NULL) OR a
 =>
-@2
+b
 ----
 false
 
-predtest vars=(int)
-@1 < 10 OR @1 > 100
+predtest vars=(a int)
+a < 10 OR a > 100
 =>
-@1 < 10
+a < 10
 ----
 false
 
-predtest vars=(bool, bool)
-@1 OR @2
+predtest vars=(a bool, b bool)
+a OR b
 =>
-@2
+b
 ----
 false

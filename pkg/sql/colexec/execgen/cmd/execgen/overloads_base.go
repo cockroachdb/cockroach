@@ -345,7 +345,7 @@ type twoArgsResolvedOverloadRightWidthInfo struct {
 
 type assignFunc func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string
 type compareFunc func(targetElem, leftElem, rightElem, leftCol, rightCol string) string
-type castFunc func(to, from, fromCol string) string
+type castFunc func(to, from, fromCol, toType string) string
 
 // Assign produces a Go source string that assigns the "targetElem" variable to
 // the result of applying the overload to the two inputs, "leftElem" and
@@ -393,9 +393,9 @@ func (o *lastArgWidthOverload) Compare(
 		leftElem, rightElem, targetElem, leftElem, rightElem, targetElem, targetElem)
 }
 
-func (o *lastArgWidthOverload) Cast(to, from, fromCol string) string {
+func (o *lastArgWidthOverload) Cast(to, from, fromCol, toType string) string {
 	if o.CastFunc != nil {
-		if ret := o.CastFunc(to, from, fromCol); ret != "" {
+		if ret := o.CastFunc(to, from, fromCol, toType); ret != "" {
 			return ret
 		}
 	}

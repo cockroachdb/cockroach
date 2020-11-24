@@ -420,7 +420,7 @@ func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (ex
 
 // getColumns returns the set of column ordinals in the table for the set of
 // column IDs, along with a mapping from the column IDs to output ordinals
-// (starting with outputOrdinalStart).
+// (starting with 0).
 func (b *Builder) getColumns(
 	cols opt.ColSet, tableID opt.TableID,
 ) (exec.TableColumnOrdinalSet, opt.ColMap) {
@@ -830,8 +830,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	}
 
 	var outputCols opt.ColMap
-	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// For semi and anti join, only the left columns are output.
+	if !joinType.ShouldIncludeRightColsInOutput() {
 		outputCols = leftPlan.outputCols
 	} else {
 		outputCols = allCols
@@ -887,6 +886,8 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		hint := tree.AstLookup
 		if !f.Has(memo.DisallowMergeJoin) {
 			hint = tree.AstMerge
+		} else if !f.Has(memo.DisallowInvertedJoinIntoLeft) || !f.Has(memo.DisallowInvertedJoinIntoRight) {
+			hint = tree.AstInverted
 		}
 
 		return execPlan{}, errors.Errorf(
@@ -898,6 +899,23 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	leftExpr := join.Child(0).(memo.RelExpr)
 	rightExpr := join.Child(1).(memo.RelExpr)
 	filters := join.Child(2).(*memo.FiltersExpr)
+	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
+		// We have a partial join, and we want to make sure that the relation
+		// with smaller cardinality is on the right side. Note that we assumed
+		// it during the costing.
+		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
+		// choosing a side.
+		leftRowCount := leftExpr.Relational().Stats.RowCount
+		rightRowCount := rightExpr.Relational().Stats.RowCount
+		if leftRowCount < rightRowCount {
+			if joinType == descpb.LeftSemiJoin {
+				joinType = descpb.RightSemiJoin
+			} else {
+				joinType = descpb.RightAntiJoin
+			}
+			leftExpr, rightExpr = rightExpr, leftExpr
+		}
+	}
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
 		leftExpr.Relational().OutputCols,
@@ -1007,8 +1025,10 @@ func (b *Builder) initJoinBuild(
 		}
 	}
 
-	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
-		// For semi and anti join, only the left columns are output.
+	if !joinType.ShouldIncludeLeftColsInOutput() {
+		return leftPlan, rightPlan, onExpr, rightPlan.outputCols, nil
+	}
+	if !joinType.ShouldIncludeRightColsInOutput() {
 		return leftPlan, rightPlan, onExpr, leftPlan.outputCols, nil
 	}
 	return leftPlan, rightPlan, onExpr, allCols, nil
@@ -1474,6 +1494,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		join.LookupColsAreTableKey,
 		lookupOrdinals,
 		onExpr,
+		join.IsSecondJoinInPairedJoiner,
 		res.reqOrdering(join),
 		locking,
 	)
@@ -1482,6 +1503,12 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	}
 
 	// Apply a post-projection if Cols doesn't contain all input columns.
+	//
+	// NB: For left outer paired-joins, this is where the continuation column and
+	// the PK columns for the right side, which were part of the inputCols, are
+	// projected away. (The GenerateInvertedJoins exploration rule has already
+	// done this for semi and anti paired-joins by adding a Project operator
+	// after the join).
 	if !inputCols.SubsetOf(join.Cols) {
 		outCols := join.Cols
 		if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
@@ -1502,6 +1529,9 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 
 	inputCols := join.Input.Relational().OutputCols
 	lookupCols := join.Cols.Difference(inputCols)
+	if join.IsFirstJoinInPairedJoiner {
+		lookupCols.Remove(join.ContinuationCol)
+	}
 
 	// Add the inverted column since it will be referenced in the inverted
 	// expression and needs a corresponding indexed var. It will be projected
@@ -1509,8 +1539,21 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	lookupCols.Add(join.InvertedCol)
 
 	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
-	allCols := joinOutputMap(input.outputCols, lookupColMap)
+	// allExprCols are the columns used in expressions evaluated by this join.
+	allExprCols := joinOutputMap(input.outputCols, lookupColMap)
 
+	allCols := allExprCols
+	if join.IsFirstJoinInPairedJoiner {
+		// allCols needs to include the continuation column since it will be
+		// in the result output by this join.
+		allCols = allExprCols.Copy()
+		maxValue, ok := allCols.MaxValue()
+		if !ok {
+			return execPlan{}, errors.AssertionFailedf("allCols should not be empty")
+		}
+		// Assign the continuation column the next unused value in the map.
+		allCols.Set(int(join.ContinuationCol), maxValue+1)
+	}
 	res := execPlan{outputCols: allCols}
 	if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
 		// For semi and anti join, only the left columns are output.
@@ -1518,8 +1561,8 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	}
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
-		ivarMap: allCols.Copy(),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allExprCols.Len()),
+		ivarMap: allExprCols.Copy(),
 	}
 	onExpr, err := b.buildScalar(&ctx, &join.On)
 	if err != nil {
@@ -1537,7 +1580,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	// typing). Perhaps we need to pass this information in a more specific way
 	// and not as a generic expression?
 	ord, _ := ctx.ivarMap.Get(int(join.InvertedCol))
-	ctx.ivarMap.Set(int(join.Table.ColumnID(idx.Column(0).InvertedSourceColumnOrdinal())), ord)
+	ctx.ivarMap.Set(int(join.Table.ColumnID(idx.VirtualInvertedColumn().InvertedSourceColumnOrdinal())), ord)
 	invertedExpr, err := b.buildScalar(&ctx, join.InvertedExpr)
 	if err != nil {
 		return execPlan{}, err
@@ -1551,6 +1594,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		idx,
 		lookupOrdinals,
 		onExpr,
+		join.IsFirstJoinInPairedJoiner,
 		res.reqOrdering(join),
 	)
 	if err != nil {

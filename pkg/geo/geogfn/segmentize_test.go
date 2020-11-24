@@ -118,7 +118,11 @@ func TestSegmentize(t *testing.T) {
 	t.Run("many coordinates to segmentize", func(t *testing.T) {
 		g := geo.MustParseGeography("LINESTRING(0 0, 100 80)")
 		_, err := Segmentize(g, 0.001)
-		require.EqualError(t, err, "attempting to segmentize into too many coordinates; need 34359738370 points between [0 0] and [100 80], max 16336")
+		require.EqualError(
+			t,
+			err,
+			fmt.Sprintf("attempting to segmentize into too many coordinates; need 34359738370 points between [0 0] and [100 80], max %d", geo.MaxAllowedSplitPoints),
+		)
 	})
 }
 

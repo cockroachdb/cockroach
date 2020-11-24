@@ -414,8 +414,8 @@ func verifyCleanup(key roachpb.Key, eng storage.Engine, t *testing.T, coords ...
 			}
 		}
 		meta := &enginepb.MVCCMetadata{}
-		//lint:ignore SA1019 historical usage of deprecated eng.GetProto is OK
-		ok, _, _, err := eng.GetProto(storage.MakeMVCCMetadataKey(key), meta)
+		//lint:ignore SA1019 historical usage of deprecated eng.MVCCGetProto is OK
+		ok, _, _, err := eng.MVCCGetProto(storage.MakeMVCCMetadataKey(key), meta)
 		if err != nil {
 			return fmt.Errorf("error getting MVCC metadata: %s", err)
 		}

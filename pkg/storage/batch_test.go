@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync/atomic"
 	"testing"
 
@@ -22,13 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -47,6 +46,20 @@ func mvccKey(k interface{}) MVCCKey {
 	}
 }
 
+func mustMarshal(m protoutil.Message) []byte {
+	b, err := protoutil.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func appender(s string) []byte {
+	val := roachpb.MakeValueFromString(s)
+	v := &enginepb.MVCCMetadataSubsetForMergeSerialization{RawBytes: val.RawBytes}
+	return mustMarshal(v)
+}
+
 func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch) error) {
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -61,32 +74,32 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			}
 			defer b.Close()
 
-			if err := b.Put(mvccKey("a"), []byte("value")); err != nil {
+			if err := b.PutUnversioned(mvccKey("a").Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
 			// Write an engine value to be deleted.
-			if err := e.Put(mvccKey("b"), []byte("value")); err != nil {
+			if err := e.PutUnversioned(mvccKey("b").Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.Clear(mvccKey("b")); err != nil {
+			if err := b.ClearUnversioned(mvccKey("b").Key); err != nil {
 				t.Fatal(err)
 			}
 			// Write an engine value to be merged.
-			if err := e.Put(mvccKey("c"), appender("foo")); err != nil {
+			if err := e.PutUnversioned(mvccKey("c").Key, appender("foo")); err != nil {
 				t.Fatal(err)
 			}
 			if err := b.Merge(mvccKey("c"), appender("bar")); err != nil {
 				t.Fatal(err)
 			}
 			// Write a key with an empty value.
-			if err := b.Put(mvccKey("e"), nil); err != nil {
+			if err := b.PutUnversioned(mvccKey("e").Key, nil); err != nil {
 				t.Fatal(err)
 			}
 			// Write an engine value to be single deleted.
-			if err := e.Put(mvccKey("d"), []byte("before")); err != nil {
+			if err := e.PutUnversioned(mvccKey("d").Key, []byte("before")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.SingleClear(mvccKey("d")); err != nil {
+			if err := b.SingleClearEngineKey(EngineKey{Key: mvccKey("d").Key}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -186,12 +199,14 @@ func TestReadOnlyBasics(t *testing.T) {
 			a := mvccKey("a")
 			getVal := &roachpb.Value{}
 			successTestCases := []func(){
-				func() { _, _ = ro.Get(a) },
-				func() { _, _, _, _ = ro.GetProto(a, getVal) },
-				func() { _ = ro.Iterate(a.Key, a.Key, func(MVCCKeyValue) (bool, error) { return true, nil }) },
-				func() { ro.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
+				func() { _, _ = ro.MVCCGet(a) },
+				func() { _, _, _, _ = ro.MVCCGetProto(a, getVal) },
 				func() {
-					ro.NewIterator(IterOptions{
+					_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, func(MVCCKeyValue) error { return iterutil.StopIteration() })
+				},
+				func() { ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}).Close() },
+				func() {
+					ro.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 						MinTimestampHint: hlc.MinTimestamp,
 						MaxTimestampHint: hlc.MaxTimestamp,
 						UpperBound:       roachpb.KeyMax,
@@ -209,46 +224,45 @@ func TestReadOnlyBasics(t *testing.T) {
 				}
 				shouldPanic(t, func() { ro.Close() }, "Close", "closing an already-closed "+name)
 				for i, f := range successTestCases {
-					shouldPanic(t, f, string(i), "using a closed "+name)
+					shouldPanic(t, f, strconv.Itoa(i), "using a closed "+name)
 				}
 			}()
 
 			for i, f := range successTestCases {
-				shouldNotPanic(t, f, string(i))
+				shouldNotPanic(t, f, strconv.Itoa(i))
 			}
 
 			// For a read-only ReadWriter, all Writer methods should panic.
 			failureTestCases := []func(){
 				func() { _ = ro.ApplyBatchRepr(nil, false) },
-				func() { _ = ro.Clear(a) },
-				func() { _ = ro.SingleClear(a) },
-				func() { _ = ro.ClearRange(a, a) },
+				func() { _ = ro.ClearUnversioned(a.Key) },
+				func() { _ = ro.ClearRawRange(a.Key, a.Key) },
 				func() { _ = ro.Merge(a, nil) },
-				func() { _ = ro.Put(a, nil) },
+				func() { _ = ro.PutUnversioned(a.Key, nil) },
 			}
 			for i, f := range failureTestCases {
-				shouldPanic(t, f, string(i), "not implemented")
+				shouldPanic(t, f, strconv.Itoa(i), "not implemented")
 			}
 
-			if err := e.Put(mvccKey("a"), []byte("value")); err != nil {
+			if err := e.PutUnversioned(mvccKey("a").Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
-			if err := e.Put(mvccKey("b"), []byte("value")); err != nil {
+			if err := e.PutUnversioned(mvccKey("b").Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
-			if err := e.Clear(mvccKey("b")); err != nil {
+			if err := e.ClearUnversioned(mvccKey("b").Key); err != nil {
 				t.Fatal(err)
 			}
-			if err := e.Put(mvccKey("c"), appender("foo")); err != nil {
+			if err := e.PutUnversioned(mvccKey("c").Key, appender("foo")); err != nil {
 				t.Fatal(err)
 			}
 			if err := e.Merge(mvccKey("c"), appender("bar")); err != nil {
 				t.Fatal(err)
 			}
-			if err := e.Put(mvccKey("d"), []byte("value")); err != nil {
+			if err := e.PutUnversioned(mvccKey("d").Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
-			if err := e.SingleClear(mvccKey("d")); err != nil {
+			if err := e.ClearUnversioned(mvccKey("d").Key); err != nil {
 				t.Fatal(err)
 			}
 
@@ -354,7 +368,7 @@ func TestApplyBatchRepr(t *testing.T) {
 				b1 := e.NewBatch()
 				defer b1.Close()
 
-				if err := b1.Put(mvccKey("lost"), []byte("update")); err != nil {
+				if err := b1.PutUnversioned(mvccKey("lost").Key, []byte("update")); err != nil {
 					t.Fatal(err)
 				}
 
@@ -380,7 +394,7 @@ func TestApplyBatchRepr(t *testing.T) {
 				key := mvccKey("phantom")
 				val := []byte("phantom")
 
-				if err := b3.Put(key, val); err != nil {
+				if err := b3.PutUnversioned(key.Key, val); err != nil {
 					t.Fatal(err)
 				}
 
@@ -396,7 +410,7 @@ func TestApplyBatchRepr(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if b, err := e.Get(key); err != nil {
+				if b, err := e.MVCCGet(key); err != nil {
 					t.Fatal(err)
 				} else if !reflect.DeepEqual(b, val) {
 					t.Fatalf("read %q from engine, expected %q", b, val)
@@ -419,29 +433,29 @@ func TestBatchGet(t *testing.T) {
 			defer b.Close()
 
 			// Write initial values, then write to batch.
-			if err := e.Put(mvccKey("b"), []byte("value")); err != nil {
+			if err := e.PutUnversioned(mvccKey("b").Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
-			if err := e.Put(mvccKey("c"), appender("foo")); err != nil {
+			if err := e.PutUnversioned(mvccKey("c").Key, appender("foo")); err != nil {
 				t.Fatal(err)
 			}
 			// Write batch values.
-			if err := b.Put(mvccKey("a"), []byte("value")); err != nil {
+			if err := b.PutUnversioned(mvccKey("a").Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.Clear(mvccKey("b")); err != nil {
+			if err := b.ClearUnversioned(mvccKey("b").Key); err != nil {
 				t.Fatal(err)
 			}
 			if err := b.Merge(mvccKey("c"), appender("bar")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.Put(mvccKey("d"), []byte("before")); err != nil {
+			if err := b.PutUnversioned(mvccKey("d").Key, []byte("before")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.SingleClear(mvccKey("d")); err != nil {
+			if err := b.SingleClearEngineKey(EngineKey{Key: mvccKey("d").Key}); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.Put(mvccKey("d"), []byte("after")); err != nil {
+			if err := b.PutUnversioned(mvccKey("d").Key, []byte("after")); err != nil {
 				t.Fatal(err)
 			}
 
@@ -452,7 +466,7 @@ func TestBatchGet(t *testing.T) {
 				{Key: mvccKey("d"), Value: []byte("after")},
 			}
 			for i, expKV := range expValues {
-				kv, err := b.Get(expKV.Key)
+				kv, err := b.MVCCGet(expKV.Key)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -488,10 +502,10 @@ func TestBatchMerge(t *testing.T) {
 			defer b.Close()
 
 			// Write batch put, delete & merge.
-			if err := b.Put(mvccKey("a"), appender("a-value")); err != nil {
+			if err := b.PutUnversioned(mvccKey("a").Key, appender("a-value")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.Clear(mvccKey("b")); err != nil {
+			if err := b.ClearUnversioned(mvccKey("b").Key); err != nil {
 				t.Fatal(err)
 			}
 			if err := b.Merge(mvccKey("c"), appender("c-value")); err != nil {
@@ -510,7 +524,7 @@ func TestBatchMerge(t *testing.T) {
 			}
 
 			// Verify values.
-			val, err := b.Get(mvccKey("a"))
+			val, err := b.MVCCGet(mvccKey("a"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -518,7 +532,7 @@ func TestBatchMerge(t *testing.T) {
 				t.Error("mismatch of \"a\"")
 			}
 
-			val, err = b.Get(mvccKey("b"))
+			val, err = b.MVCCGet(mvccKey("b"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -526,7 +540,7 @@ func TestBatchMerge(t *testing.T) {
 				t.Error("mismatch of \"b\"")
 			}
 
-			val, err = b.Get(mvccKey("c"))
+			val, err = b.MVCCGet(mvccKey("c"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -550,13 +564,13 @@ func TestBatchProto(t *testing.T) {
 			defer b.Close()
 
 			val := roachpb.MakeValueFromString("value")
-			if _, _, err := PutProto(b, mvccKey("proto"), &val); err != nil {
+			if _, _, err := PutProto(b, mvccKey("proto").Key, &val); err != nil {
 				t.Fatal(err)
 			}
 			getVal := &roachpb.Value{}
-			ok, keySize, valSize, err := b.GetProto(mvccKey("proto"), getVal)
+			ok, keySize, valSize, err := b.MVCCGetProto(mvccKey("proto"), getVal)
 			if !ok || err != nil {
-				t.Fatalf("expected GetProto to success ok=%t: %+v", ok, err)
+				t.Fatalf("expected MVCCGetProto to success ok=%t: %+v", ok, err)
 			}
 			if keySize != 6 {
 				t.Errorf("expected key size 6; got %d", keySize)
@@ -568,23 +582,23 @@ func TestBatchProto(t *testing.T) {
 			if valSize != int64(len(data)) {
 				t.Errorf("expected value size %d; got %d", len(data), valSize)
 			}
-			if !proto.Equal(getVal, &val) {
+			if !reflect.DeepEqual(getVal, &val) {
 				t.Errorf("expected %v; got %v", &val, getVal)
 			}
 			// Before commit, proto will not be available via engine.
 			fmt.Printf("before\n")
-			if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); ok || err != nil {
+			if ok, _, _, err := e.MVCCGetProto(mvccKey("proto"), getVal); ok || err != nil {
 				fmt.Printf("after\n")
-				t.Fatalf("expected GetProto to fail ok=%t: %+v", ok, err)
+				t.Fatalf("expected MVCCGetProto to fail ok=%t: %+v", ok, err)
 			}
 			// Commit and verify the proto can be read directly from the engine.
 			if err := b.Commit(false /* sync */); err != nil {
 				t.Fatal(err)
 			}
-			if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); !ok || err != nil {
-				t.Fatalf("expected GetProto to success ok=%t: %+v", ok, err)
+			if ok, _, _, err := e.MVCCGetProto(mvccKey("proto"), getVal); !ok || err != nil {
+				t.Fatalf("expected MVCCGetProto to success ok=%t: %+v", ok, err)
 			}
-			if !proto.Equal(getVal, &val) {
+			if !reflect.DeepEqual(getVal, &val) {
 				t.Errorf("expected %v; got %v", &val, getVal)
 			}
 		})
@@ -619,7 +633,7 @@ func TestBatchScan(t *testing.T) {
 				{Key: mvccKey("m"), Value: []byte("13")},
 			}
 			for _, kv := range existingVals {
-				if err := e.Put(kv.Key, kv.Value); err != nil {
+				if err := e.PutUnversioned(kv.Key.Key, kv.Value); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -637,7 +651,7 @@ func TestBatchScan(t *testing.T) {
 				{Key: mvccKey("jj"), Value: []byte("b10")},
 			}
 			for _, kv := range batchVals {
-				if err := b.Put(kv.Key, kv.Value); err != nil {
+				if err := b.PutUnversioned(kv.Key.Key, kv.Value); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -702,10 +716,10 @@ func TestBatchScanWithDelete(t *testing.T) {
 			defer b.Close()
 
 			// Write initial value, then delete via batch.
-			if err := e.Put(mvccKey("a"), []byte("value")); err != nil {
+			if err := e.PutUnversioned(mvccKey("a").Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.Clear(mvccKey("a")); err != nil {
+			if err := b.ClearUnversioned(mvccKey("a").Key); err != nil {
 				t.Fatal(err)
 			}
 			kvs, err := Scan(b, roachpb.KeyMin, roachpb.KeyMax, 0)
@@ -735,14 +749,14 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 			defer b.Close()
 
 			// Write two values.
-			if err := e.Put(mvccKey("a"), []byte("value1")); err != nil {
+			if err := e.PutUnversioned(mvccKey("a").Key, []byte("value1")); err != nil {
 				t.Fatal(err)
 			}
-			if err := e.Put(mvccKey("b"), []byte("value2")); err != nil {
+			if err := e.PutUnversioned(mvccKey("b").Key, []byte("value2")); err != nil {
 				t.Fatal(err)
 			}
 			// Now, delete "a" in batch.
-			if err := b.Clear(mvccKey("a")); err != nil {
+			if err := b.ClearUnversioned(mvccKey("a").Key); err != nil {
 				t.Fatal(err)
 			}
 			// A scan with max=1 should scan "b".
@@ -777,7 +791,7 @@ func TestBatchConcurrency(t *testing.T) {
 			if err := b.Merge(mvccKey("a"), appender("bar")); err != nil {
 				t.Fatal(err)
 			}
-			val, err := b.Get(mvccKey("a"))
+			val, err := b.MVCCGet(mvccKey("a"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -785,11 +799,11 @@ func TestBatchConcurrency(t *testing.T) {
 				t.Error("mismatch of \"a\"")
 			}
 			// Write an engine value.
-			if err := e.Put(mvccKey("a"), appender("foo")); err != nil {
+			if err := e.PutUnversioned(mvccKey("a").Key, appender("foo")); err != nil {
 				t.Fatal(err)
 			}
 			// Now, read again and verify that the merge happens on top of the mod.
-			val, err = b.Get(mvccKey("a"))
+			val, err = b.MVCCGet(mvccKey("a"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -797,138 +811,6 @@ func TestBatchConcurrency(t *testing.T) {
 				t.Error("mismatch of \"a\"")
 			}
 		})
-	}
-}
-
-func TestBatchBuilder(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
-	stopper.AddCloser(e)
-
-	batch := e.NewBatch().(*rocksDBBatch)
-	batch.ensureBatch()
-	// Ensure that, even though we reach into the batch's internals with
-	// dbPut etc, asking for the batch's Repr will get data from C++ and
-	// not its unused builder.
-	batch.flushes++
-	defer batch.Close()
-
-	builder := &RocksDBBatchBuilder{}
-
-	testData := []struct {
-		key string
-		ts  hlc.Timestamp
-	}{
-		{"a", hlc.Timestamp{}},
-		{"b", hlc.Timestamp{WallTime: 1}},
-		{"c", hlc.Timestamp{WallTime: 1, Logical: 1}},
-	}
-	for _, data := range testData {
-		key := MVCCKey{roachpb.Key(data.key), data.ts}
-		if err := dbPut(batch.batch, key, []byte("value")); err != nil {
-			t.Fatal(err)
-		}
-		if err := dbClear(batch.batch, key); err != nil {
-			t.Fatal(err)
-		}
-		// TODO(itsbilal): Uncomment this when pebble.Batch supports SingleDeletion.
-		//if err := dbSingleClear(batch.batch, key); err != nil {
-		//	t.Fatal(err)
-		//}
-		if err := dbMerge(batch.batch, key, appender("bar")); err != nil {
-			t.Fatal(err)
-		}
-
-		builder.Put(key, []byte("value"))
-		builder.Clear(key)
-		// TODO(itsbilal): Uncomment this when pebble.Batch supports SingleDeletion.
-		//builder.SingleClear(key)
-		builder.Merge(key, appender("bar"))
-	}
-
-	batchRepr := batch.Repr()
-	builderRepr := builder.Finish()
-	if !bytes.Equal(batchRepr, builderRepr) {
-		t.Fatalf("expected [% x], but got [% x]", batchRepr, builderRepr)
-	}
-}
-
-func TestBatchBuilderStress(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
-	stopper.AddCloser(e)
-
-	rng, _ := randutil.NewPseudoRand()
-
-	for i := 0; i < 1000; i++ {
-		count := 1 + rng.Intn(1000)
-
-		func() {
-			batch := e.NewBatch().(*rocksDBBatch)
-			batch.ensureBatch()
-			// Ensure that, even though we reach into the batch's internals with
-			// dbPut etc, asking for the batch's Repr will get data from C++ and
-			// not its unused builder.
-			batch.flushes++
-			defer batch.Close()
-
-			builder := &RocksDBBatchBuilder{}
-
-			for j := 0; j < count; j++ {
-				var ts hlc.Timestamp
-				if rng.Float32() <= 0.9 {
-					// Give 90% of keys timestamps.
-					ts.WallTime = rng.Int63()
-					if rng.Float32() <= 0.1 {
-						// Give 10% of timestamps a non-zero logical component.
-						ts.Logical = rng.Int31()
-					}
-				}
-				key := MVCCKey{
-					Key:       []byte(fmt.Sprintf("%d", rng.Intn(10000))),
-					Timestamp: ts,
-				}
-				// Generate a random mixture of puts, deletes, single deletes, and merges.
-				switch rng.Intn(3) {
-				case 0:
-					if err := dbPut(batch.batch, key, []byte("value")); err != nil {
-						t.Fatal(err)
-					}
-					builder.Put(key, []byte("value"))
-				case 1:
-					if err := dbClear(batch.batch, key); err != nil {
-						t.Fatal(err)
-					}
-					builder.Clear(key)
-				case 2:
-					// TODO(itsbilal): Don't test SingleClears matching up until
-					// pebble.Batch supports them.
-					//if err := dbSingleClear(batch.batch, key); err != nil {
-					//	t.Fatal(err)
-					//}
-					//builder.SingleClear(key)
-				case 3:
-					if err := dbMerge(batch.batch, key, appender("bar")); err != nil {
-						t.Fatal(err)
-					}
-					builder.Merge(key, appender("bar"))
-				}
-			}
-
-			batchRepr := batch.Repr()
-			builderRepr := builder.Finish()
-			if !bytes.Equal(batchRepr, builderRepr) {
-				t.Fatalf("expected [% x], but got [% x]", batchRepr, builderRepr)
-			}
-		}()
 	}
 }
 
@@ -945,7 +827,7 @@ func TestBatchDistinctAfterApplyBatchRepr(t *testing.T) {
 				batch := e.NewBatch()
 				defer batch.Close()
 
-				if err := batch.Put(mvccKey("batchkey"), []byte("b")); err != nil {
+				if err := batch.PutUnversioned(mvccKey("batchkey").Key, []byte("b")); err != nil {
 					t.Fatal(err)
 				}
 
@@ -961,7 +843,7 @@ func TestBatchDistinctAfterApplyBatchRepr(t *testing.T) {
 			defer distinct.Close()
 
 			// The distinct batch can see the earlier write to the batch.
-			v, err := distinct.Get(mvccKey("batchkey"))
+			v, err := distinct.MVCCGet(mvccKey("batchkey"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -979,22 +861,22 @@ func TestBatchDistinct(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			if err := e.Put(mvccKey("b"), []byte("b")); err != nil {
+			if err := e.PutUnversioned(mvccKey("b").Key, []byte("b")); err != nil {
 				t.Fatal(err)
 			}
 
 			batch := e.NewBatch()
 			defer batch.Close()
 
-			if err := batch.Put(mvccKey("a"), []byte("a")); err != nil {
+			if err := batch.PutUnversioned(mvccKey("a").Key, []byte("a")); err != nil {
 				t.Fatal(err)
 			}
-			if err := batch.Clear(mvccKey("b")); err != nil {
+			if err := batch.ClearUnversioned(mvccKey("b").Key); err != nil {
 				t.Fatal(err)
 			}
 
 			// The original batch can see the writes to the batch.
-			if v, err := batch.Get(mvccKey("a")); err != nil {
+			if v, err := batch.MVCCGet(mvccKey("a")); err != nil {
 				t.Fatal(err)
 			} else if string(v) != "a" {
 				t.Fatalf("expected a, but got %s", v)
@@ -1002,12 +884,12 @@ func TestBatchDistinct(t *testing.T) {
 
 			// The distinct batch will see previous writes to the batch.
 			distinct := batch.Distinct()
-			if v, err := distinct.Get(mvccKey("a")); err != nil {
+			if v, err := distinct.MVCCGet(mvccKey("a")); err != nil {
 				t.Fatal(err)
 			} else if string(v) != "a" {
 				t.Fatalf("expected a, but got %s", v)
 			}
-			if v, err := distinct.Get(mvccKey("b")); err != nil {
+			if v, err := distinct.MVCCGet(mvccKey("b")); err != nil {
 				t.Fatal(err)
 			} else if v != nil {
 				t.Fatalf("expected nothing, but got %s", v)
@@ -1015,7 +897,7 @@ func TestBatchDistinct(t *testing.T) {
 
 			// Similarly, for distinct batch iterators we will see previous writes to the
 			// batch.
-			iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := distinct.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			iter.SeekGE(mvccKey("a"))
 			if ok, err := iter.Valid(); !ok {
 				t.Fatalf("expected iterator to be valid; err=%v", err)
@@ -1025,10 +907,10 @@ func TestBatchDistinct(t *testing.T) {
 			}
 			iter.Close()
 
-			if err := distinct.Put(mvccKey("c"), []byte("c")); err != nil {
+			if err := distinct.PutUnversioned(mvccKey("c").Key, []byte("c")); err != nil {
 				t.Fatal(err)
 			}
-			if v, err := distinct.Get(mvccKey("c")); err != nil {
+			if v, err := distinct.MVCCGet(mvccKey("c")); err != nil {
 				t.Fatal(err)
 			} else {
 				switch engineImpl.name {
@@ -1050,7 +932,7 @@ func TestBatchDistinct(t *testing.T) {
 			distinct.Close()
 
 			// Writes to the distinct batch are reflected in the original batch.
-			if v, err := batch.Get(mvccKey("c")); err != nil {
+			if v, err := batch.MVCCGet(mvccKey("c")); err != nil {
 				t.Fatal(err)
 			} else if string(v) != "c" {
 				t.Fatalf("expected c, but got %s", v)
@@ -1068,10 +950,10 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			if err := e.Put(mvccKey("b"), []byte("b")); err != nil {
+			if err := e.PutUnversioned(mvccKey("b").Key, []byte("b")); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, err := PutProto(e, mvccKey("c"), &roachpb.Value{}); err != nil {
+			if _, _, err := PutProto(e, mvccKey("c").Key, &roachpb.Value{}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1083,7 +965,7 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 
 			// Verify that reads on the distinct batch go to the underlying engine, not
 			// to the write-only batch.
-			iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := distinct.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			iter.SeekGE(mvccKey("a"))
 			if ok, err := iter.Valid(); !ok {
 				t.Fatalf("expected iterator to be valid, err=%v", err)
@@ -1093,14 +975,14 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 			}
 			iter.Close()
 
-			if v, err := distinct.Get(mvccKey("b")); err != nil {
+			if v, err := distinct.MVCCGet(mvccKey("b")); err != nil {
 				t.Fatal(err)
 			} else if string(v) != "b" {
 				t.Fatalf("expected b, but got %s", v)
 			}
 
 			val := &roachpb.Value{}
-			if _, _, _, err := distinct.GetProto(mvccKey("c"), val); err != nil {
+			if _, _, _, err := distinct.MVCCGetProto(mvccKey("c"), val); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -1126,15 +1008,15 @@ func TestBatchDistinctPanics(t *testing.T) {
 			// while the distinct batch is open.
 			a := mvccKey("a")
 			testCases := []func(){
-				func() { _ = batch.Put(a, nil) },
+				func() { _ = batch.PutUnversioned(a.Key, nil) },
 				func() { _ = batch.Merge(a, nil) },
-				func() { _ = batch.Clear(a) },
-				func() { _ = batch.SingleClear(a) },
+				func() { _ = batch.ClearUnversioned(a.Key) },
+				func() { _ = batch.SingleClearEngineKey(EngineKey{Key: a.Key}) },
 				func() { _ = batch.ApplyBatchRepr(nil, false) },
-				func() { _, _ = batch.Get(a) },
-				func() { _, _, _, _ = batch.GetProto(a, nil) },
-				func() { _ = batch.Iterate(a.Key, a.Key, nil) },
-				func() { _ = batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}) },
+				func() { _, _ = batch.MVCCGet(a) },
+				func() { _, _, _, _ = batch.MVCCGetProto(a, nil) },
+				func() { _ = batch.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, nil) },
+				func() { _ = batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}) },
 			}
 			for i, f := range testCases {
 				func() {
@@ -1170,18 +1052,18 @@ func TestBatchIteration(t *testing.T) {
 			v1 := []byte("value1")
 			v2 := []byte("value2")
 
-			if err := b.Put(k1, v1); err != nil {
+			if err := b.PutUnversioned(k1.Key, v1); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.Put(k2, v2); err != nil {
+			if err := b.PutUnversioned(k2.Key, v2); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.Put(k3, []byte("doesn't matter")); err != nil {
+			if err := b.PutUnversioned(k3.Key, []byte("doesn't matter")); err != nil {
 				t.Fatal(err)
 			}
 
 			iterOpts := IterOptions{UpperBound: k3.Key}
-			iter := b.NewIterator(iterOpts)
+			iter := b.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
 			defer iter.Close()
 
 			// Forward iteration,
@@ -1282,7 +1164,7 @@ func TestBatchCombine(t *testing.T) {
 						k := fmt.Sprint(v)
 
 						b := e.NewWriteOnlyBatch()
-						if err := b.Put(mvccKey(k), []byte(k)); err != nil {
+						if err := b.PutUnversioned(mvccKey(k).Key, []byte(k)); err != nil {
 							errs <- errors.Wrap(err, "put failed")
 							return
 						}
@@ -1292,7 +1174,7 @@ func TestBatchCombine(t *testing.T) {
 						}
 
 						// Verify we can read the key we just wrote immediately.
-						if v, err := e.Get(mvccKey(k)); err != nil {
+						if v, err := e.MVCCGet(mvccKey(k)); err != nil {
 							errs <- errors.Wrap(err, "get failed")
 							return
 						} else if string(v) != k {
@@ -1317,21 +1199,27 @@ func TestDecodeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
+	e := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
 	defer e.Close()
 
 	tests := []MVCCKey{
-		{Key: []byte{}},
 		{Key: []byte("foo")},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1}},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}},
+		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1, Flags: 3}},
 	}
 	for _, test := range tests {
 		t.Run(test.String(), func(t *testing.T) {
 			b := e.NewBatch()
 			defer b.Close()
-			if err := b.Put(test, nil); err != nil {
-				t.Fatalf("%+v", err)
+			if test.Timestamp.IsEmpty() {
+				if err := b.PutUnversioned(test.Key, nil); err != nil {
+					t.Fatalf("%+v", err)
+				}
+			} else {
+				if err := b.PutMVCC(test, nil); err != nil {
+					t.Fatalf("%+v", err)
+				}
 			}
 			repr := b.Repr()
 

@@ -142,7 +142,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 
 	record := Record{
 		Description: "fake job",
-		Username:    "test",
+		Username:    security.TestUserName(),
 		Details:     jobspb.ImportDetails{},
 		Progress:    jobspb.ImportProgress{},
 	}
@@ -208,7 +208,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				jobControl,
 			)
 			require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 
 	record := Record{
 		Description: "fake job",
-		Username:    "test",
+		Username:    security.TestUserName(),
 		Details:     jobspb.ImportDetails{},
 		Progress:    jobspb.ImportProgress{},
 	}
@@ -285,7 +285,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				jobControl,
 			)
 			require.NoError(t, err)

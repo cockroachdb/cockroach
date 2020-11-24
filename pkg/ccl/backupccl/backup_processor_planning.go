@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -30,7 +31,7 @@ import (
 // build up the BulkOpSummary.
 func distBackup(
 	ctx context.Context,
-	phs sql.PlanHookState,
+	execCtx sql.JobExecContext,
 	spans roachpb.Spans,
 	introducedSpans roachpb.Spans,
 	pkIDs map[uint64]bool,
@@ -44,10 +45,10 @@ func distBackup(
 	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
 	var noTxn *kv.Txn
 
-	dsp := phs.DistSQLPlanner()
-	evalCtx := phs.ExtendedEvalContext()
+	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
 
-	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
+	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
 		return err
 	}
@@ -63,8 +64,8 @@ func distBackup(
 		mvccFilter,
 		encryption,
 		startTime, endTime,
-		phs.User(),
-		phs.ExecCfg(),
+		execCtx.User(),
+		execCtx.ExecCfg(),
 	)
 	if err != nil {
 		return err
@@ -75,11 +76,7 @@ func distBackup(
 		return nil
 	}
 
-	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
-	if err != nil {
-		return err
-	}
-	p := sql.MakePhysicalPlan(gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
@@ -95,7 +92,7 @@ func distBackup(
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
 	p.PlanToStreamColMap = []int{}
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
@@ -121,7 +118,7 @@ func distBackup(
 	defer close(progCh)
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
+	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 	return rowResultWriter.Err()
 }
 
@@ -136,7 +133,7 @@ func makeBackupDataProcessorSpecs(
 	mvccFilter roachpb.MVCCFilter,
 	encryption *jobspb.BackupEncryptionOptions,
 	startTime, endTime hlc.Timestamp,
-	user string,
+	user security.SQLUsername,
 	execCfg *sql.ExecutorConfig,
 ) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
 	var spanPartitions []sql.SpanPartition
@@ -191,7 +188,7 @@ func makeBackupDataProcessorSpecs(
 			PKIDs:            pkIDs,
 			BackupStartTime:  startTime,
 			BackupEndTime:    endTime,
-			User:             user,
+			UserProto:        user.EncodeProto(),
 		}
 		nodeToSpec[partition.Node] = spec
 	}
@@ -212,7 +209,7 @@ func makeBackupDataProcessorSpecs(
 				PKIDs:            pkIDs,
 				BackupStartTime:  startTime,
 				BackupEndTime:    endTime,
-				User:             user,
+				UserProto:        user.EncodeProto(),
 			}
 			nodeToSpec[partition.Node] = spec
 		}

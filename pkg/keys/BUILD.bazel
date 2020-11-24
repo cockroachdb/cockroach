@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "keys",
+    srcs = [
+        "constants.go",
+        "doc.go",
+        "errors.go",
+        "keys.go",
+        "printer.go",
+        "spans.go",
+        "sql.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/keys",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/encoding",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "keys_test",
+    srcs = [
+        "keys_test.go",
+        "printer_test.go",
+    ],
+    embed = [":keys"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/bitarray",
+        "//pkg/util/duration",
+        "//pkg/util/encoding",
+        "//pkg/util/keysutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

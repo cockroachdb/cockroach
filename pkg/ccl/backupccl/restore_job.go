@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -122,7 +123,7 @@ func makeImportSpans(
 	backups []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	lowWaterMark roachpb.Key,
-	user string,
+	user security.SQLUsername,
 	onMissing func(span covering.Range, start, end hlc.Timestamp) error,
 ) ([]execinfrapb.RestoreSpanEntry, hlc.Timestamp, error) {
 	// Put the covering for the already-completed spans into the
@@ -282,7 +283,7 @@ rangeLoop:
 func WriteDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
-	user string,
+	user security.SQLUsername,
 	descsCol *descs.Collection,
 	databases []catalog.DatabaseDescriptor,
 	schemas []catalog.SchemaDescriptor,
@@ -293,7 +294,7 @@ func WriteDescriptors(
 	extra []roachpb.KeyValue,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	err := func() error {
 		b := txn.NewBatch()
 		wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -480,7 +481,7 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 // files.
 func restore(
 	restoreCtx context.Context,
-	phs sql.PlanHookState,
+	execCtx sql.JobExecContext,
 	numClusterNodes int,
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
@@ -491,7 +492,7 @@ func restore(
 	job *jobs.Job,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (RowCount, error) {
-	user := phs.User()
+	user := execCtx.User()
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
@@ -579,7 +580,7 @@ func restore(
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
 	g.GoCtx(func(ctx context.Context) error {
 		ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
-		defer tracing.FinishSpan(progressSpan)
+		defer progressSpan.Finish()
 		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
 
@@ -620,7 +621,7 @@ func restore(
 	// TODO(pbardea): Improve logging in processors.
 	if err := distRestore(
 		restoreCtx,
-		phs,
+		execCtx,
 		importSpanChunks,
 		pkIDs,
 		encryption,
@@ -652,7 +653,7 @@ func restore(
 // be broken down into two methods.
 func loadBackupSQLDescs(
 	ctx context.Context,
-	p sql.PlanHookState,
+	p sql.JobExecContext,
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
 ) ([]BackupManifest, BackupManifest, []catalog.Descriptor, error) {
@@ -704,6 +705,9 @@ type restoreResumer struct {
 		// beforePublishingDescriptors is called right before publishing
 		// descriptors, after any data has been restored.
 		beforePublishingDescriptors func() error
+		// afterPublishingDescriptors is called after committing the transaction to
+		// publish new descriptors in the public state.
+		afterPublishingDescriptors func() error
 		// duringSystemTableRestoration is called once for every system table we
 		// restore. It is used to simulate any errors that we may face at this point
 		// of the restore.
@@ -780,28 +784,56 @@ func remapRelevantStatistics(
 func isDatabaseEmpty(
 	ctx context.Context,
 	txn *kv.Txn,
-	dbDesc catalog.DatabaseDescriptor,
+	dbID descpb.ID,
+	allDescs []catalog.Descriptor,
 	ignoredChildren map[descpb.ID]struct{},
 ) (bool, error) {
-	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec)
-	if err != nil {
-		return false, err
-	}
 	for _, desc := range allDescs {
 		if _, ok := ignoredChildren[desc.GetID()]; ok {
 			continue
 		}
-		if desc.GetParentID() == dbDesc.GetID() {
+		if desc.GetParentID() == dbID {
 			return false, nil
 		}
 	}
 	return true, nil
 }
 
+// isSchemaEmpty is like isDatabaseEmpty for schemas: it returns whether the
+// schema is empty, disregarding the contents of ignoredChildren.
+func isSchemaEmpty(
+	ctx context.Context,
+	txn *kv.Txn,
+	schemaID descpb.ID,
+	allDescs []catalog.Descriptor,
+	ignoredChildren map[descpb.ID]struct{},
+) (bool, error) {
+	for _, desc := range allDescs {
+		if _, ok := ignoredChildren[desc.GetID()]; ok {
+			continue
+		}
+		if desc.GetParentSchemaID() == schemaID {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func getTempSystemDBID(details jobspb.RestoreDetails) descpb.ID {
+	tempSystemDBID := keys.MinNonPredefinedUserDescID
+	for id := range details.DescriptorRewrites {
+		if int(id) > tempSystemDBID {
+			tempSystemDBID = int(id)
+		}
+	}
+
+	return descpb.ID(tempSystemDBID)
+}
+
 // createImportingDescriptors create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingDescriptors(
-	ctx context.Context, p sql.PlanHookState, sqlDescs []catalog.Descriptor, r *restoreResumer,
+	ctx context.Context, p sql.JobExecContext, sqlDescs []catalog.Descriptor, r *restoreResumer,
 ) (tables []catalog.TableDescriptor, oldTableIDs []descpb.ID, spans []roachpb.Span, err error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
@@ -837,15 +869,11 @@ func createImportingDescriptors(
 			types = append(types, mut)
 		}
 	}
-	tempSystemDBID := keys.MinNonPredefinedUserDescID
-	for id := range details.DescriptorRewrites {
-		if int(id) > tempSystemDBID {
-			tempSystemDBID = int(id)
-		}
-	}
+
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		databases = append(databases, dbdesc.NewInitial(
-			descpb.ID(tempSystemDBID), restoreTempSystemDB, security.AdminRole))
+		tempSystemDBID := getTempSystemDBID(details)
+		databases = append(databases, dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
+			security.AdminRoleName()))
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
@@ -1067,10 +1095,10 @@ func createImportingDescriptors(
 
 // Resume is part of the jobs.Resumer interface.
 func (r *restoreResumer) Resume(
-	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
-	p := phs.(sql.PlanHookState)
+	p := execCtx.(sql.JobExecContext)
 	r.versionAtLeast20_2 = p.ExecCfg().Settings.Version.IsActive(
 		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
 
@@ -1139,12 +1167,21 @@ func (r *restoreResumer) Resume(
 				return err
 			}
 		}
+		if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
+			if err := fn(); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
 	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
 	if err != nil {
-		return err
+		if !build.IsRelease() {
+			return err
+		}
+		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
+		numClusterNodes = 1
 	}
 
 	for _, tenant := range details.Tenants {
@@ -1192,6 +1229,11 @@ func (r *restoreResumer) Resume(
 			return err
 		}
 	}
+	if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
 
 	r.notifyStatsRefresherOfNewTables()
 
@@ -1199,7 +1241,7 @@ func (r *restoreResumer) Resume(
 	// restores were a special case, but really we should be making only the
 	// temporary system tables public before we restore all the system table data.
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB); err != nil {
+		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, tables); err != nil {
 			return err
 		}
 	}
@@ -1332,14 +1374,19 @@ func (r *restoreResumer) publishDescriptors(
 		}
 		allMutDescs = append(allMutDescs, mutTable)
 		newTables = append(newTables, mutTable.TableDesc())
-		// Convert any mutations that were in progress on the table descriptor
-		// when the backup was taken, and convert them to schema change jobs.
-		newJobs, err := createSchemaChangeJobsFromMutations(ctx,
-			r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, mutTable)
-		if err != nil {
-			return newDescriptorChangeJobs, err
+		// For cluster restores, all the jobs are restored directly from the jobs
+		// table, so there is no need to re-create ongoing schema change jobs,
+		// otherwise we'll create duplicate jobs.
+		if details.DescriptorCoverage != tree.AllDescriptors {
+			// Convert any mutations that were in progress on the table descriptor
+			// when the backup was taken, and convert them to schema change jobs.
+			newJobs, err := createSchemaChangeJobsFromMutations(ctx,
+				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), mutTable)
+			if err != nil {
+				return newDescriptorChangeJobs, err
+			}
+			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
 		}
-		newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
 	}
 	// For all of the newly created types, make type schema change jobs for any
 	// type descriptors that were backed up in the middle of a type schema change.
@@ -1353,8 +1400,8 @@ func (r *restoreResumer) publishDescriptors(
 		}
 		allMutDescs = append(allMutDescs, typ)
 		newTypes = append(newTypes, typ.TypeDesc())
-		if typ.HasPendingSchemaChanges() {
-			typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, typ)
+		if typ.HasPendingSchemaChanges() && details.DescriptorCoverage != tree.AllDescriptors {
+			typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), typ)
 			if err != nil {
 				return newDescriptorChangeJobs, err
 			}
@@ -1433,20 +1480,19 @@ func (r *restoreResumer) publishDescriptors(
 // has been committed from a restore that has failed or been canceled. It does
 // this by adding the table descriptors in DROP state, which causes the schema
 // change stuff to delete the keys in the background.
-func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	telemetry.Count("restore.total.failed")
 	telemetry.CountBucketed("restore.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
 
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	execCfg := phs.(sql.PlanHookState).ExecCfg()
+	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
 	return descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
 		execCfg.DB, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			for _, tenant := range details.Tenants {
-				// TODO(dt): this is a noop since the tenant is already active=false but
-				// that should be fixed in DestroyTenant.
-				if err := sql.DestroyTenant(ctx, execCfg, txn, tenant.ID); err != nil {
+				tenant.State = descpb.TenantInfo_DROP
+				if err := sql.GCTenant(ctx, execCfg, &tenant); err != nil {
 					return err
 				}
 			}
@@ -1535,27 +1581,6 @@ func (r *restoreResumer) dropDescriptors(
 		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
 	}
 
-	// Drop any schema descriptors that this restore created. Also collect the
-	// descriptors so we can update their parent databases later.
-	// TODO (lucy): It's possible for tables and types to be added under the
-	// schema after it becomes public. To account for this, we need to refrain
-	// from dropping the schema if it has children, like we do for databases.
-	dbsWithDeletedSchemas := make(map[descpb.ID][]*descpb.SchemaDescriptor)
-	for i := range details.SchemaDescs {
-		sc := details.SchemaDescs[i]
-		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-			ctx,
-			b,
-			keys.SystemSQLCodec,
-			sc.ParentID,
-			keys.RootNamespaceID,
-			sc.Name,
-			false, /* kvTrace */
-		)
-		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
-		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
-	}
-
 	// Queue a GC job.
 	// Set the drop time as 1 (ns in Unix time), so that the table gets GC'd
 	// immediately.
@@ -1569,7 +1594,7 @@ func (r *restoreResumer) dropDescriptors(
 	}
 	gcJobRecord := jobs.Record{
 		Description:   fmt.Sprintf("GC for %s", r.job.Payload().Description),
-		Username:      r.job.Payload().Username,
+		Username:      r.job.Payload().UsernameProto.Decode(),
 		DescriptorIDs: tablesToGC,
 		Details:       gcDetails,
 		Progress:      jobspb.SchemaChangeGCProgress{},
@@ -1579,11 +1604,9 @@ func (r *restoreResumer) dropDescriptors(
 		return err
 	}
 
-	// Drop the database descriptors that were created at the start of the
-	// restore if they are now empty (i.e. no user created a table in this
-	// database during the restore).
-	var isDBEmpty bool
-	var err error
+	// Drop the database and schema descriptors that were created at the start of
+	// the restore if they are now empty (i.e. no user created a table, etc. in
+	// the database or schema during the restore).
 	ignoredChildDescIDs := make(map[descpb.ID]struct{})
 	for _, table := range details.TableDescs {
 		ignoredChildDescIDs[table.ID] = struct{}{}
@@ -1594,12 +1617,45 @@ func (r *restoreResumer) dropDescriptors(
 	for _, schema := range details.SchemaDescs {
 		ignoredChildDescIDs[schema.ID] = struct{}{}
 	}
+	allDescs, err := descsCol.GetAllDescriptors(ctx, txn, true /* validate */)
+	if err != nil {
+		return err
+	}
 
+	// Delete any schema descriptors that this restore created. Also collect the
+	// descriptors so we can update their parent databases later.
+	dbsWithDeletedSchemas := make(map[descpb.ID][]*descpb.SchemaDescriptor)
+	for _, schemaDesc := range details.SchemaDescs {
+		sc := schemadesc.NewMutableExisting(*schemaDesc)
+		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
+		isSchemaEmpty, err := isSchemaEmpty(ctx, txn, sc.GetID(), allDescs, ignoredChildDescIDs)
+		if err != nil {
+			return errors.Wrapf(err, "checking if schema %s is empty during restore cleanup", sc.GetName())
+		}
+
+		if !isSchemaEmpty {
+			log.Warningf(ctx, "preserving schema %s on restore failure because it contains new child objects", sc.GetName())
+			continue
+		}
+		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
+			ctx,
+			b,
+			keys.SystemSQLCodec,
+			sc.ParentID,
+			keys.RootNamespaceID,
+			sc.Name,
+			false, /* kvTrace */
+		)
+		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
+		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc.SchemaDesc())
+	}
+
+	// Delete the database descriptors.
 	deletedDBs := make(map[descpb.ID]struct{})
 	for _, dbDesc := range details.DatabaseDescs {
 		db := dbdesc.NewExistingMutable(*dbDesc)
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
-		isDBEmpty, err = isDatabaseEmpty(ctx, txn, db, ignoredChildDescIDs)
+		isDBEmpty, err := isDatabaseEmpty(ctx, txn, db.GetID(), allDescs, ignoredChildDescIDs)
 		if err != nil {
 			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", db.GetName())
 		}
@@ -1722,7 +1778,7 @@ func getRestoringPrivileges(
 	ctx context.Context,
 	txn *kv.Txn,
 	desc catalog.Descriptor,
-	user string,
+	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
 ) (*descpb.PrivilegeDescriptor, error) {
@@ -1768,25 +1824,57 @@ func getRestoringPrivileges(
 
 // restoreSystemTables atomically replaces the contents of the system tables
 // with the data from the restored system tables.
-func (r *restoreResumer) restoreSystemTables(ctx context.Context, db *kv.DB) error {
+func (r *restoreResumer) restoreSystemTables(
+	ctx context.Context,
+	db *kv.DB,
+	restoreDetails jobspb.RestoreDetails,
+	tables []catalog.TableDescriptor,
+) error {
+	tempSystemDBID := getTempSystemDBID(restoreDetails)
+
 	executor := r.execCfg.InternalExecutor
 	var err error
-	for _, systemTable := range fullClusterSystemTables {
+
+	// Iterate through all the tables that we're restoring, and if it was restored
+	// to the temporary system DB then copy it's data over to the real system
+	// table.
+	for _, table := range tables {
+		if table.GetParentID() != tempSystemDBID {
+			continue
+		}
+		systemTableName := table.GetName()
+
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
-			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTable)
+			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTableName)
 			// Don't clear the jobs table as to not delete the jobs that are performing
 			// the restore.
-			if systemTable != systemschema.JobsTable.Name {
-				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTable)
+			if systemTableName == systemschema.SettingsTable.Name {
+				// Don't delete the cluster version.
+				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE name <> 'version';", systemTableName)
 				_, err = executor.Exec(ctx, stmtDebugName+"-data-deletion", txn, deleteQuery)
 				if err != nil {
-					return errors.Wrapf(err, "deleting data from system.%s", systemTable)
+					return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+				}
+			} else if systemTableName != systemschema.JobsTable.Name {
+				// Don't clear the jobs table as to not delete the jobs that are
+				// performing the restore.
+				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTableName)
+				_, err = executor.Exec(ctx, stmtDebugName+"-data-deletion", txn, deleteQuery)
+				if err != nil {
+					return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 				}
 			}
-			restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s);", systemTable, restoreTempSystemDB, systemTable)
+
+			restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s);", systemTableName,
+				restoreTempSystemDB, systemTableName)
+			if systemTableName == systemschema.SettingsTable.Name {
+				// Don't overwrite the cluster version.
+				restoreQuery = fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s WHERE name <> 'version');",
+					systemTableName, restoreTempSystemDB, systemTableName)
+			}
 			if _, err := executor.Exec(ctx, stmtDebugName+"-data-insert", txn, restoreQuery); err != nil {
-				return errors.Wrapf(err, "inserting data to system.%s", systemTable)
+				return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 			}
 			return nil
 		}); err != nil {

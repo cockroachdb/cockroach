@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // Options are the options to Download().
@@ -140,9 +141,12 @@ var httpClient = httputil.NewClientWithTimeout(300 * time.Second)
 // Download downloads the binary for the given version, and skips the download
 // if the archive is already present in `destDir`.
 //
+// Do not use this to download the cockroach binary. It won't work for v20.2+
+// releases, which include the geos libraries along with the binary. On
+// roachprod, use `roachprod stage` instead.
+//
 // `version` can be:
 //
-// - a release, e.g. v1.0.5 (makes sense only for downloading `cockroach`)
 // - a SHA from the master branch, e.g. bd828feaa309578142fe7ad2d89ee1b70adbd52d
 // - the string "LATEST" for the most recent SHA from the master branch. Note that
 //   caching is disabled in that case.
@@ -157,7 +161,7 @@ func Download(ctx context.Context, opts Options) (string, error) {
 	destFileName := filepath.Join(opts.Dir, opts.filename())
 
 	if stat, err := os.Stat(destFileName); err != nil {
-		if !os.IsNotExist(err) {
+		if !oserror.IsNotExist(err) {
 			return "", err
 		}
 	} else if stat.Size() > 0 && opts.Version != "LATEST" {
@@ -206,7 +210,7 @@ func Download(ctx context.Context, opts Options) (string, error) {
 		}
 	}
 
-	if stat, err := os.Stat(destFileName); err != nil && !os.IsNotExist(err) {
+	if stat, err := os.Stat(destFileName); err != nil && !oserror.IsNotExist(err) {
 		return "", errors.Wrap(err, "checking downloaded binary")
 	} else if stat.Size() == 0 {
 		return "", errors.Errorf("%s is unexpectedly empty", destFileName)

@@ -189,22 +189,36 @@ var constSubKeyDict = []struct {
 	{"/storeIdent", localStoreIdentSuffix},
 	{"/gossipBootstrap", localStoreGossipSuffix},
 	{"/clusterVersion", localStoreClusterVersionSuffix},
+	{"/nodeTombstone", localStoreNodeTombstoneSuffix},
 	{"/suggestedCompaction", localStoreSuggestedCompactionSuffix},
+	{"/cachedSettings", localStoreCachedSettingsSuffix},
 }
 
-func suggestedCompactionKeyPrint(key roachpb.Key) string {
-	start, end, err := DecodeStoreSuggestedCompactionKey(key)
+func nodeTombstoneKeyPrint(key roachpb.Key) string {
+	nodeID, err := DecodeNodeTombstoneKey(key)
 	if err != nil {
 		return fmt.Sprintf("<invalid: %s>", err)
 	}
-	return fmt.Sprintf("{%s-%s}", start, end)
+	return fmt.Sprint("n", nodeID)
+}
+
+func cachedSettingsKeyPrint(key roachpb.Key) string {
+	settingKey, err := DecodeStoreCachedSettingsKey(key)
+	if err != nil {
+		return fmt.Sprintf("<invalid: %s>", err)
+	}
+	return settingKey.String()
 }
 
 func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 	for _, v := range constSubKeyDict {
 		if bytes.HasPrefix(key, v.key) {
-			if v.key.Equal(localStoreSuggestedCompactionSuffix) {
-				return v.name + "/" + suggestedCompactionKeyPrint(
+			if v.key.Equal(localStoreNodeTombstoneSuffix) {
+				return v.name + "/" + nodeTombstoneKeyPrint(
+					append(roachpb.Key(nil), append(localStorePrefix, key...)...),
+				)
+			} else if v.key.Equal(localStoreCachedSettingsSuffix) {
+				return v.name + "/" + cachedSettingsKeyPrint(
 					append(roachpb.Key(nil), append(localStorePrefix, key...)...),
 				)
 			}
@@ -218,8 +232,13 @@ func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 	for _, s := range constSubKeyDict {
 		if strings.HasPrefix(input, s.name) {
-			if s.key.Equal(localStoreSuggestedCompactionSuffix) {
-				panic(&ErrUglifyUnsupported{errors.New("cannot parse suggested compaction key")})
+			switch {
+			case
+				s.key.Equal(localStoreSuggestedCompactionSuffix),
+				s.key.Equal(localStoreNodeTombstoneSuffix),
+				s.key.Equal(localStoreCachedSettingsSuffix):
+				panic(&ErrUglifyUnsupported{errors.Errorf("cannot parse local store key with suffix %s", s.key)})
+			default:
 			}
 			output = MakeStoreKey(s.key, nil)
 			return

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -40,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func FakePHS(opName, user string) (interface{}, func()) {
+func FakePHS(opName string, user security.SQLUsername) (interface{}, func()) {
 	return nil, func() {}
 }
 
@@ -81,6 +82,7 @@ func TestRegistryCancelation(t *testing.T) {
 		histogramWindowInterval,
 		FakePHS,
 		"",
+		nil, /* knobs */
 	)
 
 	const cancelInterval = time.Nanosecond

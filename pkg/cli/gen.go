@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 )
@@ -55,7 +56,7 @@ func runGenManCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if _, err := os.Stat(manPath); err != nil {
-		if os.IsNotExist(err) {
+		if oserror.IsNotExist(err) {
 			if err := os.MkdirAll(manPath, 0755); err != nil {
 				return err
 			}
@@ -213,7 +214,7 @@ Output the list of cluster settings known to this binary.
 				panic(fmt.Sprintf("unknown setting type %q", setting.Typ()))
 			}
 			var defaultVal string
-			if sm, ok := setting.(*settings.StateMachineSetting); ok {
+			if sm, ok := setting.(*settings.VersionSetting); ok {
 				defaultVal = sm.SettingsListDefault()
 			} else {
 				defaultVal = setting.String(&s.SV)

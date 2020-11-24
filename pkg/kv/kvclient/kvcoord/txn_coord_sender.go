@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -472,7 +471,7 @@ func (tc *TxnCoordSender) Send(
 	if tc.mu.txn.ID == (uuid.UUID{}) {
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
-	if !tracing.IsBlackHoleSpan(sp) {
+	if !sp.IsBlackHole() {
 		sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
 	}
 	ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
@@ -609,7 +608,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		newTxn := roachpb.PrepareTransactionForRetry(
 			ctx, abortedErr, roachpb.NormalUserPriority, tc.clock)
 		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-			abortedErr.Message, tc.mu.txn.ID, newTxn))
+			abortedErr.String(), tc.mu.txn.ID, newTxn))
 	case protoStatus != roachpb.PENDING || hbObservedStatus != roachpb.PENDING:
 		// The transaction proto is in an unexpected state.
 		return roachpb.NewErrorf(
@@ -688,7 +687,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 
 	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
 	retErr := roachpb.NewTransactionRetryWithProtoRefreshError(
-		pErr.Message,
+		pErr.String(),
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)
 
@@ -748,7 +747,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 		return nil
 	}
 
-	if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+	if pErr.TransactionRestart() != roachpb.TransactionRestart_NONE {
 		if tc.typ == kv.LeafTxn {
 			// Leaves handle retriable errors differently than roots. The leaf
 			// transaction is not supposed to be used any more after a retriable
@@ -783,7 +782,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 	// rollback), but some errors are safe to allow continuing (in particular
 	// ConditionFailedError). In particular, SQL can recover by rolling back to a
 	// savepoint.
-	if roachpb.ErrPriority(pErr.GetDetail()) != roachpb.ErrorScoreUnambiguousError {
+	if roachpb.ErrPriority(pErr.GoError()) != roachpb.ErrorScoreUnambiguousError {
 		tc.mu.txnState = txnError
 		tc.mu.storedErr = roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
 			PrevError: pErr.String(),

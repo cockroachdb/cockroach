@@ -264,7 +264,12 @@ func RotateWithPointOrigin(
 		return g, ErrPointOriginEmpty
 	}
 
-	x, y := t.FlatCoords()[0], t.FlatCoords()[1]
+	return RotateWithXY(g, rotRadians, t.FlatCoords()[0], t.FlatCoords()[1])
+}
+
+// RotateWithXY returns a modified Geometry whose coordinates are rotated
+// around the X and Y by a rotRadians.
+func RotateWithXY(g geo.Geometry, rotRadians, x, y float64) (geo.Geometry, error) {
 	cos, sin := math.Cos(rotRadians), math.Sin(rotRadians)
 	return Affine(
 		g,
@@ -275,4 +280,16 @@ func RotateWithPointOrigin(
 			{0, 0, 0, 1},
 		},
 	)
+}
+
+// TransScale returns a modified Geometry whose coordinates are
+// translate by deltaX and deltaY and scale by xFactor and yFactor
+func TransScale(g geo.Geometry, deltaX, deltaY, xFactor, yFactor float64) (geo.Geometry, error) {
+	return Affine(g,
+		AffineMatrix([][]float64{
+			{xFactor, 0, 0, xFactor * deltaX},
+			{0, yFactor, 0, yFactor * deltaY},
+			{0, 0, 1, 0},
+			{0, 0, 0, 1},
+		}))
 }

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -431,7 +431,7 @@ func TestLeaseExpiration(t *testing.T) {
 	defer func() { leaseRefreshInterval = oldLeaseRefreshInterval }()
 
 	exitCalled := make(chan bool)
-	log.SetExitFunc(true /* hideStack */, func(int) { exitCalled <- true })
+	log.SetExitFunc(true /* hideStack */, func(exit.Code) { exitCalled <- true })
 	defer log.ResetExitFunc()
 	// Disable stack traces to make the test output in teamcity less deceiving.
 	defer log.DisableTracebacks()()
@@ -604,7 +604,7 @@ func TestCreateSystemTable(t *testing.T) {
 	var descriptor descpb.Descriptor
 	if err := mt.kvDB.GetProto(ctx, descKey, &descriptor); err != nil {
 		t.Error(err)
-	} else if !proto.Equal(descVal, &descriptor) {
+	} else if !descVal.Equal(&descriptor) {
 		t.Errorf("expected %v for key %q, got %v", descVal, descKey, descriptor)
 	}
 
@@ -897,7 +897,7 @@ CREATE TABLE system.jobs (
 	require.NoError(t, mt.runMigration(ctx, migration))
 	newJobsTableAgain := catalogkv.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
-	require.True(t, proto.Equal(newJobsTable.TableDesc(), newJobsTableAgain.TableDesc()))
+	require.True(t, newJobsTable.TableDesc().Equal(newJobsTableAgain.TableDesc()))
 }
 
 func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable(t *testing.T) {

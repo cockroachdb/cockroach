@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -261,10 +261,11 @@ func checkForcedErr(
 		// We return a NotLeaseHolderError so that the DistSender retries.
 		// NB: we set proposerStoreID to 0 because we don't know who proposed the
 		// Raft command. This is ok, as this is only used for debug information.
-		nlhe := newNotLeaseHolderError(replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc)
-		nlhe.CustomMsg = fmt.Sprintf(
-			"stale proposal: command was proposed under lease #%d but is being applied "+
-				"under lease: %s", raftCmd.ProposerLeaseSequence, replicaState.Lease)
+		nlhe := newNotLeaseHolderError(
+			replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc,
+			fmt.Sprintf(
+				"stale proposal: command was proposed under lease #%d but is being applied "+
+					"under lease: %s", raftCmd.ProposerLeaseSequence, replicaState.Lease))
 		return leaseIndex, proposalNoReevaluation, roachpb.NewError(nlhe)
 	}
 
@@ -551,7 +552,7 @@ func changeRemovesStore(
 	// a new range descriptor. Check first if this is 19.1 or earlier command which
 	// uses DeprecatedChangeType and DeprecatedReplica
 	if change.Desc == nil {
-		return change.DeprecatedChangeType == roachpb.REMOVE_REPLICA && change.DeprecatedReplica.ReplicaID == curReplica.ReplicaID
+		return change.DeprecatedChangeType == roachpb.REMOVE_VOTER && change.DeprecatedReplica.ReplicaID == curReplica.ReplicaID
 	}
 	// In 19.2 and beyond we supply the new range descriptor in the change.
 	// We know we're removed if we do not appear in the new descriptor.
@@ -652,6 +653,15 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// its unlock method in cmd.splitMergeUnlock.
 		rhsRepl.raftMu.AssertHeld()
 
+		// We mark the replica as destroyed so that new commands are not
+		// accepted. This destroy status will be detected after the batch
+		// commits by handleMergeResult() to finish the removal.
+		rhsRepl.mu.Lock()
+		rhsRepl.mu.destroyStatus.Set(
+			roachpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
+			destroyReasonRemoved)
+		rhsRepl.mu.Unlock()
+
 		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
 		// extra safeguard against creating new replicas of the RHS. This isn't
 		// required for correctness, since the merge protocol should guarantee that
@@ -726,11 +736,11 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		!b.r.store.TestingKnobs().DisableEagerReplicaRemoval {
 
 		// We mark the replica as destroyed so that new commands are not
-		// accepted. This destroy status will be detected after the batch commits
-		// by Replica.handleChangeReplicasTrigger() to finish the removal.
+		// accepted. This destroy status will be detected after the batch
+		// commits by handleChangeReplicasResult() to finish the removal.
 		//
-		// NB: we must be holding the raftMu here because we're in the
-		// midst of application.
+		// NB: we must be holding the raftMu here because we're in the midst of
+		// application.
 		b.r.mu.Lock()
 		b.r.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
@@ -1061,7 +1071,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.mu.Unlock()
 			sm.stats.stateAssertions++
 		}
-	} else if res := cmd.replicatedResult(); !res.Equal(kvserverpb.ReplicatedEvalResult{}) {
+	} else if res := cmd.replicatedResult(); !res.IsZero() {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
 	}
 
@@ -1117,7 +1127,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	ctx context.Context, rResult *kvserverpb.ReplicatedEvalResult,
 ) (shouldAssert, isRemoved bool) {
 	// Assert that this replicatedResult implies at least one side-effect.
-	if rResult.Equal(kvserverpb.ReplicatedEvalResult{}) {
+	if rResult.IsZero() {
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
@@ -1147,15 +1157,10 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		rResult.RaftLogDelta = 0
 	}
 
-	if rResult.SuggestedCompactions != nil {
-		sm.r.handleSuggestedCompactionsResult(ctx, rResult.SuggestedCompactions)
-		rResult.SuggestedCompactions = nil
-	}
-
 	// The rest of the actions are "nontrivial" and may have large effects on the
 	// in-memory and on-disk ReplicaStates. If any of these actions are present,
 	// we want to assert that these two states do not diverge.
-	shouldAssert = !rResult.Equal(kvserverpb.ReplicatedEvalResult{})
+	shouldAssert = !rResult.IsZero()
 	if !shouldAssert {
 		return false, false
 	}
@@ -1196,7 +1201,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		rResult.ComputeChecksum = nil
 	}
 
-	if !rResult.Equal(kvserverpb.ReplicatedEvalResult{}) {
+	if !rResult.IsZero() {
 		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, kvserverpb.ReplicatedEvalResult{}))
 	}
 	return true, isRemoved

@@ -77,6 +77,10 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		)
 	}
 
+	if n.SurvivalGoal != tree.SurvivalGoalDefault {
+		return nil, unimplemented.New("create database survive", "implementation pending")
+	}
+
 	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
 	if err != nil {
 		return nil, err
@@ -109,7 +113,7 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 				DatabaseName string
 				Statement    string
 				User         string
-			}{n.n.Name.String(), n.n.String(), params.SessionData().User},
+			}{n.n.Name.String(), n.n.String(), params.p.User().Normalized()},
 		); err != nil {
 			return err
 		}

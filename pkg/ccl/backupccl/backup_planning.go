@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -27,12 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -68,23 +69,6 @@ const (
 	kms
 )
 
-// TODO(pbardea): We should move to a model of having the system tables opt-
-// {in,out} of being included in a full cluster backup. See #43781.
-var fullClusterSystemTables = []string{
-	// System config tables.
-	systemschema.UsersTable.Name,
-	systemschema.ZonesTable.Name,
-	systemschema.SettingsTable.Name,
-	// Rest of system tables.
-	systemschema.LocationsTable.Name,
-	systemschema.RoleMembersTable.Name,
-	systemschema.UITable.Name,
-	systemschema.CommentsTable.Name,
-	systemschema.JobsTable.Name,
-	systemschema.ScheduledJobsTable.Name,
-	// Table statistics are backed up in the backup descriptor for now.
-}
-
 type tableAndIndex struct {
 	tableID descpb.ID
 	indexID descpb.IndexID
@@ -96,6 +80,12 @@ type backupKMSEnv struct {
 }
 
 var _ cloud.KMSEnv = &backupKMSEnv{}
+
+// featureBackupEnabled is used to enable and disable the BACKUP feature.
+var featureBackupEnabled = settings.RegisterPublicBoolSetting(
+	"feature.backup.enabled",
+	"set to true to enable backups, false to disable; default is true",
+	featureflag.FeatureFlagEnabledDefault)
 
 func (p *backupKMSEnv) ClusterSettings() *cluster.Settings {
 	return p.settings
@@ -305,14 +295,16 @@ func resolveOptionsForBackupJobDescription(
 	return newOpts, nil
 }
 
-func backupJobDescription(
-	p sql.PlanHookState,
+// GetRedactedBackupNode returns a copy of the argument `backup`, but with all
+// the secret information redacted.
+func GetRedactedBackupNode(
 	backup *tree.Backup,
 	to []string,
 	incrementalFrom []string,
 	kmsURIs []string,
 	resolvedSubdir string,
-) (string, error) {
+	hasBeenPlanned bool,
+) (*tree.Backup, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
 		Targets: backup.Targets,
@@ -327,14 +319,14 @@ func backupJobDescription(
 	// LATEST, where we are appending an incremental BACKUP.
 	// - For `BACKUP INTO x` this would be the sub-directory we have selected to
 	// write the BACKUP to.
-	if b.Nested {
+	if b.Nested && hasBeenPlanned {
 		b.Subdir = tree.NewDString(resolvedSubdir)
 	}
 
 	for _, t := range to {
 		sanitizedTo, err := cloudimpl.SanitizeExternalStorageURI(t, nil /* extraParams */)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		b.To = append(b.To, tree.NewDString(sanitizedTo))
 	}
@@ -342,16 +334,32 @@ func backupJobDescription(
 	for _, from := range incrementalFrom {
 		sanitizedFrom, err := cloudimpl.SanitizeExternalStorageURI(from, nil /* extraParams */)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		b.IncrementalFrom = append(b.IncrementalFrom, tree.NewDString(sanitizedFrom))
 	}
 
 	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options, kmsURIs)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	b.Options = resolvedOpts
+	return b, nil
+}
+
+func backupJobDescription(
+	p sql.PlanHookState,
+	backup *tree.Backup,
+	to []string,
+	incrementalFrom []string,
+	kmsURIs []string,
+	resolvedSubdir string,
+) (string, error) {
+	b, err := GetRedactedBackupNode(backup, to, incrementalFrom, kmsURIs, resolvedSubdir,
+		true /* hasBeenPlanned */)
+	if err != nil {
+		return "", err
+	}
 
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(b, ann), nil
@@ -501,6 +509,13 @@ func backupPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
+	if err := featureflag.CheckEnabled(featureBackupEnabled,
+		&p.ExecCfg().Settings.SV,
+		"BACKUP",
+	); err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	var err error
 	subdirFn := func() (string, error) { return "", nil }
 	if backupStmt.Subdir != nil {
@@ -559,7 +574,7 @@ func backupPlanHook(
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		if !(p.ExtendedEvalContext().TxnImplicit || backupStmt.Options.Detached) {
 			return errors.Errorf("BACKUP cannot be used inside a transaction without DETACHED option")
@@ -590,7 +605,7 @@ func backupPlanHook(
 			return err
 		}
 		if len(to) > 1 {
-			if err := requireEnterprise("partitoned destinations"); err != nil {
+			if err := requireEnterprise("partitioned destinations"); err != nil {
 				return err
 			}
 		}
@@ -824,7 +839,7 @@ func backupPlanHook(
 				keys.MinKey,
 				p.User(),
 				func(span covering.Range, start, end hlc.Timestamp) error {
-					if (start == hlc.Timestamp{}) {
+					if start.IsEmpty() {
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
 						return nil
 					}

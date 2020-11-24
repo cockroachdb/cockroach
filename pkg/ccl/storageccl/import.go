@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -142,7 +141,9 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	}
 	defer cArgs.EvalCtx.GetLimiters().ConcurrentImportRequests.Finish()
 
-	var iters []storage.SimpleIterator
+	// The sstables only contain MVCC data and no intents, so using an MVCC
+	// iterator is sufficient.
+	var iters []storage.SimpleMVCCIterator
 	for _, file := range args.Files {
 		log.VEventf(ctx, 2, "import file %s %s", file.Path, args.Key)
 
@@ -218,7 +219,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 			break
 		}
 
-		if args.EndTime != (hlc.Timestamp{}) {
+		if !args.EndTime.IsEmpty() {
 			// TODO(dan): If we have to skip past a lot of versions to find the
 			// latest one before args.EndTime, then this could be slow.
 			if args.EndTime.Less(iter.UnsafeKey().Timestamp) {

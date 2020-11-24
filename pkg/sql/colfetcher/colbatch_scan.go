@@ -12,10 +12,12 @@ package colfetcher
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -61,6 +63,7 @@ type ColBatchScan struct {
 }
 
 var _ execinfra.IOReader = &ColBatchScan{}
+var _ execinfra.Releasable = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
 func (s *ColBatchScan) Init() {
@@ -126,11 +129,18 @@ func (s *ColBatchScan) GetRowsRead() int64 {
 	return s.rowsRead
 }
 
+var colBatchScanPool = sync.Pool{
+	New: func() interface{} {
+		return &ColBatchScan{}
+	},
+}
+
 // NewColBatchScan creates a new ColBatchScan operator.
 func NewColBatchScan(
 	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
+	evalCtx *tree.EvalContext,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (*ColBatchScan, error) {
@@ -138,13 +148,17 @@ func NewColBatchScan(
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
 		return nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
+	if spec.IsCheck {
+		// cFetchers don't support these checks.
+		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
+	}
 
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
 
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	// TODO(ajwerner): The need to construct an Immutable here
 	// indicates that we're probably doing this wrong. Instead we should be
-	// just seting the ID and Version in the spec or something like that and
+	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated Immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
 	typs := table.ColumnTypesWithMutations(returnMutations)
@@ -157,62 +171,51 @@ func NewColBatchScan(
 	}
 	for i := range sysColDescs {
 		typs = append(typs, sysColDescs[i].Type)
-		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+		columnIdxMap.Set(sysColDescs[i].ID, columnIdxMap.Len())
 	}
 
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := flowCtx.NewEvalCtx()
 	// Before we can safely use types from the table descriptor, we need to
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
 	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
 	semaCtx.TypeResolver = resolver
-	if err := resolver.HydrateTypeSlice(evalCtx.Context, typs); err != nil {
-		return nil, err
-	}
-	helper := execinfra.ProcOutputHelper{}
-	if err := helper.Init(
-		post,
-		typs,
-		&semaCtx,
-		evalCtx,
-		nil, /* output */
-	); err != nil {
+	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
 		return nil, err
 	}
 
-	neededColumns := helper.NeededColumns()
-
-	fetcher := cFetcher{}
-	if spec.IsCheck {
-		// cFetchers don't support these checks.
-		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
+	var neededColumns util.FastIntSet
+	for i := range spec.NeededColumns {
+		neededColumns.Add(int(spec.NeededColumns[i]))
 	}
+
+	fetcher := cFetcherPool.Get().(*cFetcher)
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, &fetcher, table, int(spec.IndexIdx), columnIdxMap,
+		flowCtx.Codec(), allocator, fetcher, table, int(spec.IndexIdx), columnIdxMap,
 		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
 		sysColDescs,
 	); err != nil {
 		return nil, err
 	}
 
-	nSpans := len(spec.Spans)
-	spans := make(roachpb.Spans, nSpans)
-	for i := range spans {
-		spans[i] = spec.Spans[i].Span
+	s := colBatchScanPool.Get().(*ColBatchScan)
+	spans := s.spans[:0]
+	for i := range spec.Spans {
+		spans = append(spans, spec.Spans[i].Span)
 	}
-	return &ColBatchScan{
+	*s = ColBatchScan{
 		ctx:       ctx,
 		spans:     spans,
 		flowCtx:   flowCtx,
-		rf:        &fetcher,
+		rf:        fetcher,
 		limitHint: limitHint,
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
 		parallelize: spec.Parallelize && limitHint == 0,
 		ResultTypes: typs,
-	}, nil
+	}
+	return s, nil
 }
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
@@ -222,7 +225,7 @@ func initCRowFetcher(
 	fetcher *cFetcher,
 	desc *tabledesc.Immutable,
 	indexIdx int,
-	colIdxMap map[descpb.ColumnID]int,
+	colIdxMap catalog.TableColMap,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	scanVisibility execinfrapb.ScanVisibility,
@@ -257,4 +260,13 @@ func initCRowFetcher(
 	}
 
 	return index, isSecondaryIndex, nil
+}
+
+// Release implements the execinfra.Releasable interface.
+func (s *ColBatchScan) Release() {
+	s.rf.Release()
+	*s = ColBatchScan{
+		spans: s.spans[:0],
+	}
+	colBatchScanPool.Put(s)
 }

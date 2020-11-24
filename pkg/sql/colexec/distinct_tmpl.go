@@ -22,13 +22,26 @@ package colexec
 import (
 	"context"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
+)
+
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ apd.Context
+	_ coldataext.Datum
+	_ duration.Duration
+	_ tree.AggType
 )
 
 // OrderedDistinctColsToOperators is a utility function that given an input and
@@ -169,22 +182,23 @@ func newPartitioner(t *types.T) (partitioner, error) {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinct_TYPEOp struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal _GOTYPE
+
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
 
-	// outputCol is the boolean output column. It is shared by all of the
-	// other distinct operators in a distinct operator set.
-	outputCol []bool
-
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
-	// lastVal is the last value seen by the operator, so that the distincting
-	// still works across batch boundaries.
-	lastVal     _GOTYPE
 	lastValNull bool
 }
 

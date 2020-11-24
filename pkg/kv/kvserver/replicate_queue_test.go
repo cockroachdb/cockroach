@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/tracker"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 func TestReplicateQueueRebalance(t *testing.T) {
@@ -225,7 +225,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 	})
 
 	infos, err := filterRangeLog(
-		tc.Conns[0], kvserverpb.RangeLogEventType_add, kvserverpb.ReasonRangeUnderReplicated,
+		tc.Conns[0], kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -286,7 +286,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	})
 
 	infos, err := filterRangeLog(
-		tc.Conns[0], kvserverpb.RangeLogEventType_remove, kvserverpb.ReasonRangeOverReplicated,
+		tc.Conns[0], kvserverpb.RangeLogEventType_remove_voter, kvserverpb.ReasonRangeOverReplicated,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -358,7 +358,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, 38565)
-	skip.UnderRace(t, 38565)
+	skip.UnderRaceWithIssue(t, 38565)
 	skip.UnderShort(t, 38565)
 	ctx := context.Background()
 

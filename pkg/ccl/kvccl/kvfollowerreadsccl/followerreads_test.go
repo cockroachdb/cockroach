@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -228,9 +227,9 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 							},
 						},
 						SQLExecutor: &sql.ExecutorTestingKnobs{
-							WithStatementTrace: func(sp opentracing.Span, stmt string) {
+							WithStatementTrace: func(trace tracing.Recording, stmt string) {
 								if stmt == historicalQuery {
-									recCh <- tracing.GetRecording(sp)
+									recCh <- trace
 								}
 							},
 						},

@@ -123,7 +123,7 @@ func (p *planner) processSerialInColumnDef(
 	// the cache does not work (well) if the txn retries and the
 	// descriptor was written already in an early txn attempt.
 	un := seqName.ToUnresolvedObjectName()
-	dbDesc, prefix, err := p.ResolveTargetObject(ctx, un)
+	dbDesc, _, prefix, err := p.ResolveTargetObject(ctx, un)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

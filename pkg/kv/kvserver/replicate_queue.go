@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 const (
@@ -59,6 +59,7 @@ var minLeaseTransferInterval = settings.RegisterNonNegativeDurationSetting(
 	1*time.Second,
 )
 
+// TODO(aayush): Expand this metric set to include metrics about non-voting replicas.
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
@@ -200,7 +201,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 		})
 	}
 	if nl := store.cfg.NodeLiveness; nl != nil { // node liveness is nil for some unittests
-		nl.RegisterCallback(func(_ kvserverpb.Liveness) {
+		nl.RegisterCallback(func(_ livenesspb.Liveness) {
 			updateFn()
 		})
 	}
@@ -443,11 +444,6 @@ func (rq *replicateQueue) addOrReplace(
 		// a replica.
 		removeIdx = -1
 	}
-	st := rq.store.cfg.Settings
-	if !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicas) {
-		// If we can't swap yet, don't.
-		removeIdx = -1
-	}
 
 	remainingLiveReplicas := liveVoterReplicas
 	if removeIdx >= 0 {
@@ -530,7 +526,7 @@ func (rq *replicateQueue) addOrReplace(
 		}
 	}
 	rq.metrics.AddReplicaCount.Inc(1)
-	ops := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, newReplica)
+	ops := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, newReplica)
 	if removeIdx < 0 {
 		log.VEventf(ctx, 1, "adding replica %+v: %s",
 			newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
@@ -540,7 +536,7 @@ func (rq *replicateQueue) addOrReplace(
 		log.VEventf(ctx, 1, "replacing replica %s with %+v: %s",
 			removeReplica, newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
 		ops = append(ops,
-			roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, roachpb.ReplicationTarget{
+			roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, roachpb.ReplicationTarget{
 				StoreID: removeReplica.StoreID,
 				NodeID:  removeReplica.NodeID,
 			})...)
@@ -709,7 +705,7 @@ func (rq *replicateQueue) remove(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonRangeOverReplicated,
@@ -751,7 +747,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonStoreDecommissioning, "", dryRun,
@@ -783,7 +779,7 @@ func (rq *replicateQueue) removeDead(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonStoreDead,
@@ -818,7 +814,7 @@ func (rq *replicateQueue) removeLearner(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
 		SnapshotRequest_UNKNOWN,
 		kvserverpb.ReasonAbandonedLearner,
@@ -862,8 +858,8 @@ func (rq *replicateQueue) considerRebalance(
 				// atomic replication changes being turned off, the changes
 				// will be executed individually in the order in which they
 				// appear.
-				{Target: addTarget, ChangeType: roachpb.ADD_REPLICA},
-				{Target: removeTarget, ChangeType: roachpb.REMOVE_REPLICA},
+				{Target: addTarget, ChangeType: roachpb.ADD_VOTER},
+				{Target: removeTarget, ChangeType: roachpb.REMOVE_VOTER},
 			}
 
 			if len(existingReplicas) == 1 {

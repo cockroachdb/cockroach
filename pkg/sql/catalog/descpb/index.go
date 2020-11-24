@@ -14,6 +14,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // RunOverAllColumns applies its argument fn to each of the column IDs in desc.
@@ -89,6 +91,9 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	desc.ColumnNames = make([]string, 0, len(elems))
 	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
+		if c.Expr != nil {
+			return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+		}
 		desc.ColumnNames = append(desc.ColumnNames, string(c.Column))
 		switch c.Direction {
 		case tree.Ascending, tree.DefaultDirection:
@@ -156,17 +161,37 @@ func (desc *IndexDescriptor) ColNamesString() string {
 // IsValidOriginIndex returns whether the index can serve as an origin index for a foreign
 // key constraint with the provided set of originColIDs.
 func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
-	return ColumnIDs(desc.ColumnIDs).HasPrefix(originColIDs)
+	return !desc.IsPartial() && ColumnIDs(desc.ColumnIDs).HasPrefix(originColIDs)
 }
 
 // IsValidReferencedIndex returns whether the index can serve as a referenced index for a foreign
 // key constraint with the provided set of referencedColumnIDs.
 func (desc *IndexDescriptor) IsValidReferencedIndex(referencedColIDs ColumnIDs) bool {
-	return desc.Unique && ColumnIDs(desc.ColumnIDs).Equals(referencedColIDs)
+	return desc.Unique && !desc.IsPartial() && ColumnIDs(desc.ColumnIDs).Equals(referencedColIDs)
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
 // format (data encoded the same way as if they were in an implicit column).
 func (desc *IndexDescriptor) HasOldStoredColumns() bool {
 	return len(desc.ExtraColumnIDs) > 0 && len(desc.StoreColumnIDs) < len(desc.StoreColumnNames)
+}
+
+// InvertedColumnID returns the ColumnID of the inverted column of the inverted
+// index. This is always the last column in ColumnIDs. Panics if the index is
+// not inverted.
+func (desc *IndexDescriptor) InvertedColumnID() ColumnID {
+	if desc.Type != IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	return desc.ColumnIDs[len(desc.ColumnIDs)-1]
+}
+
+// InvertedColumnName returns the name of the inverted column of the inverted
+// index. This is always the last column in ColumnNames. Panics if the index is
+// not inverted.
+func (desc *IndexDescriptor) InvertedColumnName() string {
+	if desc.Type != IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	return desc.ColumnNames[len(desc.ColumnNames)-1]
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 const (
@@ -166,7 +167,7 @@ func createCACertAndKey(
 
 	var key crypto.PrivateKey
 	if _, err := os.Stat(caKeyPath); err != nil {
-		if !os.IsNotExist(err) {
+		if !oserror.IsNotExist(err) {
 			return errors.Errorf("could not stat CA key file %s: %v", caKeyPath, err)
 		}
 
@@ -235,7 +236,7 @@ func createCACertAndKey(
 		}
 		log.Infof(context.Background(), "found %d certificates in %s",
 			len(existingCertificates), certPath)
-	} else if !os.IsNotExist(err) {
+	} else if !oserror.IsNotExist(err) {
 		return errors.Errorf("could not stat CA cert file %s: %v", certPath, err)
 	}
 
@@ -289,7 +290,10 @@ func CreateNodePair(
 
 	// Allow control of the principal to place in the cert via an env var. This
 	// is intended for testing purposes only.
-	nodeUser := envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser)
+	nodeUser, _ := MakeSQLUsernameFromUserInput(
+		envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser),
+		UsernameValidation)
+
 	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
 		nodeKey.Public(), lifetime, nodeUser, hosts)
 	if err != nil {
@@ -376,7 +380,7 @@ func CreateClientPair(
 	keySize int,
 	lifetime time.Duration,
 	overwrite bool,
-	user string,
+	user SQLUsername,
 	wantPKCS8Key bool,
 ) error {
 	if len(caKeyPath) == 0 {

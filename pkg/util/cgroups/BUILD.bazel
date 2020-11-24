@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cgroups",
+    srcs = ["cgroups.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/cgroups",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
+)
+
+go_test(
+    name = "cgroups_test",
+    srcs = ["cgroups_test.go"],
+    embed = [":cgroups"],
+    deps = [
+        "//pkg/testutils",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

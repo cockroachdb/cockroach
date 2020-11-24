@@ -12,10 +12,7 @@
 
 package colexec
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/col/coldata"
 
 // execgen:template<useSel>
 func collectProbeOuter(
@@ -30,21 +27,22 @@ func collectProbeOuter(
 		currentID := hj.ht.probeScratch.headID[i]
 
 		for {
-			if nResults >= coldata.BatchSize() {
+			if nResults == len(hj.probeState.buildIdx) {
 				hj.probeState.prevBatch = batch
 				hj.probeState.prevBatchResumeIdx = i
 				return nResults
 			}
 
-			hj.probeState.probeRowUnmatched[nResults] = currentID == 0
-			if currentID > 0 {
-				hj.probeState.buildIdx[nResults] = int(currentID - 1)
-			} else {
-				// If currentID == 0, then probeRowUnmatched will have been set - and
-				// we set the corresponding buildIdx to zero so that (as long as the
-				// build hash table has at least one row) we can copy the values vector
-				// without paying attention to probeRowUnmatched.
+			rowUnmatched := currentID == 0
+			hj.probeState.probeRowUnmatched[nResults] = rowUnmatched
+			if rowUnmatched {
+				// The row is unmatched, and we set the corresponding buildIdx
+				// to zero so that (as long as the build hash table has at least
+				// one row) we can copy the values vector without paying
+				// attention to probeRowUnmatched.
 				hj.probeState.buildIdx[nResults] = 0
+			} else {
+				hj.probeState.buildIdx[nResults] = int(currentID - 1)
 			}
 			hj.probeState.probeIdx[nResults] = getIdx(i, sel, useSel)
 			currentID = hj.ht.same[currentID]
@@ -71,7 +69,7 @@ func collectProbeNoOuter(
 	for i := hj.probeState.prevBatchResumeIdx; i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 		for currentID != 0 {
-			if nResults >= coldata.BatchSize() {
+			if nResults == len(hj.probeState.buildIdx) {
 				hj.probeState.prevBatch = batch
 				hj.probeState.prevBatchResumeIdx = i
 				return nResults
@@ -91,7 +89,7 @@ func collectProbeNoOuter(
 // "Matches" are in quotes because we're actually interested in non-matches
 // from the left side.
 // execgen:template<useSel>
-func collectAnti(
+func collectLeftAnti(
 	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int, useSel bool,
 ) int {
 	// Early bounds checks.
@@ -111,6 +109,22 @@ func collectAnti(
 	return nResults
 }
 
+// collectRightSemiAnti processes all matches for right semi/anti joins. Note
+// that during the probing phase we do not emit any output for these joins and
+// are simply tracking whether build rows had a match. The output will be
+// populated when in hjEmittingRight state.
+func collectRightSemiAnti(hj *hashJoiner, batchSize int) {
+	// Early bounds checks.
+	_ = hj.ht.probeScratch.headID[batchSize-1]
+	for i := int(0); i < batchSize; i++ {
+		currentID := hj.ht.probeScratch.headID[i]
+		for currentID != 0 {
+			hj.probeState.buildRowMatched[currentID-1] = true
+			currentID = hj.ht.same[currentID]
+		}
+	}
+}
+
 // execgen:template<useSel>
 func distinctCollectProbeOuter(hj *hashJoiner, batchSize int, sel []int, useSel bool) {
 	// Early bounds checks.
@@ -126,7 +140,13 @@ func distinctCollectProbeOuter(hj *hashJoiner, batchSize int, sel []int, useSel 
 		id := hj.ht.probeScratch.groupID[i]
 		rowUnmatched := id == 0
 		hj.probeState.probeRowUnmatched[i] = rowUnmatched
-		if !rowUnmatched {
+		if rowUnmatched {
+			// The row is unmatched, and we set the corresponding buildIdx
+			// to zero so that (as long as the build hash table has at least
+			// one row) we can copy the values vector without paying
+			// attention to probeRowUnmatched.
+			hj.probeState.buildIdx[i] = 0
+		} else {
 			hj.probeState.buildIdx[i] = int(id - 1)
 		}
 		hj.probeState.probeIdx[i] = getIdx(i, sel, useSel)
@@ -161,7 +181,12 @@ func distinctCollectProbeNoOuter(
 func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := int(0)
 
-	if hj.spec.left.outer {
+	if hj.spec.joinType.IsRightSemiOrRightAnti() {
+		collectRightSemiAnti(hj, batchSize)
+		return 0
+	}
+
+	if hj.spec.joinType.IsLeftOuterOrFullOuter() {
 		if sel != nil {
 			nResults = collectProbeOuter(hj, batchSize, nResults, batch, sel, true)
 		} else {
@@ -169,17 +194,15 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 		}
 	} else {
 		if sel != nil {
-			switch hj.spec.joinType {
-			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
-				nResults = collectAnti(hj, batchSize, nResults, batch, sel, true)
-			default:
+			if hj.spec.joinType.IsLeftAntiOrExceptAll() {
+				nResults = collectLeftAnti(hj, batchSize, nResults, batch, sel, true)
+			} else {
 				nResults = collectProbeNoOuter(hj, batchSize, nResults, batch, sel, true)
 			}
 		} else {
-			switch hj.spec.joinType {
-			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
-				nResults = collectAnti(hj, batchSize, nResults, batch, sel, false)
-			default:
+			if hj.spec.joinType.IsLeftAntiOrExceptAll() {
+				nResults = collectLeftAnti(hj, batchSize, nResults, batch, sel, false)
+			} else {
 				nResults = collectProbeNoOuter(hj, batchSize, nResults, batch, sel, false)
 			}
 		}
@@ -194,7 +217,12 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := int(0)
 
-	if hj.spec.left.outer {
+	if hj.spec.joinType.IsRightSemiOrRightAnti() {
+		collectRightSemiAnti(hj, batchSize)
+		return 0
+	}
+
+	if hj.spec.joinType.IsLeftOuterOrFullOuter() {
 		nResults = batchSize
 
 		if sel != nil {
@@ -204,23 +232,21 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 		}
 	} else {
 		if sel != nil {
-			switch hj.spec.joinType {
-			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
+			if hj.spec.joinType.IsLeftAntiOrExceptAll() {
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.
-				nResults = collectAnti(hj, batchSize, nResults, batch, sel, true)
-			default:
+				nResults = collectLeftAnti(hj, batchSize, nResults, batch, sel, true)
+			} else {
 				nResults = distinctCollectProbeNoOuter(hj, batchSize, nResults, sel, true)
 			}
 		} else {
-			switch hj.spec.joinType {
-			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
+			if hj.spec.joinType.IsLeftAntiOrExceptAll() {
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.
-				nResults = collectAnti(hj, batchSize, nResults, batch, sel, false)
-			default:
+				nResults = collectLeftAnti(hj, batchSize, nResults, batch, sel, false)
+			} else {
 				nResults = distinctCollectProbeNoOuter(hj, batchSize, nResults, sel, false)
 			}
 		}

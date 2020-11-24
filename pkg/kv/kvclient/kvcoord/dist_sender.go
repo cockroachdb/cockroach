@@ -135,7 +135,7 @@ var CanSendToFollower = func(
 
 const (
 	// The default limit for asynchronous senders.
-	defaultSenderConcurrency = 500
+	defaultSenderConcurrency = 1024
 	// The maximum number of range descriptors to prefetch during range lookups.
 	rangeLookupPrefetchCount = 8
 	// The maximum number of times a replica is retried when it repeatedly returns
@@ -152,7 +152,7 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 var senderConcurrencyLimit = settings.RegisterNonNegativeIntSetting(
 	"kv.dist_sender.concurrency_limit",
 	"maximum number of asynchronous send requests",
-	max(defaultSenderConcurrency, int64(32*runtime.NumCPU())),
+	max(defaultSenderConcurrency, int64(64*runtime.NumCPU())),
 )
 
 func max(a, b int64) int64 {
@@ -574,7 +574,7 @@ func (ds *DistSender) initAndVerifyBatch(
 
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
-	if ba.ReadConsistency != roachpb.CONSISTENT && ba.Timestamp == (hlc.Timestamp{}) {
+	if ba.ReadConsistency != roachpb.CONSISTENT && ba.Timestamp.IsEmpty() {
 		ba.Timestamp = ds.clock.Now()
 	}
 
@@ -1499,7 +1499,7 @@ func (ds *DistSender) sendPartialBatch(
 			{
 				var s redact.StringBuilder
 				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
-				log.Warningf(ctx, "slow range RPC: %v", s)
+				log.Warningf(ctx, "slow range RPC: %v", &s)
 			}
 			// If the RPC wasn't successful, defer the logging of a message once the
 			// RPC is not retried any more.
@@ -1509,7 +1509,7 @@ func (ds *DistSender) sendPartialBatch(
 					ds.metrics.SlowRPCs.Dec(1)
 					var s redact.StringBuilder
 					slowRangeRPCReturnWarningStr(&s, timeutil.Since(tBegin), attempts)
-					log.Warningf(ctx, "slow RPC response: %v", s)
+					log.Warningf(ctx, "slow RPC response: %v", &s)
 				}(tBegin, attempts)
 			}
 			tBegin = time.Time{} // prevent reentering branch for this RPC
@@ -1954,24 +1954,29 @@ func (ds *DistSender) sendToReplicas(
 			// If the reply contains a timestamp, update the local HLC with it.
 			if br.Error != nil {
 				log.VErrEventf(ctx, 2, "%v", br.Error)
-				if br.Error.Now != (hlc.Timestamp{}) {
+				if !br.Error.Now.IsEmpty() {
 					ds.clock.Update(br.Error.Now)
 				}
-			} else if br.Now != (hlc.Timestamp{}) {
+			} else if !br.Now.IsEmpty() {
 				ds.clock.Update(br.Now)
+			}
+
+			if br.Error == nil {
+				// If the server gave us updated range info, lets update our cache with it.
+				//
+				// TODO(andreimatei): shouldn't we do this unconditionally? Our cache knows how
+				// to disregard stale information.
+				if len(br.RangeInfos) > 0 {
+					log.VEventf(ctx, 2, "received updated range info: %s", br.RangeInfos)
+					routing.EvictAndReplace(ctx, br.RangeInfos...)
+				}
+				return br, nil
 			}
 
 			// TODO(andrei): There are errors below that cause us to move to a
 			// different replica without updating our caches. This means that future
 			// requests will attempt the same useless replicas.
 			switch tErr := br.Error.GetDetail().(type) {
-			case nil:
-				// If the server gave us updated range info, lets update our cache with it.
-				if len(br.RangeInfos) > 0 {
-					log.VEventf(ctx, 2, "received updated range info: %s", br.RangeInfos)
-					routing.EvictAndReplace(ctx, br.RangeInfos...)
-				}
-				return br, nil
 			case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
 				// These errors are likely to be unique to the replica that reported
 				// them, so no action is required before the next retry.
@@ -2064,7 +2069,11 @@ func (ds *DistSender) maybeIncrementErrCounters(br *roachpb.BatchResponse, err e
 	if err != nil {
 		ds.metrics.ErrCounts[roachpb.CommunicationErrType].Inc(1)
 	} else {
-		ds.metrics.ErrCounts[br.Error.GetDetail().Type()].Inc(1)
+		typ := roachpb.InternalErrType
+		if detail := br.Error.GetDetail(); detail != nil {
+			typ = detail.Type()
+		}
+		ds.metrics.ErrCounts[typ].Inc(1)
 	}
 }
 

@@ -970,7 +970,7 @@ func (g *newRuleGen) genCustomFunc(customFunc *lang.CustomFuncExpr) {
 		// Handle Root function.
 		if g.normalize {
 			// The root expression can only be accessed during exploration.
-			panic(fmt.Sprint("the root expression can only be accessed during exploration"))
+			panic("the root expression can only be accessed during exploration")
 		}
 		g.w.write("_root")
 	} else {

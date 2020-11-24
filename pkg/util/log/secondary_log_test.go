@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -34,7 +35,7 @@ func TestSecondaryLog(t *testing.T) {
 	defer cancel()
 
 	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
+	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 	defer l.Close()
 
 	// Interleave some messages.
@@ -48,7 +49,7 @@ func TestSecondaryLog(t *testing.T) {
 
 	// Check that the messages indeed made it to different files.
 
-	contents, err := ioutil.ReadFile(mainLog.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(debugLog.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,10 +57,10 @@ func TestSecondaryLog(t *testing.T) {
 		t.Errorf("log does not contain error text\n%s", contents)
 	}
 	if strings.Contains(string(contents), "world") {
-		t.Errorf("secondary log spilled into primary\n%s", contents)
+		t.Errorf("secondary log spilled into debug log\n%s", contents)
 	}
 
-	contents, err = ioutil.ReadFile(l.logger.mu.file.(*syncBuffer).file.Name())
+	contents, err = ioutil.ReadFile(l.logger.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +80,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	mainLog.stderrThreshold = Severity_NONE
+	logging.stderrSink.threshold = severity.NONE
 
 	// Take over stderr.
 	TestingResetActive()
@@ -92,7 +93,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	// Now create a secondary logger in the same directory.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
+	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 	defer l.Close()
 
 	// Log something on the secondary logger.
@@ -103,7 +104,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	fmt.Fprint(os.Stderr, stderrText)
 
 	// Check the stderr log file: we want our stderr text there.
-	contents, err := ioutil.ReadFile(stderrLog.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(stderrLog.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +113,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	}
 
 	// Check the secondary log file: we don't want our stderr text there.
-	contents2, err := ioutil.ReadFile(l.logger.mu.file.(*syncBuffer).file.Name())
+	contents2, err := ioutil.ReadFile(l.logger.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +131,7 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 	defer cancel()
 
 	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
+	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 	defer l.Close()
 
 	// Emit some logging and ensure the files gets created.
@@ -142,7 +143,7 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 		t.Fatalf("error in ListLogFiles: %v", err)
 	}
 
-	expectedName := filepath.Base(l.logger.mu.file.(*syncBuffer).file.Name())
+	expectedName := filepath.Base(l.logger.getFileSink().mu.file.(*syncBuffer).file.Name())
 	foundExpected := false
 	for i := range results {
 		if results[i].Name == expectedName {

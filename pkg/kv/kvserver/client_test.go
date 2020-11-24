@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -52,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -64,9 +64,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 	"google.golang.org/grpc"
 )
 
@@ -305,7 +306,7 @@ type multiTestContext struct {
 	stores         []*kvserver.Store
 	stoppers       []*stop.Stopper
 	idents         []roachpb.StoreIdent
-	nodeLivenesses []*kvserver.NodeLiveness
+	nodeLivenesses []*liveness.NodeLiveness
 }
 
 func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
@@ -349,7 +350,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	m.idents = make([]roachpb.StoreIdent, numStores)
 	m.grpcServers = make([]*grpc.Server, numStores)
 	m.gossips = make([]*gossip.Gossip, numStores)
-	m.nodeLivenesses = make([]*kvserver.NodeLiveness, numStores)
+	m.nodeLivenesses = make([]*liveness.NodeLiveness, numStores)
 
 	if m.storeConfig != nil && m.storeConfig.Clock != nil {
 		require.Nil(t, m.manualClock, "can't use manual clock; storeConfig.Clock is set")
@@ -592,9 +593,7 @@ func (t *multiTestContextKVTransport) SendNext(
 	// the multi test context, so we can derive the index for stoppers
 	// and senders by subtracting 1 from the node ID.
 	nodeIndex := int(rep.NodeID) - 1
-	if log.V(1) {
-		log.Infof(ctx, "SendNext nodeIndex=%d", nodeIndex)
-	}
+	log.VEventf(ctx, 2, "SendNext nodeIndex=%d", nodeIndex)
 
 	// This method crosses store boundaries: it is possible that the
 	// destination store is stopped while the source is still running.
@@ -618,7 +617,14 @@ func (t *multiTestContextKVTransport) SendNext(
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
 	if err := s.RunTask(ctx, "mtc send", func(ctx context.Context) {
-		br, pErr = sender.Send(ctx, ba)
+		// Clear the caller's tags to simulate going to a different node. Otherwise
+		// logs get tags from both the sender node and the receiver node,
+		// confusingly.
+		// TODO(andrei): Don't clear the tags if the RPC is going to the same node
+		// as the sender. We'd have to tell the multiTestContextKVTransport who the
+		// sender is.
+		callCtx := logtags.WithTags(ctx, nil /* tags */)
+		br, pErr = sender.Send(callCtx, ba)
 	}); err != nil {
 		pErr = roachpb.NewError(err)
 	}
@@ -830,7 +836,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 }
 
 func (m *multiTestContext) populateStorePool(
-	idx int, cfg kvserver.StoreConfig, nodeLiveness *kvserver.NodeLiveness,
+	idx int, cfg kvserver.StoreConfig, nodeLiveness *liveness.NodeLiveness,
 ) {
 	m.storePools[idx] = kvserver.NewStorePool(
 		cfg.AmbientCtx,
@@ -904,12 +910,15 @@ func (m *multiTestContext) addStore(idx int) {
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
+	ambient.AddLogTag("n", nodeID)
+
 	m.populateDB(idx, cfg.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
-	m.nodeLivenesses[idx] = kvserver.NewNodeLiveness(
-		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
-		nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
-	)
+	m.nodeLivenesses[idx] = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
+		AmbientCtx: ambient, Clock: m.clocks[idx], DB: m.dbs[idx], Gossip: m.gossips[idx],
+		LivenessThreshold: nlActive, RenewalDuration: nlRenewal, Settings: cfg.Settings,
+		HistogramWindowInterval: metric.TestSampleInterval,
+	})
 	m.populateStorePool(idx, cfg, m.nodeLivenesses[idx])
 	cfg.DB = m.dbs[idx]
 	cfg.NodeLiveness = m.nodeLivenesses[idx]
@@ -1018,15 +1027,19 @@ func (m *multiTestContext) addStore(idx int) {
 			m.t.Fatal(err)
 		}
 	}
-	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, m.engines[idx:idx+1], func(ctx context.Context) {
-		now := clock.Now()
-		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
-		ran.Do(func() {
-			close(ran.ch)
-		})
-	})
+	m.nodeLivenesses[idx].Start(ctx,
+		liveness.NodeLivenessStartOptions{
+			Stopper: stopper,
+			Engines: m.engines[idx : idx+1],
+			OnSelfLive: func(ctx context.Context) {
+				now := clock.Now()
+				if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
+					log.Warningf(ctx, "%v", err)
+				}
+				ran.Do(func() {
+					close(ran.ch)
+				})
+			}})
 
 	store.WaitForInit()
 
@@ -1095,10 +1108,11 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	cfg := m.makeStoreConfig(i)
 	m.populateDB(i, m.storeConfig.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
-	m.nodeLivenesses[i] = kvserver.NewNodeLiveness(
-		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i],
-		m.gossips[i], nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
-	)
+	m.nodeLivenesses[i] = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
+		AmbientCtx: log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, Clock: m.clocks[i], DB: m.dbs[i],
+		Gossip: m.gossips[i], LivenessThreshold: nlActive, RenewalDuration: nlRenewal, Settings: cfg.Settings,
+		HistogramWindowInterval: metric.TestSampleInterval,
+	})
 	m.populateStorePool(i, cfg, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
@@ -1115,11 +1129,15 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.DefaultClass).Reset()
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.SystemClass).Reset()
 	m.mu.Unlock()
-	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, m.engines[i:i+1], func(ctx context.Context) {
-		now := m.clocks[i].Now()
-		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
+	cfg.NodeLiveness.Start(ctx, liveness.NodeLivenessStartOptions{
+		Stopper: stopper,
+		Engines: m.engines[i : i+1],
+		OnSelfLive: func(ctx context.Context) {
+			now := m.clocks[i].Now()
+			if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
+				log.Warningf(ctx, "%v", err)
+			}
+		},
 	})
 }
 
@@ -1157,24 +1175,6 @@ func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.R
 	return nil // unreached, but the compiler can't tell.
 }
 
-// findMemberStoreLocked finds a non-stopped Store which is a member
-// of the given range.
-func (m *multiTestContext) findMemberStoreLocked(desc roachpb.RangeDescriptor) *kvserver.Store {
-	for _, s := range m.stores {
-		if s == nil {
-			// Store is stopped.
-			continue
-		}
-		for _, r := range desc.InternalReplicas {
-			if s.StoreID() == r.StoreID {
-				return s
-			}
-		}
-	}
-	m.t.Fatalf("couldn't find a live member of %s", &desc)
-	return nil // unreached, but the compiler can't tell.
-}
-
 // restart stops and restarts all stores but leaves the engines intact,
 // so the stores should contain the same persistent storage as before.
 func (m *multiTestContext) restart() {
@@ -1196,9 +1196,9 @@ func (m *multiTestContext) changeReplicas(
 
 	var alreadyDoneErr string
 	switch changeType {
-	case roachpb.ADD_REPLICA:
+	case roachpb.ADD_VOTER:
 		alreadyDoneErr = "unable to add replica .* which is already present"
-	case roachpb.REMOVE_REPLICA:
+	case roachpb.REMOVE_VOTER:
 		alreadyDoneErr = "unable to remove replica .* which is not present"
 	}
 
@@ -1253,7 +1253,8 @@ func (m *multiTestContext) changeReplicas(
 	return desc.NextReplicaID, nil
 }
 
-// replicateRange replicates the given range onto the given stores.
+// replicateRange replicates the given range onto the given destination stores. The destinations
+// are indicated by indexes within m.stores.
 func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int) {
 	m.t.Helper()
 	if err := m.replicateRangeNonFatal(rangeID, dests...); err != nil {
@@ -1270,7 +1271,7 @@ func (m *multiTestContext) replicateRangeNonFatal(rangeID roachpb.RangeID, dests
 	expectedReplicaIDs := make([]roachpb.ReplicaID, len(dests))
 	for i, dest := range dests {
 		var err error
-		expectedReplicaIDs[i], err = m.changeReplicas(startKey, dest, roachpb.ADD_REPLICA)
+		expectedReplicaIDs[i], err = m.changeReplicas(startKey, dest, roachpb.ADD_VOTER)
 		if err != nil {
 			return err
 		}
@@ -1316,7 +1317,7 @@ func (m *multiTestContext) unreplicateRangeNonFatal(rangeID roachpb.RangeID, des
 	startKey := m.findStartKeyLocked(rangeID)
 	m.mu.RUnlock()
 
-	_, err := m.changeReplicas(startKey, dest, roachpb.REMOVE_REPLICA)
+	_, err := m.changeReplicas(startKey, dest, roachpb.REMOVE_VOTER)
 	return err
 }
 
@@ -1361,14 +1362,6 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 // testing.T which may differ from m.t.
 func (m *multiTestContext) waitForValuesT(t testing.TB, key roachpb.Key, expected []int64) {
 	t.Helper()
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
 	testutils.SucceedsSoon(t, func() error {
 		actual := m.readIntFromEngines(key)
 		if !reflect.DeepEqual(expected, actual) {
@@ -1378,9 +1371,9 @@ func (m *multiTestContext) waitForValuesT(t testing.TB, key roachpb.Key, expecte
 	})
 }
 
-// waitForValues waits up to the given duration for the integer values
-// at the given key to match the expected slice (across all engines).
-// Fails the test if they do not match.
+// waitForValues waits for the integer values at the given key to match the
+// expected slice (across all engines). Fails the test if they do not match
+// after the SucceedsSoon period.
 func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 	m.t.Helper()
 	m.waitForValuesT(m.t, key, expected)
@@ -1442,7 +1435,7 @@ func (m *multiTestContext) heartbeatLiveness(ctx context.Context, store int) err
 
 	var err error
 	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
-		if err = nl.Heartbeat(ctx, l); !errors.Is(err, kvserver.ErrEpochIncremented) {
+		if err = nl.Heartbeat(ctx, l); !errors.Is(err, liveness.ErrEpochIncremented) {
 			break
 		}
 	}
@@ -1657,9 +1650,14 @@ func verifyRangeStats(
 func verifyRecomputedStats(
 	reader storage.Reader, d *roachpb.RangeDescriptor, expMS enginepb.MVCCStats, nowNanos int64,
 ) error {
-	if ms, err := rditer.ComputeStatsForRange(d, reader, nowNanos); err != nil {
+	ms, err := rditer.ComputeStatsForRange(d, reader, nowNanos)
+	if err != nil {
 		return err
-	} else if expMS != ms {
+	}
+	// When used with a real wall clock these will not be the same, since it
+	// takes time to load stats.
+	expMS.AgeTo(ms.LastUpdateNanos)
+	if expMS != ms {
 		return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)
 	}
 	return nil

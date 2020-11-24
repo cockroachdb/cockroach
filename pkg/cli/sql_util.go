@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -478,7 +479,7 @@ func (t sqlTxnShim) Rollback(context.Context) error {
 
 func (t sqlTxnShim) Exec(_ context.Context, query string, values ...interface{}) error {
 	if len(values) != 0 {
-		panic(fmt.Sprintf("sqlTxnShim.ExecContext must not be called with values"))
+		panic("sqlTxnShim.ExecContext must not be called with values")
 	}
 	return t.conn.Exec(query, nil)
 }
@@ -968,7 +969,7 @@ func maybeShowTimes(
 		fmt.Fprintln(w)
 	}()
 
-	clientSideQueryTime := queryCompleteTime.Sub(startTime)
+	clientSideQueryLatency := queryCompleteTime.Sub(startTime)
 	// We don't print timings for multi-statement queries as we don't have an
 	// accurate way to measure them currently. See #48180.
 	if isMultiStatementQuery {
@@ -990,18 +991,18 @@ func maybeShowTimes(
 	unit := "s"
 	multiplier := 1.
 	precision := 3
-	if clientSideQueryTime.Seconds() < 1 {
+	if clientSideQueryLatency.Seconds() < 1 {
 		unit = "ms"
 		multiplier = 1000.
 		precision = 0
 	}
 
 	if sqlCtx.verboseTimings {
-		fmt.Fprintf(w, "Time: %s", clientSideQueryTime)
+		fmt.Fprintf(w, "Time: %s", clientSideQueryLatency)
 	} else {
 		// Simplified displays: human users typically can't
 		// distinguish sub-millisecond latencies.
-		fmt.Fprintf(w, "Time: %.*f%s", precision, clientSideQueryTime.Seconds()*multiplier, unit)
+		fmt.Fprintf(w, "Time: %.*f%s", precision, clientSideQueryLatency.Seconds()*multiplier, unit)
 	}
 
 	if !sqlCtx.enableServerExecutionTimings {
@@ -1018,7 +1019,13 @@ func maybeShowTimes(
 
 	fmt.Fprint(stderr, " total")
 
-	networkLat := clientSideQueryTime - serviceLat
+	networkLat := clientSideQueryLatency - serviceLat
+	// serviceLat can be greater than clientSideQueryLatency for some extremely quick
+	// statements (eg. BEGIN). So as to not confuse the user, we attribute all of
+	// the clientSideQueryLatency to the network in such cases.
+	if networkLat.Seconds() < 0 {
+		networkLat = clientSideQueryLatency
+	}
 	otherLat := serviceLat - parseLat - planLat - execLat
 	if sqlCtx.verboseTimings {
 		fmt.Fprintf(w, " (parse %s / plan %s / exec %s / other %s / network %s)\n",
@@ -1148,12 +1155,12 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 		// that we can let the user see and control the result using
 		// `bytea_output`.
 		return lex.EncodeByteArrayToRawBytes(string(t),
-			lex.BytesEncodeEscape, false /* skipHexPrefix */)
+			sessiondatapb.BytesEncodeEscape, false /* skipHexPrefix */)
 
 	case time.Time:
 		// Since we do not know whether the datum is Timestamp or TimestampTZ,
 		// output the full format.
-		return t.Format(tree.TimestampTZOutputFormat)
+		return t.Format(timeutil.FullTimeFormat)
 	}
 
 	return fmt.Sprint(val)

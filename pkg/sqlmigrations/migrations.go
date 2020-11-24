@@ -205,40 +205,23 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v19.1.
-		// TODO(knz): bake this migration into v19.2
-		name:   "create system.comment table",
-		workFn: createCommentTable,
-		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
-		newDescriptorIDs:    staticIDs(keys.CommentsTableID),
+		name: "create system.comment table",
 	},
 	{
-		name:   "create system.replication_constraint_stats table",
-		workFn: createReplicationConstraintStatsTable,
 		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
-		newDescriptorIDs:    staticIDs(keys.ReplicationConstraintStatsTableID),
+		name: "create system.replication_constraint_stats table",
 	},
 	{
-		name:   "create system.replication_critical_localities table",
-		workFn: createReplicationCriticalLocalitiesTable,
 		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
-		newDescriptorIDs:    staticIDs(keys.ReplicationCriticalLocalitiesTableID),
+		name: "create system.replication_critical_localities table",
 	},
 	{
-		name:   "create system.reports_meta table",
-		workFn: createReportsMetaTable,
 		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
-		newDescriptorIDs:    staticIDs(keys.ReportsMetaTableID),
+		name: "create system.reports_meta table",
 	},
 	{
-		name:   "create system.replication_stats table",
-		workFn: createReplicationStatsTable,
 		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
-		newDescriptorIDs:    staticIDs(keys.ReplicationStatsTableID),
+		name: "create system.replication_stats table",
 	},
 	{
 		// Introduced in v19.1.
@@ -254,24 +237,15 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v19.2, baked into v20.1.
-		name:                "change reports fields from timestamp to timestamptz",
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
+		name: "change reports fields from timestamp to timestamptz",
 	},
 	{
-		// Introduced in v20.1.
-		// TODO(ajwerner): Bake this migration into v20.2.
-		name:                "create system.protected_ts_meta table",
-		workFn:              createProtectedTimestampsMetaTable,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionProtectedTimestamps),
-		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsMetaTableID),
+		// Introduced in v20.1, baked into v20.2.
+		name: "create system.protected_ts_meta table",
 	},
 	{
-		// Introduced in v20.1.
-		// TODO(ajwerner): Bake this migration into v20.2.
-		name:                "create system.protected_ts_records table",
-		workFn:              createProtectedTimestampsRecordsTable,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionProtectedTimestamps),
-		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsRecordsTableID),
+		// Introduced in v20.1, baked into v20.2.
+		name: "create system.protected_ts_records table",
 	},
 	{
 		// Introduced in v20.1. Note that this migration
@@ -298,27 +272,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
 	},
 	{
-		// Introduced in v20.1.
-		name:                "create system.role_options table",
-		workFn:              createRoleOptionsTable,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionCreateRolePrivilege),
-		newDescriptorIDs:    staticIDs(keys.RoleOptionsTableID),
+		// Introduced in v20.1, baked into v20.2.
+		name: "create system.role_options table",
 	},
 	{
-		// Introduced in v20.1.
-		// TODO(andrei): Bake this migration into v20.2.
+		// Introduced in v20.1, baked into v20.2.
 		name: "create statement_diagnostics_requests, statement_diagnostics and " +
 			"system.statement_bundle_chunks tables",
-		workFn:              createStatementInfoSystemTables,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionStatementDiagnosticsSystemTables),
-		newDescriptorIDs: staticIDs(keys.StatementBundleChunksTableID,
-			keys.StatementDiagnosticsRequestsTableID, keys.StatementDiagnosticsTableID),
-	},
-	{
-		// Introduced in v20.1.
-		name:                "remove public permissions on system.comments",
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionSchemaChangeJob),
-		workFn:              depublicizeSystemComments,
 	},
 	{
 		// Introduced in v20.1. Baked into v20.2.
@@ -460,7 +420,7 @@ type runner struct {
 func (r runner) execAsRoot(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
 	_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.RootUser,
+			User: security.RootUserName(),
 		},
 		stmt, qargs...)
 	return err
@@ -872,7 +832,7 @@ func (m *Manager) migrateSystemNamespace(
 			rows, err := r.sqlExecutor.QueryEx(
 				ctx, "read-deprecated-namespace-table", txn,
 				sessiondata.InternalExecutorOverride{
-					User: security.RootUser,
+					User: security.RootUserName(),
 				},
 				q)
 			if err != nil {
@@ -976,45 +936,6 @@ func createSystemTable(ctx context.Context, r runner, desc catalog.TableDescript
 	return err
 }
 
-func createCommentTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, systemschema.CommentsTable)
-}
-
-func createReplicationConstraintStatsTable(ctx context.Context, r runner) error {
-	if err := createSystemTable(ctx, r, systemschema.ReplicationConstraintStatsTable); err != nil {
-		return err
-	}
-	err := r.execAsRoot(ctx, "add-constraints-ttl",
-		fmt.Sprintf(
-			"ALTER TABLE system.replication_constraint_stats CONFIGURE ZONE USING gc.ttlseconds = %d",
-			int(systemschema.ReplicationConstraintStatsTableTTL.Seconds())))
-	return errors.Wrapf(err, "failed to set TTL on %s", systemschema.ReplicationConstraintStatsTable.Name)
-}
-
-func createReplicationCriticalLocalitiesTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, systemschema.ReplicationCriticalLocalitiesTable)
-}
-
-func createReplicationStatsTable(ctx context.Context, r runner) error {
-	if err := createSystemTable(ctx, r, systemschema.ReplicationStatsTable); err != nil {
-		return err
-	}
-	err := r.execAsRoot(ctx, "add-replication-status-ttl",
-		fmt.Sprintf("ALTER TABLE system.replication_stats CONFIGURE ZONE USING gc.ttlseconds = %d",
-			int(systemschema.ReplicationStatsTableTTL.Seconds())))
-	return errors.Wrapf(err, "failed to set TTL on %s", systemschema.ReplicationStatsTable.Name)
-}
-
-func createProtectedTimestampsMetaTable(ctx context.Context, r runner) error {
-	return errors.Wrap(createSystemTable(ctx, r, systemschema.ProtectedTimestampsMetaTable),
-		"failed to create system.protected_ts_meta")
-}
-
-func createProtectedTimestampsRecordsTable(ctx context.Context, r runner) error {
-	return errors.Wrap(createSystemTable(ctx, r, systemschema.ProtectedTimestampsRecordsTable),
-		"failed to create system.protected_ts_records")
-}
-
 func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
@@ -1052,16 +973,6 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 	})
 }
 
-func createRoleOptionsTable(ctx context.Context, r runner) error {
-	// Create system.role_options table with an entry for (admin, CREATEROLE).
-	err := createSystemTable(ctx, r, systemschema.RoleOptionsTable)
-	if err != nil {
-		return errors.Wrap(err, "failed to create system.role_options")
-	}
-
-	return nil
-}
-
 func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {
 	// Add the CREATELOGIN option to roles that already have CREATEROLE.
 	const upsertCreateRoleStmt = `
@@ -1085,7 +996,7 @@ func markDeprecatedSchemaChangeJobsFailed(ctx context.Context, r runner) error {
 			// Get jobs in a non-terminal state.
 			rows, err := r.sqlExecutor.QueryEx(
 				ctx, "get-deprecated-schema-change-jobs", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				`SELECT id, status, payload FROM system.jobs WHERE status NOT IN ($1, $2, $3) LIMIT $4`,
 				jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, batchSize,
 			)
@@ -1125,7 +1036,7 @@ func markDeprecatedSchemaChangeJobsFailed(ctx context.Context, r runner) error {
 				}
 				if _, err := r.sqlExecutor.ExecEx(
 					ctx, "update-deprecated-schema-change-job", txn,
-					sessiondata.InternalExecutorOverride{User: security.RootUser},
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 					`UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3`,
 					jobs.StatusFailed, newPayloadBytes, id,
 				); err != nil {
@@ -1141,23 +1052,6 @@ func markDeprecatedSchemaChangeJobsFailed(ctx context.Context, r runner) error {
 			return err
 		}
 		log.Infof(ctx, "checked %d jobs for existence of deprecated schema change jobs", prevBatchSize)
-	}
-	return nil
-}
-
-func createReportsMetaTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, systemschema.ReportsMetaTable)
-}
-
-func createStatementInfoSystemTables(ctx context.Context, r runner) error {
-	if err := createSystemTable(ctx, r, systemschema.StatementBundleChunksTable); err != nil {
-		return errors.Wrap(err, "failed to create system.statement_bundle_chunks")
-	}
-	if err := createSystemTable(ctx, r, systemschema.StatementDiagnosticsRequestsTable); err != nil {
-		return errors.Wrap(err, "failed to create system.statement_diagnostics_requests")
-	}
-	if err := createSystemTable(ctx, r, systemschema.StatementDiagnosticsTable); err != nil {
-		return errors.Wrap(err, "failed to create system.statement_diagnostics")
 	}
 	return nil
 }
@@ -1212,12 +1106,29 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 	if err := r.execAsRoot(
 		ctx,
 		"insert-setting",
-		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'm') ON CONFLICT(name) DO NOTHING`, b),
+		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'v') ON CONFLICT(name) DO NOTHING`, b),
 	); err != nil {
 		return err
 	}
 
-	if err := r.execAsRoot(
+	// NB: We have to run with retry here due to the following "race" condition:
+	// - We're attempting to the set the cluster version at startup.
+	// - Setting the cluster version requires all nodes to be up and running, in
+	//   order to push out all relevant version gates.
+	// - This list of "all nodes" is gathered by looking at all the liveness
+	//   records in KV.
+	// - When starting a multi-node cluster all at once, nodes other than the
+	//   one being bootstrapped join the cluster using the join RPC.
+	// - The join RPC results in the creation of a liveness record for the
+	//   joining node, except it starts off in an expired state (leaving it to
+	//   the joining node to heartbeat it for the very first time).
+	//
+	// Attempting to set the cluster version at startup, while there also may be
+	// other nodes trying to join, could then result in failures where the
+	// migration infrastructure find expired liveness records and gives up. To
+	// that end we'll simply retry, expecting the joining nodes to "come live"
+	// before long.
+	if err := r.execAsRootWithRetry(
 		ctx, "set-setting", "SET CLUSTER SETTING version = $1", v.String(),
 	); err != nil {
 		return err
@@ -1260,7 +1171,7 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 		row, err := r.sqlExecutor.QueryRowEx(
 			ctx, "disallowPublicUserOrRole", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
-				User: security.RootUser,
+				User: security.RootUserName(),
 			},
 			selectPublicStmt, security.PublicRole,
 		)
@@ -1353,7 +1264,7 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	// If so, we don't want to do anything.
 	row, err := r.sqlExecutor.QueryRowEx(ctx, "update-system-locations",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		`SELECT count(*) FROM system.locations`)
 	if err != nil {
 		return err
@@ -1374,23 +1285,6 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	}
 	return nil
 }
-
-func depublicizeSystemComments(ctx context.Context, r runner) error {
-	// At some point in time, system.comments was mistakenly created
-	// with all privileges granted to the "public" role (i.e. everyone).
-	// This migration cleans this up.
-
-	for _, priv := range []string{"GRANT", "INSERT", "DELETE", "UPDATE"} {
-		stmt := fmt.Sprintf(`REVOKE %s ON TABLE system.comments FROM public`, priv)
-		// REVOKE should never fail here -- it's always possible for root
-		// to revoke a privilege even if it's not currently granted.
-		if err := r.execAsRoot(ctx, "depublicize-system-comments", stmt); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func alterSystemJobsAddCreatedByColumns(ctx context.Context, r runner) error {
 	// NB: we use family name as it existed in the original system.jobs schema to
 	// minimize migration work needed (avoid renames).
@@ -1405,7 +1299,7 @@ ON system.jobs (created_by_type, created_by_id)
 STORING (status)
 `
 	asNode := sessiondata.InternalExecutorOverride{
-		User: security.NodeUser,
+		User: security.NodeUserName(),
 	}
 
 	if _, err := r.sqlExecutor.ExecEx(
@@ -1430,7 +1324,7 @@ ADD COLUMN IF NOT EXISTS claim_session_id BYTES CREATE FAMILY claim,
 ADD COLUMN IF NOT EXISTS claim_instance_id INT8 FAMILY claim
 `
 	asNode := sessiondata.InternalExecutorOverride{
-		User: security.NodeUser,
+		User: security.NodeUserName(),
 	}
 	if _, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-claim-cols", nil, asNode, addColsStmt); err != nil {
 		return err
@@ -1444,7 +1338,7 @@ func createTenantsTable(ctx context.Context, r runner) error {
 
 func alterSystemScheduledJobsFixTableSchema(ctx context.Context, r runner) error {
 	setOwner := "UPDATE system.scheduled_jobs SET owner='root' WHERE owner IS NULL"
-	asNode := sessiondata.InternalExecutorOverride{User: security.NodeUser}
+	asNode := sessiondata.InternalExecutorOverride{User: security.NodeUserName()}
 
 	if _, err := r.sqlExecutor.ExecEx(ctx, "set-schedule-owner", nil, asNode, setOwner); err != nil {
 		return err

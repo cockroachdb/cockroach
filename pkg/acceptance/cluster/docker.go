@@ -27,7 +27,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -218,7 +220,7 @@ func createContainer(
 	// container.
 	for _, bind := range hostConfig.Binds {
 		hostPath, _ := splitBindSpec(bind)
-		if _, err := os.Stat(hostPath); os.IsNotExist(err) {
+		if _, err := os.Stat(hostPath); oserror.IsNotExist(err) {
 			maybePanic(os.MkdirAll(hostPath, 0755))
 		} else {
 			maybePanic(err)
@@ -305,7 +307,7 @@ func (c *Container) Wait(ctx context.Context, condition container.WaitCondition)
 		if exitCode := waitOKBody.StatusCode; exitCode != 0 {
 			err = errors.Errorf("non-zero exit code: %d", exitCode)
 			fmt.Fprintln(out, err.Error())
-			log.Shoutf(ctx, log.Severity_INFO, "command left-over files in %s", c.cluster.volumesDir)
+			log.Shoutf(ctx, severity.INFO, "command left-over files in %s", c.cluster.volumesDir)
 		}
 
 		return err

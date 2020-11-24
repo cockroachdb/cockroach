@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -62,9 +63,10 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
-		security.RootUser,
+		security.RootUserName(),
 		&MemoryMetrics{},
 		&execCfg,
+		sessiondatapb.SessionData{},
 	)
 	defer cleanup()
 	p := internalPlanner.(*planner)
@@ -148,7 +150,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 		// We need to re-plan every time, since close() below makes
 		// the plan unusable across retries.
-		p.stmt = &Statement{Statement: stmt}
+		p.stmt = makeStatement(stmt, ClusterWideID{})
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}

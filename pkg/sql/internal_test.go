@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -47,7 +48,7 @@ func TestInternalExecutor(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT 1")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +68,7 @@ func TestInternalExecutor(t *testing.T) {
 	// The following statement will succeed on the 2nd try.
 	row, err = ie.QueryRowEx(
 		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"select case nextval('test.seq') when 1 then crdb_internal.force_retry('1h') else 99 end",
 	)
 	if err != nil {
@@ -90,7 +91,7 @@ func TestInternalExecutor(t *testing.T) {
 		cnt++
 		row, err = ie.QueryRowEx(
 			ctx, "test", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"select case nextval('test.seq') when 2 then crdb_internal.force_retry('1h') else 99 end",
 		)
 		if cnt == 1 {
@@ -148,10 +149,14 @@ func TestInternalFullTableScan(t *testing.T) {
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
-			Database:               "db",
-			SequenceState:          &sessiondata.SequenceState{},
-			User:                   security.RootUser,
-			DisallowFullTableScans: true,
+			SessionData: sessiondatapb.SessionData{
+				Database:  "db",
+				UserProto: security.RootUserName().EncodeProto(),
+			},
+			LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+				DisallowFullTableScans: true,
+			},
+			SequenceState: &sessiondata.SequenceState{},
 		})
 
 	// Internal queries that perform full table scans shouldn't fail because of
@@ -176,16 +181,16 @@ func TestQueryIsAdminWithNoTxn(t *testing.T) {
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 
 	testData := []struct {
-		user     string
+		user     security.SQLUsername
 		expAdmin bool
 	}{
-		{security.NodeUser, true},
-		{security.RootUser, true},
-		{"testuser", false},
+		{security.NodeUserName(), true},
+		{security.RootUserName(), true},
+		{security.TestUserName(), false},
 	}
 
 	for _, tc := range testData {
-		t.Run(tc.user, func(t *testing.T) {
+		t.Run(tc.user.Normalized(), func(t *testing.T) {
 			rows, cols, err := ie.QueryWithCols(ctx, "test", nil, /* txn */
 				sessiondata.InternalExecutorOverride{User: tc.user},
 				"SELECT crdb_internal.is_admin()")
@@ -234,8 +239,9 @@ GRANT admin TO testadmin`
 		{"testadmin", roleoption.CREATEROLE.String(), true, ""},
 		{"testadmin", "nonexistent", false, "unrecognized role option"},
 	} {
+		username := security.MakeSQLUsernameFromPreNormalizedString(tc.user)
 		rows, cols, err := ie.QueryWithCols(ctx, "test", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: tc.user},
+			sessiondata.InternalExecutorOverride{User: username},
 			"SELECT crdb_internal.has_role_option($1)", tc.option)
 		if tc.expectedErr != "" {
 			if !testutils.IsError(err, tc.expectedErr) {
@@ -277,9 +283,11 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
-			Database:      expDB,
+			SessionData: sessiondatapb.SessionData{
+				Database:  expDB,
+				UserProto: security.RootUserName().EncodeProto(),
+			},
 			SequenceState: &sessiondata.SequenceState{},
-			User:          security.RootUser,
 		})
 
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
@@ -343,10 +351,12 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		)
 		ie.SetSessionData(
 			&sessiondata.SessionData{
-				User:            security.RootUser,
-				Database:        "defaultdb",
-				ApplicationName: "appname_findme",
-				SequenceState:   &sessiondata.SequenceState{},
+				SessionData: sessiondatapb.SessionData{
+					UserProto:       security.RootUserName().EncodeProto(),
+					Database:        "defaultdb",
+					ApplicationName: "appname_findme",
+				},
+				SequenceState: &sessiondata.SequenceState{},
 			})
 		testInternalExecutorAppNameInitialization(
 			t, sem,
@@ -521,7 +531,7 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err := ie.QueryEx(
-		ctx, "leaf-query", leafTxn, sessiondata.InternalExecutorOverride{User: security.RootUser}, "SELECT 1",
+		ctx, "leaf-query", leafTxn, sessiondata.InternalExecutorOverride{User: security.RootUserName()}, "SELECT 1",
 	)
 	require.NoError(t, err)
 }

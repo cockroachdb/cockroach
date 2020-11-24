@@ -77,7 +77,7 @@ func newReadImportDataProcessor(
 
 func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	defer cp.output.ProducerDone()
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
@@ -145,13 +145,29 @@ func makeInputConverter(
 				return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")
 			}
 		}
+
+		// If we're using a format like CSV where data columns are not "named", and
+		// therefore cannot be mapped to schema columns, then require the user to
+		// use IMPORT INTO.
+		//
+		// We could potentially do something smarter here and check that only a
+		// suffix of the columns are computed, and then expect the data file to have
+		// #(visible columns) - #(computed columns).
+		if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
+			for _, col := range singleTable.VisibleColumns() {
+				if col.IsComputed() {
+					return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
+						"to use computed columns, use IMPORT INTO")
+				}
+			}
+		}
 	}
 
 	switch spec.Format.Format {
 	case roachpb.IOFileFormat_CSV:
 		isWorkload := true
 		for _, file := range spec.Uri {
-			if conf, err := cloudimpl.ExternalStorageConfFromURI(file, spec.User); err != nil || conf.Provider != roachpb.ExternalStorageProvider_Workload {
+			if conf, err := cloudimpl.ExternalStorageConfFromURI(file, spec.User()); err != nil || conf.Provider != roachpb.ExternalStorageProvider_Workload {
 				isWorkload = false
 				break
 			}
@@ -193,7 +209,7 @@ func ingestKvs(
 	kvCh <-chan row.KVBatch,
 ) (*roachpb.BulkOpSummary, error) {
 	ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
 

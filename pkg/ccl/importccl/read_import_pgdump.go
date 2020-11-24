@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -93,13 +94,14 @@ func (p *postgreStream) Next() (interface{}, error) {
 
 	for p.s.Scan() {
 		t := p.s.Text()
+		// Regardless if we can parse the statement, check that it's not something
+		// we want to ignore.
+		if isIgnoredStatement(t) {
+			continue
+		}
+
 		stmts, err := parser.Parse(t)
 		if err != nil {
-			// Something non-parseable may be something we don't yet parse but still
-			// want to ignore.
-			if isIgnoredStatement(t) {
-				continue
-			}
 			return nil, err
 		}
 		switch len(stmts) {
@@ -219,12 +221,13 @@ func readPostgresCreateTable(
 	ctx context.Context,
 	input io.Reader,
 	evalCtx *tree.EvalContext,
-	p sql.PlanHookState,
+	p sql.JobExecContext,
 	match string,
 	parentID descpb.ID,
 	walltime int64,
 	fks fkHandler,
 	max int,
+	owner security.SQLUsername,
 ) ([]*tabledesc.Mutable, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
 	// instead of creating a full table descriptor first and adding indexes
@@ -236,15 +239,10 @@ func readPostgresCreateTable(
 	createSeq := make(map[string]*tree.CreateSequence)
 	tableFKs := make(map[string][]*tree.ForeignKeyConstraintTableDef)
 	ps := newPostgreStream(input, max)
-	params := p.RunParams(ctx)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
 			ret := make([]*tabledesc.Mutable, 0, len(createTbl))
-			owner := security.AdminRole
-			if params.SessionData() != nil {
-				owner = params.SessionData().User
-			}
 			for name, seq := range createSeq {
 				id := descpb.ID(int(defaultCSVTableID) + len(ret))
 				desc, err := sql.NewSequenceTableDesc(
@@ -257,7 +255,7 @@ func readPostgresCreateTable(
 					hlc.Timestamp{WallTime: walltime},
 					descpb.NewDefaultPrivilegeDescriptor(owner),
 					tree.PersistencePermanent,
-					&params,
+					nil, /* params */
 				)
 				if err != nil {
 					return nil, err
@@ -614,7 +612,7 @@ func (m *pgDumpReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user string,
+	user security.SQLUsername,
 ) error {
 	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
 }
@@ -675,15 +673,23 @@ func (m *pgDumpReader) readFile(
 			var targetColMapIdx []int
 			if len(i.Columns) != 0 {
 				targetColMapIdx = make([]int, len(i.Columns))
-				conv.IsTargetCol = make(map[int]struct{}, len(i.Columns))
+				conv.TargetColOrds = util.FastIntSet{}
 				for j := range i.Columns {
 					colName := string(i.Columns[j])
 					idx, ok := m.colMap[conv][colName]
 					if !ok {
 						return errors.Newf("targeted column %q not found", colName)
 					}
-					conv.IsTargetCol[idx] = struct{}{}
+					conv.TargetColOrds.Add(idx)
 					targetColMapIdx[j] = idx
+				}
+				// For any missing columns, fill those to NULL.
+				// These will get filled in with the correct default / computed expression
+				// provided conv.IsTargetCol is not set for the given column index.
+				for idx := range conv.VisibleCols {
+					if !conv.TargetColOrds.Contains(idx) {
+						conv.Datums[idx] = tree.DNull
+					}
 				}
 			}
 			for _, tuple := range values.Rows {
@@ -730,14 +736,14 @@ func (m *pgDumpReader) readFile(
 			var targetColMapIdx []int
 			if conv != nil {
 				targetColMapIdx = make([]int, len(i.Columns))
-				conv.IsTargetCol = make(map[int]struct{}, len(i.Columns))
+				conv.TargetColOrds = util.FastIntSet{}
 				for j := range i.Columns {
 					colName := string(i.Columns[j])
 					idx, ok := m.colMap[conv][colName]
 					if !ok {
 						return errors.Newf("targeted column %q not found", colName)
 					}
-					conv.IsTargetCol[idx] = struct{}{}
+					conv.TargetColOrds.Add(idx)
 					targetColMapIdx[j] = idx
 				}
 			}
@@ -763,7 +769,7 @@ func (m *pgDumpReader) readFile(
 				}
 				switch row := row.(type) {
 				case copyData:
-					if expected, got := len(conv.IsTargetCol), len(row); expected != got {
+					if expected, got := conv.TargetColOrds.Len(), len(row); expected != got {
 						return makeRowErr("", count, pgcode.Syntax,
 							"expected %d values, got %d", expected, got)
 					}

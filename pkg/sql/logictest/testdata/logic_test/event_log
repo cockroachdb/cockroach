@@ -3,6 +3,33 @@
 # TABLE DDL
 ##################
 
+# Verify events related to roles
+##################
+
+statement ok
+CREATE ROLE r
+
+statement ok
+CREATE ROLE IF NOT EXISTS r2
+
+statement ok
+ALTER ROLE r WITH CONTROLCHANGEFEED
+
+statement ok
+DROP ROLE r, r2
+
+query ITTT
+SELECT "reportingID", info::JSONB->>'RoleName', "eventType", user
+FROM system.eventlog
+WHERE "eventType" IN ('create_role', 'drop_role', 'alter_role')
+ORDER BY "eventType", 2
+----
+1 r          alter_role    root
+1 r          create_role   root
+1 r2         create_role   root
+1 testuser   create_role   root
+1 r, r2        drop_role   root
+
 # Create two tables + superfluous "IF NOT EXISTS"
 ##################
 
@@ -251,6 +278,27 @@ WHERE "eventType" = 'drop_table'
 ----
 1  test.public.b
 
+# Create + Rename table
+##################
+
+statement ok
+CREATE TABLE toberenamed( id SERIAL PRIMARY KEY );
+
+statement ok
+ALTER TABLE toberenamed RENAME TO renamedtable;
+
+
+# Verify that rename table event is logged
+##################
+
+query ITT
+SELECT "reportingID", info::JSONB->>'TableName', info::JSONB->>'NewTableName'
+FROM system.eventlog
+WHERE "eventType" = 'rename_table'
+  AND info::JSONB->>'Statement' LIKE 'ALTER TABLE toberenamed RENAME TO renamedtable%'
+----
+1  test.public.toberenamed  test.public.renamedtable
+
 
 ##################
 # DATABASE DDL
@@ -335,6 +383,67 @@ WHERE "eventType" = 'drop_database'
 
 statement ok
 SET DATABASE = test
+
+# Add a database.
+##################
+
+statement ok
+CREATE DATABASE eventlogtorename
+
+# rename database.
+##################
+
+statement ok
+ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname
+
+# verify contents of database rename event
+##################
+
+query ITT
+SELECT "reportingID", info::JSONB->>'DatabaseName', info::JSONB->>'NewDatabaseName'
+FROM system.eventlog
+WHERE "eventType" = 'rename_database'
+  AND info::JSONB->>'Statement' LIKE 'ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname%'
+----
+1  eventlogtorename  eventlogtonewname
+
+statement ok
+SET DATABASE = test
+
+# set owner of database.
+##################
+
+statement ok
+CREATE USER u
+
+statement ok
+ALTER DATABASE eventlogtonewname OWNER TO u
+
+query ITT
+SELECT "reportingID", info::JSONB->>'DatabaseName', info::JSONB->>'Owner'
+FROM system.eventlog
+WHERE "eventType" = 'alter_database_owner'
+----
+1  eventlogtonewname  u
+
+# convert database to schema
+##################
+
+statement ok
+ALTER DATABASE eventlogtonewname CONVERT TO SCHEMA WITH PARENT test
+
+query ITT
+SELECT "reportingID", info::JSONB->>'DatabaseName', info::JSONB->>'NewDatabaseName'
+FROM system.eventlog
+WHERE "eventType" = 'convert_to_schema'
+----
+1  eventlogtonewname  test
+
+statement ok
+DROP SCHEMA eventlogtonewname
+
+statement ok
+DROP USER u
 
 ##################
 # Cluster Settings
@@ -443,3 +552,102 @@ SELECT "eventType", "reportingID", info::JSONB->>'ViewName'
 ----
 create_view  1  test.public.v
 drop_view    1  test.public.v
+
+
+# Change privileges
+##################
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE b (id INT PRIMARY KEY)
+
+statement ok
+CREATE USER u
+
+statement ok
+CREATE USER v
+
+statement ok
+GRANT INSERT ON TABLE a,b TO u
+
+statement ok
+REVOKE UPDATE ON TABLE a FROM u,v
+
+query ITT
+SELECT "reportingID", "info", "eventType"
+FROM system.eventlog
+WHERE "eventType" = 'grant_privilege'
+OR "eventType" = 'revoke_privilege'
+ORDER BY "eventType"
+----
+1 {"Target":"TABLE a, b","User":"root","Grantees":"u","Privileges":"INSERT"} grant_privilege
+1 {"Target":"TABLE a","User":"root","Grantees":"u,v","Privileges":"UPDATE"} revoke_privilege
+
+statement ok
+DROP TABLE a
+
+statement ok
+DROP TABLE b
+
+statement ok
+DROP USER u
+
+statement ok
+DROP USER v
+
+
+# Schema events
+##################
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE USER u
+
+statement ok
+CREATE SCHEMA AUTHORIZATION u
+
+query ITT
+SELECT "reportingID", info::JSONB->>'SchemaName', info::JSONB->>'Owner'
+FROM system.eventlog
+WHERE "eventType" = 'create_schema'
+ORDER BY 2
+----
+1 s root
+1 u u
+
+statement ok
+ALTER SCHEMA u RENAME TO t
+
+query ITT
+SELECT "reportingID", info::JSONB->>'SchemaName', info::JSONB->>'NewSchemaName'
+FROM system.eventlog
+WHERE "eventType" = 'rename_schema'
+----
+1 u t
+
+statement ok
+ALTER SCHEMA t OWNER TO root
+
+query ITT
+SELECT "reportingID", info::JSONB->>'SchemaName', info::JSONB->>'Owner'
+FROM system.eventlog
+WHERE "eventType" = 'alter_schema_owner'
+----
+1 t root
+
+statement ok
+DROP SCHEMA s, t
+
+query IT
+SELECT "reportingID", info::JSONB->>'SchemaName'
+FROM system.eventlog
+WHERE "eventType" = 'drop_schema'
+ORDER BY 2
+----
+1 eventlogtonewname
+1 s
+1 t

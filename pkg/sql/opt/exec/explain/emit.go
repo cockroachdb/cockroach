@@ -98,7 +98,9 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 	for i := range plan.Cascades {
 		ob.EnterMetaNode("fk-cascade")
 		ob.Attr("fk", plan.Cascades[i].FKName)
-		ob.Attr("input", plan.Cascades[i].Buffer.(*Node).args.(*bufferArgs).Label)
+		if buffer := plan.Cascades[i].Buffer; buffer != nil {
+			ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
+		}
 		ob.LeaveNode()
 	}
 	for _, n := range plan.Checks {
@@ -210,6 +212,10 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 		}
 		return e.joinNodeName("lookup", a.JoinType), nil
 
+	case invertedJoinOp:
+		a := n.args.(*invertedJoinArgs)
+		return e.joinNodeName("inverted", a.JoinType), nil
+
 	case applyJoinOp:
 		a := n.args.(*applyJoinArgs)
 		return e.joinNodeName("apply", a.JoinType), nil
@@ -309,6 +315,10 @@ func (e *emitter) joinNodeName(algo string, joinType descpb.JoinType) string {
 		typ = "semi"
 	case descpb.LeftAntiJoin:
 		typ = "anti"
+	case descpb.RightSemiJoin:
+		typ = "right semi"
+	case descpb.RightAntiJoin:
+		typ = "right anti"
 	default:
 		typ = fmt.Sprintf("invalid: %d", joinType)
 	}

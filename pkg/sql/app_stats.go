@@ -44,14 +44,16 @@ type stmtKey struct {
 	implicitTxn    bool
 }
 
-const invalidStmtID = ""
+const invalidStmtID = 0
 
 // txnKey is the hashed string constructed using the individual statement IDs
 // that comprise the transaction.
-type txnKey string
+type txnKey uint64
 
 // appStats holds per-application statistics.
 type appStats struct {
+	// TODO(arul): This can be refactored to have a RWLock instead, and have all
+	// usages acquire a read lock whenever appropriate. See #55285.
 	syncutil.Mutex
 
 	st        *cluster.Settings
@@ -124,7 +126,8 @@ var txnStatsEnable = settings.RegisterPublicBoolSetting(
 // consumed by a SQL statement before it is collected for statistics reporting.
 var sqlStatsCollectionLatencyThreshold = settings.RegisterPublicDurationSetting(
 	"sql.metrics.statement_details.threshold",
-	"minimum execution time to cause statistics to be collected",
+	"minimum execution time to cause statement statistics to be collected. "+
+		"If configured, no transaction stats are collected.",
 	0,
 )
 
@@ -155,7 +158,10 @@ func (s stmtKey) String() string {
 
 // recordStatement saves per-statement statistics.
 //
-// samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
+// samplePlanDescription can be nil, as these are only sampled periodically
+// per unique fingerprint.
+// recordStatement always returns a valid stmtID corresponding to the given
+// stmt regardless of whether the statement is actually recorded or not.
 func (a *appStats) recordStatement(
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
@@ -168,28 +174,27 @@ func (a *appStats) recordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
 ) roachpb.StmtID {
-	if !stmtStatsEnable.Get(&a.st.SV) {
-		return invalidStmtID
-	}
-
 	createIfNonExistent := true
-	// If the statement is below the latency threshold, we don't need to create
-	// an entry in the stmts map for it.
-	if t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV); t > 0 && t.Seconds() >= svcLat {
+	// If the statement is below the latency threshold, or stats aren't being
+	// recorded we don't need to create an entry in the stmts map for it. We do
+	// still need stmtID for transaction level metrics tracking.
+	t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV)
+	if !stmtStatsEnable.Get(&a.st.SV) || (t > 0 && t.Seconds() >= svcLat) {
 		createIfNonExistent = false
 	}
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(
-		stmt, implicitTxn,
+	s, stmtID := a.getStatsForStmt(
+		stmt.AnonymizedStr, implicitTxn,
 		err, createIfNonExistent,
 	)
 
-	// This statement was below the latency threshold, and therefore shouldn't
-	// be recorded. We still need to return the statement ID though, for
-	// transaction level metrics tracking.
+	// This statement was below the latency threshold or sql stats aren't being
+	// recorded. Either way, we don't need to record anything in the stats object
+	// for this statement, though we do need to return the statement ID for
+	// transaction level metrics collection.
 	if !createIfNonExistent {
-		return s.ID
+		return stmtID
 	}
 
 	// Collect the per-statement statistics.
@@ -216,6 +221,11 @@ func (a *appStats) recordStatement(
 	s.mu.data.OverheadLat.Record(s.mu.data.Count, ovhLat)
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
+	// Note that some fields derived from tracing statements (such as
+	// BytesSentOverNetwork) are not updated here because they are collected
+	// on-demand.
+	// TODO(asubiotto): Record the aforementioned fields here when always-on
+	//  tracing is a thing.
 	s.mu.vectorized = vectorized
 	s.mu.distSQLUsed = distSQLUsed
 	s.mu.Unlock()
@@ -223,30 +233,33 @@ func (a *appStats) recordStatement(
 	return s.ID
 }
 
-// getStatsForStmt retrieves the per-stmt stat object.
+// getStatsForStmt retrieves the per-stmt stat object. Regardless of if a valid
+// stat object is returned or not, we always return the correct stmtID
+// for the given stmt.
 func (a *appStats) getStatsForStmt(
-	stmt *Statement, implicitTxn bool, err error, createIfNonexistent bool,
-) *stmtStats {
+	anonymizedStmt string, implicitTxn bool, err error, createIfNonexistent bool,
+) (*stmtStats, roachpb.StmtID) {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
 	key := stmtKey{
-		failed:      err != nil,
-		implicitTxn: implicitTxn,
-	}
-	if stmt.AnonymizedStr != "" {
-		// Use the cached anonymized string.
-		key.anonymizedStmt = stmt.AnonymizedStr
-	} else {
-		key.anonymizedStmt = anonymizeStmt(stmt.AST)
+		anonymizedStmt: anonymizedStmt,
+		failed:         err != nil,
+		implicitTxn:    implicitTxn,
 	}
 
-	stmtID := constructStatementIDFromStmtKey(key)
-
-	return a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent)
+	// We first try and see if we can get by without creating a new entry for this
+	// key, as this allows us to not construct the statementID from scratch (which
+	// is an expensive operation)
+	s := a.getStatsForStmtWithKey(key, invalidStmtID, false /* createIfNonexistent */)
+	if s == nil {
+		stmtID := constructStatementIDFromStmtKey(key)
+		return a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent), stmtID
+	}
+	return s, s.ID
 }
 
 func (a *appStats) getStatsForStmtWithKey(
-	key stmtKey, ID roachpb.StmtID, createIfNonexistent bool,
+	key stmtKey, stmtID roachpb.StmtID, createIfNonexistent bool,
 ) *stmtStats {
 	a.Lock()
 	// Retrieve the per-statement statistic object, and create it if it
@@ -254,7 +267,7 @@ func (a *appStats) getStatsForStmtWithKey(
 	s, ok := a.stmts[key]
 	if !ok && createIfNonexistent {
 		s = &stmtStats{}
-		s.ID = ID
+		s.ID = stmtID
 		a.stmts[key] = s
 	}
 	a.Unlock()
@@ -299,7 +312,7 @@ func (a *appStats) Add(other *appStats) {
 
 	// Merge the statement stats.
 	for k, v := range statMap {
-		s := a.getStatsForStmtWithKey(k, v.ID, true)
+		s := a.getStatsForStmtWithKey(k, v.ID, true /* createIfNonexistent */)
 		s.mu.Lock()
 		// Note that we don't need to take a lock on v because
 		// no other thread knows about v yet.
@@ -345,6 +358,9 @@ func (a *appStats) Add(other *appStats) {
 }
 
 func anonymizeStmt(ast tree.Statement) string {
+	if ast == nil {
+		return ""
+	}
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
@@ -400,10 +416,11 @@ func (a *appStats) recordTransaction(
 	if !txnStatsEnable.Get(&a.st.SV) {
 		return
 	}
-	// Only collect stats if the transaction service time is above the configured
-	// stats collection latency threshold.
+	// Do not collect transaction statistics if the stats collection latency
+	// threshold is set, since our transaction UI relies on having stats for every
+	// statement in the transaction.
 	t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV)
-	if t > 0 && t.Seconds() >= serviceLat.Seconds() {
+	if t > 0 {
 		return
 	}
 
@@ -429,14 +446,14 @@ func (a *appStats) recordTransaction(
 // sample logical plan for its corresponding fingerprint. We use
 // `logicalPlanCollectionPeriod` to assess how frequently to sample logical
 // plans.
-func (a *appStats) shouldSaveLogicalPlanDescription(stmt *Statement, implicitTxn bool) bool {
+func (a *appStats) shouldSaveLogicalPlanDescription(anonymizedStmt string, implicitTxn bool) bool {
 	if !sampleLogicalPlans.Get(&a.st.SV) {
 		return false
 	}
 	// We don't know yet if we will hit an error, so we assume we don't. The worst
 	// that can happen is that for statements that always error out, we will
 	// always save the tree plan.
-	stats := a.getStatsForStmt(stmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
+	stats, _ := a.getStatsForStmt(anonymizedStmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
@@ -584,7 +601,7 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 
 	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
 		virtual, err := vt.getVirtualTableEntry(tn)
-		if err != nil || virtual.desc == nil {
+		if err != nil || virtual == nil {
 			ctx.WriteByte('_')
 			return
 		}

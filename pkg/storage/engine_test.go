@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -39,10 +38,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func ensureRangeEqual(
@@ -90,7 +91,7 @@ func TestEngineBatchCommit(t *testing.T) {
 						case <-writesDone:
 							return nil
 						default:
-							val, err := e.Get(key)
+							val, err := e.MVCCGet(key)
 							if err != nil {
 								return err
 							}
@@ -112,7 +113,7 @@ func TestEngineBatchCommit(t *testing.T) {
 			batch := e.NewBatch()
 			defer batch.Close()
 			for i := 0; i < numWrites; i++ {
-				if err := batch.Put(key, []byte(strconv.Itoa(i))); err != nil {
+				if err := batch.PutUnversioned(key.Key, []byte(strconv.Itoa(i))); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -144,20 +145,20 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 			{
 				batch := eng.NewBatch()
 				defer batch.Close()
-				iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 				key := MVCCKey{Key: roachpb.Key("b")}
 
-				if err := batch.Put(key, []byte("foo")); err != nil {
+				if err := batch.PutUnversioned(key.Key, []byte("foo")); err != nil {
 					t.Fatal(err)
 				}
 
 				iter.SeekGE(key)
 
-				if err := batch.Clear(key); err != nil {
+				if err := batch.ClearUnversioned(key.Key); err != nil {
 					t.Fatal(err)
 				}
 
-				// Iterator should not reuse its cached result.
+				// MVCCIterator should not reuse its cached result.
 				iter.SeekGE(key)
 
 				if ok, err := iter.Valid(); err != nil {
@@ -254,15 +255,15 @@ func TestEngineBatch(t *testing.T) {
 
 			apply := func(rw ReadWriter, d data) error {
 				if d.value == nil {
-					return rw.Clear(d.key)
+					return rw.ClearUnversioned(d.key.Key)
 				} else if d.merge {
 					return rw.Merge(d.key, d.value)
 				}
-				return rw.Put(d.key, d.value)
+				return rw.PutUnversioned(d.key.Key, d.value)
 			}
 
 			get := func(rw ReadWriter, key MVCCKey) []byte {
-				b, err := rw.Get(key)
+				b, err := rw.MVCCGet(key)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -288,7 +289,7 @@ func TestEngineBatch(t *testing.T) {
 					currentBatch[k] = batch[shuffledIndices[k]]
 				}
 				// Reset the key
-				if err := engine.Clear(key); err != nil {
+				if err := engine.ClearUnversioned(key.Key); err != nil {
 					t.Fatal(err)
 				}
 				// Run it once with individual operations and remember the result.
@@ -302,7 +303,7 @@ func TestEngineBatch(t *testing.T) {
 				// Run the whole thing as a batch and compare.
 				b := engine.NewBatch()
 				defer b.Close()
-				if err := b.Clear(key); err != nil {
+				if err := b.ClearUnversioned(key.Key); err != nil {
 					t.Fatal(err)
 				}
 				for _, op := range currentBatch {
@@ -316,7 +317,7 @@ func TestEngineBatch(t *testing.T) {
 					t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
 				}
 				// Try using an iterator to get the value from the batch.
-				iter := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				iter := b.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 				iter.SeekGE(key)
 				if ok, err := iter.Valid(); !ok {
 					if currentBatch[len(currentBatch)-1].value != nil {
@@ -363,19 +364,19 @@ func TestEnginePutGetDelete(t *testing.T) {
 
 			// Test for correct handling of empty keys, which should produce errors.
 			for i, err := range []error{
-				engine.Put(mvccKey(""), []byte("")),
-				engine.Put(NilKey, []byte("")),
+				engine.PutUnversioned(mvccKey("").Key, []byte("")),
+				engine.PutUnversioned(NilKey.Key, []byte("")),
 				func() error {
-					_, err := engine.Get(mvccKey(""))
+					_, err := engine.MVCCGet(mvccKey(""))
 					return err
 				}(),
-				engine.Clear(NilKey),
+				engine.ClearUnversioned(NilKey.Key),
 				func() error {
-					_, err := engine.Get(NilKey)
+					_, err := engine.MVCCGet(NilKey)
 					return err
 				}(),
-				engine.Clear(NilKey),
-				engine.Clear(mvccKey("")),
+				engine.ClearUnversioned(NilKey.Key),
+				engine.ClearUnversioned(mvccKey("").Key),
 			} {
 				if err == nil {
 					t.Fatalf("%d: illegal handling of empty key", i)
@@ -394,27 +395,27 @@ func TestEnginePutGetDelete(t *testing.T) {
 				{mvccKey("server"), []byte("42")},
 			}
 			for _, c := range testCases {
-				val, err := engine.Get(c.key)
+				val, err := engine.MVCCGet(c.key)
 				if err != nil {
 					t.Errorf("get: expected no error, but got %s", err)
 				}
 				if len(val) != 0 {
 					t.Errorf("expected key %q value.Bytes to be nil: got %+v", c.key, val)
 				}
-				if err := engine.Put(c.key, c.value); err != nil {
+				if err := engine.PutUnversioned(c.key.Key, c.value); err != nil {
 					t.Errorf("put: expected no error, but got %s", err)
 				}
-				val, err = engine.Get(c.key)
+				val, err = engine.MVCCGet(c.key)
 				if err != nil {
 					t.Errorf("get: expected no error, but got %s", err)
 				}
 				if !bytes.Equal(val, c.value) {
 					t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
 				}
-				if err := engine.Clear(c.key); err != nil {
+				if err := engine.ClearUnversioned(c.key.Key); err != nil {
 					t.Errorf("delete: expected no error, but got %s", err)
 				}
-				val, err = engine.Get(c.key)
+				val, err = engine.MVCCGet(c.key)
 				if err != nil {
 					t.Errorf("get: expected no error, but got %s", err)
 				}
@@ -433,6 +434,49 @@ func addMergeTimestamp(t *testing.T, data []byte, ts int64) []byte {
 	}
 	v.MergeTimestamp = &hlc.LegacyTimestamp{WallTime: ts}
 	return mustMarshal(&v)
+}
+
+var testtime = int64(-446061360000000000)
+
+type tsSample struct {
+	offset int32
+	count  uint32
+	sum    float64
+	max    float64
+	min    float64
+}
+
+// timeSeriesRow generates a simple InternalTimeSeriesData object which starts
+// at the given timestamp and has samples of the given duration. The time series
+// is written using the older sample-row data format. The object is stored in an
+// MVCCMetadata object and marshaled to bytes.
+func timeSeriesRow(start int64, duration int64, samples ...tsSample) []byte {
+	tsv := timeSeriesRowAsValue(start, duration, samples...)
+	return mustMarshal(&enginepb.MVCCMetadataSubsetForMergeSerialization{RawBytes: tsv.RawBytes})
+}
+
+func timeSeriesRowAsValue(start int64, duration int64, samples ...tsSample) roachpb.Value {
+	ts := &roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: start,
+		SampleDurationNanos: duration,
+	}
+	for _, sample := range samples {
+		newSample := roachpb.InternalTimeSeriesSample{
+			Offset: sample.offset,
+			Count:  sample.count,
+			Sum:    sample.sum,
+		}
+		if sample.count > 1 {
+			newSample.Max = proto.Float64(sample.max)
+			newSample.Min = proto.Float64(sample.min)
+		}
+		ts.Samples = append(ts.Samples, newSample)
+	}
+	var v roachpb.Value
+	if err := v.SetProto(ts); err != nil {
+		panic(err)
+	}
+	return v
 }
 
 // TestEngineMerge tests that the passing through of engine merge operations
@@ -498,7 +542,7 @@ func TestEngineMerge(t *testing.T) {
 						t.Fatalf("%d: %+v", i, err)
 					}
 				}
-				result, _ := engine.Get(tc.testKey)
+				result, _ := engine.MVCCGet(tc.testKey)
 				engineBytes[engineIndex][tcIndex] = result
 				var resultV, expectedV enginepb.MVCCMetadata
 				if err := protoutil.Unmarshal(result, &resultV); err != nil {
@@ -534,16 +578,14 @@ func TestEngineMustExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	test := func(engineType enginepb.EngineType, errStr string) {
+	test := func(errStr string) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)
 		defer dirCleanupFn()
 
-		_, err := NewEngine(
-			engineType,
-			0, base.StorageConfig{
-				Dir:       tempDir,
-				MustExist: true,
-			})
+		_, err := NewEngine(0, base.StorageConfig{
+			Dir:       tempDir,
+			MustExist: true,
+		})
 		if err == nil {
 			t.Fatal("expected error related to missing directory")
 		}
@@ -552,8 +594,7 @@ func TestEngineMustExist(t *testing.T) {
 		}
 	}
 
-	test(enginepb.EngineTypeRocksDB, "does not exist (create_if_missing is false)")
-	test(enginepb.EngineTypePebble, "no such file or directory")
+	test("no such file or directory")
 }
 
 func TestEngineTimeBound(t *testing.T) {
@@ -577,7 +618,7 @@ func TestEngineTimeBound(t *testing.T) {
 			for i, time := range times {
 				s := fmt.Sprintf("%02d", i)
 				key := MVCCKey{Key: roachpb.Key(s), Timestamp: time}
-				if err := engine.Put(key, []byte(s)); err != nil {
+				if err := engine.PutMVCC(key, []byte(s)); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -588,7 +629,7 @@ func TestEngineTimeBound(t *testing.T) {
 			batch := engine.NewBatch()
 			defer batch.Close()
 
-			check := func(t *testing.T, tbi Iterator, keys, ssts int) {
+			check := func(t *testing.T, tbi MVCCIterator, keys, ssts int) {
 				defer tbi.Close()
 				tbi.SeekGE(NilKey)
 
@@ -615,12 +656,12 @@ func TestEngineTimeBound(t *testing.T) {
 			}
 
 			testCases := []struct {
-				iter       Iterator
+				iter       MVCCIterator
 				keys, ssts int
 			}{
 				// Completely to the right, not touching.
 				{
-					iter: batch.NewIterator(IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 						MinTimestampHint: maxTimestamp.Next(),
 						MaxTimestampHint: maxTimestamp.Next().Next(),
 						UpperBound:       roachpb.KeyMax,
@@ -631,7 +672,7 @@ func TestEngineTimeBound(t *testing.T) {
 				},
 				// Completely to the left, not touching.
 				{
-					iter: batch.NewIterator(IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 						MinTimestampHint: minTimestamp.Prev().Prev(),
 						MaxTimestampHint: minTimestamp.Prev(),
 						UpperBound:       roachpb.KeyMax,
@@ -642,7 +683,7 @@ func TestEngineTimeBound(t *testing.T) {
 				},
 				// Touching on the right.
 				{
-					iter: batch.NewIterator(IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 						MinTimestampHint: maxTimestamp,
 						MaxTimestampHint: maxTimestamp,
 						UpperBound:       roachpb.KeyMax,
@@ -653,7 +694,7 @@ func TestEngineTimeBound(t *testing.T) {
 				},
 				// Touching on the left.
 				{
-					iter: batch.NewIterator(IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 						MinTimestampHint: minTimestamp,
 						MaxTimestampHint: minTimestamp,
 						UpperBound:       roachpb.KeyMax,
@@ -665,7 +706,7 @@ func TestEngineTimeBound(t *testing.T) {
 				// Copy of last case, but confirm that we don't get SST stats if we don't
 				// ask for them.
 				{
-					iter: batch.NewIterator(IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 						MinTimestampHint: minTimestamp,
 						MaxTimestampHint: minTimestamp,
 						UpperBound:       roachpb.KeyMax,
@@ -676,7 +717,7 @@ func TestEngineTimeBound(t *testing.T) {
 				},
 				// Copy of last case, but confirm that upper bound is respected.
 				{
-					iter: batch.NewIterator(IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 						MinTimestampHint: minTimestamp,
 						MaxTimestampHint: minTimestamp,
 						UpperBound:       []byte("02"),
@@ -695,7 +736,7 @@ func TestEngineTimeBound(t *testing.T) {
 
 			// Make a regular iterator. Before #21721, this would accidentally pick up the
 			// time bounded iterator instead.
-			iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
 			iter.SeekGE(NilKey)
 
@@ -732,7 +773,7 @@ func TestFlushNumSSTables(t *testing.T) {
 			for i := 0; i < 10000; i++ {
 				key := make([]byte, 4)
 				binary.BigEndian.PutUint32(key, uint32(i))
-				err := batch.Put(MVCCKey{Key: key}, []byte("foobar"))
+				err := batch.PutUnversioned(key, []byte("foobar"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -782,7 +823,7 @@ func TestEngineScan1(t *testing.T) {
 			}
 			keyMap := map[string][]byte{}
 			for _, c := range testCases {
-				if err := engine.Put(c.key, c.value); err != nil {
+				if err := engine.PutUnversioned(c.key.Key, c.value); err != nil {
 					t.Errorf("could not put key %q: %+v", c.key, err)
 				}
 				keyMap[string(c.key.Key)] = c.value
@@ -918,7 +959,7 @@ func TestEngineDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		return engine.ClearRange(start, end)
+		return engine.ClearMVCCRange(start, end)
 	})
 }
 
@@ -928,7 +969,7 @@ func TestEngineDeleteRangeBatch(t *testing.T) {
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		batch := engine.NewWriteOnlyBatch()
 		defer batch.Close()
-		if err := batch.ClearRange(start, end); err != nil {
+		if err := batch.ClearMVCCRange(start, end); err != nil {
 			return err
 		}
 		batch2 := engine.NewWriteOnlyBatch()
@@ -944,7 +985,7 @@ func TestEngineDeleteIterRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+		iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 		return engine.ClearIterRange(iter, start.Key, end.Key)
 	})
@@ -961,10 +1002,10 @@ func TestSnapshot(t *testing.T) {
 
 			key := mvccKey("a")
 			val1 := []byte("1")
-			if err := engine.Put(key, val1); err != nil {
+			if err := engine.PutUnversioned(key.Key, val1); err != nil {
 				t.Fatal(err)
 			}
-			val, _ := engine.Get(key)
+			val, _ := engine.MVCCGet(key)
 			if !bytes.Equal(val, val1) {
 				t.Fatalf("the value %s in get result does not match the value %s in request",
 					val, val1)
@@ -974,11 +1015,11 @@ func TestSnapshot(t *testing.T) {
 			defer snap.Close()
 
 			val2 := []byte("2")
-			if err := engine.Put(key, val2); err != nil {
+			if err := engine.PutUnversioned(key.Key, val2); err != nil {
 				t.Fatal(err)
 			}
-			val, _ = engine.Get(key)
-			valSnapshot, error := snap.Get(key)
+			val, _ = engine.MVCCGet(key)
+			valSnapshot, error := snap.MVCCGet(key)
 			if error != nil {
 				t.Fatalf("error : %s", error)
 			}
@@ -1022,10 +1063,10 @@ func TestSnapshotMethods(t *testing.T) {
 			keys := []MVCCKey{mvccKey("a"), mvccKey("b")}
 			vals := [][]byte{[]byte("1"), []byte("2")}
 			for i := range keys {
-				if err := engine.Put(keys[i], vals[i]); err != nil {
+				if err := engine.PutUnversioned(keys[i].Key, vals[i]); err != nil {
 					t.Fatal(err)
 				}
-				if val, err := engine.Get(keys[i]); err != nil {
+				if val, err := engine.MVCCGet(keys[i]); err != nil {
 					t.Fatal(err)
 				} else if !bytes.Equal(vals[i], val) {
 					t.Fatalf("expected %s, but found %s", vals[i], val)
@@ -1036,7 +1077,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 			// Verify Get.
 			for i := range keys {
-				valSnapshot, err := snap.Get(keys[i])
+				valSnapshot, err := snap.MVCCGet(keys[i])
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1057,15 +1098,15 @@ func TestSnapshotMethods(t *testing.T) {
 					keyvals, keyvalsSnapshot)
 			}
 
-			// Verify Iterate.
+			// Verify MVCCIterate.
 			index := 0
-			if err := snap.Iterate(roachpb.KeyMin, roachpb.KeyMax, func(kv MVCCKeyValue) (bool, error) {
+			if err := snap.MVCCIterate(roachpb.KeyMin, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
 				if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 					t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 						index, keys[index], vals[index], kv.Key, kv.Value)
 				}
 				index++
-				return false, nil
+				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -1073,12 +1114,12 @@ func TestSnapshotMethods(t *testing.T) {
 			// Write a new key to engine.
 			newKey := mvccKey("c")
 			newVal := []byte("3")
-			if err := engine.Put(newKey, newVal); err != nil {
+			if err := engine.PutUnversioned(newKey.Key, newVal); err != nil {
 				t.Fatal(err)
 			}
 
-			// Verify NewIterator still iterates over original snapshot.
-			iter := snap.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			// Verify NewMVCCIterator still iterates over original snapshot.
+			iter := snap.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			iter.SeekGE(newKey)
 			if ok, err := iter.Valid(); err != nil {
 				t.Fatal(err)
@@ -1104,7 +1145,7 @@ func insertKeysAndValues(keys []MVCCKey, values [][]byte, engine Engine, t *test
 		} else {
 			val = []byte("value")
 		}
-		if err := engine.Put(keys[idx], val); err != nil {
+		if err := engine.PutUnversioned(keys[idx].Key, val); err != nil {
 			t.Errorf("put: expected no error, but got %s", err)
 		}
 	}
@@ -1117,17 +1158,18 @@ func TestCreateCheckpoint(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	rocksDB, err := NewRocksDB(
-		RocksDBConfig{
+	opts := DefaultPebbleOptions()
+	db, err := NewPebble(
+		context.Background(),
+		PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Settings: cluster.MakeTestingClusterSettings(),
 				Dir:      dir,
 			},
+			Opts: opts,
 		},
-		RocksDBCache{},
 	)
-
-	db := Engine(rocksDB) // be impl neutral from now on
+	assert.NoError(t, err)
 	defer db.Close()
 
 	dir = filepath.Join(dir, "checkpoint")
@@ -1320,9 +1362,9 @@ func TestEngineFS(t *testing.T) {
 						t.Fatalf("%q: got nil error, want non-nil %s", tc, errorStr)
 					}
 					var actualErrStr string
-					if os.IsExist(err) {
+					if oserror.IsExist(err) {
 						actualErrStr = "exists"
-					} else if os.IsNotExist(err) {
+					} else if oserror.IsNotExist(err) {
 						actualErrStr = "does-not-exist"
 					} else {
 						actualErrStr = "error"
@@ -1347,21 +1389,6 @@ type engineImpl struct {
 
 // These FS implementations are not in-memory.
 var engineRealFSImpls = []engineImpl{
-	{"rocksdb", func(t *testing.T, dir string) Engine {
-		db, err := NewRocksDB(
-			RocksDBConfig{
-				StorageConfig: base.StorageConfig{
-					Settings: cluster.MakeTestingClusterSettings(),
-					Dir:      dir,
-				},
-			},
-			RocksDBCache{},
-		)
-		if err != nil {
-			t.Fatalf("could not create new rocksdb instance at %s: %+v", dir, err)
-		}
-		return db
-	}},
 	{"pebble", func(t *testing.T, dir string) Engine {
 
 		opts := DefaultPebbleOptions()
@@ -1396,7 +1423,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 			defer db.Close()
 
 			// Verify Remove returns os.ErrNotExist if file does not exist.
-			if err := db.Remove("/non/existent/file"); !os.IsNotExist(err) {
+			if err := db.Remove("/non/existent/file"); !oserror.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
@@ -1433,12 +1460,12 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 			}
 
 			// Verify ReadFile returns os.ErrNotExist if reading an already deleted file.
-			if _, err := db.ReadFile(fname); !os.IsNotExist(err) {
+			if _, err := db.ReadFile(fname); !oserror.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
 			// Verify Remove returns os.ErrNotExist if deleting an already deleted file.
-			if err := db.Remove(fname); !os.IsNotExist(err) {
+			if err := db.Remove(fname); !oserror.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 		})
@@ -1457,49 +1484,31 @@ func TestSupportsPrev(t *testing.T) {
 	}
 	runTest := func(t *testing.T, eng Engine, et engineTest) {
 		t.Run("engine", func(t *testing.T) {
-			it := eng.NewIterator(opts)
+			it := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts)
 			defer it.Close()
 			require.Equal(t, et.engineIterSupportsPrev, it.SupportsPrev())
 		})
 		t.Run("batch", func(t *testing.T) {
 			batch := eng.NewBatch()
 			defer batch.Close()
-			batchIt := batch.NewIterator(opts)
+			batchIt := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts)
 			defer batchIt.Close()
 			require.Equal(t, et.batchIterSupportsPrev, batchIt.SupportsPrev())
 		})
 		t.Run("snapshot", func(t *testing.T) {
 			snap := eng.NewSnapshot()
 			defer snap.Close()
-			snapIt := snap.NewIterator(opts)
+			snapIt := snap.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts)
 			defer snapIt.Close()
 			require.Equal(t, et.snapshotIterSupportsPrev, snapIt.SupportsPrev())
 		})
 	}
 	t.Run("pebble", func(t *testing.T) {
-		eng := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20)
+		eng := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
 		defer eng.Close()
 		runTest(t, eng, engineTest{
 			engineIterSupportsPrev:   true,
 			batchIterSupportsPrev:    true,
-			snapshotIterSupportsPrev: true,
-		})
-	})
-	t.Run("rocksdb", func(t *testing.T) {
-		eng := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
-		defer eng.Close()
-		runTest(t, eng, engineTest{
-			engineIterSupportsPrev:   true,
-			batchIterSupportsPrev:    false,
-			snapshotIterSupportsPrev: true,
-		})
-	})
-	t.Run("tee", func(t *testing.T) {
-		eng := newTeeInMem(context.Background(), roachpb.Attributes{}, 1<<20)
-		defer eng.Close()
-		runTest(t, eng, engineTest{
-			engineIterSupportsPrev:   true,
-			batchIterSupportsPrev:    false,
 			snapshotIterSupportsPrev: true,
 		})
 	})
@@ -1512,12 +1521,6 @@ func TestFS(t *testing.T) {
 	var engineImpls []engineImpl
 	engineImpls = append(engineImpls, engineRealFSImpls...)
 	engineImpls = append(engineImpls,
-		engineImpl{
-			name: "rocksdb_mem",
-			create: func(_ *testing.T, _ string) Engine {
-				return createTestRocksDBEngine()
-			},
-		},
 		engineImpl{
 			name: "pebble_mem",
 			create: func(_ *testing.T, _ string) Engine {
@@ -1548,7 +1551,7 @@ func TestFS(t *testing.T) {
 			// Create a/ and assert that it's empty.
 			require.NoError(t, fs.MkdirAll(path("a")))
 			expectLS(path("a"), []string{})
-			if _, err := fs.Stat(path("a/b/c")); !os.IsNotExist(err) {
+			if _, err := fs.Stat(path("a/b/c")); !oserror.IsNotExist(err) {
 				t.Fatal(`fs.Stat("a/b/c") should not exist`)
 			}
 

@@ -37,7 +37,7 @@ import (
 //
 // The input files use the following DSL:
 //
-// txn_begin      t=<name> [ts=<int>[,<int>]]
+// txn_begin      t=<name> [ts=<int>[,<int>]] [maxTs=<int>[,<int>]]
 // txn_remove     t=<name>
 // txn_restart    t=<name>
 // txn_update     t=<name> t2=<name>
@@ -97,24 +97,21 @@ func TestMVCCHistories(t *testing.T) {
 
 				reportDataEntries := func(buf *bytes.Buffer) error {
 					hasData := false
-					err := engine.Iterate(
-						span.Key,
-						span.EndKey,
-						func(r MVCCKeyValue) (bool, error) {
-							hasData = true
-							if r.Key.Timestamp.IsEmpty() {
-								// Meta is at timestamp zero.
-								meta := enginepb.MVCCMetadata{}
-								if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
-									fmt.Fprintf(buf, "meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
-								} else {
-									fmt.Fprintf(buf, "meta: %v -> %+v\n", r.Key, &meta)
-								}
+					err := engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
+						hasData = true
+						if r.Key.Timestamp.IsEmpty() {
+							// Meta is at timestamp zero.
+							meta := enginepb.MVCCMetadata{}
+							if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
+								fmt.Fprintf(buf, "meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
 							} else {
-								fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
+								fmt.Fprintf(buf, "meta: %v -> %+v\n", r.Key, &meta)
 							}
-							return false, nil
-						})
+						} else {
+							fmt.Fprintf(buf, "data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
+						}
+						return nil
+					})
 					if !hasData {
 						buf.WriteString("<no data>\n")
 					}
@@ -410,11 +407,12 @@ func cmdTxnBegin(e *evalCtx) error {
 	var txnName string
 	e.scanArg("t", &txnName)
 	ts := e.getTs(nil)
+	maxTs := e.getTsWithName(nil, "maxTs")
 	key := roachpb.KeyMin
 	if e.hasArg("k") {
 		key = e.getKey()
 	}
-	txn, err := e.newTxn(txnName, ts, key)
+	txn, err := e.newTxn(txnName, ts, maxTs, key)
 	e.results.txn = txn
 	return err
 }
@@ -521,7 +519,7 @@ func cmdCheckIntent(e *evalCtx) error {
 	}
 	metaKey := mvccKey(key)
 	var meta enginepb.MVCCMetadata
-	ok, _, _, err := e.engine.GetProto(metaKey, &meta)
+	ok, _, _, err := e.engine.MVCCGetProto(metaKey, &meta)
 	if err != nil {
 		return err
 	}
@@ -539,10 +537,7 @@ func cmdCheckIntent(e *evalCtx) error {
 
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
-	return e.engine.ClearRange(
-		MVCCKey{Key: key},
-		MVCCKey{Key: endKey},
-	)
+	return e.engine.ClearRawRange(key, endKey)
 }
 
 func cmdCPut(e *evalCtx) error {
@@ -799,15 +794,19 @@ func (e *evalCtx) getResolve() (bool, roachpb.TransactionStatus) {
 }
 
 func (e *evalCtx) getTs(txn *roachpb.Transaction) hlc.Timestamp {
+	return e.getTsWithName(txn, "ts")
+}
+
+func (e *evalCtx) getTsWithName(txn *roachpb.Transaction, name string) hlc.Timestamp {
 	var ts hlc.Timestamp
 	if txn != nil {
 		ts = txn.ReadTimestamp
 	}
-	if !e.hasArg("ts") {
+	if !e.hasArg(name) {
 		return ts
 	}
 	var tsS string
-	e.scanArg("ts", &tsS)
+	e.scanArg(name, &tsS)
 	parts := strings.Split(tsS, ",")
 
 	// Find the wall time part.
@@ -921,7 +920,7 @@ func (e *evalCtx) getKeyRange() (sk, ek roachpb.Key) {
 }
 
 func (e *evalCtx) newTxn(
-	txnName string, ts hlc.Timestamp, key roachpb.Key,
+	txnName string, ts, maxTs hlc.Timestamp, key roachpb.Key,
 ) (*roachpb.Transaction, error) {
 	if _, ok := e.txns[txnName]; ok {
 		e.Fatalf("txn %s already open", txnName)
@@ -935,6 +934,7 @@ func (e *evalCtx) newTxn(
 		},
 		Name:          txnName,
 		ReadTimestamp: ts,
+		MaxTimestamp:  maxTs,
 		Status:        roachpb.PENDING,
 	}
 	e.txnCounter = e.txnCounter.Add(1)

@@ -246,6 +246,7 @@ func TestContextualHelp(t *testing.T) {
 
 		{`REASSIGN OWNED BY ?? TO ??`, `REASSIGN OWNED BY`},
 		{`REASSIGN OWNED BY foo, bar TO ??`, `REASSIGN OWNED BY`},
+		{`DROP OWNED BY ??`, `DROP OWNED BY`},
 
 		{`RESUME ??`, `RESUME`},
 		{`RESUME JOB ??`, `RESUME JOBS`},
@@ -333,6 +334,8 @@ func TestContextualHelp(t *testing.T) {
 
 		{`SHOW PARTITIONS FROM ??`, `SHOW PARTITIONS`},
 
+		{`SHOW REGIONS ??`, `SHOW REGIONS`},
+
 		{`SHOW ROLES ??`, `SHOW ROLES`},
 
 		{`SHOW SCHEMAS FROM ??`, `SHOW SCHEMAS`},
@@ -351,7 +354,6 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SYNTAX ??`, `SHOW SYNTAX`},
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
 		{`SHOW SAVEPOINT STATUS ??`, `SHOW SAVEPOINT`},
-		{`SHOW LAST QUERY STATISTICS ??`, `SHOW LAST QUERY STATISTICS`},
 
 		{`SHOW RANGE ??`, `SHOW RANGE`},
 

@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -58,7 +57,7 @@ type ProposalData struct {
 
 	// An optional tracing span bound to the proposal. Will be cleaned
 	// up when the proposal finishes.
-	sp opentracing.Span
+	sp *tracing.Span
 
 	// idKey uniquely identifies this proposal.
 	// TODO(andreimatei): idKey is legacy at this point: We could easily key
@@ -138,7 +137,7 @@ func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposal
 	proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
 	proposal.signalProposalResult(pr)
 	if proposal.sp != nil {
-		tracing.FinishSpan(proposal.sp)
+		proposal.sp.Finish()
 		proposal.sp = nil
 	}
 }
@@ -228,8 +227,6 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 		}
 	}
 
-	limiter := limit.NewLimiter(rate.Limit(consistencyCheckRate.Get(&r.store.ClusterSettings().SV)))
-
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {
 		func() {
@@ -239,7 +236,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 				snapshot = &roachpb.RaftSnapshotData{}
 			}
 
-			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, limiter)
+			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, r.store.consistencyLimiter)
 			if err != nil {
 				log.Errorf(ctx, "%v", err)
 				result = nil
@@ -430,7 +427,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	// If we're the current raft leader, may want to transfer the leadership to
 	// the new leaseholder. Note that this condition is also checked periodically
 	// when ticking the replica.
-	r.maybeTransferRaftLeadership(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholder(ctx)
 
 	// Notify the store that a lease change occurred and it may need to
 	// gossip the updated store descriptor (with updated capacity).
@@ -729,7 +726,7 @@ func (r *Replica) evaluateProposal(
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
-	if ba.Timestamp == (hlc.Timestamp{}) {
+	if ba.Timestamp.IsEmpty() {
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
@@ -780,7 +777,7 @@ func (r *Replica) evaluateProposal(
 	// 3. the request has replicated side-effects.
 	needConsensus := !batch.Empty() ||
 		ms != (enginepb.MVCCStats{}) ||
-		!res.Replicated.Equal(kvserverpb.ReplicatedEvalResult{})
+		!res.Replicated.IsZero()
 
 	if needConsensus {
 		// Set the proposal's WriteBatch, which is the serialized representation of
@@ -888,20 +885,20 @@ func (r *Replica) requestToProposal(
 	return proposal, pErr
 }
 
-// getTraceData extracts the SpanContext of the current span.
+// getTraceData extracts the SpanMeta of the current span.
 func (r *Replica) getTraceData(ctx context.Context) opentracing.TextMapCarrier {
-	sp := opentracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(ctx)
 	if sp == nil {
 		return nil
 	}
-	if tracing.IsBlackHoleSpan(sp) {
+	if sp.IsBlackHole() {
 		return nil
 	}
 	traceData := opentracing.TextMapCarrier{}
 	if err := r.AmbientContext.Tracer.Inject(
-		sp.Context(), opentracing.TextMap, traceData,
+		sp.Meta(), opentracing.TextMap, traceData,
 	); err != nil {
-		log.Errorf(ctx, "failed to inject sp context (%+v) as trace data: %s", sp.Context(), err)
+		log.Errorf(ctx, "failed to inject sp context (%+v) as trace data: %s", sp.Meta(), err)
 		return nil
 	}
 	return traceData

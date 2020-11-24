@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
+const testCacheSize = 1 << 30 // 1 GB
+
 func setupMVCCPebble(b testing.TB, dir string) Engine {
 	opts := DefaultPebbleOptions()
 	opts.FS = vfs.Default
@@ -304,18 +306,18 @@ func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkClearRange_Pebble(b *testing.B) {
+func BenchmarkClearMVCCRange_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		return batch.ClearRange(start, end)
+		return batch.ClearMVCCRange(start, end)
 	})
 }
 
 func BenchmarkClearIterRange_Pebble(b *testing.B) {
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+		iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 		return batch.ClearIterRange(iter, start.Key, end.Key)
 	})
@@ -342,4 +344,32 @@ func BenchmarkBatchApplyBatchRepr_Pebble(b *testing.B) {
 			}
 		})
 	}
+}
+
+func BenchmarkBatchBuilderPut(b *testing.B) {
+	value := make([]byte, 10)
+	for i := range value {
+		value[i] = byte(i)
+	}
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+
+	b.ResetTimer()
+
+	const batchSize = 1000
+	batch := &RocksDBBatchBuilder{}
+	for i := 0; i < b.N; i += batchSize {
+		end := i + batchSize
+		if end > b.N {
+			end = b.N
+		}
+
+		for j := i; j < end; j++ {
+			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
+			ts := hlc.Timestamp{WallTime: int64(j)}
+			batch.Put(MVCCKey{key, ts}, value)
+		}
+		batch.Finish()
+	}
+
+	b.StopTimer()
 }

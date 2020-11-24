@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+# TODO(irfansharif): The dependency tree for the *.eg.go needs sorting out. It
+# depends on execgen+templates from a parent package. Look towards colexec for
+# how this should be done. For now we just lazily depend on the already
+# generated+checked in file.
+#
+# keep
+go_library(
+    name = "colexecagg",
+    srcs = [
+        "aggregate_funcs.go",
+        "hash_any_not_null_agg.eg.go",
+        "hash_avg_agg.eg.go",
+        "hash_bool_and_or_agg.eg.go",
+        "hash_concat_agg.eg.go",
+        "hash_count_agg.eg.go",
+        "hash_default_agg.eg.go",
+        "hash_min_max_agg.eg.go",
+        "hash_sum_agg.eg.go",
+        "hash_sum_int_agg.eg.go",
+        "ordered_any_not_null_agg.eg.go",
+        "ordered_avg_agg.eg.go",
+        "ordered_bool_and_or_agg.eg.go",
+        "ordered_concat_agg.eg.go",
+        "ordered_count_agg.eg.go",
+        "ordered_default_agg.eg.go",
+        "ordered_min_max_agg.eg.go",
+        "ordered_sum_agg.eg.go",
+        "ordered_sum_int_agg.eg.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg",
+    visibility = ["//visibility:public"],
+    # Pin the dependencies used in auto-generated code.
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",  # keep
+        "//pkg/sql/colconv",
+        "//pkg/sql/colexec/execgen",  # keep
+        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/duration",
+        "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

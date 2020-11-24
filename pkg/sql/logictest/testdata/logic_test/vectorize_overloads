@@ -573,9 +573,79 @@ NULL
 NULL
 ["foo", {"b": 3}]
 
+query T
+EXPLAIN (VEC) SELECT _json #> '{a,b}' FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projJSONFetchValPathDatumDatumConstOp
+      └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT _json #> '{a,b}' #> '{c}' FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projJSONFetchValPathDatumDatumConstOp
+    └ *colexec.projJSONFetchValPathDatumDatumConstOp
+      └ *colfetcher.ColBatchScan
+
+query T
+SELECT _json #> '{2,a}' FROM many_types
+----
+NULL
+["foo", {"b": 3}]
+NULL
+["foo", {"b": 3}]
+
+query T
+SELECT _json #> '{2,a}' #> '{1,b}' FROM many_types
+----
+NULL
+3
+NULL
+3
+
+query T
+SELECT _json #> '{}' FROM many_types
+----
+NULL
+[1, "hello", {"a": ["foo", {"b": 3}]}]
+[2, "hi", {"b": ["bar", {"c": 4}]}]
+[1, "hello", {"a": ["foo", {"b": 3}]}]
+
+query T
+SELECT _json #> '{c}' #> '{d}' FROM many_types
+----
+NULL
+NULL
+NULL
+NULL
+
+# Regression tests for #49143. Correctly handle cases where the -> operator
+# results in NULL when both arguments are non-NULL.
+subtest regression_49143
+
+query B
+SELECT _json -> 5  = '1' FROM many_types
+----
+NULL
+NULL
+NULL
+NULL
+
+query B
+SELECT _json -> _int -> 'a' = '["foo", {"b": 3}]' FROM many_types
+----
+NULL
+NULL
+NULL
+true
 
 # Make sure we fall back to row engine when we have a mixed-type expression
 # with dates.
+subtest mixed_types_with_dates
+
 query T
 EXPLAIN (VEC) SELECT _time + _date FROM many_types
 ----

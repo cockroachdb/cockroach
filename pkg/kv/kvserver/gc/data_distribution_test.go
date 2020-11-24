@@ -49,14 +49,18 @@ func (ds dataDistribution) setupTest(
 			break
 		}
 		if txn == nil {
-			require.NoError(t, eng.Put(kv.Key, kv.Value))
+			if kv.Key.Timestamp.IsEmpty() {
+				require.NoError(t, eng.PutUnversioned(kv.Key.Key, kv.Value))
+			} else {
+				require.NoError(t, eng.PutMVCC(kv.Key, kv.Value))
+			}
 		} else {
 			// TODO(ajwerner): Decide if using MVCCPut is worth it.
 			ts := kv.Key.Timestamp
-			if txn.ReadTimestamp == (hlc.Timestamp{}) {
+			if txn.ReadTimestamp.IsEmpty() {
 				txn.ReadTimestamp = ts
 			}
-			if txn.WriteTimestamp == (hlc.Timestamp{}) {
+			if txn.WriteTimestamp.IsEmpty() {
 				txn.WriteTimestamp = ts
 			}
 			err := storage.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts,

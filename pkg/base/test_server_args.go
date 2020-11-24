@@ -153,6 +153,8 @@ type TestClusterArgs struct {
 	// no entry in the map for a particular server, the default ServerArgs are
 	// used.
 	//
+	// These are indexes: the key 0 corresponds to the first node.
+	//
 	// A copy of an entry from this map will be copied to each individual server
 	// and potentially adjusted according to ReplicationMode.
 	ServerArgsPerNode map[int]TestServerArgs
@@ -191,6 +193,7 @@ func DefaultTestTempStorageConfigWithSize(
 	return TempStorageConfig{
 		InMemory: true,
 		Mon:      monitor,
+		Settings: st,
 	}
 }
 
@@ -206,9 +209,9 @@ const (
 	// If ReplicationAuto is used, StartTestCluster() blocks until the initial
 	// ranges are fully replicated.
 	ReplicationAuto TestClusterReplicationMode = iota
-	// ReplicationManual means that the split and replication queues of all
-	// servers are stopped, and the test must manually control splitting and
-	// replication through the TestServer.
+	// ReplicationManual means that the split, merge and replication queues of all
+	// servers are stopped, and the test must manually control splitting, merging
+	// and  replication through the TestServer.
 	// Note that the server starts with a number of system ranges,
 	// all with a single replica on node 1.
 	ReplicationManual
@@ -230,4 +233,12 @@ type TestTenantArgs struct {
 	// TenantIDCodecOverride overrides the tenant ID used to construct the SQL
 	// server's codec, but nothing else (e.g. its certs). Used for testing.
 	TenantIDCodecOverride roachpb.TenantID
+
+	// Stopper, if not nil, is used to stop the tenant manually otherwise the
+	// TestServer stopper will be used.
+	Stopper *stop.Stopper
+
+	// DeterministicExplainAnalyze, if set, will result in overriding fields in
+	// EXPLAIN ANALYZE (PLAN) that can vary between runs (like elapsed times).
+	DeterministicExplainAnalyze bool
 }

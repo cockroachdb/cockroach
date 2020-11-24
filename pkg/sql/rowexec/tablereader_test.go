@@ -30,13 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/types"
-	"github.com/opentracing/opentracing-go"
 )
 
 func TestTableReader(t *testing.T) {
@@ -302,6 +302,53 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	})
 }
 
+func TestTableReaderDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlutils.CreateTable(t, sqlDB, "t",
+		"num INT PRIMARY KEY",
+		3, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+
+	// Run the flow in a snowball trace so that we can test for tracing info.
+	tracer := tracing.NewTracer()
+	ctx, sp := tracing.StartSnowballTrace(context.Background(), tracer, "test flow ctx")
+	defer sp.Finish()
+	st := s.ClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+	flowCtx := execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+		Txn:    leafTxn,
+		Local:  true,
+		NodeID: evalCtx.NodeID,
+	}
+	spec := execinfrapb.TableReaderSpec{
+		Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
+		Table: *td.TableDesc(),
+	}
+	post := execinfrapb.PostProcessSpec{
+		Projection:    true,
+		OutputColumns: []uint32{0},
+	}
+
+	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
+		return newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, out)
+	})
+}
+
 // Test that a scan with a limit doesn't touch more ranges than necessary (i.e.
 // we properly set the limit on the underlying Fetcher/KVFetcher).
 func TestLimitScans(t *testing.T) {
@@ -345,9 +392,9 @@ func TestLimitScans(t *testing.T) {
 
 	// Now we're going to run the tableReader and trace it.
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("root", tracing.Recordable)
-	tracing.StartRecording(sp, tracing.SnowballRecording)
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	sp := tracer.StartSpan("root", tracing.WithForceRealSpan())
+	sp.StartRecording(tracing.SnowballRecording)
+	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.EvalCtx.Context = ctx
 
 	tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
@@ -365,7 +412,7 @@ func TestLimitScans(t *testing.T) {
 
 		// Simulate what the DistSQLReceiver does and ingest the trace.
 		if meta != nil && len(meta.TraceData) > 0 {
-			if err := tracing.ImportRemoteSpans(sp, meta.TraceData); err != nil {
+			if err := sp.ImportRemoteSpans(meta.TraceData); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -378,22 +425,25 @@ func TestLimitScans(t *testing.T) {
 		t.Fatalf("expected %d rows, got: %d", limit, rows)
 	}
 
+	skip.UnderMetamorphic(t, "the rest of this test isn't metamorphic: its output "+
+		"depends on the batch size, which varies the number of spans searched.")
+
 	// We're now going to count how many distinct scans we've done. This regex is
 	// specific so that we don't count range resolving requests, and we dedupe
 	// scans from the same key as the DistSender retries scans when it detects
 	// splits.
 	re := regexp.MustCompile(fmt.Sprintf(`querying next range at /Table/%d/1(\S.*)?`, tableDesc.ID))
-	spans := tracing.GetRecording(sp)
+	spans := sp.GetRecording()
 	ranges := make(map[string]struct{})
 	for _, span := range spans {
 		if span.Operation == tableReaderProcName {
 			// Verify that stat collection lines up with results.
-			trs := TableReaderStats{}
-			if err := types.UnmarshalAny(span.Stats, &trs); err != nil {
+			stats := execinfrapb.ComponentStats{}
+			if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
 				t.Fatal(err)
 			}
-			if trs.InputStats.NumRows != limit {
-				t.Fatalf("read %d rows, but stats only counted: %d", limit, trs.InputStats.NumRows)
+			if stats.KV.TuplesRead.Value() != limit {
+				t.Fatalf("read %d rows, but stats counted: %s", limit, stats.KV.TuplesRead)
 			}
 		}
 		for _, l := range span.Logs {

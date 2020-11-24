@@ -13,7 +13,9 @@ package tree
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
@@ -179,6 +181,7 @@ func (node *AlterTable) HoistAddColumnConstraints() {
 				}
 				normalizedCmds = append(normalizedCmds, constraint)
 				d.References.Table = nil
+				telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
 			}
 		}
 	}
@@ -236,7 +239,7 @@ func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.ToType.SQLString())
 	if len(node.Collation) > 0 {
 		ctx.WriteString(" COLLATE ")
-		ctx.WriteString(node.Collation)
+		lex.EncodeLocaleName(&ctx.Buffer, node.Collation)
 	}
 	if node.Using != nil {
 		ctx.WriteString(" USING ")
@@ -547,10 +550,30 @@ func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Stats)
 }
 
+// AlterTableRegionalAffinity represents an ALTER TABLE SET REGIONAL AFFINITY command.
+type AlterTableRegionalAffinity struct {
+	Name             *UnresolvedObjectName
+	IfExists         bool
+	RegionalAffinity RegionalAffinity
+}
+
+var _ Statement = &AlterTableRegionalAffinity{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableRegionalAffinity) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TABLE ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	node.Name.Format(ctx)
+	ctx.WriteString(" SET ")
+	node.RegionalAffinity.Format(ctx)
+}
+
 // AlterTableSetSchema represents an ALTER TABLE SET SCHEMA command.
 type AlterTableSetSchema struct {
 	Name           *UnresolvedObjectName
-	Schema         string
+	Schema         Name
 	IfExists       bool
 	IsView         bool
 	IsMaterialized bool
@@ -575,12 +598,14 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 	}
 	node.Name.Format(ctx)
 	ctx.WriteString(" SET SCHEMA ")
-	ctx.WriteString(node.Schema)
+	ctx.FormatNode(&node.Schema)
 }
 
 // AlterTableOwner represents an ALTER TABLE OWNER TO command.
 type AlterTableOwner struct {
-	Owner string
+	// TODO(solon): Adjust this, see
+	// https://github.com/cockroachdb/cockroach/issues/54696
+	Owner security.SQLUsername
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
@@ -591,5 +616,5 @@ func (node *AlterTableOwner) TelemetryCounter() telemetry.Counter {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatNameP(&node.Owner)
+	ctx.FormatUsername(node.Owner)
 }

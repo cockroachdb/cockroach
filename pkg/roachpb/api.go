@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -594,26 +595,6 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 		}
 	}
 	return nil
-}
-
-// MustSetInner sets the Request contained in the union. It panics if the
-// request is not recognized by the union type. The RequestUnion is reset
-// before being repopulated.
-func (ru *RequestUnion) MustSetInner(args Request) {
-	ru.Reset()
-	if !ru.SetInner(args) {
-		panic(errors.AssertionFailedf("%T excludes %T", ru, args))
-	}
-}
-
-// MustSetInner sets the Response contained in the union. It panics if the
-// response is not recognized by the union type. The ResponseUnion is reset
-// before being repopulated.
-func (ru *ResponseUnion) MustSetInner(reply Response) {
-	ru.Reset()
-	if !ru.SetInner(reply) {
-		panic(errors.AssertionFailedf("%T excludes %T", ru, reply))
-	}
 }
 
 // Method implements the Request interface.
@@ -1418,14 +1399,26 @@ func (rc ReplicationChanges) byType(typ ReplicaChangeType) []ReplicationTarget {
 	return sl
 }
 
-// Additions returns a slice of all contained replication changes that add replicas.
-func (rc ReplicationChanges) Additions() []ReplicationTarget {
-	return rc.byType(ADD_REPLICA)
+// VoterAdditions returns a slice of all contained replication changes that add replicas.
+func (rc ReplicationChanges) VoterAdditions() []ReplicationTarget {
+	return rc.byType(ADD_VOTER)
 }
 
-// Removals returns a slice of all contained replication changes that remove replicas.
-func (rc ReplicationChanges) Removals() []ReplicationTarget {
-	return rc.byType(REMOVE_REPLICA)
+// VoterRemovals returns a slice of all contained replication changes that remove replicas.
+func (rc ReplicationChanges) VoterRemovals() []ReplicationTarget {
+	return rc.byType(REMOVE_VOTER)
+}
+
+// NonVoterAdditions returns a slice of all contained replication
+// changes that add non-voters.
+func (rc ReplicationChanges) NonVoterAdditions() []ReplicationTarget {
+	return rc.byType(ADD_NON_VOTER)
+}
+
+// NonVoterRemovals returns a slice of all contained replication changes
+// that remove non-voters.
+func (rc ReplicationChanges) NonVoterRemovals() []ReplicationTarget {
+	return rc.byType(REMOVE_NON_VOTER)
 }
 
 // Changes returns the changes requested by this AdminChangeReplicasRequest, taking
@@ -1465,4 +1458,22 @@ func (rirr *ResolveIntentRangeRequest) AsLockUpdate() LockUpdate {
 		Status:         rirr.Status,
 		IgnoredSeqNums: rirr.IgnoredSeqNums,
 	}
+}
+
+// CreateStoreIdent creates a store identifier out of the details captured
+// within the join node response (the join node RPC is used to allocate a store
+// ID for the client's first store).
+func (r *JoinNodeResponse) CreateStoreIdent() (StoreIdent, error) {
+	nodeID, storeID := NodeID(r.NodeID), StoreID(r.StoreID)
+	clusterID, err := uuid.FromBytes(r.ClusterID)
+	if err != nil {
+		return StoreIdent{}, err
+	}
+
+	sIdent := StoreIdent{
+		ClusterID: clusterID,
+		NodeID:    nodeID,
+		StoreID:   storeID,
+	}
+	return sIdent, nil
 }

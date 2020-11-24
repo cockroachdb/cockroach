@@ -237,3 +237,28 @@ func parseGeoHash(g string, precision int) (geohash.Box, error) {
 	}
 	return box, nil
 }
+
+// GeometryToEncodedPolyline turns the provided geometry and precision into a Polyline ASCII
+func GeometryToEncodedPolyline(g Geometry, p int) (string, error) {
+	gt, err := g.AsGeomT()
+	if err != nil {
+		return "", fmt.Errorf("error parsing input geometry: %v", err)
+	}
+	if gt.SRID() != 4326 {
+		return "", errors.New("only SRID 4326 is supported")
+	}
+
+	return encodePolylinePoints(gt.FlatCoords(), p), nil
+}
+
+// ParseEncodedPolyline takes the encoded polyline ASCII and precision, decodes the points and returns them as a geometry
+func ParseEncodedPolyline(encodedPolyline string, precision int) (Geometry, error) {
+	flatCoords := decodePolylinePoints(encodedPolyline, precision)
+	ls := geom.NewLineStringFlat(geom.XY, flatCoords).SetSRID(4326)
+
+	g, err := MakeGeometryFromGeomT(ls)
+	if err != nil {
+		return Geometry{}, fmt.Errorf("parsing geography error: %v", err)
+	}
+	return g, nil
+}

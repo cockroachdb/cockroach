@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "systemschema",
+    srcs = ["system.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/privilege",
+        "//pkg/sql/types",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "systemschema_test",
+    srcs = ["system_test.go"],
+    embed = [":systemschema"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -346,7 +347,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 		if err := tc.init(); err != nil {
 			t.Fatal(err)
 		}
-		constructors, constArguments, outputTypes, err := ProcessAggregations(
+		constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)
 		require.NoError(t, err)
@@ -575,7 +576,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			if err := tc.init(); err != nil {
 				t.Fatal(err)
 			}
-			constructors, constArguments, outputTypes, err := ProcessAggregations(
+			constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 			)
 			require.NoError(t, err)
@@ -791,7 +792,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 			if err := tc.init(); err != nil {
 				t.Fatal(err)
 			}
-			constructors, constArguments, outputTypes, err := ProcessAggregations(
+			constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 			)
 			require.NoError(t, err)
@@ -914,7 +915,7 @@ func TestAggregatorRandom(t *testing.T) {
 						aggCols:   [][]uint32{{}, {1}, {1}, {1}, {1}, {1}},
 					}
 					require.NoError(t, tc.init())
-					constructors, constArguments, outputTypes, err := ProcessAggregations(
+					constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 						&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 					)
 					require.NoError(t, err)
@@ -1024,7 +1025,7 @@ func benchmarkAggregateFunction(
 		}
 	}
 	require.NoError(b, tc.init())
-	constructors, constArguments, outputTypes, err := ProcessAggregations(
+	constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 		&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 	)
 	require.NoError(b, err)
@@ -1079,7 +1080,7 @@ func benchmarkAggregateFunction(
 				for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 				}
 			}
-			require.NoError(b, a.(Closer).Close(ctx))
+			require.NoError(b, a.(colexecbase.Closer).Close(ctx))
 		},
 	)
 }
@@ -1123,7 +1124,7 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 	}
 	for aggFnNumber := 0; aggFnNumber < numFnsToRun; aggFnNumber++ {
 		aggFn := execinfrapb.AggregatorSpec_Func(aggFnNumber)
-		if !isAggOptimized(aggFn) {
+		if !colexecagg.IsAggOptimized(aggFn) {
 			continue
 		}
 		for _, agg := range aggTypes {
@@ -1288,7 +1289,7 @@ func TestHashAggregator(t *testing.T) {
 		if err := tc.init(); err != nil {
 			t.Fatal(err)
 		}
-		constructors, constArguments, outputTypes, err := ProcessAggregations(
+		constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)
 		require.NoError(t, err)

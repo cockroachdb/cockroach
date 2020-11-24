@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -259,7 +260,7 @@ func init() {
 		if err := extraClientFlagInit(); err != nil {
 			return err
 		}
-		return setDefaultStderrVerbosity(cmd, log.Severity_WARNING)
+		return setDefaultStderrVerbosity(cmd, severity.WARNING)
 	})
 
 	// Add a pre-run command for `start` and `start-single-node`, as well as the
@@ -272,7 +273,7 @@ func init() {
 			if err := extraServerFlagInit(cmd); err != nil {
 				return err
 			}
-			return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
+			return setDefaultStderrVerbosity(cmd, severity.INFO)
 		})
 	}
 
@@ -331,7 +332,7 @@ func init() {
 	// after argument parsing. We could use UNKNOWN, but to ensure that
 	// the usage text is somewhat less confusing to the user, we use the
 	// special severity value DEFAULT instead.
-	pf.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
+	pf.Lookup(logflags.LogToStderrName).NoOptDefVal = severity.DEFAULT.String()
 
 	// Remember we are starting in the background as the `start` command will
 	// avoid printing some messages to standard output in that case.
@@ -553,6 +554,7 @@ func init() {
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, systemBenchCmds...)
 	clientCmds = append(clientCmds, nodeLocalCmds...)
+	clientCmds = append(clientCmds, importCmds...)
 	clientCmds = append(clientCmds, userFileCmds...)
 	clientCmds = append(clientCmds, stmtDiagCmds...)
 	for _, cmd := range clientCmds {
@@ -581,6 +583,7 @@ func init() {
 		statusNodeCmd,
 		lsNodesCmd,
 		debugZipCmd,
+		doctorClusterCmd,
 		// If you add something here, make sure the actual implementation
 		// of the command uses `cmdTimeoutContext(.)` or it will ignore
 		// the timeout.
@@ -677,6 +680,7 @@ func init() {
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	sqlCmds = append(sqlCmds, stmtDiagCmds...)
 	sqlCmds = append(sqlCmds, nodeLocalCmds...)
+	sqlCmds = append(sqlCmds, importCmds...)
 	sqlCmds = append(sqlCmds, userFileCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.Flags()
@@ -769,12 +773,26 @@ func init() {
 		// variables from startCtx, this is one case where we afford
 		// sharing a variable between both.
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
+
+		intFlag(f, &demoCtx.sqlPort, cliflags.DemoSQLPort)
+		intFlag(f, &demoCtx.httpPort, cliflags.DemoHTTPPort)
 	}
 
 	// statement-diag command.
 	{
 		boolFlag(stmtDiagDeleteCmd.Flags(), &stmtDiagCtx.all, cliflags.StmtDiagDeleteAll)
 		boolFlag(stmtDiagCancelCmd.Flags(), &stmtDiagCtx.all, cliflags.StmtDiagCancelAll)
+	}
+
+	// import dump command.
+	{
+		d := importDumpFileCmd.Flags()
+		boolFlag(d, &importCtx.skipForeignKeys, cliflags.ImportSkipForeignKeys)
+		intFlag(d, &importCtx.maxRowSize, cliflags.ImportMaxRowSize)
+
+		t := importDumpTableCmd.Flags()
+		boolFlag(t, &importCtx.skipForeignKeys, cliflags.ImportSkipForeignKeys)
+		intFlag(t, &importCtx.maxRowSize, cliflags.ImportMaxRowSize)
 	}
 
 	// sqlfmt command.
@@ -927,7 +945,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	if err := security.SetCertPrincipalMap(startCtx.serverCertPrincipalMap); err != nil {
 		return err
 	}
-	serverCfg.User = security.NodeUser
+	serverCfg.User = security.NodeUserName()
 	serverCfg.Insecure = startCtx.serverInsecure
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 
@@ -1069,7 +1087,7 @@ func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity)
 	// then set stderr logging to the level considered default by the
 	// specific command.
 	if (!vf.Changed && !log.DirSet()) ||
-		(vf.Changed && vf.Value.String() == log.Severity_DEFAULT.String()) {
+		(vf.Changed && vf.Value.String() == severity.DEFAULT.String()) {
 		if err := vf.Value.Set(defaultSeverity.String()); err != nil {
 			return err
 		}

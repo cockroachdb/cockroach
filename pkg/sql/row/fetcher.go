@@ -88,7 +88,7 @@ type tableInfo struct {
 	neededValueCols int
 
 	// Map used to get the index for columns in cols.
-	colIdxMap map[descpb.ColumnID]int
+	colIdxMap catalog.TableColMap
 
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
@@ -151,7 +151,7 @@ type FetcherTableArgs struct {
 	Spans            roachpb.Spans
 	Desc             catalog.TableDescriptor
 	Index            *descpb.IndexDescriptor
-	ColIdxMap        map[descpb.ColumnID]int
+	ColIdxMap        catalog.TableColMap
 	IsSecondaryIndex bool
 	Cols             []descpb.ColumnDescriptor
 	// The indexes (0 to # of columns - 1) of the columns to return.
@@ -376,13 +376,14 @@ func (rf *Fetcher) Init(
 
 		// Scan through the entire columns map to see which columns are
 		// required.
-		for col, idx := range table.colIdxMap {
+		for _, col := range table.cols {
+			idx := table.colIdxMap.GetDefault(col.ID)
 			if tableArgs.ValNeededForCol.Contains(idx) {
 				// The idx-th column is required.
-				table.neededCols.Add(int(col))
+				table.neededCols.Add(int(col.ID))
 
 				// Set up any system column metadata, if this column is a system column.
-				switch colinfo.GetSystemColumnKindFromColumnID(col) {
+				switch colinfo.GetSystemColumnKindFromColumnID(col.ID) {
 				case descpb.SystemColumnKind_MVCCTIMESTAMP:
 					table.timestampOutputIdx = idx
 					rf.mvccDecodeStrategy = MVCCDecodingRequired
@@ -409,7 +410,7 @@ func (rf *Fetcher) Init(
 			table.indexColIdx = make([]int, nIndexCols)
 		}
 		for i, id := range indexColumnIDs {
-			colIdx, ok := table.colIdxMap[id]
+			colIdx, ok := table.colIdxMap.Get(id)
 			if ok {
 				table.indexColIdx[i] = colIdx
 				if table.neededCols.Contains(int(id)) {
@@ -461,7 +462,7 @@ func (rf *Fetcher) Init(
 		}
 
 		// Prepare our index key vals slice.
-		table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs)
+		table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs, table.keyValTypes)
 		if err != nil {
 			return err
 		}
@@ -477,7 +478,7 @@ func (rf *Fetcher) Init(
 			// Primary indexes only contain ascendingly-encoded
 			// values. If this ever changes, we'll probably have to
 			// figure out the directions here too.
-			table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
+			table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.ExtraColumnIDs, table.extraTypes)
 			nExtraColumns := len(table.index.ExtraColumnIDs)
 			if cap(table.extraVals) >= nExtraColumns {
 				table.extraVals = table.extraVals[:nExtraColumns]
@@ -804,8 +805,10 @@ func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []rowenc.EncDatum) str
 	var buf strings.Builder
 	for i, v := range vals {
 		if err := v.EnsureDecoded(types[i], rf.alloc); err != nil {
-			buf.WriteString("error decoding: ")
+			buf.WriteString("/{error decoding: ")
 			buf.WriteString(err.Error())
+			buf.WriteByte('}')
+			continue
 		}
 		buf.WriteByte('/')
 		buf.WriteString(v.Datum.String())
@@ -1040,7 +1043,7 @@ func (rf *Fetcher) processKV(
 				}
 				for i, id := range table.index.ExtraColumnIDs {
 					if table.neededCols.Contains(int(id)) {
-						table.row[table.colIdxMap[id]] = table.extraVals[i]
+						table.row[table.colIdxMap.GetDefault(id)] = table.extraVals[i]
 					}
 				}
 				if rf.traceKV {
@@ -1103,7 +1106,7 @@ func (rf *Fetcher) processValueSingle(
 	}
 
 	if rf.traceKV || table.neededCols.Contains(int(colID)) {
-		if idx, ok := table.colIdxMap[colID]; ok {
+		if idx, ok := table.colIdxMap.Get(colID); ok {
 			if rf.traceKV {
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].Name)
 			}
@@ -1177,7 +1180,7 @@ func (rf *Fetcher) processValueBytes(
 			}
 			continue
 		}
-		idx := table.colIdxMap[colID]
+		idx := table.colIdxMap.GetDefault(colID)
 
 		if rf.traceKV {
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].Name)
@@ -1388,13 +1391,13 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 		}
 
 		for _, colID := range familySortedColumnIDs {
-			rowVal := table.row[table.colIdxMap[colID]]
+			rowVal := table.row[table.colIdxMap.GetDefault(colID)]
 			if rowVal.IsNull() {
 				// Column is not present.
 				continue
 			}
 
-			if skip, err := rh.skipColumnInPK(colID, familyID, rowVal.Datum); err != nil {
+			if skip, err := rh.skipColumnInPK(colID, rowVal.Datum); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err, "unable to determine skip")
 			} else if skip {
 				continue
@@ -1478,7 +1481,7 @@ func (rf *Fetcher) checkKeyOrdering(ctx context.Context) error {
 	// is found, compare the values to ensure the ordering matches the column
 	// ordering.
 	for i, id := range rf.rowReadyTable.index.ColumnIDs {
-		idx := rf.rowReadyTable.colIdxMap[id]
+		idx := rf.rowReadyTable.colIdxMap.GetDefault(id)
 		result := rf.rowReadyTable.decodedRow[idx].Compare(&evalCtx, rf.rowReadyTable.lastDatums[idx])
 		expectedDirection := rf.rowReadyTable.index.ColumnDirections[i]
 		if rf.reverse && expectedDirection == descpb.IndexDescriptor_ASC {

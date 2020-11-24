@@ -167,6 +167,8 @@ function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
     run_lat: randomStat(),
     service_lat: randomStat(),
     overhead_lat: randomStat(),
+    bytes_read: randomStat(),
+    rows_read: randomStat(),
     sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null),
   };
 }

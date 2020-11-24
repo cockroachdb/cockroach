@@ -19,12 +19,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -52,8 +55,11 @@ type transientCluster struct {
 	s          *server.TestServer
 	servers    []*server.TestServer
 
+	httpFirstPort int
+	sqlFirstPort  int
+
 	adminPassword string
-	adminUser     string
+	adminUser     security.SQLUsername
 }
 
 func (c *transientCluster) checkConfigAndSetupLogging(
@@ -101,6 +107,9 @@ func (c *transientCluster) checkConfigAndSetupLogging(
 		}
 	}
 
+	c.httpFirstPort = demoCtx.httpPort
+	c.sqlFirstPort = demoCtx.sqlPort
+
 	return nil
 }
 
@@ -125,7 +134,11 @@ func (c *transientCluster) start(
 			joinAddr = c.s.ServingRPCAddr()
 		}
 		nodeID := roachpb.NodeID(i + 1)
-		args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir)
+		args := testServerArgsForTransientCluster(
+			c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir,
+			c.sqlFirstPort,
+			c.httpFirstPort,
+		)
 		if i == 0 {
 			// The first node also auto-inits the cluster.
 			args.NoAutoInitializeCluster = false
@@ -147,7 +160,12 @@ func (c *transientCluster) start(
 			}
 		}
 
-		serv := serverFactory.New(args).(*server.TestServer)
+		s, err := serverFactory.New(args)
+		if err != nil {
+			return err
+		}
+		serv := s.(*server.TestServer)
+		c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 		if i == 0 {
 			c.s = serv
 			// The first node connects its Settings instance to the `log`
@@ -192,7 +210,6 @@ func (c *transientCluster) start(
 			errCh <- nil
 		}
 
-		c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 		// Ensure we close all sticky stores we've created.
 		for _, store := range args.StoreSpecs {
 			if store.StickyInMemoryEngineID != "" {
@@ -275,10 +292,10 @@ func (c *transientCluster) start(
 	if err != nil {
 		return err
 	}
-	c.adminUser = demoUsername
+	c.adminUser = security.MakeSQLUsernameFromPreNormalizedString(demoUsername)
 	c.adminPassword = demoPassword
 	if demoCtx.insecure {
-		c.adminUser = security.RootUser
+		c.adminUser = security.RootUserName()
 		c.adminPassword = "unused"
 	}
 
@@ -300,7 +317,11 @@ func (c *transientCluster) start(
 // testServerArgsForTransientCluster creates the test arguments for
 // a necessary server in the demo cluster.
 func testServerArgsForTransientCluster(
-	sock unixSocketDetails, nodeID roachpb.NodeID, joinAddr string, demoDir string,
+	sock unixSocketDetails,
+	nodeID roachpb.NodeID,
+	joinAddr string,
+	demoDir string,
+	sqlBasePort, httpBasePort int,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
 	storeSpec := base.DefaultTestStoreSpec
@@ -321,6 +342,15 @@ func testServerArgsForTransientCluster(
 		TenantAddr: new(string),
 	}
 
+	if !testingForceRandomizeDemoPorts {
+		// Unit tests can be run with multiple processes side-by-side with
+		// `make stress`. This is bound to not work with fixed ports.
+		sqlPort := sqlBasePort + int(nodeID) - 1
+		httpPort := httpBasePort + int(nodeID) - 1
+		args.SQLAddr = fmt.Sprintf(":%d", sqlPort)
+		args.HTTPAddr = fmt.Sprintf(":%d", httpPort)
+	}
+
 	if demoCtx.localities != nil {
 		args.Locality = demoCtx.localities[int(nodeID-1)]
 	}
@@ -333,6 +363,10 @@ func testServerArgsForTransientCluster(
 
 	return args
 }
+
+// testingForceRandomizeDemoPorts disables the fixed port allocation
+// for demo clusters, for use in tests.
+var testingForceRandomizeDemoPorts bool
 
 func (c *transientCluster) cleanup(ctx context.Context) {
 	if c.stopper != nil {
@@ -389,7 +423,7 @@ func (c *transientCluster) Recommission(nodeID roachpb.NodeID) error {
 
 	req := &serverpb.DecommissionRequest{
 		NodeIDs:          []roachpb.NodeID{nodeID},
-		TargetMembership: kvserverpb.MembershipStatus_ACTIVE,
+		TargetMembership: livenesspb.MembershipStatus_ACTIVE,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -432,7 +466,7 @@ func (c *transientCluster) Decommission(nodeID roachpb.NodeID) error {
 	{
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{nodeID},
-			TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONING,
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
 		}
 		_, err = adminClient.Decommission(ctx, req)
 		if err != nil {
@@ -443,7 +477,7 @@ func (c *transientCluster) Decommission(nodeID roachpb.NodeID) error {
 	{
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{nodeID},
-			TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONED,
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 		}
 		_, err = adminClient.Decommission(ctx, req)
 		if err != nil {
@@ -468,8 +502,13 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	}
 
 	// TODO(#42243): re-compute the latency mapping.
-	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir)
-	serv := server.TestServerFactory.New(args).(*server.TestServer)
+	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir,
+		c.sqlFirstPort, c.httpFirstPort)
+	s, err := server.TestServerFactory.New(args)
+	if err != nil {
+		return err
+	}
+	serv := s.(*server.TestServer)
 
 	// We want to only return after the server is ready.
 	readyCh := make(chan struct{})
@@ -493,14 +532,48 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	return nil
 }
 
+// AddNode create a new node in the cluster and start it.
+// This function uses RestartNode to perform the actual node
+// starting.
+func (c *transientCluster) AddNode(localityString string) error {
+	// '\demo add' accepts both strings that are quoted and not quoted. To properly make use of
+	// quoted strings, strip off the quotes.  Before we do that though, make sure that the quotes match,
+	// or that there aren't any quotes in the string.
+	re := regexp.MustCompile(`".+"|'.+'|[^'"]+`)
+	if localityString != re.FindString(localityString) {
+		return errors.Errorf(`Invalid locality (missing " or '): %s`, localityString)
+	}
+	trimmedString := strings.Trim(localityString, `"'`)
+
+	// Setup locality based on supplied string.
+	var loc roachpb.Locality
+	if err := loc.Set(trimmedString); err != nil {
+		return err
+	}
+
+	// Ensure that the cluster is sane before we start messing around with it.
+	if len(demoCtx.localities) != demoCtx.nodes || demoCtx.nodes != len(c.servers) {
+		return errors.Errorf("number of localities specified (%d) must equal number of "+
+			"nodes (%d) and number of servers (%d)", len(demoCtx.localities), demoCtx.nodes, len(c.servers))
+	}
+
+	// Create a new empty server element and add associated locality info.
+	// When we call RestartNode below, this element will be properly initialized.
+	c.servers = append(c.servers, nil)
+	demoCtx.localities = append(demoCtx.localities, loc)
+	demoCtx.nodes++
+	newNodeID := roachpb.NodeID(demoCtx.nodes)
+
+	return c.RestartNode(newNodeID)
+}
+
 func maybeWarnMemSize(ctx context.Context) {
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
 		requestedMem := (demoCtx.cacheSize + demoCtx.sqlPoolMemorySize) * int64(demoCtx.nodes)
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
 			log.Shoutf(
-				ctx,
-				log.Severity_WARNING,
+				ctx, severity.WARNING,
 				`HIGH MEMORY USAGE
 The sum of --max-sql-memory (%s) and --cache (%s) multiplied by the
 number of nodes (%d) results in potentially high memory usage on your
@@ -546,7 +619,7 @@ func generateCerts(certsDir string) (err error) {
 		defaultKeySize,
 		defaultCertLifetime,
 		false, /* overwrite */
-		security.RootUser,
+		security.RootUserName(),
 		false, /* generatePKCS8Key */
 	)
 }
@@ -574,7 +647,7 @@ func (c *transientCluster) getNetworkURLForServer(
 		sqlURL.User = url.User(security.RootUser)
 		options.Add("sslmode", "disable")
 	} else {
-		sqlURL.User = url.UserPassword(c.adminUser, c.adminPassword)
+		sqlURL.User = url.UserPassword(c.adminUser.Normalized(), c.adminPassword)
 		options.Add("sslmode", "require")
 	}
 	sqlURL.RawQuery = options.Encode()
@@ -678,11 +751,15 @@ func (c *transientCluster) runWorkload(
 						panic(err)
 					}
 					if err := f(ctx); err != nil {
-						// Only log an error and return when the workload function throws
-						// an error, because errors these errors should be ignored, and
-						// should not interrupt the rest of the demo.
+						// Log an error without exiting the load generator when the workload
+						// function throws an error. A single error during the workload demo
+						// should not stop the demo.
 						log.Warningf(ctx, "error running workload query: %+v", err)
+					}
+					select {
+					case <-c.s.Stopper().ShouldStop():
 						return
+					default:
 					}
 				}
 			}
@@ -746,10 +823,9 @@ func (c *transientCluster) sockForServer(nodeID roachpb.NodeID) unixSocketDetail
 	if !c.useSockets {
 		return unixSocketDetails{}
 	}
-	defaultPort, _ := strconv.Atoi(base.DefaultPort)
 	return unixSocketDetails{
 		socketDir:  c.demoDir,
-		portNumber: defaultPort + int(nodeID) - 1,
+		portNumber: c.sqlFirstPort + int(nodeID) - 1,
 		username:   c.adminUser,
 		password:   c.adminPassword,
 	}
@@ -758,7 +834,7 @@ func (c *transientCluster) sockForServer(nodeID roachpb.NodeID) unixSocketDetail
 type unixSocketDetails struct {
 	socketDir  string
 	portNumber int
-	username   string
+	username   security.SQLUsername
 	password   string
 }
 
@@ -784,7 +860,7 @@ func (s unixSocketDetails) String() string {
 	// mode the password is not checked on the server.
 	sqlURL := url.URL{
 		Scheme:   "postgres",
-		User:     url.UserPassword(s.username, s.password),
+		User:     url.UserPassword(s.username.Normalized(), s.password),
 		RawQuery: options.Encode(),
 	}
 	return sqlURL.String()

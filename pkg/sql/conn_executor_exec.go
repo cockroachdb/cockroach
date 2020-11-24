@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"hash/fnv"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -24,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // execStmt executes one statement by dispatching according to the current
@@ -63,11 +62,16 @@ import (
 // pinfo: The values to use for the statement's placeholders. If nil is passed,
 // 	 then the statement cannot have any placeholder.
 func (ex *connExecutor) execStmt(
-	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
+	ctx context.Context,
+	parserStmt parser.Statement,
+	prepared *PreparedStatement,
+	pinfo *tree.PlaceholderInfo,
+	res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload, error) {
+	ast := parserStmt.AST
 	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
 		log.HasSpanOrEvent(ctx) {
-		log.VEventf(ctx, 2, "executing: %s in state: %s", stmt, ex.machine.CurState())
+		log.VEventf(ctx, 2, "executing: %s in state: %s", ast, ex.machine.CurState())
 	}
 
 	// Stop the session idle timeout when a new statement is executed.
@@ -76,16 +80,13 @@ func (ex *connExecutor) execStmt(
 
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
-	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
+	if _, ok := ast.(tree.ObserverStatement); ok {
 		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
-		err := ex.runObserverStatement(ctx, stmt, res)
+		err := ex.runObserverStatement(ctx, ast, res)
 		// Note that regardless of res.Err(), these observer statements don't
 		// generate error events; transactions are always allowed to continue.
 		return nil, nil, err
 	}
-
-	queryID := ex.generateID()
-	stmt.queryID = queryID
 
 	// Dispatch the statement for execution based on the current state.
 	var ev fsm.Event
@@ -94,7 +95,11 @@ func (ex *connExecutor) execStmt(
 
 	switch ex.machine.CurState().(type) {
 	case stateNoTxn:
-		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
+		// Note: when not using explicit transactions, we go through this transition
+		// for every statement. It is important to minimize the amount of work and
+		// allocations performed up to this point.
+		ev, payload = ex.execStmtInNoTxnState(ctx, ast)
+
 	case stateOpen:
 		if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 			remoteAddr := "internal"
@@ -104,23 +109,26 @@ func (ex *connExecutor) execStmt(
 			labels := pprof.Labels(
 				"appname", ex.sessionData.ApplicationName,
 				"addr", remoteAddr,
-				"stmt.tag", stmt.AST.StatementTag(),
-				"stmt.anonymized", stmt.AnonymizedStr,
+				"stmt.tag", ast.StatementTag(),
+				"stmt.anonymized", anonymizeStmt(ast),
 			)
 			pprof.Do(ctx, labels, func(ctx context.Context) {
-				ev, payload, err = ex.execStmtInOpenState(ctx, stmt, res, pinfo)
+				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res)
 			})
 		} else {
-			ev, payload, err = ex.execStmtInOpenState(ctx, stmt, res, pinfo)
+			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res)
 		}
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.recordFailure()
 		}
+
 	case stateAborted:
-		ev, payload = ex.execStmtInAbortedState(ctx, stmt, res)
+		ev, payload = ex.execStmtInAbortedState(ctx, ast, res)
+
 	case stateCommitWait:
-		ev, payload = ex.execStmtInCommitWaitState(stmt, res)
+		ev, payload = ex.execStmtInCommitWaitState(ast, res)
+
 	default:
 		panic(errors.AssertionFailedf("unexpected txn state: %#v", ex.machine.CurState()))
 	}
@@ -135,7 +143,7 @@ func (ex *connExecutor) execStmt(
 
 	if ex.sessionData.IdleInTransactionSessionTimeout > 0 {
 		startIdleInTransactionSessionTimeout := func() {
-			switch stmt.AST.(type) {
+			switch ast.(type) {
 			case *tree.CommitTransaction, *tree.RollbackTransaction:
 				// Do nothing, the transaction is completed, we do not want to start
 				// an idle timer.
@@ -174,13 +182,6 @@ func (ex *connExecutor) execPortal(
 	stmtRes CommandResult,
 	pinfo *tree.PlaceholderInfo,
 ) (ev fsm.Event, payload fsm.EventPayload, err error) {
-	curStmt := Statement{
-		Statement:     portal.Stmt.Statement,
-		Prepared:      portal.Stmt,
-		ExpectedTypes: portal.Stmt.Columns,
-		AnonymizedStr: portal.Stmt.AnonymizedStr,
-	}
-	stmtCtx := withStatement(ctx, ex.curStmt)
 	switch ex.machine.CurState().(type) {
 	case stateOpen:
 		// We're about to execute the statement in an open state which
@@ -199,25 +200,27 @@ func (ex *connExecutor) execPortal(
 		// Note that here we deviate from Postgres which returns an error
 		// when attempting to execute an exhausted portal which has a
 		// StatementType() different from "Rows".
-		if !portal.exhausted {
-			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
-			// Portal suspension is supported via a "side" state machine
-			// (see pgwire.limitedCommandResult for details), so when
-			// execStmt returns, we know for sure that the portal has been
-			// executed to completion, thus, it is exhausted.
-			// Note that the portal is considered exhausted regardless of
-			// the fact whether an error occurred or not - if it did, we
-			// still don't want to re-execute the portal from scratch.
-			// The current statement may have just closed and deleted the portal,
-			// so only exhaust it if it still exists.
-			if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-				ex.exhaustPortal(portalName)
-			}
+		if portal.exhausted {
+			return nil, nil, nil
 		}
+		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes)
+		// Portal suspension is supported via a "side" state machine
+		// (see pgwire.limitedCommandResult for details), so when
+		// execStmt returns, we know for sure that the portal has been
+		// executed to completion, thus, it is exhausted.
+		// Note that the portal is considered exhausted regardless of
+		// the fact whether an error occurred or not - if it did, we
+		// still don't want to re-execute the portal from scratch.
+		// The current statement may have just closed and deleted the portal,
+		// so only exhaust it if it still exists.
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
+			ex.exhaustPortal(portalName)
+		}
+		return ev, payload, err
+
 	default:
-		ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
+		return ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes)
 	}
-	return
 }
 
 // execStmtInOpenState executes one statement in the context of the session's
@@ -234,12 +237,27 @@ func (ex *connExecutor) execPortal(
 //
 // The returned event can be nil if no state transition is required.
 func (ex *connExecutor) execStmtInOpenState(
-	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
+	ctx context.Context,
+	parserStmt parser.Statement,
+	prepared *PreparedStatement,
+	pinfo *tree.PlaceholderInfo,
+	res RestrictedCommandResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	ex.incrementStartedStmtCounter(stmt)
+	ast := parserStmt.AST
+	ctx = withStatement(ctx, ast)
+
+	var stmt Statement
+	queryID := ex.generateID()
+	if prepared != nil {
+		stmt = makeStatementFromPrepared(prepared, queryID)
+	} else {
+		stmt = makeStatement(parserStmt, queryID)
+	}
+
+	ex.incrementStartedStmtCounter(ast)
 	defer func() {
 		if retErr == nil && !payloadHasError(retPayload) {
-			ex.incrementExecutedStmtCounter(stmt)
+			ex.incrementExecutedStmtCounter(ast)
 		}
 	}()
 
@@ -255,7 +273,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// Canceling a query cancels its transaction's context so we take a reference
 	// to the cancelation function here.
-	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt, ex.state.cancel)
+	unregisterFn := ex.addActiveQuery(ast, stmt.SQL, queryID, ex.state.cancel)
 
 	// queryDone is a cleanup function dealing with unregistering a query.
 	// It also deals with overwriting res.Error to a more user-friendly message in
@@ -281,7 +299,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			// intercept the event and payload returned here to ensure that the query
 			// is not retried.
 			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(stmt.AST)),
+				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			res.SetError(cancelchecker.QueryCanceledError)
 			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
@@ -301,7 +319,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
 			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(stmt.AST)),
+				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			res.SetError(sqlerrors.QueryTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
@@ -322,16 +340,22 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutator.paramStatusUpdater = res
 	p.noticeSender = res
+	ih := &p.instrumentation
 
-	var shouldCollectDiagnostics bool
-	var finishCollectionDiagnostics StmtDiagnosticsTraceFinishFunc
-
-	if explainBundle, ok := stmt.AST.(*tree.ExplainAnalyzeDebug); ok {
-		telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
-		// Always collect diagnostics for EXPLAIN ANALYZE (DEBUG).
-		shouldCollectDiagnostics = true
+	if e, ok := ast.(*tree.ExplainAnalyze); ok &&
+		(e.Mode == tree.ExplainDebug || e.Mode == tree.ExplainPlan) {
+		if e.Mode == tree.ExplainDebug {
+			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
+			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
+		} else {
+			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
+			flags := explain.MakeFlags(&e.ExplainOptions)
+			flags.MakeDeterministic = ex.server.cfg.TestingKnobs.DeterministicExplainAnalyze
+			ih.SetOutputMode(explainAnalyzePlanOutput, flags)
+		}
 		// Strip off the explain node to execute the inner statement.
-		stmt.AST = explainBundle.Statement
+		stmt.AST = e.Statement
+		ast = e.Statement
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?
 
@@ -339,71 +363,30 @@ func (ex *connExecutor) execStmtInOpenState(
 		// reflect the column types of the EXPLAIN itself and not those of the inner
 		// statement).
 		stmt.ExpectedTypes = nil
-
-		// EXPLAIN ANALYZE (DEBUG) does not return the rows for the given query;
-		// instead it returns some text which includes a URL.
-		// TODO(radu): maybe capture some of the rows and include them in the
-		// bundle.
-		p.discardRows = true
-	} else {
-		shouldCollectDiagnostics, finishCollectionDiagnostics = ex.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.AST)
-		if shouldCollectDiagnostics {
-			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
-		}
 	}
 
-	if shouldCollectDiagnostics {
-		p.collectBundle = true
-		tr := ex.server.cfg.AmbientCtx.Tracer
-		origCtx := ctx
-		var sp opentracing.Span
-		ctx, sp = tracing.StartSnowballTrace(ctx, tr, "traced statement")
+	var needFinish bool
+	ctx, needFinish = ih.Setup(
+		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
+		stmt.AnonymizedStr, os.ImplicitTxn.Get(),
+	)
+	if needFinish {
+		sql := stmt.SQL
+		defer func() {
+			retErr = ih.Finish(ex.server.cfg, ex.appStats, ex.statsCollector, p, ast, sql, res, retErr)
+		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx
-		defer func() {
-			// Record the statement information that we've collected.
-			// Note that in case of implicit transactions, the trace contains the auto-commit too.
-			sp.Finish()
-			trace := tracing.GetRecording(sp)
-			ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
-			placeholders := p.extendedEvalCtx.Placeholders
-			if finishCollectionDiagnostics != nil {
-				bundle, collectionErr := buildStatementBundle(
-					origCtx, ex.server.cfg.DB, ie, &p.curPlan, trace, placeholders,
-				)
-				finishCollectionDiagnostics(origCtx, bundle.trace, bundle.zip, collectionErr)
-			} else {
-				// Handle EXPLAIN ANALYZE (DEBUG).
-				// If there was a communication error, no point in setting any results.
-				if retErr == nil {
-					retErr = setExplainBundleResult(
-						origCtx, res, stmt.AST, trace, &p.curPlan, placeholders, ie, ex.server.cfg,
-					)
-				}
-			}
-		}()
-	}
-
-	if ex.server.cfg.TestingKnobs.WithStatementTrace != nil {
-		tr := ex.server.cfg.AmbientCtx.Tracer
-		var sp opentracing.Span
-		ctx, sp = tracing.StartSnowballTrace(ctx, tr, stmt.SQL)
-		// TODO(radu): consider removing this if/when #46164 is addressed.
-		p.extendedEvalCtx.Context = ctx
-
-		defer func() {
-			ex.server.cfg.TestingKnobs.WithStatementTrace(sp, stmt.SQL)
-		}()
 	}
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, stmt.AST)
+		ev, payload := ex.makeErrEvent(err, ast)
 		return ev, payload, nil
 	}
 
 	// We exempt `SET` statements from the statement timeout, particularly so as
 	// not to block the `SET statement_timeout` command itself.
-	if ex.sessionData.StmtTimeout > 0 && stmt.AST.StatementTag() != "SET" {
+	if ex.sessionData.StmtTimeout > 0 && ast.StatementTag() != "SET" {
 		timerDuration := ex.sessionData.StmtTimeout - timeutil.Since(ex.phaseTimes[sessionQueryReceived])
 		// There's no need to proceed with execution if the timer has already expired.
 		if timerDuration < 0 {
@@ -413,7 +396,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		timeoutTicker = time.AfterFunc(
 			timerDuration,
 			func() {
-				ex.cancelQuery(stmt.queryID)
+				ex.cancelQuery(queryID)
 				queryTimedOut = true
 				doneAfterFunc <- struct{}{}
 			})
@@ -425,7 +408,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if perr, ok := retPayload.(payloadWithError); ok {
 				execErr = perr.errorCause()
 			}
-			filter(ctx, stmt.String(), execErr)
+			filter(ctx, ast.String(), execErr)
 		}
 
 		// Do the auto-commit, if necessary.
@@ -433,12 +416,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			return
 		}
 		if os.ImplicitTxn.Get() {
-			retEv, retPayload = ex.handleAutoCommit(ctx, stmt.AST)
+			retEv, retPayload = ex.handleAutoCommit(ctx, ast)
 			return
 		}
 	}()
 
-	switch s := stmt.AST.(type) {
+	switch s := ast.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is always an error when in the Open state. It's legitimate only in
 		// the NoTxn state.
@@ -446,7 +429,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	case *tree.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no plan for it.
-		ev, payload := ex.commitSQLTransaction(ctx, stmt.AST)
+		ev, payload := ex.commitSQLTransaction(ctx, ast)
 		return ev, payload, nil
 
 	case *tree.RollbackTransaction:
@@ -491,22 +474,21 @@ func (ex *connExecutor) execStmtInOpenState(
 				typeHints[i] = resolved
 			}
 		}
-		if _, err := ex.addPreparedStmt(
-			ctx, name,
-			Statement{
-				Statement: parser.Statement{
-					// We need the SQL string just for the part that comes after
-					// "PREPARE ... AS",
-					// TODO(radu): it would be nice if the parser would figure out this
-					// string and store it in tree.Prepare.
-					SQL:             tree.AsStringWithFlags(s.Statement, tree.FmtParsable),
-					AST:             s.Statement,
-					NumPlaceholders: stmt.NumPlaceholders,
-					NumAnnotations:  stmt.NumAnnotations,
-				},
+		prepStmt := makeStatement(
+			parser.Statement{
+				// We need the SQL string just for the part that comes after
+				// "PREPARE ... AS",
+				// TODO(radu): it would be nice if the parser would figure out this
+				// string and store it in tree.Prepare.
+				SQL:             tree.AsStringWithFlags(s.Statement, tree.FmtParsable),
+				AST:             s.Statement,
+				NumPlaceholders: stmt.NumPlaceholders,
+				NumAnnotations:  stmt.NumAnnotations,
 			},
-			typeHints,
-			PreparedStatementOriginSQL,
+			ex.generateID(),
+		)
+		if _, err := ex.addPreparedStmt(
+			ctx, name, prepStmt, typeHints, PreparedStatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -531,13 +513,14 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 
 		stmt.Statement = ps.Statement
+		ast = stmt.AST
 		stmt.Prepared = ps
 		stmt.ExpectedTypes = ps.Columns
 		stmt.AnonymizedStr = ps.AnonymizedStr
 		res.ResetStmtType(ps.AST)
 
 		if s.DiscardRows {
-			p.discardRows = true
+			ih.SetDiscardRows()
 		}
 	}
 
@@ -547,7 +530,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens.
 
 	if os.ImplicitTxn.Get() {
-		asOfTs, err := p.isAsOf(ctx, stmt.AST)
+		asOfTs, err := p.isAsOf(ctx, ast)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -561,7 +544,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// the transaction's timestamp. This is useful for running AOST statements
 		// using the InternalExecutor inside an external transaction; one might want
 		// to do that to force p.avoidCachedDescriptors to be set below.
-		ts, err := p.isAsOf(ctx, stmt.AST)
+		ts, err := p.isAsOf(ctx, ast)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -633,7 +616,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	p.stmt = &stmt
+	p.stmt = stmt
 	p.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
@@ -649,7 +632,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		if canAutoRetry {
 			ev := eventRetriableErr{
-				IsCommit:     fsm.FromBool(isCommit(stmt.AST)),
+				IsCommit:     fsm.FromBool(isCommit(ast)),
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
 			txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
@@ -701,19 +684,19 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 // implicit transaction, or a COMMIT statement when using an explicit
 // transaction.
 func (ex *connExecutor) commitSQLTransaction(
-	ctx context.Context, stmt tree.Statement,
+	ctx context.Context, ast tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
 	ex.phaseTimes[sessionStartTransactionCommit] = timeutil.Now()
-	err := ex.commitSQLTransactionInternal(ctx, stmt)
+	err := ex.commitSQLTransactionInternal(ctx, ast)
 	if err != nil {
-		return ex.makeErrEvent(err, stmt)
+		return ex.makeErrEvent(err, ast)
 	}
 	ex.phaseTimes[sessionEndTransactionCommit] = timeutil.Now()
-	return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
+	return eventTxnFinishCommitted{}, nil
 }
 
 func (ex *connExecutor) commitSQLTransactionInternal(
-	ctx context.Context, stmt tree.Statement,
+	ctx context.Context, ast tree.Statement,
 ) error {
 	if err := validatePrimaryKeys(&ex.extraTxnState.descCollection); err != nil {
 		return err
@@ -759,7 +742,7 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
 	// We're done with this txn.
-	return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
+	return eventTxnFinishAborted{}, nil
 }
 
 // dispatchToExecutionEngine executes the statement, writes the result to res
@@ -817,7 +800,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if stmt.AST.StatementType() == tree.Rows {
 		cols = planner.curPlan.main.planColumns()
 	}
-	if err := ex.initStatementResult(ctx, res, stmt, cols); err != nil {
+	if err := ex.initStatementResult(ctx, res, stmt.AST, cols); err != nil {
 		res.SetError(err)
 		return nil
 	}
@@ -835,10 +818,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.statsCollector.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
 	ex.mu.Lock()
-	queryMeta, ok := ex.mu.ActiveQueries[stmt.queryID]
+	queryMeta, ok := ex.mu.ActiveQueries[stmt.QueryID]
 	if !ok {
 		ex.mu.Unlock()
-		panic(errors.AssertionFailedf("query %d not in registry", stmt.queryID))
+		panic(errors.AssertionFailedf("query %d not in registry", stmt.QueryID))
 	}
 	queryMeta.phase = executing
 	// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
@@ -892,13 +875,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // makeExecPlan creates an execution plan and populates planner.curPlan using
 // the cost-based optimizer.
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
-	savePlanString := planner.collectBundle
-	planner.curPlan.init(
-		planner.stmt,
-		ex.appStats,
-		savePlanString,
-	)
-
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return err
@@ -963,10 +939,10 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	evalCtx := planner.ExtendedEvalContext()
 	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	planCtx.stmtType = recv.stmtType
-	if planner.collectBundle {
-		planCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
-			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
-		}
+	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
+		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
+	} else if planner.instrumentation.ShouldCollectBundle() {
+		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
 
 	var evalCtxFactory func() *extendedEvalContext
@@ -991,12 +967,12 @@ func (ex *connExecutor) execWithDistSQLEngine(
 
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
-			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute,
+			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv,
 		) {
 			return recv.stats, recv.commErr
 		}
 	}
-	recv.discardRows = planner.discardRows
+	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
 	cleanup := ex.server.cfg.DistSQLPlanner.PlanAndRun(
@@ -1010,7 +986,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	}
 
 	ex.server.cfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
-		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv, distribute,
+		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv,
 	)
 
 	return recv.stats, recv.commErr
@@ -1066,14 +1042,14 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 // the cursor is not advanced. This means that the statement will run again in
 // stateOpen, at each point its results will also be flushed.
 func (ex *connExecutor) execStmtInNoTxnState(
-	ctx context.Context, stmt Statement,
+	ctx context.Context, ast tree.Statement,
 ) (_ fsm.Event, payload fsm.EventPayload) {
-	switch s := stmt.AST.(type) {
+	switch s := ast.(type) {
 	case *tree.BeginTransaction:
-		ex.incrementStartedStmtCounter(stmt)
+		ex.incrementStartedStmtCounter(ast)
 		defer func() {
 			if !payloadHasError(payload) {
-				ex.incrementExecutedStmtCounter(stmt)
+				ex.incrementExecutedStmtCounter(ast)
 			}
 		}()
 		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, s)
@@ -1089,7 +1065,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.transitionCtx)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
-		return ex.makeErrEvent(errNoTransactionInProgress, stmt.AST)
+		return ex.makeErrEvent(errNoTransactionInProgress, ast)
 	default:
 		// NB: Implicit transactions are created without a historical timestamp even
 		// though the statement might contain an AOST clause. In these cases the
@@ -1110,12 +1086,12 @@ func (ex *connExecutor) execStmtInNoTxnState(
 // - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
 //   allowing it to be retried.
 func (ex *connExecutor) execStmtInAbortedState(
-	ctx context.Context, stmt Statement, res RestrictedCommandResult,
+	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
 ) (_ fsm.Event, payload fsm.EventPayload) {
-	ex.incrementStartedStmtCounter(stmt)
+	ex.incrementStartedStmtCounter(ast)
 	defer func() {
 		if !payloadHasError(payload) {
-			ex.incrementExecutedStmtCounter(stmt)
+			ex.incrementExecutedStmtCounter(ast)
 		}
 	}()
 
@@ -1127,7 +1103,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 		return ev, payload
 	}
 
-	switch s := stmt.AST.(type) {
+	switch s := ast.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		if _, ok := s.(*tree.CommitTransaction); ok {
 			// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
@@ -1164,20 +1140,20 @@ func (ex *connExecutor) execStmtInAbortedState(
 // CommitWait.
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
 func (ex *connExecutor) execStmtInCommitWaitState(
-	stmt Statement, res RestrictedCommandResult,
+	ast tree.Statement, res RestrictedCommandResult,
 ) (ev fsm.Event, payload fsm.EventPayload) {
-	ex.incrementStartedStmtCounter(stmt)
+	ex.incrementStartedStmtCounter(ast)
 	defer func() {
 		if !payloadHasError(payload) {
-			ex.incrementExecutedStmtCounter(stmt)
+			ex.incrementExecutedStmtCounter(ast)
 		}
 	}()
-	switch stmt.AST.(type) {
+	switch ast.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
 		// get a COMMIT in state Aborted.
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
+		return eventTxnFinishCommitted{}, nil
 	default:
 		ev = eventNonRetriableErr{IsCommit: fsm.False}
 		payload = eventNonRetriableErrPayload{
@@ -1191,9 +1167,9 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 //
 // If an error is returned, the connection needs to stop processing queries.
 func (ex *connExecutor) runObserverStatement(
-	ctx context.Context, stmt Statement, res RestrictedCommandResult,
+	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
 ) error {
-	switch sqlStmt := stmt.AST.(type) {
+	switch sqlStmt := ast.(type) {
 	case *tree.ShowTransactionStatus:
 		return ex.runShowTransactionState(ctx, res)
 	case *tree.ShowSavepointStatus:
@@ -1206,7 +1182,7 @@ func (ex *connExecutor) runObserverStatement(
 	case *tree.ShowLastQueryStatistics:
 		return ex.runShowLastQueryStatistics(ctx, res)
 	default:
-		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", stmt.AST))
+		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", ast))
 		return nil
 	}
 }
@@ -1333,14 +1309,13 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 // longer executing. NOTE(andrei): As of Feb 2018, "executing" does not imply
 // that the results have been delivered to the client.
 func (ex *connExecutor) addActiveQuery(
-	queryID ClusterWideID, stmt Statement, cancelFun context.CancelFunc,
+	ast tree.Statement, rawStmt string, queryID ClusterWideID, cancelFun context.CancelFunc,
 ) func() {
-
-	_, hidden := stmt.AST.(tree.HiddenFromShowQueries)
+	_, hidden := ast.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
 		txnID:         ex.state.mu.txn.ID(),
 		start:         ex.phaseTimes[sessionQueryReceived],
-		rawStmt:       stmt.SQL,
+		rawStmt:       rawStmt,
 		phase:         preparing,
 		isDistributed: false,
 		ctxCancel:     cancelFun,
@@ -1357,7 +1332,7 @@ func (ex *connExecutor) addActiveQuery(
 			panic(errors.AssertionFailedf("query %d missing from ActiveQueries", queryID))
 		}
 		delete(ex.mu.ActiveQueries, queryID)
-		ex.mu.LastActiveQuery = stmt.AST
+		ex.mu.LastActiveQuery = ast
 
 		ex.mu.Unlock()
 	}
@@ -1381,7 +1356,7 @@ func (ex *connExecutor) handleAutoCommit(
 	txn := ex.state.mu.txn
 	if txn.IsCommitted() {
 		log.Event(ctx, "statement execution committed the txn")
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
+		return eventTxnFinishCommitted{}, nil
 	}
 
 	if knob := ex.server.cfg.TestingKnobs.BeforeAutoCommit; knob != nil {
@@ -1401,14 +1376,14 @@ func (ex *connExecutor) handleAutoCommit(
 
 // incrementStartedStmtCounter increments the appropriate started
 // statement counter for stmt's type.
-func (ex *connExecutor) incrementStartedStmtCounter(stmt Statement) {
-	ex.metrics.StartedStatementCounters.incrementCount(ex, stmt.AST)
+func (ex *connExecutor) incrementStartedStmtCounter(ast tree.Statement) {
+	ex.metrics.StartedStatementCounters.incrementCount(ex, ast)
 }
 
 // incrementExecutedStmtCounter increments the appropriate executed
 // statement counter for stmt's type.
-func (ex *connExecutor) incrementExecutedStmtCounter(stmt Statement) {
-	ex.metrics.ExecutedStatementCounters.incrementCount(ex, stmt.AST)
+func (ex *connExecutor) incrementExecutedStmtCounter(ast tree.Statement) {
+	ex.metrics.ExecutedStatementCounters.incrementCount(ex, ast)
 }
 
 // payloadHasError returns true if the passed payload implements
@@ -1432,7 +1407,7 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.phaseTimes[sessionTransactionReceived] = ex.phaseTimes[sessionQueryReceived]
 	ex.phaseTimes[sessionFirstStartExecTransaction] = timeutil.Now()
 	ex.phaseTimes[sessionMostRecentStartExecTransaction] = ex.phaseTimes[sessionFirstStartExecTransaction]
-	ex.extraTxnState.transactionStatementsHash = fnv.New128()
+	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
 
@@ -1443,7 +1418,7 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	onTxnRestart = func() {
 		ex.phaseTimes[sessionMostRecentStartExecTransaction] = timeutil.Now()
 		ex.extraTxnState.transactionStatementIDs = nil
-		ex.extraTxnState.transactionStatementsHash = fnv.New128()
+		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 		ex.extraTxnState.numRows = 0
 	}
 	return onTxnFinish, onTxnRestart
@@ -1458,10 +1433,8 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 	txnRetryLat := ex.phaseTimes.getTransactionRetryLatency()
 	commitLat := ex.phaseTimes.getCommitLatency()
 
-	key := txnKey(fmt.Sprintf("%x", ex.extraTxnState.transactionStatementsHash.Sum(nil)))
-
 	ex.statsCollector.recordTransaction(
-		key,
+		txnKey(ex.extraTxnState.transactionStatementsHash.Sum()),
 		txnTime.Seconds(),
 		ev,
 		implicit,

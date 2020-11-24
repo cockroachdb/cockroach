@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqltestutils",
+    srcs = ["sql_test_utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqltestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

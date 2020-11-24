@@ -547,7 +547,7 @@ project
  ├── fd: ()-->(20)
  ├── left-join-apply
  │    ├── columns: ref_0.s:4 exists:19
- │    ├── scan ref_0
+ │    ├── scan a [as=ref_0]
  │    │    └── columns: ref_0.s:4
  │    ├── project
  │    │    ├── columns: exists:19!null
@@ -561,7 +561,7 @@ project
  │    │    │    ├── left-join (cross)
  │    │    │    │    ├── columns: ref_1.k:6!null true:17
  │    │    │    │    ├── outer: (4)
- │    │    │    │    ├── scan ref_1
+ │    │    │    │    ├── scan a [as=ref_1]
  │    │    │    │    │    ├── columns: ref_1.k:6!null
  │    │    │    │    │    └── key: (6)
  │    │    │    │    ├── project
@@ -917,7 +917,7 @@ inner-join (hash)
       └── u:1 = y:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
 # InnerJoinApply case.
-norm expect=RejectNullsUnderJoinLeft
+norm expect=RejectNullsUnderJoinLeft disable=ProjectInnerJoinValues
 SELECT * FROM a
 LEFT JOIN xy ON k = x
 INNER JOIN LATERAL (VALUES (x)) f(v) ON v = y

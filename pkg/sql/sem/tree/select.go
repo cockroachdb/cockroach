@@ -77,14 +77,14 @@ func (node *ParenSelect) Format(ctx *FmtCtx) {
 
 // SelectClause represents a SELECT statement.
 type SelectClause struct {
-	Distinct    bool
+	From        From
 	DistinctOn  DistinctOn
 	Exprs       SelectExprs
-	From        From
-	Where       *Where
 	GroupBy     GroupBy
-	Having      *Where
 	Window      Window
+	Having      *Where
+	Where       *Where
+	Distinct    bool
 	TableSelect bool
 }
 
@@ -445,9 +445,10 @@ const (
 
 // JoinTableExpr.Hint
 const (
-	AstHash   = "HASH"
-	AstLookup = "LOOKUP"
-	AstMerge  = "MERGE"
+	AstHash     = "HASH"
+	AstLookup   = "LOOKUP"
+	AstMerge    = "MERGE"
+	AstInverted = "INVERTED"
 )
 
 // Format implements the NodeFormatter interface.

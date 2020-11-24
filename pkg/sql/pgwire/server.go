@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -640,8 +640,11 @@ func parseClientProvidedSessionParameters(
 		// Load the parameter.
 		switch key {
 		case "user":
-			// Unicode-normalize and case-fold the username.
-			args.User = tree.Name(value).Normalize()
+			// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+			// case-insensitive. Therefore we need to normalize the username
+			// here, so that further lookups for authentication have the correct
+			// identifier.
+			args.User, _ = security.MakeSQLUsernameFromUserInput(value, security.UsernameValidation)
 
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {

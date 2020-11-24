@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "optfmt_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/cmd/optfmt",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/sql/opt/optgen/lang",
+        "//pkg/util/pretty",
+        "//vendor/github.com/pmezard/go-difflib/difflib",
+    ],
+)
+
+go_binary(
+    name = "optfmt",
+    embed = [":optfmt_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "optfmt_test",
+    srcs = ["main_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":optfmt_lib"],
+    deps = ["//vendor/github.com/cockroachdb/datadriven"],
+)

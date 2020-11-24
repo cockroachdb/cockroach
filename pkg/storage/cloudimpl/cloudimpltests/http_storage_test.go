@@ -47,7 +47,7 @@ func TestPutHttp(t *testing.T) {
 	defer dirCleanup()
 
 	const badHeadResponse = "bad-head-response"
-	user := security.RootUser
+	user := security.RootUserName()
 
 	makeServer := func() (*url.URL, func() int, func()) {
 		var files int
@@ -326,7 +326,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		http.DefaultTransport.(*http.Transport).Proxy = nil
 	}()
 
-	conf, err := cloudimpl.ExternalStorageConfFromURI("http://my-server", security.RootUser)
+	conf, err := cloudimpl.ExternalStorageConfFromURI("http://my-server", security.RootUserName())
 	require.NoError(t, err)
 	s, err := cloudimpl.MakeExternalStorage(
 		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,

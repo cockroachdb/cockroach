@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"net"
 	"os"
@@ -32,10 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -83,7 +85,7 @@ type sqlServer struct {
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
 	jobRegistry            *jobs.Registry
-	migMgr                 *sqlmigrations.Manager
+	sqlmigrationsMgr       *sqlmigrations.Manager
 	statsRefresher         *stats.Refresher
 	temporaryObjectCleaner *sql.TemporaryObjectCleaner
 	internalMemMetrics     sql.MemoryMetrics
@@ -109,7 +111,8 @@ type sqlServer struct {
 type sqlServerOptionalKVArgs struct {
 	// nodesStatusServer gives access to the NodesStatus service.
 	nodesStatusServer serverpb.OptionalNodesStatusServer
-	// Narrowed down version of *NodeLiveness. Used by jobs and DistSQLPlanner
+	// Narrowed down version of *NodeLiveness. Used by jobs, DistSQLPlanner, and
+	// migration manager.
 	nodeLiveness optionalnodeliveness.Container
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
 	// config, the DistSQL planner, the table statistics cache, the statements
@@ -221,7 +224,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
 
 	jobRegistry := cfg.circularJobRegistry
-
 	{
 		regLiveness := cfg.nodeLiveness
 		if testingLiveness := cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
@@ -233,6 +235,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		)
 		cfg.registry.AddMetricStruct(cfg.sqlLivenessProvider.Metrics())
 
+		var jobsKnobs *jobs.TestingKnobs
+		if cfg.TestingKnobs.JobsTestingKnobs != nil {
+			jobsKnobs = cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs)
+		}
 		*jobRegistry = *jobs.MakeRegistry(
 			cfg.AmbientCtx,
 			cfg.stopper,
@@ -244,12 +250,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.sqlLivenessProvider,
 			cfg.Settings,
 			cfg.HistogramWindowInterval(),
-			func(opName, user string) (interface{}, func()) {
+			func(opName string, user security.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
-				return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, execCfg)
+				return sql.MakeJobExecContext(opName, user, &sql.MemoryMetrics{}, execCfg)
 			},
 			cfg.jobAdoptionStopFile,
+			jobsKnobs,
 		)
 	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
@@ -309,7 +316,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.TempStorageConfig.Spec
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.StorageEngine, cfg.TempStorageConfig, useStoreSpec)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
@@ -354,6 +361,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RPCContext:     cfg.rpcContext,
 		Stopper:        cfg.stopper,
 
+		LatencyGetter: &serverpb.LatencyGetter{
+			NodesStatusServer: &cfg.nodesStatusServer,
+		},
+
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,
 		TempFS:          tempFS,
@@ -371,7 +382,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		) (kvserverbase.BulkAdder, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
-			bulkMon := execinfra.NewMonitor(ctx, bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
+			bulkMon := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "bulk-adder-monitor")
 			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon)
 		},
 
@@ -423,8 +434,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	}
 
 	var isLive func(roachpb.NodeID) (bool, error)
-	if nl, ok := cfg.nodeLiveness.Optional(47900); ok {
-		isLive = nl.IsLive
+	nodeLiveness, ok := cfg.nodeLiveness.Optional(47900)
+	if ok {
+		isLive = nodeLiveness.IsLive
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
 		// schedule on - always returning true is fine.
@@ -544,6 +556,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	} else {
 		execCfg.TypeSchemaChangerTestingKnobs = new(sql.TypeSchemaChangerTestingKnobs)
 	}
+	execCfg.SchemaChangerMetrics = sql.NewSchemaChangerMetrics()
+	cfg.registry.AddMetricStruct(execCfg.SchemaChangerMetrics)
+
 	if gcJobTestingKnobs := cfg.TestingKnobs.GCJob; gcJobTestingKnobs != nil {
 		execCfg.GCJobTestingKnobs = gcJobTestingKnobs.(*sql.GCJobTestingKnobs)
 	} else {
@@ -624,6 +639,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
+	if cfg.TenantID == roachpb.SystemTenantID {
+		// We only need to attach a version upgrade hook if we're the system
+		// tenant. Regular tenants are disallowed from changing cluster
+		// versions.
+		migrationMgr := migration.NewManager(
+			cfg.nodeDialer,
+			nodeLiveness,
+			cfg.circularInternalExecutor,
+			cfg.db,
+		)
+		execCfg.VersionUpgradeHook = func(ctx context.Context, targetV roachpb.Version) error {
+			return migrationMgr.MigrateTo(ctx, targetV)
+		}
+	}
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
@@ -633,6 +663,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.sqlStatusServer,
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
+		leaseMgr,
 	)
 
 	return &sqlServer{
@@ -673,7 +704,6 @@ func (s *sqlServer) preStart(
 	}
 	s.connManager = connManager
 	s.pgL = pgL
-	s.sqlLivenessProvider.Start(ctx)
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
@@ -695,20 +725,29 @@ func (s *sqlServer) preStart(
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB, s.execCfg.Gossip)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
+	// Only start the sqlliveness subsystem if we're already at the cluster
+	// version which relies on it.
+	sqllivenessActive := sqlliveness.IsActive(ctx, s.execCfg.Settings)
+	if sqllivenessActive {
+		s.sqlLivenessProvider.Start(ctx)
+	}
+
 	migrationsExecutor := sql.MakeInternalExecutor(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
 	migrationsExecutor.SetSessionData(
 		&sessiondata.SessionData{
-			// Migrations need an executor with query distribution turned off. This is
-			// because the node crashes if migrations fail to execute, and query
-			// distribution introduces more moving parts. Local execution is more
-			// robust; for example, the DistSender has retries if it can't connect to
-			// another node, but DistSQL doesn't. Also see #44101 for why DistSQL is
-			// particularly fragile immediately after a node is started (i.e. the
-			// present situation).
-			DistSQLMode: sessiondata.DistSQLOff,
+			LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+				// Migrations need an executor with query distribution turned off. This is
+				// because the node crashes if migrations fail to execute, and query
+				// distribution introduces more moving parts. Local execution is more
+				// robust; for example, the DistSender has retries if it can't connect to
+				// another node, but DistSQL doesn't. Also see #44101 for why DistSQL is
+				// particularly fragile immediately after a node is started (i.e. the
+				// present situation).
+				DistSQLMode: sessiondata.DistSQLOff,
+			},
 		})
-	migMgr := sqlmigrations.NewManager(
+	sqlmigrationsMgr := sqlmigrations.NewManager(
 		stopper,
 		s.execCfg.DB,
 		s.execCfg.Codec,
@@ -719,7 +758,7 @@ func (s *sqlServer) preStart(
 		s.execCfg.Settings,
 		s.jobRegistry,
 	)
-	s.migMgr = migMgr // only for testing via TestServer
+	s.sqlmigrationsMgr = sqlmigrationsMgr // only for testing via TestServer
 
 	if err := s.jobRegistry.Start(
 		ctx, stopper, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
@@ -754,15 +793,29 @@ func (s *sqlServer) preStart(
 	}
 
 	// Run startup migrations (note: these depend on jobs subsystem running).
-	if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
+	if err := sqlmigrationsMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
 		return errors.Wrap(err, "ensuring SQL migrations")
 	}
 
-	log.Infof(ctx, "done ensuring all necessary migrations have run")
+	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
 
+	// Start the sqlLivenessProvider after we've run the SQL migrations that it
+	// relies on. Jobs used by sqlmigrations can't rely on having the
+	// sqlLivenessProvider running as it was introduced in 20.2.
+	//
+	// TODO(ajwerner): For 21.1 this call will need to be lifted above the call
+	// to EnsureMigrations so that migrations which launch jobs will work.
+	if !sqllivenessActive &&
+		// This clause exists to support sqlmigrations tests which intentionally
+		// inject a binary version below the one which includes the relevant
+		// migration. In this case we won't start the sqlliveness subsystem.
+		(!s.execCfg.Settings.Version.BinaryVersion().Less(clusterversion.VersionByKey(
+			clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable))) {
+		s.sqlLivenessProvider.Start(ctx)
+	}
 	// Start the async migration to upgrade namespace entries from the old
 	// namespace table (id 2) to the new one (id 30).
-	if err := migMgr.StartSystemNamespaceMigration(ctx, bootstrapVersion); err != nil {
+	if err := sqlmigrationsMgr.StartSystemNamespaceMigration(ctx, bootstrapVersion); err != nil {
 		return err
 	}
 
@@ -780,10 +833,10 @@ func (s *sqlServer) preStart(
 			InternalExecutor: s.internalExecutor,
 			DB:               s.execCfg.DB,
 			TestingKnobs:     knobs.JobsTestingKnobs,
-			PlanHookMaker: func(opName string, txn *kv.Txn, user string) (interface{}, func()) {
+			PlanHookMaker: func(opName string, txn *kv.Txn, user security.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
-				return sql.NewInternalPlanner(opName, txn, user, &sql.MemoryMetrics{}, s.execCfg)
+				return sql.NewInternalPlanner(opName, txn, user, &sql.MemoryMetrics{}, s.execCfg, sessiondatapb.SessionData{})
 			},
 		},
 		scheduledjobs.ProdJobSchedulerEnv,

@@ -2,6 +2,7 @@ The following types are considered always safe for reporting:
 
 File | Type
 --|--
+pkg/cli/exit/exit.go | `Code`
 pkg/jobs/jobspb/wrap.go | `Type`
 pkg/kv/kvserver/concurrency/lock/locking.go | `WaitPolicy`
 pkg/kv/kvserver/raft.go | `SnapshotRequest_Type`
@@ -20,6 +21,11 @@ pkg/sql/catalog/descpb/structured.go | `DescriptorVersion`
 pkg/sql/catalog/descpb/structured.go | `IndexDescriptorVersion`
 pkg/sql/catalog/descpb/structured.go | `ColumnID`
 pkg/sql/catalog/descpb/structured.go | `MutationID`
+pkg/sql/catalog/descpb/structured.go | `ConstraintValidity`
+pkg/sql/catalog/descpb/structured.go | `DescriptorMutation_Direction`
+pkg/sql/catalog/descpb/structured.go | `DescriptorMutation_State`
+pkg/sql/catalog/descpb/structured.go | `DescriptorState`
+pkg/sql/catalog/descpb/structured.go | `ConstraintType`
 pkg/sql/sem/tree/table_ref.go | `ID`
 pkg/sql/sem/tree/table_ref.go | `ColumnID`
 pkg/storage/enginepb/mvcc3.go | `MVCCStatsDelta`
@@ -42,3 +48,4 @@ pkg/util/log/redact.go | `reflect.TypeOf(complex128(0))`
 pkg/util/log/redact.go | `reflect.TypeOf(os.Interrupt)`
 pkg/util/log/redact.go | `reflect.TypeOf(time.Time{})`
 pkg/util/log/redact.go | `reflect.TypeOf(time.Duration(0))`
+pkg/util/log/redact.go | `reflect.TypeOf(encodingtype.T(0))`

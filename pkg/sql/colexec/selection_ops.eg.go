@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,12 +28,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ apd.Context
+	_ duration.Duration
+	_ coldataext.Datum
+)
+
 // selConstOpBase contains all of the fields for binary selections with a
 // constant, except for the constant itself.
 type selConstOpBase struct {
 	OneInputNode
 	colIdx         int
-	overloadHelper overloadHelper
+	overloadHelper execgen.OverloadHelper
 }
 
 // selOpBase contains all of the fields for non-constant binary selections.
@@ -40,7 +49,7 @@ type selOpBase struct {
 	OneInputNode
 	col1Idx        int
 	col2Idx        int
-	overloadHelper overloadHelper
+	overloadHelper execgen.OverloadHelper
 }
 
 type selEQBoolBoolConstOp struct {
@@ -50,7 +59,7 @@ type selEQBoolBoolConstOp struct {
 
 func (p *selEQBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -197,7 +206,7 @@ type selEQBoolBoolOp struct {
 
 func (p *selEQBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -354,7 +363,7 @@ type selEQBytesBytesConstOp struct {
 
 func (p *selEQBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -469,7 +478,7 @@ type selEQBytesBytesOp struct {
 
 func (p *selEQBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -594,7 +603,7 @@ type selEQDecimalInt16ConstOp struct {
 
 func (p *selEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -622,7 +631,7 @@ func (p *selEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -648,7 +657,7 @@ func (p *selEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -674,7 +683,7 @@ func (p *selEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -700,7 +709,7 @@ func (p *selEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -733,7 +742,7 @@ type selEQDecimalInt16Op struct {
 
 func (p *selEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -765,7 +774,7 @@ func (p *selEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -793,7 +802,7 @@ func (p *selEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -820,7 +829,7 @@ func (p *selEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -848,7 +857,7 @@ func (p *selEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -882,7 +891,7 @@ type selEQDecimalInt32ConstOp struct {
 
 func (p *selEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -910,7 +919,7 @@ func (p *selEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -936,7 +945,7 @@ func (p *selEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -962,7 +971,7 @@ func (p *selEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -988,7 +997,7 @@ func (p *selEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -1021,7 +1030,7 @@ type selEQDecimalInt32Op struct {
 
 func (p *selEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -1053,7 +1062,7 @@ func (p *selEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -1081,7 +1090,7 @@ func (p *selEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -1108,7 +1117,7 @@ func (p *selEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -1136,7 +1145,7 @@ func (p *selEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -1170,7 +1179,7 @@ type selEQDecimalInt64ConstOp struct {
 
 func (p *selEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -1198,7 +1207,7 @@ func (p *selEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -1224,7 +1233,7 @@ func (p *selEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -1250,7 +1259,7 @@ func (p *selEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -1276,7 +1285,7 @@ func (p *selEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -1309,7 +1318,7 @@ type selEQDecimalInt64Op struct {
 
 func (p *selEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -1341,7 +1350,7 @@ func (p *selEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -1369,7 +1378,7 @@ func (p *selEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -1396,7 +1405,7 @@ func (p *selEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -1424,7 +1433,7 @@ func (p *selEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -1458,7 +1467,7 @@ type selEQDecimalFloat64ConstOp struct {
 
 func (p *selEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -1486,7 +1495,7 @@ func (p *selEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1514,7 +1523,7 @@ func (p *selEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1542,7 +1551,7 @@ func (p *selEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1570,7 +1579,7 @@ func (p *selEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1605,7 +1614,7 @@ type selEQDecimalFloat64Op struct {
 
 func (p *selEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -1637,7 +1646,7 @@ func (p *selEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1667,7 +1676,7 @@ func (p *selEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1696,7 +1705,7 @@ func (p *selEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1726,7 +1735,7 @@ func (p *selEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1762,7 +1771,7 @@ type selEQDecimalDecimalConstOp struct {
 
 func (p *selEQDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -1877,7 +1886,7 @@ type selEQDecimalDecimalOp struct {
 
 func (p *selEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -2002,7 +2011,7 @@ type selEQInt16Int16ConstOp struct {
 
 func (p *selEQInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -2161,7 +2170,7 @@ type selEQInt16Int16Op struct {
 
 func (p *selEQInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -2330,7 +2339,7 @@ type selEQInt16Int32ConstOp struct {
 
 func (p *selEQInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -2489,7 +2498,7 @@ type selEQInt16Int32Op struct {
 
 func (p *selEQInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -2658,7 +2667,7 @@ type selEQInt16Int64ConstOp struct {
 
 func (p *selEQInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -2817,7 +2826,7 @@ type selEQInt16Int64Op struct {
 
 func (p *selEQInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -2986,7 +2995,7 @@ type selEQInt16Float64ConstOp struct {
 
 func (p *selEQInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -3177,7 +3186,7 @@ type selEQInt16Float64Op struct {
 
 func (p *selEQInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -3378,7 +3387,7 @@ type selEQInt16DecimalConstOp struct {
 
 func (p *selEQInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -3406,7 +3415,7 @@ func (p *selEQInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -3432,7 +3441,7 @@ func (p *selEQInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -3458,7 +3467,7 @@ func (p *selEQInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -3484,7 +3493,7 @@ func (p *selEQInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -3517,7 +3526,7 @@ type selEQInt16DecimalOp struct {
 
 func (p *selEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -3549,7 +3558,7 @@ func (p *selEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -3577,7 +3586,7 @@ func (p *selEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -3604,7 +3613,7 @@ func (p *selEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -3632,7 +3641,7 @@ func (p *selEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -3666,7 +3675,7 @@ type selEQInt32Int16ConstOp struct {
 
 func (p *selEQInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -3825,7 +3834,7 @@ type selEQInt32Int16Op struct {
 
 func (p *selEQInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -3994,7 +4003,7 @@ type selEQInt32Int32ConstOp struct {
 
 func (p *selEQInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -4153,7 +4162,7 @@ type selEQInt32Int32Op struct {
 
 func (p *selEQInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -4322,7 +4331,7 @@ type selEQInt32Int64ConstOp struct {
 
 func (p *selEQInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -4481,7 +4490,7 @@ type selEQInt32Int64Op struct {
 
 func (p *selEQInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -4650,7 +4659,7 @@ type selEQInt32Float64ConstOp struct {
 
 func (p *selEQInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -4841,7 +4850,7 @@ type selEQInt32Float64Op struct {
 
 func (p *selEQInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -5042,7 +5051,7 @@ type selEQInt32DecimalConstOp struct {
 
 func (p *selEQInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -5070,7 +5079,7 @@ func (p *selEQInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -5096,7 +5105,7 @@ func (p *selEQInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -5122,7 +5131,7 @@ func (p *selEQInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -5148,7 +5157,7 @@ func (p *selEQInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -5181,7 +5190,7 @@ type selEQInt32DecimalOp struct {
 
 func (p *selEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -5213,7 +5222,7 @@ func (p *selEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -5241,7 +5250,7 @@ func (p *selEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -5268,7 +5277,7 @@ func (p *selEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -5296,7 +5305,7 @@ func (p *selEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -5330,7 +5339,7 @@ type selEQInt64Int16ConstOp struct {
 
 func (p *selEQInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -5489,7 +5498,7 @@ type selEQInt64Int16Op struct {
 
 func (p *selEQInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -5658,7 +5667,7 @@ type selEQInt64Int32ConstOp struct {
 
 func (p *selEQInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -5817,7 +5826,7 @@ type selEQInt64Int32Op struct {
 
 func (p *selEQInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -5986,7 +5995,7 @@ type selEQInt64Int64ConstOp struct {
 
 func (p *selEQInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -6145,7 +6154,7 @@ type selEQInt64Int64Op struct {
 
 func (p *selEQInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -6314,7 +6323,7 @@ type selEQInt64Float64ConstOp struct {
 
 func (p *selEQInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -6505,7 +6514,7 @@ type selEQInt64Float64Op struct {
 
 func (p *selEQInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -6706,7 +6715,7 @@ type selEQInt64DecimalConstOp struct {
 
 func (p *selEQInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -6734,7 +6743,7 @@ func (p *selEQInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -6760,7 +6769,7 @@ func (p *selEQInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -6786,7 +6795,7 @@ func (p *selEQInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -6812,7 +6821,7 @@ func (p *selEQInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -6845,7 +6854,7 @@ type selEQInt64DecimalOp struct {
 
 func (p *selEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -6877,7 +6886,7 @@ func (p *selEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -6905,7 +6914,7 @@ func (p *selEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -6932,7 +6941,7 @@ func (p *selEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -6960,7 +6969,7 @@ func (p *selEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -6994,7 +7003,7 @@ type selEQFloat64Int16ConstOp struct {
 
 func (p *selEQFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -7185,7 +7194,7 @@ type selEQFloat64Int16Op struct {
 
 func (p *selEQFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -7386,7 +7395,7 @@ type selEQFloat64Int32ConstOp struct {
 
 func (p *selEQFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -7577,7 +7586,7 @@ type selEQFloat64Int32Op struct {
 
 func (p *selEQFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -7778,7 +7787,7 @@ type selEQFloat64Int64ConstOp struct {
 
 func (p *selEQFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -7969,7 +7978,7 @@ type selEQFloat64Int64Op struct {
 
 func (p *selEQFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -8170,7 +8179,7 @@ type selEQFloat64Float64ConstOp struct {
 
 func (p *selEQFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -8361,7 +8370,7 @@ type selEQFloat64Float64Op struct {
 
 func (p *selEQFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -8562,7 +8571,7 @@ type selEQFloat64DecimalConstOp struct {
 
 func (p *selEQFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -8590,7 +8599,7 @@ func (p *selEQFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8618,7 +8627,7 @@ func (p *selEQFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8646,7 +8655,7 @@ func (p *selEQFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8674,7 +8683,7 @@ func (p *selEQFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8709,7 +8718,7 @@ type selEQFloat64DecimalOp struct {
 
 func (p *selEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -8741,7 +8750,7 @@ func (p *selEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8771,7 +8780,7 @@ func (p *selEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8800,7 +8809,7 @@ func (p *selEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8830,7 +8839,7 @@ func (p *selEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8866,7 +8875,7 @@ type selEQTimestampTimestampConstOp struct {
 
 func (p *selEQTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -9009,7 +9018,7 @@ type selEQTimestampTimestampOp struct {
 
 func (p *selEQTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -9162,7 +9171,7 @@ type selEQIntervalIntervalConstOp struct {
 
 func (p *selEQIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -9277,7 +9286,7 @@ type selEQIntervalIntervalOp struct {
 
 func (p *selEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -9402,7 +9411,7 @@ type selEQDatumDatumConstOp struct {
 
 func (p *selEQDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -9525,7 +9534,7 @@ type selEQDatumDatumOp struct {
 
 func (p *selEQDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -9658,7 +9667,7 @@ type selNEBoolBoolConstOp struct {
 
 func (p *selNEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -9805,7 +9814,7 @@ type selNEBoolBoolOp struct {
 
 func (p *selNEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -9962,7 +9971,7 @@ type selNEBytesBytesConstOp struct {
 
 func (p *selNEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -10077,7 +10086,7 @@ type selNEBytesBytesOp struct {
 
 func (p *selNEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -10202,7 +10211,7 @@ type selNEDecimalInt16ConstOp struct {
 
 func (p *selNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -10230,7 +10239,7 @@ func (p *selNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10256,7 +10265,7 @@ func (p *selNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10282,7 +10291,7 @@ func (p *selNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10308,7 +10317,7 @@ func (p *selNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10341,7 +10350,7 @@ type selNEDecimalInt16Op struct {
 
 func (p *selNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -10373,7 +10382,7 @@ func (p *selNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -10401,7 +10410,7 @@ func (p *selNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -10428,7 +10437,7 @@ func (p *selNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -10456,7 +10465,7 @@ func (p *selNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -10490,7 +10499,7 @@ type selNEDecimalInt32ConstOp struct {
 
 func (p *selNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -10518,7 +10527,7 @@ func (p *selNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10544,7 +10553,7 @@ func (p *selNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10570,7 +10579,7 @@ func (p *selNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10596,7 +10605,7 @@ func (p *selNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10629,7 +10638,7 @@ type selNEDecimalInt32Op struct {
 
 func (p *selNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -10661,7 +10670,7 @@ func (p *selNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -10689,7 +10698,7 @@ func (p *selNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -10716,7 +10725,7 @@ func (p *selNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -10744,7 +10753,7 @@ func (p *selNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -10778,7 +10787,7 @@ type selNEDecimalInt64ConstOp struct {
 
 func (p *selNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -10806,7 +10815,7 @@ func (p *selNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10832,7 +10841,7 @@ func (p *selNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10858,7 +10867,7 @@ func (p *selNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10884,7 +10893,7 @@ func (p *selNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -10917,7 +10926,7 @@ type selNEDecimalInt64Op struct {
 
 func (p *selNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -10949,7 +10958,7 @@ func (p *selNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -10977,7 +10986,7 @@ func (p *selNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -11004,7 +11013,7 @@ func (p *selNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -11032,7 +11041,7 @@ func (p *selNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -11066,7 +11075,7 @@ type selNEDecimalFloat64ConstOp struct {
 
 func (p *selNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -11094,7 +11103,7 @@ func (p *selNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11122,7 +11131,7 @@ func (p *selNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11150,7 +11159,7 @@ func (p *selNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11178,7 +11187,7 @@ func (p *selNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11213,7 +11222,7 @@ type selNEDecimalFloat64Op struct {
 
 func (p *selNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -11245,7 +11254,7 @@ func (p *selNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11275,7 +11284,7 @@ func (p *selNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11304,7 +11313,7 @@ func (p *selNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11334,7 +11343,7 @@ func (p *selNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -11370,7 +11379,7 @@ type selNEDecimalDecimalConstOp struct {
 
 func (p *selNEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -11485,7 +11494,7 @@ type selNEDecimalDecimalOp struct {
 
 func (p *selNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -11610,7 +11619,7 @@ type selNEInt16Int16ConstOp struct {
 
 func (p *selNEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -11769,7 +11778,7 @@ type selNEInt16Int16Op struct {
 
 func (p *selNEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -11938,7 +11947,7 @@ type selNEInt16Int32ConstOp struct {
 
 func (p *selNEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -12097,7 +12106,7 @@ type selNEInt16Int32Op struct {
 
 func (p *selNEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -12266,7 +12275,7 @@ type selNEInt16Int64ConstOp struct {
 
 func (p *selNEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -12425,7 +12434,7 @@ type selNEInt16Int64Op struct {
 
 func (p *selNEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -12594,7 +12603,7 @@ type selNEInt16Float64ConstOp struct {
 
 func (p *selNEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -12785,7 +12794,7 @@ type selNEInt16Float64Op struct {
 
 func (p *selNEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -12986,7 +12995,7 @@ type selNEInt16DecimalConstOp struct {
 
 func (p *selNEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -13014,7 +13023,7 @@ func (p *selNEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -13040,7 +13049,7 @@ func (p *selNEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -13066,7 +13075,7 @@ func (p *selNEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -13092,7 +13101,7 @@ func (p *selNEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -13125,7 +13134,7 @@ type selNEInt16DecimalOp struct {
 
 func (p *selNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -13157,7 +13166,7 @@ func (p *selNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -13185,7 +13194,7 @@ func (p *selNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -13212,7 +13221,7 @@ func (p *selNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -13240,7 +13249,7 @@ func (p *selNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -13274,7 +13283,7 @@ type selNEInt32Int16ConstOp struct {
 
 func (p *selNEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -13433,7 +13442,7 @@ type selNEInt32Int16Op struct {
 
 func (p *selNEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -13602,7 +13611,7 @@ type selNEInt32Int32ConstOp struct {
 
 func (p *selNEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -13761,7 +13770,7 @@ type selNEInt32Int32Op struct {
 
 func (p *selNEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -13930,7 +13939,7 @@ type selNEInt32Int64ConstOp struct {
 
 func (p *selNEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -14089,7 +14098,7 @@ type selNEInt32Int64Op struct {
 
 func (p *selNEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -14258,7 +14267,7 @@ type selNEInt32Float64ConstOp struct {
 
 func (p *selNEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -14449,7 +14458,7 @@ type selNEInt32Float64Op struct {
 
 func (p *selNEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -14650,7 +14659,7 @@ type selNEInt32DecimalConstOp struct {
 
 func (p *selNEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -14678,7 +14687,7 @@ func (p *selNEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -14704,7 +14713,7 @@ func (p *selNEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -14730,7 +14739,7 @@ func (p *selNEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -14756,7 +14765,7 @@ func (p *selNEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -14789,7 +14798,7 @@ type selNEInt32DecimalOp struct {
 
 func (p *selNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -14821,7 +14830,7 @@ func (p *selNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -14849,7 +14858,7 @@ func (p *selNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -14876,7 +14885,7 @@ func (p *selNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -14904,7 +14913,7 @@ func (p *selNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -14938,7 +14947,7 @@ type selNEInt64Int16ConstOp struct {
 
 func (p *selNEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -15097,7 +15106,7 @@ type selNEInt64Int16Op struct {
 
 func (p *selNEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -15266,7 +15275,7 @@ type selNEInt64Int32ConstOp struct {
 
 func (p *selNEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -15425,7 +15434,7 @@ type selNEInt64Int32Op struct {
 
 func (p *selNEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -15594,7 +15603,7 @@ type selNEInt64Int64ConstOp struct {
 
 func (p *selNEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -15753,7 +15762,7 @@ type selNEInt64Int64Op struct {
 
 func (p *selNEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -15922,7 +15931,7 @@ type selNEInt64Float64ConstOp struct {
 
 func (p *selNEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -16113,7 +16122,7 @@ type selNEInt64Float64Op struct {
 
 func (p *selNEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -16314,7 +16323,7 @@ type selNEInt64DecimalConstOp struct {
 
 func (p *selNEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -16342,7 +16351,7 @@ func (p *selNEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -16368,7 +16377,7 @@ func (p *selNEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -16394,7 +16403,7 @@ func (p *selNEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -16420,7 +16429,7 @@ func (p *selNEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -16453,7 +16462,7 @@ type selNEInt64DecimalOp struct {
 
 func (p *selNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -16485,7 +16494,7 @@ func (p *selNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -16513,7 +16522,7 @@ func (p *selNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -16540,7 +16549,7 @@ func (p *selNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -16568,7 +16577,7 @@ func (p *selNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -16602,7 +16611,7 @@ type selNEFloat64Int16ConstOp struct {
 
 func (p *selNEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -16793,7 +16802,7 @@ type selNEFloat64Int16Op struct {
 
 func (p *selNEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -16994,7 +17003,7 @@ type selNEFloat64Int32ConstOp struct {
 
 func (p *selNEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -17185,7 +17194,7 @@ type selNEFloat64Int32Op struct {
 
 func (p *selNEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -17386,7 +17395,7 @@ type selNEFloat64Int64ConstOp struct {
 
 func (p *selNEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -17577,7 +17586,7 @@ type selNEFloat64Int64Op struct {
 
 func (p *selNEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -17778,7 +17787,7 @@ type selNEFloat64Float64ConstOp struct {
 
 func (p *selNEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -17969,7 +17978,7 @@ type selNEFloat64Float64Op struct {
 
 func (p *selNEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -18170,7 +18179,7 @@ type selNEFloat64DecimalConstOp struct {
 
 func (p *selNEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -18198,7 +18207,7 @@ func (p *selNEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18226,7 +18235,7 @@ func (p *selNEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18254,7 +18263,7 @@ func (p *selNEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18282,7 +18291,7 @@ func (p *selNEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18317,7 +18326,7 @@ type selNEFloat64DecimalOp struct {
 
 func (p *selNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -18349,7 +18358,7 @@ func (p *selNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18379,7 +18388,7 @@ func (p *selNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18408,7 +18417,7 @@ func (p *selNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18438,7 +18447,7 @@ func (p *selNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18474,7 +18483,7 @@ type selNETimestampTimestampConstOp struct {
 
 func (p *selNETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -18617,7 +18626,7 @@ type selNETimestampTimestampOp struct {
 
 func (p *selNETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -18770,7 +18779,7 @@ type selNEIntervalIntervalConstOp struct {
 
 func (p *selNEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -18885,7 +18894,7 @@ type selNEIntervalIntervalOp struct {
 
 func (p *selNEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -19010,7 +19019,7 @@ type selNEDatumDatumConstOp struct {
 
 func (p *selNEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -19133,7 +19142,7 @@ type selNEDatumDatumOp struct {
 
 func (p *selNEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -19266,7 +19275,7 @@ type selLTBoolBoolConstOp struct {
 
 func (p *selLTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -19413,7 +19422,7 @@ type selLTBoolBoolOp struct {
 
 func (p *selLTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -19570,7 +19579,7 @@ type selLTBytesBytesConstOp struct {
 
 func (p *selLTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -19685,7 +19694,7 @@ type selLTBytesBytesOp struct {
 
 func (p *selLTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -19810,7 +19819,7 @@ type selLTDecimalInt16ConstOp struct {
 
 func (p *selLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -19838,7 +19847,7 @@ func (p *selLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -19864,7 +19873,7 @@ func (p *selLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -19890,7 +19899,7 @@ func (p *selLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -19916,7 +19925,7 @@ func (p *selLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -19949,7 +19958,7 @@ type selLTDecimalInt16Op struct {
 
 func (p *selLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -19981,7 +19990,7 @@ func (p *selLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20009,7 +20018,7 @@ func (p *selLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20036,7 +20045,7 @@ func (p *selLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20064,7 +20073,7 @@ func (p *selLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20098,7 +20107,7 @@ type selLTDecimalInt32ConstOp struct {
 
 func (p *selLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -20126,7 +20135,7 @@ func (p *selLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -20152,7 +20161,7 @@ func (p *selLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -20178,7 +20187,7 @@ func (p *selLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -20204,7 +20213,7 @@ func (p *selLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -20237,7 +20246,7 @@ type selLTDecimalInt32Op struct {
 
 func (p *selLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -20269,7 +20278,7 @@ func (p *selLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20297,7 +20306,7 @@ func (p *selLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20324,7 +20333,7 @@ func (p *selLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20352,7 +20361,7 @@ func (p *selLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20386,7 +20395,7 @@ type selLTDecimalInt64ConstOp struct {
 
 func (p *selLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -20414,7 +20423,7 @@ func (p *selLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -20440,7 +20449,7 @@ func (p *selLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -20466,7 +20475,7 @@ func (p *selLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -20492,7 +20501,7 @@ func (p *selLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -20525,7 +20534,7 @@ type selLTDecimalInt64Op struct {
 
 func (p *selLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -20557,7 +20566,7 @@ func (p *selLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20585,7 +20594,7 @@ func (p *selLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20612,7 +20621,7 @@ func (p *selLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20640,7 +20649,7 @@ func (p *selLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -20674,7 +20683,7 @@ type selLTDecimalFloat64ConstOp struct {
 
 func (p *selLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -20702,7 +20711,7 @@ func (p *selLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20730,7 +20739,7 @@ func (p *selLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20758,7 +20767,7 @@ func (p *selLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20786,7 +20795,7 @@ func (p *selLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20821,7 +20830,7 @@ type selLTDecimalFloat64Op struct {
 
 func (p *selLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -20853,7 +20862,7 @@ func (p *selLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20883,7 +20892,7 @@ func (p *selLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20912,7 +20921,7 @@ func (p *selLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20942,7 +20951,7 @@ func (p *selLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20978,7 +20987,7 @@ type selLTDecimalDecimalConstOp struct {
 
 func (p *selLTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -21093,7 +21102,7 @@ type selLTDecimalDecimalOp struct {
 
 func (p *selLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -21218,7 +21227,7 @@ type selLTInt16Int16ConstOp struct {
 
 func (p *selLTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -21377,7 +21386,7 @@ type selLTInt16Int16Op struct {
 
 func (p *selLTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -21546,7 +21555,7 @@ type selLTInt16Int32ConstOp struct {
 
 func (p *selLTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -21705,7 +21714,7 @@ type selLTInt16Int32Op struct {
 
 func (p *selLTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -21874,7 +21883,7 @@ type selLTInt16Int64ConstOp struct {
 
 func (p *selLTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -22033,7 +22042,7 @@ type selLTInt16Int64Op struct {
 
 func (p *selLTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -22202,7 +22211,7 @@ type selLTInt16Float64ConstOp struct {
 
 func (p *selLTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -22393,7 +22402,7 @@ type selLTInt16Float64Op struct {
 
 func (p *selLTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -22594,7 +22603,7 @@ type selLTInt16DecimalConstOp struct {
 
 func (p *selLTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -22622,7 +22631,7 @@ func (p *selLTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -22648,7 +22657,7 @@ func (p *selLTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -22674,7 +22683,7 @@ func (p *selLTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -22700,7 +22709,7 @@ func (p *selLTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -22733,7 +22742,7 @@ type selLTInt16DecimalOp struct {
 
 func (p *selLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -22765,7 +22774,7 @@ func (p *selLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -22793,7 +22802,7 @@ func (p *selLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -22820,7 +22829,7 @@ func (p *selLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -22848,7 +22857,7 @@ func (p *selLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -22882,7 +22891,7 @@ type selLTInt32Int16ConstOp struct {
 
 func (p *selLTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -23041,7 +23050,7 @@ type selLTInt32Int16Op struct {
 
 func (p *selLTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -23210,7 +23219,7 @@ type selLTInt32Int32ConstOp struct {
 
 func (p *selLTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -23369,7 +23378,7 @@ type selLTInt32Int32Op struct {
 
 func (p *selLTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -23538,7 +23547,7 @@ type selLTInt32Int64ConstOp struct {
 
 func (p *selLTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -23697,7 +23706,7 @@ type selLTInt32Int64Op struct {
 
 func (p *selLTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -23866,7 +23875,7 @@ type selLTInt32Float64ConstOp struct {
 
 func (p *selLTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -24057,7 +24066,7 @@ type selLTInt32Float64Op struct {
 
 func (p *selLTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -24258,7 +24267,7 @@ type selLTInt32DecimalConstOp struct {
 
 func (p *selLTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -24286,7 +24295,7 @@ func (p *selLTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -24312,7 +24321,7 @@ func (p *selLTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -24338,7 +24347,7 @@ func (p *selLTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -24364,7 +24373,7 @@ func (p *selLTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -24397,7 +24406,7 @@ type selLTInt32DecimalOp struct {
 
 func (p *selLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -24429,7 +24438,7 @@ func (p *selLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -24457,7 +24466,7 @@ func (p *selLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -24484,7 +24493,7 @@ func (p *selLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -24512,7 +24521,7 @@ func (p *selLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -24546,7 +24555,7 @@ type selLTInt64Int16ConstOp struct {
 
 func (p *selLTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -24705,7 +24714,7 @@ type selLTInt64Int16Op struct {
 
 func (p *selLTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -24874,7 +24883,7 @@ type selLTInt64Int32ConstOp struct {
 
 func (p *selLTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -25033,7 +25042,7 @@ type selLTInt64Int32Op struct {
 
 func (p *selLTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -25202,7 +25211,7 @@ type selLTInt64Int64ConstOp struct {
 
 func (p *selLTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -25361,7 +25370,7 @@ type selLTInt64Int64Op struct {
 
 func (p *selLTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -25530,7 +25539,7 @@ type selLTInt64Float64ConstOp struct {
 
 func (p *selLTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -25721,7 +25730,7 @@ type selLTInt64Float64Op struct {
 
 func (p *selLTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -25922,7 +25931,7 @@ type selLTInt64DecimalConstOp struct {
 
 func (p *selLTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -25950,7 +25959,7 @@ func (p *selLTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -25976,7 +25985,7 @@ func (p *selLTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -26002,7 +26011,7 @@ func (p *selLTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -26028,7 +26037,7 @@ func (p *selLTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -26061,7 +26070,7 @@ type selLTInt64DecimalOp struct {
 
 func (p *selLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -26093,7 +26102,7 @@ func (p *selLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -26121,7 +26130,7 @@ func (p *selLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -26148,7 +26157,7 @@ func (p *selLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -26176,7 +26185,7 @@ func (p *selLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -26210,7 +26219,7 @@ type selLTFloat64Int16ConstOp struct {
 
 func (p *selLTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -26401,7 +26410,7 @@ type selLTFloat64Int16Op struct {
 
 func (p *selLTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -26602,7 +26611,7 @@ type selLTFloat64Int32ConstOp struct {
 
 func (p *selLTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -26793,7 +26802,7 @@ type selLTFloat64Int32Op struct {
 
 func (p *selLTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -26994,7 +27003,7 @@ type selLTFloat64Int64ConstOp struct {
 
 func (p *selLTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -27185,7 +27194,7 @@ type selLTFloat64Int64Op struct {
 
 func (p *selLTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -27386,7 +27395,7 @@ type selLTFloat64Float64ConstOp struct {
 
 func (p *selLTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -27577,7 +27586,7 @@ type selLTFloat64Float64Op struct {
 
 func (p *selLTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -27778,7 +27787,7 @@ type selLTFloat64DecimalConstOp struct {
 
 func (p *selLTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -27806,7 +27815,7 @@ func (p *selLTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -27834,7 +27843,7 @@ func (p *selLTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -27862,7 +27871,7 @@ func (p *selLTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -27890,7 +27899,7 @@ func (p *selLTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -27925,7 +27934,7 @@ type selLTFloat64DecimalOp struct {
 
 func (p *selLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -27957,7 +27966,7 @@ func (p *selLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -27987,7 +27996,7 @@ func (p *selLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -28016,7 +28025,7 @@ func (p *selLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -28046,7 +28055,7 @@ func (p *selLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -28082,7 +28091,7 @@ type selLTTimestampTimestampConstOp struct {
 
 func (p *selLTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -28225,7 +28234,7 @@ type selLTTimestampTimestampOp struct {
 
 func (p *selLTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -28378,7 +28387,7 @@ type selLTIntervalIntervalConstOp struct {
 
 func (p *selLTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -28493,7 +28502,7 @@ type selLTIntervalIntervalOp struct {
 
 func (p *selLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -28618,7 +28627,7 @@ type selLTDatumDatumConstOp struct {
 
 func (p *selLTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -28741,7 +28750,7 @@ type selLTDatumDatumOp struct {
 
 func (p *selLTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -28874,7 +28883,7 @@ type selLEBoolBoolConstOp struct {
 
 func (p *selLEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -29021,7 +29030,7 @@ type selLEBoolBoolOp struct {
 
 func (p *selLEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -29178,7 +29187,7 @@ type selLEBytesBytesConstOp struct {
 
 func (p *selLEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -29293,7 +29302,7 @@ type selLEBytesBytesOp struct {
 
 func (p *selLEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -29418,7 +29427,7 @@ type selLEDecimalInt16ConstOp struct {
 
 func (p *selLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -29446,7 +29455,7 @@ func (p *selLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -29472,7 +29481,7 @@ func (p *selLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -29498,7 +29507,7 @@ func (p *selLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -29524,7 +29533,7 @@ func (p *selLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -29557,7 +29566,7 @@ type selLEDecimalInt16Op struct {
 
 func (p *selLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -29589,7 +29598,7 @@ func (p *selLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -29617,7 +29626,7 @@ func (p *selLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -29644,7 +29653,7 @@ func (p *selLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -29672,7 +29681,7 @@ func (p *selLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -29706,7 +29715,7 @@ type selLEDecimalInt32ConstOp struct {
 
 func (p *selLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -29734,7 +29743,7 @@ func (p *selLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -29760,7 +29769,7 @@ func (p *selLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -29786,7 +29795,7 @@ func (p *selLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -29812,7 +29821,7 @@ func (p *selLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -29845,7 +29854,7 @@ type selLEDecimalInt32Op struct {
 
 func (p *selLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -29877,7 +29886,7 @@ func (p *selLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -29905,7 +29914,7 @@ func (p *selLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -29932,7 +29941,7 @@ func (p *selLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -29960,7 +29969,7 @@ func (p *selLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -29994,7 +30003,7 @@ type selLEDecimalInt64ConstOp struct {
 
 func (p *selLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -30022,7 +30031,7 @@ func (p *selLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -30048,7 +30057,7 @@ func (p *selLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -30074,7 +30083,7 @@ func (p *selLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -30100,7 +30109,7 @@ func (p *selLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -30133,7 +30142,7 @@ type selLEDecimalInt64Op struct {
 
 func (p *selLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -30165,7 +30174,7 @@ func (p *selLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -30193,7 +30202,7 @@ func (p *selLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -30220,7 +30229,7 @@ func (p *selLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -30248,7 +30257,7 @@ func (p *selLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -30282,7 +30291,7 @@ type selLEDecimalFloat64ConstOp struct {
 
 func (p *selLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -30310,7 +30319,7 @@ func (p *selLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -30338,7 +30347,7 @@ func (p *selLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -30366,7 +30375,7 @@ func (p *selLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -30394,7 +30403,7 @@ func (p *selLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -30429,7 +30438,7 @@ type selLEDecimalFloat64Op struct {
 
 func (p *selLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -30461,7 +30470,7 @@ func (p *selLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -30491,7 +30500,7 @@ func (p *selLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -30520,7 +30529,7 @@ func (p *selLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -30550,7 +30559,7 @@ func (p *selLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -30586,7 +30595,7 @@ type selLEDecimalDecimalConstOp struct {
 
 func (p *selLEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -30701,7 +30710,7 @@ type selLEDecimalDecimalOp struct {
 
 func (p *selLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -30826,7 +30835,7 @@ type selLEInt16Int16ConstOp struct {
 
 func (p *selLEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -30985,7 +30994,7 @@ type selLEInt16Int16Op struct {
 
 func (p *selLEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -31154,7 +31163,7 @@ type selLEInt16Int32ConstOp struct {
 
 func (p *selLEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -31313,7 +31322,7 @@ type selLEInt16Int32Op struct {
 
 func (p *selLEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -31482,7 +31491,7 @@ type selLEInt16Int64ConstOp struct {
 
 func (p *selLEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -31641,7 +31650,7 @@ type selLEInt16Int64Op struct {
 
 func (p *selLEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -31810,7 +31819,7 @@ type selLEInt16Float64ConstOp struct {
 
 func (p *selLEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -32001,7 +32010,7 @@ type selLEInt16Float64Op struct {
 
 func (p *selLEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -32202,7 +32211,7 @@ type selLEInt16DecimalConstOp struct {
 
 func (p *selLEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -32230,7 +32239,7 @@ func (p *selLEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -32256,7 +32265,7 @@ func (p *selLEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -32282,7 +32291,7 @@ func (p *selLEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -32308,7 +32317,7 @@ func (p *selLEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -32341,7 +32350,7 @@ type selLEInt16DecimalOp struct {
 
 func (p *selLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -32373,7 +32382,7 @@ func (p *selLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -32401,7 +32410,7 @@ func (p *selLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -32428,7 +32437,7 @@ func (p *selLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -32456,7 +32465,7 @@ func (p *selLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -32490,7 +32499,7 @@ type selLEInt32Int16ConstOp struct {
 
 func (p *selLEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -32649,7 +32658,7 @@ type selLEInt32Int16Op struct {
 
 func (p *selLEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -32818,7 +32827,7 @@ type selLEInt32Int32ConstOp struct {
 
 func (p *selLEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -32977,7 +32986,7 @@ type selLEInt32Int32Op struct {
 
 func (p *selLEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -33146,7 +33155,7 @@ type selLEInt32Int64ConstOp struct {
 
 func (p *selLEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -33305,7 +33314,7 @@ type selLEInt32Int64Op struct {
 
 func (p *selLEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -33474,7 +33483,7 @@ type selLEInt32Float64ConstOp struct {
 
 func (p *selLEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -33665,7 +33674,7 @@ type selLEInt32Float64Op struct {
 
 func (p *selLEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -33866,7 +33875,7 @@ type selLEInt32DecimalConstOp struct {
 
 func (p *selLEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -33894,7 +33903,7 @@ func (p *selLEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -33920,7 +33929,7 @@ func (p *selLEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -33946,7 +33955,7 @@ func (p *selLEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -33972,7 +33981,7 @@ func (p *selLEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -34005,7 +34014,7 @@ type selLEInt32DecimalOp struct {
 
 func (p *selLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -34037,7 +34046,7 @@ func (p *selLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -34065,7 +34074,7 @@ func (p *selLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -34092,7 +34101,7 @@ func (p *selLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -34120,7 +34129,7 @@ func (p *selLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -34154,7 +34163,7 @@ type selLEInt64Int16ConstOp struct {
 
 func (p *selLEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -34313,7 +34322,7 @@ type selLEInt64Int16Op struct {
 
 func (p *selLEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -34482,7 +34491,7 @@ type selLEInt64Int32ConstOp struct {
 
 func (p *selLEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -34641,7 +34650,7 @@ type selLEInt64Int32Op struct {
 
 func (p *selLEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -34810,7 +34819,7 @@ type selLEInt64Int64ConstOp struct {
 
 func (p *selLEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -34969,7 +34978,7 @@ type selLEInt64Int64Op struct {
 
 func (p *selLEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -35138,7 +35147,7 @@ type selLEInt64Float64ConstOp struct {
 
 func (p *selLEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -35329,7 +35338,7 @@ type selLEInt64Float64Op struct {
 
 func (p *selLEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -35530,7 +35539,7 @@ type selLEInt64DecimalConstOp struct {
 
 func (p *selLEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -35558,7 +35567,7 @@ func (p *selLEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -35584,7 +35593,7 @@ func (p *selLEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -35610,7 +35619,7 @@ func (p *selLEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -35636,7 +35645,7 @@ func (p *selLEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -35669,7 +35678,7 @@ type selLEInt64DecimalOp struct {
 
 func (p *selLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -35701,7 +35710,7 @@ func (p *selLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -35729,7 +35738,7 @@ func (p *selLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -35756,7 +35765,7 @@ func (p *selLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -35784,7 +35793,7 @@ func (p *selLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -35818,7 +35827,7 @@ type selLEFloat64Int16ConstOp struct {
 
 func (p *selLEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -36009,7 +36018,7 @@ type selLEFloat64Int16Op struct {
 
 func (p *selLEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -36210,7 +36219,7 @@ type selLEFloat64Int32ConstOp struct {
 
 func (p *selLEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -36401,7 +36410,7 @@ type selLEFloat64Int32Op struct {
 
 func (p *selLEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -36602,7 +36611,7 @@ type selLEFloat64Int64ConstOp struct {
 
 func (p *selLEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -36793,7 +36802,7 @@ type selLEFloat64Int64Op struct {
 
 func (p *selLEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -36994,7 +37003,7 @@ type selLEFloat64Float64ConstOp struct {
 
 func (p *selLEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -37185,7 +37194,7 @@ type selLEFloat64Float64Op struct {
 
 func (p *selLEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -37386,7 +37395,7 @@ type selLEFloat64DecimalConstOp struct {
 
 func (p *selLEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -37414,7 +37423,7 @@ func (p *selLEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -37442,7 +37451,7 @@ func (p *selLEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -37470,7 +37479,7 @@ func (p *selLEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -37498,7 +37507,7 @@ func (p *selLEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -37533,7 +37542,7 @@ type selLEFloat64DecimalOp struct {
 
 func (p *selLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -37565,7 +37574,7 @@ func (p *selLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -37595,7 +37604,7 @@ func (p *selLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -37624,7 +37633,7 @@ func (p *selLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -37654,7 +37663,7 @@ func (p *selLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -37690,7 +37699,7 @@ type selLETimestampTimestampConstOp struct {
 
 func (p *selLETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -37833,7 +37842,7 @@ type selLETimestampTimestampOp struct {
 
 func (p *selLETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -37986,7 +37995,7 @@ type selLEIntervalIntervalConstOp struct {
 
 func (p *selLEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -38101,7 +38110,7 @@ type selLEIntervalIntervalOp struct {
 
 func (p *selLEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -38226,7 +38235,7 @@ type selLEDatumDatumConstOp struct {
 
 func (p *selLEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -38349,7 +38358,7 @@ type selLEDatumDatumOp struct {
 
 func (p *selLEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -38482,7 +38491,7 @@ type selGTBoolBoolConstOp struct {
 
 func (p *selGTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -38629,7 +38638,7 @@ type selGTBoolBoolOp struct {
 
 func (p *selGTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -38786,7 +38795,7 @@ type selGTBytesBytesConstOp struct {
 
 func (p *selGTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -38901,7 +38910,7 @@ type selGTBytesBytesOp struct {
 
 func (p *selGTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -39026,7 +39035,7 @@ type selGTDecimalInt16ConstOp struct {
 
 func (p *selGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -39054,7 +39063,7 @@ func (p *selGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39080,7 +39089,7 @@ func (p *selGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39106,7 +39115,7 @@ func (p *selGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39132,7 +39141,7 @@ func (p *selGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39165,7 +39174,7 @@ type selGTDecimalInt16Op struct {
 
 func (p *selGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -39197,7 +39206,7 @@ func (p *selGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39225,7 +39234,7 @@ func (p *selGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39252,7 +39261,7 @@ func (p *selGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39280,7 +39289,7 @@ func (p *selGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39314,7 +39323,7 @@ type selGTDecimalInt32ConstOp struct {
 
 func (p *selGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -39342,7 +39351,7 @@ func (p *selGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39368,7 +39377,7 @@ func (p *selGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39394,7 +39403,7 @@ func (p *selGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39420,7 +39429,7 @@ func (p *selGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39453,7 +39462,7 @@ type selGTDecimalInt32Op struct {
 
 func (p *selGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -39485,7 +39494,7 @@ func (p *selGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39513,7 +39522,7 @@ func (p *selGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39540,7 +39549,7 @@ func (p *selGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39568,7 +39577,7 @@ func (p *selGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39602,7 +39611,7 @@ type selGTDecimalInt64ConstOp struct {
 
 func (p *selGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -39630,7 +39639,7 @@ func (p *selGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39656,7 +39665,7 @@ func (p *selGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39682,7 +39691,7 @@ func (p *selGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39708,7 +39717,7 @@ func (p *selGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -39741,7 +39750,7 @@ type selGTDecimalInt64Op struct {
 
 func (p *selGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -39773,7 +39782,7 @@ func (p *selGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39801,7 +39810,7 @@ func (p *selGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39828,7 +39837,7 @@ func (p *selGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39856,7 +39865,7 @@ func (p *selGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -39890,7 +39899,7 @@ type selGTDecimalFloat64ConstOp struct {
 
 func (p *selGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -39918,7 +39927,7 @@ func (p *selGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -39946,7 +39955,7 @@ func (p *selGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -39974,7 +39983,7 @@ func (p *selGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -40002,7 +40011,7 @@ func (p *selGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -40037,7 +40046,7 @@ type selGTDecimalFloat64Op struct {
 
 func (p *selGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -40069,7 +40078,7 @@ func (p *selGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -40099,7 +40108,7 @@ func (p *selGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -40128,7 +40137,7 @@ func (p *selGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -40158,7 +40167,7 @@ func (p *selGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -40194,7 +40203,7 @@ type selGTDecimalDecimalConstOp struct {
 
 func (p *selGTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -40309,7 +40318,7 @@ type selGTDecimalDecimalOp struct {
 
 func (p *selGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -40434,7 +40443,7 @@ type selGTInt16Int16ConstOp struct {
 
 func (p *selGTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -40593,7 +40602,7 @@ type selGTInt16Int16Op struct {
 
 func (p *selGTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -40762,7 +40771,7 @@ type selGTInt16Int32ConstOp struct {
 
 func (p *selGTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -40921,7 +40930,7 @@ type selGTInt16Int32Op struct {
 
 func (p *selGTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -41090,7 +41099,7 @@ type selGTInt16Int64ConstOp struct {
 
 func (p *selGTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -41249,7 +41258,7 @@ type selGTInt16Int64Op struct {
 
 func (p *selGTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -41418,7 +41427,7 @@ type selGTInt16Float64ConstOp struct {
 
 func (p *selGTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -41609,7 +41618,7 @@ type selGTInt16Float64Op struct {
 
 func (p *selGTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -41810,7 +41819,7 @@ type selGTInt16DecimalConstOp struct {
 
 func (p *selGTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -41838,7 +41847,7 @@ func (p *selGTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -41864,7 +41873,7 @@ func (p *selGTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -41890,7 +41899,7 @@ func (p *selGTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -41916,7 +41925,7 @@ func (p *selGTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -41949,7 +41958,7 @@ type selGTInt16DecimalOp struct {
 
 func (p *selGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -41981,7 +41990,7 @@ func (p *selGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -42009,7 +42018,7 @@ func (p *selGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -42036,7 +42045,7 @@ func (p *selGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -42064,7 +42073,7 @@ func (p *selGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -42098,7 +42107,7 @@ type selGTInt32Int16ConstOp struct {
 
 func (p *selGTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -42257,7 +42266,7 @@ type selGTInt32Int16Op struct {
 
 func (p *selGTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -42426,7 +42435,7 @@ type selGTInt32Int32ConstOp struct {
 
 func (p *selGTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -42585,7 +42594,7 @@ type selGTInt32Int32Op struct {
 
 func (p *selGTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -42754,7 +42763,7 @@ type selGTInt32Int64ConstOp struct {
 
 func (p *selGTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -42913,7 +42922,7 @@ type selGTInt32Int64Op struct {
 
 func (p *selGTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -43082,7 +43091,7 @@ type selGTInt32Float64ConstOp struct {
 
 func (p *selGTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -43273,7 +43282,7 @@ type selGTInt32Float64Op struct {
 
 func (p *selGTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -43474,7 +43483,7 @@ type selGTInt32DecimalConstOp struct {
 
 func (p *selGTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -43502,7 +43511,7 @@ func (p *selGTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -43528,7 +43537,7 @@ func (p *selGTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -43554,7 +43563,7 @@ func (p *selGTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -43580,7 +43589,7 @@ func (p *selGTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -43613,7 +43622,7 @@ type selGTInt32DecimalOp struct {
 
 func (p *selGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -43645,7 +43654,7 @@ func (p *selGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -43673,7 +43682,7 @@ func (p *selGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -43700,7 +43709,7 @@ func (p *selGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -43728,7 +43737,7 @@ func (p *selGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -43762,7 +43771,7 @@ type selGTInt64Int16ConstOp struct {
 
 func (p *selGTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -43921,7 +43930,7 @@ type selGTInt64Int16Op struct {
 
 func (p *selGTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -44090,7 +44099,7 @@ type selGTInt64Int32ConstOp struct {
 
 func (p *selGTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -44249,7 +44258,7 @@ type selGTInt64Int32Op struct {
 
 func (p *selGTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -44418,7 +44427,7 @@ type selGTInt64Int64ConstOp struct {
 
 func (p *selGTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -44577,7 +44586,7 @@ type selGTInt64Int64Op struct {
 
 func (p *selGTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -44746,7 +44755,7 @@ type selGTInt64Float64ConstOp struct {
 
 func (p *selGTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -44937,7 +44946,7 @@ type selGTInt64Float64Op struct {
 
 func (p *selGTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -45138,7 +45147,7 @@ type selGTInt64DecimalConstOp struct {
 
 func (p *selGTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -45166,7 +45175,7 @@ func (p *selGTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -45192,7 +45201,7 @@ func (p *selGTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -45218,7 +45227,7 @@ func (p *selGTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -45244,7 +45253,7 @@ func (p *selGTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -45277,7 +45286,7 @@ type selGTInt64DecimalOp struct {
 
 func (p *selGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -45309,7 +45318,7 @@ func (p *selGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -45337,7 +45346,7 @@ func (p *selGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -45364,7 +45373,7 @@ func (p *selGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -45392,7 +45401,7 @@ func (p *selGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -45426,7 +45435,7 @@ type selGTFloat64Int16ConstOp struct {
 
 func (p *selGTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -45617,7 +45626,7 @@ type selGTFloat64Int16Op struct {
 
 func (p *selGTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -45818,7 +45827,7 @@ type selGTFloat64Int32ConstOp struct {
 
 func (p *selGTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -46009,7 +46018,7 @@ type selGTFloat64Int32Op struct {
 
 func (p *selGTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -46210,7 +46219,7 @@ type selGTFloat64Int64ConstOp struct {
 
 func (p *selGTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -46401,7 +46410,7 @@ type selGTFloat64Int64Op struct {
 
 func (p *selGTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -46602,7 +46611,7 @@ type selGTFloat64Float64ConstOp struct {
 
 func (p *selGTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -46793,7 +46802,7 @@ type selGTFloat64Float64Op struct {
 
 func (p *selGTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -46994,7 +47003,7 @@ type selGTFloat64DecimalConstOp struct {
 
 func (p *selGTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -47022,7 +47031,7 @@ func (p *selGTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -47050,7 +47059,7 @@ func (p *selGTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -47078,7 +47087,7 @@ func (p *selGTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -47106,7 +47115,7 @@ func (p *selGTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -47141,7 +47150,7 @@ type selGTFloat64DecimalOp struct {
 
 func (p *selGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -47173,7 +47182,7 @@ func (p *selGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -47203,7 +47212,7 @@ func (p *selGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -47232,7 +47241,7 @@ func (p *selGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -47262,7 +47271,7 @@ func (p *selGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -47298,7 +47307,7 @@ type selGTTimestampTimestampConstOp struct {
 
 func (p *selGTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -47441,7 +47450,7 @@ type selGTTimestampTimestampOp struct {
 
 func (p *selGTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -47594,7 +47603,7 @@ type selGTIntervalIntervalConstOp struct {
 
 func (p *selGTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -47709,7 +47718,7 @@ type selGTIntervalIntervalOp struct {
 
 func (p *selGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -47834,7 +47843,7 @@ type selGTDatumDatumConstOp struct {
 
 func (p *selGTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -47957,7 +47966,7 @@ type selGTDatumDatumOp struct {
 
 func (p *selGTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -48090,7 +48099,7 @@ type selGEBoolBoolConstOp struct {
 
 func (p *selGEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -48237,7 +48246,7 @@ type selGEBoolBoolOp struct {
 
 func (p *selGEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -48394,7 +48403,7 @@ type selGEBytesBytesConstOp struct {
 
 func (p *selGEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -48509,7 +48518,7 @@ type selGEBytesBytesOp struct {
 
 func (p *selGEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -48634,7 +48643,7 @@ type selGEDecimalInt16ConstOp struct {
 
 func (p *selGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -48662,7 +48671,7 @@ func (p *selGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -48688,7 +48697,7 @@ func (p *selGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -48714,7 +48723,7 @@ func (p *selGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -48740,7 +48749,7 @@ func (p *selGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -48773,7 +48782,7 @@ type selGEDecimalInt16Op struct {
 
 func (p *selGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -48805,7 +48814,7 @@ func (p *selGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -48833,7 +48842,7 @@ func (p *selGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -48860,7 +48869,7 @@ func (p *selGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -48888,7 +48897,7 @@ func (p *selGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -48922,7 +48931,7 @@ type selGEDecimalInt32ConstOp struct {
 
 func (p *selGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -48950,7 +48959,7 @@ func (p *selGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -48976,7 +48985,7 @@ func (p *selGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -49002,7 +49011,7 @@ func (p *selGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -49028,7 +49037,7 @@ func (p *selGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -49061,7 +49070,7 @@ type selGEDecimalInt32Op struct {
 
 func (p *selGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -49093,7 +49102,7 @@ func (p *selGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -49121,7 +49130,7 @@ func (p *selGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -49148,7 +49157,7 @@ func (p *selGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -49176,7 +49185,7 @@ func (p *selGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -49210,7 +49219,7 @@ type selGEDecimalInt64ConstOp struct {
 
 func (p *selGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -49238,7 +49247,7 @@ func (p *selGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -49264,7 +49273,7 @@ func (p *selGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -49290,7 +49299,7 @@ func (p *selGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -49316,7 +49325,7 @@ func (p *selGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(p.constArg))
 							cmpResult = tree.CompareDecimals(&arg, tmpDec)
 						}
@@ -49349,7 +49358,7 @@ type selGEDecimalInt64Op struct {
 
 func (p *selGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -49381,7 +49390,7 @@ func (p *selGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -49409,7 +49418,7 @@ func (p *selGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -49436,7 +49445,7 @@ func (p *selGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -49464,7 +49473,7 @@ func (p *selGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg2))
 							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
 						}
@@ -49498,7 +49507,7 @@ type selGEDecimalFloat64ConstOp struct {
 
 func (p *selGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -49526,7 +49535,7 @@ func (p *selGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -49554,7 +49563,7 @@ func (p *selGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -49582,7 +49591,7 @@ func (p *selGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -49610,7 +49619,7 @@ func (p *selGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -49645,7 +49654,7 @@ type selGEDecimalFloat64Op struct {
 
 func (p *selGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -49677,7 +49686,7 @@ func (p *selGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -49707,7 +49716,7 @@ func (p *selGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -49736,7 +49745,7 @@ func (p *selGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -49766,7 +49775,7 @@ func (p *selGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -49802,7 +49811,7 @@ type selGEDecimalDecimalConstOp struct {
 
 func (p *selGEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -49917,7 +49926,7 @@ type selGEDecimalDecimalOp struct {
 
 func (p *selGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -50042,7 +50051,7 @@ type selGEInt16Int16ConstOp struct {
 
 func (p *selGEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -50201,7 +50210,7 @@ type selGEInt16Int16Op struct {
 
 func (p *selGEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -50370,7 +50379,7 @@ type selGEInt16Int32ConstOp struct {
 
 func (p *selGEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -50529,7 +50538,7 @@ type selGEInt16Int32Op struct {
 
 func (p *selGEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -50698,7 +50707,7 @@ type selGEInt16Int64ConstOp struct {
 
 func (p *selGEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -50857,7 +50866,7 @@ type selGEInt16Int64Op struct {
 
 func (p *selGEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -51026,7 +51035,7 @@ type selGEInt16Float64ConstOp struct {
 
 func (p *selGEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -51217,7 +51226,7 @@ type selGEInt16Float64Op struct {
 
 func (p *selGEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -51418,7 +51427,7 @@ type selGEInt16DecimalConstOp struct {
 
 func (p *selGEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -51446,7 +51455,7 @@ func (p *selGEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -51472,7 +51481,7 @@ func (p *selGEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -51498,7 +51507,7 @@ func (p *selGEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -51524,7 +51533,7 @@ func (p *selGEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -51557,7 +51566,7 @@ type selGEInt16DecimalOp struct {
 
 func (p *selGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -51589,7 +51598,7 @@ func (p *selGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -51617,7 +51626,7 @@ func (p *selGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -51644,7 +51653,7 @@ func (p *selGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -51672,7 +51681,7 @@ func (p *selGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -51706,7 +51715,7 @@ type selGEInt32Int16ConstOp struct {
 
 func (p *selGEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -51865,7 +51874,7 @@ type selGEInt32Int16Op struct {
 
 func (p *selGEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -52034,7 +52043,7 @@ type selGEInt32Int32ConstOp struct {
 
 func (p *selGEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -52193,7 +52202,7 @@ type selGEInt32Int32Op struct {
 
 func (p *selGEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -52362,7 +52371,7 @@ type selGEInt32Int64ConstOp struct {
 
 func (p *selGEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -52521,7 +52530,7 @@ type selGEInt32Int64Op struct {
 
 func (p *selGEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -52690,7 +52699,7 @@ type selGEInt32Float64ConstOp struct {
 
 func (p *selGEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -52881,7 +52890,7 @@ type selGEInt32Float64Op struct {
 
 func (p *selGEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -53082,7 +53091,7 @@ type selGEInt32DecimalConstOp struct {
 
 func (p *selGEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -53110,7 +53119,7 @@ func (p *selGEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -53136,7 +53145,7 @@ func (p *selGEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -53162,7 +53171,7 @@ func (p *selGEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -53188,7 +53197,7 @@ func (p *selGEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -53221,7 +53230,7 @@ type selGEInt32DecimalOp struct {
 
 func (p *selGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -53253,7 +53262,7 @@ func (p *selGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -53281,7 +53290,7 @@ func (p *selGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -53308,7 +53317,7 @@ func (p *selGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -53336,7 +53345,7 @@ func (p *selGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -53370,7 +53379,7 @@ type selGEInt64Int16ConstOp struct {
 
 func (p *selGEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -53529,7 +53538,7 @@ type selGEInt64Int16Op struct {
 
 func (p *selGEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -53698,7 +53707,7 @@ type selGEInt64Int32ConstOp struct {
 
 func (p *selGEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -53857,7 +53866,7 @@ type selGEInt64Int32Op struct {
 
 func (p *selGEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -54026,7 +54035,7 @@ type selGEInt64Int64ConstOp struct {
 
 func (p *selGEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -54185,7 +54194,7 @@ type selGEInt64Int64Op struct {
 
 func (p *selGEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -54354,7 +54363,7 @@ type selGEInt64Float64ConstOp struct {
 
 func (p *selGEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -54545,7 +54554,7 @@ type selGEInt64Float64Op struct {
 
 func (p *selGEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -54746,7 +54755,7 @@ type selGEInt64DecimalConstOp struct {
 
 func (p *selGEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -54774,7 +54783,7 @@ func (p *selGEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -54800,7 +54809,7 @@ func (p *selGEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -54826,7 +54835,7 @@ func (p *selGEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -54852,7 +54861,7 @@ func (p *selGEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg))
 							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
 						}
@@ -54885,7 +54894,7 @@ type selGEInt64DecimalOp struct {
 
 func (p *selGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -54917,7 +54926,7 @@ func (p *selGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -54945,7 +54954,7 @@ func (p *selGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -54972,7 +54981,7 @@ func (p *selGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -55000,7 +55009,7 @@ func (p *selGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							tmpDec.SetInt64(int64(arg1))
 							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
 						}
@@ -55034,7 +55043,7 @@ type selGEFloat64Int16ConstOp struct {
 
 func (p *selGEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -55225,7 +55234,7 @@ type selGEFloat64Int16Op struct {
 
 func (p *selGEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -55426,7 +55435,7 @@ type selGEFloat64Int32ConstOp struct {
 
 func (p *selGEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -55617,7 +55626,7 @@ type selGEFloat64Int32Op struct {
 
 func (p *selGEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -55818,7 +55827,7 @@ type selGEFloat64Int64ConstOp struct {
 
 func (p *selGEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -56009,7 +56018,7 @@ type selGEFloat64Int64Op struct {
 
 func (p *selGEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -56210,7 +56219,7 @@ type selGEFloat64Float64ConstOp struct {
 
 func (p *selGEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -56401,7 +56410,7 @@ type selGEFloat64Float64Op struct {
 
 func (p *selGEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -56602,7 +56611,7 @@ type selGEFloat64DecimalConstOp struct {
 
 func (p *selGEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -56630,7 +56639,7 @@ func (p *selGEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -56658,7 +56667,7 @@ func (p *selGEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -56686,7 +56695,7 @@ func (p *selGEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -56714,7 +56723,7 @@ func (p *selGEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -56749,7 +56758,7 @@ type selGEFloat64DecimalOp struct {
 
 func (p *selGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -56781,7 +56790,7 @@ func (p *selGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -56811,7 +56820,7 @@ func (p *selGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -56840,7 +56849,7 @@ func (p *selGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -56870,7 +56879,7 @@ func (p *selGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.tmpDec1
+							tmpDec := &_overloadHelper.TmpDec1
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -56906,7 +56915,7 @@ type selGETimestampTimestampConstOp struct {
 
 func (p *selGETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -57049,7 +57058,7 @@ type selGETimestampTimestampOp struct {
 
 func (p *selGETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -57202,7 +57211,7 @@ type selGEIntervalIntervalConstOp struct {
 
 func (p *selGEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -57317,7 +57326,7 @@ type selGEIntervalIntervalOp struct {
 
 func (p *selGEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -57442,7 +57451,7 @@ type selGEDatumDatumConstOp struct {
 
 func (p *selGEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -57565,7 +57574,7 @@ type selGEDatumDatumOp struct {
 
 func (p *selGEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
@@ -57703,7 +57712,7 @@ func GetSelectionConstOperator(
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
-	c := GetDatumToPhysicalFn(constType)(constArg)
+	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,

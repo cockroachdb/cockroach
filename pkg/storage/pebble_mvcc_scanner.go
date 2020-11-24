@@ -90,7 +90,7 @@ func (p *pebbleResults) finish() [][]byte {
 // Go port of mvccScanner in libroach/mvcc.h. Stores all variables relating to
 // one MVCCGet / MVCCScan call.
 type pebbleMVCCScanner struct {
-	parent  Iterator
+	parent  MVCCIterator
 	reverse bool
 	peeked  bool
 	// Iteration bounds. Does not contain MVCC timestamp.
@@ -284,7 +284,7 @@ func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
 // Emit a tuple and return true if we have reason to believe iteration can
 // continue.
 func (p *pebbleMVCCScanner) getAndAdvance() bool {
-	if p.curKey.Timestamp != (hlc.Timestamp{}) {
+	if !p.curKey.Timestamp.IsEmpty() {
 		if p.curKey.Timestamp.LessEq(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer than
 			// the most recent version's timestamp.
@@ -339,7 +339,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		p.err = errors.Errorf("intent without transaction")
 		return false
 	}
-	metaTS := hlc.Timestamp(p.meta.Timestamp)
+	metaTS := p.meta.Timestamp.ToTimestamp()
 
 	// metaTS is the timestamp of an intent value, which we may or may
 	// not end up ignoring, depending on factors codified below. If we do ignore
@@ -360,12 +360,13 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 	otherIntentVisible := metaTS.LessEq(maxVisibleTS) || p.failOnMoreRecent
 
 	if !ownIntent && !otherIntentVisible {
-		// 6. The key contains an intent, but we're reading before the
-		// intent. Seek to the desired version. Note that if we own the
-		// intent (i.e. we're reading transactionally) we want to read
-		// the intent regardless of our read timestamp and fall into
-		// case 8 below.
-		return p.seekVersion(p.ts, false)
+		// 6. The key contains an intent, but we're reading below the intent.
+		// Seek to the desired version, checking for uncertainty if necessary.
+		//
+		// Note that if we own the intent (i.e. we're reading transactionally)
+		// we want to read the intent regardless of our read timestamp and fall
+		// into case 8 below.
+		return p.seekVersion(maxVisibleTS, p.checkUncertainty)
 	}
 
 	if p.inconsistent {
@@ -681,7 +682,7 @@ func (p *pebbleMVCCScanner) iterSeekReverse(key MVCCKey) bool {
 		return false
 	}
 
-	if p.curKey.Timestamp == (hlc.Timestamp{}) {
+	if p.curKey.Timestamp.IsEmpty() {
 		// We landed on an intent or inline value.
 		return true
 	}

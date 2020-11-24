@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1419,7 +1419,7 @@ func (expr *Tuple) TypeCheck(
 	if len(expr.Labels) > 0 {
 		labels = make([]string, len(expr.Labels))
 		for i := range expr.Labels {
-			labels[i] = lex.NormalizeName(expr.Labels[i])
+			labels[i] = lexbase.NormalizeName(expr.Labels[i])
 		}
 	}
 	expr.typ = types.MakeLabeledTuple(contents, labels)
@@ -1488,7 +1488,9 @@ func (expr *Placeholder) TypeCheck(
 	// when there are no available values for the placeholders yet, because
 	// during Execute all placeholders are replaced from the AST before type
 	// checking.
-	if typ, ok := semaCtx.Placeholders.Type(expr.Idx); ok {
+	if typ, ok, err := semaCtx.Placeholders.Type(expr.Idx); err != nil {
+		return expr, err
+	} else if ok {
 		if !desired.Equivalent(typ) {
 			// This indicates there's a conflict between what the type system thinks
 			// the type for this position should be, and the actual type of the

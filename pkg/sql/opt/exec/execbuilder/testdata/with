@@ -6,78 +6,108 @@ CREATE TABLE x(a INT)
 statement ok
 CREATE TABLE y(a INT)
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
-·                        distribution         local                    ·       ·
-·                        vectorized           false                    ·       ·
-root                     ·                    ·                        (a, a)  ·
- ├── cross join (inner)  ·                    ·                        (a, a)  ·
- │    │                  estimated row count  1000000 (missing stats)  ·       ·
- │    ├── scan buffer    ·                    ·                        (a)     ·
- │    │                  estimated row count  1000 (missing stats)     ·       ·
- │    │                  label                buffer 1 (t)             ·       ·
- │    └── scan buffer    ·                    ·                        (a)     ·
- │                       estimated row count  1000 (missing stats)     ·       ·
- │                       label                buffer 1 (t)             ·       ·
- └── subquery            ·                    ·                        ·       ·
-      │                  id                   @S1                      ·       ·
-      │                  original sql         SELECT a FROM y          ·       ·
-      │                  exec mode            all rows                 ·       ·
-      └── buffer         ·                    ·                        (a)     ·
-           │             label                buffer 1 (t)             ·       ·
-           └── scan      ·                    ·                        (a)     ·
-·                        estimated row count  1000 (missing stats)     ·       ·
-·                        table                y@primary                ·       ·
-·                        spans                FULL SCAN                ·       ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (a, a)
+│
+├── • cross join (inner)
+│   │ columns: (a, a)
+│   │ estimated row count: 1000000 (missing stats)
+│   │
+│   ├── • scan buffer
+│   │     columns: (a)
+│   │     estimated row count: 1000 (missing stats)
+│   │     label: buffer 1 (t)
+│   │
+│   └── • scan buffer
+│         columns: (a)
+│         estimated row count: 1000 (missing stats)
+│         label: buffer 1 (t)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT a FROM y
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1 (t)
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1000 (missing stats)
+              table: y@primary
+              spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t
 ----
-·          distribution         local                 ·    ·
-·          vectorized           true                  ·    ·
-render     ·                    ·                     (a)  ·
- │         estimated row count  1000 (missing stats)  ·    ·
- │         render 0             a                     ·    ·
- └── scan  ·                    ·                     (a)  ·
-·          estimated row count  1000 (missing stats)  ·    ·
-·          table                y@primary             ·    ·
-·          spans                FULL SCAN             ·    ·
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a)
+│ estimated row count: 1000 (missing stats)
+│ render 0: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1000 (missing stats)
+      table: y@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE)
   WITH t AS (INSERT INTO x VALUES (1) RETURNING a) SELECT * FROM t
 ----
-·                                distribution         local                                 ·                   ·
-·                                vectorized           false                                 ·                   ·
-root                             ·                    ·                                     (a)                 ·
- ├── scan buffer                 ·                    ·                                     (a)                 ·
- │                               estimated row count  1                                     ·                   ·
- │                               label                buffer 1 (t)                          ·                   ·
- └── subquery                    ·                    ·                                     ·                   ·
-      │                          id                   @S1                                   ·                   ·
-      │                          original sql         INSERT INTO x VALUES (1) RETURNING a  ·                   ·
-      │                          exec mode            all rows                              ·                   ·
-      └── buffer                 ·                    ·                                     (a)                 ·
-           │                     label                buffer 1 (t)                          ·                   ·
-           └── project           ·                    ·                                     (a)                 ·
-                │                estimated row count  1                                     ·                   ·
-                └── insert       ·                    ·                                     (a, rowid)          ·
-                     │           estimated row count  1                                     ·                   ·
-                     │           into                 x(a, rowid)                           ·                   ·
-                     └── values  ·                    ·                                     (column1, column6)  ·
-·                                size                 2 columns, 1 row                      ·                   ·
-·                                row 0, expr 0        1                                     ·                   ·
-·                                row 0, expr 1        unique_rowid()                        ·                   ·
+distribution: local
+vectorized: false
+·
+• root
+│ columns: (a)
+│
+├── • scan buffer
+│     columns: (a)
+│     estimated row count: 1
+│     label: buffer 1 (t)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: INSERT INTO x VALUES (1) RETURNING a
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1 (t)
+        │
+        └── • project
+            │ columns: (a)
+            │ estimated row count: 1
+            │
+            └── • insert
+                │ columns: (a, rowid)
+                │ estimated row count: 1
+                │ into: x(a, rowid)
+                │
+                └── • values
+                      columns: (column1, column6)
+                      size: 2 columns, 1 row
+                      row 0, expr 0: 1
+                      row 0, expr 1: unique_rowid()
 
 # Regression test for #39010.
 
 statement ok
 CREATE TABLE table39010 (col NAME)
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE)
   WITH
     w AS (SELECT NULL, NULL FROM table39010)
@@ -86,20 +116,26 @@ EXPLAIN (VERBOSE)
   FROM
     w, table39010
 ----
-·                   distribution         local                    ·      ·
-·                   vectorized           true                     ·      ·
-cross join (inner)  ·                    ·                        (col)  ·
- │                  estimated row count  1000000 (missing stats)  ·      ·
- ├── scan           ·                    ·                        ()     ·
- │                  estimated row count  1000 (missing stats)     ·      ·
- │                  table                table39010@primary       ·      ·
- │                  spans                FULL SCAN                ·      ·
- └── scan           ·                    ·                        (col)  ·
-·                   estimated row count  1000 (missing stats)     ·      ·
-·                   table                table39010@primary       ·      ·
-·                   spans                FULL SCAN                ·      ·
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (col)
+│ estimated row count: 1000000 (missing stats)
+│
+├── • scan
+│     columns: ()
+│     estimated row count: 1000 (missing stats)
+│     table: table39010@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (col)
+      estimated row count: 1000 (missing stats)
+      table: table39010@primary
+      spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE)
   WITH RECURSIVE t(n) AS (
       VALUES (1)
@@ -108,16 +144,24 @@ EXPLAIN (VERBOSE)
   )
   SELECT sum(n) FROM t
 ----
-·                        distribution         local               ·          ·
-·                        vectorized           false               ·          ·
-group (scalar)           ·                    ·                   (sum)      ·
- │                       estimated row count  1 (missing stats)   ·          ·
- │                       aggregate 0          sum(n)              ·          ·
- └── render              ·                    ·                   (n)        ·
-      │                  estimated row count  10 (missing stats)  ·          ·
-      │                  render 0             column1             ·          ·
-      └── recursive cte  ·                    ·                   (column1)  ·
-           │             estimated row count  10 (missing stats)  ·          ·
-           └── values    ·                    ·                   (column1)  ·
-·                        size                 1 column, 1 row     ·          ·
-·                        row 0, expr 0        1                   ·          ·
+distribution: local
+vectorized: false
+·
+• group (scalar)
+│ columns: (sum)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: sum(n)
+│
+└── • render
+    │ columns: (n)
+    │ estimated row count: 10 (missing stats)
+    │ render 0: column1
+    │
+    └── • recursive cte
+        │ columns: (column1)
+        │ estimated row count: 10 (missing stats)
+        │
+        └── • values
+              columns: (column1)
+              size: 1 column, 1 row
+              row 0, expr 0: 1

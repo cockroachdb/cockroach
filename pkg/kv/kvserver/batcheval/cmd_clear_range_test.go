@@ -33,14 +33,14 @@ type wrappedBatch struct {
 	clearRangeCount int
 }
 
-func (wb *wrappedBatch) Clear(key storage.MVCCKey) error {
+func (wb *wrappedBatch) ClearEngineKey(key storage.EngineKey) error {
 	wb.clearCount++
-	return wb.Batch.Clear(key)
+	return wb.Batch.ClearEngineKey(key)
 }
 
-func (wb *wrappedBatch) ClearRange(start, end storage.MVCCKey) error {
+func (wb *wrappedBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
 	wb.clearRangeCount++
-	return wb.Batch.ClearRange(start, end)
+	return wb.Batch.ClearMVCCRangeAndIntents(start, end)
 }
 
 // TestCmdClearRangeBytesThreshold verifies that clear range resorts to
@@ -142,11 +142,9 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			if err := batch.Commit(true /* commit */); err != nil {
 				t.Fatal(err)
 			}
-			if err := eng.Iterate(startKey, endKey,
-				func(kv storage.MVCCKeyValue) (bool, error) {
-					return true, errors.New("expected no data in underlying engine")
-				},
-			); err != nil {
+			if err := eng.MVCCIterate(startKey, endKey, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+				return errors.New("expected no data in underlying engine")
+			}); err != nil {
 				t.Fatal(err)
 			}
 		})

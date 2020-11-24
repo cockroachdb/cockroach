@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "observedts",
+    srcs = [
+        "doc.go",
+        "limit.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "observedts_test",
+    srcs = ["limit_test.go"],
+    embed = [":observedts"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

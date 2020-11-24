@@ -12,7 +12,6 @@ package kvserver_test
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +54,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 				return nil
 			}
 			crt := et.InternalCommitTrigger.GetChangeReplicasTrigger()
-			if crt == nil || crt.DeprecatedChangeType != roachpb.REMOVE_REPLICA {
+			if crt == nil || crt.DeprecatedChangeType != roachpb.REMOVE_VOTER {
 				return nil
 			}
 			testutils.SucceedsSoon(t, func() error {
@@ -85,7 +85,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 
 	// Create our scratch range and up-replicate it.
 	k := tc.ScratchRange(t)
-	tc.AddReplicasOrFatal(t, k, tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, k, tc.Target(1), tc.Target(2))
 	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
 
 	ts := tc.Servers[1]
@@ -126,7 +126,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 					dir := repl1.SideloadedRaftMuLocked().Dir()
 					repl1.RaftUnlock()
 					_, err := eng.Stat(dir)
-					if os.IsNotExist(err) {
+					if oserror.IsNotExist(err) {
 						return nil
 					}
 					return errors.Errorf("replica still has sideloaded files despite GC: %v", err)
@@ -135,7 +135,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		}()
 	}
 
-	desc := tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
+	desc := tc.RemoveVotersOrFatal(t, k, tc.Target(1))
 
 	// Make sure the range is removed from the store.
 	testutils.SucceedsSoon(t, func() error {
@@ -176,10 +176,10 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 
 	// Create our scratch range and up-replicate it.
 	k := tc.ScratchRange(t)
-	tc.AddReplicasOrFatal(t, k, tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, k, tc.Target(1), tc.Target(2))
 	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
 
-	desc := tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
+	desc := tc.RemoveVotersOrFatal(t, k, tc.Target(1))
 
 	// Wait long enough for the direct replica GC to have had a chance and been
 	// discarded because the queue is disabled.

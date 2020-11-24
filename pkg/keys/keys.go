@@ -76,38 +76,59 @@ func StoreHLCUpperBoundKey() roachpb.Key {
 	return MakeStoreKey(localStoreHLCUpperBoundSuffix, nil)
 }
 
-// StoreSuggestedCompactionKey returns a store-local key for a
-// suggested compaction. It combines the specified start and end keys.
-func StoreSuggestedCompactionKey(start, end roachpb.Key) roachpb.Key {
-	var detail roachpb.RKey
-	detail = encoding.EncodeBytesAscending(detail, start)
-	detail = encoding.EncodeBytesAscending(detail, end)
-	return MakeStoreKey(localStoreSuggestedCompactionSuffix, detail)
+// StoreNodeTombstoneKey returns the key for storing a node tombstone for nodeID.
+func StoreNodeTombstoneKey(nodeID roachpb.NodeID) roachpb.Key {
+	return MakeStoreKey(localStoreNodeTombstoneSuffix, encoding.EncodeUint32Ascending(nil, uint32(nodeID)))
 }
 
-// DecodeStoreSuggestedCompactionKey returns the start and end keys of
-// the suggested compaction's span.
-func DecodeStoreSuggestedCompactionKey(key roachpb.Key) (start, end roachpb.Key, err error) {
+// DecodeNodeTombstoneKey returns the NodeID for the node tombstone.
+func DecodeNodeTombstoneKey(key roachpb.Key) (roachpb.NodeID, error) {
+	suffix, detail, err := DecodeStoreKey(key)
+	if err != nil {
+		return 0, err
+	}
+	if !suffix.Equal(localStoreNodeTombstoneSuffix) {
+		return 0, errors.Errorf("key with suffix %q != %q", suffix, localStoreNodeTombstoneSuffix)
+	}
+	detail, nodeID, err := encoding.DecodeUint32Ascending(detail)
+	if len(detail) != 0 {
+		return 0, errors.Errorf("invalid key has trailing garbage: %q", detail)
+	}
+	return roachpb.NodeID(nodeID), err
+}
+
+// StoreSuggestedCompactionKeyPrefix returns a store-local prefix for all
+// suggested compaction keys. These are unused in versions 21.1 and later.
+//
+// TODO(bilal): Delete this method along with any related uses of it after 21.1.
+func StoreSuggestedCompactionKeyPrefix() roachpb.Key {
+	return MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
+}
+
+// StoreCachedSettingsKey returns a store-local key for store's cached settings.
+func StoreCachedSettingsKey(settingKey roachpb.Key) roachpb.Key {
+	return MakeStoreKey(localStoreCachedSettingsSuffix, encoding.EncodeBytesAscending(nil, settingKey))
+}
+
+// DecodeStoreCachedSettingsKey returns the setting's key of the cached settings kvs.
+func DecodeStoreCachedSettingsKey(key roachpb.Key) (settingKey roachpb.Key, err error) {
 	var suffix, detail roachpb.RKey
 	suffix, detail, err = DecodeStoreKey(key)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	if !suffix.Equal(localStoreSuggestedCompactionSuffix) {
-		return nil, nil, errors.Errorf("key with suffix %q != %q", suffix, localStoreSuggestedCompactionSuffix)
+	if !suffix.Equal(localStoreCachedSettingsSuffix) {
+		return nil, errors.Errorf(
+			"key with suffix %q != %q",
+			suffix,
+			localStoreCachedSettingsSuffix,
+		)
 	}
-	detail, start, err = encoding.DecodeBytesAscending(detail, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	detail, end, err = encoding.DecodeBytesAscending(detail, nil)
-	if err != nil {
-		return nil, nil, err
-	}
+	detail, settingKey, err = encoding.DecodeBytesAscending(detail, nil)
 	if len(detail) != 0 {
-		return nil, nil, errors.Errorf("invalid key has trailing garbage: %q", detail)
+		return nil, errors.Errorf("invalid key has trailing garbage: %q", detail)
 	}
-	return start, end, nil
+	return
 }
 
 // NodeLivenessKey returns the key for the node liveness record.
@@ -397,6 +418,55 @@ func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 	return MakeRangeKey(key, LocalQueueLastProcessedSuffix, roachpb.RKey(queue))
 }
 
+// LockTableSingleKey creates a key under which all single-key locks for the
+// given key can be found. buf is used as scratch-space to avoid allocations
+// -- its contents will be overwritten and not appended to.
+// Note that there can be multiple locks for the given key, but those are
+// distinguished using the "version" which is not in scope of the keys
+// package.
+// For a scan [start, end) the corresponding lock table scan is
+// [LTSK(start), LTSK(end)).
+func LockTableSingleKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
+	// The +3 accounts for the bytesMarker and terminator.
+	keyLen := len(LocalRangeLockTablePrefix) + len(LockTableSingleKeyInfix) + len(key) + 3
+	if cap(buf) < keyLen {
+		buf = make([]byte, 0, keyLen)
+	} else {
+		buf = buf[:0]
+	}
+	// Don't unwrap any local prefix on key using Addr(key). This allow for
+	// doubly-local lock table keys. For example, local range descriptor keys can
+	// be locked during split and merge transactions.
+	buf = append(buf, LocalRangeLockTablePrefix...)
+	buf = append(buf, LockTableSingleKeyInfix...)
+	buf = encoding.EncodeBytesAscending(buf, key)
+	return buf, buf
+}
+
+// DecodeLockTableSingleKey decodes the single-key lock table key to return the key
+// that was locked..
+func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error) {
+	if !bytes.HasPrefix(key, LocalRangeLockTablePrefix) {
+		return nil, errors.Errorf("key %q does not have %q prefix",
+			key, LocalRangeLockTablePrefix)
+	}
+	// Cut the prefix.
+	b := key[len(LocalRangeLockTablePrefix):]
+	if !bytes.HasPrefix(b, LockTableSingleKeyInfix) {
+		return nil, errors.Errorf("key %q is not for a single-key lock", key)
+	}
+	b = b[len(LockTableSingleKeyInfix):]
+	b, lockedKey, err = encoding.DecodeBytesAscending(b, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) != 0 {
+		return nil, errors.Errorf("key %q has left-over bytes %d after decoding",
+			key, len(b))
+	}
+	return lockedKey, err
+}
+
 // IsLocal performs a cheap check that returns true iff a range-local key is
 // passed, that is, a key for which `Addr` would return a non-identical RKey
 // (or a decoding error).
@@ -408,6 +478,12 @@ func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 // claimed by a related (but not identical) concept.
 func IsLocal(k roachpb.Key) bool {
 	return bytes.HasPrefix(k, localPrefix)
+}
+
+// IsLocalStoreKey performs a cheap check that returns true iff the parameter
+// is a local store key.
+func IsLocalStoreKey(k roachpb.Key) bool {
+	return bytes.HasPrefix(k, localStorePrefix)
 }
 
 // Addr returns the address for the key, used to lookup the range containing the

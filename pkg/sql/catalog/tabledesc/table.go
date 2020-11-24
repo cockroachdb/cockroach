@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -63,6 +63,11 @@ func MakeColumnDefDescs(
 	if d.HasFKConstraint() {
 		// Should never happen since `HoistConstraints` moves these to table level
 		return nil, nil, nil, errors.New("unexpected column REFERENCED constraint")
+	}
+	if d.Unique.WithoutIndex {
+		return nil, nil, nil, pgerror.New(pgcode.FeatureNotSupported,
+			"unique constraints without an index are not yet supported",
+		)
 	}
 
 	col := &descpb.ColumnDescriptor{
@@ -107,7 +112,7 @@ func MakeColumnDefDescs(
 	}
 
 	var idx *descpb.IndexDescriptor
-	if d.PrimaryKey.IsPrimaryKey || d.Unique {
+	if d.PrimaryKey.IsPrimaryKey || (d.Unique.IsUnique && !d.Unique.WithoutIndex) {
 		if !d.PrimaryKey.Sharded {
 			idx = &descpb.IndexDescriptor{
 				Unique:           true,
@@ -132,8 +137,8 @@ func MakeColumnDefDescs(
 				},
 			}
 		}
-		if d.UniqueConstraintName != "" {
-			idx.Name = string(d.UniqueConstraintName)
+		if d.Unique.ConstraintName != "" {
+			idx.Name = string(d.Unique.ConstraintName)
 		}
 	}
 

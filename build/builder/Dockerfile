@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libncurses-dev \
     make \
     patch \
+    patchelf \
     texinfo \
     xz-utils \
  && apt-get clean
@@ -114,13 +115,20 @@ RUN mkdir ncurses \
 
 RUN apt-get purge -y gcc g++ && apt-get autoremove -y
 
-# clang - msan
+# clang-3.9 - msan, libtapi needs 3.9+
 # cmake - msan / c-deps: libroach, protobuf, et al.
+# libssl-dev - osxcross
+# libxml2-dev - osxcross
 # python - msan
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    clang \
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    clang-3.9 \
     cmake \
-    python
+    libssl-dev \
+    libxml2-dev \
+    python \
+  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-3.9 100 \
+    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-3.9
 
 # Build an msan-enabled build of libc++, following instructions from
 # https://github.com/google/sanitizers/wiki/MemorySanitizerLibcxxHowTo
@@ -131,11 +139,19 @@ RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/l
  && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j$(nproc)) \
  && rm -rf llvm
 
+# libtapi is required for later versions of MacOSX.
+RUN git clone https://github.com/tpoechtrager/apple-libtapi.git \
+    && cd apple-libtapi \
+    && git checkout a66284251b46d591ee4a0cb4cf561b92a0c138d8 \
+    && ./build.sh \
+    && ./install.sh \
+    && cd .. \
+    && rm -rf apple-libtapi
+
 # Install osxcross. This needs the min supported osx version (we bump that
 # whenever Go does, in which case the builder image stops working). The SDK
-# can either be generated from Xcode or we let someone else do the work.
-# See for example:
-# https://github.com/docker/golang-cross/pull/11#issuecomment-428741406.
+# can be generated from Xcode by following
+# https://github.com/tpoechtrager/osxcross#packaging-the-sdk.
 #
 # See https://en.wikipedia.org/wiki/Uname for the right suffix in the `mv` step
 # below. For example, Yosemite is 10.10 and has kernel release (uname -r)
@@ -144,17 +160,17 @@ RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/l
 # The osxcross SHA should be bumped. It's fixed merely to avoid an obvious
 # highjack of the upstream repo from slipping in unnoticed.
 RUN git clone https://github.com/tpoechtrager/osxcross.git \
- && (cd osxcross && git checkout 6525b2b7d33abc371ad889f205377dc5cf81f23e) \
- && (cd osxcross/tarballs && curl -sfSL https://s3.dockerproject.org/darwin/v2/MacOSX10.10.sdk.tar.xz -O) \
- && echo "631b4144c6bf75bf7a4d480d685a9b5bda10ee8d03dbf0db829391e2ef858789 osxcross/tarballs/MacOSX10.10.sdk.tar.xz" | sha256sum -c - \
- && OSX_VERSION_MIN=10.10 PORTABLE=1 UNATTENDED=1 osxcross/build.sh \
- && mv osxcross/target /x-tools/x86_64-apple-darwin14 \
+ && (cd osxcross && git checkout 9d7f6c2461dccb2b2781fff323f231a4b096fe41) \
+ && (cd osxcross/tarballs && curl -sfSL https://cockroach-builder-assets.s3.amazonaws.com/MacOSX10.15.sdk.tar.xz -O) \
+ && echo "c0b910e485bd24aba62b879a724c48bcb2520a8ab92067a79e3762dac0d7f47c osxcross/tarballs/MacOSX10.15.sdk.tar.xz" | sha256sum -c - \
+ && OSX_VERSION_MIN=10.15 PORTABLE=1 UNATTENDED=1 osxcross/build.sh \
+ && mv osxcross/target /x-tools/x86_64-apple-darwin19 \
  && rm -rf osxcross
 
-RUN ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin14-cc \
- && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin14-c++
+RUN ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin19-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin19-c++
 
-ENV PATH $PATH:/x-tools/x86_64-apple-darwin14/bin
+ENV PATH $PATH:/x-tools/x86_64-apple-darwin19/bin
 
 # automake - sed build
 # autopoint - sed build
@@ -197,8 +213,8 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-chech.sh.
 RUN apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.13.14.src.tar.gz -o golang.tar.gz \
- && echo '197333e97290e9ea8796f738d61019dcba1c377c2f3961fd6a114918ecc7ab06 golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.15.5.src.tar.gz -o golang.tar.gz \
+ && echo 'c1076b90cf94b73ebed62a81d802cd84d43d02dea8c07abdc922c57a071c84f1 golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
@@ -215,16 +231,7 @@ RUN chmod -R a+w $(go env GOTOOLDIR)
 # Allow Go support files in gdb.
 RUN echo "add-auto-load-safe-path $(go env GOROOT)/src/runtime/runtime-gdb.py" > ~/.gdbinit
 
-RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - \
- && echo 'deb https://deb.nodesource.com/node_12.x xenial main' | tee /etc/apt/sources.list.d/nodesource.list \
- && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
- && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list \
- && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
- && echo 'deb https://packages.cloud.google.com/apt cloud-sdk-xenial main' | tee /etc/apt/sources.list.d/gcloud.list \
- && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
- && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
- && apt-get update
-
+# bazel - build system
 # ccache - speed up C and C++ compilation
 # lsof - roachprod monitor
 # netcat - roachprod monitor
@@ -235,7 +242,19 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # yarn - ui
 # chrome - ui
 # unzip - for installing awscli
-RUN apt-get install -y --no-install-recommends \
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - \
+ && echo 'deb https://deb.nodesource.com/node_12.x xenial main' | tee /etc/apt/sources.list.d/nodesource.list \
+ && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
+ && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list \
+ && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
+ && echo 'deb https://packages.cloud.google.com/apt cloud-sdk-xenial main' | tee /etc/apt/sources.list.d/gcloud.list \
+ && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+ && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
+ && echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list \
+ && curl https://bazel.build/bazel-release.pub.gpg | apt-key add - \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+    bazel-3.6.0 \
     ccache \
     google-cloud-sdk \
     lsof \
@@ -282,7 +301,8 @@ RUN apt-get purge -y \
 
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
-RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /usr/local/bin/mkrelease
+RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /usr/local/bin/mkrelease \
+    && ln -s /usr/bin/bazel-3.6.0 /usr/bin/bazel
 
 RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz \
     | tar xz -C / --strip-components 1

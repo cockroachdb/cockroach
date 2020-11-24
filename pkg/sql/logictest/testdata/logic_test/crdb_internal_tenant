@@ -1,0 +1,520 @@
+# LogicTest: 3node-tenant
+
+query II
+SELECT count(distinct(node_id)), count(*)  FROM crdb_internal.node_runtime_info
+----
+1 12
+
+query IT
+SELECT node_id, name FROM crdb_internal.leases ORDER BY name
+----
+0  role_members
+0  test
+
+query error database "crdb_internal" does not exist
+ALTER DATABASE crdb_internal RENAME TO not_crdb_internal
+
+statement error schema cannot be modified: "crdb_internal"
+CREATE TABLE crdb_internal.t (x INT)
+
+query error database "crdb_internal" does not exist
+DROP DATABASE crdb_internal
+
+query TTTTI
+SHOW TABLES FROM crdb_internal
+----
+crdb_internal  backward_dependencies        table  NULL  NULL
+crdb_internal  builtin_functions            table  NULL  NULL
+crdb_internal  cluster_queries              table  NULL  NULL
+crdb_internal  cluster_sessions             table  NULL  NULL
+crdb_internal  cluster_settings             table  NULL  NULL
+crdb_internal  cluster_transactions         table  NULL  NULL
+crdb_internal  create_statements            table  NULL  NULL
+crdb_internal  create_type_statements       table  NULL  NULL
+crdb_internal  databases                    table  NULL  NULL
+crdb_internal  feature_usage                table  NULL  NULL
+crdb_internal  forward_dependencies         table  NULL  NULL
+crdb_internal  gossip_alerts                table  NULL  NULL
+crdb_internal  gossip_liveness              table  NULL  NULL
+crdb_internal  gossip_network               table  NULL  NULL
+crdb_internal  gossip_nodes                 table  NULL  NULL
+crdb_internal  index_columns                table  NULL  NULL
+crdb_internal  invalid_objects              table  NULL  NULL
+crdb_internal  jobs                         table  NULL  NULL
+crdb_internal  kv_node_status               table  NULL  NULL
+crdb_internal  kv_store_status              table  NULL  NULL
+crdb_internal  leases                       table  NULL  NULL
+crdb_internal  node_build_info              table  NULL  NULL
+crdb_internal  node_metrics                 table  NULL  NULL
+crdb_internal  node_queries                 table  NULL  NULL
+crdb_internal  node_runtime_info            table  NULL  NULL
+crdb_internal  node_sessions                table  NULL  NULL
+crdb_internal  node_statement_statistics    table  NULL  NULL
+crdb_internal  node_transaction_statistics  table  NULL  NULL
+crdb_internal  node_transactions            table  NULL  NULL
+crdb_internal  node_txn_stats               table  NULL  NULL
+crdb_internal  partitions                   table  NULL  NULL
+crdb_internal  predefined_comments          table  NULL  NULL
+crdb_internal  ranges                       view   NULL  NULL
+crdb_internal  ranges_no_leases             table  NULL  NULL
+crdb_internal  schema_changes               table  NULL  NULL
+crdb_internal  session_trace                table  NULL  NULL
+crdb_internal  session_variables            table  NULL  NULL
+crdb_internal  table_columns                table  NULL  NULL
+crdb_internal  table_indexes                table  NULL  NULL
+crdb_internal  table_row_statistics         table  NULL  NULL
+crdb_internal  tables                       table  NULL  NULL
+crdb_internal  zones                        table  NULL  NULL
+
+statement ok
+CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
+
+query TIT
+SELECT t.name, t.version, t.state FROM crdb_internal.tables AS t JOIN system.namespace AS n ON (n.id = t.parent_id and n.name = 'testdb');
+----
+foo 1 PUBLIC
+
+# Ensure there is a lease taken on foo.
+query I
+SELECT * FROM testdb.foo
+----
+
+# Check the lease.
+query T
+SELECT l.name FROM crdb_internal.leases AS l JOIN system.namespace AS n ON (n.id = l.table_id and n.name = 'foo');
+----
+foo
+
+# We merely check the column list for schema_changes.
+query IITTITTT colnames
+SELECT * FROM crdb_internal.schema_changes
+----
+table_id parent_id name type target_id target_name state direction
+
+# We don't select the modification time as it does not remain contant.
+query IITTITTTTTTTI colnames
+SELECT
+  table_id,
+  parent_id,
+  name,
+  database_name,
+  version,
+  format_version,
+  state,
+  sc_lease_node_id,
+  sc_lease_expiration_time,
+  drop_time,
+  audit_mode,
+  schema_name,
+  parent_schema_id
+FROM crdb_internal.tables WHERE NAME = 'descriptor'
+----
+table_id  parent_id  name        database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name  parent_schema_id
+3         1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public       29
+
+# Verify that table names are not double escaped.
+
+statement ok
+CREATE TABLE testdb." ""\'" (i int)
+
+query T
+SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
+----
+foo
+"\'
+
+query TT colnames
+SELECT field, value FROM crdb_internal.node_build_info WHERE field ILIKE 'name'
+----
+field value
+Name  CockroachDB
+
+query T rowsort
+SELECT field FROM crdb_internal.node_build_info
+----
+Name
+Build
+ClusterID
+Organization
+Version
+Channel
+
+
+# The validity of the rows in this table are tested elsewhere; we merely assert the columns.
+query ITTTTTTTTTTTRTTI colnames
+SELECT * FROM crdb_internal.jobs WHERE false
+----
+job_id  job_type  description  statement  user_name  descriptor_ids  status  running_status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id
+
+query IITTITTT colnames
+SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
+----
+table_id  parent_id  name  type  target_id  target_name  state  direction
+
+query IITITB colnames
+SELECT * FROM crdb_internal.leases WHERE node_id < 0
+----
+node_id  table_id  name  parent_id  expiration  deleted
+
+query ITTTTIIITRRRRRRRRRRRRRRRRR colnames
+SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
+----
+node_id  application_name  flags  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  implicit_txn
+
+query ITTTIIRRRRRRRR colnames
+SELECT * FROM crdb_internal.node_transaction_statistics WHERE node_id < 0
+----
+node_id  application_name  key  statement_ids  count  max_retries  service_lat_avg  service_lat_var  retry_lat_avg  retry_lat_var  commit_lat_avg  commit_lat_var  rows_read_avg  rows_read_var
+
+query IITTTTTTT colnames
+SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
+----
+span_idx  message_idx  timestamp  duration  operation  loc  tag  message age
+
+query TTTBT colnames
+SELECT * FROM crdb_internal.cluster_settings WHERE variable = ''
+----
+variable  value  type  public  description
+
+query TI colnames
+SELECT * FROM crdb_internal.feature_usage WHERE feature_name = ''
+----
+feature_name  usage_count
+
+query TTB colnames
+SELECT * FROM crdb_internal.session_variables WHERE variable = ''
+----
+variable  value  hidden
+
+query TTITTTTTTBT colnames
+SELECT * FROM crdb_internal.node_queries WHERE node_id < 0
+----
+query_id  txn_id  node_id  session_id user_name  start  query  client_address  application_name  distributed  phase
+
+query TTITTTTTTBT colnames
+SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
+----
+query_id  txn_id  node_id  session_id user_name  start  query  client_address  application_name  distributed  phase
+
+query TITTTTIII colnames
+SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries
+
+query TITTTTIII colnames
+SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries
+
+query ITTTTTTTTTTT colnames
+SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
+----
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
+
+query ITTTTTTTTTTT colnames
+SELECT * FROM crdb_internal.cluster_sessions WHERE node_id < 0
+----
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
+
+query TTTT colnames
+SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
+----
+function  signature  category  details
+
+query ITTITTTTTTTT colnames
+SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
+----
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state  create_nofks  alter_statements  validate_statements  has_partitions
+
+query ITITTBTB colnames
+SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  column_id  column_name  column_type  nullable  default_expr  hidden
+
+query ITITTBB colnames
+SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted
+
+query ITITTITT colnames
+SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  index_id  index_name  column_type  column_id  column_name  column_direction
+
+query ITIIITITT colnames
+SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
+
+query ITIITITT colnames
+SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
+
+query IITTTTTTTTTTT colnames
+SELECT * FROM crdb_internal.zones WHERE false
+----
+zone_id  subzone_id  target  range_name  database_name  table_name  index_name  partition_name
+raw_config_yaml  raw_config_sql  raw_config_protobuf full_config_yaml full_config_sql
+
+statement error not fully contained in tenant keyspace
+SELECT * FROM crdb_internal.ranges WHERE range_id < 0
+
+statement error not fully contained in tenant keyspace
+SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
+
+# crdb_internal.zones is not populated for tenants.
+query IT
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
+----
+
+query error pq: foo
+SELECT crdb_internal.force_error('', 'foo')
+
+query error pgcode FOOYAA pq: foo
+SELECT crdb_internal.force_error('FOOYAA', 'foo')
+
+query I
+select crdb_internal.force_retry(interval '0s')
+----
+0
+
+query error pq: crdb_internal.set_vmodule\(\): syntax error: expect comma-separated list of filename=N
+select crdb_internal.set_vmodule('not anything reasonable')
+
+query I
+select crdb_internal.set_vmodule('doesntexist=2,butitsok=4')
+----
+0
+
+query I
+select crdb_internal.set_vmodule('')
+----
+0
+
+query T
+select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
+----
+20.2
+
+query ITTT colnames
+select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
+----
+node_id  component  field   value
+0        DB         URL     postgresql://root@127.0.0.1:<port>?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
+0        DB         Scheme  postgresql
+0        DB         User    root
+0        DB         Host    127.0.0.1
+0        DB         Port    <port>
+0        DB         URI     /?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
+0        UI         URL     https://127.0.0.1:<port>
+0        UI         Scheme  https
+0        UI         User    ·
+0        UI         Host    127.0.0.1
+0        UI         Port    <port>
+0        UI         URI     /
+
+statement error unsupported in multi-tenancy mode
+SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version FROM crdb_internal.gossip_nodes WHERE node_id = 1
+
+statement error unsupported in multi-tenancy mode
+SELECT node_id, epoch, regexp_replace(expiration, '^\d+\.\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning, membership FROM crdb_internal.gossip_liveness WHERE node_id = 1
+
+statement error unsupported in multi-tenancy mode
+SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version
+FROM crdb_internal.kv_node_status WHERE node_id = 1
+
+statement error unsupported in multi-tenancy mode
+SELECT node_id, store_id, attrs, used
+FROM crdb_internal.kv_store_status WHERE node_id = 1
+
+statement ok
+CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)
+
+statement error unsupported in multi-tenancy mode
+ALTER TABLE foo SPLIT AT VALUES(2)
+
+# Cluster ID is unset for tenants.
+query B
+select crdb_internal.cluster_id() != '00000000-0000-0000-0000-000000000000' FROM foo
+----
+false
+
+# Check that privileged builtins are only allowed for 'root'
+user testuser
+
+query error insufficient privilege
+select crdb_internal.force_panic('foo')
+
+query error insufficient privilege
+select crdb_internal.force_log_fatal('foo')
+
+query error insufficient privilege
+select crdb_internal.set_vmodule('')
+
+query error pq: only users with the admin role are allowed to access the node runtime information
+select * from crdb_internal.node_runtime_info
+
+query error pq: only users with the admin role are allowed to read crdb_internal.ranges
+select * from crdb_internal.ranges
+
+query error pq: only users with the admin role are allowed to read crdb_internal.gossip_nodes
+select * from crdb_internal.gossip_nodes
+
+query error pq: only users with the admin role are allowed to read crdb_internal.gossip_liveness
+select * from crdb_internal.gossip_liveness
+
+query error pq: only users with the admin role are allowed to read crdb_internal.node_metrics
+select * from crdb_internal.node_metrics
+
+query error pq: only users with the admin role are allowed to read crdb_internal.kv_node_status
+select * from crdb_internal.kv_node_status
+
+query error pq: only users with the admin role are allowed to read crdb_internal.kv_store_status
+select * from crdb_internal.kv_store_status
+
+query error pq: only users with the admin role are allowed to read crdb_internal.gossip_alerts
+select * from crdb_internal.gossip_alerts
+
+# Anyone can see the executable version.
+query T
+select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
+----
+20.2
+
+user root
+
+# Regression test for #34441
+query T
+SELECT crdb_internal.pretty_key(e'\\xa82a00918ed9':::BYTES, (-5096189069466142898):::INT8);
+----
+/Table/32/???/9/6/81
+
+subtest max_retry_counter
+# Verify that the max_retry counter in statement stats actually increases with retries.
+
+statement ok
+SET application_name = 'test_max_retry'
+
+# Make the statement retry, to ensure max_retries increases to
+# become different from 0.
+statement OK
+CREATE SEQUENCE s;
+  SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h'::INTERVAL), 0);
+  DROP SEQUENCE s
+
+statement OK
+RESET application_name
+
+# Note: in the following test, three rows of output are expected:
+# - one for the SELECT statements that failed with a retry error,
+# - one for the final SELECT retry attempt that succeeded without an error,
+# - one for the RESET statement.
+#
+# We expect the first two entries to have max_retries > 0 because
+# auto-retries are expected by the server.
+# We also expect the RESET statement to have max_retries = 0, because
+# RESET never retries. This tests that the retry counter is properly
+# reset to 0 between statements - a naive implementation could make
+# the counter increase forever, even between statements.
+#
+# TODO(radu): there should be a single fingerprint, with ::INTERVAL. The
+# different fingerprint on retries is caused by in-place mutation of the AST
+# (#22847).
+#
+
+query TIB
+SELECT key, max_retries, flags LIKE '!%' AS f
+  FROM crdb_internal.node_statement_statistics
+ WHERE application_name = 'test_max_retry'
+ORDER BY key, f
+----
+CREATE SEQUENCE s                                                     0  false
+DROP SEQUENCE s                                                       0  false
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            2  false
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            1  true
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_::INTERVAL), _)  0  true
+SET application_name = DEFAULT                                        0  false
+
+query T
+SELECT crdb_internal.cluster_name()
+----
+testclustername
+
+# Regression for 41834.
+statement ok
+CREATE TABLE table41834 ();
+SELECT
+	crdb_internal.encode_key(
+		-8912529861854991652,
+		0,
+		CASE
+		WHEN false THEN (NULL,)
+		ELSE (NULL,)
+		END
+	)
+FROM
+	table41834;
+
+
+subtest builtin_is_admin
+
+user root
+
+query B
+SELECT crdb_internal.is_admin()
+----
+true
+
+user testuser
+
+query B
+SELECT crdb_internal.is_admin()
+----
+false
+
+user root
+
+# Test the crdb_internal.create_type_statements table.
+statement ok
+CREATE TYPE enum1 AS ENUM ('hello', 'hi');
+CREATE TYPE enum2 AS ENUM ()
+
+query ITTITTT
+SELECT * FROM crdb_internal.create_type_statements
+----
+52  test  public  59  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
+52  test  public  61  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
+
+# Test the virtual index as well.
+
+statement ok
+SET application_name = "test_txn_statistics"
+
+statement ok
+CREATE TABLE t_53504()
+
+statement ok
+BEGIN; SELECT * FROM t_53504; SELECT * FROM t_53504; SELECT * FROM t_53504; COMMIT;
+
+statement ok
+BEGIN; SELECT * FROM t_53504; SELECT * FROM t_53504; COMMIT;
+
+statement ok
+BEGIN; SELECT * FROM t_53504; SELECT * FROM t_53504; COMMIT;
+
+statement ok
+BEGIN; SELECT * FROM t_53504; COMMIT;
+
+statement ok
+SELECT * FROM t_53504
+
+query ITTTI colnames
+SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
+----
+node_id  application_name     key                   statement_ids                                                     count
+0        test_txn_statistics  4572719807723346491   {14727561584397653505,14727561584397653505}                       2
+0        test_txn_statistics  6826443595058283584   {14727561584397653505,14727561584397653505,14727561584397653505}  1
+0        test_txn_statistics  7134109142904971730   {14727561584397653517}                                            1
+0        test_txn_statistics  7134109142904971742   {14727561584397653505}                                            1
+0        test_txn_statistics  10166963080898232577  {2484845987516053214}                                             1

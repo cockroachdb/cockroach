@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/gogo/protobuf/proto"
 	"github.com/jackc/pgx"
 	"github.com/kr/pretty"
@@ -446,6 +447,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 func TestBackupRestoreAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "flaky test. Issues #50984, #54599")
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
@@ -597,7 +599,8 @@ func TestBackupRestoreAppend(t *testing.T) {
 			store, err := cloudimpl.ExternalStorageFromURI(ctx, "userfile:///0",
 				base.ExternalIODirConfig{},
 				tc.Servers[0].ClusterSettings(),
-				blobs.TestEmptyBlobClientFactory, "root",
+				blobs.TestEmptyBlobClientFactory,
+				security.RootUserName(),
 				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB())
 			require.NoError(t, err)
 			defer store.Close()
@@ -1093,7 +1096,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP TABLE bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobspb.TypeBackup, jobs.StatusSucceeded, jobs.Record{
-		Username: security.RootUser,
+		Username: security.RootUserName(),
 		Description: fmt.Sprintf(
 			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir+"redacted", sanitizedFullDir+"redacted",
@@ -1108,7 +1111,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	sqlDB.Exec(t, `RESTORE TABLE bank FROM $1, $2 WITH OPTIONS (into_db='restoredb')`, fullDir, incDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
-		Username: security.RootUser,
+		Username: security.RootUserName(),
 		Description: fmt.Sprintf(
 			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db='restoredb'`,
 			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
@@ -1173,7 +1176,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			sanitizedEncryptionOption = fmt.Sprintf("kms='%s'", sanitizedURI)
 		} else {
 			encryptionOption = "encryption_passphrase='abcdefg'"
-			sanitizedEncryptionOption = fmt.Sprintf("encryption_passphrase='redacted'")
+			sanitizedEncryptionOption = "encryption_passphrase='redacted'"
 		}
 
 		t.Run(tc.name, func(t *testing.T) {
@@ -1194,7 +1197,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			// Verify the BACKUP job description is sanitized.
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StatusSucceeded,
 				jobs.Record{
-					Username: security.RootUser,
+					Username: security.RootUserName(),
 					Description: fmt.Sprintf(
 						`BACKUP DATABASE data TO '%s' WITH %s`,
 						backupLoc1, sanitizedEncryptionOption),
@@ -1212,7 +1215,7 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 
 			// Verify the RESTORE job description is sanitized.
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
-				Username: security.RootUser,
+				Username: security.RootUserName(),
 				Description: fmt.Sprintf(
 					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db='restoredb'`,
 					backupLoc1, sanitizedEncryptionOption,
@@ -1403,7 +1406,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 
 	if _, err := os.Stat(checkpointPath); err == nil {
 		t.Fatalf("backup checkpoint descriptor at %s not cleaned up", checkpointPath)
-	} else if !os.IsNotExist(err) {
+	} else if !oserror.IsNotExist(err) {
 		t.Fatal(err)
 	}
 }
@@ -1418,7 +1421,7 @@ func createAndWaitForJob(
 	t.Helper()
 	now := timeutil.ToUnixMicros(timeutil.Now())
 	payload, err := protoutil.Marshal(&jobspb.Payload{
-		Username:      security.RootUser,
+		UsernameProto: security.RootUserName().EncodeProto(),
 		DescriptorIDs: descriptorIDs,
 		StartedMicros: now,
 		Details:       jobspb.WrapPayloadDetails(details),
@@ -5771,6 +5774,7 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 // Ensure that backing up and restoring tenants succeeds.
 func TestBackupRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	const numAccounts = 1
 	ctx, tc, systemDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -5815,9 +5819,6 @@ func TestBackupRestoreTenant(t *testing.T) {
 	systemDB.Exec(t, `BACKUP TENANT 11 TO 'nodelocal://1/t11'`)
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
 
-	// TODO(dt): test destroying a tenant and RESTORE'ing over a destroyed tenant
-	// once tenant destruction actually clears their key-space. See #48775.
-
 	t.Run("non-existent", func(t *testing.T) {
 		systemDB.ExpectErr(t, "tenant 123 does not exist", `BACKUP TENANT 123 TO 'nodelocal://1/t1'`)
 		systemDB.ExpectErr(t, "tenant 21 does not exist", `BACKUP TENANT 21 TO 'nodelocal://1/t20'`)
@@ -5845,11 +5846,45 @@ func TestBackupRestoreTenant(t *testing.T) {
 			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
 		)
 
+		ten10Stopper := stop.NewStopper()
 		restoreConn10 := serverutils.StartTenant(
+			t, restoreTC.Server(0), base.TestTenantArgs{
+				TenantID: roachpb.MakeTenantID(10), Existing: true, Stopper: ten10Stopper,
+			},
+		)
+		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
+		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
+
+		// Stop the tenant process before destroying the tenant.
+		restoreConn10.Close()
+		ten10Stopper.Stop(ctx)
+		restoreConn10 = nil
+
+		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
+		restoreDB.CheckQueryResults(t,
+			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
+			[][]string{{`10`, `false`, `{"id": "10", "state": "DROP"}`}},
+		)
+
+		restoreDB.Exec(t, `SELECT crdb_internal.gc_tenant(10)`)
+		ten10Prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(10))
+		ten10PrefixEnd := ten10Prefix.PrefixEnd()
+		rows, err := restoreTC.Server(0).DB().Scan(ctx, ten10Prefix, ten10PrefixEnd, 0 /* maxRows */)
+		require.NoError(t, err)
+		require.Equal(t, []kv.KeyValue{}, rows)
+
+		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
+		restoreDB.CheckQueryResults(t,
+			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
+			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
+		)
+
+		restoreConn10 = serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
 		)
 		defer restoreConn10.Close()
-		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
+		restoreTenant10 = sqlutils.MakeSQLRunner(restoreConn10)
 
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
@@ -6384,6 +6419,234 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		close(continueNotif)
 		require.NoError(t, g.Wait())
 
+	})
+}
+
+// TestCleanupDoesNotDeleteParentsWithChildObjects tests that if the job fails
+// after the new descriptors have been published, and any new databases or
+// schemas have new child objects/schemas added to them, we don't drop those
+// databases or schemas (to avoid orphaning the new child objects/schemas).
+func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var state = struct {
+		mu syncutil.Mutex
+		// Closed when the restore job has reached the point right after publishing
+		// public descriptors.
+		afterPublishingNotification chan struct{}
+		// Closed when we're ready to resume with the restore.
+		continueNotification chan struct{}
+	}{}
+	notifyAfterPublishing := func() (chan struct{}, chan struct{}) {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		state.afterPublishingNotification = make(chan struct{})
+		state.continueNotification = make(chan struct{})
+		return state.afterPublishingNotification, state.continueNotification
+	}
+	notifyContinue := func(ctx context.Context) {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		if state.afterPublishingNotification != nil {
+			close(state.afterPublishingNotification)
+			state.afterPublishingNotification = nil
+		}
+		select {
+		case <-state.continueNotification:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+
+	t.Run("clean-up-database-with-schema", func(t *testing.T) {
+		ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		for _, server := range tc.Servers {
+			registry := server.JobRegistry().(*jobs.Registry)
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.afterPublishingDescriptors = func() error {
+						notifyContinue(ctx)
+						return errors.New("injected error")
+					}
+					return r
+				},
+			}
+		}
+
+		sqlDB.Exec(t, `
+			CREATE DATABASE d;
+			USE d;
+			CREATE SCHEMA sc;
+			CREATE TABLE sc.tb (x INT);
+			CREATE TYPE sc.typ AS ENUM ('hello');
+		`)
+
+		// Back up the database.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+		// Drop the database and restore into it.
+		sqlDB.Exec(t, `DROP DATABASE d`)
+
+		afterPublishNotif, continueNotif := notifyAfterPublishing()
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			_, err := sqlDB.DB.ExecContext(ctx, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+			require.Regexp(t, "injected error", err)
+			return nil
+		})
+
+		<-afterPublishNotif
+		// Create a schema in the database we just made public for which the RESTORE
+		// job isn't actually finished.
+		sqlDB.Exec(t, `
+			USE d;
+			CREATE SCHEMA new_schema;
+		`)
+		close(continueNotif)
+		require.NoError(t, g.Wait())
+
+		// Check that the restored database still exists, but only contains the new
+		// schema we added.
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS FROM d] ORDER BY 1`, [][]string{
+			{"crdb_internal"}, {"information_schema"}, {"new_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"},
+		})
+		sqlDB.CheckQueryResults(t, `SHOW TABLES FROM d`, [][]string{})
+		sqlDB.CheckQueryResults(t, `SHOW TYPES`, [][]string{})
+	})
+
+	t.Run("clean-up-database-with-table", func(t *testing.T) {
+		ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		for _, server := range tc.Servers {
+			registry := server.JobRegistry().(*jobs.Registry)
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.afterPublishingDescriptors = func() error {
+						notifyContinue(ctx)
+						return errors.New("injected error")
+					}
+					return r
+				},
+			}
+		}
+
+		sqlDB.Exec(t, `
+			CREATE DATABASE d;
+			USE d;
+			CREATE SCHEMA sc;
+			CREATE TABLE sc.tb (x INT);
+			CREATE TYPE sc.typ AS ENUM ('hello');
+		`)
+
+		// Back up the database.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+		// Drop the database and restore into it.
+		sqlDB.Exec(t, `DROP DATABASE d`)
+
+		afterPublishNotif, continueNotif := notifyAfterPublishing()
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			_, err := sqlDB.DB.ExecContext(ctx, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+			require.Regexp(t, "injected error", err)
+			return nil
+		})
+
+		<-afterPublishNotif
+		// Create a table in the database we just made public for which the RESTORE
+		// job isn't actually finished.
+		sqlDB.Exec(t, `CREATE TABLE d.public.new_table()`)
+		close(continueNotif)
+		require.NoError(t, g.Wait())
+
+		// Check that the restored database still exists, but only contains the new
+		// table we added.
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS FROM d] ORDER BY 1`, [][]string{
+			{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"},
+		})
+		sqlDB.CheckQueryResults(t, `SELECT schema_name, table_name FROM [SHOW TABLES FROM d]`, [][]string{
+			{"public", "new_table"},
+		})
+		sqlDB.CheckQueryResults(t, `SHOW TYPES`, [][]string{})
+	})
+
+	t.Run("clean-up-schema-with-table", func(t *testing.T) {
+		ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		for _, server := range tc.Servers {
+			registry := server.JobRegistry().(*jobs.Registry)
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.afterPublishingDescriptors = func() error {
+						notifyContinue(ctx)
+						return errors.New("injected error")
+					}
+					return r
+				},
+			}
+		}
+
+		// Use the same connection throughout (except for the concurrent RESTORE) to
+		// preserve session variables.
+		conn, err := tc.Conns[0].Conn(ctx)
+		require.NoError(t, err)
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+
+		sqlDB.Exec(t, `
+			CREATE DATABASE olddb;
+			USE olddb;
+			CREATE SCHEMA sc;
+			CREATE TABLE sc.tb (x INT);
+		`)
+
+		// Back up the database.
+		sqlDB.Exec(t, `BACKUP DATABASE olddb TO 'nodelocal://0/test/'`)
+
+		// Drop the database.
+		sqlDB.Exec(t, `DROP DATABASE olddb`)
+
+		// Create a new database and restore into it.
+		sqlDB.Exec(t, `CREATE DATABASE newdb`)
+
+		afterPublishNotif, continueNotif := notifyAfterPublishing()
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := tc.Conns[0].Conn(ctx)
+			require.NoError(t, err)
+			_, err = conn.ExecContext(ctx, `RESTORE olddb.* FROM 'nodelocal://0/test/' WITH into_db='newdb'`)
+			require.Regexp(t, "injected error", err)
+			return nil
+		})
+
+		<-afterPublishNotif
+		// Create a table in the schema we just made public for which the RESTORE
+		// job isn't actually finished.
+		sqlDB.Exec(t, `CREATE TABLE newdb.sc.new_table()`)
+		close(continueNotif)
+		require.NoError(t, g.Wait())
+
+		sqlDB.Exec(t, `USE newdb`)
+		sqlDB.CheckQueryResults(t, `SELECT schema_name from [SHOW SCHEMAS FROM newdb] ORDER BY 1`, [][]string{
+			{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"sc"},
+		})
+		sqlDB.CheckQueryResults(t, `SELECT schema_name, table_name FROM [SHOW TABLES FROM sc]`, [][]string{
+			{"sc", "new_table"},
+		})
 	})
 }
 

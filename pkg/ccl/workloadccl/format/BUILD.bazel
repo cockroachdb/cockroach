@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "format",
+    srcs = ["sstable.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/format",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/importccl",
+        "//pkg/keys",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/parser",
+        "//pkg/sql/row",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/storage",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/workload",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

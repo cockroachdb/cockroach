@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -20,7 +19,7 @@ import (
 
 func registerInconsistency(r *testRegistry) {
 	r.Add(testSpec{
-		Name:       fmt.Sprintf("inconsistency"),
+		Name:       "inconsistency",
 		Owner:      OwnerKV,
 		MinVersion: "v19.2.2", // https://github.com/cockroachdb/cockroach/pull/42149 is new in 19.2.2
 		Cluster:    makeClusterSpec(3),
@@ -74,9 +73,9 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 	// 0x120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20312a004a00
 	// 0x120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20322a004a00
 
-	c.Run(ctx, c.Node(1), "./cockroach debug rocksdb put --hex --db={store-dir} "+
-		"0x016b1202000174786e2d0000000000000000000000000000000000 "+
-		"0x12040800100018002000280032280a10000000000000000000000000000000001a1066616b65207472616e73616374696f6e2a004a00")
+	c.Run(ctx, c.Node(1), "./cockroach debug pebble db set {store-dir} "+
+		"hex:016b1202000174786e2d0000000000000000000000000000000000 "+
+		"hex:12040800100018002000280032280a10000000000000000000000000000000001a1066616b65207472616e73616374696f6e2a004a00")
 
 	m := newMonitor(ctx, c)
 	c.Start(ctx, t, nodes)
@@ -87,6 +86,8 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 		}
 		return nil
 	})
+
+	time.Sleep(10 * time.Second) // wait for n1-n3 to all be known as live to each other
 
 	// set an aggressive consistency check interval, but only now (that we're
 	// reasonably sure all nodes are live, etc). This makes sure that the consistency

@@ -18,13 +18,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -71,9 +72,6 @@ type ColumnBackfiller struct {
 
 	// mon is a memory monitor linked with the ColumnBackfiller on creation.
 	mon *mon.BytesMonitor
-	// boundAccount is associated with mon and is used to track allocations during
-	// a column backfill.
-	boundAccount mon.BoundAccount
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
@@ -137,7 +135,6 @@ func (cb *ColumnBackfiller) init(
 		return errors.AssertionFailedf("no memory monitor linked to ColumnBackfiller during init")
 	}
 	cb.mon = mon
-	cb.boundAccount = mon.MakeBoundAccount()
 
 	return cb.fetcher.Init(
 		evalCtx.Context,
@@ -147,7 +144,7 @@ func (cb *ColumnBackfiller) init(
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&cb.alloc,
-		mon,
+		cb.mon,
 		tableArgs,
 	)
 }
@@ -239,7 +236,6 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 func (cb *ColumnBackfiller) Close(ctx context.Context) {
 	cb.fetcher.Close(ctx)
 	if cb.mon != nil {
-		cb.boundAccount.Close(ctx)
 		cb.mon.Stop(ctx)
 	}
 }
@@ -383,7 +379,7 @@ type IndexBackfiller struct {
 
 	added []*descpb.IndexDescriptor
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
-	colIdxMap map[descpb.ColumnID]int
+	colIdxMap catalog.TableColMap
 
 	types   []*types.T
 	rowVals tree.Datums
@@ -447,7 +443,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	// Add the columns referenced in the predicate to valNeededForCol so that
 	// columns necessary to evaluate the predicate expression are fetched.
 	predicateRefColIDs.ForEach(func(col descpb.ColumnID) {
-		valNeededForCol.Add(ib.colIdxMap[col])
+		valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
 	return ib.init(evalCtx, predicates, valNeededForCol, desc, mon)
@@ -469,7 +465,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 
 	evalCtx := flowCtx.NewEvalCtx()
 	var predicates map[descpb.IndexID]tree.TypedExpr
-	var predicateRefColIDs schemaexpr.TableColSet
+	var predicateRefColIDs catalog.TableColSet
 
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
@@ -503,7 +499,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	// Add the columns referenced in the predicate to valNeededForCol so that
 	// columns necessary to evaluate the predicate expression are fetched.
 	predicateRefColIDs.ForEach(func(col descpb.ColumnID) {
-		valNeededForCol.Add(ib.colIdxMap[col])
+		valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
 	return ib.init(evalCtx, predicates, valNeededForCol, desc, mon)
@@ -544,9 +540,8 @@ func (ib *IndexBackfiller) initCols(desc *tabledesc.Immutable) {
 	}
 
 	// Create a map of each column's ID to its ordinal.
-	ib.colIdxMap = make(map[descpb.ColumnID]int, len(ib.cols))
 	for i := range ib.cols {
-		ib.colIdxMap[ib.cols[i].ID] = i
+		ib.colIdxMap.Set(ib.cols[i].ID, i)
 	}
 }
 

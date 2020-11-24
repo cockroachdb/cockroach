@@ -77,33 +77,49 @@ SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr 
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVFr2zwUhu-_XyHOVQsqsWwnaQwFf2wdS-mSrunFoPjCjbXG4FiuJENCyH8ftgOpE0-ypySXtvRI5zwv6GxAfCTgwez-8f7LC8p5gr49T3-g1_tfT4__jyfo6ut49jL7-XiNdltWGAnJq11pvpRMfOQhp-hhOp7sfkiOphO0RndoVS1GAWBIWUQn4ZIK8F6BAAYbMDiAwQUMfQgwZJzNqRCMF1s2JTCOVuBZGOI0y2XxO8AwZ5yCtwEZy4SCBy_hW0KfaRhR3rMAQ0RlGCflNZ8K9DMeL0O-BgyzLEyFh24g2GJgudwdvT_xbY0WoVjUz_JtCLYBBiHDdwoe2eJ_K5E0lSh5Q30927KsjkWSWpH2X4vcn5OnjEeU06h2UlCQui0NnX4PxeKBxSnlvUG9tIT-lle-fX3H4_eFvPLJNWCY5tJDPsG-e9DnvgfHoIeGAifshmU9Qg67bbzbrd1N2odstw25zPim5542aXLZpIfnSNpub9tpbdstbQ9Oa9u-rO3bc9h22tt2W9selLZvT2vbuazt0Tlsu-1t91vbLjx3nWkq0e5lRRPr3POi4f5nKjKWCtpqGlhFBzR6p5URwXI-p0-czctrqs9pyZUvcESFrFbt6mOcVktFge3hvgk8NIFHJjAhapp0MGZ3g_sm8NAEHpnAB8aOaPuQtj7Tjlq3o4RJ3bd1SLsmYalhTVhqWBOWGtaEpYZ1YfVNwhqY6FbDGt1qWKNbDWt0q2Gd7qGJ7lsT3WpYo1sNa3SrYY1uNazTPTLRTboMy-M3tMu07ErrHv8u87IrrXNOjqaHUnqw_e9PAAAA__-O9umd
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-·                        distribution         full                  ·            ·
-·                        vectorized           true                  ·            ·
-project                  ·                    ·                     (x, str)     ·
- │                       estimated row count  333 (missing stats)   ·            ·
- └── merge join (inner)  ·                    ·                     (x, y, str)  ·
-      │                  estimated row count  333 (missing stats)   ·            ·
-      │                  equality             (x) = (y)             ·            ·
-      │                  left cols are key    ·                     ·            ·
-      │                  right cols are key   ·                     ·            ·
-      │                  merge ordering       +"(x=y)"              ·            ·
-      ├── filter         ·                    ·                     (x)          +x
-      │    │             estimated row count  333 (missing stats)   ·            ·
-      │    │             filter               (x % 2) = 0           ·            ·
-      │    └── scan      ·                    ·                     (x)          +x
-      │                  estimated row count  1000 (missing stats)  ·            ·
-      │                  table                numtosquare@primary   ·            ·
-      │                  spans                FULL SCAN             ·            ·
-      └── filter         ·                    ·                     (y, str)     +y
-           │             estimated row count  333 (missing stats)   ·            ·
-           │             filter               (y % 2) = 0           ·            ·
-           └── scan      ·                    ·                     (y, str)     +y
-·                        estimated row count  1000 (missing stats)  ·            ·
-·                        table                numtostr@primary      ·            ·
-·                        spans                FULL SCAN             ·            ·
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (x, str)
+│ estimated row count: 333 (missing stats)
+│
+└── • merge join (inner)
+    │ columns: (x, y, str)
+    │ estimated row count: 333 (missing stats)
+    │ equality: (x) = (y)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(x=y)"
+    │
+    ├── • filter
+    │   │ columns: (x)
+    │   │ ordering: +x
+    │   │ estimated row count: 333 (missing stats)
+    │   │ filter: (x % 2) = 0
+    │   │
+    │   └── • scan
+    │         columns: (x)
+    │         ordering: +x
+    │         estimated row count: 1000 (missing stats)
+    │         table: numtosquare@primary
+    │         spans: FULL SCAN
+    │
+    └── • filter
+        │ columns: (y, str)
+        │ ordering: +y
+        │ estimated row count: 333 (missing stats)
+        │ filter: (y % 2) = 0
+        │
+        └── • scan
+              columns: (y, str)
+              ordering: +y
+              estimated row count: 1000 (missing stats)
+              table: numtostr@primary
+              spans: FULL SCAN
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
@@ -152,15 +168,17 @@ SELECT url FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr WHERE y < 1000 OR y > 
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkEEPk0AQhe_-isl4aZNtWGp6YE_VFiMJLRVI1FQOK0wqCbC4uySShv9ugKqtidXjvnnf2zdzRfOtQoGJH_q7FDpdwds4OsDZ_3gKXwdHWOyDJE3eh0u4WfrZ0HS1VcZq-PDOj31Y9PC54_xVDi7nfAlR_Esi8G7S3o_hzSfoYe8nOwiDQ5DCJkOGjSroKGsyKM7oIsMNZgxbrXIyRulRvk6moPiOgjMsm7azo5wxzJUmFFe0pa0IBR7VSrXOmFKQlWU12QaGqrO_IWPlhVCsB3YX7D4PTuWXimKSBWmHP8Tjz2tsW13WUvfIMGllYwSsHM_znJcgmwJcUPYraWQYdVbAduwYlnVpYYN_a-g-NPzH6jGZVjWG_mt3PmQMqbjQfF6jOp3TSat8-mZ-RhM3CQUZO0_X8yNo5tFY8B52n8L8DzgbXvwIAAD__-xGysw=
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
-·     distribution         full                  ·    ·
-·     vectorized           true                  ·    ·
-scan  ·                    ·                     (x)  ·
-·     estimated row count  1000 (missing stats)  ·    ·
-·     table                numtosquare@primary   ·    ·
-·     spans                FULL SCAN             ·    ·
+distribution: full
+vectorized: true
+·
+• scan
+  columns: (x)
+  estimated row count: 1000 (missing stats)
+  table: numtosquare@primary
+  spans: FULL SCAN
 
 # Verifies that unused renders don't cause us to do rendering instead of a
 # simple projection.
@@ -169,44 +187,60 @@ SELECT url FROM [EXPLAIN (DISTSQL) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToS
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJyMT01L80AYvL-_YplT-7pi43FPFa0QqG1tchDKHtbsQwkku-l-QCTkv0uyinoQPC3zsTPzDPCXBgLFZru5L1l0DXs87p_YafNy2N7lO7Z4yIuyeN4u2YelT4bFJ-Tslv2fnp5dsSyJJrbB-ktUjpYSHMZq2qmWPMQJGSRH52xF3ls3UcNsyHUPseKoTRfDREuOyjqCGBDq0BAESvXa0JGUJnezAoemoOpmjv3Wue5c3Sr3Bo6iU8YLdg2OfQyCrTPIkcPG8FXigzoTRDbyvw85ku-s8fRjw2_Jq1FykD5TOtbb6Co6OFvNNQnu538zocmHpGYJ5CZJoxz_vQcAAP__tjyKSg==
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 ----
-·               distribution         full                  ·              ·
-·               vectorized           true                  ·              ·
-sort            ·                    ·                     (y, str, res)  +res
- │              estimated row count  1000 (missing stats)  ·              ·
- │              order                +res                  ·              ·
- └── render     ·                    ·                     (res, y, str)  ·
-      │         estimated row count  1000 (missing stats)  ·              ·
-      │         render 0             repeat('test', y)     ·              ·
-      │         render 1             y                     ·              ·
-      │         render 2             str                   ·              ·
-      └── scan  ·                    ·                     (y, str)       ·
-·               estimated row count  1000 (missing stats)  ·              ·
-·               table                numtostr@primary      ·              ·
-·               spans                FULL SCAN             ·              ·
+distribution: full
+vectorized: true
+·
+• sort
+│ columns: (y, str, res)
+│ ordering: +res
+│ estimated row count: 1000 (missing stats)
+│ order: +res
+│
+└── • render
+    │ columns: (res, y, str)
+    │ estimated row count: 1000 (missing stats)
+    │ render 0: repeat('test', y)
+    │ render 1: y
+    │ render 2: str
+    │
+    └── • scan
+          columns: (y, str)
+          estimated row count: 1000 (missing stats)
+          table: numtostr@primary
+          spans: FULL SCAN
 
-query TTTTT
+query T
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 ----
-·                    distribution         full                  ·              ·
-·                    vectorized           true                  ·              ·
-limit                ·                    ·                     (y, str, res)  ·
- │                   estimated row count  10 (missing stats)    ·              ·
- │                   count                10                    ·              ·
- └── sort            ·                    ·                     (res, y, str)  +res
-      │              estimated row count  1000 (missing stats)  ·              ·
-      │              order                +res                  ·              ·
-      └── render     ·                    ·                     (res, y, str)  ·
-           │         estimated row count  1000 (missing stats)  ·              ·
-           │         render 0             repeat('test', y)     ·              ·
-           │         render 1             y                     ·              ·
-           │         render 2             str                   ·              ·
-           └── scan  ·                    ·                     (y, str)       ·
-·                    estimated row count  1000 (missing stats)  ·              ·
-·                    table                numtostr@primary      ·              ·
-·                    spans                FULL SCAN             ·              ·
+distribution: full
+vectorized: true
+·
+• limit
+│ columns: (y, str, res)
+│ estimated row count: 10 (missing stats)
+│ count: 10
+│
+└── • sort
+    │ columns: (res, y, str)
+    │ ordering: +res
+    │ estimated row count: 1000 (missing stats)
+    │ order: +res
+    │
+    └── • render
+        │ columns: (res, y, str)
+        │ estimated row count: 1000 (missing stats)
+        │ render 0: repeat('test', y)
+        │ render 1: y
+        │ render 2: str
+        │
+        └── • scan
+              columns: (y, str)
+              estimated row count: 1000 (missing stats)
+              table: numtostr@primary
+              spans: FULL SCAN
 
 # Regression test for #20481.
 query T

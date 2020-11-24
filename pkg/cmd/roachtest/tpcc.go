@@ -18,13 +18,11 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -65,11 +63,15 @@ type tpccOptions struct {
 
 // tpccImportCmd generates the command string to load tpcc data for the
 // specified warehouse count into a cluster.
-func tpccImportCmd(t *test, warehouses int, extraArgs string) string {
-	// Use `cockroach workload` instead of `workload` so the tpcc
-	// workload-versions match on release branches.
-	return fmt.Sprintf("./cockroach workload fixtures import tpcc --warehouses=%d %s {pgurl:1}",
-		warehouses, extraArgs)
+//
+// The command uses `cockroach workload` instead of `workload` so the tpcc
+// workload-versions match on release branches. Similarly, the command does not
+// specify pgurl to ensure that it is run on a node with a running cockroach
+// instance to ensure that the workload version matches the gateway version in a
+// mixed version cluster.
+func tpccImportCmd(warehouses int, extraArgs ...string) string {
+	return fmt.Sprintf("./cockroach workload fixtures import tpcc --warehouses=%d %s",
+		warehouses, strings.Join(extraArgs, " "))
 }
 
 func setupTPCC(
@@ -93,17 +95,9 @@ func setupTPCC(
 			if v == "" {
 				regularNodes = append(regularNodes, c.Node(i+1))
 			} else {
-				// NB: binfetcher caches the downloaded files.
-				binary, err := binfetcher.Download(ctx, binfetcher.Options{
-					Binary:  "cockroach",
-					Version: v,
-					GOOS:    ifLocal(runtime.GOOS, "linux"),
-					GOARCH:  "amd64",
-				})
-				if err != nil {
-					t.Fatalf("while fetching %s: %s", v, err)
+				if err := c.Stage(ctx, c.l, "release", v, "", c.Node(i+1)); err != nil {
+					t.Fatal(err)
 				}
-				c.Put(ctx, binary, "./cockroach", c.Node(i+1))
 			}
 		}
 		c.Put(ctx, cockroach, "./cockroach", regularNodes...)
@@ -121,7 +115,7 @@ func setupTPCC(
 		switch opts.SetupType {
 		case usingImport:
 			t.Status("loading fixture")
-			c.Run(ctx, workloadNode, tpccImportCmd(t, opts.Warehouses, opts.ExtraSetupArgs))
+			c.Run(ctx, crdbNodes[:1], tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs))
 		case usingInit:
 			t.Status("initializing tables")
 			extraArgs := opts.ExtraSetupArgs
@@ -222,11 +216,9 @@ func registerTPCC(r *testRegistry) {
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
 		// running with the max supported warehouses.
-		Name:  "tpcc/headroom/" + headroomSpec.String(),
-		Owner: OwnerKV,
-		// TODO(dan): Backfill tpccSupportedWarehouses and remove this "v2.1.0"
-		// minimum on gce.
-		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
+		Name:       "tpcc/headroom/" + headroomSpec.String(),
+		Owner:      OwnerKV,
+		MinVersion: "v19.1.0",
 		Tags:       []string{`default`, `release_qualification`},
 		Cluster:    headroomSpec,
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -247,11 +239,9 @@ func registerTPCC(r *testRegistry) {
 		// mixed-headroom is similar to w=headroom, but with an additional node
 		// and on a mixed version cluster. It simulates a real production
 		// deployment in the middle of the migration into a new cluster version.
-		Name:  "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
-		Owner: OwnerKV,
-		// TODO(dan): Backfill tpccSupportedWarehouses and remove this "v2.1.0"
-		// minimum on gce.
-		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
+		Name:       "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
+		Owner:      OwnerKV,
+		MinVersion: "v19.1.0",
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
 		Tags:    []string{`default`},
@@ -280,7 +270,7 @@ func registerTPCC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "tpcc-nowait/nodes=3/w=1",
 		Owner:      OwnerKV,
-		MinVersion: maybeMinVersionForFixturesImport(cloud),
+		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
@@ -294,7 +284,7 @@ func registerTPCC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "weekly/tpcc/headroom",
 		Owner:      OwnerKV,
-		MinVersion: maybeMinVersionForFixturesImport(cloud),
+		MinVersion: "v19.1.0",
 		Tags:       []string{`weekly`},
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Timeout:    time.Duration(6*24)*time.Hour + time.Duration(10)*time.Minute,
@@ -311,8 +301,8 @@ func registerTPCC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "tpcc/w=100/nodes=3/chaos=true",
 		Owner:      OwnerKV,
+		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(4),
-		MinVersion: maybeMinVersionForFixturesImport(cloud),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -339,8 +329,8 @@ func registerTPCC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "tpcc/interleaved/nodes=3/cpu=16/w=500",
 		Owner:      OwnerSQLExec,
-		Cluster:    makeClusterSpec(4, cpu(16)),
 		MinVersion: "v20.1.0",
+		Cluster:    makeClusterSpec(4, cpu(16)),
 		Timeout:    6 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			skip.WithIssue(t, 53886)
@@ -351,7 +341,7 @@ func registerTPCC(r *testRegistry) {
 				// bottleneck on initialization which is significantly slower than import.
 				Warehouses:     500,
 				Duration:       time.Minute * 15,
-				ExtraSetupArgs: fmt.Sprintf("--interleaved=true"),
+				ExtraSetupArgs: "--interleaved=true",
 				SetupType:      usingInit,
 			})
 		},
@@ -369,8 +359,8 @@ func registerTPCC(r *testRegistry) {
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehouses: gceOrAws(cloud, 2000, 3000),
-		EstimatedMax:   gceOrAws(cloud, 1600, 2500),
+		LoadWarehouses: gceOrAws(cloud, 2500, 3000),
+		EstimatedMax:   gceOrAws(cloud, 2200, 2500),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
@@ -413,36 +403,11 @@ func registerTPCC(r *testRegistry) {
 	})
 }
 
-func maxVersion(vers ...string) string {
-	var max *version.Version
-	for _, v := range vers {
-		v, err := version.Parse(v)
-		if err != nil {
-			continue
-		}
-		if max == nil || v.AtLeast(max) {
-			max = v
-		}
-	}
-	if max == nil {
-		return ""
-	}
-	return max.String()
-}
-
 func gceOrAws(cloud string, gce, aws int) int {
 	if cloud == "aws" {
 		return aws
 	}
 	return gce
-}
-
-func maybeMinVersionForFixturesImport(cloud string) string {
-	const minVersionForFixturesImport = "v19.1.0"
-	if cloud == "aws" {
-		return minVersionForFixturesImport
-	}
-	return ""
 }
 
 // tpccBenchDistribution represents a distribution of nodes in a tpccbench
@@ -588,7 +553,7 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 
 	minVersion := b.MinVersion
 	if minVersion == "" {
-		minVersion = maybeMinVersionForFixturesImport(cloud)
+		minVersion = "v19.1.0" // needed for import
 	}
 
 	r.Add(testSpec{
@@ -664,8 +629,8 @@ func loadTPCCBench(
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
 	waitForFullReplication(t, db)
-	cmd := tpccImportCmd(t, b.LoadWarehouses, loadArgs)
-	if err := c.RunE(ctx, loadNode, cmd); err != nil {
+	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs)
+	if err := c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err
 	}
 	if rebalanceWait == 0 || len(roachNodes) <= 3 {
@@ -785,9 +750,6 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		iteration++
 		t.l.Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
 		m := newMonitor(ctx, c, roachNodes)
-		// Restart the cluster before each iteration to help eliminate
-		// inter-trial interactions.
-		m.ExpectDeaths(int32(len(roachNodes)))
 		c.Stop(ctx, roachNodes)
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 		time.Sleep(restartWait)

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -31,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // executeWriteBatch is the entry point for client requests which may mutate the
@@ -123,7 +124,8 @@ func (r *Replica) executeWriteBatch(
 	// manager.
 	if curLease, _ := r.GetLease(); curLease.Sequence > st.Lease.Sequence {
 		curLeaseCpy := curLease // avoid letting curLease escape
-		err := newNotLeaseHolderError(&curLeaseCpy, r.store.StoreID(), r.Desc())
+		err := newNotLeaseHolderError(&curLeaseCpy, r.store.StoreID(), r.Desc(),
+			"stale lease discovered before proposing")
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
 		return nil, g, roachpb.NewError(err)
 	}
@@ -244,7 +246,7 @@ func (r *Replica) executeWriteBatch(
 func rangeUnavailableMessage(
 	s *redact.StringBuilder,
 	desc *roachpb.RangeDescriptor,
-	lm IsLiveMap,
+	lm liveness.IsLiveMap,
 	rs *raft.Status,
 	ba *roachpb.BatchRequest,
 	dur time.Duration,

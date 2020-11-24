@@ -13,6 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -64,16 +66,17 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 }
 
 func (n *alterTypeNode) startExec(params runParams) error {
+	telemetry.Inc(n.n.Cmd.TelemetryCounter())
 	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:
 		err = params.p.addEnumValue(params.ctx, n, t)
 	case *tree.AlterTypeRenameValue:
-		err = params.p.renameTypeValue(params.ctx, n, t.OldVal, t.NewVal)
+		err = params.p.renameTypeValue(params.ctx, n, string(t.OldVal), string(t.NewVal))
 	case *tree.AlterTypeRename:
-		err = params.p.renameType(params.ctx, n, t.NewName)
+		err = params.p.renameType(params.ctx, n, string(t.NewName))
 	case *tree.AlterTypeSetSchema:
-		err = params.p.setTypeSchema(params.ctx, n, t.Schema)
+		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
 		err = params.p.alterTypeOwner(params.ctx, n, t.Owner)
 	default:
@@ -100,7 +103,11 @@ func (n *alterTypeNode) startExec(params runParams) error {
 			TypeName  string
 			Statement string
 			User      string
-		}{n.desc.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.p.User()},
+		}{
+			n.desc.Name,
+			tree.AsStringWithFQNames(n.n, params.Ann()),
+			params.p.User().Normalized(),
+		},
 	)
 }
 
@@ -112,7 +119,7 @@ func (p *planner) addEnumValue(
 	}
 	// See if the value already exists in the enum or not.
 	for _, member := range n.desc.EnumMembers {
-		if member.LogicalRepresentation == node.NewVal {
+		if member.LogicalRepresentation == string(node.NewVal) {
 			if node.IfNotExists {
 				p.BufferClientNotice(
 					ctx,
@@ -295,30 +302,26 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 	)
 }
 
-func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner string) error {
+func (p *planner) alterTypeOwner(
+	ctx context.Context, n *alterTypeNode, newOwner security.SQLUsername,
+) error {
 	typeDesc := n.desc
+
 	privs := typeDesc.GetPrivileges()
 
-	hasOwnership, err := p.HasOwnership(ctx, typeDesc)
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == privs.Owner() {
+		return nil
+	}
+
+	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
 
-	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, privs, newOwner, hasOwnership); err != nil {
+	if err := p.checkCanAlterTypeAndSetNewOwner(ctx, typeDesc, arrayDesc, newOwner); err != nil {
 		return err
 	}
-
-	// Ensure the new owner has CREATE privilege on the type's schema.
-	if err := p.canCreateOnSchema(ctx, typeDesc.GetParentSchemaID(), newOwner); err != nil {
-		return err
-	}
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
-		return nil
-	}
-
-	privs.SetOwner(newOwner)
 
 	if err := p.writeTypeSchemaChange(
 		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
@@ -326,17 +329,36 @@ func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner
 		return err
 	}
 
-	// Also have to change the owner of the implicit array type.
-	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, n.desc.ArrayTypeID)
-	if err != nil {
-		return err
-	}
-
-	arrayDesc.Privileges.SetOwner(newOwner)
-
 	return p.writeTypeSchemaChange(
 		ctx, arrayDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
 	)
+}
+
+// checkCanAlterTypeAndSetNewOwner handles privilege checking and setting new owner.
+// Called in ALTER TYPE and REASSIGN OWNED BY.
+func (p *planner) checkCanAlterTypeAndSetNewOwner(
+	ctx context.Context,
+	typeDesc *typedesc.Mutable,
+	arrayTypeDesc *typedesc.Mutable,
+	newOwner security.SQLUsername,
+) error {
+	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
+		return err
+	}
+
+	// Ensure the new owner has CREATE privilege on the type's schema.
+	if err := p.canCreateOnSchema(
+		ctx, typeDesc.GetParentSchemaID(), typeDesc.ParentID, newOwner, checkPublicSchema); err != nil {
+		return err
+	}
+
+	privs := typeDesc.GetPrivileges()
+	privs.SetOwner(newOwner)
+
+	// Also have to change the owner of the implicit array type.
+	arrayTypeDesc.Privileges.SetOwner(newOwner)
+
+	return nil
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }
@@ -345,15 +367,21 @@ func (n *alterTypeNode) Close(ctx context.Context)           {}
 func (n *alterTypeNode) ReadingOwnWrites()                   {}
 
 func (p *planner) canModifyType(ctx context.Context, desc *typedesc.Mutable) error {
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
+	}
+
 	hasOwnership, err := p.HasOwnership(ctx, desc)
 	if err != nil {
 		return err
 	}
-
 	if !hasOwnership {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"must be owner of type %s", tree.Name(desc.GetName()))
 	}
-
 	return nil
 }

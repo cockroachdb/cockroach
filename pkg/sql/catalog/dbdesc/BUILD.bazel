@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dbdesc",
+    srcs = ["database_desc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/security",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/privilege",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/cockroachdb/redact",
+    ],
+)
+
+go_test(
+    name = "dbdesc_test",
+    srcs = ["database_test.go"],
+    embed = [":dbdesc"],
+    deps = [
+        "//pkg/security",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)

@@ -11,9 +11,11 @@
 package jobs
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -28,11 +30,11 @@ var FakeNodeID = func() *base.NodeIDContainer {
 }()
 
 // FakeNodeLiveness allows simulating liveness failures without the full
-// storage.NodeLiveness machinery.
+// liveness.NodeLiveness machinery.
 type FakeNodeLiveness struct {
 	mu struct {
 		syncutil.Mutex
-		livenessMap map[roachpb.NodeID]*kvserverpb.Liveness
+		livenessMap map[roachpb.NodeID]*livenesspb.Liveness
 	}
 
 	// A non-blocking send is performed over these channels when the corresponding
@@ -47,12 +49,12 @@ func NewFakeNodeLiveness(nodeCount int) *FakeNodeLiveness {
 		SelfCalledCh:          make(chan struct{}),
 		GetLivenessesCalledCh: make(chan struct{}),
 	}
-	nl.mu.livenessMap = make(map[roachpb.NodeID]*kvserverpb.Liveness)
+	nl.mu.livenessMap = make(map[roachpb.NodeID]*livenesspb.Liveness)
 	for i := 0; i < nodeCount; i++ {
 		nodeID := roachpb.NodeID(i + 1)
-		nl.mu.livenessMap[nodeID] = &kvserverpb.Liveness{
+		nl.mu.livenessMap[nodeID] = &livenesspb.Liveness{
 			Epoch:      1,
-			Expiration: hlc.LegacyTimestamp(hlc.MaxTimestamp),
+			Expiration: hlc.MaxTimestamp.ToLegacyTimestamp(),
 			NodeID:     nodeID,
 		}
 	}
@@ -62,10 +64,10 @@ func NewFakeNodeLiveness(nodeCount int) *FakeNodeLiveness {
 // ModuleTestingKnobs implements base.ModuleTestingKnobs.
 func (*FakeNodeLiveness) ModuleTestingKnobs() {}
 
-// Self implements the implicit storage.NodeLiveness interface. It uses NodeID
+// Self implements the implicit liveness.NodeLiveness interface. It uses NodeID
 // as the node ID. On every call, a nonblocking send is performed over nl.ch to
 // allow tests to execute a callback.
-func (nl *FakeNodeLiveness) Self() (kvserverpb.Liveness, bool) {
+func (nl *FakeNodeLiveness) Self() (livenesspb.Liveness, bool) {
 	select {
 	case nl.SelfCalledCh <- struct{}{}:
 	default:
@@ -75,8 +77,8 @@ func (nl *FakeNodeLiveness) Self() (kvserverpb.Liveness, bool) {
 	return *nl.mu.livenessMap[FakeNodeID.Get()], true
 }
 
-// GetLivenesses implements the implicit storage.NodeLiveness interface.
-func (nl *FakeNodeLiveness) GetLivenesses() (out []kvserverpb.Liveness) {
+// GetLivenesses implements the implicit liveness.NodeLiveness interface.
+func (nl *FakeNodeLiveness) GetLivenesses() (out []livenesspb.Liveness) {
 	select {
 	case nl.GetLivenessesCalledCh <- struct{}{}:
 	default:
@@ -87,6 +89,11 @@ func (nl *FakeNodeLiveness) GetLivenesses() (out []kvserverpb.Liveness) {
 		out = append(out, *liveness)
 	}
 	return out
+}
+
+// GetLivenessesFromKV implements the implicit liveness.NodeLiveness interface.
+func (nl *FakeNodeLiveness) GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error) {
+	return nil, errors.New("FakeNodeLiveness.GetLivenessesFromKV is unimplemented")
 }
 
 // IsLive is unimplemented.
@@ -106,7 +113,7 @@ func (nl *FakeNodeLiveness) FakeIncrementEpoch(id roachpb.NodeID) {
 func (nl *FakeNodeLiveness) FakeSetExpiration(id roachpb.NodeID, ts hlc.Timestamp) {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
-	nl.mu.livenessMap[id].Expiration = hlc.LegacyTimestamp(ts)
+	nl.mu.livenessMap[id].Expiration = ts.ToLegacyTimestamp()
 }
 
 // ResetConstructors resets the registered Resumer constructors.

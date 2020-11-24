@@ -15,6 +15,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -325,8 +327,8 @@ type result struct {
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
 func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.SessionData) {
-	if o.User != "" {
-		sd.User = o.User
+	if !o.User.Undefined() {
+		sd.UserProto = o.User.EncodeProto()
 	}
 	if o.Database != "" {
 		sd.Database = o.Database
@@ -337,6 +339,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.SearchPath != nil {
 		sd.SearchPath = *o.SearchPath
 	}
+	if o.DatabaseIDToTempSchemaID != nil {
+		sd.DatabaseIDToTempSchemaID = o.DatabaseIDToTempSchemaID
+	}
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
@@ -344,13 +349,13 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 ) sessiondata.InternalExecutorOverride {
 	if ie.sessionData == nil {
 		return sessiondata.InternalExecutorOverride{
-			User:            security.RootUser,
+			User:            security.RootUserName(),
 			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sessiondata.InternalExecutorOverride{}
-	if ie.sessionData.User == "" {
-		o.User = security.RootUser
+	if ie.sessionData.User().Undefined() {
+		o.User = security.RootUserName()
 	}
 	if ie.sessionData.ApplicationName == "" {
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
@@ -382,7 +387,7 @@ func (ie *InternalExecutor) execInternal(
 		sd = ie.s.newSessionData(SessionArgs{})
 	}
 	applyOverrides(sessionDataOverride, sd)
-	if sd.User == "" {
+	if sd.User().Undefined() {
 		return result{}, errors.AssertionFailedf("no user specified for internal query")
 	}
 	if sd.ApplicationName == "" {
@@ -517,6 +522,8 @@ type internalClientComm struct {
 	sync func([]resWithPos)
 }
 
+var _ ClientComm = &internalClientComm{}
+
 type resWithPos struct {
 	*bufferedCommandResult
 	pos CmdPos
@@ -528,7 +535,8 @@ func (icc *internalClientComm) CreateStatementResult(
 	_ RowDescOpt,
 	pos CmdPos,
 	_ []pgwirebase.FormatCode,
-	_ sessiondata.DataConversionConfig,
+	_ sessiondatapb.DataConversionConfig,
+	_ *time.Location,
 	_ int,
 	_ string,
 	_ bool,

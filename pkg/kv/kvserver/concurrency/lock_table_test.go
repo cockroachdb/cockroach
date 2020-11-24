@@ -887,7 +887,7 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 	}
 	var keys []roachpb.Key
 	for i := 0; i < 10; i++ {
-		keys = append(keys, roachpb.Key(string('a'+i)))
+		keys = append(keys, roachpb.Key(string(rune('a'+i))))
 	}
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
@@ -960,7 +960,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	}
 	var keys []roachpb.Key
 	for i := 0; i < 10; i++ {
-		keys = append(keys, roachpb.Key(string('a'+i)))
+		keys = append(keys, roachpb.Key(string(rune('a'+i))))
 	}
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 	const numActiveTxns = 8

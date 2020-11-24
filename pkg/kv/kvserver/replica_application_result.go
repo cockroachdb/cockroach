@@ -70,7 +70,7 @@ func isTrivial(r *kvserverpb.ReplicatedEvalResult) bool {
 	allowlist.DeprecatedDelta = nil
 	allowlist.PrevLeaseProposal = nil
 	allowlist.State = nil
-	return allowlist.Equal(kvserverpb.ReplicatedEvalResult{})
+	return allowlist.IsZero()
 }
 
 // clearTrivialReplicatedEvalResultFields is used to zero out the fields of a
@@ -214,8 +214,8 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 			r.mu.state.Lease,
 			r.store.StoreID(),
 			r.mu.state.Desc,
+			"reproposal failed due to closed timestamp",
 		)
-		err.CustomMsg = "reproposal failed due to closed timestamp"
 		return roachpb.NewError(err)
 	}
 	// Some tests check for this log message in the trace.
@@ -338,10 +338,6 @@ func (r *Replica) handleChangeReplicasResult(
 	if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
 		// We destroyed the data when the batch committed so don't destroy it again.
 		DestroyData: false,
-		// In order to detect the GC queue racing with other causes of replica removal
-		// the store will no-op when removing a replica which is already marked as removed
-		// unless we set ignoreDestroyStatus to true.
-		ignoreDestroyStatus: true,
 	}); err != nil {
 		log.Fatalf(ctx, "failed to remove replica: %v", err)
 	}
@@ -360,17 +356,5 @@ func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64) {
 	}
 	if r.mu.raftLogLastCheckSize < 0 {
 		r.mu.raftLogLastCheckSize = 0
-	}
-}
-
-func (r *Replica) handleSuggestedCompactionsResult(
-	ctx context.Context, scs []kvserverpb.SuggestedCompaction,
-) {
-	// Pebble Stores don't use a compactor.
-	if r.store.compactor == nil {
-		return
-	}
-	for _, sc := range scs {
-		r.store.compactor.Suggest(ctx, sc)
 	}
 }

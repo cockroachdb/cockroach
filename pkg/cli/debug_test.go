@@ -39,21 +39,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 )
 
 func createStore(t *testing.T, path string) {
 	t.Helper()
-	cache := storage.NewRocksDBCache(server.DefaultCacheSize)
-	defer cache.Release()
-	db, err := storage.NewRocksDB(
-		storage.RocksDBConfig{
-			StorageConfig: base.StorageConfig{
-				Dir:       path,
-				MustExist: false,
-			},
+	cache := pebble.NewCache(server.DefaultCacheSize)
+	defer cache.Unref()
+	cfg := storage.PebbleConfig{
+		StorageConfig: base.StorageConfig{
+			Dir:       path,
+			MustExist: false,
 		},
-		cache,
-	)
+	}
+	cfg.Opts = storage.DefaultPebbleOptions()
+	cfg.Opts.Cache = cache
+	db, err := storage.NewPebble(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,9 +127,9 @@ func TestOpenReadOnlyStore(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			key := storage.MakeMVCCMetadataKey(roachpb.Key("key"))
+			key := roachpb.Key("key")
 			val := []byte("value")
-			err = db.Put(key, val)
+			err = db.PutUnversioned(key, val)
 			if !testutils.IsError(err, test.expErr) {
 				t.Fatalf("wanted %s but got %v", test.expErr, err)
 			}

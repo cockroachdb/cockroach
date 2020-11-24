@@ -55,10 +55,9 @@ enum ScanVisibility {
 // columns of the rows that pass a filter expression.
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) are all the
-// columns of the table. Internally, only the values for the columns needed by
-// the post-processing stage are to be populated. If is_check is set, the
-// TableReader will run additional data checking procedures and the
-// "internal columns" are:
+// columns of the table. Internally, only the values for the columns specified
+// by needed_columns are to be populated. If is_check is set, the TableReader
+// will run additional data checking procedures and the "internal columns" are:
 //  - Error type (string).
 //  - Primary key as a string, if it was obtainable.
 //  - JSON of all decoded column values.
@@ -139,6 +138,11 @@ message TableReaderSpec {
   // Indicates whether or not this TableReader is expected to produce any
   // system columns in its output.
   optional bool has_system_columns = 14 [(gogoproto.nullable) = false];
+
+  // Indicates the ordinals of the columns values for which are needed by the
+  // post-processing stage and, therefore, are to be populated. It is ignored
+  // if is_check is true.
+  repeated uint32 needed_columns = 15;
 }
 
 // IndexSkipTableReaderSpec is the specification for a table reader that
@@ -243,6 +247,11 @@ message IndexSkipTableReaderSpec {
 // The output for LEFT_SEMI:
 // a2, b1, c1, d4, true
 // Again, the d, cont columns will be projected away after the join.
+//
+// The example above is for a lookup join as the second join in the
+// paired-joins. The lookup join can also be the first join in the
+// paired-joins, which is indicated by both
+// OutputGroupContinuationForLeftRow and MaintainOrdering set to true.
 message JoinReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
@@ -270,8 +279,8 @@ message JoinReaderSpec {
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
   // stream has M columns, in this expression variables @1 to @N refer to
-  // columns of the left stream and variables @N to @(N+M) refer to columns in
-  // the right stream.
+  // columns of the left stream and variables @(N+1) to @(N+M) refer to columns
+  // in the right stream.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   // This used to be used for an extra index filter expression. It was removed
@@ -314,8 +323,16 @@ message JoinReaderSpec {
   optional bool has_system_columns = 13 [(gogoproto.nullable) = false];
 
   // LeftJoinWithPairedJoiner is used when a left {outer,anti,semi} join is
-  // being achieved by pairing two joins. See the comment above.
+  // being achieved by pairing two joins, and this is the second join. See
+  // the comment above.
   optional bool left_join_with_paired_joiner = 14 [(gogoproto.nullable) = false];
+
+  // OutputGroupContinuationForLeftRow indicates that this join is the first
+  // join in the paired-joins. At most one of OutputGroupContinuationForLeftRow
+  // and LeftJoinWithPairedJoiner must be true. Additionally, if
+  // OutputGroupContinuationForLeftRow is true, MaintainOrdering must also
+  // be true.
+  optional bool output_group_continuation_for_left_row = 15 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
@@ -417,14 +434,18 @@ message ZigzagJoinerSpec {
 // same ordering on columns C1, C2 and C5, C4 respectively. For example: C1+,C2-
 // and C5+,C4-.
 //
-// The "internal columns" of a MergeJoiner (see ProcessorSpec) are the
-// concatenation of left input columns and right input columns. If the left
-// input has N columns and the right input has M columns, the first N columns
-// contain values from the left side and the following M columns contain values
-// from the right side.
+// The "internal columns" of a MergeJoiner (see ProcessorSpec) are:
+// - for INNER, LEFT_OUTER, RIGHT_OUTER, FULL_OUTER - the concatenation of left
+//   input columns and right input columns.
+//   If the left input has N columns and the right input has M columns, the
+//   first N columns contain values from the left side and the following M
+//   columns contain values from the right side.
+// - for LEFT_SEMI, LEFT_ANTI, INTERSECT_ALL, EXCEPT_ALL - the left input
+//   columns.
+// - for RIGHT_SEMI, RIGHT_ANTI - the right input columns.
 //
-// In the case of semi-join and anti-join, the processor core outputs only the
-// left columns.
+// Note that, regardless of the join type, an optional ON expression can refer
+// to columns from both inputs.
 message MergeJoinerSpec {
   // The streams must be ordered according to the columns that have equality
   // constraints. The first column of the left ordering is constrained to be
@@ -470,21 +491,18 @@ message MergeJoinerSpec {
 // i.e. all results that stem from left row (i) precede results that stem from
 // left row (i+1).
 //
-// The "internal columns" of a HashJoiner (see ProcessorSpec) are the
-// concatenation of merged columns (if present), left input columns and right
-// input columns. Each merged column corresponds to a left and a right equality
-// column; its value is the value on the left if it is not NULL, otherwise it is
-// the value on the right. There are either zero or
-// E=len(left_eq_columns)=len(right_eq_columns) merged columns.
+// The "internal columns" of a HashJoiner (see ProcessorSpec) are:
+// - for INNER, LEFT_OUTER, RIGHT_OUTER, FULL_OUTER - the concatenation of left
+//   input columns and right input columns.
+//   If the left input has N columns and the right input has M columns, the
+//   first N columns contain values from the left side and the following M
+//   columns contain values from the right side.
+// - for LEFT_SEMI, LEFT_ANTI, INTERSECT_ALL, EXCEPT_ALL - the left input
+//   columns.
+// - for RIGHT_SEMI, RIGHT_ANTI - the right input columns.
 //
-// If the left input has N columns and the right input has M columns, the
-// first N columns contain values from the left side and the following M columns
-// contain values from the right side. If merged columns are present, they
-// occupy first E positions followed by N values from the left side and M values
-// from the right side.
-//
-// In the case of semi-join and anti-join, the processor core outputs only the
-// left columns.
+// Note that, regardless of the join type, an optional ON expression can refer
+// to columns from both inputs.
 message HashJoinerSpec {
   // The join constraints certain columns from the left stream to equal
   // corresponding columns on the right stream. These must have the same length.
@@ -494,9 +512,8 @@ message HashJoinerSpec {
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
   // stream has M columns, in this expression variables @1 to @N refer to
-  // columns of the left stream and variables @N to @(N+M) refer to columns in
-  // the right stream.
-  // Having "ON" expression implies no merged columns.
+  // columns of the left stream and variables @(N+1) to @(N+M) refer to columns
+  // in the right stream.
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
@@ -511,16 +528,7 @@ message HashJoinerSpec {
   // same set of values on the right equality columns.
   optional bool right_eq_columns_are_key = 9 [(gogoproto.nullable) = false];
 
-  // DEPRECATED
-  //
-  // Extra merged columns that are added in case of OUTER JOINS. These
-  // columns occupy first positions in a row amd it's the left value if it's not
-  // NULL, otherwise it's the right value. In INNER JOIN case no merged columns are
-  // needed since left stream values are guaranteed to be not NULL.
-  //
-  // This has been deprecated; the distsqlrun layer still supports it for
-  // backward compatibility during upgrade.
-  optional bool merged_columns = 7 [(gogoproto.nullable) = false];
+  reserved 7;
 }
 
 // InvertedJoinerSpec is the specification for an inverted join. The processor
@@ -708,6 +716,14 @@ message AggregatorSpec {
     ST_EXTENT = 32;
     ST_UNION = 33;
     ST_COLLECT = 34;
+    COVAR_POP = 35;
+    COVAR_SAMP = 36;
+    REGR_INTERCEPT = 37;
+    REGR_R2 = 38;
+    REGR_SLOPE = 39;
+    REGR_SXX = 40;
+    REGR_SYY = 41;
+    REGR_SXY = 42;
   }
 
   enum Type {

@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -79,22 +78,15 @@ var (
 	}...)
 )
 
-// createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
-// storage capacity.
-func createTestRocksDBEngine() Engine {
-	return newRocksDBInMem(roachpb.Attributes{}, 1<<20)
-}
-
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() Engine {
-	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20)
+	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
 }
 
 var mvccEngineImpls = []struct {
 	name   string
 	create func() Engine
 }{
-	{"rocksdb", createTestRocksDBEngine},
 	{"pebble", createTestPebbleEngine},
 }
 
@@ -118,7 +110,7 @@ func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 
 // mvccGetGo is identical to MVCCGet except that it uses mvccGetInternal
-// instead of the C++ Iterator.MVCCGet. It is used to test mvccGetInternal
+// instead of the C++ MVCCIterator.MVCCGet. It is used to test mvccGetInternal
 // which is used by mvccPutInternal to avoid Cgo crossings. Simply using the
 // C++ MVCCGet in mvccPutInternal causes a significant performance hit to
 // conditional put operations.
@@ -129,7 +121,7 @@ func mvccGetGo(
 		return nil, nil, emptyKeyError()
 	}
 
-	iter := reader.NewIterator(IterOptions{Prefix: true})
+	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	buf := newGetBuffer()
@@ -413,291 +405,6 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	}
 }
 
-// TestMVCCGetUncertainty verifies that the appropriate error results when
-// a transaction reads a key at a timestamp that has versions newer than that
-// timestamp, but older than the transaction's MaxTimestamp.
-func TestMVCCGetUncertainty(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			for _, impl := range mvccGetImpls {
-				t.Run(impl.name, func(t *testing.T) {
-					mvccGet := impl.fn
-					engine := engineImpl.create()
-					defer engine.Close()
-
-					// Txn with read timestamp 7 and MaxTimestamp 10.
-					txn := &roachpb.Transaction{
-						TxnMeta: enginepb.TxnMeta{
-							ID:             uuid.MakeV4(),
-							WriteTimestamp: hlc.Timestamp{WallTime: 7},
-						},
-						MaxTimestamp: hlc.Timestamp{WallTime: 10},
-					}
-					getOptsTxn := MVCCGetOptions{Txn: txn}
-					scanOptsTxn := MVCCScanOptions{Txn: txn}
-
-					// Same txn but with a MaxTimestamp reduced to 9.
-					txnMaxTS9 := txn.Clone()
-					txnMaxTS9.MaxTimestamp = hlc.Timestamp{WallTime: 9}
-					getOptsTxnMaxTS9 := MVCCGetOptions{Txn: txnMaxTS9}
-					scanOptsTxnMaxTS9 := MVCCScanOptions{Txn: txnMaxTS9}
-
-					// Same txn but with a MaxTimestamp reduced to 7.
-					txnMaxTS7 := txn.Clone()
-					txnMaxTS7.MaxTimestamp = hlc.Timestamp{WallTime: 7}
-					getOptsTxnMaxTS7 := MVCCGetOptions{Txn: txnMaxTS7}
-					scanOptsTxnMaxTS7 := MVCCScanOptions{Txn: txnMaxTS7}
-
-					// Case 1: One value in the past, one value in the future of read
-					// and ahead of MaxTimestamp of read. Neither should interfere.
-					//
-					// -----------------
-					// - 12: val2
-					// |
-					// - 10: max timestamp
-					// |
-					// -  7: read timestamp
-					// |
-					// -  1: val1
-					// -----------------
-					if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
-						t.Fatal(err)
-					}
-					if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 12}, value2, nil); err != nil {
-						t.Fatal(err)
-					}
-					// Read with transaction, should get a value back.
-					if val, _, err := mvccGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 7}, getOptsTxn); err != nil {
-						t.Fatal(err)
-					} else if val == nil || !bytes.Equal(val.RawBytes, value1.RawBytes) {
-						t.Fatalf("wanted %q, got %v", value1.RawBytes, val)
-					}
-					if res, err := MVCCScan(
-						ctx, engine, testKey1, testKey1.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxn,
-					); err != nil {
-						t.Fatal(err)
-					} else if len(res.KVs) != 1 {
-						t.Fatalf("wanted 1 kv, got %d", len(res.KVs))
-					} else if val := res.KVs[0].Value; !bytes.Equal(val.RawBytes, value1.RawBytes) {
-						t.Fatalf("wanted %q, got %v", value1.RawBytes, val)
-					}
-
-					// Case 2a: One value in the future of read but below MaxTimestamp
-					// of read. Should result in a ReadWithinUncertaintyIntervalError
-					// when reading.
-					//
-					// -----------------
-					// - 10: max timestamp
-					// -  9: val2
-					// |
-					// -  7: read timestamp
-					// -----------------
-					if err := MVCCPut(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: 9}, value2, nil); err != nil {
-						t.Fatal(err)
-					}
-					// Read with transaction, should get error back.
-					if _, _, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 7}, getOptsTxn); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
-						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
-					}
-					if _, err := MVCCScan(
-						ctx, engine, testKey2, testKey2.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxn,
-					); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
-						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
-					}
-					// Case 2b: Reduce MaxTimestamp to exactly that of value in future.
-					// Should result in a ReadWithinUncertaintyIntervalError when
-					// reading.
-					//
-					// -----------------
-					// -  9: val2 & max timestamp
-					// |
-					// -  7: read timestamp
-					// -----------------
-					if _, _, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 7}, getOptsTxnMaxTS9); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
-						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
-					}
-					if _, err := MVCCScan(
-						ctx, engine, testKey2, testKey2.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxnMaxTS9,
-					); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
-						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
-					}
-					// Case 2c: Reduce MaxTimestamp below value in future. Value should
-					// no longer interfere when reading.
-					//
-					// -----------------
-					// -  9: val2
-					// |
-					// -  7: read timestamp & max timestamp
-					// -----------------
-					if _, _, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 7}, getOptsTxnMaxTS7); err != nil {
-						t.Fatal(err)
-					}
-					if _, err := MVCCScan(
-						ctx, engine, testKey2, testKey2.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxnMaxTS7,
-					); err != nil {
-						t.Fatal(err)
-					}
-
-					// Case 3a: One intent in the future of read but below MaxTimestamp
-					// of read. Should result in a WriteIntentError when reading.
-					//
-					// -----------------
-					// - 10: max timestamp
-					// -  9: val2 (intent)
-					// |
-					// -  7: read timestamp
-					// -----------------
-					intentTxn := &roachpb.Transaction{
-						TxnMeta: enginepb.TxnMeta{
-							ID:             uuid.MakeV4(),
-							WriteTimestamp: hlc.Timestamp{WallTime: 9},
-						},
-						ReadTimestamp: hlc.Timestamp{WallTime: 9},
-					}
-					if err := MVCCPut(ctx, engine, nil, testKey3, hlc.Timestamp{WallTime: 9}, value2, intentTxn); err != nil {
-						t.Fatal(err)
-					}
-					// Read with transaction, should get error back.
-					if _, _, err := mvccGet(ctx, engine, testKey3, hlc.Timestamp{WallTime: 7}, getOptsTxn); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
-						t.Fatalf("wanted a WriteIntentError, got %+v", err)
-					}
-					if _, err := MVCCScan(
-						ctx, engine, testKey3, testKey3.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxn,
-					); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
-						t.Fatalf("wanted a WriteIntentError, got %+v", err)
-					}
-					// Case 3b: Reduce MaxTimestamp to exactly that of intent in future.
-					// Should result in a WriteIntentError when reading.
-					//
-					// -----------------
-					// -  9: val2 (intent) & max timestamp
-					// |
-					// -  7: read timestamp
-					// -----------------
-					if _, _, err := mvccGet(ctx, engine, testKey3, hlc.Timestamp{WallTime: 7}, getOptsTxnMaxTS9); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
-						t.Fatalf("wanted a WriteIntentError, got %+v", err)
-					}
-					if _, err := MVCCScan(
-						ctx, engine, testKey3, testKey3.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxnMaxTS9,
-					); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
-						t.Fatalf("wanted a WriteIntentError, got %+v", err)
-					}
-					// Case 3c: Reduce MaxTimestamp below intent in future. Intent should
-					// no longer interfere when reading.
-					//
-					// -----------------
-					// -  9: val2 (intent)
-					// |
-					// -  7: read timestamp & max timestamp
-					// -----------------
-					if _, _, err := mvccGet(ctx, engine, testKey3, hlc.Timestamp{WallTime: 7}, getOptsTxnMaxTS7); err != nil {
-						t.Fatal(err)
-					}
-					if _, err := MVCCScan(
-						ctx, engine, testKey3, testKey3.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxnMaxTS7,
-					); err != nil {
-						t.Fatal(err)
-					}
-
-					// Case 4a: Two values in future of read. One is ahead of
-					// MaxTimestamp of read and one is below MaxTimestamp of read. The
-					// value within the read's uncertainty interval should result in a
-					// ReadWithinUncertaintyIntervalError when reading.
-					//
-					// -----------------
-					// - 99: val3
-					// |
-					// - 10: max timestamp
-					// -  9: val2
-					// |
-					// -  7: read timestamp
-					// -----------------
-					if err := MVCCPut(ctx, engine, nil, testKey4, hlc.Timestamp{WallTime: 9}, value2, nil); err != nil {
-						t.Fatal(err)
-					}
-					if err := MVCCPut(ctx, engine, nil, testKey4, hlc.Timestamp{WallTime: 99}, value3, nil); err != nil {
-						t.Fatal(err)
-					}
-					if _, _, err := mvccGet(ctx, engine, testKey4, hlc.Timestamp{WallTime: 7}, getOptsTxn); err == nil {
-						t.Fatalf("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
-						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
-					}
-					if _, err := MVCCScan(
-						ctx, engine, testKey4, testKey4.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxn,
-					); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
-						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
-					}
-					// Case 4b: Reduce MaxTimestamp to exactly that of second value in
-					// future. The value within the read's uncertainty interval should
-					// result in a ReadWithinUncertaintyIntervalError when reading.
-					//
-					// -----------------
-					// - 99: val3
-					// |
-					// -  9: val2 & max timestamp
-					// |
-					// -  7: read timestamp
-					// -----------------
-					if _, _, err := mvccGet(ctx, engine, testKey4, hlc.Timestamp{WallTime: 7}, getOptsTxnMaxTS9); err == nil {
-						t.Fatalf("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
-						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
-					}
-					if _, err := MVCCScan(
-						ctx, engine, testKey4, testKey4.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxnMaxTS9,
-					); err == nil {
-						t.Fatal("wanted an error")
-					} else if !errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
-						t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
-					}
-					// Case 4c: Reduce MaxTimestamp below second value in future. Value should
-					// no longer interfere when reading.
-					//
-					// -----------------
-					// - 99: val3
-					// |
-					// -  9: val2
-					// |
-					// -  7: read timestamp & max timestamp
-					// -----------------
-					if _, _, err := mvccGet(ctx, engine, testKey4, hlc.Timestamp{WallTime: 7}, getOptsTxnMaxTS7); err != nil {
-						t.Fatal(err)
-					}
-					if _, err := MVCCScan(
-						ctx, engine, testKey4, testKey4.PrefixEnd(), hlc.Timestamp{WallTime: 7}, scanOptsTxnMaxTS7,
-					); err != nil {
-						t.Fatal(err)
-					}
-				})
-			}
-		})
-	}
-}
-
 func TestMVCCGetAndDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -874,7 +581,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Verify nothing is written to the engine.
-			if val, err := engine.Get(mvccKey(testKey1)); err != nil || val != nil {
+			if val, err := engine.MVCCGet(mvccKey(testKey1)); err != nil || val != nil {
 				t.Fatalf("expected no mvcc metadata after delete of a missing key; got %q: %+v", val, err)
 			}
 		})
@@ -1177,7 +884,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	}
 }
 
-// TestMVCCGetProtoInconsistent verifies the behavior of GetProto with
+// TestMVCCGetProtoInconsistent verifies the behavior of MVCCGetProto with
 // consistent set to false.
 func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1326,7 +1033,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 
 					{
 						// Seek the iter to a valid position.
-						iter := batch.NewIterator(iterOptions)
+						iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
 						iter.SeekGE(MakeMVCCMetadataKey(key))
 						iter.Close()
 					}
@@ -1340,7 +1047,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 					case "findSplitKey":
 						_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
 					case "computeStats":
-						iter := batch.NewIterator(iterOptions)
+						iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
 						_, err = iter.ComputeStats(roachpb.KeyMin, roachpb.KeyMax, 0)
 						iter.Close()
 					}
@@ -1349,7 +1056,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 					}
 
 					// Verify that the iter is invalid.
-					iter := batch.NewIterator(iterOptions)
+					iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
 					defer iter.Close()
 					if ok, _ := iter.Valid(); ok {
 						t.Fatalf("iterator should not be valid")
@@ -1369,23 +1076,23 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			err := engine.Put(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err := engine.PutMVCC(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.Put(MVCCKey{testKey2, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{testKey2, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.Put(MVCCKey{testKey2, hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{testKey2, hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.Put(MVCCKey{testKey3, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{testKey3, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.Put(MVCCKey{testKey4, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(MVCCKey{testKey4, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1401,7 +1108,7 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 				ReadTimestamp: hlc.Timestamp{WallTime: 10},
 				MaxTimestamp:  hlc.Timestamp{WallTime: 10},
 			}
-			iter := batch.NewIterator(IterOptions{
+			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 				LowerBound: testKey1,
 				UpperBound: testKey5,
 			})
@@ -1874,9 +1581,9 @@ func TestMVCCDeleteRange(t *testing.T) {
 			kvs := []roachpb.KeyValue{}
 			if _, err = MVCCIterate(
 				ctx, engine, keyMin, keyMax, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{Tombstones: true},
-				func(kv roachpb.KeyValue) (bool, error) {
+				func(kv roachpb.KeyValue) error {
 					kvs = append(kvs, kv)
-					return false, nil
+					return nil
 				},
 			); err != nil {
 				t.Fatal(err)
@@ -2586,9 +2293,9 @@ func computeStats(
 	t *testing.T, reader Reader, from, to roachpb.Key, nowNanos int64,
 ) enginepb.MVCCStats {
 	t.Helper()
-	iter := reader.NewIterator(IterOptions{UpperBound: to})
+	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: to})
 	defer iter.Close()
-	s, err := ComputeStatsGo(iter, from, to, nowNanos)
+	s, err := ComputeStatsForRange(iter, from, to, nowNanos)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -3477,7 +3184,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 			} else if value != nil {
 				t.Fatalf("expected the value to be empty: %s", value)
 			}
-			if meta, err := engine.Get(mvccKey(testKey1)); err != nil {
+			if meta, err := engine.MVCCGet(mvccKey(testKey1)); err != nil {
 				t.Fatal(err)
 			} else if len(meta) != 0 {
 				t.Fatalf("expected no more MVCCMetadata, got: %s", meta)
@@ -3516,7 +3223,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if meta, err := engine.Get(mvccKey(testKey1)); err != nil {
+			if meta, err := engine.MVCCGet(mvccKey(testKey1)); err != nil {
 				t.Fatal(err)
 			} else if len(meta) != 0 {
 				t.Fatalf("expected no more MVCCMetadata, got: %s", meta)
@@ -4241,7 +3948,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 			if num != 5 || resumeSpan == nil {
 				t.Errorf("expected resolution for only 5 keys; got %d, resume=%s", num, resumeSpan)
 			}
-			expResumeSpan := &roachpb.Span{Key: roachpb.Key("12").Next(), EndKey: roachpb.Key("30")}
+			expResumeSpan := roachpb.Span{Key: roachpb.Key("12").Next(), EndKey: roachpb.Key("30")}
 			if !resumeSpan.Equal(expResumeSpan) {
 				t.Errorf("expected resume span %s; got %s", expResumeSpan, resumeSpan)
 			}
@@ -4916,7 +4623,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 
 			// Verify aggregated stats match computed stats after GC.
-			iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
@@ -5025,9 +4732,11 @@ type readWriterReturningSeekLTTrackingIterator struct {
 	ReadWriter
 }
 
-// NewIterator injects a seekLTTrackingIterator over the engine's real iterator.
-func (rw *readWriterReturningSeekLTTrackingIterator) NewIterator(opts IterOptions) Iterator {
-	rw.it.Iterator = rw.ReadWriter.NewIterator(opts)
+// NewMVCCIterator injects a seekLTTrackingIterator over the engine's real iterator.
+func (rw *readWriterReturningSeekLTTrackingIterator) NewMVCCIterator(
+	iterKind MVCCIterKind, opts IterOptions,
+) MVCCIterator {
+	rw.it.MVCCIterator = rw.ReadWriter.NewMVCCIterator(iterKind, opts)
 	return &rw.it
 }
 
@@ -5035,12 +4744,12 @@ func (rw *readWriterReturningSeekLTTrackingIterator) NewIterator(opts IterOption
 // called.
 type seekLTTrackingIterator struct {
 	seekLTCalled int
-	Iterator
+	MVCCIterator
 }
 
 func (it *seekLTTrackingIterator) SeekLT(k MVCCKey) {
 	it.seekLTCalled++
-	it.Iterator.SeekLT(k)
+	it.MVCCIterator.SeekLT(k)
 }
 
 // TestMVCCGarbageCollectUsesSeekLTAppropriately ensures that the garbage
@@ -5065,7 +4774,7 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 	engineBatchIteratorSupportsPrev := func(engine Engine) bool {
 		batch := engine.NewBatch()
 		defer batch.Close()
-		it := batch.NewIterator(IterOptions{
+		it := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			UpperBound: keys.UserTableDataMin,
 			LowerBound: keys.MaxKey,
 		})
@@ -5237,7 +4946,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 			// Check that the intent was not cleared.
 			metaKey := mvccKey(testKey1)
 			meta := &enginepb.MVCCMetadata{}
-			ok, _, _, err := engine.GetProto(metaKey, meta)
+			ok, _, _, err := engine.MVCCGetProto(metaKey, meta)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -5339,7 +5048,7 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 				}
 			}
 
-			if first, second := vals[0], vals[1]; !proto.Equal(first, second) {
+			if first, second := vals[0], vals[1]; !reflect.DeepEqual(first, second) {
 				var firstTS, secondTS roachpb.InternalTimeSeriesData
 				if err := first.GetProto(&firstTS); err != nil {
 					t.Fatal(err)

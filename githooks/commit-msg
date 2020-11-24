@@ -140,7 +140,7 @@ else
                     "cli change") ;;
                     "sql change") ;;
                     "api change") ;;
-                    "admin ui change") ;;
+                    "ui change") ;;
                     "general change") ;;
                     "build change") ;;
                     "enterprise change") ;;
@@ -156,6 +156,8 @@ else
                         hint "Try 'Release note ($lcat)' -> 'Release note (sql change)'" ;;
                     api*)
                         hint "Try 'Release note ($lcat)' -> 'Release note (api change)'" ;;
+                    "admin ui"*|"admin-ui"*)
+                        hint "Try 'Release note ($lcat)' -> 'Release note (ui change)'" ;;
                     "backwards-incompatible"*|"backward incompatible"*)
                         hint "Try '$lcat' -> 'backward-incompatible change'" ;;
                     *) hint "unknown category '$lcat'" ;;

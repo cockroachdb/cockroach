@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 var (
@@ -443,15 +443,21 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRangeSnapshotsNormalApplied = metric.Metadata{
-		Name:        "range.snapshots.normal-applied",
-		Help:        "Number of applied snapshots",
+	metaRangeSnapshotsAppliedByVoters = metric.Metadata{
+		Name:        "range.snapshots.applied-voter",
+		Help:        "Number of snapshots applied by voter replicas",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRangeSnapshotsLearnerApplied = metric.Metadata{
-		Name:        "range.snapshots.learner-applied",
-		Help:        "Number of applied learner snapshots",
+	metaRangeSnapshotsAppliedForInitialUpreplication = metric.Metadata{
+		Name:        "range.snapshots.applied-initial",
+		Help:        "Number of snapshots applied for initial upreplication",
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotsAppliedByNonVoter = metric.Metadata{
+		Name:        "range.snapshots.applied-non-voter",
+		Help:        "Number of snapshots applied by non-voter replicas",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1016,6 +1022,12 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaClosedTimestampFailuresToClose = metric.Metadata{
+		Name:        "kv.closed_timestamp.failures_to_close",
+		Help:        "Number of times the min prop tracker failed to close timestamps due to epoch mismatch or pending evaluations",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1095,14 +1107,15 @@ type StoreMetrics struct {
 	// accordingly.
 
 	// Range event metrics.
-	RangeSplits                  *metric.Counter
-	RangeMerges                  *metric.Counter
-	RangeAdds                    *metric.Counter
-	RangeRemoves                 *metric.Counter
-	RangeSnapshotsGenerated      *metric.Counter
-	RangeSnapshotsNormalApplied  *metric.Counter
-	RangeSnapshotsLearnerApplied *metric.Counter
-	RangeRaftLeaderTransfers     *metric.Counter
+	RangeSplits                                  *metric.Counter
+	RangeMerges                                  *metric.Counter
+	RangeAdds                                    *metric.Counter
+	RangeRemoves                                 *metric.Counter
+	RangeSnapshotsGenerated                      *metric.Counter
+	RangeSnapshotsAppliedByVoters                *metric.Counter
+	RangeSnapshotsAppliedForInitialUpreplication *metric.Counter
+	RangeSnapshotsAppliedByNonVoters             *metric.Counter
+	RangeRaftLeaderTransfers                     *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1208,7 +1221,8 @@ type StoreMetrics struct {
 	RangeFeedMetrics *rangefeed.Metrics
 
 	// Closed timestamp metrics.
-	ClosedTimestampMaxBehindNanos *metric.Gauge
+	ClosedTimestampMaxBehindNanos  *metric.Gauge
+	ClosedTimestampFailuresToClose *metric.Gauge
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -1458,14 +1472,15 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DiskStalled: metric.NewGauge(metaDiskStalled),
 
 		// Range event metrics.
-		RangeSplits:                  metric.NewCounter(metaRangeSplits),
-		RangeMerges:                  metric.NewCounter(metaRangeMerges),
-		RangeAdds:                    metric.NewCounter(metaRangeAdds),
-		RangeRemoves:                 metric.NewCounter(metaRangeRemoves),
-		RangeSnapshotsGenerated:      metric.NewCounter(metaRangeSnapshotsGenerated),
-		RangeSnapshotsNormalApplied:  metric.NewCounter(metaRangeSnapshotsNormalApplied),
-		RangeSnapshotsLearnerApplied: metric.NewCounter(metaRangeSnapshotsLearnerApplied),
-		RangeRaftLeaderTransfers:     metric.NewCounter(metaRangeRaftLeaderTransfers),
+		RangeSplits:                   metric.NewCounter(metaRangeSplits),
+		RangeMerges:                   metric.NewCounter(metaRangeMerges),
+		RangeAdds:                     metric.NewCounter(metaRangeAdds),
+		RangeRemoves:                  metric.NewCounter(metaRangeRemoves),
+		RangeSnapshotsGenerated:       metric.NewCounter(metaRangeSnapshotsGenerated),
+		RangeSnapshotsAppliedByVoters: metric.NewCounter(metaRangeSnapshotsAppliedByVoters),
+		RangeSnapshotsAppliedForInitialUpreplication: metric.NewCounter(metaRangeSnapshotsAppliedForInitialUpreplication),
+		RangeSnapshotsAppliedByNonVoters:             metric.NewCounter(metaRangeSnapshotsAppliedByNonVoter),
+		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 
 		// Raft processing metrics.
 		RaftTicks:                 metric.NewCounter(metaRaftTicks),
@@ -1583,7 +1598,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeFeedMetrics: rangefeed.NewMetrics(),
 
 		// Closed timestamp metrics.
-		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),
+		ClosedTimestampMaxBehindNanos:  metric.NewGauge(metaClosedTimestampMaxBehindNanos),
+		ClosedTimestampFailuresToClose: metric.NewGauge(metaClosedTimestampFailuresToClose),
 	}
 	storeRegistry.AddMetricStruct(sm)
 

@@ -34,6 +34,8 @@ import (
 // these.
 type SortableRowContainer interface {
 	Len() int
+	// AddRow adds a row to the container. If an error is returned, then the
+	// row wasn't actually added.
 	AddRow(context.Context, rowenc.EncDatumRow) error
 	// Sort sorts the rows according to the current ordering (the one set either
 	// at initialization or by the last call of Reorder() - if the container is
@@ -178,11 +180,6 @@ func (mc *MemRowContainer) InitWithMon(
 	mc.scratchRow = make(tree.Datums, len(types))
 	mc.scratchEncRow = make(rowenc.EncDatumRow, len(types))
 	mc.evalCtx = evalCtx
-}
-
-// Types returns the MemRowContainer's types.
-func (mc *MemRowContainer) Types() []*types.T {
-	return mc.types
 }
 
 // Less is part of heap.Interface and is only meant to be used internally.

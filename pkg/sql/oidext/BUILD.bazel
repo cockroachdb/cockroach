@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "oidext",
+    srcs = ["oidext.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/oidext",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/lib/pq/oid"],
+)
+
+go_test(
+    name = "oidext_test",
+    srcs = ["oidext_test.go"],
+    embed = [":oidext"],
+    deps = [
+        "//vendor/github.com/lib/pq/oid",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

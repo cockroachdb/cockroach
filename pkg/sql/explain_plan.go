@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -25,17 +24,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
 // explainPlanNode implements EXPLAIN (PLAN); it produces the output of
 // EXPLAIN given an explain.Plan.
 type explainPlanNode struct {
+	optColumnsSlot
+
 	flags explain.Flags
 	plan  *explain.Plan
 	run   explainPlanNodeRun
-
-	columns colinfo.ResultColumns
 }
 
 type explainPlanNodeRun struct {
@@ -47,12 +46,15 @@ func (e *explainPlanNode) startExec(params runParams) error {
 	distribution, willVectorize := explainGetDistributedAndVectorized(params, realPlan)
 
 	ob := explain.NewOutputBuilder(e.flags)
-	if err := emitExplain(ob, params.p.ExecCfg().Codec, e.plan, distribution, willVectorize); err != nil {
+	if err := emitExplain(ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan, distribution, willVectorize); err != nil {
 		return err
 	}
-	v := params.p.newContainerValuesNode(e.columns, 0)
-	for _, row := range ob.BuildExplainRows() {
-		if _, err := v.rows.AddRow(params.ctx, row); err != nil {
+	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, 0)
+	rows := ob.BuildStringRows()
+	datums := make([]tree.DString, len(rows))
+	for i, row := range rows {
+		datums[i] = tree.DString(row)
+		if _, err := v.rows.AddRow(params.ctx, tree.Datums{&datums[i]}); err != nil {
 			return err
 		}
 	}
@@ -63,13 +65,14 @@ func (e *explainPlanNode) startExec(params runParams) error {
 
 func emitExplain(
 	ob *explain.OutputBuilder,
+	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
 	explainPlan *explain.Plan,
 	distribution physicalplan.PlanDistribution,
 	vectorized bool,
 ) error {
-	ob.AddField("distribution", distribution.String())
-	ob.AddField("vectorized", fmt.Sprintf("%t", vectorized))
+	ob.AddDistribution(distribution.String())
+	ob.AddVectorized(vectorized)
 	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
 		var tabDesc *tabledesc.Immutable
 		var idxDesc *descpb.IndexDescriptor
@@ -80,7 +83,7 @@ func emitExplain(
 			tabDesc = table.(*optTable).desc
 			idxDesc = index.(*optIndex).desc
 		}
-		spans, err := generateScanSpans(codec, tabDesc, idxDesc, scanParams)
+		spans, err := generateScanSpans(evalCtx, codec, tabDesc, idxDesc, scanParams)
 		if err != nil {
 			return err.Error()
 		}
@@ -130,7 +133,6 @@ func explainGetDistributedAndVectorized(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
 	)
-	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, plan.subqueryPlans, distribution)
 	defer func() {
@@ -147,18 +149,14 @@ func explainGetDistributedAndVectorized(
 
 		ctxSessionData := flowCtx.EvalCtx.SessionData
 		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
-		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
+		if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
 			willVectorize = false
-		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondata.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondata.VectorizeOn) {
+		} else if !vectorizedThresholdMet && ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOn {
 			willVectorize = false
 		} else {
 			willVectorize = true
-			thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
-			for scheduledOnNodeID, flow := range flows {
-				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
-				if _, err := colflow.SupportsVectorized(
-					params.ctx, flowCtx, flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
-				); err != nil {
+			for _, flow := range flows {
+				if err := colflow.IsSupported(ctxSessionData.VectorizeMode, flow); err != nil {
 					willVectorize = false
 					break
 				}

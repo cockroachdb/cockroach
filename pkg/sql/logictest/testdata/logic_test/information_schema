@@ -159,8 +159,7 @@ information_schema.tables  CREATE TABLE information_schema.tables (
                            table_name STRING NOT NULL,
                            table_type STRING NOT NULL,
                            is_insertable_into STRING NOT NULL,
-                           version INT8 NULL,
-                           INDEX tables_table_name_idx (table_name ASC) STORING (table_catalog, table_schema, table_type, is_insertable_into, version)
+                           version INT8 NULL
 )
 
 query TTBTTTB colnames
@@ -238,6 +237,7 @@ crdb_internal       gossip_liveness
 crdb_internal       gossip_network
 crdb_internal       gossip_nodes
 crdb_internal       index_columns
+crdb_internal       invalid_objects
 crdb_internal       jobs
 crdb_internal       kv_node_status
 crdb_internal       kv_store_status
@@ -315,6 +315,7 @@ pg_catalog          pg_language
 pg_catalog          pg_locks
 pg_catalog          pg_matviews
 pg_catalog          pg_namespace
+pg_catalog          pg_opclass
 pg_catalog          pg_operator
 pg_catalog          pg_prepared_statements
 pg_catalog          pg_prepared_xacts
@@ -391,6 +392,7 @@ gossip_liveness
 gossip_network
 gossip_nodes
 index_columns
+invalid_objects
 jobs
 kv_node_status
 kv_store_status
@@ -468,6 +470,7 @@ pg_language
 pg_locks
 pg_matviews
 pg_namespace
+pg_opclass
 pg_operator
 pg_prepared_statements
 pg_prepared_xacts
@@ -515,6 +518,16 @@ query T
 SET DATABASE = test; SELECT table_name FROM information_schema.tables WHERE table_schema = 'other_db'
 ----
 
+# Check that tables from other schemas are found
+query TT rowsort
+CREATE SCHEMA myschema;
+CREATE TABLE myschema.abc();
+CREATE TABLE abc();
+SELECT table_schema, table_name FROM information_schema.tables WHERE table_name = 'abc';
+----
+myschema  abc
+public    abc
+
 # Check that filtering works.
 query T
 SELECT table_name FROM other_db.information_schema.tables WHERE table_name > 't'  ORDER BY 1 DESC
@@ -553,6 +566,7 @@ system         crdb_internal       gossip_liveness                    SYSTEM VIE
 system         crdb_internal       gossip_network                     SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_nodes                       SYSTEM VIEW  NO                  1
 system         crdb_internal       index_columns                      SYSTEM VIEW  NO                  1
+system         crdb_internal       invalid_objects                    SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                               SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_status                     SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                    SYSTEM VIEW  NO                  1
@@ -630,6 +644,7 @@ system         pg_catalog          pg_language                        SYSTEM VIE
 system         pg_catalog          pg_locks                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_matviews                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_namespace                       SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_opclass                         SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_operator                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_prepared_statements             SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_prepared_xacts                  SYSTEM VIEW  NO                  1
@@ -1079,24 +1094,24 @@ SELECT *
 FROM information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name          table_catalog  table_schema  table_name  constraint_type  is_deferrable  initially_deferred
-constraint_db       public             541687103_59_1_not_null  constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             c2                       constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             check_a                  constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             primary                  constraint_db  public        t1          PRIMARY KEY      NO             NO
-constraint_db       public             t1_a_key                 constraint_db  public        t1          UNIQUE           NO             NO
-constraint_db       public             541687103_60_2_not_null  constraint_db  public        t2          CHECK            NO             NO
-constraint_db       public             fk                       constraint_db  public        t2          FOREIGN KEY      NO             NO
+constraint_catalog  constraint_schema  constraint_name           table_catalog  table_schema  table_name  constraint_type  is_deferrable  initially_deferred
+constraint_db       public             3753077756_62_1_not_null  constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             c2                        constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             check_a                   constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             primary                   constraint_db  public        t1          PRIMARY KEY      NO             NO
+constraint_db       public             t1_a_key                  constraint_db  public        t1          UNIQUE           NO             NO
+constraint_db       public             3753077756_63_2_not_null  constraint_db  public        t2          CHECK            NO             NO
+constraint_db       public             fk                        constraint_db  public        t2          FOREIGN KEY      NO             NO
 
 query TTTT colnames
 SELECT *
 FROM information_schema.check_constraints
 ORDER BY CONSTRAINT_CATALOG, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name          check_clause
-constraint_db       public             541687103_59_1_not_null  p IS NOT NULL
-constraint_db       public             c2                       ((a < 99:::INT8))
-constraint_db       public             check_a                  ((a > 4:::INT8))
+constraint_catalog  constraint_schema  constraint_name           check_clause
+constraint_db       public             3753077756_62_1_not_null  p IS NOT NULL
+constraint_db       public             c2                        ((a < 99:::INT8))
+constraint_db       public             check_a                   ((a > 4:::INT8))
 
 query TTTTTTT colnames
 SELECT *
@@ -1120,10 +1135,10 @@ USING (constraint_catalog, constraint_schema, constraint_name)
 WHERE tc.table_schema in ('public')
 ORDER BY tc.table_schema, tc.table_name, cc.constraint_name
 ----
-table_schema  table_name  constraint_name          check_clause
-public        t1          541687103_59_1_not_null  p IS NOT NULL
-public        t1          c2                       ((a < 99:::INT8))
-public        t1          check_a                  ((a > 4:::INT8))
+table_schema  table_name  constraint_name           check_clause
+public        t1          3753077756_62_1_not_null  p IS NOT NULL
+public        t1          c2                        ((a < 99:::INT8))
+public        t1          check_a                   ((a > 4:::INT8))
 
 statement ok
 DROP DATABASE constraint_db CASCADE
@@ -1390,52 +1405,52 @@ SELECT table_name, column_name, data_type, crdb_sql_type, udt_catalog, udt_schem
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'data_types'
 ----
-table_name  column_name  data_type                    crdb_sql_type            udt_catalog  udt_schema  udt_name      collation_catalog  collation_schema  collation_name
-data_types  a            bigint                       INT8                     test         pg_catalog  int8          NULL               NULL              NULL
-data_types  a2           smallint                     INT2                     test         pg_catalog  int2          NULL               NULL              NULL
-data_types  a4           integer                      INT4                     test         pg_catalog  int4          NULL               NULL              NULL
-data_types  a8           bigint                       INT8                     test         pg_catalog  int8          NULL               NULL              NULL
-data_types  b            double precision             FLOAT8                   test         pg_catalog  float8        NULL               NULL              NULL
-data_types  b4           real                         FLOAT4                   test         pg_catalog  float4        NULL               NULL              NULL
-data_types  br           real                         FLOAT4                   test         pg_catalog  float4        NULL               NULL              NULL
-data_types  c            numeric                      DECIMAL                  test         pg_catalog  numeric       NULL               NULL              NULL
-data_types  cp           numeric                      DECIMAL(3)               test         pg_catalog  numeric       NULL               NULL              NULL
-data_types  cps          numeric                      DECIMAL(3,2)             test         pg_catalog  numeric       NULL               NULL              NULL
-data_types  d            text                         STRING                   test         pg_catalog  text          NULL               NULL              NULL
-data_types  dl           text                         STRING COLLATE en        test         pg_catalog  text          test               pg_catalog        en
-data_types  dc           character                    CHAR                     test         pg_catalog  bpchar        NULL               NULL              NULL
-data_types  dc2          character                    CHAR(2)                  test         pg_catalog  bpchar        NULL               NULL              NULL
-data_types  dv           character varying            VARCHAR                  test         pg_catalog  varchar       NULL               NULL              NULL
-data_types  dv2          character varying            VARCHAR(2)               test         pg_catalog  varchar       NULL               NULL              NULL
-data_types  dq           "char"                       "char"                   test         pg_catalog  char          NULL               NULL              NULL
-data_types  e            bytea                        BYTES                    test         pg_catalog  bytea         NULL               NULL              NULL
-data_types  f            timestamp without time zone  TIMESTAMP                test         pg_catalog  timestamp     NULL               NULL              NULL
-data_types  f6           timestamp without time zone  TIMESTAMP(6)             test         pg_catalog  timestamp     NULL               NULL              NULL
-data_types  g            timestamp with time zone     TIMESTAMPTZ              test         pg_catalog  timestamptz   NULL               NULL              NULL
-data_types  g6           timestamp with time zone     TIMESTAMPTZ(6)           test         pg_catalog  timestamptz   NULL               NULL              NULL
-data_types  h            bit                          BIT                      test         pg_catalog  bit           NULL               NULL              NULL
-data_types  h2           bit                          BIT(2)                   test         pg_catalog  bit           NULL               NULL              NULL
-data_types  hv           bit varying                  VARBIT                   test         pg_catalog  varbit        NULL               NULL              NULL
-data_types  hv2          bit varying                  VARBIT(2)                test         pg_catalog  varbit        NULL               NULL              NULL
-data_types  i            interval                     INTERVAL                 test         pg_catalog  interval      NULL               NULL              NULL
-data_types  j            boolean                      BOOL                     test         pg_catalog  bool          NULL               NULL              NULL
-data_types  k            oid                          OID                      test         pg_catalog  oid           NULL               NULL              NULL
-data_types  k2           regclass                     REGCLASS                 test         pg_catalog  regclass      NULL               NULL              NULL
-data_types  k3           regnamespace                 REGNAMESPACE             test         pg_catalog  regnamespace  NULL               NULL              NULL
-data_types  k4           regproc                      REGPROC                  test         pg_catalog  regproc       NULL               NULL              NULL
-data_types  k5           regprocedure                 REGPROCEDURE             test         pg_catalog  regprocedure  NULL               NULL              NULL
-data_types  k6           regtype                      REGTYPE                  test         pg_catalog  regtype       NULL               NULL              NULL
-data_types  l            uuid                         UUID                     test         pg_catalog  uuid          NULL               NULL              NULL
-data_types  m            ARRAY                        INT2[]                   test         pg_catalog  _int2         NULL               NULL              NULL
-data_types  m2           ARRAY                        STRING[]                 test         pg_catalog  _text         NULL               NULL              NULL
-data_types  m3           ARRAY                        DECIMAL(3,2)[]           test         pg_catalog  _numeric      NULL               NULL              NULL
-data_types  m4           ARRAY                        VARCHAR(2)[] COLLATE en  test         pg_catalog  _varchar      NULL               NULL              NULL
-data_types  n            inet                         INET                     test         pg_catalog  inet          NULL               NULL              NULL
-data_types  o            time without time zone       TIME                     test         pg_catalog  time          NULL               NULL              NULL
-data_types  o6           time without time zone       TIME(6)                  test         pg_catalog  time          NULL               NULL              NULL
-data_types  p            jsonb                        JSONB                    test         pg_catalog  jsonb         NULL               NULL              NULL
-data_types  q            name                         NAME                     test         pg_catalog  name          NULL               NULL              NULL
-data_types  rowid        bigint                       INT8                     test         pg_catalog  int8          NULL               NULL              NULL
+table_name  column_name  data_type                    crdb_sql_type              udt_catalog  udt_schema  udt_name      collation_catalog  collation_schema  collation_name
+data_types  a            bigint                       INT8                       test         pg_catalog  int8          NULL               NULL              NULL
+data_types  a2           smallint                     INT2                       test         pg_catalog  int2          NULL               NULL              NULL
+data_types  a4           integer                      INT4                       test         pg_catalog  int4          NULL               NULL              NULL
+data_types  a8           bigint                       INT8                       test         pg_catalog  int8          NULL               NULL              NULL
+data_types  b            double precision             FLOAT8                     test         pg_catalog  float8        NULL               NULL              NULL
+data_types  b4           real                         FLOAT4                     test         pg_catalog  float4        NULL               NULL              NULL
+data_types  br           real                         FLOAT4                     test         pg_catalog  float4        NULL               NULL              NULL
+data_types  c            numeric                      DECIMAL                    test         pg_catalog  numeric       NULL               NULL              NULL
+data_types  cp           numeric                      DECIMAL(3)                 test         pg_catalog  numeric       NULL               NULL              NULL
+data_types  cps          numeric                      DECIMAL(3,2)               test         pg_catalog  numeric       NULL               NULL              NULL
+data_types  d            text                         STRING                     test         pg_catalog  text          NULL               NULL              NULL
+data_types  dl           text                         STRING COLLATE en          test         pg_catalog  text          test               pg_catalog        en
+data_types  dc           character                    CHAR                       test         pg_catalog  bpchar        NULL               NULL              NULL
+data_types  dc2          character                    CHAR(2)                    test         pg_catalog  bpchar        NULL               NULL              NULL
+data_types  dv           character varying            VARCHAR                    test         pg_catalog  varchar       NULL               NULL              NULL
+data_types  dv2          character varying            VARCHAR(2)                 test         pg_catalog  varchar       NULL               NULL              NULL
+data_types  dq           "char"                       "char"                     test         pg_catalog  char          NULL               NULL              NULL
+data_types  e            bytea                        BYTES                      test         pg_catalog  bytea         NULL               NULL              NULL
+data_types  f            timestamp without time zone  TIMESTAMP                  test         pg_catalog  timestamp     NULL               NULL              NULL
+data_types  f6           timestamp without time zone  TIMESTAMP(6)               test         pg_catalog  timestamp     NULL               NULL              NULL
+data_types  g            timestamp with time zone     TIMESTAMPTZ                test         pg_catalog  timestamptz   NULL               NULL              NULL
+data_types  g6           timestamp with time zone     TIMESTAMPTZ(6)             test         pg_catalog  timestamptz   NULL               NULL              NULL
+data_types  h            bit                          BIT                        test         pg_catalog  bit           NULL               NULL              NULL
+data_types  h2           bit                          BIT(2)                     test         pg_catalog  bit           NULL               NULL              NULL
+data_types  hv           bit varying                  VARBIT                     test         pg_catalog  varbit        NULL               NULL              NULL
+data_types  hv2          bit varying                  VARBIT(2)                  test         pg_catalog  varbit        NULL               NULL              NULL
+data_types  i            interval                     INTERVAL                   test         pg_catalog  interval      NULL               NULL              NULL
+data_types  j            boolean                      BOOL                       test         pg_catalog  bool          NULL               NULL              NULL
+data_types  k            oid                          OID                        test         pg_catalog  oid           NULL               NULL              NULL
+data_types  k2           regclass                     REGCLASS                   test         pg_catalog  regclass      NULL               NULL              NULL
+data_types  k3           regnamespace                 REGNAMESPACE               test         pg_catalog  regnamespace  NULL               NULL              NULL
+data_types  k4           regproc                      REGPROC                    test         pg_catalog  regproc       NULL               NULL              NULL
+data_types  k5           regprocedure                 REGPROCEDURE               test         pg_catalog  regprocedure  NULL               NULL              NULL
+data_types  k6           regtype                      REGTYPE                    test         pg_catalog  regtype       NULL               NULL              NULL
+data_types  l            uuid                         UUID                       test         pg_catalog  uuid          NULL               NULL              NULL
+data_types  m            ARRAY                        INT2[]                     test         pg_catalog  _int2         NULL               NULL              NULL
+data_types  m2           ARRAY                        STRING[]                   test         pg_catalog  _text         NULL               NULL              NULL
+data_types  m3           ARRAY                        DECIMAL(3,2)[]             test         pg_catalog  _numeric      NULL               NULL              NULL
+data_types  m4           ARRAY                        VARCHAR(2)[] COLLATE en    test         pg_catalog  _varchar      NULL               NULL              NULL
+data_types  n            inet                         INET                       test         pg_catalog  inet          NULL               NULL              NULL
+data_types  o            time without time zone       TIME                       test         pg_catalog  time          NULL               NULL              NULL
+data_types  o6           time without time zone       TIME(6)                    test         pg_catalog  time          NULL               NULL              NULL
+data_types  p            jsonb                        JSONB                      test         pg_catalog  jsonb         NULL               NULL              NULL
+data_types  q            name                         NAME                       test         pg_catalog  name          NULL               NULL              NULL
+data_types  rowid        bigint                       INT8                       test         pg_catalog  int8          NULL               NULL              NULL
 
 statement ok
 DROP TABLE data_types
@@ -1661,6 +1676,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_nodes                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_columns                      SELECT          NULL          YES
+NULL     public   system         crdb_internal       invalid_objects                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                               SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                    SELECT          NULL          YES
@@ -1738,6 +1754,7 @@ NULL     public   system         pg_catalog          pg_language                
 NULL     public   system         pg_catalog          pg_locks                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_matviews                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_namespace                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_opclass                         SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_operator                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_statements             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_xacts                  SELECT          NULL          YES
@@ -2039,6 +2056,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_nodes                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_columns                      SELECT          NULL          YES
+NULL     public   system         crdb_internal       invalid_objects                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                               SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                    SELECT          NULL          YES
@@ -2116,6 +2134,7 @@ NULL     public   system         pg_catalog          pg_language                
 NULL     public   system         pg_catalog          pg_locks                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_matviews                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_namespace                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_opclass                         SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_operator                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_statements             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_xacts                  SELECT          NULL          YES

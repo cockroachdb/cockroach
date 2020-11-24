@@ -62,7 +62,7 @@ var changefeedResultTypes = []*types.T{
 // progress of the changefeed's corresponding system job.
 func distChangefeedFlow(
 	ctx context.Context,
-	phs sql.PlanHookState,
+	execCtx sql.JobExecContext,
 	jobID int64,
 	details jobspb.ChangefeedDetails,
 	progress jobspb.Progress,
@@ -80,7 +80,7 @@ func distChangefeedFlow(
 	// based on whether we should perform an initial scan.
 	{
 		h := progress.GetHighWater()
-		noHighWater := (h == nil || *h == (hlc.Timestamp{}))
+		noHighWater := (h == nil || h.IsEmpty())
 		// We want to set the highWater and thus avoid an initial scan if either
 		// this is a cursor and there was no request for one, or we don't have a
 		// cursor but we have a request to not have an initial scan.
@@ -92,14 +92,14 @@ func distChangefeedFlow(
 
 	spansTS := details.StatementTime
 	var initialHighWater hlc.Timestamp
-	if h := progress.GetHighWater(); h != nil && *h != (hlc.Timestamp{}) {
+	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
 		initialHighWater = *h
 		// If we have a high-water set, use it to compute the spans, since the
 		// ones at the statement time may have been garbage collected by now.
 		spansTS = initialHighWater
 	}
 
-	execCfg := phs.ExecCfg()
+	execCfg := execCtx.ExecCfg()
 	trackedSpans, err := fetchSpansForTargets(ctx, execCfg.DB, execCfg.Codec, details.Targets, spansTS)
 	if err != nil {
 		return err
@@ -111,8 +111,8 @@ func distChangefeedFlow(
 	if err != nil {
 		return err
 	}
-	dsp := phs.DistSQLPlanner()
-	evalCtx := phs.ExtendedEvalContext()
+	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn, true /* distribute */)
 
 	var spanPartitions []sql.SpanPartition
@@ -141,9 +141,9 @@ func distChangefeedFlow(
 
 		corePlacement[i].NodeID = sp.Node
 		corePlacement[i].Core.ChangeAggregator = &execinfrapb.ChangeAggregatorSpec{
-			Watches: watches,
-			Feed:    details,
-			User:    phs.User(),
+			Watches:   watches,
+			Feed:      details,
+			UserProto: execCtx.User().EncodeProto(),
 		}
 	}
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
@@ -154,10 +154,10 @@ func distChangefeedFlow(
 		TrackedSpans: trackedSpans,
 		Feed:         details,
 		JobID:        jobID,
-		User:         phs.User(),
+		UserProto:    execCtx.User().EncodeProto(),
 	}
 
-	p := sql.MakePhysicalPlan(gatewayNodeID)
+	p := planCtx.NewPhysicalPlan()
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
 	p.AddSingleGroupStage(
 		gatewayNodeID,
@@ -167,7 +167,7 @@ func distChangefeedFlow(
 	)
 
 	p.PlanToStreamColMap = []int{1, 2, 3}
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	resultRows := makeChangefeedResultWriter(resultsCh)
 	recv := sql.MakeDistSQLReceiver(
@@ -195,7 +195,7 @@ func distChangefeedFlow(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, finishedSetupFn)()
+	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)()
 	return resultRows.Err()
 }
 

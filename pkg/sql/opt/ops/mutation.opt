@@ -20,7 +20,8 @@
 [Relational, Mutation, WithBinding]
 define Insert {
     Input RelExpr
-    Checks FKChecksExpr
+    UniqueChecks UniqueChecksExpr
+    FKChecks FKChecksExpr
     _ MutationPrivate
 }
 
@@ -182,7 +183,8 @@ define MutationPrivate {
 [Relational, Mutation, WithBinding]
 define Update {
     Input RelExpr
-    Checks FKChecksExpr
+    UniqueChecks UniqueChecksExpr
+    FKChecks FKChecksExpr
     _ MutationPrivate
 }
 
@@ -205,7 +207,8 @@ define Update {
 [Relational, Mutation, WithBinding]
 define Upsert {
     Input RelExpr
-    Checks FKChecksExpr
+    UniqueChecks UniqueChecksExpr
+    FKChecks FKChecksExpr
     _ MutationPrivate
 }
 
@@ -217,7 +220,8 @@ define Upsert {
 [Relational, Mutation, WithBinding]
 define Delete {
     Input RelExpr
-    Checks FKChecksExpr
+    UniqueChecks UniqueChecksExpr
+    FKChecks FKChecksExpr
     _ MutationPrivate
 }
 
@@ -249,6 +253,35 @@ define FKChecksItemPrivate {
     # The FK constraint is InboundForeignKey(FKOrdinal) on the referenced table.
     FKOutbound bool
     FKOrdinal int
+
+    # KeyCols are the columns in the Check query that form the value tuple shown
+    # in the error message.
+    KeyCols ColList
+
+    # OpName is the name that should be used for this check in error messages.
+    OpName string
+}
+
+# UniqueChecks is a list of uniqueness check queries, to be run after the main
+# query.
+[Scalar, List]
+define UniqueChecks {
+}
+
+# UniqueChecksItem is a unique check query, to be run after the main query.
+# An execution error will be generated if the query returns any results.
+[Scalar, ListItem]
+define UniqueChecksItem {
+    Check RelExpr
+    _ UniqueChecksItemPrivate
+}
+
+[Private]
+define UniqueChecksItemPrivate {
+    Table TableID
+
+    # This is the ordinal of the check in the table's unique constraints.
+    CheckOrdinal int
 
     # KeyCols are the columns in the Check query that form the value tuple shown
     # in the error message.

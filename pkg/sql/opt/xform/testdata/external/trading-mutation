@@ -1186,7 +1186,7 @@ values
            │         │    ├── cardinality: [0 - 100]
            │         │    ├── key: (5,12-14)
            │         │    ├── fd: ()-->(4), (1)==(12), (12)==(1), (2)==(13), (13)==(2), (3)==(14), (14)==(3)
-           │         │    ├── inner-join (lookup transactions)
+           │         │    ├── inner-join (lookup transactions [as=t])
            │         │    │    ├── columns: d.dealerid:1!null d.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null t.dealerid:12!null t.isbuy:13!null date:14!null
            │         │    │    ├── key columns: [1 2 3] = [12 13 14]
            │         │    │    ├── lookup columns are key
@@ -1200,7 +1200,7 @@ values
            │         │    │    │    ├── fd: ()-->(4)
            │         │    │    │    ├── ordering: -3 opt(4) [actual: -3]
            │         │    │    │    ├── limit hint: 1100.00
-           │         │    │    │    └── scan d@detailscardidindex
+           │         │    │    │    └── scan transactiondetails@detailscardidindex [as=d]
            │         │    │    │         ├── columns: d.dealerid:1!null d.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null
            │         │    │    │         ├── constraint: /1/2/4/3/5
            │         │    │    │         │    ├── [/1/false/19483/'2020-02-28 00:00:00+00:00' - /1/false/19483/'2020-03-01 00:00:00+00:00']
@@ -1466,7 +1466,7 @@ SET actualinventory = (SELECT coalesce(sum_INT(quantity), 0)
 FROM Updates
 WHERE ci.cardid = Updates.c AND ci.dealerid = 1
 ----
-update ci
+update cardsinfo [as=ci]
  ├── columns: <none>
  ├── fetch columns: ci.dealerid:20 ci.cardid:21 buyprice:22 sellprice:23 discount:24 desiredinventory:25 actualinventory:26 maxinventory:27 ci.version:28 ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32
  ├── update-mapping:
@@ -1486,7 +1486,7 @@ update ci
       │    ├── grouping columns: ci.cardid:21!null
       │    ├── key: (21)
       │    ├── fd: ()-->(20), (21)-->(20,22-32,34,35,44), (28)-->(21-27,29-32), (21)==(34), (34)==(21)
-      │    ├── left-join (lookup inventorydetails)
+      │    ├── left-join (lookup inventorydetails [as=id])
       │    │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null id.dealerid:36 id.cardid:37 quantity:39
       │    │    ├── key columns: [53 21] = [36 37]
       │    │    ├── fd: ()-->(20), (21)-->(22-32,34,35), (28)-->(21-27,29-32), (21)==(34), (34)==(21)
@@ -1501,7 +1501,7 @@ update ci
       │    │    │    │    ├── cardinality: [0 - 2]
       │    │    │    │    ├── key: (21)
       │    │    │    │    ├── fd: ()-->(20), (21)-->(20,22-32,34,35), (28)-->(21-27,29-32), (21)==(34), (34)==(21)
-      │    │    │    │    ├── inner-join (lookup cardsinfo)
+      │    │    │    │    ├── inner-join (lookup cardsinfo [as=ci])
       │    │    │    │    │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null
       │    │    │    │    │    ├── key columns: [51 34] = [20 21]
       │    │    │    │    │    ├── lookup columns are key

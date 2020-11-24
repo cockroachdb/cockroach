@@ -98,6 +98,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	prevDBID := tableDesc.ParentID
 
 	var targetDbDesc catalog.DatabaseDescriptor
+	var targetSchemaDesc catalog.ResolvedSchema
 	// If the target new name has no qualifications, then assume that the table
 	// is intended to be renamed into the same database and schema.
 	newTn := n.newTn
@@ -105,6 +106,11 @@ func (n *renameTableNode) startExec(params runParams) error {
 		newTn.ObjectNamePrefix = oldTn.ObjectNamePrefix
 		var err error
 		targetDbDesc, err = p.ResolveUncachedDatabaseByName(ctx, string(oldTn.CatalogName), true /* required */)
+		if err != nil {
+			return err
+		}
+
+		_, targetSchemaDesc, err = p.ResolveUncachedSchemaDescriptor(ctx, targetDbDesc.GetID(), oldTn.Schema(), true)
 		if err != nil {
 			return err
 		}
@@ -125,7 +131,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		newUn := newTn.ToUnresolvedObjectName()
 		var prefix tree.ObjectNamePrefix
 		var err error
-		targetDbDesc, prefix, err = p.ResolveTargetObject(ctx, newUn)
+		targetDbDesc, targetSchemaDesc, prefix, err = p.ResolveTargetObject(ctx, newUn)
 		if err != nil {
 			return err
 		}
@@ -144,6 +150,34 @@ func (n *renameTableNode) startExec(params runParams) error {
 		)
 	}
 
+	// Special checks when attempting to move a table to a different database,
+	// which is usually not allowed.
+	if oldTn.Catalog() != newTn.Catalog() {
+		// Don't allow moving the table to a different database unless both the
+		// source and target schemas are the public schema. This preserves backward
+		// compatibility for the behavior prior to user-defined schemas.
+		if oldTn.Schema() != string(tree.PublicSchemaName) || newTn.Schema() != string(tree.PublicSchemaName) {
+			return pgerror.Newf(pgcode.InvalidName,
+				"cannot change database of table unless both the old and new schemas are the public schema in each database")
+		}
+		// Don't allow moving the table to a different database if the table
+		// references any user-defined types, to prevent cross-database type
+		// references.
+		columns := make([]descpb.ColumnDescriptor, 0, len(tableDesc.Columns)+len(tableDesc.Mutations))
+		columns = append(columns, tableDesc.Columns...)
+		for _, m := range tableDesc.Mutations {
+			if col := m.GetColumn(); col != nil {
+				columns = append(columns, *col)
+			}
+		}
+		for _, c := range columns {
+			if c.Type.UserDefined() {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"cannot change database of table if any of its column types are user-defined")
+			}
+		}
+	}
+
 	// oldTn and newTn are already normalized, so we can compare directly here.
 	if oldTn.Catalog() == newTn.Catalog() &&
 		oldTn.Schema() == newTn.Schema() &&
@@ -152,8 +186,8 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
-	exists, id, err := catalogkv.LookupPublicTableID(
-		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
+	exists, id, err := catalogkv.LookupObjectID(
+		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), targetSchemaDesc.ID, newTn.Table(),
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
@@ -167,6 +201,10 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	// The parent schema ID is never modified here because changing the schema of
+	// a table within the same database is disallowed, and changing the database
+	// of a table is only allowed if both the source and target schemas are the
+	// public schema.
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.GetID()
 
@@ -205,7 +243,25 @@ func (n *renameTableNode) startExec(params runParams) error {
 	newTbKey := catalogkv.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
 		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
 
-	return p.writeNameKey(ctx, newTbKey, descID)
+	if err := p.writeNameKey(ctx, newTbKey, descID); err != nil {
+		return err
+	}
+
+	// Log Rename Table event. This is an auditable log event and is recorded
+	// in the same transaction as the table descriptor update.
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		EventLogRenameTable,
+		int32(tableDesc.ID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			TableName    string
+			Statement    string
+			User         string
+			NewTableName string
+		}{oldTn.FQString(), n.n.String(), params.p.User().Normalized(), newTn.FQString()},
+	)
 }
 
 func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }

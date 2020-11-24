@@ -15,10 +15,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -37,18 +37,10 @@ var insertFastPathNodePool = sync.Pool{
 	},
 }
 
-// Check that exec.InsertFastPathMaxRows does not exceed the default
-// mutations.MaxBatchSize.
-func init() {
-	if mutations.MaxBatchSize() < exec.InsertFastPathMaxRows {
-		panic("decrease exec.InsertFastPathMaxRows")
-	}
-}
-
 // insertFastPathNode is a faster implementation of inserting values in a table
 // and performing FK checks. It is used when all the foreign key checks can be
 // performed via a direct lookup in an index, and when the input is VALUES of
-// limited size (at most exec.InsertFastPathMaxRows).
+// limited size (at most mutations.MaxBatchSize).
 type insertFastPathNode struct {
 	// input values, similar to a valuesNode.
 	input [][]tree.TypedExpr
@@ -99,7 +91,7 @@ type insertFastPathFKCheck struct {
 	tabDesc     *tabledesc.Immutable
 	idxDesc     *descpb.IndexDescriptor
 	keyPrefix   []byte
-	colMap      map[descpb.ColumnID]int
+	colMap      catalog.TableColMap
 	spanBuilder *span.Builder
 }
 
@@ -110,14 +102,13 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 
 	codec := params.ExecCfg().Codec
 	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc, c.idxDesc.ID)
-	c.spanBuilder = span.MakeBuilder(codec, c.tabDesc, c.idxDesc)
+	c.spanBuilder = span.MakeBuilder(params.EvalContext(), codec, c.tabDesc, c.idxDesc)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
 		return errors.AssertionFailedf(
 			"%d FK cols, only %d cols in index", len(c.InsertCols), idx.numLaxKeyCols,
 		)
 	}
-	c.colMap = make(map[descpb.ColumnID]int, len(c.InsertCols))
 	for i, ord := range c.InsertCols {
 		var colID descpb.ColumnID
 		if i < len(c.idxDesc.ColumnIDs) {
@@ -126,7 +117,7 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 			colID = c.idxDesc.ExtraColumnIDs[i-len(c.idxDesc.ColumnIDs)]
 		}
 
-		c.colMap[colID] = int(ord)
+		c.colMap.Set(colID, int(ord))
 	}
 	return nil
 }

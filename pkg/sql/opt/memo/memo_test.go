@@ -12,14 +12,18 @@ package memo_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	opttestutils "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
@@ -50,6 +54,47 @@ func TestStatsQuality(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
 		memo.ExprFmtHideScalars
 	runDataDrivenTest(t, "testdata/stats_quality/", flags)
+}
+
+func TestCompositeSensitive(t *testing.T) {
+	datadriven.RunTest(t, "testdata/composite_sensitive", func(t *testing.T, d *datadriven.TestData) string {
+		semaCtx := tree.MakeSemaContext()
+		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+		var f norm.Factory
+		f.Init(&evalCtx, nil /* catalog */)
+		md := f.Metadata()
+
+		if d.Cmd != "composite-sensitive" {
+			d.Fatalf(t, "unsupported command: %s\n", d.Cmd)
+		}
+		var sv opttestutils.ScalarVars
+
+		for _, arg := range d.CmdArgs {
+			key, vals := arg.Key, arg.Vals
+			switch key {
+			case "vars":
+				err := sv.Init(md, vals)
+				if err != nil {
+					d.Fatalf(t, "%v", err)
+				}
+
+			default:
+				d.Fatalf(t, "unknown argument: %s\n", key)
+			}
+		}
+
+		expr, err := parser.ParseExpr(d.Input)
+		if err != nil {
+			d.Fatalf(t, "error parsing: %v", err)
+		}
+
+		b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
+		if err := b.Build(expr); err != nil {
+			d.Fatalf(t, "error building: %v", err)
+		}
+		return fmt.Sprintf("%v", memo.CanBeCompositeSensitive(md, f.Memo().RootExpr()))
+	})
 }
 
 func TestMemoInit(t *testing.T) {

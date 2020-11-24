@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "geoindex",
+    srcs = [
+        "config.pb.go",
+        "geoindex.go",
+        "s2_geography_index.go",
+        "s2_geometry_index.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geoindex",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geogfn",
+        "//pkg/geo/geomfn",
+        "//pkg/geo/geopb",
+        "//pkg/geo/geoprojbase",
+        "//pkg/geo/geos",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/golang/geo/r3",
+        "//vendor/github.com/golang/geo/s1",
+        "//vendor/github.com/golang/geo/s2",
+        "//vendor/github.com/twpayne/go-geom",
+    ],
+)
+
+go_test(
+    name = "geoindex_test",
+    srcs = [
+        "s2_geography_index_test.go",
+        "s2_geometry_index_test.go",
+        "utils_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":geoindex"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geogfn",
+        "//pkg/geo/geopb",
+        "//pkg/geo/geoprojbase",
+        "//pkg/geo/geos",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/cockroachdb/datadriven",
+        "//vendor/github.com/golang/geo/s2",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

@@ -91,7 +91,7 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 				SequenceName string
 				Statement    string
 				User         string
-			}{toDel.tn.FQString(), n.n.String(), params.SessionData().User},
+			}{toDel.tn.FQString(), n.n.String(), params.p.User().Normalized()},
 		); err != nil {
 			return err
 		}

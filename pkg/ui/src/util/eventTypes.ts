@@ -20,10 +20,16 @@ type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
 export const CREATE_DATABASE = "create_database";
 // Recorded when a database is dropped.
 export const DROP_DATABASE = "drop_database";
+// Recorded when a database is renamed.
+export const RENAME_DATABASE = "rename_database";
+// Recorded when a database's owner is changed.
+export const ALTER_DATABASE_OWNER = "alter_database_owner";
 // Recorded when a table is created.
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
 export const DROP_TABLE = "drop_table";
+// Recorded when a table is renamed.
+export const RENAME_TABLE = "rename_table";
 // Recorded when a table is truncated.
 export const TRUNCATE_TABLE = "truncate_table";
 // Recorded when a table is altered.
@@ -69,6 +75,26 @@ export const SET_ZONE_CONFIG = "set_zone_config";
 export const REMOVE_ZONE_CONFIG = "remove_zone_config";
 // Recorded when statistics are collected for a table.
 export const CREATE_STATISTICS = "create_statistics";
+// Recorded when privileges are added to a user(s).
+export const GRANT_PRIVILEGE = "grant_privilege";
+// Recorded when privileges are removed from a user(s).
+export const REVOKE_PRIVILEGE = "revoke_privilege";
+// Recorded when a schema is created.
+export const CREATE_SCHEMA = "create_schema";
+// Recorded when a schema is dropped.
+export const DROP_SCHEMA = "drop_schema";
+// Recorded when a schema is renamed.
+export const RENAME_SCHEMA = "rename_schema";
+// Recorded when a schema's owner is changed.
+export const ALTER_SCHEMA_OWNER = "alter_schema_owner";
+// Recorded when a database is converted to a schema.
+export const CONVERT_TO_SCHEMA = "convert_to_schema";
+// Recorded when a role is created.
+export const CREATE_ROLE = "create_role";
+// Recorded when a role is dropped.
+export const DROP_ROLE = "drop_role";
+// Recorded when a role is altered.
+export const ALTER_ROLE = "alter_role";
 
 // Node Event Types
 export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONING, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];

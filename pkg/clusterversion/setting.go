@@ -26,14 +26,14 @@ const KeyVersionSetting = "version"
 // version represents the cluster's "active version". This is a cluster setting,
 // but a special one. It can only advance to higher and higher versions. The
 // setting can be used to see if migrations are to be considered enabled or
-// disabled through the isActive() method. All external usage of the cluster
-// settings takes place through a Handle and `Initialize()`/`SetBeforeChange()`.
+// disabled through the `isActive()` method. All external usage of the cluster
+// settings takes place through a Handle and `Initialize()`.
 //
 // During the node startup sequence, an initial version (persisted to the
 // engines) is read and passed to `version.initialize`. It is only after that
-// that `version.{activeVersion,isActive} can be called. In turn, the node
-// usually registers itself as a callback to be notified of any further updates
-// to the setting, which are also persisted.
+// that `version.{activeVersion,isActive} can be called. Further updates to the
+// setting also need to be persisted before informing the setting itself about
+// it.
 //
 // This dance is necessary because we cannot determine a safe default value for
 // the version setting without looking at what's been persisted: The setting
@@ -45,39 +45,28 @@ const KeyVersionSetting = "version"
 // running in the same cluster. Hence, only once we get word of the "safe"
 // version to use can we allow moving parts that actually need to know what's
 // going on.
-//
-// Additionally, whenever the version changes, we want to persist that update to
-// wherever the caller to initialize() got the initial version from
-// (typically a collection of `engine.Engine`s), which the caller will do by
-// registering itself via setBeforeChange()`, which is invoked *before* exposing
-// the new version to callers of `activeVersion()` and `isActive()`.
 var version = registerClusterVersionSetting()
 
 // clusterVersionSetting is the implementation of the 'version' setting. Like all
 // setting structs, it is immutable, as Version is a global; all the state is
 // maintained in a Handle instance.
 type clusterVersionSetting struct {
-	settings.StateMachineSetting
+	settings.VersionSetting
 }
 
-var _ settings.StateMachineSettingImpl = &clusterVersionSetting{}
+var _ settings.VersionSettingImpl = &clusterVersionSetting{}
 
 // registerClusterVersionSetting creates a clusterVersionSetting and registers
 // it with the cluster settings registry.
 func registerClusterVersionSetting() *clusterVersionSetting {
-	s := makeClusterVersionSetting()
-	s.StateMachineSetting.SetReportable(true)
-	settings.RegisterStateMachineSetting(
-		KeyVersionSetting,
-		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<unstable>,
-		&s.StateMachineSetting)
-	s.SetVisibility(settings.Public)
-	return s
-}
-
-func makeClusterVersionSetting() *clusterVersionSetting {
 	s := &clusterVersionSetting{}
-	s.StateMachineSetting = settings.MakeStateMachineSetting(s)
+	s.VersionSetting = settings.MakeVersionSetting(s)
+	settings.RegisterVersionSetting(
+		KeyVersionSetting,
+		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<internal>,
+		&s.VersionSetting)
+	s.SetVisibility(settings.Public)
+	s.SetReportable(true)
 	return s
 }
 
@@ -106,7 +95,7 @@ func (cv *clusterVersionSetting) initialize(
 		}
 		// Now version > ver.Version.
 	}
-	if err := cv.validateSupportedVersionInner(ctx, version, sv); err != nil {
+	if err := cv.validateBinaryVersions(version, sv); err != nil {
 		return err
 	}
 
@@ -158,87 +147,60 @@ func (cv *clusterVersionSetting) isActive(
 	return cv.activeVersion(ctx, sv).IsActive(versionKey)
 }
 
-// setBeforeChange registers a callback to be called before the cluster version
-// is updated. The new cluster version will only become "visible" after the
-// callback has returned.
-//
-// The callback can be set at most once.
-func (cv *clusterVersionSetting) setBeforeChange(
-	ctx context.Context, cb func(ctx context.Context, newVersion ClusterVersion), sv *settings.Values,
-) {
-	vh := sv.Opaque().(Handle)
-	h := vh.(*handleImpl)
-	h.beforeClusterVersionChangeMu.Lock()
-	defer h.beforeClusterVersionChangeMu.Unlock()
-	if h.beforeClusterVersionChangeMu.cb != nil {
-		log.Fatalf(ctx, "beforeClusterVersionChange already set")
-	}
-	h.beforeClusterVersionChangeMu.cb = cb
-}
-
-// Decode is part of the StateMachineSettingImpl interface.
-func (cv *clusterVersionSetting) Decode(val []byte) (interface{}, error) {
+// Decode is part of the VersionSettingImpl interface.
+func (cv *clusterVersionSetting) Decode(val []byte) (settings.ClusterVersionImpl, error) {
 	var clusterVersion ClusterVersion
 	if err := protoutil.Unmarshal(val, &clusterVersion); err != nil {
-		return "", err
+		return nil, err
 	}
 	return clusterVersion, nil
 }
 
-// DecodeToString is part of the StateMachineSettingImpl interface.
-func (cv *clusterVersionSetting) DecodeToString(val []byte) (string, error) {
-	clusterVersion, err := cv.Decode(val)
-	if err != nil {
-		return "", err
-	}
-	return clusterVersion.(ClusterVersion).Version.String(), nil
-}
-
-// ValidateLogical is part of the StateMachineSettingImpl interface.
-func (cv *clusterVersionSetting) ValidateLogical(
-	ctx context.Context, sv *settings.Values, curRawProto []byte, newVal string,
+// Validate is part of the VersionSettingImpl interface.
+func (cv *clusterVersionSetting) Validate(
+	_ context.Context, sv *settings.Values, curRawProto, newRawProto []byte,
 ) ([]byte, error) {
-	newVersion, err := roachpb.ParseVersion(newVal)
-	if err != nil {
-		return nil, err
-	}
-	if err := cv.validateSupportedVersionInner(ctx, newVersion, sv); err != nil {
+	var newCV ClusterVersion
+	if err := protoutil.Unmarshal(newRawProto, &newCV); err != nil {
 		return nil, err
 	}
 
-	var oldV ClusterVersion
-	if err := protoutil.Unmarshal(curRawProto, &oldV); err != nil {
+	if err := cv.validateBinaryVersions(newCV.Version, sv); err != nil {
+		return nil, err
+	}
+
+	var oldCV ClusterVersion
+	if err := protoutil.Unmarshal(curRawProto, &oldCV); err != nil {
 		return nil, err
 	}
 
 	// Versions cannot be downgraded.
-	if newVersion.Less(oldV.Version) {
+	if newCV.Version.Less(oldCV.Version) {
 		return nil, errors.Errorf(
 			"versions cannot be downgraded (attempting to downgrade from %s to %s)",
-			oldV.Version, newVersion)
+			oldCV.Version, newCV.Version)
 	}
 
-	// Prevent cluster version upgrade until cluster.preserve_downgrade_option is reset.
+	// Prevent cluster version upgrade until cluster.preserve_downgrade_option
+	// is reset.
 	if downgrade := preserveDowngradeVersion.Get(sv); downgrade != "" {
 		return nil, errors.Errorf(
 			"cannot upgrade to %s: cluster.preserve_downgrade_option is set to %s",
-			newVersion, downgrade)
+			newCV.Version, downgrade)
 	}
 
 	// Return the serialized form of the new version.
-	newV := ClusterVersion{Version: newVersion}
-	return protoutil.Marshal(&newV)
+	return protoutil.Marshal(&newCV)
 }
 
-// ValidateGossipVersion is part of the StateMachineSettingImpl interface.
-func (cv *clusterVersionSetting) ValidateGossipUpdate(
+// ValidateBinaryVersions is part of the VersionSettingImpl interface.
+func (cv *clusterVersionSetting) ValidateBinaryVersions(
 	ctx context.Context, sv *settings.Values, rawProto []byte,
 ) (retErr error) {
-
 	defer func() {
-		// This implementation of ValidateGossipUpdate never returns errors. Instead,
-		// we crash. Not being able to update our version to what the rest of the cluster is running
-		// is a serious issue.
+		// This implementation of ValidateBinaryVersions never returns errors.
+		// Instead, we crash. Not being able to update our version to what the
+		// rest of the cluster is running is a serious issue.
 		if retErr != nil {
 			log.Fatalf(ctx, "failed to validate version upgrade: %s", retErr)
 		}
@@ -248,34 +210,16 @@ func (cv *clusterVersionSetting) ValidateGossipUpdate(
 	if err := protoutil.Unmarshal(rawProto, &ver); err != nil {
 		return err
 	}
-	return cv.validateSupportedVersionInner(ctx, ver.Version, sv)
+	return cv.validateBinaryVersions(ver.Version, sv)
 }
 
-// SettingsListDefault is part of the StateMachineSettingImpl interface.
+// SettingsListDefault is part of the VersionSettingImpl interface.
 func (cv *clusterVersionSetting) SettingsListDefault() string {
 	return binaryVersion.String()
 }
 
-// BeforeChange is part of the StateMachineSettingImpl interface
-func (cv *clusterVersionSetting) BeforeChange(
-	ctx context.Context, encodedVal []byte, sv *settings.Values,
-) {
-	var clusterVersion ClusterVersion
-	if err := protoutil.Unmarshal(encodedVal, &clusterVersion); err != nil {
-		log.Fatalf(ctx, "failed to unmarshall version: %s", err)
-	}
-
-	vh := sv.Opaque().(Handle)
-	h := vh.(*handleImpl)
-	h.beforeClusterVersionChangeMu.Lock()
-	if cb := h.beforeClusterVersionChangeMu.cb; cb != nil {
-		cb(ctx, clusterVersion)
-	}
-	h.beforeClusterVersionChangeMu.Unlock()
-}
-
-func (cv *clusterVersionSetting) validateSupportedVersionInner(
-	ctx context.Context, ver roachpb.Version, sv *settings.Values,
+func (cv *clusterVersionSetting) validateBinaryVersions(
+	ver roachpb.Version, sv *settings.Values,
 ) error {
 	vh := sv.Opaque().(Handle)
 	if vh.BinaryMinSupportedVersion() == (roachpb.Version{}) {

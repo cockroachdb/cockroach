@@ -32,7 +32,8 @@ import (
 )
 
 // TestParse verifies that we can parse the supplied SQL and regenerate the SQL
-// string from the syntax tree.
+// string from the syntax tree.  If the supplied SQL generates a different string
+// from the sytnax tree, use TestParse2 below.
 func TestParse(t *testing.T) {
 	testData := []struct {
 		sql string
@@ -70,6 +71,9 @@ func TestParse(t *testing.T) {
 		{`CREATE DATABASE a LC_CTYPE = 'INVALID'`},
 		{`CREATE DATABASE a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID'`},
 		{`CREATE DATABASE a CONNECTION LIMIT = 13`},
+		{`CREATE DATABASE a REGIONS = "us-west-1", "us-west-2"`},
+		{`CREATE DATABASE a SURVIVE REGION FAILURE`},
+		{`CREATE DATABASE a SURVIVE ZONE FAILURE`},
 		{`CREATE DATABASE IF NOT EXISTS a`},
 		{`CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0'`},
 		{`CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'invalid'`},
@@ -80,10 +84,18 @@ func TestParse(t *testing.T) {
 		{`CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'C.UTF-8'`},
 		{`CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'INVALID'`},
 		{`CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID'`},
+		{`CREATE DATABASE IF NOT EXISTS a REGIONS = "us-west-1", "us-west-2"`},
+		{`CREATE DATABASE IF NOT EXISTS a SURVIVE REGION FAILURE`},
+		{`CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE`},
+
 		{`CREATE SCHEMA IF NOT EXISTS foo`},
 		{`CREATE SCHEMA foo`},
+		{`CREATE SCHEMA IF NOT EXISTS foo.bar`},
+		{`CREATE SCHEMA foo.bar`},
 		{`CREATE SCHEMA IF NOT EXISTS foo AUTHORIZATION foobar`},
+		{`CREATE SCHEMA IF NOT EXISTS foo.bar AUTHORIZATION foobar`},
 		{`CREATE SCHEMA foo AUTHORIZATION foobar`},
+		{`CREATE SCHEMA foo.bar AUTHORIZATION foobar`},
 		{`CREATE SCHEMA IF NOT EXISTS AUTHORIZATION foobar`},
 		{`CREATE SCHEMA AUTHORIZATION foobar`},
 
@@ -112,6 +124,26 @@ func TestParse(t *testing.T) {
 		{`CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e)`},
 		{`CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > 3`},
 		{`CREATE INDEX a ON b (c) WITH (fillfactor = 100, y_bounds = 50)`},
+
+		{`CREATE INDEX ON a ((a + b))`},
+		{`CREATE INDEX ON a (lower(a))`},
+		{`CREATE INDEX ON a (a, lower(b))`},
+		{`CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))`},
+		{`CREATE INDEX ON a (a, (a + 1), (b + 2))`},
+		{`CREATE INDEX ON a (lower(a))`},
+		{`CREATE INDEX ON a (lower(a), lower(b))`},
+		{`CREATE INDEX ON a (a, lower(b))`},
+		{`CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))`},
+		{`CREATE UNIQUE INDEX ON a ((a + b))`},
+		{`CREATE UNIQUE INDEX ON a (lower(a))`},
+		{`CREATE UNIQUE INDEX ON a (a, lower(b))`},
+		{`CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))`},
+		{`CREATE UNIQUE INDEX ON a (a, (a + 1), (b + 2))`},
+		{`CREATE UNIQUE INDEX ON a (lower(a))`},
+		{`CREATE UNIQUE INDEX ON a (lower(a), lower(b))`},
+		{`CREATE UNIQUE INDEX ON a (a, lower(b))`},
+		{`CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))`},
+		{`CREATE INVERTED INDEX ON a ((ARRAY[a, b]))`},
 
 		{`CREATE TABLE a ()`},
 		{`CREATE TEMPORARY TABLE a (b INT8)`},
@@ -155,6 +187,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT8 CONSTRAINT always NOT NULL)`},
 		{`CREATE TABLE a (b INT8 PRIMARY KEY)`},
 		{`CREATE TABLE a (b INT8 UNIQUE)`},
+		{`CREATE TABLE a (b INT8 UNIQUE WITHOUT INDEX)`},
 		{`CREATE TABLE a (b INT8 NULL PRIMARY KEY)`},
 		{`CREATE TABLE a (b INT8 DEFAULT 1)`},
 		{`CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT 1)`},
@@ -202,6 +235,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT8, c STRING, INDEX (b, c))`},
 		{`CREATE TABLE a (b INT8, c STRING, INDEX d (b, c))`},
 		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c))`},
+		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c))`},
 		{`CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f))`},
 		{`CREATE TABLE a (b INT8, UNIQUE (b))`},
 		{`CREATE TABLE a (b INT8, UNIQUE (b) STORING (c))`},
@@ -250,6 +284,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT8 CONSTRAINT c PRIMARY KEY)`},
 		{`CREATE TABLE a (b INT8 CONSTRAINT c NULL)`},
 		{`CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE)`},
+		{`CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE WITHOUT INDEX)`},
 		{`CREATE TABLE a (b INT8 CONSTRAINT c DEFAULT d)`},
 		{`CREATE TABLE a (b INT8 CONSTRAINT c CHECK (d))`},
 		{`CREATE TABLE a (b INT8 CONSTRAINT c REFERENCES d)`},
@@ -304,7 +339,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b STRING COLLATE de)`},
 		{`CREATE TABLE a (b STRING(3) COLLATE de)`},
 		{`CREATE TABLE a (b STRING[] COLLATE de)`},
-		{`CREATE TABLE a (b STRING(3)[] COLLATE de)`},
+		{`CREATE TABLE a (b STRING(3)[] COLLATE en_US)`},
 
 		{`CREATE TABLE a (LIKE b)`},
 		{`CREATE TABLE a (LIKE b, c INT8)`},
@@ -380,6 +415,17 @@ func TestParse(t *testing.T) {
 		{`DROP SCHEMA IF EXISTS a, b CASCADE`},
 		{`DROP SCHEMA IF EXISTS a, b RESTRICT`},
 		{`DROP SCHEMA a RESTRICT`},
+
+		{`DROP SCHEMA a.a`},
+		{`DROP SCHEMA a.a, b.b, c.c`},
+		{`DROP SCHEMA a, b.b, c`},
+		{`DROP SCHEMA IF EXISTS a.a, b.b, c.c`},
+		{`DROP SCHEMA IF EXISTS a, b, c.c`},
+		{`DROP SCHEMA IF EXISTS a.a, b.b CASCADE`},
+		{`DROP SCHEMA IF EXISTS a.a, b CASCADE`},
+		{`DROP SCHEMA IF EXISTS a.a, b.c RESTRICT`},
+		{`DROP SCHEMA IF EXISTS a, b.b RESTRICT`},
+		{`DROP SCHEMA a.a RESTRICT`},
 
 		{`DROP TYPE a`},
 		{`DROP TYPE a, b, c`},
@@ -502,6 +548,7 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN (OPT, VERBOSE) SELECT 1`},
 		{`EXPLAIN ANALYZE (DISTSQL) SELECT 1`},
 		{`EXPLAIN ANALYZE (DEBUG) SELECT 1`},
+		{`EXPLAIN ANALYZE (PLAN) SELECT 1`},
 		{`SELECT * FROM [EXPLAIN SELECT 1]`},
 		{`SELECT * FROM [SHOW TRANSACTION STATUS]`},
 
@@ -599,6 +646,8 @@ func TestParse(t *testing.T) {
 		{`SHOW RANGES FROM INDEX t@i`},
 		{`SHOW RANGES FROM INDEX d.i`},
 		{`SHOW RANGES FROM INDEX i`},
+		{`SHOW REGIONS FROM CLUSTER`},
+		{`SHOW REGIONS FROM DATABASE d`},
 		{`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`},
 		{`SHOW ZONE CONFIGURATIONS`},
 		{`EXPLAIN SHOW ZONE CONFIGURATIONS`},
@@ -620,7 +669,9 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN SHOW GRANTS`},
 		{`SHOW GRANTS ON TABLE foo`},
 		{`SHOW GRANTS ON SCHEMA foo`},
+		{`SHOW GRANTS ON SCHEMA foo.bar`},
 		{`SHOW GRANTS ON SCHEMA foo, bar`},
+		{`SHOW GRANTS ON SCHEMA foo.bar, bar.baz`},
 		{`SHOW GRANTS ON TYPE typ1`},
 		{`SHOW GRANTS ON TYPE typ1, schema2.typ2, db.schema.typ`},
 		{`SHOW GRANTS ON TABLE foo, db.foo`},
@@ -711,8 +762,11 @@ func TestParse(t *testing.T) {
 
 		// GRANT ON SCHEMA.
 		{`GRANT USAGE ON SCHEMA foo TO root`},
+		{`GRANT USAGE ON SCHEMA foo.bar TO root`},
 		{`GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root`},
+		{`GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root`},
 		{`GRANT ALL ON SCHEMA foo, bar, baz TO root`},
+		{`GRANT ALL ON SCHEMA a.b, c.d, e.f TO root`},
 
 		// Tables are the default, but can also be specified with
 		// REVOKE x ON TABLE y. However, the stringer does not output TABLE.
@@ -732,8 +786,11 @@ func TestParse(t *testing.T) {
 
 		// REVOKE ON SCHEMA.
 		{`REVOKE USAGE ON SCHEMA foo FROM root`},
+		{`REVOKE USAGE ON SCHEMA foo.bar FROM root`},
 		{`REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root`},
+		{`REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root`},
 		{`REVOKE ALL ON SCHEMA foo, bar, baz FROM root`},
+		{`REVOKE ALL ON SCHEMA a.b, c.d, e.f FROM root`},
 
 		{`INSERT INTO a VALUES (1)`},
 		{`EXPLAIN INSERT INTO a VALUES (1)`},
@@ -1167,11 +1224,13 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t1 INNER MERGE JOIN t2 USING (a)`},
 		{`SELECT a FROM t1 LEFT JOIN t2 ON a = b`},
 		{`SELECT a FROM t1 LEFT LOOKUP JOIN t2 ON a = b`},
+		{`SELECT a FROM t1 LEFT INVERTED JOIN t2 ON a @> b`},
 		{`SELECT a FROM t1 RIGHT JOIN t2 ON a = b`},
 		{`SELECT a FROM t1 INNER JOIN t2 ON a = b`},
 		{`SELECT a FROM t1 INNER HASH JOIN t2 ON a = b`},
 		{`SELECT a FROM t1 CROSS JOIN t2`},
 		{`SELECT a FROM t1 CROSS LOOKUP JOIN t2`},
+		{`SELECT a FROM t1 CROSS INVERTED JOIN t2`},
 		{`SELECT a FROM t1 NATURAL JOIN t2`},
 		{`SELECT a FROM t1 NATURAL INNER MERGE JOIN t2`},
 		{`SELECT a FROM t1 INNER JOIN t2 USING (a)`},
@@ -1301,6 +1360,9 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.
 
 		{`ALTER DATABASE a RENAME TO b`},
+		{`ALTER DATABASE a ADD REGION "us-west-1"`},
+		{`ALTER DATABASE a DROP REGION "us-west-1"`},
+		{`ALTER DATABASE a SURVIVE REGION FAILURE`},
 		{`EXPLAIN ALTER DATABASE a RENAME TO b`},
 
 		{`ALTER DATABASE a OWNER TO foo`},
@@ -1315,6 +1377,8 @@ func TestParse(t *testing.T) {
 
 		{`ALTER SCHEMA s RENAME TO s2`},
 		{`ALTER SCHEMA s OWNER TO foo`},
+		{`ALTER SCHEMA db.s RENAME TO s2`},
+		{`ALTER SCHEMA db.s OWNER TO foo`},
 
 		{`ALTER TABLE a RENAME TO b`},
 		{`EXPLAIN ALTER TABLE a RENAME TO b`},
@@ -1324,13 +1388,17 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a RENAME CONSTRAINT c1 TO c2`},
 		{`ALTER TABLE IF EXISTS a RENAME CONSTRAINT c1 TO c2`},
 		{`ALTER TABLE a RENAME CONSTRAINT c TO d, RENAME COLUMN e TO f`},
+		{`ALTER TABLE a SET REGIONAL AFFINITY NONE`},
+		{`ALTER TABLE IF EXISTS a SET REGIONAL AFFINITY NONE`},
+		{`ALTER TABLE a SET REGIONAL AFFINITY "us-west-1"`},
+		{`ALTER TABLE a SET REGIONAL AFFINITY ROW LEVEL`},
 
 		{`ALTER TABLE a ADD COLUMN b INT8, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`EXPLAIN ALTER TABLE a ADD COLUMN b INT8`},
 		{`ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT8, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN b INT8, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN IF NOT EXISTS b INT8, ADD CONSTRAINT a_idx UNIQUE (a)`},
-		{`ALTER TABLE a ADD COLUMN b INT8, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`ALTER TABLE a ADD COLUMN b INT8 UNIQUE WITHOUT INDEX, ADD CONSTRAINT a_no_idx UNIQUE WITHOUT INDEX (a)`},
 		{`ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT8, ADD CONSTRAINT a_idx UNIQUE (a) NOT VALID`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN b INT8, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN IF NOT EXISTS b INT8, ADD CONSTRAINT a_idx UNIQUE (a)`},
@@ -1392,6 +1460,7 @@ func TestParse(t *testing.T) {
 		{`COPY t (a, b, c) FROM STDIN`},
 		{`COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'`},
 		{`COPY t (a, b, c) FROM STDIN WITH BINARY`},
+		{`COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = 'filename'`},
 
 		{`ALTER TABLE a SPLIT AT VALUES (1)`},
 		{`EXPLAIN ALTER TABLE a SPLIT AT VALUES (1)`},
@@ -1518,6 +1587,10 @@ func TestParse(t *testing.T) {
 
 		{`REASSIGN OWNED BY foo TO bar`},
 		{`REASSIGN OWNED BY foo, bar TO third`},
+		{`DROP OWNED BY foo`},
+		{`DROP OWNED BY foo, bar`},
+		{`DROP OWNED BY foo CASCADE`},
+		{`DROP OWNED BY foo RESTRICT`},
 
 		{`COMMENT ON COLUMN a.b IS 'a'`},
 		{`COMMENT ON COLUMN a.b IS NULL`},
@@ -1698,6 +1771,10 @@ func TestParse2(t *testing.T) {
 			`CREATE DATABASE a WITH CONNECTION LIMIT -1`,
 			`CREATE DATABASE a`,
 		},
+		{
+			`CREATE DATABASE a REGION "us-west-1"`,
+			`CREATE DATABASE a REGIONS = "us-west-1"`,
+		},
 		{`CREATE TABLE a (b INT) WITH (fillfactor=100)`,
 			`CREATE TABLE a (b INT8)`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
@@ -1717,6 +1794,12 @@ func TestParse2(t *testing.T) {
 			`CREATE INVERTED INDEX a ON b (c)`},
 		{`CREATE UNIQUE INDEX a ON b USING GIN (c)`,
 			`CREATE UNIQUE INVERTED INDEX a ON b (c)`},
+
+		{`CREATE INDEX ON a (a, (lower(b)))`,
+			`CREATE INDEX ON a (a, lower(b))`},
+
+		{`CREATE INDEX ON a ((lower(a) || ' ' || lower(b)))`,
+			`CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))`},
 
 		{`CREATE TABLE a (b BIGSERIAL, c SMALLSERIAL, d SERIAL)`,
 			`CREATE TABLE a (b SERIAL8, c SERIAL2, d SERIAL8)`},
@@ -1742,6 +1825,11 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b VARCHAR, c VARCHAR(3))`},
 		{`CREATE TABLE a (b BIT VARYING(2), c BIT(1))`,
 			`CREATE TABLE a (b VARBIT(2), c BIT)`},
+
+		{`CREATE TABLE a (b INT, CHECK (b > 0) NOT VALID)`,
+			`CREATE TABLE a (b INT8, CHECK (b > 0))`},
+		{`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other (b) NOT VALID)`,
+			`CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other (b))`},
 
 		{`CREATE STATISTICS a ON col1 FROM t AS OF SYSTEM TIME '2016-01-01'`,
 			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
@@ -2266,6 +2354,8 @@ $function$`,
 
 		{`COPY t (a, b, c) FROM STDIN BINARY`,
 			`COPY t (a, b, c) FROM STDIN WITH BINARY`},
+		{`COPY t (a, b, c) FROM STDIN destination = 'filename' BINARY`,
+			`COPY t (a, b, c) FROM STDIN WITH BINARY destination = 'filename'`},
 
 		// Identifier handling for zone configs.
 
@@ -2293,6 +2383,42 @@ $function$`,
 			`ALTER INDEX i CONFIGURE ZONE USING "foo.bar" = yay`},
 		{`ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT`,
 			`ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT`},
+		{
+			`ALTER TABLE a SET REGIONAL AFFINITY TO NONE`,
+			`ALTER TABLE a SET REGIONAL AFFINITY NONE`,
+		},
+		{
+			`ALTER TABLE a SET REGIONAL AFFINITY TO "us-west-1"`,
+			`ALTER TABLE a SET REGIONAL AFFINITY "us-west-1"`,
+		},
+		{
+			`ALTER TABLE a SET REGIONAL AFFINITY AT ROW LEVEL`,
+			`ALTER TABLE a SET REGIONAL AFFINITY ROW LEVEL`,
+		},
+		{
+			`ALTER TABLE a SET LOCALITY GLOBAL`,
+			`ALTER TABLE a SET REGIONAL AFFINITY NONE`,
+		},
+		{
+			`ALTER TABLE a SET LOCALITY REGIONAL BY TABLE IN "us-west-1"`,
+			`ALTER TABLE a SET REGIONAL AFFINITY "us-west-1"`,
+		},
+		{
+			`ALTER TABLE a SET LOCALITY REGIONAL BY ROW`,
+			`ALTER TABLE a SET REGIONAL AFFINITY ROW LEVEL`,
+		},
+		{
+			`ALTER TABLE a SET NO REGIONAL AFFINITY`,
+			`ALTER TABLE a SET REGIONAL AFFINITY NONE`,
+		},
+		{
+			`ALTER TABLE a SET TABLE LEVEL REGIONAL AFFINITY TO "us-west-1"`,
+			`ALTER TABLE a SET REGIONAL AFFINITY "us-west-1"`,
+		},
+		{
+			`ALTER TABLE a SET ROW LEVEL REGIONAL AFFINITY`,
+			`ALTER TABLE a SET REGIONAL AFFINITY ROW LEVEL`,
+		},
 
 		// Alternative forms for table patterns.
 
@@ -2612,6 +2738,24 @@ SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS,
 
 		{`REASSIGN OWNED BY CURRENT_USER TO foo`, `REASSIGN OWNED BY "current_user" TO foo`},
 		{`REASSIGN OWNED BY SESSION_USER TO foo`, `REASSIGN OWNED BY "session_user" TO foo`},
+		{`DROP OWNED BY CURRENT_USER`, `DROP OWNED BY "current_user"`},
+		{`DROP OWNED BY SESSION_USER`, `DROP OWNED BY "session_user"`},
+
+		// Validate that GRANT and REVOKE can accept optional PRIVILEGES syntax
+		{`GRANT ALL PRIVILEGES ON DATABASE foo TO root`, `GRANT ALL ON DATABASE foo TO root`},
+		{`GRANT ALL PRIVILEGES ON TABLE foo TO root`, `GRANT ALL ON TABLE foo TO root`},
+		{`GRANT ALL PRIVILEGES ON SCHEMA foo TO root`, `GRANT ALL ON SCHEMA foo TO root`},
+		{`GRANT ALL PRIVILEGES ON SCHEMA foo.bar TO root`, `GRANT ALL ON SCHEMA foo.bar TO root`},
+		{`GRANT ALL PRIVILEGES ON SCHEMA a.b, c.d TO root`, `GRANT ALL ON SCHEMA a.b, c.d TO root`},
+		{`REVOKE ALL PRIVILEGES ON DATABASE foo FROM root`, `REVOKE ALL ON DATABASE foo FROM root`},
+		{`REVOKE ALL PRIVILEGES ON TABLE foo FROM root`, `REVOKE ALL ON TABLE foo FROM root`},
+		{`REVOKE ALL PRIVILEGES ON SCHEMA foo FROM root`, `REVOKE ALL ON SCHEMA foo FROM root`},
+		{`REVOKE ALL PRIVILEGES ON SCHEMA foo.bar FROM root`, `REVOKE ALL ON SCHEMA foo.bar FROM root`},
+		{`REVOKE ALL PRIVILEGES ON SCHEMA a.b, c.d FROM root`, `REVOKE ALL ON SCHEMA a.b, c.d FROM root`},
+
+		// Check rules for normalizing collation names.
+		{`CREATE TABLE a (b STRING COLLATE "en-us")`, `CREATE TABLE a (b STRING COLLATE en_US)`},
+		{`CREATE TABLE a (b STRING COLLATE en_us)`, `CREATE TABLE a (b STRING COLLATE en_US)`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
@@ -3072,9 +3216,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`, ``},
 		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`, ``},
 
-		{`CREATE INDEX a ON b((c + d))`, 9682, ``, ``},
-		{`CREATE INDEX a ON b((c[d]))`, 9682, ``, ``},
-		{`CREATE INDEX a ON b(foo(c))`, 9682, ``, ``},
 		{`CREATE INDEX a ON b(c gin_trgm_ops)`, 41285, `index using gin_trgm_ops`, ``},
 		{`CREATE INDEX a ON b(c gist_trgm_ops)`, 41285, `index using gist_trgm_ops`, ``},
 		{`CREATE INDEX a ON b(c bobby)`, 47420, ``, ``},
@@ -3121,6 +3262,11 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b TSVECTOR)`, 7821, `tsvector`, ``},
 		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`, ``},
 		{`CREATE TABLE a(b XML)`, 0, `xml`, ``},
+
+		{`CREATE TABLE a(a INT, PRIMARY KEY (a) NOT VALID)`, 0, `table constraint`,
+			`PRIMARY KEY constraints cannot be marked NOT VALID`},
+		{`CREATE TABLE a(a INT, UNIQUE (a) NOT VALID)`, 0, `table constraint`,
+			`UNIQUE constraints cannot be marked NOT VALID`},
 
 		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``, ``},
 		{`UPDATE foo SET a.b = 1`, 27792, ``, ``},

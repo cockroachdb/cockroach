@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -123,12 +123,12 @@ func TestStoreGossipSystemData(t *testing.T) {
 		systemConfig := s.Gossip().GetSystemConfig()
 		return systemConfig
 	}
-	getNodeLiveness := func(s *kvserver.Store) kvserverpb.Liveness {
-		var liveness kvserverpb.Liveness
+	getNodeLiveness := func(s *kvserver.Store) livenesspb.Liveness {
+		var liveness livenesspb.Liveness
 		if err := s.Gossip().GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
 			return liveness
 		}
-		return kvserverpb.Liveness{}
+		return livenesspb.Liveness{}
 	}
 
 	// Restart the store and verify that both the system-config and node-liveness
@@ -140,7 +140,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 		if !getSystemConfig(tc.GetFirstStoreFromServer(t, 1)).DefaultZoneConfig.Equal(zcfg) {
 			return errors.New("system config not gossiped")
 		}
-		if getNodeLiveness(tc.GetFirstStoreFromServer(t, 1)) == (kvserverpb.Liveness{}) {
+		if getNodeLiveness(tc.GetFirstStoreFromServer(t, 1)) == (livenesspb.Liveness{}) {
 			return errors.New("node liveness not gossiped")
 		}
 		return nil
@@ -165,7 +165,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	key := keys.SystemConfigSpan.Key
-	tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 
 	initialStoreIdx := -1
 	for i := range tc.Servers {
@@ -205,7 +205,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	key := roachpb.RKey(keys.NodeLivenessSpan.Key)
-	tc.AddReplicasOrFatal(t, key.AsRawKey(), tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, key.AsRawKey(), tc.Target(1), tc.Target(2))
 	if pErr := tc.WaitForVoters(key.AsRawKey(), tc.Target(1), tc.Target(2)); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -303,7 +303,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	scratchStartKey := tc.ScratchRange(t)
-	desc := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
+	desc := tc.AddVotersOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
 	scratchRangeID.Store(desc.RangeID)
 	// Make sure n1 has the lease to start with.
 	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
@@ -327,8 +327,8 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 			defer wg.Done()
 			_, err = tc.Server(0).DB().AdminChangeReplicas(ctx,
 				scratchStartKey, desc, []roachpb.ReplicationChange{
-					{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(2)},
-					{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(3)},
+					{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(2)},
+					{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
 				})
 			require.NoError(t, err)
 		}()

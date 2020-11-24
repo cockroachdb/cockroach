@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func init() {
@@ -96,7 +95,7 @@ func PrintLeakedStoppers(t testing.TB) {
 	trackedStoppers.Lock()
 	defer trackedStoppers.Unlock()
 	for _, tracked := range trackedStoppers.stoppers {
-		t.Logf("leaked stopper, created at:\n%s", tracked.createdAt)
+		t.Errorf("leaked stopper, created at:\n%s", tracked.createdAt)
 	}
 }
 
@@ -216,7 +215,7 @@ func (s *Stopper) RunWorker(ctx context.Context, f func(context.Context)) {
 		// Remove any associated span; we need to ensure this because the
 		// worker may run longer than the caller which presumably closes
 		// any spans it has created.
-		ctx = opentracing.ContextWithSpan(ctx, nil)
+		ctx = tracing.ContextWithSpan(ctx, nil)
 		defer s.Recover(ctx)
 		defer s.stop.Done()
 		f(ctx)
@@ -342,7 +341,7 @@ func (s *Stopper) RunAsyncTask(
 	go func() {
 		defer s.Recover(ctx)
 		defer s.runPostlude(taskName)
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		f(ctx)
 	}()
@@ -401,7 +400,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 		defer s.Recover(ctx)
 		defer s.runPostlude(taskName)
 		defer alloc.Release()
-		defer tracing.FinishSpan(span)
+		defer span.Finish()
 
 		f(ctx)
 	}()
@@ -476,11 +475,16 @@ func (s *Stopper) Stop(ctx context.Context) {
 	s.mu.Unlock()
 
 	if stopCalled {
+		// Wait for the concurrent Stop() to complete.
+		<-s.stopped
 		return
 	}
 
-	defer s.Recover(ctx)
-	defer unregister(s)
+	defer func() {
+		s.Recover(ctx)
+		unregister(s)
+		close(s.stopped)
+	}()
 
 	if log.V(1) {
 		file, line, _ := caller.Lookup(1)
@@ -494,7 +498,6 @@ func (s *Stopper) Stop(ctx context.Context) {
 	if r := recover(); r != nil {
 		go s.Quiesce(ctx)
 		close(s.stopper)
-		close(s.stopped)
 		s.mu.Lock()
 		for _, c := range s.mu.closers {
 			go c.Close()
@@ -517,7 +520,6 @@ func (s *Stopper) Stop(ctx context.Context) {
 	for _, c := range s.mu.closers {
 		c.Close()
 	}
-	close(s.stopped)
 }
 
 // ShouldQuiesce returns a channel which will be closed when Stop() has been

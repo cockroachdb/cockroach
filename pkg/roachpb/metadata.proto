@@ -20,6 +20,7 @@ import "gogoproto/gogo.proto";
 // node topology, store type, and machine capabilities.
 message Attributes {
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
 
   repeated string attrs = 1 [(gogoproto.moretags) = "yaml:\"attrs,flow\""];
 }
@@ -83,10 +84,28 @@ enum ReplicaType {
   // count towards the quorum(s). Candidates will not ask for (or take into
   // account) votes of (peers they consider) LEARNERs for leadership nor do
   // their acknowledged log entries get taken into account for determining the
-  // committed index. At the time of writing, learners in CockroachDB are a
-  // short-term transient state: a replica being added and on its way to being a
-  // VOTER_{FULL,INCOMING}, or a VOTER_DEMOTING being removed.
+  // committed index. Learners in CockroachDB are a short-term transient state:
+  // a replica being added and on its way to being a VOTER_{FULL,INCOMING}, or a
+  // VOTER_DEMOTING being removed.
+  //
+  // Note that once these replicas upreplicate after receiving their initial
+  // snapshot, they will count towards the raft leader's quota pool and throttle
+  // incoming proposals if they fall "too far behind".
   LEARNER = 1;
+  // NON_VOTER indicates a replica that applies committed entries, but does not
+  // count towards the quorum(s). Candidates will not ask for (or take into
+  // account) votes of (peers they consider) NON_VOTERs for leadership nor do
+  // their acknowledged log entries get taken into account for determining the
+  // committed index.
+  //
+  // Under the hood, it is based on an etcd/raft LearnerNode, like the LEARNER
+  // replica type defined above. They will also cause the quota pool on the
+  // leader to throttle incoming proposals if they fall behind.
+  //
+  // Unlike LEARNERs, these are a persistent state meant to serve user traffic
+  // via follower reads. See comment above ReplicaDescriptors.NonVoters() for
+  // differences in how LEARNERs and NON_VOTERs are handled internally.
+  NON_VOTER = 5;
 }
 
 // ReplicaDescriptor describes a replica location by node ID
@@ -303,6 +322,7 @@ message StoreCapacity {
 
 // NodeDescriptor holds details on node physical/network topology.
 message NodeDescriptor {
+  option (gogoproto.equal) = true;
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
@@ -322,6 +342,7 @@ message NodeDescriptor {
 // LocalityAddress holds the private address accessible only from other nodes
 // in the corresponding locality.
 message LocalityAddress {
+  option (gogoproto.equal) = true;
   optional util.UnresolvedAddr address = 1 [(gogoproto.nullable) = false];
   optional Tier locality_tier = 2 [(gogoproto.nullable) = false];
 }
@@ -348,6 +369,7 @@ message StoreDeadReplicas {
 // Locality is an ordered set of key value Tiers that describe a node's
 // location. The tier keys should be the same across all nodes.
 message Locality {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
 
   repeated Tier tiers = 1 [(gogoproto.nullable) = false];
@@ -355,6 +377,7 @@ message Locality {
 
 // Tier represents one level of the locality hierarchy.
 message Tier {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
 
   // Key is the name of tier and should match all other nodes.
@@ -364,6 +387,7 @@ message Tier {
 }
 
 message Version {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
 
   // The names "major" and "minor" are reserved in C in
@@ -373,8 +397,9 @@ message Version {
   optional int32 minor_val = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "Minor"];
   // Note that patch is a placeholder and will always be zero.
   optional int32 patch = 3 [(gogoproto.nullable) = false];
-  // The unstable version is used to migrate during development.
-  // Users of stable, public releases will only use binaries
-  // with unstable set to 0.
-  optional int32 unstable = 4 [(gogoproto.nullable) = false];
+  // The internal version is used to introduce migrations during the development
+  // cycle. They are subversions that are never the end versions of a release,
+  // i.e. users of stable, public release will only use binaries with the
+  // internal version set to 0.
+  optional int32 internal = 4 [(gogoproto.nullable) = false];
 }

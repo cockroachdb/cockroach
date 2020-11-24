@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster/tc"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -248,7 +249,7 @@ func (a *allocSim) rangeInfo() allocStats {
 				return
 			}
 			resp, err := status.Metrics(context.Background(), &serverpb.MetricsRequest{
-				NodeId: fmt.Sprintf("local"),
+				NodeId: "local",
 			})
 			if err != nil {
 				log.Fatalf(context.Background(), "%v", err)
@@ -518,9 +519,9 @@ func main() {
 	a := newAllocSim(c)
 	a.localities = localities
 
-	log.SetExitFunc(false /* hideStack */, func(code int) {
+	log.SetExitFunc(false /* hideStack */, func(code exit.Code) {
 		c.Close()
-		os.Exit(code)
+		exit.WithCode(code)
 	})
 
 	go func() {

@@ -13,6 +13,7 @@ package memo
 import (
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -1584,6 +1585,7 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 // hasOuterCols returns true if the given expression has outer columns (i.e.
 // columns that are referenced by the expression but not bound by it).
 func hasOuterCols(e opt.Expr) bool {
+	// This is a slightly faster implementation of !getOuterCols(e).Empty().
 	switch t := e.(type) {
 	case *VariableExpr:
 		return true
@@ -1600,6 +1602,25 @@ func hasOuterCols(e opt.Expr) bool {
 	}
 
 	return false
+}
+
+// getOuterCols returns the outer columns of an expression (i.e.  columns that are
+// referenced by the expression but not bound by it).
+func getOuterCols(e opt.Expr) opt.ColSet {
+	switch t := e.(type) {
+	case *VariableExpr:
+		return opt.MakeColSet(t.Col)
+	case RelExpr:
+		return t.Relational().OuterCols
+	case ScalarPropsExpr:
+		return t.ScalarProps().Shared.OuterCols
+	}
+
+	var res opt.ColSet
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		res.UnionWith(getOuterCols(e.Child(i)))
+	}
+	return res
 }
 
 // MakeTableFuncDep returns the set of functional dependencies derived from the
@@ -2308,4 +2329,69 @@ func deriveWithUses(r opt.Expr) props.WithUsesMap {
 		}
 	}
 	return result
+}
+
+// CanBeCompositeSensitive returns true if a scalar expression could return
+// logically different results because of non-logical differences in outer
+// columns with composite type.
+//
+// Composite values are values that contain more information than the logical
+// value (i.e. the key encoding). Examples are decimals (1.0 = 1.00) and
+// collated strings ('foo' COLLATE en_u_ks_level1 = 'FOO' COLLATE
+// en_u_ks_level1).
+//
+// An example of a composite-sensitive expression is `d::string`, where d is a
+// DECIMAL.
+//
+// This property is used to determine when a scalar expression can be copied,
+// with outer column variable references changed to refer to other columns that
+// are known to be equal to the original columns.
+func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
+	outerCols := getOuterCols(e)
+	var compositeOuterCols opt.ColSet
+	outerCols.ForEach(func(col opt.ColumnID) {
+		if colinfo.HasCompositeKeyEncoding(md.ColumnMeta(col).Type) {
+			compositeOuterCols.Add(col)
+		}
+	})
+	if compositeOuterCols.Empty() {
+		// Fast path: none of the outer columns are composite.
+		return false
+	}
+
+	var canBeSensitive func(e opt.Expr) bool
+	canBeSensitive = func(e opt.Expr) bool {
+		if _, ok := e.(RelExpr); ok {
+			// Not a purely scalar expression.
+			return true
+		}
+		if !getOuterCols(e).Intersects(compositeOuterCols) {
+			// None of the outer columns of this sub-expression are composite.
+			return false
+		}
+		// Check the inputs to the operator. Together, the following conditions are
+		// sufficient to prove that this expression is not sensitive:
+		//  1. None of the inputs are sensitive to composite outer columns.
+		//     Otherwise, the operator can receive different inputs for logically
+		//     equal outer values and thus produce different outputs.
+		//  2. The operator is marked as being always insensitive, or none of the
+		//     input data types are composite.
+		checkTypes := !opt.IsCompositeInsensitiveOp(e)
+		for i, n := 0, e.ChildCount(); i < n; i++ {
+			if canBeSensitive(e.Child(i)) {
+				// Condition 1 not satisfied.
+				return true
+			}
+			if checkTypes {
+				// Note that the canBeSensitive() call above always returns true for
+				// relational expressions, so we are sure that the child is scalar.
+				if child := e.Child(i).(opt.ScalarExpr); colinfo.HasCompositeKeyEncoding(child.DataType()) {
+					// Condition 2 not satisfied.
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return canBeSensitive(e)
 }

@@ -9,15 +9,18 @@
 package cliccl
 
 import (
+	"context"
 	"crypto/tls"
 	"io/ioutil"
 	"net"
 	"strings"
 
+	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 var sqlProxyListenAddr, sqlProxyTargetAddr string
@@ -131,23 +134,52 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 		return err
 	}
 	defer func() { _ = ln.Close() }()
-	return sqlproxyccl.Serve(ln, sqlproxyccl.Options{
+
+	// Multiplex the listen address to give easy access to metrics from this
+	// command.
+	mux := cmux.New(ln)
+	httpLn := mux.Match(cmux.HTTP1Fast())
+	proxyLn := mux.Match(cmux.Any())
+
+	outgoingConf := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	server := sqlproxyccl.NewServer(sqlproxyccl.Options{
 		IncomingTLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{cer},
 		},
-		OutgoingTLSConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-		OutgoingAddrFromParams: func(params map[string]string) (addr string, clientErr error) {
+		BackendConfigFromParams: func(
+			params map[string]string, _ net.Conn,
+		) (config *sqlproxyccl.BackendConfig, clientErr error) {
 			const magic = "prancing-pony"
+			cfg := &sqlproxyccl.BackendConfig{
+				OutgoingAddress: sqlProxyTargetAddr,
+				TLSConf:         outgoingConf,
+			}
 			if strings.HasPrefix(params["database"], magic+".") {
 				params["database"] = params["database"][len(magic)+1:]
-				return sqlProxyTargetAddr, nil
+				return cfg, nil
 			}
 			if params["options"] == "--cluster="+magic {
-				return sqlProxyTargetAddr, nil
+				return cfg, nil
 			}
-			return "", errors.Errorf("client failed to pass '%s' via database or options", magic)
+			return nil, errors.Errorf("client failed to pass '%s' via database or options", magic)
 		},
 	})
+
+	group, ctx := errgroup.WithContext(context.Background())
+
+	group.Go(func() error {
+		return server.ServeHTTP(ctx, httpLn)
+	})
+
+	group.Go(func() error {
+		return server.Serve(proxyLn)
+	})
+
+	group.Go(func() error {
+		return mux.Serve()
+	})
+
+	return group.Wait()
 }

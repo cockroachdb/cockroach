@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -45,9 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -151,38 +149,21 @@ func (dsp *DistSQLPlanner) setupFlows(
 		resultChan = make(chan runnerResult, len(flows)-1)
 	}
 
-	if evalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
-		if !vectorizeThresholdMet && (evalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto || evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeOn) {
+	if vectorizeMode := evalCtx.SessionData.VectorizeMode; vectorizeMode != sessiondatapb.VectorizeOff {
+		if !vectorizeThresholdMet && vectorizeMode == sessiondatapb.VectorizeOn {
 			// Vectorization is not justified for this flow because the expected
 			// amount of data is too small and the overhead of pre-allocating data
 			// structures needed for the vectorized engine is expected to dominate
 			// the execution time.
-			setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+			setupReq.EvalContext.SessionData.VectorizeMode = sessiondatapb.VectorizeOff
 		} else {
-			// Now we check to see whether or not to even try vectorizing the flow.
-			// The goal here is to determine up front whether all of the flows can be
-			// vectorized. If any of them can't, turn off the setting.
-			// TODO(yuzefovich): this is a safe but quite inefficient way of setting
-			// up vectorized flows since the flows will effectively be planned twice.
-
-			// TODO (rohany): This is unfortunate that this call to setup vectorize makes
-			//  it's own flow context rather than being able to use the one that is made
-			//  later.
-			flowCtx := dsp.distSQLSrv.NewFlowContext(ctx, execinfrapb.FlowID{}, &evalCtx.EvalContext, setupReq.TraceKV, localState)
-			// This flowCtx is only used during the vectorize check, so we need to
-			// clean up any accessed descriptors after checking.
-			defer func() {
-				flowCtx.TypeResolverFactory.CleanupFunc(ctx)
-			}()
-
-			for scheduledOnNodeID, spec := range flows {
-				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
-				if _, err := colflow.SupportsVectorized(
-					ctx, &flowCtx, spec.Processors, localState.IsLocal, recv, scheduledOnRemoteNode,
-				); err != nil {
+			// Now we determine whether the vectorized engine supports the flow
+			// specs.
+			for _, spec := range flows {
+				if err := colflow.IsSupported(vectorizeMode, spec); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false
-					if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeExperimentalAlways {
+					if vectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
 						returnVectorizationSetupError = true
 						// If running with VectorizeExperimentalAlways, this check makes sure
 						// that we can still run SET statements (mostly to set vectorize to
@@ -190,12 +171,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 						if len(spec.Processors) == 1 &&
 							spec.Processors[0].Core.LocalPlanNode != nil {
 							rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
-							if rsidx != nil {
-								lp := localState.LocalProcs[*rsidx]
-								if z, ok := lp.(colflow.VectorizeAlwaysException); ok {
-									if z.IsException() {
-										returnVectorizationSetupError = false
-									}
+							lp := localState.LocalProcs[rsidx]
+							if z, ok := lp.(colflow.VectorizeAlwaysException); ok {
+								if z.IsException() {
+									returnVectorizationSetupError = false
 								}
 							}
 						}
@@ -206,7 +185,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 					}
 					// Vectorization is not supported for this flow, so we override the
 					// setting.
-					setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+					setupReq.EvalContext.SessionData.VectorizeMode = sessiondatapb.VectorizeOff
 					break
 				}
 			}
@@ -339,36 +318,17 @@ func (dsp *DistSQLPlanner) Run(
 		return func() {}
 	}
 
-	if planCtx.saveDiagram != nil {
-		// Local flows might not have the UUID field set. We need it to be set to
-		// distinguish statistics for processors in subqueries vs the main query vs
-		// postqueries.
-		if len(flows) == 1 {
-			for _, f := range flows {
-				if f.FlowID == (execinfrapb.FlowID{}) {
-					f.FlowID.UUID = uuid.MakeV4()
-				}
-			}
-		}
-		log.VEvent(ctx, 1, "creating plan diagram")
-		var stmtStr string
-		if planCtx.planner != nil && planCtx.planner.stmt != nil {
-			stmtStr = planCtx.planner.stmt.String()
-		}
-		diagram, err := execinfrapb.GeneratePlanDiagram(
-			stmtStr, flows, planCtx.saveDiagramShowInputTypes,
-		)
-		if err != nil {
+	if planCtx.saveFlows != nil {
+		if err := planCtx.saveFlows(flows); err != nil {
 			recv.SetError(err)
 			return func() {}
 		}
-		planCtx.saveDiagram(diagram)
 	}
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram for logging")
 		var stmtStr string
-		if planCtx.planner != nil && planCtx.planner.stmt != nil {
+		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
 			stmtStr = planCtx.planner.stmt.String()
 		}
 		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, false /* showInputTypes */)
@@ -384,7 +344,7 @@ func (dsp *DistSQLPlanner) Run(
 	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart()
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
 
-	recv.outputTypes = plan.ResultTypes
+	recv.outputTypes = plan.GetResultTypes()
 
 	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
 
@@ -682,11 +642,11 @@ func (r *DistSQLReceiver) Push(
 			r.rangeCache.Insert(r.ctx, meta.Ranges...)
 		}
 		if len(meta.TraceData) > 0 {
-			span := opentracing.SpanFromContext(r.ctx)
+			span := tracing.SpanFromContext(r.ctx)
 			if span == nil {
 				r.resultWriter.SetError(
 					errors.New("trying to ingest remote spans but there is no recording span set up"))
-			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
+			} else if err := span.ImportRemoteSpans(meta.TraceData); err != nil {
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
 		}
@@ -816,7 +776,6 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	evalCtxFactory func() *extendedEvalContext,
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
-	maybeDistribute bool,
 ) bool {
 	for planIdx, subqueryPlan := range subqueryPlans {
 		if err := dsp.planAndRunSubquery(
@@ -827,7 +786,6 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			evalCtxFactory(),
 			subqueryPlans,
 			recv,
-			maybeDistribute,
 		); err != nil {
 			recv.SetError(err)
 			// Usually we leave the closure of subqueries to occur when the
@@ -853,7 +811,6 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	evalCtx *extendedEvalContext,
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
-	maybeDistribute bool,
 ) error {
 	subqueryMonitor := mon.NewMonitor(
 		"subquery",
@@ -870,18 +827,13 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryMemAccount := subqueryMonitor.MakeBoundAccount()
 	defer subqueryMemAccount.Close(ctx)
 
-	var distributeSubquery bool
-	if maybeDistribute {
-		distributeSubquery = getPlanDistribution(
-			ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
-		).WillDistribute()
-	}
+	distributeSubquery := getPlanDistribution(
+		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
+	).WillDistribute()
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
 	subqueryPlanCtx.stmtType = tree.Rows
-	if planner.collectBundle {
-		subqueryPlanCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
-			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
-		}
+	if planner.instrumentation.ShouldCollectBundle() {
+		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
 	// Don't close the top-level plan from subqueries - someone else will handle
 	// that.
@@ -902,7 +854,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		subqueryRecv.noColsRequired = true
 		typ = colinfo.ColTypeInfoFromColTypes([]*types.T{})
 	} else {
-		typ = colinfo.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
+		typ = colinfo.ColTypeInfoFromColTypes(subqueryPhysPlan.GetResultTypes())
 	}
 	rows = rowcontainer.NewRowContainer(subqueryMemAccount, typ)
 	defer rows.Close(ctx)
@@ -1016,7 +968,6 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	evalCtxFactory func() *extendedEvalContext,
 	plan *planComponents,
 	recv *DistSQLReceiver,
-	maybeDistribute bool,
 ) bool {
 	if len(plan.cascades) == 0 && len(plan.checkPlans) == 0 {
 		return false
@@ -1032,10 +983,14 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		// TODO(radu): this requires keeping all previous plans "alive" until the
 		// very end. We may want to make copies of the buffer nodes and clean up
 		// everything else.
-		buf := plan.cascades[i].Buffer.(*bufferNode)
-		if buf.bufferedRows.Len() == 0 {
-			// No rows were actually modified.
-			continue
+		buf := plan.cascades[i].Buffer
+		var numBufferedRows int
+		if buf != nil {
+			numBufferedRows = buf.(*bufferNode).bufferedRows.Len()
+			if numBufferedRows == 0 {
+				// No rows were actually modified.
+				continue
+			}
 		}
 
 		log.VEventf(ctx, 1, "executing cascade for constraint %s", plan.cascades[i].FKName)
@@ -1062,7 +1017,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		}
 		cascadePlan, err := plan.cascades[i].PlanFn(
 			ctx, &planner.semaCtx, &evalCtx.EvalContext, execFactory,
-			buf, buf.bufferedRows.Len(), allowAutoCommit,
+			buf, numBufferedRows, allowAutoCommit,
 		)
 		if err != nil {
 			recv.SetError(err)
@@ -1101,7 +1056,6 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			planner,
 			evalCtx,
 			recv,
-			maybeDistribute,
 		); err != nil {
 			recv.SetError(err)
 			return false
@@ -1131,7 +1085,6 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			planner,
 			evalCtxFactory(),
 			recv,
-			maybeDistribute,
 		); err != nil {
 			recv.SetError(err)
 			return false
@@ -1148,7 +1101,6 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	planner *planner,
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
-	maybeDistribute bool,
 ) error {
 	postqueryMonitor := mon.NewMonitor(
 		"postquery",
@@ -1165,19 +1117,14 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()
 	defer postqueryMemAccount.Close(ctx)
 
-	var distributePostquery bool
-	if maybeDistribute {
-		distributePostquery = getPlanDistribution(
-			ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
-		).WillDistribute()
-	}
+	distributePostquery := getPlanDistribution(
+		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
+	).WillDistribute()
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributePostquery)
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
-	if planner.collectBundle {
-		postqueryPlanCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
-			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
-		}
+	if planner.instrumentation.ShouldCollectBundle() {
+		postqueryPlanCtx.saveFlows = postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
 
 	postqueryPhysPlan, err := dsp.createPhysPlan(postqueryPlanCtx, postqueryPlan)

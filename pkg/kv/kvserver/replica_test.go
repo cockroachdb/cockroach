@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -41,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -55,10 +58,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -69,14 +72,12 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
-	"go.etcd.io/etcd/raft/tracker"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/etcd/raft/v3/tracker"
 	"golang.org/x/net/trace"
-	"golang.org/x/time/rate"
 )
 
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
@@ -229,8 +230,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
 	}
 	if tc.engine == nil {
-		tc.engine = storage.NewInMem(context.Background(), storage.DefaultStorageEngine,
-			roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+		tc.engine = storage.NewInMem(context.Background(), roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 		stopper.AddCloser(tc.engine)
 	}
 	if tc.transport == nil {
@@ -325,7 +325,7 @@ func (tc *testContext) Sender() kv.Sender {
 		if ba.RangeID == 0 {
 			ba.RangeID = 1
 		}
-		if ba.Timestamp == (hlc.Timestamp{}) {
+		if ba.Timestamp.IsEmpty() {
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				tc.Fatal(err)
 			}
@@ -1429,36 +1429,108 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	}
 }
 
-// TestReplicaDrainLease makes sure that no new leases are granted when
-// the Store is draining.
+// Test that draining nodes only take the lease if they're the leader.
 func TestReplicaDrainLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
-
-	// Acquire initial lease.
 	ctx := context.Background()
-	status, pErr := tc.repl.redirectOnOrAcquireLease(ctx)
-	if pErr != nil {
-		t.Fatal(pErr)
+	clusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				NodeLiveness: NodeLivenessTestingKnobs{
+					// This test waits for an epoch-based lease to expire, so we're setting the
+					// liveness duration as low as possible while still keeping the test stable.
+					LivenessDuration: 2000 * time.Millisecond,
+					RenewalDuration:  1000 * time.Millisecond,
+				},
+				Store: &StoreTestingKnobs{
+					// We eliminate clock offsets in order to eliminate the stasis period of
+					// leases. Otherwise we'd need to make leases longer.
+					MaxOffset: time.Nanosecond,
+				},
+			},
+		},
 	}
+	tc := serverutils.StartNewTestCluster(t, 2, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+	rngKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, rngKey, tc.Target(1))
 
-	tc.store.SetDraining(true, nil /* reporter */)
-	tc.repl.mu.Lock()
-	pErr = <-tc.repl.requestLeaseLocked(ctx, status).C()
-	tc.repl.mu.Unlock()
-	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
-	if !ok {
-		t.Fatalf("expected NotLeaseHolderError, not %v", pErr)
-	}
-	tc.store.SetDraining(false, nil /* reporter */)
-	// Newly undrained, leases work again.
-	if _, pErr := tc.repl.redirectOnOrAcquireLease(ctx); pErr != nil {
-		t.Fatal(pErr)
-	}
+	s1 := tc.Server(0)
+	s2 := tc.Server(1)
+	store1, err := s1.GetStores().(*Stores).GetStore(s1.GetFirstStoreID())
+	require.NoError(t, err)
+	store2, err := s2.GetStores().(*Stores).GetStore(s2.GetFirstStoreID())
+	require.NoError(t, err)
+
+	rd := tc.LookupRangeOrFatal(t, rngKey)
+	r1, err := store1.GetReplica(rd.RangeID)
+	require.NoError(t, err)
+	status := r1.CurrentLeaseStatus(ctx)
+	require.True(t, status.Lease.OwnedBy(store1.StoreID()), "someone else got the lease: %s", status)
+	// We expect the lease to be valid, but don't check that because, under race, it might have
+	// expired already.
+
+	// Stop n1's heartbeats and wait for the lease to expire.
+
+	log.Infof(ctx, "test: suspending heartbeats for n1")
+	cleanup := s1.NodeLiveness().(*liveness.NodeLiveness).PauseAllHeartbeatsForTest()
+	defer cleanup()
+
+	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		status := r1.CurrentLeaseStatus(ctx)
+		require.True(t, status.Lease.OwnedBy(store1.StoreID()), "someone else got the lease: %s", status)
+		if status.State == kvserverpb.LeaseState_VALID {
+			return errors.New("lease still valid")
+		}
+		// We need to wait for the stasis state to pass too; during stasis other
+		// replicas can't take the lease.
+		if status.State == kvserverpb.LeaseState_STASIS {
+			return errors.New("lease still in stasis")
+		}
+		return nil
+	})
+
+	require.Equal(t, r1.RaftStatus().Lead, uint64(r1.ReplicaID()),
+		"expected leadership to still be on the first replica")
+
+	// Mark the stores as draining. We'll then start checking how acquiring leases
+	// behaves while draining.
+	store1.draining.Store(true)
+	store2.draining.Store(true)
+
+	r2, err := store2.GetReplica(rd.RangeID)
+	require.NoError(t, err)
+	// Check that a draining replica that's not the leader does NOT take the
+	// lease.
+	_, pErr := r2.redirectOnOrAcquireLease(ctx)
+	require.NotNil(t, pErr)
+	require.IsType(t, &roachpb.NotLeaseHolderError{}, pErr.GetDetail())
+
+	// Now transfer the leadership from r1 to r2 and check that r1 can now acquire
+	// the lease.
+
+	// Initiate the leadership transfer.
+	r1.mu.Lock()
+	r1.mu.internalRaftGroup.TransferLeader(uint64(r2.ReplicaID()))
+	r1.mu.Unlock()
+	// Run the range through the Raft scheduler, otherwise the leadership messages
+	// doesn't get sent because the range is quiesced.
+	store1.EnqueueRaftUpdateCheck(r1.RangeID)
+
+	// Wait for the leadership transfer to happen.
+	testutils.SucceedsSoon(t, func() error {
+		if r2.RaftStatus().SoftState.RaftState != raft.StateLeader {
+			return errors.Newf("r1 not yet leader")
+		}
+		return nil
+	})
+
+	// Check that r2 can now acquire the lease.
+	_, pErr = r2.redirectOnOrAcquireLease(ctx)
+	require.NoError(t, pErr.GoError())
 }
 
 // TestReplicaGossipFirstRange verifies that the first range gossips its
@@ -2057,7 +2129,7 @@ func TestOptimizePuts(t *testing.T) {
 			t.Errorf("%d: expected %+v; got %+v", i, c.expBlind, blind)
 		}
 		if c.exKey != nil {
-			if err := tc.engine.Clear(storage.MakeMVCCMetadataKey(c.exKey)); err != nil {
+			if err := tc.engine.ClearUnversioned(c.exKey); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2219,16 +2291,16 @@ func TestLeaseConcurrent(t *testing.T) {
 			pErrs[i] = <-pErrCh
 		}
 
-		newMsg := "moob"
+		newErr := errors.New("moob")
 		for i, pErr := range pErrs {
 			if withError != (pErr != nil) {
 				t.Errorf("%d: wanted error: %t, got error %v", i, withError, pErr)
 			}
-			if testutils.IsPError(pErr, newMsg) {
+			if testutils.IsPError(pErr, newErr.Error()) {
 				t.Errorf("%d: errors shared memory: %v", i, pErr)
 			} else if testutils.IsPError(pErr, origMsg) {
 				// Mess with anyone holding the same reference.
-				pErr.Message = newMsg
+				pErr.EncodedError = errors.EncodeError(context.Background(), newErr)
 			} else if pErr != nil {
 				t.Errorf("%d: unexpected error: %s", i, pErr)
 			}
@@ -2850,7 +2922,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
 				t.Fatal(pErr)
 			}
-			iter := tc.engine.NewIterator(storage.IterOptions{Prefix: true})
+			iter := tc.engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
 			defer iter.Close()
 			mvccKey := storage.MakeMVCCMetadataKey(key)
 			iter.SeekGE(mvccKey)
@@ -2860,7 +2932,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 			} else if err := iter.ValueProto(&keyMeta); err != nil {
 				t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
 			}
-			if tsNext := tsNew.Next(); hlc.Timestamp(keyMeta.Timestamp) != tsNext {
+			if tsNext := tsNew.Next(); keyMeta.Timestamp.ToTimestamp() != tsNext {
 				t.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
 					key, tsNext, keyMeta.Timestamp)
 			}
@@ -3215,8 +3287,8 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var exitStatus int
-	log.SetExitFunc(true /* hideStack */, func(i int) {
+	var exitStatus exit.Code
+	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
 		exitStatus = i
 	})
 	defer log.ResetExitFunc()
@@ -3251,7 +3323,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	if !testutils.IsPError(pErr, "replica corruption") {
 		t.Fatal(pErr)
 	}
-	if exitStatus != 255 {
+	if exitStatus != exit.FatalError() {
 		t.Fatalf("did not fatal (exit status %d)", exitStatus)
 	}
 }
@@ -3826,7 +3898,7 @@ func TestSerializableDeadline(t *testing.T) {
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok ||
 		!testutils.IsError(err, expectedErrMsg) {
 		t.Fatalf("expected %q, got: %s (%T)", expectedErrMsg,
-			err, pErr.GetDetail())
+			err, pErr.GoError())
 	}
 }
 
@@ -4003,8 +4075,8 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var exitStatus int
-	log.SetExitFunc(true /* hideStack */, func(i int) {
+	var exitStatus exit.Code
+	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
 		exitStatus = i
 	})
 	defer log.ResetExitFunc()
@@ -4047,7 +4119,7 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 		t.Errorf("unexpected error: %s", pErr)
 	}
 
-	if exitStatus != 255 {
+	if exitStatus != exit.FatalError() {
 		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }
@@ -6281,7 +6353,7 @@ func TestMerge(t *testing.T) {
 	if err := resp.Value.GetProto(&actual); err != nil {
 		t.Fatal(err)
 	}
-	if !proto.Equal(&actual, &expected) {
+	if !actual.Equal(&expected) {
 		t.Errorf("Get did not return expected value: %v != %v", actual, expected)
 	}
 }
@@ -6384,8 +6456,8 @@ func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var exitStatus int
-	log.SetExitFunc(true /* hideStack */, func(i int) {
+	var exitStatus exit.Code
+	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
 		exitStatus = i
 	})
 	defer log.ResetExitFunc()
@@ -6423,7 +6495,7 @@ func TestReplicaCorruption(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should have triggered fatal error.
-	if exitStatus != 255 {
+	if exitStatus != exit.FatalError() {
 		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }
@@ -6433,23 +6505,31 @@ func TestReplicaCorruption(t *testing.T) {
 func TestChangeReplicasDuplicateError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
 
-	// We now allow adding a replica to the same node, to support rebalances
-	// within the same node when replication is 1x, so add another replica to the
-	// range descriptor to avoid this case.
-	if _, err := tc.addBogusReplicaToRangeDesc(context.Background()); err != nil {
-		t.Fatalf("Unexpected error %v", err)
+	tests := []roachpb.ReplicaChangeType{
+		roachpb.ADD_VOTER,
+		roachpb.ADD_NON_VOTER,
 	}
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
-		NodeID:  tc.store.Ident.NodeID,
-		StoreID: 9999,
-	})
-	if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
-		t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
+	for _, typ := range tests {
+		t.Run(typ.String(), func(t *testing.T) {
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
+			tc.Start(t, stopper)
+			// We now allow adding a replica to the same node, to support rebalances
+			// within the same node when replication is 1x, so add another replica to the
+			// range descriptor to avoid this case.
+			if _, err := tc.addBogusReplicaToRangeDesc(context.Background()); err != nil {
+				t.Fatalf("Unexpected error %v", err)
+			}
+			chgs := roachpb.MakeReplicationChanges(typ, roachpb.ReplicationTarget{
+				NodeID:  tc.store.Ident.NodeID,
+				StoreID: 9999,
+			})
+			if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
+				t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
+			}
+		})
 	}
 }
 
@@ -6919,8 +6999,8 @@ func TestReplicaDestroy(t *testing.T) {
 		}
 	}()
 
-	iter := rditer.NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(),
-		false /* replicatedOnly */, false /* seekEnd */)
+	iter := rditer.NewReplicaEngineDataIterator(tc.repl.Desc(), tc.repl.store.Engine(),
+		false /* replicatedOnly */)
 	defer iter.Close()
 	if ok, err := iter.Valid(); err != nil {
 		t.Fatal(err)
@@ -7836,7 +7916,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 
 	tc.repl.mu.Lock()
-	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	origIndexes := make([]int, 0, num)
@@ -7856,7 +7936,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	tc.repl.mu.Lock()
 	atomic.StoreInt32(&dropAll, 0)
 	tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonTicks)
-	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	tc.repl.mu.Unlock()
@@ -7960,7 +8040,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 			t.Error(pErr)
 		}
 		r.mu.Lock()
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		r.mu.Unlock()
@@ -7976,7 +8056,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 		var reproposed []*ProposalData
 		r.mu.Lock() // avoid data race - proposals belong to the Replica
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		dropProposals.Lock()
@@ -8101,7 +8181,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	repl.mu.Lock()
-	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeader)
@@ -8563,10 +8643,10 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		return d
 	}
-	live := func(ids ...roachpb.NodeID) IsLiveMap {
-		m := IsLiveMap{}
+	live := func(ids ...roachpb.NodeID) liveness.IsLiveMap {
+		m := liveness.IsLiveMap{}
 		for _, id := range ids {
-			m[id] = IsLiveMapEntry{IsLive: true}
+			m[id] = liveness.IsLiveMapEntry{IsLive: true}
 		}
 		return m
 	}
@@ -8582,7 +8662,7 @@ func TestReplicaMetrics(t *testing.T) {
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
 		raftStatus  *raft.Status
-		liveness    IsLiveMap
+		liveness    liveness.IsLiveMap
 		raftLogSize int64
 		expected    ReplicaMetrics
 	}{
@@ -9418,7 +9498,7 @@ type testQuiescer struct {
 	isDestroyed     bool
 
 	// Not used to implement quiescer, but used by tests.
-	livenessMap IsLiveMap
+	livenessMap liveness.IsLiveMap
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9504,7 +9584,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				lastIndex:      logIndex,
 				raftReady:      false,
 				ownsValidLease: true,
-				livenessMap: IsLiveMap{
+				livenessMap: liveness.IsLiveMap{
 					1: {IsLive: true},
 					2: {IsLive: true},
 					3: {IsLive: true},
@@ -9610,8 +9690,8 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	for _, i := range []uint64{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
 			nodeID := roachpb.NodeID(i)
-			q.livenessMap[nodeID] = IsLiveMapEntry{
-				Liveness: kvserverpb.Liveness{NodeID: nodeID},
+			q.livenessMap[nodeID] = liveness.IsLiveMapEntry{
+				Liveness: livenesspb.Liveness{NodeID: nodeID},
 				IsLive:   false,
 			}
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
@@ -9660,7 +9740,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 						},
 					},
 				},
-				livenessMap: IsLiveMap{
+				livenessMap: liveness.IsLiveMap{
 					1: {IsLive: true},
 					2: {IsLive: true},
 					3: {IsLive: true},
@@ -9706,78 +9786,78 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 	})
 	// Lagging replica with same liveness information.
 	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{l}
+		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{l}
 		return q, req
 	})
 	// Lagging replica with older liveness information.
 	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
 		lOld := l
 		lOld.Epoch--
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{lOld}
+		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lOld}
 		return q, req
 	})
 	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
 		lOld := l
 		lOld.Expiration.WallTime--
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{lOld}
+		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lOld}
 		return q, req
 	})
 	// Lagging replica with newer liveness information.
 	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
 		lNew := l
 		lNew.Epoch++
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{lNew}
+		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lNew}
 		return q, req
 	})
 	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
-		l := kvserverpb.Liveness{
+		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
 		lNew := l
 		lNew.Expiration.WallTime++
-		req.LaggingFollowersOnQuiesce = []kvserverpb.Liveness{lNew}
+		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lNew}
 		return q, req
 	})
 }
@@ -9930,14 +10010,16 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 	send := func(ba roachpb.BatchRequest) (hlc.Timestamp, error) {
 		br, pErr := tc.Sender().Send(context.Background(), ba)
 		if pErr != nil {
-			return hlc.Timestamp{}, pErr.GetDetail()
+			return hlc.Timestamp{}, pErr.GoError()
 		}
 
 		// Check that we didn't mess up the stats.
 		// Regression test for #31870.
 		snap := tc.engine.NewSnapshot()
 		defer snap.Close()
-		res, err := tc.repl.sha512(context.Background(), *tc.repl.Desc(), tc.engine, nil /* diff */, roachpb.ChecksumMode_CHECK_FULL, limit.NewLimiter(rate.Inf))
+		res, err := tc.repl.sha512(context.Background(), *tc.repl.Desc(), tc.engine,
+			nil /* diff */, roachpb.ChecksumMode_CHECK_FULL,
+			quotapool.NewRateLimiter("ConsistencyQueue", quotapool.Limit(math.MaxFloat64), math.MaxInt64))
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
@@ -12414,7 +12496,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
@@ -12486,11 +12568,11 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 
 	// Hold the RaftLock to encourage the reproposals to occur in the same batch.
 	tc.repl.RaftLock()
-	sp := tracer.StartRootSpan("replica send", logtags.FromContext(ctx), tracing.RecordableSpan)
-	tracedCtx := opentracing.ContextWithSpan(ctx, sp)
+	sp := tracer.StartSpan("replica send", tracing.WithCtxLogTags(ctx), tracing.WithForceRealSpan())
+	tracedCtx := tracing.ContextWithSpan(ctx, sp)
 	// Go out of our way to enable recording so that expensive logging is enabled
 	// for this context.
-	tracing.StartRecording(sp, tracing.SingleNodeRecording)
+	sp.StartRecording(tracing.SingleNodeRecording)
 	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -12509,11 +12591,11 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
@@ -12872,25 +12954,25 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 	tcs := []testCase{
 		// Simple addition of learner.
 		mk(
-			"SIMPLE(l2) ADD_REPLICA[(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
+			"SIMPLE(l2) ADD_VOTER[(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 		),
 		// Simple addition of voter (necessarily via learner).
 		mk(
-			"SIMPLE(v2) ADD_REPLICA[(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
+			"SIMPLE(v2) ADD_VOTER[(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 		),
 		// Simple removal of voter.
 		mk(
-			"SIMPLE(r2) REMOVE_REPLICA[(n200,s200):2]: after=[(n100,s100):1] next=3",
+			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 		),
 		// Simple removal of learner.
 		mk(
-			"SIMPLE(r2) REMOVE_REPLICA[(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
+			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypeRemove},
 		),
@@ -12900,7 +12982,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Addition of learner and removal of voter at same time.
 		mk(
-			"ENTER_JOINT(r2 l3) ADD_REPLICA[(n200,s200):3LEARNER], REMOVE_REPLICA[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
+			"ENTER_JOINT(r2 l3) ADD_VOTER[(n200,s200):3LEARNER], REMOVE_VOTER[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
@@ -12908,7 +12990,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Promotion of two voters.
 		mk(
-			"ENTER_JOINT(v2 v3) ADD_REPLICA[(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
+			"ENTER_JOINT(v2 v3) ADD_VOTER[(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
@@ -12916,7 +12998,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Removal of two voters.
 		mk(
-			"ENTER_JOINT(r2 r3) REMOVE_REPLICA[(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
+			"ENTER_JOINT(r2 r3) REMOVE_VOTER[(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
@@ -12924,10 +13006,10 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Demoting two voters.
 		mk(
-			"ENTER_JOINT(r2 l2 r3 l3) REMOVE_REPLICA[(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
+			"ENTER_JOINT(r2 l2 r3 l3) REMOVE_VOTER[(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeDemote},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeDemote},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},
 		),
 		// Leave joint config entered via demotion.
 		mk(
@@ -12969,8 +13051,8 @@ func TestRangeUnavailableMessage(t *testing.T) {
 	dur := time.Minute
 	var ba roachpb.BatchRequest
 	ba.Add(&roachpb.RequestLeaseRequest{})
-	lm := IsLiveMap{
-		1: IsLiveMapEntry{IsLive: true},
+	lm := liveness.IsLiveMap{
+		1: liveness.IsLiveMapEntry{IsLive: true},
 	}
 	rs := raft.Status{}
 	var s redact.StringBuilder

@@ -13,6 +13,7 @@ package explain_test
 import (
 	"bytes"
 	"fmt"
+	"testing"
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -21,11 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/datadriven"
 	yaml "gopkg.in/yaml.v2"
 )
 
-func ExampleOutputBuilder() {
-	example := func(name string, flags explain.Flags) {
+func TestOutputBuilder(t *testing.T) {
+	example := func(flags explain.Flags) *explain.OutputBuilder {
 		ob := explain.NewOutputBuilder(flags)
 		ob.AddField("distributed", "true")
 		ob.EnterMetaNode("meta")
@@ -60,196 +62,53 @@ func ExampleOutputBuilder() {
 			ob.LeaveNode()
 		}
 		ob.LeaveNode()
-
-		rows := ob.BuildExplainRows()
-
-		var buf bytes.Buffer
-		tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-		for _, r := range rows {
-			for j := range r {
-				if j > 0 {
-					fmt.Fprint(tw, "\t")
-				}
-				fmt.Fprint(tw, tree.AsStringWithFlags(r[j], tree.FmtExport))
-			}
-			fmt.Fprint(tw, "\n")
-		}
-		_ = tw.Flush()
-
-		fmt.Printf("-- %s (datums) --\n", name)
-		fmt.Print(util.RemoveTrailingSpaces(buf.String()))
-
-		fmt.Printf("\n-- %s (string) --\n", name)
-		fmt.Print(ob.BuildString())
-
-		treeYaml, err := yaml.Marshal(ob.BuildProtoTree())
-		if err != nil {
-			panic(err)
-		}
-		fmt.Printf("\n-- %s (tree) --\n%s\n", name, treeYaml)
+		return ob
 	}
 
-	example("basic", explain.Flags{})
-	example("verbose", explain.Flags{Verbose: true})
-	example("verbose+types", explain.Flags{Verbose: true, ShowTypes: true})
+	datadriven.RunTest(t, "testdata/output", func(t *testing.T, d *datadriven.TestData) string {
+		var flags explain.Flags
+		for _, arg := range d.CmdArgs {
+			switch arg.Key {
+			case "verbose":
+				flags.Verbose = true
+			case "types":
+				flags.Verbose = true
+				flags.ShowTypes = true
+			default:
+				panic(fmt.Sprintf("unknown argument %s", arg.Key))
+			}
+		}
+		ob := example(flags)
+		switch d.Cmd {
+		case "string":
+			return ob.BuildString()
 
-	// Output:
-	// -- basic (datums) --
-	//                      distributed  true
-	// meta
-	//  └── render
-	//       │              render 0     foo
-	//       │              render 1     bar
-	//       └── join
-	//            │         type         outer
-	//            ├── scan
-	//            │         table        foo
-	//            └── scan
-	//                      table        bar
-	//
-	// -- basic (string) --
-	//                      distributed  true
-	// meta
-	//  └── render
-	//       │              render 0     foo
-	//       │              render 1     bar
-	//       └── join
-	//            │         type         outer
-	//            ├── scan
-	//            │         table        foo
-	//            └── scan
-	//                      table        bar
-	//
-	// -- basic (tree) --
-	// name: meta
-	// attrs: []
-	// children:
-	// - name: render
-	//   attrs:
-	//   - key: render 0
-	//     value: foo
-	//   - key: render 1
-	//     value: bar
-	//   children:
-	//   - name: join
-	//     attrs:
-	//     - key: type
-	//       value: outer
-	//     children:
-	//     - name: scan
-	//       attrs:
-	//       - key: table
-	//         value: foo
-	//       children: []
-	//     - name: scan
-	//       attrs:
-	//       - key: table
-	//         value: bar
-	//       children: []
-	//
-	// -- verbose (datums) --
-	//                      0          distributed  true
-	// meta                 0  meta
-	//  └── render          1  render                      (a, b)  +a,-b
-	//       │              1          render 0     foo
-	//       │              1          render 1     bar
-	//       └── join       2  join                        (x)
-	//            │         2          type         outer
-	//            ├── scan  3  scan                        (x)
-	//            │         3          table        foo
-	//            └── scan  3  scan                        ()
-	//                      3          table        bar
-	//
-	// -- verbose (string) --
-	//                      distributed  true
-	// meta
-	//  └── render                              (a, b)  +a,-b
-	//       │              render 0     foo
-	//       │              render 1     bar
-	//       └── join                           (x)
-	//            │         type         outer
-	//            ├── scan                      (x)
-	//            │         table        foo
-	//            └── scan                      ()
-	//                      table        bar
-	//
-	// -- verbose (tree) --
-	// name: meta
-	// attrs: []
-	// children:
-	// - name: render
-	//   attrs:
-	//   - key: render 0
-	//     value: foo
-	//   - key: render 1
-	//     value: bar
-	//   children:
-	//   - name: join
-	//     attrs:
-	//     - key: type
-	//       value: outer
-	//     children:
-	//     - name: scan
-	//       attrs:
-	//       - key: table
-	//         value: foo
-	//       children: []
-	//     - name: scan
-	//       attrs:
-	//       - key: table
-	//         value: bar
-	//       children: []
-	//
-	// -- verbose+types (datums) --
-	//                      0          distributed  true
-	// meta                 0  meta
-	//  └── render          1  render                      (a int, b string)  +a,-b
-	//       │              1          render 0     foo
-	//       │              1          render 1     bar
-	//       └── join       2  join                        (x int)
-	//            │         2          type         outer
-	//            ├── scan  3  scan                        (x int)
-	//            │         3          table        foo
-	//            └── scan  3  scan                        ()
-	//                      3          table        bar
-	//
-	// -- verbose+types (string) --
-	//                      distributed  true
-	// meta
-	//  └── render                              (a int, b string)  +a,-b
-	//       │              render 0     foo
-	//       │              render 1     bar
-	//       └── join                           (x int)
-	//            │         type         outer
-	//            ├── scan                      (x int)
-	//            │         table        foo
-	//            └── scan                      ()
-	//                      table        bar
-	//
-	// -- verbose+types (tree) --
-	// name: meta
-	// attrs: []
-	// children:
-	// - name: render
-	//   attrs:
-	//   - key: render 0
-	//     value: foo
-	//   - key: render 1
-	//     value: bar
-	//   children:
-	//   - name: join
-	//     attrs:
-	//     - key: type
-	//       value: outer
-	//     children:
-	//     - name: scan
-	//       attrs:
-	//       - key: table
-	//         value: foo
-	//       children: []
-	//     - name: scan
-	//       attrs:
-	//       - key: table
-	//         value: bar
-	//       children: []
+		case "tree":
+			treeYaml, err := yaml.Marshal(ob.BuildProtoTree())
+			if err != nil {
+				panic(err)
+			}
+			return string(treeYaml)
+
+		case "datums":
+			rows := ob.BuildExplainRows()
+
+			var buf bytes.Buffer
+			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+			for _, r := range rows {
+				for j := range r {
+					if j > 0 {
+						fmt.Fprint(tw, "\t")
+					}
+					fmt.Fprint(tw, tree.AsStringWithFlags(r[j], tree.FmtExport))
+				}
+				fmt.Fprint(tw, "\n")
+			}
+			_ = tw.Flush()
+
+			return util.RemoveTrailingSpaces(buf.String())
+		default:
+			panic(fmt.Sprintf("unknown command %s", d.Cmd))
+		}
+	})
 }

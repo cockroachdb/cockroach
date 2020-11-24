@@ -32,6 +32,8 @@ func init() {
 }
 
 // EvalAddSSTable evaluates an AddSSTable command.
+// NB: These sstables do not contain intents/locks, so the code below only
+// needs to deal with MVCCKeys.
 func EvalAddSSTable(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
@@ -42,7 +44,7 @@ func EvalAddSSTable(
 
 	// TODO(tschottdorf): restore the below in some form (gets in the way of testing).
 	// _, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
-	// defer tracing.FinishSpan(span)
+	// defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
 	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
@@ -89,7 +91,7 @@ func EvalAddSSTable(
 	if args.MVCCStats == nil || verifyFastPath {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
-		computed, err := storage.ComputeStatsGo(
+		computed, err := storage.ComputeStatsForRange(
 			dataIter, mvccStartKey.Key, mvccEndKey.Key, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
@@ -192,8 +194,15 @@ func EvalAddSSTable(
 			// NB: This is *not* a general transformation of any arbitrary SST to a
 			// WriteBatch: it assumes every key in the SST is a simple Set. This is
 			// already assumed elsewhere in this RPC though, so that's OK here.
-			if err := readWriter.Put(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
-				return result.Result{}, err
+			k := dataIter.UnsafeKey()
+			if k.Timestamp.IsEmpty() {
+				if err := readWriter.PutUnversioned(k.Key, dataIter.UnsafeValue()); err != nil {
+					return result.Result{}, err
+				}
+			} else {
+				if err := readWriter.PutMVCC(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
+					return result.Result{}, err
+				}
 			}
 			dataIter.Next()
 		}
@@ -225,7 +234,7 @@ func checkForKeyCollisions(
 	emptyMVCCStats := enginepb.MVCCStats{}
 
 	// Create iterator over the existing data.
-	existingDataIter := dbEngine.NewIterator(storage.IterOptions{UpperBound: mvccEndKey.Key})
+	existingDataIter := dbEngine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: mvccEndKey.Key})
 	defer existingDataIter.Close()
 	existingDataIter.SeekGE(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {

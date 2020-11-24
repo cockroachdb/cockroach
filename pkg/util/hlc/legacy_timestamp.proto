@@ -30,4 +30,17 @@ message LegacyTimestamp {
   // skew)/(minimal ns between events) and nearly impossible to
   // overflow.
   optional int32 logical = 2 [(gogoproto.nullable) = false];
+  // A collection of bit flags that provide details about the timestamp
+  // and its meaning. The data type is a uint32, but the number of flags
+  // is limited to 8 so that the flags can be encoded into a single byte.
+  //
+  // Flags do not affect the sort order of Timestamps. However, they are
+  // considered when performing structural equality checks (e.g. using the
+  // == operator). Consider use of the EqOrdering method when testing for
+  // equality.
+  //
+  // The field is nullable so that it is not serialized when no flags are
+  // set. This ensures that the timestamp encoding does not change across
+  // nodes that are and are not aware of this field.
+  optional uint32 flags = 3;
 }

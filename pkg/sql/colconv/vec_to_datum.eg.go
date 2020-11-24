@@ -11,11 +11,13 @@ package colconv
 
 import (
 	"math/big"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,18 +48,61 @@ type VecToDatumConverter struct {
 	da               rowenc.DatumAlloc
 }
 
+var _ execinfra.Releasable = &VecToDatumConverter{}
+
+var vecToDatumConverterPool = sync.Pool{
+	New: func() interface{} {
+		return &VecToDatumConverter{}
+	},
+}
+
+func getNewVecToDatumConverter(batchWidth int) *VecToDatumConverter {
+	c := vecToDatumConverterPool.Get().(*VecToDatumConverter)
+	if cap(c.convertedVecs) < batchWidth {
+		c.convertedVecs = make([]tree.Datums, batchWidth)
+	} else {
+		c.convertedVecs = c.convertedVecs[:batchWidth]
+	}
+	return c
+}
+
 // NewVecToDatumConverter creates a new VecToDatumConverter.
 // - batchWidth determines the width of the batches that it will be converting.
 // - vecIdxsToConvert determines which vectors need to be converted.
 func NewVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *VecToDatumConverter {
-	return &VecToDatumConverter{
-		convertedVecs:    make([]tree.Datums, batchWidth),
-		vecIdxsToConvert: vecIdxsToConvert,
+	c := getNewVecToDatumConverter(batchWidth)
+	c.vecIdxsToConvert = vecIdxsToConvert
+	return c
+}
+
+// NewAllVecToDatumConverter is like NewVecToDatumConverter except all of the
+// vectors in the batch will be converted.
+func NewAllVecToDatumConverter(batchWidth int) *VecToDatumConverter {
+	c := getNewVecToDatumConverter(batchWidth)
+	if cap(c.vecIdxsToConvert) < batchWidth {
+		c.vecIdxsToConvert = make([]int, batchWidth)
+	} else {
+		c.vecIdxsToConvert = c.vecIdxsToConvert[:batchWidth]
 	}
+	for i := 0; i < batchWidth; i++ {
+		c.vecIdxsToConvert[i] = i
+	}
+	return c
+}
+
+// Release is part of the execinfra.Releasable interface.
+func (c *VecToDatumConverter) Release() {
+	*c = VecToDatumConverter{
+		convertedVecs:    c.convertedVecs[:0],
+		vecIdxsToConvert: c.vecIdxsToConvert[:0],
+	}
+	vecToDatumConverterPool.Put(c)
 }
 
 // ConvertBatchAndDeselect converts the selected vectors from the batch while
-// performing a deselection step.
+// performing a deselection step. It doesn't account for the memory used by the
+// newly created tree.Datums, so it is up to the caller to do the memory
+// accounting.
 // NOTE: converted columns are "dense" in regards to the selection vector - if
 // there was a selection vector on the batch, only elements that were selected
 // are converted, so in order to access the tuple at position tupleIdx, use
@@ -73,17 +118,17 @@ func (c *VecToDatumConverter) ConvertBatchAndDeselect(batch coldata.Batch) {
 		return
 	}
 	// Ensure that convertedVecs are of sufficient length.
-	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < batchLength {
-		for _, vecIdx := range c.vecIdxsToConvert {
+	for _, vecIdx := range c.vecIdxsToConvert {
+		if cap(c.convertedVecs[vecIdx]) < batchLength {
 			c.convertedVecs[vecIdx] = make([]tree.Datum, batchLength)
+		} else {
+			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:batchLength]
 		}
+	}
+	if c.da.AllocSize < batchLength {
 		// Adjust the datum alloc according to the length of the batch since
 		// this batch is the longest we've seen so far.
 		c.da.AllocSize = batchLength
-	} else {
-		for _, vecIdx := range c.vecIdxsToConvert {
-			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:batchLength]
-		}
 	}
 	sel := batch.Selection()
 	vecs := batch.ColVecs()
@@ -95,7 +140,9 @@ func (c *VecToDatumConverter) ConvertBatchAndDeselect(batch coldata.Batch) {
 }
 
 // ConvertBatch converts the selected vectors from the batch *without*
-// performing a deselection step.
+// performing a deselection step. It doesn't account for the memory used by the
+// newly created tree.Datums, so it is up to the caller to do the memory
+// accounting.
 // NOTE: converted columns are "sparse" in regards to the selection vector - if
 // there was a selection vector, only elements that were selected are
 // converted, but the results are put at position sel[tupleIdx], so use
@@ -106,7 +153,8 @@ func (c *VecToDatumConverter) ConvertBatch(batch coldata.Batch) {
 }
 
 // ConvertVecs converts the selected vectors from vecs *without* performing a
-// deselection step.
+// deselection step. It doesn't account for the memory used by the newly
+// created tree.Datums, so it is up to the caller to do the memory accounting.
 // Note that this method is equivalent to ConvertBatch with the only difference
 // being the fact that it takes in a "disassembled" batch and not coldata.Batch.
 // Consider whether you should be using ConvertBatch instead.
@@ -120,25 +168,21 @@ func (c *VecToDatumConverter) ConvertVecs(vecs []coldata.Vec, inputLen int, sel 
 	requiredLength := inputLen
 	if sel != nil {
 		// When sel is non-nil, it might be something like sel = [1023], so we
-		// need to allocate up to the largest index mentioned in sel.
-		requiredLength = 0
-		for _, idx := range sel[:inputLen] {
-			if idx+1 > requiredLength {
-				requiredLength = idx + 1
-			}
+		// need to allocate up to the largest index mentioned in sel. Here, we
+		// rely on the fact that selection vectors are increasing sequences.
+		requiredLength = sel[inputLen-1] + 1
+	}
+	for _, vecIdx := range c.vecIdxsToConvert {
+		if cap(c.convertedVecs[vecIdx]) < requiredLength {
+			c.convertedVecs[vecIdx] = make([]tree.Datum, requiredLength)
+		} else {
+			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:requiredLength]
 		}
 	}
-	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < requiredLength {
-		for _, vecIdx := range c.vecIdxsToConvert {
-			c.convertedVecs[vecIdx] = make([]tree.Datum, requiredLength)
-		}
+	if c.da.AllocSize < requiredLength {
 		// Adjust the datum alloc according to the length of the batch since
 		// this batch is the longest we've seen so far.
 		c.da.AllocSize = requiredLength
-	} else {
-		for _, vecIdx := range c.vecIdxsToConvert {
-			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:requiredLength]
-		}
 	}
 	for _, vecIdx := range c.vecIdxsToConvert {
 		ColVecToDatum(
@@ -156,7 +200,8 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 // ColVecToDatumAndDeselect converts a vector of coldata-represented values in
 // col into tree.Datum representation while performing a deselection step.
 // length specifies the number of values to be converted and sel is an optional
-// selection vector.
+// selection vector. It doesn't account for the memory used by the newly
+// created tree.Datums, so it is up to the caller to do the memory accounting.
 func ColVecToDatumAndDeselect(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
@@ -597,7 +642,9 @@ func ColVecToDatumAndDeselect(
 }
 
 // ColVecToDatum converts a vector of coldata-represented values in col into
-// tree.Datum representation *without* performing a deselection step.
+// tree.Datum representation *without* performing a deselection step. It
+// doesn't account for the memory used by the newly created tree.Datums, so it
+// is up to the caller to do the memory accounting.
 func ColVecToDatum(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {

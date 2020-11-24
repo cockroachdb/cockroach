@@ -58,6 +58,9 @@ message CSVOptions {
   // If strict_quotes is true, a quote may NOT appear in an unquoted field and a
   // non-doubled quote may NOT appear in a quoted field.
   optional bool strict_quotes = 5 [(gogoproto.nullable) = false];
+  // Indicates the number of rows to import per CSV file.
+  // Must be a non-zero positive number. 
+  optional int64 row_limit = 6 [(gogoproto.nullable) = false];
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.
@@ -85,6 +88,8 @@ message MySQLOutfileOptions {
   // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
   optional string null_encoding = 8 [(gogoproto.nullable) = true];
   reserved 9;
+  // limit the number of rows to import.
+  optional int64 row_limit = 10 [(gogoproto.nullable) = false];
 }
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.
@@ -125,4 +130,5 @@ message AvroOptions {
   optional string schemaJSON = 3 [(gogoproto.nullable) = false];
   optional int32 max_record_size = 4 [(gogoproto.nullable) = false];
   optional int32 record_separator = 5 [(gogoproto.nullable) = false];
+  optional int64 row_limit = 6 [(gogoproto.nullable) = false];
 }

@@ -24,16 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -41,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -84,7 +83,7 @@ func (tc *TestCluster) Stopper() *stop.Stopper {
 // stopServers stops the stoppers for each individual server in the cluster.
 // This method ensures that servers that were previously stopped explicitly are
 // not double-stopped.
-func (tc *TestCluster) stopServers() {
+func (tc *TestCluster) stopServers(ctx context.Context) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -92,15 +91,17 @@ func (tc *TestCluster) stopServers() {
 	// serially when we lose quorum (2 out of 3 servers have stopped) the last
 	// server may never finish due to waiting for a Raft command that can't
 	// commit due to the lack of quorum.
+	log.Infof(ctx, "TestCluster quiescing nodes")
 	var wg sync.WaitGroup
 	wg.Add(len(tc.mu.serverStoppers))
-	for _, s := range tc.mu.serverStoppers {
-		go func(s *stop.Stopper) {
+	for i, s := range tc.mu.serverStoppers {
+		go func(i int, s *stop.Stopper) {
 			defer wg.Done()
 			if s != nil {
-				s.Quiesce(context.TODO())
+				quiesceCtx := logtags.AddTag(ctx, "n", tc.Servers[i].NodeID())
+				s.Quiesce(quiesceCtx)
 			}
-		}(s)
+		}(i, s)
 	}
 	wg.Wait()
 
@@ -197,6 +198,7 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 				// The Server becomes responsible for closing this.
 				listener, err := net.Listen("tcp", "127.0.0.1:0")
 				if err != nil {
+					tc.Stopper().Stop(context.Background())
 					t.Fatal(err)
 				}
 				firstListener = listener
@@ -211,6 +213,7 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 		}
 
 		if _, err := tc.AddServer(serverArgs); err != nil {
+			tc.Stopper().Stop(context.Background())
 			t.Fatal(err)
 		}
 	}
@@ -241,10 +244,10 @@ func (tc *TestCluster) Start(t testing.TB) {
 
 		if tc.clusterArgs.ParallelStart {
 			go func(i int) {
-				errCh <- tc.StartServer(t, tc.Server(i), tc.serverArgs[i])
+				errCh <- tc.startServer(i, tc.serverArgs[i])
 			}(i)
 		} else {
-			if err := tc.StartServer(t, tc.Server(i), tc.serverArgs[i]); err != nil {
+			if err := tc.startServer(i, tc.serverArgs[i]); err != nil {
 				t.Fatal(err)
 			}
 			// We want to wait for stores for each server in order to have predictable
@@ -284,7 +287,7 @@ func (tc *TestCluster) Start(t testing.TB) {
 
 	// Create a closer that will stop the individual server stoppers when the
 	// cluster stopper is stopped.
-	tc.stopper.AddCloser(stop.CloserFn(tc.stopServers))
+	tc.stopper.AddCloser(stop.CloserFn(func() { tc.stopServers(context.TODO()) }))
 
 	if tc.clusterArgs.ReplicationMode == base.ReplicationAuto {
 		if err := tc.WaitForFullReplication(); err != nil {
@@ -339,12 +342,12 @@ func (tc *TestCluster) AddAndStartServer(t testing.TB, serverArgs base.TestServe
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
 		serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 	}
-	serv, err := tc.AddServer(serverArgs)
+	_, err := tc.AddServer(serverArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := tc.StartServer(t, serv, serverArgs); err != nil {
+	if err := tc.startServer(len(tc.Servers)-1, serverArgs); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -367,7 +370,6 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 	); err != nil {
 		return nil, err
 	}
-	serverArgs.Stopper = stop.NewStopper()
 	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
 		var stkCopy kvserver.StoreTestingKnobs
 		if stk := serverArgs.Knobs.Store; stk != nil {
@@ -396,29 +398,38 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
-	s := serverutils.NewServer(serverArgs).(*server.TestServer)
+	srv, err := serverutils.NewServer(serverArgs)
+	if err != nil {
+		return nil, err
+	}
+	s := srv.(*server.TestServer)
 
 	tc.Servers = append(tc.Servers, s)
 	tc.serverArgs = append(tc.serverArgs, serverArgs)
-	return s, nil
-}
-
-// StartServer is the companion method to AddServer, and is responsible for
-// actually starting the server.
-func (tc *TestCluster) StartServer(
-	t testing.TB, server serverutils.TestServerInterface, serverArgs base.TestServerArgs,
-) error {
-	if err := server.Start(); err != nil {
-		t.Fatalf("%+v", err)
-	}
-
-	dbConn := serverutils.OpenDBConn(t, server, serverArgs, server.Stopper())
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	thisStopper := s.Stopper()
+	tc.mu.serverStoppers = append(tc.mu.serverStoppers, thisStopper)
+	return s, nil
+}
 
+// startServer is the companion method to AddServer, and is responsible for
+// actually starting the server.
+func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) error {
+	server := tc.Servers[idx]
+	if err := server.Start(); err != nil {
+		return err
+	}
+
+	dbConn, err := serverutils.OpenDBConnE(server, serverArgs, server.Stopper())
+	if err != nil {
+		return err
+	}
+
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
 	tc.Conns = append(tc.Conns, dbConn)
-	tc.mu.serverStoppers = append(tc.mu.serverStoppers, server.Stopper())
 	return nil
 }
 
@@ -538,14 +549,13 @@ func (tc *TestCluster) changeReplicas(
 	return *desc, nil
 }
 
-// AddReplicas is part of TestClusterInterface.
-func (tc *TestCluster) AddReplicas(
-	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+func (tc *TestCluster) addReplica(
+	startKey roachpb.Key, typ roachpb.ReplicaChangeType, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
 
 	rangeDesc, err := tc.changeReplicas(
-		roachpb.ADD_REPLICA, rKey, targets...,
+		typ, rKey, targets...,
 	)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, err
@@ -558,8 +568,22 @@ func (tc *TestCluster) AddReplicas(
 	return rangeDesc, nil
 }
 
-// AddReplicasMulti is part of TestClusterInterface.
-func (tc *TestCluster) AddReplicasMulti(
+// AddVoters is part of TestClusterInterface.
+func (tc *TestCluster) AddVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.addReplica(startKey, roachpb.ADD_VOTER, targets...)
+}
+
+// AddNonVoters is part of TestClusterInterface.
+func (tc *TestCluster) AddNonVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.addReplica(startKey, roachpb.ADD_NON_VOTER, targets...)
+}
+
+// AddVotersMulti is part of TestClusterInterface.
+func (tc *TestCluster) AddVotersMulti(
 	kts ...serverutils.KeyAndTargets,
 ) ([]roachpb.RangeDescriptor, []error) {
 	var descs []roachpb.RangeDescriptor
@@ -568,7 +592,7 @@ func (tc *TestCluster) AddReplicasMulti(
 		rKey := keys.MustAddr(kt.StartKey)
 
 		rangeDesc, err := tc.changeReplicas(
-			roachpb.ADD_REPLICA, rKey, kt.Targets...,
+			roachpb.ADD_VOTER, rKey, kt.Targets...,
 		)
 		if err != nil {
 			errs = append(errs, err)
@@ -640,12 +664,12 @@ func (tc *TestCluster) waitForNewReplicas(
 	return nil
 }
 
-// AddReplicasOrFatal is part of TestClusterInterface.
-func (tc *TestCluster) AddReplicasOrFatal(
+// AddVotersOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) AddVotersOrFatal(
 	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	t.Helper()
-	desc, err := tc.AddReplicas(startKey, targets...)
+	desc, err := tc.AddVoters(startKey, targets...)
 	if err != nil {
 		t.Fatalf(`could not add %v replicas to range containing %s: %+v`,
 			targets, startKey, err)
@@ -653,24 +677,31 @@ func (tc *TestCluster) AddReplicasOrFatal(
 	return desc
 }
 
-// RemoveReplicas is part of the TestServerInterface.
-func (tc *TestCluster) RemoveReplicas(
+// RemoveVoters is part of the TestServerInterface.
+func (tc *TestCluster) RemoveVoters(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
-	return tc.changeReplicas(roachpb.REMOVE_REPLICA, keys.MustAddr(startKey), targets...)
+	return tc.changeReplicas(roachpb.REMOVE_VOTER, keys.MustAddr(startKey), targets...)
 }
 
-// RemoveReplicasOrFatal is part of TestClusterInterface.
-func (tc *TestCluster) RemoveReplicasOrFatal(
+// RemoveVotersOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) RemoveVotersOrFatal(
 	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	t.Helper()
-	desc, err := tc.RemoveReplicas(startKey, targets...)
+	desc, err := tc.RemoveVoters(startKey, targets...)
 	if err != nil {
 		t.Fatalf(`could not remove %v replicas from range containing %s: %+v`,
 			targets, startKey, err)
 	}
 	return desc
+}
+
+// RemoveNonVoters is part of TestClusterInterface.
+func (tc *TestCluster) RemoveNonVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.changeReplicas(roachpb.REMOVE_NON_VOTER, keys.MustAddr(startKey), targets...)
 }
 
 // TransferRangeLease is part of the TestServerInterface.
@@ -683,6 +714,15 @@ func (tc *TestCluster) TransferRangeLease(
 		return errors.Wrapf(err, "%q: transfer lease unexpected error", rangeDesc.StartKey)
 	}
 	return nil
+}
+
+// TransferRangeLeaseOrFatal is a convenience version of TransferRangeLease
+func (tc *TestCluster) TransferRangeLeaseOrFatal(
+	t testing.TB, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
+) {
+	if err := tc.TransferRangeLease(rangeDesc, dest); err != nil {
+		t.Fatalf(`could transfer lease for range %s error is %+v`, rangeDesc, err)
+	}
 }
 
 // FindRangeLease is similar to FindRangeLeaseHolder but returns a Lease proto
@@ -920,11 +960,11 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 		db := tc.Servers[0].DB()
 		for _, s := range tc.Servers {
 			key := keys.NodeLivenessKey(s.NodeID())
-			var liveness kvserverpb.Liveness
+			var liveness livenesspb.Liveness
 			if err := db.GetProto(context.Background(), key, &liveness); err != nil {
 				return err
 			}
-			if (liveness == kvserverpb.Liveness{}) {
+			if (liveness == livenesspb.Liveness{}) {
 				return fmt.Errorf("no liveness record")
 			}
 			fmt.Printf("n%d: found liveness\n", s.NodeID())
@@ -983,14 +1023,6 @@ func (tc *TestCluster) readIntFromStores(key roachpb.Key) []int64 {
 // Fails the test if they do not match.
 func (tc *TestCluster) WaitForValues(t testing.TB, key roachpb.Key, expected []int64) {
 	t.Helper()
-	// This test relies on concurrently waiting for a value to change in the
-	// underlying engine(s). Since the teeing engine does not respond well to
-	// value mismatches, whether transient or permanent, skip this test if the
-	// teeing engine is being used. See
-	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		skip.IgnoreLint(t, "disabled on teeing engine")
-	}
 	testutils.SucceedsSoon(t, func() error {
 		actual := tc.readIntFromStores(key)
 		if !reflect.DeepEqual(expected, actual) {

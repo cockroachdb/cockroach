@@ -18,7 +18,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
 func TestEncodeSQLBytes(t *testing.T) {
@@ -82,58 +84,20 @@ func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, str
 func BenchmarkEncodeSQLString(b *testing.B) {
 	str := strings.Repeat("foo", 10000)
 	for i := 0; i < b.N; i++ {
-		lex.EncodeSQLStringWithFlags(bytes.NewBuffer(nil), str, lex.EncBareStrings)
-	}
-}
-
-func TestEncodeRestrictedSQLIdent(t *testing.T) {
-	testCases := []struct {
-		input  string
-		output string
-	}{
-		{`foo`, `foo`},
-		{``, `""`},
-		{`3`, `"3"`},
-		{`foo3`, `foo3`},
-		{`foo"`, `"foo"""`},
-		{`fo"o"`, `"fo""o"""`},
-		{`fOo`, `"fOo"`},
-		{`_foo`, `_foo`},
-		{`-foo`, `"-foo"`},
-		{`select`, `"select"`},
-		{`integer`, `"integer"`},
-		// N.B. These type names are examples of type names that *should* be
-		// unrestricted (left out of the reserved keyword list) because they're not
-		// part of the sql standard type name list. This is important for Postgres
-		// compatibility. If you find yourself about to change this, don't - you can
-		// convince yourself of such by looking at the output of `quote_ident`
-		// against a Postgres instance.
-		{`int8`, `int8`},
-		{`date`, `date`},
-		{`inet`, `inet`},
-	}
-
-	for _, tc := range testCases {
-		var buf bytes.Buffer
-		lex.EncodeRestrictedSQLIdent(&buf, tc.input, lex.EncBareStrings)
-		out := buf.String()
-
-		if out != tc.output {
-			t.Errorf("`%s`: expected `%s`, got `%s`", tc.input, tc.output, out)
-		}
+		lex.EncodeSQLStringWithFlags(bytes.NewBuffer(nil), str, lexbase.EncBareStrings)
 	}
 }
 
 func TestByteArrayDecoding(t *testing.T) {
 	const (
-		fmtHex = lex.BytesEncodeHex
-		fmtEsc = lex.BytesEncodeEscape
-		fmtB64 = lex.BytesEncodeBase64
+		fmtHex = sessiondatapb.BytesEncodeHex
+		fmtEsc = sessiondatapb.BytesEncodeEscape
+		fmtB64 = sessiondatapb.BytesEncodeBase64
 	)
 	testData := []struct {
 		in    string
 		auto  bool
-		inFmt lex.BytesEncodeFormat
+		inFmt sessiondatapb.BytesEncodeFormat
 		out   string
 		err   string
 	}{
@@ -209,8 +173,11 @@ func TestByteArrayEncoding(t *testing.T) {
 
 	for _, s := range testData {
 		t.Run(s.in, func(t *testing.T) {
-			for _, format := range []lex.BytesEncodeFormat{
-				lex.BytesEncodeHex, lex.BytesEncodeEscape, lex.BytesEncodeBase64} {
+			for _, format := range []sessiondatapb.BytesEncodeFormat{
+				sessiondatapb.BytesEncodeHex,
+				sessiondatapb.BytesEncodeEscape,
+				sessiondatapb.BytesEncodeBase64,
+			} {
 				t.Run(format.String(), func(t *testing.T) {
 					enc := lex.EncodeByteArrayToRawBytes(s.in, format, false)
 
@@ -219,7 +186,7 @@ func TestByteArrayEncoding(t *testing.T) {
 						t.Fatalf("encoded %q, expected %q", enc, expEnc)
 					}
 
-					if format == lex.BytesEncodeHex {
+					if format == sessiondatapb.BytesEncodeHex {
 						// Check that the \x also can be skipped.
 						enc2 := lex.EncodeByteArrayToRawBytes(s.in, format, true)
 						if enc[2:] != enc2 {

@@ -218,7 +218,7 @@ project
 norm expect=EliminateJoinUnderProjectRight
 SELECT b1.x, b1.z FROM b INNER JOIN b AS b1 ON b.x = b1.x
 ----
-scan b1
+scan b [as=b1]
  ├── columns: x:5!null z:6
  ├── key: (5)
  └── fd: (5)-->(6)
@@ -245,7 +245,7 @@ inner-join (hash)
  ├── scan b
  │    ├── columns: b.x:1!null
  │    └── key: (1)
- ├── scan b1
+ ├── scan b [as=b1]
  │    ├── columns: b1.x:5!null
  │    └── key: (5)
  └── filters

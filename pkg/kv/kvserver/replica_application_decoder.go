@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -143,15 +143,15 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(cmd.proposal.ctx, opName)
 		} else if cmd.raftCmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
-			// the span context and start a server-side span.
+			// the remote span and start a server-side span that follows from it.
 			spanCtx, err := d.r.AmbientContext.Tracer.Extract(
 				opentracing.TextMap, opentracing.TextMapCarrier(cmd.raftCmd.TraceData))
 			if err != nil {
 				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
 			} else {
 				cmd.sp = d.r.AmbientContext.Tracer.StartSpan(
-					"raft application", opentracing.FollowsFrom(spanCtx))
-				cmd.ctx = opentracing.ContextWithSpan(ctx, cmd.sp)
+					"raft application", tracing.WithRemoteParent(spanCtx), tracing.WithFollowsFrom())
+				cmd.ctx = tracing.ContextWithSpan(ctx, cmd.sp)
 			}
 		} else {
 			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(ctx, opName)

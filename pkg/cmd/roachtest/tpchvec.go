@@ -36,16 +36,20 @@ const (
 	tpchVecVersion19_2 crdbVersion = iota
 	tpchVecVersion20_1
 	tpchVecVersion20_2
+	tpchVecVersion21_1
 )
 
 func toCRDBVersion(v string) (crdbVersion, error) {
-	if strings.HasPrefix(v, "v19.2") {
+	switch {
+	case strings.HasPrefix(v, "v19.2"):
 		return tpchVecVersion19_2, nil
-	} else if strings.HasPrefix(v, "v20.1") {
+	case strings.HasPrefix(v, "v20.1"):
 		return tpchVecVersion20_1, nil
-	} else if strings.HasPrefix(v, "v20.2") {
+	case strings.HasPrefix(v, "v20.2"):
 		return tpchVecVersion20_2, nil
-	} else {
+	case strings.HasPrefix(v, "v21.1"):
+		return tpchVecVersion21_1, nil
+	default:
 		return 0, errors.Errorf("unrecognized version: %s", v)
 	}
 }
@@ -75,20 +79,7 @@ var queriesToSkipByVersion = map[crdbVersion]map[int]string{
 	},
 }
 
-// getSlownessThreshold returns the threshold at which we fail the test if vec
-// ON is slower that vec OFF, meaning that if
-//   vec_on_time >= slownessThreshold * vec_off_time
-// the test is failed. This will help catch any regressions.
-func getSlownessThreshold(version crdbVersion) float64 {
-	switch version {
-	// Note that for 19.2 version the threshold is higher in order to reduce
-	// the noise.
-	case tpchVecVersion19_2:
-		return 1.5
-	default:
-		return 1.2
-	}
-}
+const tpchVecPerfSlownessThreshold = 1.5
 
 var tpchTables = []string{
 	"nation", "region", "part", "supplier",
@@ -169,14 +160,12 @@ func (b tpchVecTestCaseBase) getRunConfig(
 }
 
 func (b tpchVecTestCaseBase) preTestRunHook(
-	_ context.Context,
-	t *test,
-	_ *cluster,
-	conn *gosql.DB,
-	version crdbVersion,
-	clusterSetup []string,
+	t *test, conn *gosql.DB, clusterSetup []string, createStats bool,
 ) {
 	performClusterSetup(t, conn, clusterSetup)
+	if createStats {
+		createStatsFromTables(t, conn, tpchTables)
+	}
 }
 
 func (b tpchVecTestCaseBase) postQueryRunHook(*test, []byte, int) {}
@@ -277,10 +266,7 @@ func (p tpchVecPerfTest) preTestRunHook(
 	version crdbVersion,
 	clusterSetup []string,
 ) {
-	p.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version, clusterSetup)
-	if !p.disableStatsCreation {
-		createStatsFromTables(t, conn, tpchTables)
-	}
+	p.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, !p.disableStatsCreation /* createStats */)
 }
 
 func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, setupIdx int) {
@@ -324,7 +310,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
 					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
 		}
-		if vecOnTime >= getSlownessThreshold(version)*vecOffTime {
+		if vecOnTime >= tpchVecPerfSlownessThreshold*vecOffTime {
 			// For some reason, the vectorized engine executed the query a lot
 			// slower than the row-by-row engine which is unexpected. In order
 			// to understand where the slowness comes from, we will run EXPLAIN
@@ -441,6 +427,12 @@ func (b tpchVecBenchTest) getRunConfig(version crdbVersion, _ map[int]string) tp
 	return runConfig
 }
 
+func (b tpchVecBenchTest) preTestRunHook(
+	_ context.Context, t *test, _ *cluster, conn *gosql.DB, _ crdbVersion, clusterSetup []string,
+) {
+	b.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
+}
+
 func (b *tpchVecBenchTest) postQueryRunHook(t *test, output []byte, setupIdx int) {
 	b.tpchVecPerfHelper.parseQueryOutput(t, output, setupIdx)
 }
@@ -512,8 +504,7 @@ func (d tpchVecDiskTest) preTestRunHook(
 	version crdbVersion,
 	clusterSetup []string,
 ) {
-	d.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version, clusterSetup)
-	createStatsFromTables(t, conn, tpchTables)
+	d.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 	// In order to stress the disk spilling of the vectorized
 	// engine, we will set workmem limit to a random value in range
 	// [16KiB, 256KiB).
@@ -548,8 +539,7 @@ func (b tpchVecSmallBatchSizeTest) preTestRunHook(
 	version crdbVersion,
 	clusterSetup []string,
 ) {
-	b.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version, clusterSetup)
-	createStatsFromTables(t, conn, tpchTables)
+	b.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 	rng, _ := randutil.NewPseudoRand()
 	setSmallBatchSize(t, conn, rng)
 }
@@ -596,8 +586,7 @@ func (s tpchVecSmithcmpTest) preTestRunHook(
 	version crdbVersion,
 	clusterSetup []string,
 ) {
-	s.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version, clusterSetup)
-	createStatsFromTables(t, conn, tpchTables)
+	s.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 	const smithcmpSHA = "a3f41f5ba9273249c5ecfa6348ea8ee3ac4b77e3"
 	node := c.Node(1)
 	if local && runtime.GOOS != "linux" {

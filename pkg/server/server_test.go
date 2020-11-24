@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -566,7 +567,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
 	valAt := func(i int) *descpb.Descriptor {
 		return dbdesc.NewInitial(
-			descpb.ID(i), "foo", security.AdminRole,
+			descpb.ID(i), "foo", security.AdminRoleName(),
 		).DescriptorProto()
 	}
 
@@ -812,9 +813,9 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 	var fatal bool
 	defer log.ResetExitFunc()
-	log.SetExitFunc(true /* hideStack */, func(r int) {
+	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
 		defer log.Flush()
-		if r != 0 {
+		if r == exit.FatalError() {
 			fatal = true
 		}
 	})
@@ -1041,7 +1042,7 @@ Binary built without web UI.
 			expected := fmt.Sprintf(
 				htmlTemplate,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","PasswordLoginEnabled":true,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
+					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
 					1,
@@ -1076,7 +1077,7 @@ Binary built without web UI.
 			{
 				loggedInClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d","PasswordLoginEnabled":true,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
 					1,
@@ -1085,7 +1086,7 @@ Binary built without web UI.
 			{
 				loggedOutClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","PasswordLoginEnabled":true,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
 					1,

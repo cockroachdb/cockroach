@@ -14,9 +14,9 @@ option go_package = "kvserver";
 
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
-import "kv/kvserver/kvserverpb/liveness.proto";
+import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
-import "etcd/raft/raftpb/raft.proto";
+import "etcd/raft/v3/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
 // RaftHeartbeat is a request that contains the barebones information for a
@@ -34,7 +34,7 @@ message RaftHeartbeat {
   uint64 commit = 5;
   bool quiesce = 6;
   reserved 7;
-  repeated storagepb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
+  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
   bool lagging_followers_on_quiesce_accurate = 10;
 }
 
@@ -70,7 +70,7 @@ message RaftMessageRequest {
   // (leader or follower) becomes aware that a replica in this set has
   // become live, it should unquiesce the range so that the replica can
   // be caught back up.
-  repeated storagepb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
+  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
   // This field helps migrate in the lagging_followers_on_quiesce field. For
   // messages sent by versions of Cockroach that do not know about the
   // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all
@@ -137,9 +137,18 @@ message SnapshotRequest {
     KV_BATCH = 0;
   }
 
+  // Type is used for metrics collection on the receiver side. See
+  // applySnapshot in replica_raftstorage.go.
   enum Type {
-    RAFT = 0;
-    LEARNER = 1;
+    // VIA_SNAPSHOT_QUEUE indicates the snapshots sent by the raft snapshot
+    // queue.
+    VIA_SNAPSHOT_QUEUE = 0;
+    // LEARNER_INITIAL indicates the initial snapshots sent to LEARNER replicas
+    // for upreplication, before they're promoted to full voters.
+    //
+    // As of the time of writing, we only send this snapshot from the
+    // atomicReplicationChange after creating a new LEARNER replica.
+    LEARNER_INITIAL = 1;
     reserved 2;
   }
 

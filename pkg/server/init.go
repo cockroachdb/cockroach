@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,13 +37,6 @@ import (
 // ErrClusterInitialized is reported when the Bootstrap RPC is run on
 // a node that is already part of an initialized cluster.
 var ErrClusterInitialized = fmt.Errorf("cluster has already been initialized")
-
-// errJoinRPCUnsupported is reported when the Join RPC is run against
-// a node that does not know about the join RPC (i.e. it is running 20.1 or
-// below).
-//
-// TODO(irfansharif): Remove this in 21.1.
-var errJoinRPCUnsupported = fmt.Errorf("node does not support the Join RPC")
 
 // ErrIncompatibleBinaryVersion is returned when a CRDB node with a binary version X
 // attempts to join a cluster with an active version that's higher. This is not
@@ -66,88 +58,99 @@ type initServer struct {
 	config initServerCfg
 
 	mu struct {
-		// This mutex is grabbed during bootstrap and is used to serialized
-		// bootstrap attempts (and attempts to read whether or not his node has
-		// been bootstrapped). It's also used to guard inspectState below.
+		// This mutex is used to serialize bootstrap attempts.
 		syncutil.Mutex
 
-		// The state of the engines. This tells us whether the node is already
-		// bootstrapped. The goal of the initServer is to stub this out by the time
-		// ServeAndWait returns.
-		inspectState *initDiskState
+		// We use this field to guard against doubly bootstrapping clusters.
+		bootstrapped bool
 
 		// If we encounter an unrecognized error during bootstrap, we use this
 		// field to block out future bootstrap attempts.
 		rejectErr error
 	}
 
+	// inspectedDiskState captures the relevant bits of the on-disk state needed
+	// by the init server. It's through this that the init server knows whether
+	// or not this node needs to be bootstrapped. It does so by checking to see
+	// if any engines were already initialized. If so, there's nothing left for
+	// the init server to, it simply returns the inspected disk state in
+	// ServeAndWait.
+	//
+	// Another function the inspected disk state provides is that it relays the
+	// synthesized cluster version (this binary's minimum supported version if
+	// there are no initialized engines). This is used as the cluster version if
+	// we end up connecting to an existing cluster via gossip.
+	//
+	// TODO(irfansharif): The above function goes away once we remove the use of
+	// gossip to join running clusters in 21.1.
+	inspectedDiskState *initState
+
 	// If this CRDB node was `cockroach init`-ialized, the resulting init state
 	// will be passed through to this channel.
 	bootstrapReqCh chan *initState
 }
 
-func newInitServer(
-	actx log.AmbientContext, inspectState *initDiskState, config initServerCfg,
-) (*initServer, error) {
-	s := &initServer{
-		AmbientContext: actx,
-		bootstrapReqCh: make(chan *initState, 1),
-		config:         config,
-	}
-	s.mu.inspectState = inspectState
-	return s, nil
-}
-
-// initDiskState contains the part of initState that is read from stable
-// storage.
-//
-// NB: The above is a lie in the case in which we join an existing mixed-version
-// cluster. In that case, the state returned from ServeAndWait will have the
-// clusterID set from Gossip (and there will be no NodeID). This is holdover
-// behavior that can be removed in 21.1, at which point the lie disappears.
-type initDiskState struct {
-	// nodeID is zero if joining an existing cluster.
-	//
-	// TODO(tbg): see TODO above.
-	nodeID roachpb.NodeID
-	// All fields below are always set.
-	clusterID          uuid.UUID
-	clusterVersion     clusterversion.ClusterVersion
-	initializedEngines []storage.Engine
-	newEngines         []storage.Engine
-}
-
-// initState contains the cluster and node IDs as well as the stores, from which
-// a CockroachDB server can be started up after ServeAndWait returns.
-//
-// TODO(irfansharif): The usage of initState and then initDiskState is a bit
-// confusing. It isn't the case today that the version held in memory for a
-// running server will be wholly reconstructed if reloading from disk. It
-// could if we always persisted any changes made to it back to disk. Right now
-// when initializing after a successful join attempt, we don't persist back the
-// disk state back to disk (we'd need to bootstrap the first store here, in the
-// same we do when `cockroach init`-ialized).
-type initState struct {
-	initDiskState
-
-	firstStoreID roachpb.StoreID
-}
-
-// NeedsInit is like needsInitLocked, except it acquires the necessary locks.
-func (s *initServer) NeedsInit() bool {
+// NeedsBootstrap returns true if we haven't already been bootstrapped or
+// haven't yet been able to join a running cluster.
+func (s *initServer) NeedsBootstrap() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.needsInitLocked()
+	return !s.mu.bootstrapped
 }
 
-// needsInitLocked returns true if (and only if) none if the engines are
-// initialized. In this case, ServeAndWait is blocked until either an
-// initialized node is reached via the Join RPC (or Gossip if operating in mixed
-// version clusters running v20.1, see ErrJoinUnimplemented), or this node
-// itself is bootstrapped.
-func (s *initServer) needsInitLocked() bool {
-	return len(s.mu.inspectState.initializedEngines) == 0
+func newInitServer(
+	actx log.AmbientContext, inspectedDiskState *initState, config initServerCfg,
+) *initServer {
+	initServer := &initServer{
+		AmbientContext:     actx,
+		bootstrapReqCh:     make(chan *initState, 1),
+		config:             config,
+		inspectedDiskState: inspectedDiskState,
+	}
+	// If we were already bootstrapped, we mark ourselves as such to prevent
+	// future bootstrap attempts.
+	if inspectedDiskState.bootstrapped() {
+		initServer.mu.bootstrapped = true
+	}
+	return initServer
+}
+
+// initState is the entirety of what the init server is tasked with
+// constructing. It's a view of our on-disk state, instantiated through
+// inspectEngines (and inspectEngines alone).
+//
+// The init server is tasked with durably persisting state on-disk when this
+// node is bootstrapped, or is able to join an already bootstrapped cluster.
+// By state here we mean the cluster ID, node ID, at least one initialized
+// engine, etc. After having persisted the relevant state, the init server
+// constructs an initState with the details needed to fully start up a CRDB
+// server.
+type initState struct {
+	nodeID               roachpb.NodeID
+	clusterID            uuid.UUID
+	clusterVersion       clusterversion.ClusterVersion
+	initializedEngines   []storage.Engine
+	uninitializedEngines []storage.Engine
+	initialSettingsKVs   []roachpb.KeyValue
+}
+
+// bootstrapped is a shorthand to check if there exists at least one initialized
+// engine.
+func (i *initState) bootstrapped() bool {
+	return len(i.initializedEngines) > 0
+}
+
+// validate asserts that the init state is a fully fleshed out one (i.e. with a
+// non-empty cluster ID and node ID).
+func (i *initState) validate() error {
+	if (i.clusterID == uuid.UUID{}) {
+		return errors.New("missing cluster ID")
+	}
+	if i.nodeID == 0 {
+		return errors.New("missing node ID")
+	}
+	return nil
 }
 
 // joinResult is used to represent the result of a node attempting to join
@@ -162,10 +165,9 @@ type joinResult struct {
 // restarting an existing node, this immediately returns. When starting with a
 // blank slate (i.e. only empty engines), it waits for incoming Bootstrap
 // request or for a successful outgoing Join RPC, whichever happens earlier.
-// See [1].
 //
 // The returned initState reflects a bootstrapped cluster (i.e. it has a cluster
-// ID and a node ID for this server). See [2].
+// ID and a node ID for this server).
 //
 // This method must be called only once.
 //
@@ -173,77 +175,66 @@ type joinResult struct {
 // have all stores initialized by the time ServeAndWait returns. This is because
 // if this server is already bootstrapped, it might hold a replica of the range
 // backing the StoreID allocating counter, and letting this server start may be
-// necessary to restore quorum to that range. So in general, after this TODO, we
-// will always leave this method with at least one store initialized, but not
+// necessary to restore quorum to that range. So in general, after this method,
+// we will always leave this method with at least one store initialized, but not
 // necessarily all. This is fine, since initializing additional stores later is
-// easy.
+// easy (see `initializeAdditionalStores`).
 //
 // `initialBoot` is true if this is a new node. This flag should only be used
 // for logging and reporting. A newly bootstrapped single-node cluster is
 // functionally equivalent to one that restarted; any decisions should be made
 // on persisted data instead of this flag.
-//
-// [1]: In mixed version clusters it waits until Gossip connects (but this is
-// slated to be removed in 21.1).
-//
-// [2]: This is not technically true for mixed version clusters where we leave
-// the node ID unassigned until later, but this too is part of the deprecated
-// init server behavior that is slated for removal in 21.1.
 func (s *initServer) ServeAndWait(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	sv *settings.Values,
-	startGossipFn func() *gossip.Gossip,
+	ctx context.Context, stopper *stop.Stopper, sv *settings.Values,
 ) (state *initState, initialBoot bool, err error) {
-	// If already bootstrapped, return early.
-	s.mu.Lock()
-	if !s.needsInitLocked() {
-		diskState := *s.mu.inspectState
-		s.mu.Unlock()
-
-		return &initState{initDiskState: diskState}, false, nil
+	// If we're restarting an already bootstrapped node, return early.
+	if s.inspectedDiskState.bootstrapped() {
+		return s.inspectedDiskState, false, nil
 	}
-	s.mu.Unlock()
 
-	log.Info(ctx, "no stores bootstrapped")
+	log.Info(ctx, "no stores initialized")
 	log.Info(ctx, "awaiting `cockroach init` or join with an already initialized node")
 
-	joinCtx, cancelJoin := context.WithCancel(ctx)
-	defer cancelJoin()
-
+	// If we end up joining a bootstrapped cluster, the resulting init state
+	// will be passed through this channel.
+	var joinCh chan joinResult
+	var cancelJoin = func() {}
 	var wg sync.WaitGroup
-	wg.Add(1)
-	// If this CRDB node was able to join a bootstrapped cluster, the resulting
-	// init state will be passed through to this channel.
-	joinCh := make(chan joinResult, 1)
-	if err := stopper.RunTask(joinCtx, "init server: join loop", func(joinCtx context.Context) {
-		stopper.RunWorker(joinCtx, func(joinCtx context.Context) {
-			defer wg.Done()
 
-			state, err := s.startJoinLoop(joinCtx, stopper)
-			joinCh <- joinResult{
-				state: state,
-				err:   err,
-			}
-		})
-	}); err != nil {
-		return nil, false, err
+	if len(s.config.resolvers) == 0 {
+		// We're pointing to only ourselves or nothing at all, which (likely)
+		// suggests that we're going to be bootstrapped by the operator. Since
+		// we're not going to be sending out join RPCs, we don't bother spinning
+		// up the join loop.
+	} else {
+		joinCh = make(chan joinResult, 1)
+		wg.Add(1)
+
+		var joinCtx context.Context
+		joinCtx, cancelJoin = context.WithCancel(ctx)
+		defer cancelJoin()
+
+		err := stopper.RunTask(joinCtx, "init server: join loop",
+			func(joinCtx context.Context) {
+				stopper.RunWorker(joinCtx, func(joinCtx context.Context) {
+					defer wg.Done()
+
+					state, err := s.startJoinLoop(joinCtx, stopper)
+					joinCh <- joinResult{state: state, err: err}
+				})
+			})
+		if err != nil {
+			return nil, false, err
+		}
 	}
-
-	// gossipConnectedCh is used as a place holder for gossip.Connected. We
-	// don't trigger on gossip connectivity unless we have to, favoring instead
-	// the join RPC to discover the cluster ID (and node ID). If we're in a
-	// mixed-version cluster however (with 20.1 nodes), we'll fall back to using
-	// the legacy gossip connectivity mechanism to discover the cluster ID.
-	var gossipConnectedCh chan struct{}
-	var g *gossip.Gossip
 
 	for {
 		select {
 		case state := <-s.bootstrapReqCh:
-			// Ensure we're draining out the join attempt. We're not going to
-			// need it anymore and it had no chance of joining anywhere (since
-			// we are starting the new cluster and are not serving Join yet).
+			// Ensure we're draining out the join attempt, if any. We're not
+			// going to need it anymore and it had no chance of joining
+			// elsewhere (since we are the ones bootstrapping the new cluster
+			// and have not started serving Join yet).
 			cancelJoin()
 			wg.Wait()
 
@@ -251,11 +242,15 @@ func (s *initServer) ServeAndWait(
 			// version will be the bootstrap version (aka the binary version[1]),
 			// but the version setting does not know yet (it was initialized as
 			// BinaryMinSupportedVersion because the engines were all
-			// uninitialized). We *could* just let the server start, and it
-			// would populate system.settings, which is then gossiped, and then
-			// the callback would update the version, but we take this shortcut
-			// to avoid having every freshly bootstrapped cluster spend time at
-			// an old cluster version.
+			// uninitialized). Given that the bootstrap version was persisted to
+			// all the engines, it's now safe for us to bump the version setting
+			// itself and start operating at the latest cluster version.
+			//
+			// TODO(irfansharif): We're calling Initialize a second time here.
+			// There's no real reason to anymore, we can use
+			// SetActiveClusterVersion instead. This will let us make
+			// `Initialize` a bit stricter, which is a nice simplification to
+			// have.
 			//
 			// [1]: See the top-level comment in pkg/clusterversion to make
 			// sense of the many versions of ...versions.
@@ -265,11 +260,7 @@ func (s *initServer) ServeAndWait(
 
 			log.Infof(ctx, "cluster %s has been created", state.clusterID)
 			log.Infof(ctx, "allocated node ID: n%d (for self)", state.nodeID)
-
-			s.mu.Lock()
-			s.mu.inspectState.clusterID = state.clusterID
-			s.mu.inspectState.initializedEngines = state.initializedEngines
-			s.mu.Unlock()
+			log.Infof(ctx, "active cluster version: %s", state.clusterVersion)
 
 			return state, true, nil
 		case result := <-joinCh:
@@ -277,74 +268,25 @@ func (s *initServer) ServeAndWait(
 			wg.Wait()
 
 			if err := result.err; err != nil {
-				if errors.Is(err, errJoinRPCUnsupported) {
-					// We're in a mixed-version cluster, we start gossip and wire up
-					// the gossip connectivity mechanism to discover the cluster ID.
-					g = startGossipFn()
-					gossipConnectedCh = g.Connected
-
-					// Let's nil out joinCh to prevent accidental re-use.
-					close(joinCh)
-					joinCh = nil
-
-					continue
-				}
-
 				if errors.Is(err, ErrIncompatibleBinaryVersion) {
 					return nil, false, err
 				}
 
 				if err != nil {
-					// We expect the join RPC to blindly retry on all errors
-					// save for the two above. This should be unreachable code.
+					// We expect the join RPC to blindly retry on all
+					// "connection" errors save for one above. If we're
+					// here, we failed to initialize our first store after a
+					// successful join attempt.
 					return nil, false, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error: %v", err)
 				}
 			}
 
 			state := result.state
 
-			// TODO(irfansharif): We can try and initialize the the version
-			// setting to the active cluster version, in the same way we do when
-			// bootstrapping. We'd need to persis the cluster version to the
-			// engines here if we're looking to do so.
-
 			log.Infof(ctx, "joined cluster %s through join rpc", state.clusterID)
-			log.Infof(ctx, "received node ID %d", state.nodeID)
+			log.Infof(ctx, "received node ID: %d", state.nodeID)
+			log.Infof(ctx, "received cluster version: %s", state.clusterVersion)
 
-			s.mu.Lock()
-			s.mu.inspectState.clusterID = state.clusterID
-			s.mu.Unlock()
-
-			return state, true, nil
-		case <-gossipConnectedCh:
-			// Ensure we're draining out the join attempt.
-			wg.Wait()
-
-			// We're in a mixed-version cluster, so we retain the legacy
-			// behavior of retrieving the cluster ID and deferring node ID
-			// allocation (happens in (*Node).start).
-			//
-			// TODO(irfansharif): Remove this in 21.1.
-
-			// Gossip connected, that is, we know a ClusterID. Due to the early
-			// return above, we know that all of our engines are empty, i.e. we
-			// don't have a NodeID yet (and the cluster version is the minimum we
-			// support). Commence startup; the Node will realize it's short a
-			// NodeID and will request one.
-			clusterID, err := g.GetClusterID()
-			if err != nil {
-				return nil, false, err
-			}
-
-			s.mu.Lock()
-			s.mu.inspectState.clusterID = clusterID
-			diskState := *s.mu.inspectState
-			s.mu.Unlock()
-
-			state := &initState{
-				initDiskState: diskState,
-			}
-			log.Infof(ctx, "joined cluster %s through gossip (legacy behavior)", state.clusterID)
 			return state, true, nil
 		case <-stopper.ShouldQuiesce():
 			return nil, false, stop.ErrUnavailable
@@ -372,7 +314,7 @@ func (s *initServer) Bootstrap(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.needsInitLocked() {
+	if s.mu.bootstrapped {
 		return nil, ErrClusterInitialized
 	}
 
@@ -380,14 +322,18 @@ func (s *initServer) Bootstrap(
 		return nil, s.mu.rejectErr
 	}
 
-	state, err := s.tryBootstrapLocked(ctx)
+	state, err := s.tryBootstrap(ctx)
 	if err != nil {
 		log.Errorf(ctx, "bootstrap: %v", err)
 		s.mu.rejectErr = errInternalBootstrapError
 		return nil, s.mu.rejectErr
 	}
 
+	// We've successfully bootstrapped (we've initialized at least one engine).
+	// We mark ourselves as bootstrapped to prevent future bootstrap attempts.
+	s.mu.bootstrapped = true
 	s.bootstrapReqCh <- state
+
 	return &serverpb.BootstrapResponse{}, nil
 }
 
@@ -399,11 +345,7 @@ func (s *initServer) Bootstrap(
 // running a binary that's too old to join the rest of the cluster.
 func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (*initState, error) {
 	if len(s.config.resolvers) == 0 {
-		// We're pointing to only ourselves, which is probably indicative of a
-		// node that's going to be bootstrapped by the operator. We could opt to
-		// not fall back to the gossip based connectivity mechanism, but we do
-		// it anyway.
-		return nil, errJoinRPCUnsupported
+		return nil, errors.AssertionFailedf("expected to find at least one resolver, found none")
 	}
 
 	// Iterate through all the resolvers at least once to reduce time taken to
@@ -419,24 +361,34 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 		}
 
 		addr := res.Addr()
-		state, err := s.attemptJoinTo(ctx, res.Addr())
-		if err == nil {
-			return state, nil
+		resp, err := s.attemptJoinTo(ctx, res.Addr())
+		if errors.Is(err, ErrIncompatibleBinaryVersion) {
+			// Propagate upwards; this is an error condition the caller knows
+			// to expect.
+			return nil, err
+		}
+		if err != nil {
+			// Try the next node if unsuccessful.
+
+			if IsWaitingForInit(err) {
+				log.Infof(ctx, "%s is itself waiting for init, will retry", addr)
+			} else {
+				log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
+			}
+			continue
 		}
 
-		if errors.Is(err, errJoinRPCUnsupported) || errors.Is(err, ErrIncompatibleBinaryVersion) {
-			// Propagate upwards; these are error conditions the caller knows to
-			// expect.
+		state, err := s.initializeFirstStoreAfterJoin(ctx, resp)
+		if err != nil {
 			return nil, err
 		}
 
-		if IsWaitingForInit(err) {
-			log.Warningf(ctx, "%s is itself waiting for init, will retry", addr)
-		} else {
-			log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
-		}
+		// We mark ourselves as bootstrapped to prevent future bootstrap attempts.
+		s.mu.Lock()
+		s.mu.bootstrapped = true
+		s.mu.Unlock()
 
-		// Try the next node if unsuccessful.
+		return state, nil
 	}
 
 	const joinRPCBackoff = time.Second
@@ -451,28 +403,40 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 		addr := s.config.resolvers[idx].Addr()
 		select {
 		case <-tickChan:
-			state, err := s.attemptJoinTo(ctx, addr)
-			if err == nil {
-				return state, nil
-			}
-
-			if errors.Is(err, errJoinRPCUnsupported) || errors.Is(err, ErrIncompatibleBinaryVersion) {
-				// Propagate upwards; these are error conditions the caller
+			resp, err := s.attemptJoinTo(ctx, addr)
+			if errors.Is(err, ErrIncompatibleBinaryVersion) {
+				// Propagate upwards; this is an error condition the caller
 				// knows to expect.
 				return nil, err
 			}
+			if err != nil {
+				// Blindly retry for all other errors, logging them for visibility.
 
-			// Blindly retry for all other errors, logging them for visibility.
+				// TODO(irfansharif): If startup logging gets too spammy, we
+				// could match against connection errors to generate nicer
+				// logging. See grpcutil.connectionRefusedRe.
 
-			// TODO(irfansharif): If startup logging gets too spammy, we
-			// could match against connection errors to generate nicer
-			// logging. See grpcutil.connectionRefusedRe.
-
-			if IsWaitingForInit(err) {
-				log.Warningf(ctx, "%s is itself waiting for init, will retry", addr)
-			} else {
-				log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
+				if IsWaitingForInit(err) {
+					log.Infof(ctx, "%s is itself waiting for init, will retry", addr)
+				} else {
+					log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
+				}
+				continue
 			}
+
+			// We were able to successfully join an existing cluster. We'll now
+			// initialize our first store, using the store ID handed to us.
+			state, err := s.initializeFirstStoreAfterJoin(ctx, resp)
+			if err != nil {
+				return nil, err
+			}
+
+			// We mark ourselves as bootstrapped to prevent future bootstrap attempts.
+			s.mu.Lock()
+			s.mu.bootstrapped = true
+			s.mu.Unlock()
+
+			return state, nil
 		case <-ctx.Done():
 			return nil, context.Canceled
 		case <-stopper.ShouldQuiesce():
@@ -481,9 +445,10 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 	}
 }
 
-// attemptJoinTo attempts to join to the node running at the given address. If
-// successful, an initState is returned.
-func (s *initServer) attemptJoinTo(ctx context.Context, addr string) (*initState, error) {
+// attemptJoinTo attempts to join to the node running at the given address.
+func (s *initServer) attemptJoinTo(
+	ctx context.Context, addr string,
+) (*roachpb.JoinNodeResponse, error) {
 	conn, err := grpc.DialContext(ctx, addr, s.config.dialOpts...)
 	if err != nil {
 		return nil, err
@@ -517,11 +482,6 @@ func (s *initServer) attemptJoinTo(ctx context.Context, addr string) (*initState
 		// The caller code, as written, switches on the error type; that'll need
 		// to be changed as well.
 
-		if status.Code() == codes.Unimplemented {
-			log.Infof(ctx, "%s running an older version; falling back to gossip-based cluster join", addr)
-			return nil, errJoinRPCUnsupported
-		}
-
 		if status.Code() == codes.PermissionDenied {
 			log.Infof(ctx, "%s is running a version higher than our binary version %s", addr, req.BinaryVersion.String())
 			return nil, ErrIncompatibleBinaryVersion
@@ -530,44 +490,50 @@ func (s *initServer) attemptJoinTo(ctx context.Context, addr string) (*initState
 		return nil, err
 	}
 
-	clusterID, err := uuid.FromBytes(resp.ClusterID)
-	if err != nil {
-		return nil, err
-	}
-
-	s.mu.Lock()
-	s.mu.inspectState.clusterID = clusterID
-	s.mu.inspectState.nodeID = roachpb.NodeID(resp.NodeID)
-	s.mu.inspectState.clusterVersion = clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
-	diskState := *s.mu.inspectState
-	s.mu.Unlock()
-
-	state := &initState{
-		initDiskState: diskState,
-		firstStoreID:  roachpb.StoreID(resp.StoreID),
-	}
-
-	return state, nil
+	return resp, nil
 }
 
-func (s *initServer) tryBootstrapLocked(ctx context.Context) (*initState, error) {
+func (s *initServer) tryBootstrap(ctx context.Context) (*initState, error) {
 	// We use our binary version to bootstrap the cluster.
 	cv := clusterversion.ClusterVersion{Version: s.config.binaryVersion}
-	if err := kvserver.WriteClusterVersionToEngines(ctx, s.mu.inspectState.newEngines, cv); err != nil {
+	if err := kvserver.WriteClusterVersionToEngines(ctx, s.inspectedDiskState.uninitializedEngines, cv); err != nil {
 		return nil, err
 	}
-	return bootstrapCluster(
-		ctx, s.mu.inspectState.newEngines, &s.config.defaultZoneConfig, &s.config.defaultSystemZoneConfig,
-	)
+
+	return bootstrapCluster(ctx, s.inspectedDiskState.uninitializedEngines, s.config)
 }
 
 // DiskClusterVersion returns the cluster version synthesized from disk. This
 // is always non-zero since it falls back to the BinaryMinSupportedVersion.
 func (s *initServer) DiskClusterVersion() clusterversion.ClusterVersion {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	return s.inspectedDiskState.clusterVersion
+}
 
-	return s.mu.inspectState.clusterVersion
+// initializeFirstStoreAfterJoin initializes the first store after a successful
+// join attempt. It re-constructs the store identifier from the join response
+// and persists the appropriate cluster version to disk. After having done so,
+// it returns an initState that captures the newly initialized store.
+func (s *initServer) initializeFirstStoreAfterJoin(
+	ctx context.Context, resp *roachpb.JoinNodeResponse,
+) (*initState, error) {
+	firstEngine := s.inspectedDiskState.uninitializedEngines[0]
+	clusterVersion := clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
+	if err := kvserver.WriteClusterVersion(ctx, firstEngine, clusterVersion); err != nil {
+		return nil, err
+	}
+
+	sIdent, err := resp.CreateStoreIdent()
+	if err != nil {
+		return nil, err
+	}
+	if err := kvserver.InitEngine(ctx, firstEngine, sIdent); err != nil {
+		return nil, err
+	}
+
+	return inspectEngines(
+		ctx, s.inspectedDiskState.uninitializedEngines,
+		s.config.binaryVersion, s.config.binaryMinSupportedVersion,
+	)
 }
 
 // initServerCfg is a thin wrapper around the server Config object, exposing

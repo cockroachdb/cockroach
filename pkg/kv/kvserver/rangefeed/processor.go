@@ -179,7 +179,7 @@ func NewProcessor(cfg Config) *Processor {
 
 // IteratorConstructor is used to construct an iterator. It should be called
 // from underneath a stopper task to ensure that the engine has not been closed.
-type IteratorConstructor func() storage.SimpleIterator
+type IteratorConstructor func() storage.SimpleMVCCIterator
 
 // Start launches a goroutine to process rangefeed events and send them to
 // registrations.
@@ -471,7 +471,7 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) bool {
 	if p == nil {
 		return true
 	}
-	if closedTS == (hlc.Timestamp{}) {
+	if closedTS.IsEmpty() {
 		return true
 	}
 	return p.sendEvent(event{ct: closedTS}, p.EventChanTimeout)
@@ -538,7 +538,7 @@ func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case len(e.ops) > 0:
 		p.consumeLogicalOps(ctx, e.ops)
-	case e.ct != hlc.Timestamp{}:
+	case !e.ct.IsEmpty():
 		p.forwardClosedTS(ctx, e.ct)
 	case e.initRTS:
 		p.initResolvedTS(ctx)

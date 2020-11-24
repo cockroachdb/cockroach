@@ -2,7 +2,7 @@ build
 EXPLAIN SELECT 1
 ----
 explain
- ├── columns: tree:2(string) field:3(string) description:4(string)
+ ├── columns: info:2(string)
  ├── stats: [rows=10]
  └── project
       ├── columns: "?column?":1(int!null)

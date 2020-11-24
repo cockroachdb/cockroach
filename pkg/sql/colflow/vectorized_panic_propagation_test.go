@@ -62,7 +62,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* toClose */
-		nil, /* outputStatsToTrace */
+		nil, /* execStatsForTrace */
 		nil, /* cancelFlow */
 	)
 	if err != nil {
@@ -109,7 +109,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* toClose */
-		nil, /* outputStatsToTrace */
+		nil, /* execStatsForTrace */
 		nil, /* cancelFlow */
 	)
 	if err != nil {

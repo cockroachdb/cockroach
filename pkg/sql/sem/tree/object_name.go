@@ -94,6 +94,19 @@ func (tp *ObjectNamePrefix) Catalog() string {
 	return string(tp.CatalogName)
 }
 
+// ObjectNamePrefixList is a list of ObjectNamePrefix
+type ObjectNamePrefixList []ObjectNamePrefix
+
+// Format implements the NodeFormatter interface.
+func (tp ObjectNamePrefixList) Format(ctx *FmtCtx) {
+	for idx, objectNamePrefix := range tp {
+		ctx.FormatNode(&objectNamePrefix)
+		if idx != len(tp)-1 {
+			ctx.WriteString(", ")
+		}
+	}
+}
+
 // UnresolvedObjectName is an unresolved qualified name for a database object
 // (table, view, etc). It is like UnresolvedName but more restrictive.
 // It should only be constructed via NewUnresolvedObjectName.

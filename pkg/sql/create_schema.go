@@ -44,8 +44,12 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaCreate)
+	dbName := p.CurrentDatabase()
+	if n.Schema.ExplicitCatalog {
+		dbName = n.Schema.Catalog()
+	}
 
-	db, err := p.ResolveMutableDatabaseDescriptor(params.ctx, p.CurrentDatabase(), true /* required */)
+	db, err := p.ResolveMutableDatabaseDescriptor(params.ctx, dbName, true /* required */)
 	if err != nil {
 		return err
 	}
@@ -59,9 +63,11 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
-	schemaName := n.Schema
-	if n.Schema == "" {
-		schemaName = n.AuthRole
+	var schemaName string
+	if !n.Schema.ExplicitSchema {
+		schemaName = n.AuthRole.Normalized()
+	} else {
+		schemaName = n.Schema.Schema()
 	}
 
 	// Ensure there aren't any name collisions.
@@ -102,7 +108,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		privs.Users[i].Privileges &= privilege.SchemaPrivileges.ToBitField()
 	}
 
-	if n.AuthRole != "" {
+	if !n.AuthRole.Undefined() {
 		exists, err := p.RoleExists(params.ctx, n.AuthRole)
 		if err != nil {
 			return err
@@ -112,7 +118,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		}
 		privs.SetOwner(n.AuthRole)
 	} else {
-		privs.SetOwner(params.SessionData().User)
+		privs.SetOwner(params.SessionData().User())
 	}
 
 	// Create the SchemaDescriptor.
@@ -141,13 +147,27 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	// Finally create the schema on disk.
-	return p.createDescriptorWithID(
+	if err := p.createDescriptorWithID(
 		params.ctx,
 		catalogkeys.NewSchemaKey(db.ID, schemaName).Key(p.ExecCfg().Codec),
 		id,
 		desc,
 		params.ExecCfg().Settings,
 		tree.AsStringWithFQNames(n, params.Ann()),
+	); err != nil {
+		return err
+	}
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		EventLogCreateSchema,
+		int32(desc.GetID()),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			SchemaName string
+			Owner      string
+			User       string
+		}{schemaName, privs.Owner().Normalized(), params.p.User().Normalized()},
 	)
 }
 

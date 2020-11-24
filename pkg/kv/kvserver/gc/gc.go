@@ -250,7 +250,7 @@ func processReplicatedKeyRange(
 		if meta.Txn != nil {
 			// Keep track of intent to resolve if older than the intent
 			// expiration threshold.
-			if hlc.Timestamp(meta.Timestamp).Less(intentExp) {
+			if meta.Timestamp.ToTimestamp().Less(intentExp) {
 				txnID := meta.Txn.ID
 				if _, ok := txnMap[txnID]; !ok {
 					txnMap[txnID] = &roachpb.Transaction{
@@ -484,8 +484,8 @@ func processLocalKeyRange(
 	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
 
 	_, err := storage.MVCCIterate(ctx, snap, startKey, endKey, hlc.Timestamp{}, storage.MVCCScanOptions{},
-		func(kv roachpb.KeyValue) (bool, error) {
-			return false, handleOne(kv)
+		func(kv roachpb.KeyValue) error {
+			return handleOne(kv)
 		})
 	return err
 }

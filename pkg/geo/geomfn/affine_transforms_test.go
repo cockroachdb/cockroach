@@ -542,3 +542,54 @@ func TestRotateWithPointOrigin(t *testing.T) {
 		})
 	}
 }
+
+func TestTransScale(t *testing.T) {
+	tests := []struct {
+		name                       string
+		inputGeom                  geom.T
+		inputDeltaX, inputDeltaY   float64
+		inputXFactor, inputYFactor float64
+		wantGeom                   geom.T
+	}{
+		{
+			name:         "transscale a 2D LINESTRING",
+			inputGeom:    geom.NewLineStringFlat(geom.XY, []float64{1, 2, 1, 1}),
+			inputDeltaX:  5,
+			inputDeltaY:  1,
+			inputXFactor: 1,
+			inputYFactor: 2,
+			wantGeom:     geom.NewLineStringFlat(geom.XY, []float64{6, 6, 6, 4}),
+		},
+		{
+			name:         "transscale a 2D POINT",
+			inputGeom:    geom.NewPointFlat(geom.XY, []float64{10, 20}),
+			inputDeltaX:  5,
+			inputDeltaY:  1,
+			inputXFactor: 1,
+			inputYFactor: 2,
+			wantGeom:     geom.NewPointFlat(geom.XY, []float64{15, 42}),
+		},
+		{
+			name:         "transscale a 2D POLYGON",
+			inputGeom:    geom.NewPolygonFlat(geom.XY, []float64{0, 0, 1, 0, 1, 1, 0, 1, 0, 0}, []int{10}),
+			inputDeltaX:  10,
+			inputDeltaY:  15,
+			inputXFactor: 10,
+			inputYFactor: 15,
+			wantGeom:     geom.NewPolygonFlat(geom.XY, []float64{100, 225, 110, 225, 110, 240, 100, 240, 100, 225}, []int{10}),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			g, err := geo.MakeGeometryFromGeomT(tt.inputGeom)
+			require.NoError(t, err)
+
+			got, err := TransScale(g, tt.inputDeltaX, tt.inputDeltaY, tt.inputXFactor, tt.inputYFactor)
+			require.NoError(t, err)
+			actualGeomT, err := got.AsGeomT()
+			require.NoError(t, err)
+			require.Equal(t, tt.wantGeom, actualGeomT)
+		})
+	}
+}

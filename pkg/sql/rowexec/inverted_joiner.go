@@ -12,9 +12,8 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -29,19 +28,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // TODO(sumeer): adjust this batch size dynamically to balance between the
 // higher scan throughput of larger batches and the cost of spilling the
 // scanned rows to disk. The spilling cost will probably be dominated by
 // the de-duping cost, since it incurs a read.
-const invertedJoinerBatchSize = 100
+var invertedJoinerBatchSize = util.ConstantWithMetamorphicTestValue(
+	100, /* defaultValue */
+	1,   /* metamorphicValue */
+)
 
 // invertedJoinerState represents the state of the processor.
 type invertedJoinerState int
@@ -64,7 +64,7 @@ type invertedJoiner struct {
 	diskMonitor  *mon.BytesMonitor
 	desc         tabledesc.Immutable
 	// The map from ColumnIDs in the table to the column position.
-	colIdxMap map[descpb.ColumnID]int
+	colIdxMap catalog.TableColMap
 	index     *descpb.IndexDescriptor
 	// The ColumnID of the inverted column. Confusingly, this is also the id of
 	// the table column that was indexed.
@@ -136,11 +136,7 @@ type invertedJoiner struct {
 		seenMatch bool
 	}
 
-	spanBuilder *span.Builder
-	// A row with one element, corresponding to an encoded inverted column
-	// value. Used to construct the span of the index for that value.
-	invertedColRow rowenc.EncDatumRow
-
+	spanBuilder           *span.Builder
 	outputContinuationCol bool
 }
 
@@ -163,6 +159,11 @@ func newInvertedJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
+	switch spec.Type {
+	case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.LeftSemiJoin, descpb.LeftAntiJoin:
+	default:
+		return nil, errors.AssertionFailedf("unexpected inverted join type %s", spec.Type)
+	}
 	ij := &invertedJoiner{
 		desc:                 tabledesc.MakeImmutable(spec.Table),
 		input:                input,
@@ -190,7 +191,7 @@ func newInvertedJoiner(
 	ij.keyRowToTableRowMap = make([]int, len(indexColumnIDs)-1)
 	for i := 1; i < len(indexColumnIDs); i++ {
 		keyRowIdx := i - 1
-		tableRowIdx := ij.colIdxMap[indexColumnIDs[i]]
+		tableRowIdx := ij.colIdxMap.GetDefault(indexColumnIDs[i])
 		ij.tableRowToKeyRowMap[tableRowIdx] = keyRowIdx
 		ij.keyRowToTableRowMap[keyRowIdx] = tableRowIdx
 		ij.keyTypes[keyRowIdx] = ij.desc.Columns[tableRowIdx].Type
@@ -268,7 +269,7 @@ func newInvertedJoiner(
 	// such workloads actually occur in practice.
 	allIndexCols := util.MakeFastIntSet()
 	for _, colID := range indexColumnIDs {
-		allIndexCols.Add(ij.colIdxMap[colID])
+		allIndexCols.Add(ij.colIdxMap.GetDefault(colID))
 	}
 	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
 	// and so do not need to see in-progress schema changes.
@@ -283,18 +284,18 @@ func newInvertedJoiner(
 	}
 
 	collectingStats := false
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		collectingStats = true
 	}
 	if collectingStats {
 		ij.input = newInputStatCollector(ij.input)
 		ij.fetcher = newRowFetcherStatCollector(&fetcher)
-		ij.FinishTrace = ij.outputStatsToTrace
+		ij.ExecStatsForTrace = ij.execStatsForTrace
 	} else {
 		ij.fetcher = &fetcher
 	}
 
-	ij.spanBuilder = span.MakeBuilder(flowCtx.Codec(), &ij.desc, ij.index)
+	ij.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), &ij.desc, ij.index)
 	ij.spanBuilder.SetNeededColumns(allIndexCols)
 
 	// Initialize memory monitors and row container for key rows.
@@ -318,35 +319,6 @@ func newInvertedJoiner(
 // SetBatchSize sets the desired batch size. It should only be used in tests.
 func (ij *invertedJoiner) SetBatchSize(batchSize int) {
 	ij.batchSize = batchSize
-}
-
-func (ij *invertedJoiner) generateSpan(enc []byte) (roachpb.Span, error) {
-	// Pretend that the encoded inverted val is an EncDatum. This isn't always
-	// true, since JSON inverted columns use a custom encoding. But since we
-	// are providing an already encoded Datum, the following will eventually
-	// fall through to EncDatum.Encode() which will reuse the encoded bytes.
-	encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
-	ij.invertedColRow = append(ij.invertedColRow[:0], encDatum)
-	span, _, err := ij.spanBuilder.SpanFromEncDatums(ij.invertedColRow, 1 /* prefixLen */)
-	return span, err
-}
-
-func (ij *invertedJoiner) generateSpans(invertedSpans []invertedSpan) ([]roachpb.Span, error) {
-	spans := make([]roachpb.Span, len(invertedSpans))
-	for i, span := range invertedSpans {
-		startSpan, err := ij.generateSpan(span.Start)
-		if err != nil {
-			return nil, err
-		}
-
-		endSpan, err := ij.generateSpan(span.End)
-		if err != nil {
-			return nil, err
-		}
-		startSpan.EndKey = endSpan.Key
-		spans[i] = startSpan
-	}
-	return spans, nil
 }
 
 // Next is part of the RowSource interface.
@@ -453,7 +425,9 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 	}
 	// NB: spans is already sorted, and that sorting is preserved when
 	// generating indexSpans.
-	indexSpans, err := ij.generateSpans(spans)
+	// TODO(mgartner): Pass a constraint that constrains the prefix columns of
+	// multi-column inverted indexes.
+	indexSpans, err := ij.spanBuilder.SpansFromInvertedSpans(spans, nil /* constraint */)
 	if err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, ij.DrainHelper()
@@ -484,7 +458,8 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			// Done with this input batch.
 			break
 		}
-		encInvertedVal := scannedRow[ij.colIdxMap[ij.invertedColID]].EncodedBytes()
+		idx := ij.colIdxMap.GetDefault(ij.invertedColID)
+		encInvertedVal := scannedRow[idx].EncodedBytes()
 		shouldAdd, err := ij.batchedExprEval.prepareAddIndexRow(encInvertedVal)
 		if err != nil {
 			ij.MoveToDraining(err)
@@ -691,59 +666,27 @@ func (ij *invertedJoiner) close() {
 	}
 }
 
-var _ execinfrapb.DistSQLSpanStats = &InvertedJoinerStats{}
-
-const invertedJoinerTagPrefix = "invertedjoiner."
-
-// Stats implements the SpanStats interface.
-func (ijs *InvertedJoinerStats) Stats() map[string]string {
-	statsMap := ijs.InputStats.Stats(invertedJoinerTagPrefix)
-	toMerge := ijs.IndexScanStats.Stats(invertedJoinerTagPrefix + "index.")
-	for k, v := range toMerge {
-		statsMap[k] = v
-	}
-	statsMap[invertedJoinerTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(ijs.MaxAllocatedMem)
-	statsMap[invertedJoinerTagPrefix+MaxDiskTagSuffix] = humanizeutil.IBytes(ijs.MaxAllocatedDisk)
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (ijs *InvertedJoinerStats) StatsForQueryPlan() []string {
-	stats := append(
-		ijs.InputStats.StatsForQueryPlan(""),
-		ijs.IndexScanStats.StatsForQueryPlan("index ")...,
-	)
-	if ijs.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ijs.MaxAllocatedMem)))
-	}
-	if ijs.MaxAllocatedDisk != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ijs.MaxAllocatedDisk)))
-	}
-	return stats
-}
-
-// outputStatsToTrace outputs the collected stats to the trace. Will
-// fail silently if the invertedJoiner is not collecting stats.
-func (ij *invertedJoiner) outputStatsToTrace() {
-	is, ok := getInputStats(ij.FlowCtx, ij.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(ij.input)
 	if !ok {
-		return
+		return nil
 	}
-	fis, ok := getFetcherInputStats(ij.FlowCtx, ij.fetcher)
+	fis, ok := getFetcherInputStats(ij.fetcher)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := opentracing.SpanFromContext(ij.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
-			&InvertedJoinerStats{
-				InputStats:       is,
-				IndexScanStats:   fis,
-				MaxAllocatedMem:  ij.MemMonitor.MaximumBytes(),
-				MaxAllocatedDisk: ij.diskMonitor.MaximumBytes(),
-			})
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		KV: execinfrapb.KVStats{
+			TuplesRead: fis.NumTuples,
+			KVTime:     fis.WaitTime,
+		},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem:  execinfrapb.MakeIntValue(uint64(ij.MemMonitor.MaximumBytes())),
+			MaxAllocatedDisk: execinfrapb.MakeIntValue(uint64(ij.diskMonitor.MaximumBytes())),
+		},
+		Output: ij.Out.Stats(),
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -51,6 +52,7 @@ func initCLIDefaults() {
 	setDemoContextDefaults()
 	setStmtDiagContextDefaults()
 	setAuthContextDefaults()
+	setImportContextDefaults()
 
 	initPreFlagsDefaults()
 
@@ -535,6 +537,8 @@ var demoCtx struct {
 	simulateLatency           bool
 	transientCluster          *transientCluster
 	insecure                  bool
+	sqlPort                   int
+	httpPort                  int
 }
 
 // setDemoContextDefaults set the default values in demoCtx.  This
@@ -553,6 +557,8 @@ func setDemoContextDefaults() {
 	demoCtx.disableLicenseAcquisition = false
 	demoCtx.transientCluster = nil
 	demoCtx.insecure = false
+	demoCtx.sqlPort, _ = strconv.Atoi(base.DefaultPort)
+	demoCtx.httpPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'
@@ -563,6 +569,17 @@ var stmtDiagCtx struct {
 
 func setStmtDiagContextDefaults() {
 	stmtDiagCtx.all = false
+}
+
+// importCtx captures the command-line parameters of the 'import' command.
+var importCtx struct {
+	maxRowSize      int
+	skipForeignKeys bool
+}
+
+func setImportContextDefaults() {
+	importCtx.maxRowSize = 512 * (1 << 10) // 512 KiB
+	importCtx.skipForeignKeys = false
 }
 
 // GetServerCfgStores provides direct public access to the StoreSpecList inside

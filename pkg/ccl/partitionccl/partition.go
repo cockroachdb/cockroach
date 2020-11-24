@@ -18,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -97,6 +97,17 @@ func valueEncodePartitionTuple(
 		}
 
 		var semaCtx tree.SemaContext
+
+		// Disallow partitioning by user-defined types because it causes issues
+		// during table descriptor validation.
+		//
+		// TODO(ajwerner): Fix this limitation by reworking validation in the
+		// descs.Collection to operate on hydrated descriptors.
+		if cols[i].Type.UserDefined() {
+			return nil, errors.UnimplementedError(errors.IssueLink{
+				IssueURL: "https://github.com/cockroachdb/cockroach/issues/55342",
+			}, "partitioning by enum values is not supported")
+		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(evalCtx.Context, expr, cols[i].Type, "partition",
 			&semaCtx,
 			tree.VolatilityImmutable,

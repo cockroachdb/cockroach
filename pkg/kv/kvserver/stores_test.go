@@ -375,8 +375,8 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 
 	ls0.AddStore(stores[0])
 
-	versionA := roachpb.Version{Major: 1, Minor: 0, Unstable: 1} // 1.0-1
-	versionB := roachpb.Version{Major: 1, Minor: 0, Unstable: 2} // 1.0-2
+	versionA := roachpb.Version{Major: 1, Minor: 0, Internal: 1} // 1.0-1
+	versionB := roachpb.Version{Major: 1, Minor: 0, Internal: 2} // 1.0-2
 
 	// Verify that the initial read of an empty store synthesizes v1.0-0. This
 	// is the code path that runs after starting the 1.1 binary for the first
@@ -477,7 +477,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 
 	ctx := context.Background()
 
-	vOneDashOne := roachpb.Version{Major: 1, Unstable: 1}
+	vOneDashOne := roachpb.Version{Major: 1, Internal: 1}
 	vOne := roachpb.Version{Major: 1}
 
 	type testCase struct {

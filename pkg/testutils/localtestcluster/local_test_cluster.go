@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -34,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -84,7 +85,7 @@ type LocalTestCluster struct {
 type InitFactoryFn func(
 	st *cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
-	tracer opentracing.Tracer,
+	tracer *tracing.Tracer,
 	clock *hlc.Clock,
 	latency time.Duration,
 	stores kv.Sender,
@@ -131,8 +132,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	clusterID := &cfg.RPCContext.ClusterID
 	server := rpc.NewServer(cfg.RPCContext) // never started
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, cfg.RPCContext, server, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
-	ltc.Eng = storage.NewInMem(ambient.AnnotateCtx(context.Background()),
-		storage.DefaultStorageEngine, roachpb.Attributes{}, 50<<20)
+	ltc.Eng = storage.NewInMem(ambient.AnnotateCtx(context.Background()), roachpb.Attributes{}, 50<<20)
 	ltc.stopper.AddCloser(ltc.Eng)
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
@@ -162,16 +162,16 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	cfg.Gossip = ltc.Gossip
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
-	cfg.NodeLiveness = kvserver.NewNodeLiveness(
-		cfg.AmbientCtx,
-		cfg.Clock,
-		cfg.DB,
-		cfg.Gossip,
-		active,
-		renewal,
-		cfg.Settings,
-		cfg.HistogramWindowInterval,
-	)
+	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
+		AmbientCtx:              cfg.AmbientCtx,
+		Clock:                   cfg.Clock,
+		DB:                      cfg.DB,
+		Gossip:                  cfg.Gossip,
+		LivenessThreshold:       active,
+		RenewalDuration:         renewal,
+		Settings:                cfg.Settings,
+		HistogramWindowInterval: cfg.HistogramWindowInterval,
+	})
 	kvserver.TimeUntilStoreDead.Override(&cfg.Settings.SV, kvserver.TestTimeUntilStoreDead)
 	cfg.StorePool = kvserver.NewStorePool(
 		cfg.AmbientCtx,
@@ -229,7 +229,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	if !ltc.DisableLivenessHeartbeat {
-		cfg.NodeLiveness.StartHeartbeat(ctx, ltc.stopper, []storage.Engine{ltc.Eng}, nil /* alive */)
+		cfg.NodeLiveness.Start(ctx,
+			liveness.NodeLivenessStartOptions{Stopper: ltc.stopper, Engines: []storage.Engine{ltc.Eng}})
 	}
 
 	if err := ltc.Store.Start(ctx, ltc.stopper); err != nil {

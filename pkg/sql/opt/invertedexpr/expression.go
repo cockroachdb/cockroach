@@ -244,6 +244,16 @@ func (is InvertedSpans) Swap(i, j int) {
 	is[i], is[j] = is[j], is[i]
 }
 
+// Start implements the span.KeyableInvertedSpans interface.
+func (is InvertedSpans) Start(i int) []byte {
+	return is[i].Start
+}
+
+// End implements the span.KeyableInvertedSpans interface.
+func (is InvertedSpans) End(i int) []byte {
+	return is[i].End
+}
+
 // InvertedExpression is the interface representing an expression or sub-expression
 // to be evaluated on the inverted index. Any implementation can be used in the
 // builder functions And() and Or(), but in practice there are two useful
@@ -336,6 +346,8 @@ type InvertedExpression interface {
 	IsTight() bool
 	// SetNotTight sets tight to false.
 	SetNotTight()
+	// Copy makes a copy of the inverted expression.
+	Copy() InvertedExpression
 }
 
 // SpanExpression is an implementation of InvertedExpression.
@@ -396,6 +408,29 @@ func (s *SpanExpression) IsTight() bool {
 // SetNotTight implements the InvertedExpression interface.
 func (s *SpanExpression) SetNotTight() {
 	s.Tight = false
+}
+
+// Copy implements the InvertedExpression interface.
+//
+// Copy makes a copy of the SpanExpression and returns it. Copy recurses into
+// the children and makes copies of them as well, so the new struct is
+// independent from the old. It does *not* perform a deep copy of the
+// SpansToRead or FactoredUnionSpans slices, however, because those slices are
+// never modified in place and therefore are safe to reuse.
+func (s *SpanExpression) Copy() InvertedExpression {
+	res := &SpanExpression{
+		Tight:              s.Tight,
+		SpansToRead:        s.SpansToRead,
+		FactoredUnionSpans: s.FactoredUnionSpans,
+		Operator:           s.Operator,
+	}
+	if s.Left != nil {
+		res.Left = s.Left.Copy()
+	}
+	if s.Right != nil {
+		res.Right = s.Right.Copy()
+	}
+	return res
 }
 
 func (s *SpanExpression) String() string {
@@ -485,6 +520,29 @@ func (n NonInvertedColExpression) IsTight() bool {
 // SetNotTight implements the InvertedExpression interface.
 func (n NonInvertedColExpression) SetNotTight() {}
 
+// Copy implements the InvertedExpression interface.
+func (n NonInvertedColExpression) Copy() InvertedExpression {
+	return NonInvertedColExpression{}
+}
+
+// SpanExpressionProtoSpans is a slice of SpanExpressionProto_Span.
+type SpanExpressionProtoSpans []SpanExpressionProto_Span
+
+// Len implements the span.KeyableInvertedSpans interface.
+func (s SpanExpressionProtoSpans) Len() int {
+	return len(s)
+}
+
+// Start implements the span.KeyableInvertedSpans interface.
+func (s SpanExpressionProtoSpans) Start(i int) []byte {
+	return s[i].Start
+}
+
+// End implements the span.KeyableInvertedSpans interface.
+func (s SpanExpressionProtoSpans) End(i int) []byte {
+	return s[i].End
+}
+
 // ExprForInvertedSpan constructs a leaf-level SpanExpression
 // for an inverted expression. Note that these leaf-level
 // expressions may also have tight = false. Geospatial functions
@@ -508,7 +566,8 @@ func ExprForInvertedSpan(span InvertedSpan, tight bool) *SpanExpression {
 	}
 }
 
-// And of two boolean expressions.
+// And of two boolean expressions. This function may modify both the left and
+// right InvertedExpressions.
 func And(left, right InvertedExpression) InvertedExpression {
 	switch l := left.(type) {
 	case *SpanExpression:
@@ -542,7 +601,8 @@ func And(left, right InvertedExpression) InvertedExpression {
 	}
 }
 
-// Or of two boolean expressions.
+// Or of two boolean expressions. This function may modify both the left and
+// right InvertedExpressions.
 func Or(left, right InvertedExpression) InvertedExpression {
 	switch l := left.(type) {
 	case *SpanExpression:

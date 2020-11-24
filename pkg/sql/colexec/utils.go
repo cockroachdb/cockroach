@@ -13,15 +13,12 @@ package colexec
 import (
 	"context"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
 
@@ -29,24 +26,7 @@ var (
 	zeroBoolColumn   = make([]bool, coldata.MaxBatchSize)
 	zeroIntColumn    = make([]int, coldata.MaxBatchSize)
 	zeroUint64Column = make([]uint64, coldata.MaxBatchSize)
-
-	zeroDecimalValue  apd.Decimal
-	zeroFloat64Value  float64
-	zeroInt64Value    int64
-	zeroIntervalValue duration.Duration
-	zeroBytesValue    []byte
 )
-
-// overloadHelper is a utility struct that helps us avoid allocations
-// of temporary decimals on every overloaded operation with them as well as
-// plumbs through other useful information. In order for the templates to see
-// it correctly, a local variable named `_overloadHelper` of this type must be declared
-// before the inlined overloaded code.
-type overloadHelper struct {
-	tmpDec1, tmpDec2 apd.Decimal
-	binFn            tree.TwoArgFn
-	evalCtx          *tree.EvalContext
-}
 
 // makeWindowIntoBatch updates windowedBatch so that it provides a "window"
 // into inputBatch starting at tuple index startIdx. It handles selection

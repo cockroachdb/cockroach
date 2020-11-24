@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -87,30 +86,25 @@ func ClearRange(
 	// instead of using a range tombstone (inefficient for small ranges).
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
-		if err := readWriter.Iterate(from, to,
-			func(kv storage.MVCCKeyValue) (bool, error) {
-				return false, readWriter.Clear(kv.Key)
-			},
-		); err != nil {
+		iter := readWriter.NewEngineIterator(storage.IterOptions{UpperBound: to})
+		valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: from})
+		for ; valid; valid, err = iter.NextEngineKey() {
+			var k storage.EngineKey
+			if k, err = iter.UnsafeEngineKey(); err != nil {
+				break
+			}
+			if err = readWriter.ClearEngineKey(k); err != nil {
+				return result.Result{}, err
+			}
+		}
+		iter.Close()
+		if err != nil {
 			return result.Result{}, err
 		}
 		return pd, nil
 	}
 
-	// Otherwise, suggest a compaction for the cleared range and clear
-	// the key span using engine.ClearRange.
-	pd.Replicated.SuggestedCompactions = []kvserverpb.SuggestedCompaction{
-		{
-			StartKey: from,
-			EndKey:   to,
-			Compaction: kvserverpb.Compaction{
-				Bytes:            statsDelta.Total(),
-				SuggestedAtNanos: cArgs.Header.Timestamp.WallTime,
-			},
-		},
-	}
-	if err := readWriter.ClearRange(storage.MakeMVCCMetadataKey(from),
-		storage.MakeMVCCMetadataKey(to)); err != nil {
+	if err := readWriter.ClearMVCCRangeAndIntents(from, to); err != nil {
 		return result.Result{}, err
 	}
 	return pd, nil
@@ -146,7 +140,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled,
 	// compute stats across the key span to be cleared.
 	if !fast || util.RaceEnabled {
-		iter := readWriter.NewIterator(storage.IterOptions{UpperBound: to})
+		iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: to})
 		computed, err := iter.ComputeStats(from, to, delta.LastUpdateNanos)
 		iter.Close()
 		if err != nil {

@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -158,14 +157,10 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 	tableDesc.AddColumnMutation(shardColDesc, descpb.DescriptorMutation_DROP)
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].ID == shardColDesc.ID {
-			tmp := tableDesc.Columns[:0]
-			for j, col := range tableDesc.Columns {
-				if i == j {
-					continue
-				}
-				tmp = append(tmp, col)
-			}
-			tableDesc.Columns = tmp
+			// Note the third slice parameter which will force a copy of the backing
+			// array if the column being removed is not the last column.
+			tableDesc.Columns = append(tableDesc.Columns[:i:i],
+				tableDesc.Columns[i+1:]...)
 			break
 		}
 	}
@@ -249,7 +244,7 @@ func (p *planner) dropIndexByName(
 			return nil
 		}
 		// Index does not exist, but we want it to: error out.
-		return err
+		return pgerror.WithCandidateCode(err, pgcode.UndefinedObject)
 	}
 	if dropped {
 		return nil
@@ -330,14 +325,6 @@ func (p *planner) dropIndexByName(
 			}
 		}
 		return foundReplacement
-	}
-	// If we aren't at the cluster version where we have removed explicit foreign key IDs
-	// from the foreign key descriptors, fall back to the existing drop index logic.
-	// That means we pretend that we can never find replacements for any indexes.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionNoExplicitForeignKeyIndexIDs) {
-		indexHasReplacementCandidate = func(func(*descpb.IndexDescriptor) bool) bool {
-			return false
-		}
 	}
 
 	// Check for foreign key mutations referencing this index.
@@ -474,7 +461,7 @@ func (p *planner) dropIndexByName(
 					// We have to explicitly check that the range descriptor's start key
 					// lies within the span of the index since ScanMetaKVs returns all
 					// intersecting spans.
-					if (desc.GetStickyBit() != hlc.Timestamp{}) && span.Key.Compare(desc.StartKey.AsRawKey()) <= 0 {
+					if !desc.GetStickyBit().IsEmpty() && span.Key.Compare(desc.StartKey.AsRawKey()) <= 0 {
 						// Swallow "key is not the start of a range" errors because it would
 						// mean that the sticky bit was removed and merged concurrently. DROP
 						// INDEX should not fail because of this.
@@ -498,7 +485,11 @@ func (p *planner) dropIndexByName(
 		}
 	}
 	if !found {
-		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
+		return pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			"index %q in the middle of being added, try again later",
+			idxName,
+		)
 	}
 
 	if err := p.removeIndexComment(ctx, tableDesc.ID, idx.ID); err != nil {
@@ -537,7 +528,7 @@ func (p *planner) dropIndexByName(
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{tn.FQString(), string(idxName), jobDesc, p.SessionData().User, uint32(mutationID),
+		}{tn.FQString(), string(idxName), jobDesc, p.User().Normalized(), uint32(mutationID),
 			droppedViews},
 	)
 }

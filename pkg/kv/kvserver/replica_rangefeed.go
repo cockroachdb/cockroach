@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
@@ -112,12 +112,12 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 }
 
 type iteratorWithCloser struct {
-	storage.SimpleIterator
+	storage.SimpleMVCCIterator
 	close func()
 }
 
 func (i iteratorWithCloser) Close() {
-	i.SimpleIterator.Close()
+	i.SimpleMVCCIterator.Close()
 	i.close()
 }
 
@@ -130,7 +130,7 @@ func (r *Replica) RangeFeed(
 ) *roachpb.Error {
 	if !r.isSystemRange() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-			base.DocsURL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
 	ctx := r.AnnotateCtx(stream.Context())
 
@@ -199,9 +199,9 @@ func (r *Replica) RangeFeed(
 	// Register the stream with a catch-up iterator.
 	var catchUpIterFunc rangefeed.IteratorConstructor
 	if usingCatchupIter {
-		catchUpIterFunc = func() storage.SimpleIterator {
+		catchUpIterFunc = func() storage.SimpleMVCCIterator {
 
-			innerIter := r.Engine().NewIterator(storage.IterOptions{
+			innerIter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				UpperBound: args.Span.EndKey,
 				// RangeFeed originally intended to use the time-bound iterator
 				// performance optimization. However, they've had correctness issues in
@@ -213,8 +213,8 @@ func (r *Replica) RangeFeed(
 				// MinTimestampHint: args.Timestamp,
 			})
 			catchUpIter := iteratorWithCloser{
-				SimpleIterator: innerIter,
-				close:          iterSemRelease,
+				SimpleMVCCIterator: innerIter,
+				close:              iterSemRelease,
 			}
 			return catchUpIter
 		}
@@ -346,8 +346,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := func() storage.SimpleIterator {
-		return r.Engine().NewIterator(storage.IterOptions{
+	rtsIter := func() storage.SimpleMVCCIterator {
+		return r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: desc.EndKey.AsRawKey(),
 			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
 			// we should periodically persist the resolved timestamp so that we

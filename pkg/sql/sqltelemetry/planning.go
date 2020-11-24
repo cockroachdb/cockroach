@@ -33,6 +33,10 @@ var SubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery")
 // correlated subquery has been processed during planning.
 var CorrelatedSubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery.correlated")
 
+// UniqueChecksUseCounter is to be incremented every time a mutation has
+// unique checks and the checks are planned by the optimizer.
+var UniqueChecksUseCounter = telemetry.GetCounterOnce("sql.plan.unique.checks")
+
 // ForeignKeyChecksUseCounter is to be incremented every time a mutation has
 // foreign key checks and the checks are planned by the optimizer.
 var ForeignKeyChecksUseCounter = telemetry.GetCounterOnce("sql.plan.fk.checks")
@@ -56,6 +60,10 @@ var MergeJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.merge-joi
 // LookupJoinHintUseCounter is to be incremented whenever a query specifies a
 // lookup join via a query hint.
 var LookupJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.lookup-join")
+
+// InvertedJoinHintUseCounter is to be incremented whenever a query specifies an
+// inverted join via a query hint.
+var InvertedJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.inverted-join")
 
 // IndexHintUseCounter is to be incremented whenever a query specifies an index
 // hint. Incremented whenever one of the more specific variants below is

@@ -127,7 +127,7 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 	// adjusted accordingly.
 	const numInitialEntries = 100
 	for i := 0; i < numInitialEntries; i++ {
-		if err := e.Put(storage.MVCCKey{Key: append([]byte("b"), byte(i))}, nil); err != nil {
+		if err := e.PutUnversioned(append([]byte("b"), byte(i)), nil); err != nil {
 			t.Fatalf("%+v", err)
 		}
 	}

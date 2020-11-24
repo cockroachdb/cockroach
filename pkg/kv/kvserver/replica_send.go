@@ -18,14 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // Send executes a command on this range, dispatching it to the
@@ -307,7 +306,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			}
 		}
 		// Limit the transaction's maximum timestamp using observed timestamps.
-		r.limitTxnMaxTimestamp(ctx, ba, status)
+		ba.Txn = observedts.LimitTxnMaxTimestamp(ctx, ba.Txn, status)
 
 		// Determine the maximal set of key spans that the batch will operate
 		// on. We only need to do this once and we make sure to do so after we
@@ -542,7 +541,7 @@ func (r *Replica) executeAdminBatch(
 	}
 
 	args := ba.Requests[0].GetInner()
-	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		sp.SetOperationName(reflect.TypeOf(args).String())
 	}
 
@@ -645,7 +644,7 @@ func (r *Replica) executeAdminBatch(
 // TODO(tschottdorf): should check that request is contained in range and that
 // EndTxn only occurs at the very end.
 func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) error {
-	if ba.Timestamp == (hlc.Timestamp{}) {
+	if ba.Timestamp.IsEmpty() {
 		// For transactional requests, Store.Send sets the timestamp. For non-
 		// transactional requests, the client sets the timestamp. Either way, we
 		// need to have a timestamp at this point.
@@ -722,62 +721,4 @@ func (r *Replica) collectSpans(
 	}
 
 	return latchSpans, lockSpans, nil
-}
-
-// limitTxnMaxTimestamp limits the batch transaction's max timestamp
-// so that it respects any timestamp already observed on this node.
-// This prevents unnecessary uncertainty interval restarts caused by
-// reading a value written at a timestamp between txn.Timestamp and
-// txn.MaxTimestamp. The replica lease's start time is also taken into
-// consideration to ensure that a lease transfer does not result in
-// the observed timestamp for this node being inapplicable to data
-// previously written by the former leaseholder. To wit:
-//
-// 1. put(k on leaseholder n1), gateway chooses t=1.0
-// 2. begin; read(unrelated key on n2); gateway chooses t=0.98
-// 3. pick up observed timestamp for n2 of t=0.99
-// 4. n1 transfers lease for range with k to n2 @ t=1.1
-// 5. read(k) on leaseholder n2 at ReadTimestamp=0.98 should get
-//    ReadWithinUncertaintyInterval because of the write in step 1, so
-//    even though we observed n2's timestamp in step 3 we must expand
-//    the uncertainty interval to the lease's start time, which is
-//    guaranteed to be greater than any write which occurred under
-//    the previous leaseholder.
-func (r *Replica) limitTxnMaxTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, status kvserverpb.LeaseStatus,
-) {
-	if ba.Txn == nil {
-		return
-	}
-	// For calls that read data within a txn, we keep track of timestamps
-	// observed from the various participating nodes' HLC clocks. If we have
-	// a timestamp on file for this Node which is smaller than MaxTimestamp,
-	// we can lower MaxTimestamp accordingly. If MaxTimestamp drops below
-	// ReadTimestamp, we effectively can't see uncertainty restarts anymore.
-	// TODO(nvanbenschoten): This should use the lease's node id.
-	obsTS, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID)
-	if !ok {
-		return
-	}
-	// If the lease is valid, we use the greater of the observed
-	// timestamp and the lease start time, up to the max timestamp. This
-	// ensures we avoid incorrect assumptions about when data was
-	// written, in absolute time on a different node, which held the
-	// lease before this replica acquired it.
-	// TODO(nvanbenschoten): Do we ever need to call this when
-	//   status.State != VALID?
-	if status.State == kvserverpb.LeaseState_VALID {
-		obsTS.Forward(status.Lease.Start)
-	}
-	if obsTS.Less(ba.Txn.MaxTimestamp) {
-		// Copy-on-write to protect others we might be sharing the Txn with.
-		txnClone := ba.Txn.Clone()
-		// The uncertainty window is [ReadTimestamp, maxTS), so if that window
-		// is empty, there won't be any uncertainty restarts.
-		if obsTS.LessEq(ba.Txn.ReadTimestamp) {
-			log.Event(ctx, "read has no clock uncertainty")
-		}
-		txnClone.MaxTimestamp.Backward(obsTS)
-		ba.Txn = txnClone
-	}
 }

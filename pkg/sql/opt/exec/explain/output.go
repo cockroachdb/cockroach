@@ -13,13 +13,13 @@ package explain
 import (
 	"bytes"
 	"fmt"
-	"text/tabwriter"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 // OutputBuilder is used to build the output of an explain tree.
@@ -54,6 +54,15 @@ type entry struct {
 
 func (e *entry) isNode() bool {
 	return e.level > 0
+}
+
+// fieldStr returns a "field" or "field: val" string; only used when this entry
+// is a field.
+func (e *entry) fieldStr() string {
+	if e.fieldVal == "" {
+		return e.field
+	}
+	return fmt.Sprintf("%s: %s", e.field, e.fieldVal)
 }
 
 // EnterNode creates a new node as a child of the current node.
@@ -204,22 +213,66 @@ func (ob *OutputBuilder) BuildExplainRows() []tree.Datums {
 	return rows
 }
 
+// BuildStringRows creates a string representation of the plan information and
+// returns it as a list of strings (one for each row). The strings do not end in
+// newline.
+func (ob *OutputBuilder) BuildStringRows() []string {
+	var result []string
+	tp := treeprinter.NewWithStyle(treeprinter.BulletStyle)
+	stack := []treeprinter.Node{tp}
+	entries := ob.entries
+
+	pop := func() *entry {
+		e := &entries[0]
+		entries = entries[1:]
+		return e
+	}
+
+	popField := func() *entry {
+		if len(entries) > 0 && !entries[0].isNode() {
+			return pop()
+		}
+		return nil
+	}
+
+	// There may be some top-level non-node entries (like "distributed"). Print
+	// them separately, as they can't be part of the tree.
+	for e := popField(); e != nil; e = popField() {
+		result = append(result, e.fieldStr())
+	}
+	if len(result) > 0 {
+		result = append(result, "")
+	}
+
+	for len(entries) > 0 {
+		entry := pop()
+		child := stack[entry.level-1].Child(entry.node)
+		stack = append(stack[:entry.level], child)
+		if entry.columns != "" {
+			child.AddLine(fmt.Sprintf("columns: %s", entry.columns))
+		}
+		if entry.ordering != "" {
+			child.AddLine(fmt.Sprintf("ordering: %s", entry.ordering))
+		}
+		// Add any fields for the node.
+		for entry = popField(); entry != nil; entry = popField() {
+			child.AddLine(entry.fieldStr())
+		}
+	}
+	result = append(result, tp.FormattedRows()...)
+	return result
+}
+
 // BuildString creates a string representation of the plan information.
 // The output string always ends in a newline.
 func (ob *OutputBuilder) BuildString() string {
+	rows := ob.BuildStringRows()
 	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-
-	treeRows := ob.buildTreeRows()
-	for i, e := range ob.entries {
-		fmt.Fprintf(tw, "%s\t%s\t%s", treeRows[i], e.field, e.fieldVal)
-		if ob.flags.Verbose {
-			fmt.Fprintf(tw, "\t%s\t%s", e.columns, e.ordering)
-		}
-		fmt.Fprintf(tw, "\n")
+	for _, row := range rows {
+		buf.WriteString(row)
+		buf.WriteString("\n")
 	}
-	_ = tw.Flush()
-	return util.RemoveTrailingSpaces(buf.String())
+	return buf.String()
 }
 
 // BuildProtoTree creates a representation of the plan as a tree of
@@ -247,4 +300,50 @@ func (ob *OutputBuilder) BuildProtoTree() *roachpb.ExplainTreePlanNode {
 	}
 
 	return sentinel.Children[0]
+}
+
+// AddTopLevelField adds a top-level field. Cannot be called while inside a
+// node.
+func (ob *OutputBuilder) AddTopLevelField(key, value string) {
+	if ob.level != 0 {
+		panic(errors.AssertionFailedf("inside node"))
+	}
+	ob.AddField(key, value)
+}
+
+// AddDistribution adds a top-level distribution field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddDistribution(value string) {
+	if ob.flags.MakeDeterministic {
+		value = "<hidden>"
+	}
+	ob.AddTopLevelField("distribution", value)
+}
+
+// AddVectorized adds a top-level vectorized field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddVectorized(value bool) {
+	valueStr := fmt.Sprintf("%t", value)
+	if ob.flags.MakeDeterministic {
+		valueStr = "<hidden>"
+	}
+	ob.AddTopLevelField("vectorized", valueStr)
+}
+
+// AddPlanningTime adds a top-level planning time field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
+	if ob.flags.MakeDeterministic {
+		delta = 10 * time.Microsecond
+	}
+	ob.AddTopLevelField("planning time", delta.Round(time.Microsecond).String())
+}
+
+// AddExecutionTime adds a top-level execution time field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
+	if ob.flags.MakeDeterministic {
+		delta = 100 * time.Microsecond
+	}
+	ob.AddTopLevelField("execution time", delta.Round(time.Microsecond).String())
 }

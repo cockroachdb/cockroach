@@ -52,6 +52,7 @@ test           crdb_internal       gossip_liveness                    public   S
 test           crdb_internal       gossip_network                     public   SELECT
 test           crdb_internal       gossip_nodes                       public   SELECT
 test           crdb_internal       index_columns                      public   SELECT
+test           crdb_internal       invalid_objects                    public   SELECT
 test           crdb_internal       jobs                               public   SELECT
 test           crdb_internal       kv_node_status                     public   SELECT
 test           crdb_internal       kv_store_status                    public   SELECT
@@ -277,6 +278,7 @@ test           pg_catalog          pg_language                        public   S
 test           pg_catalog          pg_locks                           public   SELECT
 test           pg_catalog          pg_matviews                        public   SELECT
 test           pg_catalog          pg_namespace                       public   SELECT
+test           pg_catalog          pg_opclass                         public   SELECT
 test           pg_catalog          pg_operator                        public   SELECT
 test           pg_catalog          pg_prepared_statements             public   SELECT
 test           pg_catalog          pg_prepared_xacts                  public   SELECT

@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -271,10 +271,10 @@ func validateForeignKey(
 			return err
 		}
 		if values.Len() > 0 {
-			return pgerror.Newf(pgcode.ForeignKeyViolation,
+			return pgerror.WithConstraintName(pgerror.Newf(pgcode.ForeignKeyViolation,
 				"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
 				formatValues(colNames, values), fk.Name,
-			)
+			), fk.Name)
 		}
 	}
 	query, colNames, err := nonMatchingRowQuery(
@@ -296,9 +296,9 @@ func validateForeignKey(
 		return err
 	}
 	if values.Len() > 0 {
-		return pgerror.Newf(pgcode.ForeignKeyViolation,
+		return pgerror.WithConstraintName(pgerror.Newf(pgcode.ForeignKeyViolation,
 			"foreign key violation: %q row %s has no match in %q",
-			srcTable.Name, formatValues(colNames, values), targetTable.GetName())
+			srcTable.Name, formatValues(colNames, values), targetTable.GetName()), fk.Name)
 	}
 	return nil
 }
@@ -361,11 +361,11 @@ func checkMutationInput(
 			if err != nil {
 				// If we ran into an error trying to read the check constraint, wrap it
 				// and return.
-				return errors.Wrapf(err, "failed to satisfy CHECK constraint (%s)", checks[i].Expr)
+				return pgerror.WithConstraintName(errors.Wrapf(err, "failed to satisfy CHECK constraint (%s)", checks[i].Expr), checks[i].Name)
 			}
-			return pgerror.Newf(
+			return pgerror.WithConstraintName(pgerror.Newf(
 				pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", expr,
-			)
+			), checks[i].Name)
 		}
 		colIdx++
 	}

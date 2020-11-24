@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -648,7 +647,7 @@ func (sc *SchemaChanger) validateConstraints(
 				evalCtx.Txn = txn
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
 				semaCtx := tree.MakeSemaContext()
-				collection := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+				collection := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 				semaCtx.TypeResolver = descs.NewDistSQLTypeResolver(collection, txn)
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
@@ -791,7 +790,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+				tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
@@ -900,8 +899,6 @@ func (sc *SchemaChanger) distBackfill(
 	filter backfill.MutationFilter,
 	targetSpans []roachpb.Span,
 ) error {
-	inMemoryStatusEnabled := sc.execCfg.Settings.Version.IsActive(
-		ctx, clusterversion.VersionAtomicChangeReplicasTrigger)
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
 		duration = sc.testingKnobs.WriteCheckpointInterval
@@ -980,7 +977,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 
-			tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+			tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 			// Use a leased table descriptor for the backfill.
 			defer tc.ReleaseAll(ctx)
 			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
@@ -1019,7 +1016,7 @@ func (sc *SchemaChanger) distBackfill(
 			sc.distSQLPlanner.Run(
 				planCtx,
 				nil, /* txn - the processors manage their own transactions */
-				&plan, recv, &evalCtx,
+				plan, recv, &evalCtx,
 				nil, /* finishedSetupFn */
 			)()
 			return cbw.Err()
@@ -1028,23 +1025,6 @@ func (sc *SchemaChanger) distBackfill(
 		}
 		todoSpans = updatedTodoSpans
 
-		if !inMemoryStatusEnabled {
-			var resumeSpans []roachpb.Span
-			// There is a worker node of older version that will communicate
-			// its done work by writing to the jobs table.
-			// In this case we intersect todoSpans with what the old node(s)
-			// have set in the jobs table not to overwrite their done work.
-			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				var err error
-				resumeSpans, _, _, err = rowexec.GetResumeSpans(
-					ctx, sc.jobRegistry, txn, sc.execCfg.Codec, sc.descID, sc.mutationID, filter)
-				return err
-			}); err != nil {
-				return err
-			}
-			// A \intersect B = A - (A - B)
-			todoSpans = roachpb.SubtractSpans(todoSpans, roachpb.SubtractSpans(todoSpans, resumeSpans))
-		}
 		// Record what is left to do for the job.
 		// TODO(spaskob): Execute this at a regular cadence.
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -1255,19 +1235,15 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			defer close(countReady[i])
 
 			start := timeutil.Now()
-			if len(idx.ColumnNames) != 1 {
-				panic(errors.AssertionFailedf("expected inverted index %s to have exactly 1 column, but found columns %+v",
-					idx.Name, idx.ColumnNames))
-			}
-			col := idx.ColumnNames[0]
+			col := idx.InvertedColumnName()
 
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 				ie := evalCtx.InternalExecutor.(*InternalExecutor)
 				var stmt string
 				if geoindex.IsEmptyConfig(&idx.GeoConfig) {
 					stmt = fmt.Sprintf(
-						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q)), 0) FROM [%d AS t]`,
-						col, tableDesc.ID,
+						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q, %d)), 0) FROM [%d AS t]`,
+						col, idx.Version, tableDesc.ID,
 					)
 				} else {
 					stmt = fmt.Sprintf(
@@ -1290,7 +1266,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			}); err != nil {
 				return err
 			}
-			log.Infof(ctx, "JSON column %s/%s expected inverted index count = %d, took %s",
+			log.Infof(ctx, "column %s/%s expected inverted index count = %d, took %s",
 				tableDesc.Name, col, expectedCount[i], timeutil.Since(start))
 			return nil
 		})
@@ -1338,7 +1314,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			if err != nil {
 				return err
 			}
-			tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+			tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 			// pretend that the schema has been modified.
 			if err := tc.AddUncommittedDescriptor(desc); err != nil {
 				return err
@@ -1414,7 +1390,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			return err
 		}
 
-		tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+		tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
 		if err := tc.AddUncommittedDescriptor(desc); err != nil {
 			return err
 		}
@@ -1824,7 +1800,7 @@ func validateCheckInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := descs.NewCollection(ctx, evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
+		newTc := descs.NewCollection(evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
 		// pretend that the schema has been modified.
 		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
 			return err
@@ -1860,7 +1836,7 @@ func validateFkInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := descs.NewCollection(ctx, evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
+		newTc := descs.NewCollection(evalCtx.Settings, leaseMgr, nil /* hydratedTables */)
 		// pretend that the schema has been modified.
 		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
 			return err

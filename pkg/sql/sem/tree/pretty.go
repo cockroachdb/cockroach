@@ -1600,28 +1600,6 @@ func (node *LikeTableDef) doc(p *PrettyCfg) pretty.Doc {
 	return d
 }
 
-func (node *IndexElem) doc(p *PrettyCfg) pretty.Doc {
-	d := p.Doc(&node.Column)
-	if node.Direction != DefaultDirection {
-		d = pretty.ConcatSpace(d, pretty.Keyword(node.Direction.String()))
-	}
-	if node.NullsOrder != DefaultNullsOrder {
-		d = pretty.ConcatSpace(d, pretty.Keyword(node.NullsOrder.String()))
-	}
-	return d
-}
-
-func (node *IndexElemList) doc(p *PrettyCfg) pretty.Doc {
-	if node == nil || len(*node) == 0 {
-		return pretty.Nil
-	}
-	d := make([]pretty.Doc, len(*node))
-	for i := range *node {
-		d[i] = p.Doc(&(*node)[i])
-	}
-	return p.commaSeparated(d...)
-}
-
 func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// [INVERTED] INDEX [name] (columns...)
@@ -1674,7 +1652,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// [CONSTRAINT name]
-	//    [PRIMARY KEY|UNIQUE] ( ... )
+	//    [PRIMARY KEY|UNIQUE [WITHOUT INDEX]] ( ... )
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
@@ -1682,7 +1660,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//
 	// or (no constraint name):
 	//
-	// [PRIMARY KEY|UNIQUE] ( ... )
+	// [PRIMARY KEY|UNIQUE [WITHOUT INDEX]] ( ... )
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
@@ -1694,6 +1672,9 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 		title = pretty.Keyword("PRIMARY KEY")
 	} else {
 		title = pretty.Keyword("UNIQUE")
+		if node.WithoutIndex {
+			title = pretty.ConcatSpace(title, pretty.Keyword("WITHOUT INDEX"))
+		}
 	}
 	title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
 	if node.Name != "" {
@@ -1790,7 +1771,7 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	//   [[CREATE [IF NOT EXISTS]] FAMILY [name]]
 	//   [[CONSTRAINT name] DEFAULT expr]
 	//   [[CONSTRAINT name] {NULL|NOT NULL}]
-	//   [[CONSTRAINT name] {PRIMARY KEY|UNIQUE}]
+	//   [[CONSTRAINT name] {PRIMARY KEY|UNIQUE [WITHOUT INDEX]}]
 	//   [[CONSTRAINT name] CHECK ...]
 	//   [[CONSTRAINT name] REFERENCES tbl (...)
 	//         [MATCH ...]
@@ -1851,11 +1832,14 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	pkConstraint := pretty.Nil
 	if node.PrimaryKey.IsPrimaryKey {
 		pkConstraint = pretty.Keyword("PRIMARY KEY")
-	} else if node.Unique {
+	} else if node.Unique.IsUnique {
 		pkConstraint = pretty.Keyword("UNIQUE")
+		if node.Unique.WithoutIndex {
+			pkConstraint = pretty.ConcatSpace(pkConstraint, pretty.Keyword("WITHOUT INDEX"))
+		}
 	}
 	if pkConstraint != pretty.Nil {
-		clauses = append(clauses, p.maybePrependConstraintName(&node.UniqueConstraintName, pkConstraint))
+		clauses = append(clauses, p.maybePrependConstraintName(&node.Unique.ConstraintName, pkConstraint))
 	}
 
 	if node.PrimaryKey.Sharded {
@@ -2103,44 +2087,6 @@ func (node *Export) doc(p *PrettyCfg) pretty.Doc {
 	}
 	items = append(items, p.row("FROM", p.Doc(node.Query)))
 	return p.rlTable(items...)
-}
-
-func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
-	d := pretty.Keyword("EXPLAIN")
-	showMode := node.Mode != ExplainPlan
-	// ANALYZE is a special case because it is a statement implemented as an
-	// option to EXPLAIN.
-	if node.Flags[ExplainFlagAnalyze] {
-		d = pretty.ConcatSpace(d, pretty.Keyword("ANALYZE"))
-		showMode = true
-	}
-	var opts []pretty.Doc
-	if showMode {
-		opts = append(opts, pretty.Keyword(node.Mode.String()))
-	}
-	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
-		if f != ExplainFlagAnalyze && node.Flags[f] {
-			opts = append(opts, pretty.Keyword(f.String()))
-		}
-	}
-	if len(opts) > 0 {
-		d = pretty.ConcatSpace(
-			d,
-			p.bracket("(", p.commaSeparated(opts...), ")"),
-		)
-	}
-	return p.nestUnder(d, p.Doc(node.Statement))
-}
-
-func (node *ExplainAnalyzeDebug) doc(p *PrettyCfg) pretty.Doc {
-	d := pretty.ConcatSpace(
-		pretty.ConcatSpace(
-			pretty.Keyword("EXPLAIN"),
-			pretty.Keyword("ANALYZE"),
-		),
-		p.bracket("(", pretty.Keyword("DEBUG"), ")"),
-	)
-	return p.nestUnder(d, p.Doc(node.Statement))
 }
 
 func (node *NotExpr) doc(p *PrettyCfg) pretty.Doc {

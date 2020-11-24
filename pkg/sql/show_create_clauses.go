@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -213,6 +213,9 @@ func showForeignKeyConstraint(
 	if fk.OnUpdate != descpb.ForeignKeyReference_NO_ACTION {
 		buf.WriteString(" ON UPDATE ")
 		buf.WriteString(fk.OnUpdate.String())
+	}
+	if fk.Validity != descpb.ConstraintValidity_Validated {
+		buf.WriteString(" NOT VALID")
 	}
 	return nil
 }
@@ -424,6 +427,9 @@ func showConstraintClause(
 		}
 		f.WriteString(expr)
 		f.WriteString(")")
+		if e.Validity != descpb.ConstraintValidity_Validated {
+			f.WriteString(" NOT VALID")
+		}
 	}
 	f.WriteString("\n)")
 	return nil

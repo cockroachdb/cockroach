@@ -1,0 +1,116 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.sessiondatapb;
+option go_package = "sessiondatapb";
+
+import "gogoproto/gogo.proto";
+
+// SessionData contains session parameters that are easily serializable and are
+// required to be propagated to the remote nodes for the correct execution of
+// DistSQL flows.
+message SessionData {
+  // Database indicates the "current" database for the purpose of resolving
+  // names.
+  string database = 1;
+  // ApplicationName is the name of the application running the current
+  // session. This can be used for logging and per-application statistics.
+  string application_name = 2;
+  // User is the name of the user logged into the session.
+  string user_proto = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  // DataConversion gives access to the data conversion configuration.
+  DataConversionConfig data_conversion_config = 4 [(gogoproto.nullable) = false];
+  // VectorizeMode indicates which kinds of queries to use vectorized execution
+  // engine for.
+  VectorizeExecMode vectorize_mode = 5;
+  // TestingVectorizeInjectPanics indicates whether random panics are injected
+  // into the vectorized flow execution. The goal of such behavior is making
+  // sure that errors that are propagated as panics in the vectorized engine
+  // are caught in all scenarios.
+  bool testing_vectorize_inject_panics = 6;
+  // DefaultIntSize specifies the size in bits or bytes (preferred) of how a
+  // "naked" INT type should be parsed.
+  int32 default_int_size = 7;
+  // The name of the location according to whose current timezone we're going to
+  // parse timestamps. Used to initialize sessiondata.SessionData.Location on
+  // the remote nodes.
+  //
+  // Note that the current serialization of the time.Location objects as
+  // strings has many drawbacks which could lead to unstable computation on the
+  // remote nodes. See #36864 and
+  // https://github.com/cockroachdb/cockroach/pull/55377#issuecomment-707794695
+  // for more details.
+  string location = 8;
+  // SearchPath is a list of namespaces to search builtins in. Used to
+  // initialize sessiondata.SessionData.SearchPath on the remote nodes.
+  repeated string search_path = 9;
+  string temporary_schema_name = 10;
+  // SeqState gives access to the SQL sequences that have been manipulated by
+  // the session.
+  SequenceState seq_state = 11 [(gogoproto.nullable) = false];
+}
+
+// DataConversionConfig contains the parameters that influence the conversion
+// between SQL data types and strings/byte arrays.
+message DataConversionConfig {
+  // BytesEncodeFormat indicates how to encode byte arrays when converting to
+  // string.
+  BytesEncodeFormat bytes_encode_format = 1;
+  // ExtraFloatDigits indicates the number of digits beyond the standard number
+  // to use for float conversions.This must be set to a value between -15 and
+  // 3, inclusive.
+  int32 extra_float_digits = 2;
+}
+
+// BytesEncodeFormat is the configuration for bytes to string conversions.
+enum BytesEncodeFormat {
+  option (gogoproto.goproto_enum_prefix) = false;
+  option (gogoproto.goproto_enum_stringer) = false;
+
+  // BytesEncodeHex uses the hex format: e'abc\n'::BYTES::STRING -> '\x61626312'.
+  // This is the default, for compatibility with PostgreSQL.
+  BytesEncodeHex = 0;
+  // BytesEncodeEscape uses the escaped format: e'abc\n'::BYTES::STRING -> 'abc\012'.
+  BytesEncodeEscape = 1;
+  // BytesEncodeBase64 uses base64 encoding.
+  BytesEncodeBase64 = 2;
+}
+
+// VectorizeExecMode controls if an when the Executor executes queries using
+// the columnar execution engine.
+enum VectorizeExecMode {
+  option (gogoproto.goproto_enum_prefix) = false;
+  option (gogoproto.goproto_enum_stringer) = false;
+
+  // VectorizeOff means that columnar execution is disabled.
+  VectorizeOff = 0;
+  reserved 1;
+  // VectorizeOn means that any supported queries will be run using the
+  // columnar execution.
+  VectorizeOn = 2;
+  // VectorizeExperimentalAlways means that we attempt to vectorize all
+  // queries; unsupported queries will fail. Mostly used for testing.
+  VectorizeExperimentalAlways = 3;
+}
+
+// SequenceState is used to marshall the sessiondata.SequenceState struct.
+message SequenceState {
+  // Seq represents the last value of one sequence modified by the session.
+  message Seq {
+    uint32 seq_id = 1 [(gogoproto.customname) = "SeqID"];
+    int64 latest_val = 2;
+  }
+
+  repeated Seq seqs = 1;
+  // last_seq_incremented is the id of the last sequence incremented by the
+  // session. This field is filled in iff seqs is not empty.
+  uint32 last_seq_incremented = 2;
+}

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -107,7 +106,7 @@ func TestTrace(t *testing.T) {
 				// stat value is 0.
 				rows, err := sqlDB.Query(
 					"SELECT count(message) FROM crdb_internal.session_trace " +
-						"WHERE message LIKE '%cockroach.stat.tablereader.input.rows: 0%'",
+						"WHERE message LIKE '%cockroach.stat.kv.tuples.read: 0%'",
 				)
 				if err != nil {
 					t.Fatal(err)
@@ -588,9 +587,9 @@ func TestTraceDistSQL(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WithStatementTrace: func(sp opentracing.Span, stmt string) {
+					WithStatementTrace: func(trace tracing.Recording, stmt string) {
 						if stmt == countStmt {
-							recCh <- tracing.GetRecording(sp)
+							recCh <- trace
 						}
 					},
 				},

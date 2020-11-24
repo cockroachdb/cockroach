@@ -40,14 +40,18 @@ var _ catalog.MutableDescriptor = (*Mutable)(nil)
 // MakeSimpleAlias creates a type descriptor that is an alias for the input
 // type. It is intended to be used as an intermediate for name resolution, and
 // should not be serialized and stored on disk.
-func MakeSimpleAlias(typ *types.T) *Immutable {
+func MakeSimpleAlias(typ *types.T, parentSchemaID descpb.ID) *Immutable {
 	return NewImmutable(descpb.TypeDescriptor{
+		// TODO(#sql-features): this should be attached to the current database.
+		// We don't have a way of doing this yet (and virtual tables use some
+		// fake magic).
 		ParentID:       descpb.InvalidID,
-		ParentSchemaID: descpb.InvalidID,
+		ParentSchemaID: parentSchemaID,
 		Name:           typ.Name(),
-		ID:             descpb.InvalidID,
-		Kind:           descpb.TypeDescriptor_ALIAS,
-		Alias:          typ,
+		// TODO(#sql-features): give this a hardcoded alias.
+		ID:    descpb.InvalidID,
+		Kind:  descpb.TypeDescriptor_ALIAS,
+		Alias: typ,
 	})
 }
 
@@ -297,7 +301,7 @@ func (desc *Mutable) AddEnumValue(node *tree.AlterTypeAddValue) error {
 		// If the value was requested to be added before or after an existing
 		// value, then find the index of where it should be inserted.
 		foundIndex := -1
-		existing := node.Placement.ExistingVal
+		existing := string(node.Placement.ExistingVal)
 		for i, member := range desc.EnumMembers {
 			if member.LogicalRepresentation == existing {
 				foundIndex = i
@@ -320,7 +324,7 @@ func (desc *Mutable) AddEnumValue(node *tree.AlterTypeAddValue) error {
 	// how to decode the physical representation.
 	newPhysicalRep := enum.GenByteStringBetween(getPhysicalRep(pos), getPhysicalRep(pos+1), enum.SpreadSpacing)
 	newMember := descpb.TypeDescriptor_EnumMember{
-		LogicalRepresentation:  node.NewVal,
+		LogicalRepresentation:  string(node.NewVal),
 		PhysicalRepresentation: newPhysicalRep,
 		Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
 	}

@@ -98,10 +98,13 @@ func (p *planner) checkPasswordOptionConstraints(
 
 	if roleOptions.Contains(roleoption.CREATELOGIN) ||
 		roleOptions.Contains(roleoption.NOCREATELOGIN) ||
-		roleOptions.Contains(roleoption.LOGIN) ||
-		(roleOptions.Contains(roleoption.NOLOGIN) && !newUser) || // CREATE ROLE NOLOGIN is valid without CREATELOGIN.
 		roleOptions.Contains(roleoption.PASSWORD) ||
-		roleOptions.Contains(roleoption.VALIDUNTIL) {
+		roleOptions.Contains(roleoption.VALIDUNTIL) ||
+		roleOptions.Contains(roleoption.LOGIN) ||
+		// CREATE ROLE NOLOGIN is valid without CREATELOGIN.
+		(roleOptions.Contains(roleoption.NOLOGIN) && !newUser) ||
+		// Disallow implicit LOGIN upon new user.
+		(newUser && !roleOptions.Contains(roleoption.NOLOGIN) && !roleOptions.Contains(roleoption.LOGIN)) {
 		// Only a role who has CREATELOGIN itself can grant CREATELOGIN or
 		// NOCREATELOGIN to another role, or set up a password for
 		// authentication, or set up password validity, or enable/disable
@@ -143,7 +146,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", userTableName),
 		normalizedUsername,
 	)
@@ -233,7 +236,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			params.ctx,
 			opName,
 			params.p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			stmt,
 			qargs...,
 		)
@@ -242,7 +245,17 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	return nil
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		EventLogAlterRole,
+		0, /* no target */
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			RoleName string
+			User     string
+		}{normalizedUsername.Normalized(), params.p.User().Normalized()},
+	)
 }
 
 func (*alterRoleNode) Next(runParams) (bool, error) { return false, nil }

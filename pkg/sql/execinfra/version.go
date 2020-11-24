@@ -39,11 +39,11 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 38
+const Version execinfrapb.DistSQLVersion = 42
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 37
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 42
 
 /*
 
@@ -51,7 +51,27 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 37
 
 Please add new entries at the top.
 
-- Version: 38 (MinAcceptedVersion: 38)
+- Version: 42 (MinAcceptedVersion: 42)
+  - A new field NeededColumns is added to TableReaderSpec which is now required
+    by the vectorized ColBatchScans to be set up.
+
+- Version: 41 (MinAcceptedVersion: 40)
+  - A paired joiner approach for lookup joins was added, for left
+    outer/semi/anti joins involving a pair of joinReaders, where the
+    first join uses a non-covering index.
+
+- Version: 40 (MinAcceptedVersion: 40)
+  - A new field was added execinfrapb.ProcessorSpec to propagate the result
+    column types of a processor. This change is not backwards compatible
+    because from now on the specs are expected to have that field set and the
+    field can be used during the flow setup.
+
+- Version: 39 (MinAcceptedVersion: 39)
+  - Many parameters from sessiondata.SessionData object were pulled into a
+    protobuf struct for easier propagation to the remote nodes during the
+    execution.
+
+- Version: 38 (MinAcceptedVersion: 37)
   - A paired joiner approach for inverted joins was added, for left
     outer/semi/anti joins involving the invertedJoiner and joinReader.
 

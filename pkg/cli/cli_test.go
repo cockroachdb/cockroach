@@ -106,7 +106,10 @@ func createTestCerts(certsDir string) (cleanup func() error) {
 	}
 
 	for _, a := range assets {
-		securitytest.RestrictedCopy(nil, a, certsDir, filepath.Base(a))
+		_, err := securitytest.RestrictedCopy(a, certsDir, filepath.Base(a))
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return func() error {
@@ -156,7 +159,7 @@ func newCLITest(params cliTestParams) cliTest {
 		log.Infof(context.Background(), "SQL listener at %s", c.ServingSQLAddr())
 	}
 
-	baseCfg.User = security.NodeUser
+	baseCfg.User = security.NodeUserName()
 
 	// Ensure that CLI error messages and anything meant for the
 	// original stderr is redirected to stdout, where it can be
@@ -416,6 +419,9 @@ func Example_demo() {
 	c := newCLITest(cliTestParams{noServer: true})
 	defer c.cleanup()
 
+	defer func(b bool) { testingForceRandomizeDemoPorts = b }(testingForceRandomizeDemoPorts)
+	testingForceRandomizeDemoPorts = true
+
 	testData := [][]string{
 		{`demo`, `-e`, `show database`},
 		{`demo`, `-e`, `show database`, `--empty`},
@@ -626,7 +632,7 @@ func Example_sql_format() {
 	// INSERT 1
 	// sql -e select * from t.times
 	// bare	withtz
-	// 2016-01-25 10:10:10+00:00	2016-01-25 15:10:10+00:00
+	// 2016-01-25 10:10:10+00:00:00	2016-01-25 15:10:10+00:00:00
 }
 
 func Example_sql_column_labels() {
@@ -1362,16 +1368,18 @@ func Example_misc_table() {
 	//     hai
 	// (1 row)
 	// sql --format=table -e explain select s, 'foo' from t.t
-	//     tree    |     field     | description
-	// ------------+---------------+--------------
-	//             | distribution  | full
-	//             | vectorized    | false
-	//   render    |               |
-	//    └── scan |               |
-	//             | missing stats |
-	//             | table         | t@primary
-	//             | spans         | FULL SCAN
-	// (7 rows)
+	//            info
+	// --------------------------
+	//   distribution: full
+	//   vectorized: false
+	//
+	//   • render
+	//   │
+	//   └── • scan
+	//         missing stats
+	//         table: t@primary
+	//         spans: FULL SCAN
+	// (9 rows)
 }
 
 func Example_cert() {
@@ -1388,8 +1396,7 @@ func Example_cert() {
 	// cert create-client Ομηρος
 	// cert create-client 0foo
 	// cert create-client ,foo
-	// ERROR: failed to generate client certificate and key: username ",foo" invalid
-	// SQLSTATE: 42602
+	// ERROR: failed to generate client certificate and key: username is invalid
 	// HINT: Usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, periods, or underscores, and must not exceed 63 characters.
 }
 
@@ -1414,6 +1421,7 @@ Available Commands:
 
   nodelocal         upload and delete nodelocal files
   userfile          upload, list and delete user scoped files
+  import            import a db or table from a local PGDUMP or MYSQLDUMP file
   demo              open a demo sql shell
   gen               generate auxiliary files
   version           output version information

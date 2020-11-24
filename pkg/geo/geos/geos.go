@@ -417,6 +417,23 @@ func Centroid(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+// MinimumBoundingCircle returns minimum bounding circle of an EWKB
+func MinimumBoundingCircle(ewkb geopb.EWKB) (geopb.EWKB, geopb.EWKB, float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	var centerEWKB C.CR_GEOS_String
+	var polygonEWKB C.CR_GEOS_String
+	var radius C.double
+
+	if err := statusToError(C.CR_GEOS_MinimumBoundingCircle(g, goToCSlice(ewkb), &radius, &centerEWKB, &polygonEWKB)); err != nil {
+		return nil, nil, 0, err
+	}
+	return cStringToSafeGoBytes(polygonEWKB), cStringToSafeGoBytes(centerEWKB), float64(radius), nil
+
+}
+
 // ConvexHull returns an EWKB which returns the convex hull of the given EWKB.
 func ConvexHull(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	g, err := ensureInitInternal()
@@ -485,6 +502,19 @@ func Intersection(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
 		return nil, err
 	}
 	return cStringToSafeGoBytes(cEWKB), nil
+}
+
+// UnaryUnion Returns an EWKB which is a union of input geometry components.
+func UnaryUnion(a geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var unionEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_UnaryUnion(g, goToCSlice(a), &unionEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(unionEWKB), nil
 }
 
 // Union returns an EWKB which is a union of shapes A and B.
@@ -919,6 +949,20 @@ func SharedPaths(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
 	if err := statusToError(
 		C.CR_GEOS_SharedPaths(g, goToCSlice(a), goToCSlice(b), &cEWKB),
 	); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
+// Node returns a EWKB containing a set of linestrings using the least possible number of nodes while preserving all of the input ones.
+func Node(a geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	err = statusToError(C.CR_GEOS_Node(g, goToCSlice(a), &cEWKB))
+	if err != nil {
 		return nil, err
 	}
 	return cStringToSafeGoBytes(cEWKB), nil

@@ -357,9 +357,10 @@ func descriptorsMatchingTargets(
 			if !found {
 				return ret, doesNotExistErr
 			}
-			tableDesc := descI.(catalog.TableDescriptor)
-			// If tableDesc is nil, then we resolved a type instead, so error out.
-			if tableDesc == nil {
+			tableDesc, isTable := descI.(catalog.TableDescriptor)
+			// If the type assertion didn't work, then we resolved a type instead, so
+			// error out.
+			if !isTable {
 				return ret, doesNotExistErr
 			}
 
@@ -698,7 +699,7 @@ func loadAllDescs(
 		ctx,
 		func(ctx context.Context, txn *kv.Txn) (err error) {
 			txn.SetFixedTimestamp(ctx, asOf)
-			allDescs, err = catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec)
+			allDescs, err = catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec, true /* validate */)
 			return err
 		}); err != nil {
 		return nil, err
@@ -758,10 +759,7 @@ func fullClusterTargets(
 	fullClusterDescs := make([]catalog.Descriptor, 0, len(allDescs))
 	fullClusterDBs := make([]*dbdesc.Immutable, 0)
 
-	systemTablesToBackup := make(map[string]struct{}, len(fullClusterSystemTables))
-	for _, tableName := range fullClusterSystemTables {
-		systemTablesToBackup[tableName] = struct{}{}
-	}
+	systemTablesToBackup := getSystemTablesToIncludeInClusterBackup()
 
 	for _, desc := range allDescs {
 		switch desc := desc.(type) {

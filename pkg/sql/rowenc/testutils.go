@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -150,7 +151,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		).Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 	case types.TimestampFamily:
 		return tree.MustMakeDTimestamp(
-			timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
+			timeutil.Unix(rng.Int63n(2000000000), rng.Int63n(1000000)),
 			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()),
 		)
 	case types.IntervalFamily:
@@ -201,7 +202,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		return tree.NewDBytes(tree.DBytes(p))
 	case types.TimestampTZFamily:
 		return tree.MustMakeDTimestampTZ(
-			timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
+			timeutil.Unix(rng.Int63n(2000000000), rng.Int63n(1000000)),
 			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()),
 		)
 	case types.CollatedStringFamily:
@@ -333,7 +334,7 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 }
 
 func randStringSimple(rng *rand.Rand) string {
-	return string('A' + rng.Intn(simpleRange))
+	return string(rune('A' + rng.Intn(simpleRange)))
 }
 
 func randJSONSimple(rng *rand.Rand) json.JSON {
@@ -1018,9 +1019,9 @@ func TestingMakePrimaryIndexKey(
 	}
 	// Create the ColumnID to index in datums slice map needed by
 	// MakeIndexKeyPrefix.
-	colIDToRowIndex := make(map[descpb.ColumnID]int)
+	var colIDToRowIndex catalog.TableColMap
 	for i := range vals {
-		colIDToRowIndex[index.ColumnIDs[i]] = i
+		colIDToRowIndex.Set(index.ColumnIDs[i], i)
 	}
 
 	keyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, index.ID)
@@ -1036,6 +1037,20 @@ func TestingMakePrimaryIndexKey(
 // dependencies.
 type Mutator interface {
 	Mutate(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
+}
+
+// MakeSchemaName creates a CreateSchema definition
+func MakeSchemaName(
+	ifNotExists bool, schema string, authRole security.SQLUsername,
+) *tree.CreateSchema {
+	return &tree.CreateSchema{
+		IfNotExists: ifNotExists,
+		Schema: tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(schema),
+			ExplicitSchema: true,
+		},
+		AuthRole: authRole,
+	}
 }
 
 // RandCreateTables creates random table definitions.
@@ -1359,7 +1374,7 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				case *tree.IndexTableDef:
 					idx = defType
 				case *tree.UniqueConstraintTableDef:
-					if !defType.PrimaryKey {
+					if !defType.PrimaryKey && !defType.WithoutIndex {
 						idx = &defType.IndexTableDef
 					}
 				}
@@ -1413,7 +1428,7 @@ func PartialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				case *tree.IndexTableDef:
 					idx = defType
 				case *tree.UniqueConstraintTableDef:
-					if !defType.PrimaryKey {
+					if !defType.PrimaryKey && !defType.WithoutIndex {
 						idx = &defType.IndexTableDef
 					}
 				}
@@ -1700,13 +1715,13 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 // be random strings generated from alphabet.
 func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 	numLabels := rng.Intn(6) + 1
-	labels := make([]string, numLabels)
+	labels := make(tree.EnumValueList, numLabels)
 	labelsMap := make(map[string]struct{})
 	i := 0
 	for i < numLabels {
 		s := RandString(rng, rng.Intn(6)+1, alphabet)
 		if _, ok := labelsMap[s]; !ok {
-			labels[i] = s
+			labels[i] = tree.EnumValue(s)
 			labelsMap[s] = struct{}{}
 			i++
 		}

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -83,7 +83,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	// With all other options, we don't change the setting to the
 	// most-inclusive option as we used to because the plan can be different
 	// based on 'vectorize' setting.
-	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeOff {
+	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondatapb.VectorizeOff {
 		return errors.New("vectorize is set to 'off'")
 	}
 
@@ -93,16 +93,13 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 	// Sort backward, since the first thing you add to a treeprinter will come last.
 	sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
-	tp := treeprinter.NewWithIndent(false /* leftPad */, true /* rightPad */, 0 /* edgeLength */)
-	root := tp.Child("")
+	tp := treeprinter.NewWithStyle(treeprinter.CompactStyle)
+	root := tp.Child("│")
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
-	thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
-		scheduledOnRemoteNode := flow.nodeID != thisNodeID
-		opChains, err := colflow.SupportsVectorized(
-			params.ctx, flowCtx, flow.flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
-		)
+		opChains, cleanup, err := colflow.ConvertToVecTree(params.ctx, flowCtx, flow.flow, !willDistribute)
+		defer cleanup()
 		if err != nil {
 			return err
 		}

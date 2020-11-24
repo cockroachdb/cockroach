@@ -323,7 +323,7 @@ func (s *Server) getReportingInfo(
 	// flattened for quick reads, but we'd rather only report the non-defaults.
 	if datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx, "read-setting", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT name FROM system.settings",
 	); err != nil {
 		log.Warningf(ctx, "failed to read settings: %s", err)
@@ -339,7 +339,7 @@ func (s *Server) getReportingInfo(
 		ctx,
 		"read-zone-configs",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT id, config FROM system.zones",
 	); err != nil {
 		log.Warningf(ctx, "%v", err)
@@ -490,7 +490,7 @@ type stringRedactor struct{}
 
 func (stringRedactor) Primitive(v reflect.Value) error {
 	if v.Kind() == reflect.String && v.String() != "" {
-		v.Set(reflect.ValueOf("_"))
+		v.Set(reflect.ValueOf("_").Convert(v.Type()))
 	}
 	return nil
 }

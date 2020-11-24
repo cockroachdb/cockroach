@@ -127,7 +127,7 @@ var (
 	// is responsible for ensuring the raft log doesn't grow without bound by
 	// making sure the leader doesn't get too far ahead.
 	defaultRaftLogTruncationThreshold = envutil.EnvOrDefaultInt64(
-		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 8<<20 /* 8 MB */)
+		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 16<<20 /* 16 MB */)
 
 	// defaultRaftMaxSizePerMsg specifies the maximum aggregate byte size of Raft
 	// log entries that a leader will send to followers in a single MsgApp.
@@ -169,7 +169,7 @@ type Config struct {
 
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
-	User string
+	User security.SQLUsername
 
 	// Addr is the address the server is listening on.
 	Addr string
@@ -255,7 +255,7 @@ func (*Config) HistogramWindowInterval() time.Duration {
 // This is also used in tests to reset global objects.
 func (cfg *Config) InitDefaults() {
 	cfg.Insecure = defaultInsecure
-	cfg.User = defaultUser
+	cfg.User = security.MakeSQLUsernameFromPreNormalizedString(defaultUser)
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr
@@ -413,9 +413,6 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftProposalQuota > int64(cfg.RaftMaxUncommittedEntriesSize) {
 		panic("raft proposal quota should not be above max uncommitted entries size")
 	}
-	if cfg.RaftProposalQuota < int64(cfg.RaftMaxSizePerMsg)*int64(cfg.RaftMaxInflightMsgs) {
-		panic("raft proposal quota should not be below per-replica replication window size")
-	}
 }
 
 // RaftElectionTimeout returns the raft election timeout, as computed from the
@@ -529,6 +526,8 @@ type TempStorageConfig struct {
 	Mon *mon.BytesMonitor
 	// Spec stores the StoreSpec this TempStorageConfig will use.
 	Spec StoreSpec
+	// Settings stores the cluster.Settings this TempStoreConfig will use.
+	Settings *cluster.Settings
 }
 
 // ExternalIODirConfig describes various configuration options pertaining
@@ -578,6 +577,7 @@ func TempStorageConfigFromEnv(
 		InMemory: inMem,
 		Mon:      monitor,
 		Spec:     useStore,
+		Settings: st,
 	}
 }
 

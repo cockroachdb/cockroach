@@ -100,7 +100,7 @@ SELECT 'blah ()'::REGPROC
 query error unknown function: blah\(\)
 SELECT 'blah( )'::REGPROC
 
-query error unknown function: blah\(, \)\(\)
+query error invalid name: expected separator \.: blah\(, \)
 SELECT 'blah(, )'::REGPROC
 
 query error more than one function named 'sqrt'
@@ -347,3 +347,42 @@ FROM
       (d.adrelid = a.attrelid AND d.adnum = a.attnum)
   JOIN (SELECT 1 AS oid, 1 AS attnum) AS vals ON
       (c.oid = vals.oid AND a.attnum = vals.attnum);
+
+statement error relation ".*"regression_53686.*"" does not exist
+SELECT '\"regression_53686\"'::regclass
+
+statement ok
+CREATE TABLE "regression_53686""" (a int)
+
+query T
+SELECT 'regression_53686"'::regclass
+----
+"regression_53686"""
+
+query T
+SELECT 'public.regression_53686"'::regclass
+----
+"regression_53686"""
+
+query T
+SELECT 'pg_catalog."radians"'::regproc
+----
+radians
+
+query T
+SELECT 'pg_catalog."radians"("float4")'::regproc
+----
+radians
+
+statement error unknown function: pg_catalog.radians"\(\)
+SELECT 'pg_catalog."radians"""'::regproc
+
+query TTTTT
+SELECT
+  '12345'::regclass::string,
+  '12345'::regtype::string,
+  '12345'::oid::string,
+  '12345'::regproc::string,
+  '12345'::regprocedure::string
+----
+12345  12345  12345  12345  12345

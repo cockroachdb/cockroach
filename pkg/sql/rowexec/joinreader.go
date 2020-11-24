@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -32,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // joinReaderState represents the state of the processor.
@@ -77,7 +77,7 @@ type joinReader struct {
 
 	desc             tabledesc.Immutable
 	index            *descpb.IndexDescriptor
-	colIdxMap        map[descpb.ColumnID]int
+	colIdxMap        catalog.TableColMap
 	maintainOrdering bool
 
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
@@ -111,19 +111,14 @@ type joinReader struct {
 	// (or evaluate it accurately, as is sometimes the case with inverted
 	// indexes). The first join is running a left outer or inner join, and each
 	// group of rows seen by the second join correspond to one left row.
-	//
-	// TODO(sumeer): add support for joinReader to also be the first
-	// join in this pair, say when the index can evaluate most of the
-	// join condition (the part with low selectivity), but not all.
-	// Currently only the invertedJoiner can serve as the first join
-	// in the pair.
 
 	// The input rows in the current batch belong to groups which are tracked in
 	// groupingState. The last row from the last batch is in
 	// lastInputRowFromLastBatch -- it is tracked because we don't know if it
 	// was the last row in a group until we get to the next batch. NB:
 	// groupingState is used even when there is no grouping -- we simply have
-	// groups of one.
+	// groups of one. The no grouping cases include the case of this join being
+	// the first join in the paired joins.
 	groupingState *inputBatchGroupingState
 
 	lastBatchState struct {
@@ -131,6 +126,11 @@ type joinReader struct {
 		lastGroupMatched   bool
 		lastGroupContinued bool
 	}
+
+	// Set to true when this is the first join in the paired-joins (see the
+	// detailed comment in the spec). This can never be true for index joins,
+	// and requires that the spec has MaintainOrdering set to true.
+	outputGroupContinuationForLeftRow bool
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -154,6 +154,22 @@ func newJoinReader(
 	if spec.IndexIdx != 0 && readerType == indexJoinReaderType {
 		return nil, errors.AssertionFailedf("index join must be against primary index")
 	}
+	if spec.OutputGroupContinuationForLeftRow && !spec.MaintainOrdering {
+		return nil, errors.AssertionFailedf(
+			"lookup join must maintain ordering since it is first join in paired-joins")
+	}
+	switch readerType {
+	case lookupJoinReaderType:
+		switch spec.Type {
+		case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.LeftSemiJoin, descpb.LeftAntiJoin:
+		default:
+			return nil, errors.AssertionFailedf("only inner and left {outer, semi, anti} lookup joins are supported, %s requested", spec.Type)
+		}
+	case indexJoinReaderType:
+		if spec.Type != descpb.InnerJoin {
+			return nil, errors.AssertionFailedf("only inner index joins are supported, %s requested", spec.Type)
+		}
+	}
 
 	var lookupCols []uint32
 	switch readerType {
@@ -169,15 +185,14 @@ func newJoinReader(
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
 	jr := &joinReader{
-		desc:             tabledesc.MakeImmutable(spec.Table),
-		maintainOrdering: spec.MaintainOrdering,
-		input:            input,
-		inputTypes:       input.OutputTypes(),
-		lookupCols:       lookupCols,
+		desc:                              tabledesc.MakeImmutable(spec.Table),
+		maintainOrdering:                  spec.MaintainOrdering,
+		input:                             input,
+		inputTypes:                        input.OutputTypes(),
+		lookupCols:                        lookupCols,
+		outputGroupContinuationForLeftRow: spec.OutputGroupContinuationForLeftRow,
 	}
 	if readerType != indexJoinReaderType {
-		// TODO(sumeer): When LeftJoinWithPairedJoiner, the lookup columns and the
-		// bool column must be projected away by the optimizer after this join.
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
 	}
 	var err error
@@ -208,7 +223,7 @@ func newJoinReader(
 	}
 	for i := range sysColDescs {
 		columnTypes = append(columnTypes, sysColDescs[i].Type)
-		jr.colIdxMap[sysColDescs[i].ID] = len(jr.colIdxMap)
+		jr.colIdxMap.Set(sysColDescs[i].ID, jr.colIdxMap.Len())
 	}
 
 	var leftTypes []*types.T
@@ -240,7 +255,7 @@ func newJoinReader(
 		spec.OnExpr,
 		leftEqCols,
 		indexCols,
-		0, /* numMergedColumns */
+		spec.OutputGroupContinuationForLeftRow,
 		post,
 		output,
 		execinfra.ProcStateOpts{
@@ -255,12 +270,16 @@ func newJoinReader(
 	}
 
 	collectingStats := false
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
 		collectingStats = true
 	}
 
 	neededRightCols := jr.neededRightCols()
-	if isSecondary && !neededRightCols.SubsetOf(getIndexColSet(jr.index, jr.colIdxMap)) {
+	set, err := getIndexColSet(jr.index, jr.colIdxMap)
+	if err != nil {
+		return nil, err
+	}
+	if isSecondary && !neededRightCols.SubsetOf(set) {
 		return nil, errors.Errorf("joinreader index does not cover all columns")
 	}
 
@@ -287,7 +306,7 @@ func newJoinReader(
 	if collectingStats {
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
-		jr.FinishTrace = jr.outputStatsToTrace
+		jr.ExecStatsForTrace = jr.execStatsForTrace
 	} else {
 		jr.fetcher = &fetcher
 	}
@@ -306,7 +325,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	neededRightCols util.FastIntSet,
 	readerType joinReaderType,
 ) {
-	spanBuilder := span.MakeBuilder(flowCtx.Codec(), &jr.desc, jr.index)
+	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), &jr.desc, jr.index)
 	spanBuilder.SetNeededColumns(neededRightCols)
 
 	var keyToInputRowIndices map[string][]int
@@ -363,29 +382,25 @@ func (jr *joinReader) initJoinReaderStrategy(
 		drc.DisableCache = true
 	}
 	jr.strategy = &joinReaderOrderingStrategy{
-		joinerBase:           &jr.joinerBase,
-		defaultSpanGenerator: spanGenerator,
-		isPartialJoin:        jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
-		lookedUpRows:         drc,
-		groupingState:        jr.groupingState,
+		joinerBase:                        &jr.joinerBase,
+		defaultSpanGenerator:              spanGenerator,
+		isPartialJoin:                     jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
+		lookedUpRows:                      drc,
+		groupingState:                     jr.groupingState,
+		outputGroupContinuationForLeftRow: jr.outputGroupContinuationForLeftRow,
 	}
 }
 
 // getIndexColSet returns a set of all column indices for the given index.
 func getIndexColSet(
-	index *descpb.IndexDescriptor, colIdxMap map[descpb.ColumnID]int,
-) util.FastIntSet {
+	index *descpb.IndexDescriptor, colIdxMap catalog.TableColMap,
+) (util.FastIntSet, error) {
 	cols := util.MakeFastIntSet()
 	err := index.RunOverAllColumns(func(id descpb.ColumnID) error {
-		cols.Add(colIdxMap[id])
+		cols.Add(colIdxMap.GetDefault(id))
 		return nil
 	})
-	if err != nil {
-		// This path should never be hit since the column function never returns an
-		// error.
-		panic(err)
-	}
-	return cols
+	return cols, err
 }
 
 // SetBatchSizeBytes sets the desired batch size. It should only be used in tests.
@@ -406,8 +421,14 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 	// Get the columns from the right side of the join and shift them over by
 	// the size of the left side so the right side starts at 0.
 	neededRightCols := util.MakeFastIntSet()
+	var lastCol int
 	for i, ok := neededCols.Next(len(jr.inputTypes)); ok; i, ok = neededCols.Next(i + 1) {
-		neededRightCols.Add(i - len(jr.inputTypes))
+		lastCol = i - len(jr.inputTypes)
+		neededRightCols.Add(lastCol)
+	}
+	if jr.outputGroupContinuationForLeftRow {
+		// The lastCol is the bool continuation column and not a right column.
+		neededRightCols.Remove(lastCol)
 	}
 
 	// Add columns needed by OnExpr.
@@ -582,7 +603,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			}
 		}
 
-		// Fetch the next row and copy it into the row container.
+		// Fetch the next row and tell the strategy to process it.
 		lookedUpRow, _, _, err := jr.fetcher.NextRow(jr.Ctx)
 		if err != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(err))
@@ -651,48 +672,26 @@ func (jr *joinReader) close() {
 	}
 }
 
-var _ execinfrapb.DistSQLSpanStats = &JoinReaderStats{}
-
-const joinReaderTagPrefix = "joinreader."
-
-// Stats implements the SpanStats interface.
-func (jrs *JoinReaderStats) Stats() map[string]string {
-	statsMap := jrs.InputStats.Stats(joinReaderTagPrefix)
-	toMerge := jrs.IndexLookupStats.Stats(joinReaderTagPrefix + "index.")
-	for k, v := range toMerge {
-		statsMap[k] = v
-	}
-	return statsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (jrs *JoinReaderStats) StatsForQueryPlan() []string {
-	is := append(
-		jrs.InputStats.StatsForQueryPlan(""),
-		jrs.IndexLookupStats.StatsForQueryPlan("index ")...,
-	)
-	return is
-}
-
-// outputStatsToTrace outputs the collected joinReader stats to the trace. Will
+// execStatsForTrace outputs the collected joinReader stats to the trace. Will
 // fail silently if the joinReader is not collecting stats.
-func (jr *joinReader) outputStatsToTrace() {
-	is, ok := getInputStats(jr.FlowCtx, jr.input)
+func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(jr.input)
 	if !ok {
-		return
+		return nil
 	}
-	ils, ok := getFetcherInputStats(jr.FlowCtx, jr.fetcher)
+	fis, ok := getFetcherInputStats(jr.fetcher)
 	if !ok {
-		return
+		return nil
 	}
 
 	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
-	jrs := &JoinReaderStats{
-		InputStats:       is,
-		IndexLookupStats: ils,
-	}
-	if sp := opentracing.SpanFromContext(jr.Ctx); sp != nil {
-		tracing.SetSpanStats(sp, jrs)
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		KV: execinfrapb.KVStats{
+			TuplesRead: fis.NumTuples,
+			KVTime:     fis.WaitTime,
+		},
+		Output: jr.Out.Stats(),
 	}
 }
 
@@ -839,8 +838,8 @@ type inputBatchGroupingState struct {
 type groupState struct {
 	// Whether the group matched.
 	matched bool
-	// The first row index in the group. Only valid when doGrouping = true.
-	firstRow int
+	// The last row index in the group. Only valid when doGrouping = true.
+	lastRow int
 }
 
 func (ib *inputBatchGroupingState) reset() {
@@ -857,10 +856,12 @@ func (ib *inputBatchGroupingState) addContinuationValForRow(cont bool) {
 		// First row in input batch or the start of a new group. We need to
 		// add entries in the group indexed slices.
 		ib.groupState = append(ib.groupState,
-			groupState{matched: false, firstRow: len(ib.batchRowToGroupIndex)})
+			groupState{matched: false, lastRow: len(ib.batchRowToGroupIndex)})
 	}
 	if ib.doGrouping {
-		ib.batchRowToGroupIndex = append(ib.batchRowToGroupIndex, len(ib.groupState)-1)
+		groupIndex := len(ib.groupState) - 1
+		ib.groupState[groupIndex].lastRow = len(ib.batchRowToGroupIndex)
+		ib.batchRowToGroupIndex = append(ib.batchRowToGroupIndex, groupIndex)
 	}
 }
 
@@ -868,12 +869,16 @@ func (ib *inputBatchGroupingState) setFirstGroupMatched() {
 	ib.groupState[0].matched = true
 }
 
-func (ib *inputBatchGroupingState) setMatched(rowIndex int) {
+// setMatched records that the given rowIndex has matched. It returns the
+// previous value of the matched field.
+func (ib *inputBatchGroupingState) setMatched(rowIndex int) bool {
 	groupIndex := rowIndex
 	if ib.doGrouping {
 		groupIndex = ib.batchRowToGroupIndex[rowIndex]
 	}
+	rv := ib.groupState[groupIndex].matched
 	ib.groupState[groupIndex].matched = true
+	return rv
 }
 
 func (ib *inputBatchGroupingState) getMatched(rowIndex int) bool {
@@ -902,7 +907,12 @@ func (ib *inputBatchGroupingState) isUnmatched(rowIndex int) bool {
 		// the next batch may continue the group.
 		return false
 	}
-	// Group is complete -- return true for the first row index in a group that
-	// is matched.
-	return !ib.groupState[groupIndex].matched && ib.groupState[groupIndex].firstRow == rowIndex
+	// Group is complete -- return true for the last row index in a group that
+	// is unmatched. Note that there are join reader strategies that on a
+	// row-by-row basis (a) evaluate the match condition, (b) decide whether to
+	// output (including when there is no match). It is necessary to delay
+	// saying that there is no match for the group until the last row in the
+	// group since for earlier rows, when at step (b), one does not know the
+	// match state of later rows in the group.
+	return !ib.groupState[groupIndex].matched && ib.groupState[groupIndex].lastRow == rowIndex
 }

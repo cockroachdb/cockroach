@@ -59,7 +59,7 @@ func resolveNewTypeName(
 	params runParams, name *tree.UnresolvedObjectName,
 ) (*tree.TypeName, catalog.DatabaseDescriptor, error) {
 	// Resolve the target schema and database.
-	db, prefix, err := params.p.ResolveTargetObject(params.ctx, name)
+	db, _, prefix, err := params.p.ResolveTargetObject(params.ctx, name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -93,13 +93,15 @@ func getCreateTypeParams(
 		}
 	}
 	// Get the ID of the schema the type is being created in.
-	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, db.GetID(), name.Schema())
+	dbID := db.GetID()
+	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, dbID, name.Schema())
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// Check permissions on the schema.
-	if err := params.p.canCreateOnSchema(params.ctx, schemaID, params.p.User()); err != nil {
+	if err := params.p.canCreateOnSchema(
+		params.ctx, schemaID, dbID, params.p.User(), skipCheckPublicSchema); err != nil {
 		return nil, 0, err
 	}
 
@@ -236,7 +238,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumCreate)
 
 	// Ensure there are no duplicates in the input enum values.
-	seenVals := make(map[string]struct{})
+	seenVals := make(map[tree.EnumValue]struct{})
 	for _, value := range n.EnumLabels {
 		_, ok := seenVals[value]
 		if ok {
@@ -263,7 +265,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	physReps := enum.GenerateNEvenlySpacedBytes(len(n.EnumLabels))
 	for i := range n.EnumLabels {
 		members[i] = descpb.TypeDescriptor_EnumMember{
-			LogicalRepresentation:  n.EnumLabels[i],
+			LogicalRepresentation:  string(n.EnumLabels[i]),
 			PhysicalRepresentation: physReps[i],
 			Capability:             descpb.TypeDescriptor_EnumMember_ALL,
 		}
@@ -337,7 +339,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 			TypeName  string
 			Statement string
 			User      string
-		}{typeName.FQString(), tree.AsStringWithFQNames(n, params.Ann()), p.User()},
+		}{typeName.FQString(), tree.AsStringWithFQNames(n, params.Ann()), p.User().Normalized()},
 	)
 }
 
@@ -357,7 +359,7 @@ func inheritUsagePrivilegeFromSchema(
 	switch resolvedSchema.Kind {
 	case catalog.SchemaPublic:
 		// If the type is in the public schema, the public role has USAGE on it.
-		privs.Grant(security.PublicRole, privilege.List{privilege.USAGE})
+		privs.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE})
 	case catalog.SchemaTemporary, catalog.SchemaVirtual:
 		// No types should be created in a temporary schema or a virtual schema.
 		panic(errors.AssertionFailedf(
@@ -371,7 +373,7 @@ func inheritUsagePrivilegeFromSchema(
 		// privilege descriptor.
 		for _, u := range schemaPrivs.Users {
 			if u.Privileges&privilege.USAGE.Mask() == 1 {
-				privs.Grant(u.User, privilege.List{privilege.USAGE})
+				privs.Grant(u.User(), privilege.List{privilege.USAGE})
 			}
 		}
 	default:

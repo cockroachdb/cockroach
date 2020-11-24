@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -21,13 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 type aggregateFuncs []tree.AggregateFunc
@@ -96,9 +93,9 @@ func (ag *aggregatorBase) init(
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
-	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
 		input = newInputStatCollector(input)
-		ag.FinishTrace = ag.outputStatsToTrace
+		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
 	ag.input = input
 	ag.isScalar = spec.IsScalar()
@@ -154,42 +151,18 @@ func (ag *aggregatorBase) init(
 	)
 }
 
-var _ execinfrapb.DistSQLSpanStats = &AggregatorStats{}
-
-const aggregatorTagPrefix = "aggregator."
-
-// Stats implements the SpanStats interface.
-func (as *AggregatorStats) Stats() map[string]string {
-	inputStatsMap := as.InputStats.Stats(aggregatorTagPrefix)
-	inputStatsMap[aggregatorTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(as.MaxAllocatedMem)
-	return inputStatsMap
-}
-
-// StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (as *AggregatorStats) StatsForQueryPlan() []string {
-	stats := as.InputStats.StatsForQueryPlan("" /* prefix */)
-
-	if as.MaxAllocatedMem != 0 {
-		stats = append(stats,
-			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(as.MaxAllocatedMem)))
-	}
-
-	return stats
-}
-
-func (ag *aggregatorBase) outputStatsToTrace() {
-	is, ok := getInputStats(ag.FlowCtx, ag.input)
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (ag *aggregatorBase) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(ag.input)
 	if !ok {
-		return
+		return nil
 	}
-	if sp := opentracing.SpanFromContext(ag.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
-			&AggregatorStats{
-				InputStats:      is,
-				MaxAllocatedMem: ag.MemMonitor.MaximumBytes(),
-			},
-		)
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Exec: execinfrapb.ExecStats{
+			MaxAllocatedMem: execinfrapb.MakeIntValue(uint64(ag.MemMonitor.MaximumBytes())),
+		},
+		Output: ag.Out.Stats(),
 	}
 }
 
@@ -828,6 +801,26 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 	return nil
 }
 
+// encode returns the encoding for the grouping columns, this is then used as
+// our group key to determine which bucket to add to.
+func (ag *hashAggregator) encode(
+	appendTo []byte, row rowenc.EncDatumRow,
+) (encoding []byte, err error) {
+	for _, colIdx := range ag.groupCols {
+		// We might allocate tree.Datums when hashing the row, so we'll ask the
+		// fingerprint to account for them. Note that if the datums are later
+		// used by the aggregate functions (and accounted for accordingly),
+		// this can lead to over-accounting which is acceptable.
+		appendTo, err = row[colIdx].Fingerprint(
+			ag.Ctx, ag.inputTypes[colIdx], &ag.datumAlloc, appendTo, &ag.bucketsAcc,
+		)
+		if err != nil {
+			return appendTo, err
+		}
+	}
+	return appendTo, nil
+}
+
 // accumulateRow accumulates a single row, returning an error if accumulation
 // failed for any reason.
 func (ag *hashAggregator) accumulateRow(row rowenc.EncDatumRow) error {
@@ -925,21 +918,21 @@ func (a *aggregateFuncHolder) isDistinct(
 ) (bool, error) {
 	// Allocate one EncDatum that will be reused when encoding every argument.
 	ed := rowenc.EncDatum{Datum: firstArg}
-	encoded, err := ed.Fingerprint(firstArg.ResolvedType(), alloc, prefix)
+	// We know that we have tree.Datum, so there will definitely be no need to
+	// decode ed for fingerprinting, so we pass in nil memory account.
+	encoded, err := ed.Fingerprint(ctx, firstArg.ResolvedType(), alloc, prefix, nil /* acc */)
 	if err != nil {
 		return false, err
 	}
-	if otherArgs != nil {
-		for _, arg := range otherArgs {
-			// Note that we don't need to explicitly unset ed because encoded
-			// field is never set during fingerprinting - we'll compute the
-			// encoding and return it without updating the EncDatum; therefore,
-			// simply setting Datum field to the argument is sufficient.
-			ed.Datum = arg
-			encoded, err = ed.Fingerprint(arg.ResolvedType(), alloc, encoded)
-			if err != nil {
-				return false, err
-			}
+	for _, arg := range otherArgs {
+		// Note that we don't need to explicitly unset ed because encoded
+		// field is never set during fingerprinting - we'll compute the
+		// encoding and return it without updating the EncDatum; therefore,
+		// simply setting Datum field to the argument is sufficient.
+		ed.Datum = arg
+		encoded, err = ed.Fingerprint(ctx, arg.ResolvedType(), alloc, encoded, nil /* acc */)
+		if err != nil {
+			return false, err
 		}
 	}
 
@@ -954,21 +947,6 @@ func (a *aggregateFuncHolder) isDistinct(
 	}
 	a.seen[s] = struct{}{}
 	return true, nil
-}
-
-// encode returns the encoding for the grouping columns, this is then used as
-// our group key to determine which bucket to add to.
-func (ag *aggregatorBase) encode(
-	appendTo []byte, row rowenc.EncDatumRow,
-) (encoding []byte, err error) {
-	for _, colIdx := range ag.groupCols {
-		appendTo, err = row[colIdx].Fingerprint(
-			ag.inputTypes[colIdx], &ag.datumAlloc, appendTo)
-		if err != nil {
-			return appendTo, err
-		}
-	}
-	return appendTo, nil
 }
 
 func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {

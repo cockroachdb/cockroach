@@ -59,7 +59,11 @@ type createViewNode struct {
 func (n *createViewNode) ReadingOwnWrites() {}
 
 func (n *createViewNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("view"))
+	if n.replace {
+		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("or_replace_view"))
+	} else {
+		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("view"))
+	}
 
 	viewName := n.viewName.Object()
 	persistence := n.persistence
@@ -132,7 +136,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
-	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
+	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User())
 
 	var newDesc *tabledesc.Mutable
 
@@ -266,7 +270,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}{
 			ViewName:  n.viewName.FQString(),
 			ViewQuery: n.viewQuery,
-			User:      params.SessionData().User,
+			User:      params.p.User().Normalized(),
 		},
 	)
 }

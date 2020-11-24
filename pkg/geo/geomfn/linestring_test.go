@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -117,6 +118,72 @@ func TestLineMerge(t *testing.T) {
 			require.NoError(t, err)
 			require.EqualValues(t, tc.expected, wkt)
 			require.EqualValues(t, srid, result.SRID())
+		})
+	}
+}
+
+func TestLineLocatePoint(t *testing.T) {
+	testCases := []struct {
+		lineString *geom.LineString
+		point      *geom.Point
+		expected   float64
+	}{
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{0, 1, 1, 0}),
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+			expected:   0.5,
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{0, 1, 1, 0}),
+			point:      geom.NewPointFlat(geom.XY, []float64{1, 1}),
+			expected:   0.5,
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{-1, -1, -1, 1}),
+			point:      geom.NewPointFlat(geom.XY, []float64{-1, 0}),
+			expected:   0.5,
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, -1, -1, 1}),
+			point:      geom.NewPointFlat(geom.XY, []float64{-1, 0}),
+			expected:   0.75,
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{-1, 1, 1, -1}),
+			point:      geom.NewPointFlat(geom.XY, []float64{-1, 0}),
+			expected:   0.25,
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{0, 6, 3, 0}),
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+			expected:   0.8,
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{6, 6, 3, 0}),
+			point:      geom.NewPointFlat(geom.XY, []float64{1, 1}),
+			expected:   1,
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{6, 6, 3, 0}),
+			point:      geom.NewPointFlat(geom.XY, []float64{3, 1}),
+			expected:   0.87,
+		},
+	}
+
+	for index, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", index), func(t *testing.T) {
+			line, err := geo.MakeGeometryFromGeomT(tc.lineString)
+			require.NoError(t, err)
+
+			p, err := geo.MakeGeometryFromGeomT(tc.point)
+			require.NoError(t, err)
+
+			fraction, err := LineLocatePoint(line, p)
+			require.NoError(t, err)
+
+			fraction = math.Round(fraction*100) / 100
+
+			require.Equal(t, tc.expected, fraction)
 		})
 	}
 }

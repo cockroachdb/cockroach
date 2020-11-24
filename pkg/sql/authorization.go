@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -38,17 +38,17 @@ type MembershipCache struct {
 	syncutil.Mutex
 	tableVersion descpb.DescriptorVersion
 	// userCache is a mapping from username to userRoleMembership.
-	userCache map[string]userRoleMembership
+	userCache map[security.SQLUsername]userRoleMembership
 }
 
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
-type userRoleMembership map[string]bool
+type userRoleMembership map[security.SQLUsername]bool
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
-		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user string,
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user security.SQLUsername,
 	) error
 
 	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
@@ -64,7 +64,7 @@ type AuthorizationAccessor interface {
 	// (false, nil) means that the user has NO admin role
 	// (false, err) means that there was an error running the query on
 	// the `system.users` table
-	UserHasAdminRole(ctx context.Context, user string) (bool, error)
+	UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error)
 
 	// HasAdminRole checks if the current session's user has admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
@@ -76,7 +76,7 @@ type AuthorizationAccessor interface {
 
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
-	MemberOfWithAdminOption(ctx context.Context, member string) (map[string]bool, error)
+	MemberOfWithAdminOption(ctx context.Context, member security.SQLUsername) (map[security.SQLUsername]bool, error)
 
 	// HasRoleOption converts the roleoption to its SQL column name and checks if
 	// the user belongs to a role where the option has value true. Requires a
@@ -93,7 +93,10 @@ var _ AuthorizationAccessor = &planner{}
 // CheckPrivilegeForUser implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) CheckPrivilegeForUser(
-	ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user string,
+	ctx context.Context,
+	descriptor catalog.Descriptor,
+	privilege privilege.Kind,
+	user security.SQLUsername,
 ) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
@@ -112,11 +115,11 @@ func (p *planner) CheckPrivilegeForUser(
 	privs := descriptor.GetPrivileges()
 
 	// Check if the 'public' pseudo-role has privileges.
-	if privs.CheckPrivilege(security.PublicRole, privilege) {
+	if privs.CheckPrivilege(security.PublicRoleName(), privilege) {
 		return nil
 	}
 
-	hasPriv, err := p.checkRolePredicate(ctx, user, func(role string) bool {
+	hasPriv, err := p.checkRolePredicate(ctx, user, func(role security.SQLUsername) bool {
 		return IsOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
 	})
 	if err != nil {
@@ -138,25 +141,25 @@ func (p *planner) CheckPrivilege(
 	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
 }
 
-func getOwnerOfDesc(desc catalog.Descriptor) string {
+func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
 	// Descriptors created prior to 20.2 do not have owners set.
-	owner := desc.GetPrivileges().Owner
-	if owner == "" {
+	owner := desc.GetPrivileges().Owner()
+	if owner.Undefined() {
 		// If the descriptor is ownerless and the descriptor is part of the system db,
 		// node is the owner.
 		if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
-			owner = security.NodeUser
+			owner = security.NodeUserName()
 		} else {
 			// This check is redundant in this case since admin already has privilege
 			// on all non-system objects.
-			owner = security.AdminRole
+			owner = security.AdminRoleName()
 		}
 	}
 	return owner
 }
 
 // IsOwner returns if the role has ownership on the descriptor.
-func IsOwner(desc catalog.Descriptor, role string) bool {
+func IsOwner(desc catalog.Descriptor, role security.SQLUsername) bool {
 	return role == getOwnerOfDesc(desc)
 }
 
@@ -165,9 +168,9 @@ func IsOwner(desc catalog.Descriptor, role string) bool {
 // TODO(richardjcai): SUPERUSER has implicit ownership.
 // We do not have SUPERUSER privilege yet but should we consider root a superuser?
 func (p *planner) HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error) {
-	user := p.SessionData().User
+	user := p.SessionData().User()
 
-	return p.checkRolePredicate(ctx, user, func(role string) bool {
+	return p.checkRolePredicate(ctx, user, func(role security.SQLUsername) bool {
 		return IsOwner(descriptor, role)
 	})
 }
@@ -175,7 +178,7 @@ func (p *planner) HasOwnership(ctx context.Context, descriptor catalog.Descripto
 // checkRolePredicate checks if the predicate is true for the user or
 // any roles the user is a member of.
 func (p *planner) checkRolePredicate(
-	ctx context.Context, user string, predicate func(role string) bool,
+	ctx context.Context, user security.SQLUsername, predicate func(role security.SQLUsername) bool,
 ) (bool, error) {
 	if ok := predicate(user); ok {
 		return ok, nil
@@ -202,7 +205,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 		return errors.AssertionFailedf("cannot use CheckAnyPrivilege without a txn")
 	}
 
-	user := p.SessionData().User
+	user := p.SessionData().User()
 	privs := descriptor.GetPrivileges()
 
 	// Check if 'user' itself has privileges.
@@ -211,7 +214,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 	}
 
 	// Check if 'public' has privileges.
-	if privs.AnyPrivilege(security.PublicRole) {
+	if privs.AnyPrivilege(security.PublicRoleName()) {
 		return nil
 	}
 
@@ -230,13 +233,13 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s has no privileges on %s %s",
-		p.SessionData().User, descriptor.TypeName(), descriptor.GetName())
+		p.SessionData().User(), descriptor.TypeName(), descriptor.GetName())
 }
 
 // UserHasAdminRole implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
-func (p *planner) UserHasAdminRole(ctx context.Context, user string) (bool, error) {
-	if user == "" {
+func (p *planner) UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error) {
+	if user.Undefined() {
 		return false, errors.AssertionFailedf("empty user")
 	}
 	// Verify that the txn is valid in any case, so that
@@ -249,7 +252,7 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user string) (bool, erro
 	// Check if user is 'root' or 'node'.
 	// TODO(knz): planner HasAdminRole has no business authorizing
 	// the "node" principal - node should not be issuing SQL queries.
-	if user == security.RootUser || user == security.NodeUser {
+	if user.IsRootUser() || user.IsNodeUser() {
 		return true, nil
 	}
 
@@ -260,7 +263,7 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user string) (bool, erro
 	}
 
 	// Check is 'user' is a member of role 'admin'.
-	if _, ok := memberOf[security.AdminRole]; ok {
+	if _, ok := memberOf[security.AdminRoleName()]; ok {
 		return true, nil
 	}
 
@@ -294,8 +297,8 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 // The "isAdmin" flag applies to both direct and indirect members.
 // Requires a valid transaction to be open.
 func (p *planner) MemberOfWithAdminOption(
-	ctx context.Context, member string,
-) (map[string]bool, error) {
+	ctx context.Context, member security.SQLUsername,
+) (map[security.SQLUsername]bool, error) {
 	if p.txn == nil || !p.txn.IsOpen() {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
 	}
@@ -303,21 +306,19 @@ func (p *planner) MemberOfWithAdminOption(
 	roleMembersCache := p.execCfg.RoleMemberCache
 
 	// Lookup table version.
-	objDesc, err := p.PhysicalSchemaAccessor().GetObjectDesc(
+	tableDesc, err := p.Descriptors().GetTableVersion(
 		ctx,
 		p.txn,
-		p.ExecCfg().Settings,
-		p.ExecCfg().Codec,
-		roleMembersTableName.Catalog(),
-		roleMembersTableName.Schema(),
-		roleMembersTableName.Table(),
+		&roleMembersTableName,
 		p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
 	)
 	if err != nil {
 		return nil, err
 	}
-	tableDesc := objDesc.(catalog.TableDescriptor)
 	tableVersion := tableDesc.GetVersion()
+	if tableDesc.IsUncommittedVersion() {
+		return p.resolveMemberOfWithAdminOption(ctx, member, p.txn)
+	}
 
 	// We loop in case the table version changes while we're looking up memberships.
 	for {
@@ -328,7 +329,7 @@ func (p *planner) MemberOfWithAdminOption(
 		if roleMembersCache.tableVersion != tableVersion {
 			// Update version and drop the map.
 			roleMembersCache.tableVersion = tableVersion
-			roleMembersCache.userCache = make(map[string]userRoleMembership)
+			roleMembersCache.userCache = make(map[security.SQLUsername]userRoleMembership)
 		}
 
 		userMapping, ok := roleMembersCache.userCache[member]
@@ -340,7 +341,7 @@ func (p *planner) MemberOfWithAdminOption(
 		}
 
 		// Lookup memberships outside the lock.
-		memberships, err := p.resolveMemberOfWithAdminOption(ctx, member)
+		memberships, err := p.resolveMemberOfWithAdminOption(ctx, member, nil /* txn */)
 		if err != nil {
 			return nil, err
 		}
@@ -366,13 +367,13 @@ func (p *planner) MemberOfWithAdminOption(
 // we could save detailed memberships (as opposed to fully expanded) and reuse them
 // across users. We may then want to lookup more than just this user.
 func (p *planner) resolveMemberOfWithAdminOption(
-	ctx context.Context, member string,
-) (map[string]bool, error) {
-	ret := map[string]bool{}
+	ctx context.Context, member security.SQLUsername, txn *kv.Txn,
+) (map[security.SQLUsername]bool, error) {
+	ret := map[security.SQLUsername]bool{}
 
 	// Keep track of members we looked up.
-	visited := map[string]struct{}{}
-	toVisit := []string{member}
+	visited := map[security.SQLUsername]struct{}{}
+	toVisit := []security.SQLUsername{member}
 	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
 
 	for len(toVisit) > 0 {
@@ -385,7 +386,7 @@ func (p *planner) resolveMemberOfWithAdminOption(
 		visited[m] = struct{}{}
 
 		rows, err := p.ExecCfg().InternalExecutor.Query(
-			ctx, "expand-roles", nil /* txn */, lookupRolesStmt, m,
+			ctx, "expand-roles", txn, lookupRolesStmt, m.Normalized(),
 		)
 		if err != nil {
 			return nil, err
@@ -395,10 +396,12 @@ func (p *planner) resolveMemberOfWithAdminOption(
 			roleName := tree.MustBeDString(row[0])
 			isAdmin := row[1].(*tree.DBool)
 
-			ret[string(roleName)] = bool(*isAdmin)
+			// system.role_members stores pre-normalized usernames.
+			role := security.MakeSQLUsernameFromPreNormalizedString(string(roleName))
+			ret[role] = bool(*isAdmin)
 
 			// We need to expand this role. Let the "pop" worry about already-visited elements.
-			toVisit = append(toVisit, string(roleName))
+			toVisit = append(toVisit, role)
 		}
 	}
 
@@ -414,47 +417,26 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return false, errors.AssertionFailedf("cannot use HasRoleOption without a txn")
 	}
 
-	user := p.SessionData().User
-	if user == security.RootUser || user == security.NodeUser {
+	user := p.SessionData().User()
+	if user.IsRootUser() || user.IsNodeUser() {
 		return true, nil
 	}
 
-	normalizedName, err := NormalizeAndValidateUsername(user)
+	hasAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return false, err
 	}
-
-	// Create list of roles for sql WHERE IN clause.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, normalizedName)
-	if err != nil {
-		return false, err
-	}
-
-	var roles = tree.NewDArray(types.String)
-	err = roles.Append(tree.NewDString(normalizedName))
-	if err != nil {
-		return false, err
-	}
-	for role := range memberOf {
-		if role == security.AdminRole {
-			// Superusers have all role privileges.
-			return true, nil
-		}
-		err := roles.Append(tree.NewDString(role))
-		if err != nil {
-			return false, err
-		}
+	if hasAdmin {
+		// Superusers have all role privileges.
+		return true, nil
 	}
 
 	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryEx(
 		ctx, "has-role-option", p.Txn(),
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
-			`SELECT 1 from %s WHERE option = '%s' AND username = ANY($1) LIMIT 1`,
-			RoleOptionsTableName,
-			roleOption.String()),
-		roles)
-
+			`SELECT 1 from %s WHERE option = '%s' AND username = $1 LIMIT 1`,
+			RoleOptionsTableName, roleOption.String()), user.Normalized())
 	if err != nil {
 		return false, err
 	}
@@ -500,16 +482,49 @@ const ConnAuditingClusterSettingName = "server.auth_log.sql_connections.enabled"
 // create a circular dependency.
 const AuthAuditingClusterSettingName = "server.auth_log.sql_sessions.enabled"
 
-func (p *planner) canCreateOnSchema(ctx context.Context, schemaID descpb.ID, user string) error {
+// shouldCheckPublicSchema indicates whether canCreateOnSchema should check
+// CREATE privileges for the public schema.
+type shouldCheckPublicSchema bool
+
+const (
+	checkPublicSchema     shouldCheckPublicSchema = true
+	skipCheckPublicSchema shouldCheckPublicSchema = false
+)
+
+// canCreateOnSchema returns whether a user has permission to create new objects
+// on the specified schema. For `public` schemas, it checks if the user has
+// CREATE privileges on the specified dbID. Note that skipCheckPublicSchema may
+// be passed to skip this check, since some callers check this separately.
+//
+// Privileges on temporary schemas are not validated. This is the caller's
+// responsibility.
+func (p *planner) canCreateOnSchema(
+	ctx context.Context,
+	schemaID descpb.ID,
+	dbID descpb.ID,
+	user security.SQLUsername,
+	checkPublicSchema shouldCheckPublicSchema,
+) error {
 	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(ctx, p.Txn(), schemaID)
 	if err != nil {
 		return err
 	}
 
 	switch resolvedSchema.Kind {
-	case catalog.SchemaPublic, catalog.SchemaTemporary:
-		// Anyone can CREATE on a public schema, and callers check whether the
-		// temporary schema is valid to create in.
+	case catalog.SchemaPublic:
+		// The public schema is valid to create in if the parent database is.
+		if !checkPublicSchema {
+			// The caller wishes to skip this check.
+			return nil
+		}
+		dbDesc, err := p.Descriptors().GetDatabaseVersionByID(
+			ctx, p.Txn(), dbID, tree.DatabaseLookupFlags{Required: true})
+		if err != nil {
+			return err
+		}
+		return p.CheckPrivilegeForUser(ctx, dbDesc, privilege.CREATE, user)
+	case catalog.SchemaTemporary:
+		// Callers must check whether temporary schemas are valid to create in.
 		return nil
 	case catalog.SchemaVirtual:
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
@@ -546,15 +561,11 @@ func (p *planner) canResolveDescUnderSchema(
 	}
 }
 
-// checkCanAlterToNewOwner checks if the new owner exists, the current user
-// has privileges to alter the owner of the object and the current user is a
-//  member of the new owner role.
+// checkCanAlterToNewOwner checks that the new owner exists and the current user
+// has privileges to alter the owner of the object. If the current user is not
+// a superuser, it also checks that they are a member of the new owner role.
 func (p *planner) checkCanAlterToNewOwner(
-	ctx context.Context,
-	desc catalog.MutableDescriptor,
-	privs *descpb.PrivilegeDescriptor,
-	newOwner string,
-	hasOwnership bool,
+	ctx context.Context, desc catalog.MutableDescriptor, newOwner security.SQLUsername,
 ) error {
 	// Make sure the newOwner exists.
 	roleExists, err := p.RoleExists(ctx, newOwner)
@@ -563,6 +574,15 @@ func (p *planner) checkCanAlterToNewOwner(
 	}
 	if !roleExists {
 		return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newOwner)
+	}
+
+	// If the user is a superuser, skip privilege checks.
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
 	}
 
 	var objType string
@@ -579,27 +599,28 @@ func (p *planner) checkCanAlterToNewOwner(
 		return errors.AssertionFailedf("unknown object descriptor type %v", desc)
 	}
 
-	// Make sure the user has ownership on the table
-	// and not just create privilege.
+	hasOwnership, err := p.HasOwnership(ctx, desc)
+	if err != nil {
+		return err
+	}
 	if !hasOwnership {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"must be owner of %s %s", tree.Name(objType), tree.Name(desc.GetName()))
 	}
 
-	// Requirements from PG:
-	// To alter the owner, you must also be a direct or indirect member of the
-	// new owning role, and that role must have CREATE privilege on the
-	// table's schema.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, privs.Owner)
+	// To alter the owner, you must also be a direct or indirect member of the new
+	// owning role.
+	if p.User() == newOwner {
+		return nil
+	}
+	memberOf, err := p.MemberOfWithAdminOption(ctx, p.User())
 	if err != nil {
 		return err
 	}
-	if _, ok := memberOf[newOwner]; !ok {
-		return pgerror.Newf(
-			pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
+	if _, ok := memberOf[newOwner]; ok {
+		return nil
 	}
-
-	return nil
+	return pgerror.Newf(pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
 }
 
 // HasOwnershipOnSchema checks if the current user has ownership on the schema.
@@ -624,10 +645,9 @@ func (p *planner) HasOwnershipOnSchema(ctx context.Context, schemaID descpb.ID) 
 	case catalog.SchemaVirtual:
 		// Cannot drop on virtual schemas.
 	case catalog.SchemaTemporary:
-		// The user only owns the temporary schema that corresponds to the
-		// TemporarySchemaID in the sessionData.
+		// The user owns all the temporary schemas that they created in the session.
 		hasOwnership = p.SessionData() != nil &&
-			p.SessionData().TemporarySchemaID == uint32(resolvedSchema.ID)
+			p.SessionData().IsTemporarySchemaID(uint32(resolvedSchema.ID))
 	case catalog.SchemaUserDefined:
 		hasOwnership, err = p.HasOwnership(ctx, resolvedSchema.Desc)
 		if err != nil {

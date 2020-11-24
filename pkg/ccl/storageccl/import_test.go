@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/errors"
 )
 
 func TestMaxImportBatchSize(t *testing.T) {
@@ -73,36 +72,54 @@ func slurpSSTablesLatestKey(
 	defer batch.Close()
 
 	for _, path := range paths {
-		sst := storage.MakeRocksDBSstFileReader()
+		sst, err := storage.NewSSTIterator(filepath.Join(dir, path))
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer sst.Close()
 
-		fileContents, err := ioutil.ReadFile(filepath.Join(dir, path))
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
-		if err := sst.IngestExternalFile(fileContents); err != nil {
-			t.Fatalf("%+v", err)
-		}
-		if err := sst.Iterate(start.Key, end.Key, func(kv storage.MVCCKeyValue) (bool, error) {
+		sst.SeekGE(start)
+		for {
+			if valid, err := sst.Valid(); !valid || err != nil {
+				if err != nil {
+					t.Fatal(err)
+				}
+				break
+			}
+			if !sst.UnsafeKey().Less(end) {
+				break
+			}
 			var ok bool
-			kv.Key.Key, ok = kr.rewriteKey(kv.Key.Key)
+			var newKv storage.MVCCKeyValue
+			key := sst.UnsafeKey()
+			newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
+			newKv.Key.Key = append(newKv.Key.Key, key.Key...)
+			newKv.Key.Timestamp = key.Timestamp
+			newKv.Key.Key, ok = kr.rewriteKey(newKv.Key.Key)
 			if !ok {
-				return true, errors.Errorf("could not rewrite key: %s", kv.Key.Key)
+				t.Fatalf("could not rewrite key: %s", newKv.Key.Key)
 			}
-			v := roachpb.Value{RawBytes: kv.Value}
+			v := roachpb.Value{RawBytes: newKv.Value}
 			v.ClearChecksum()
-			v.InitChecksum(kv.Key.Key)
-			if err := batch.Put(kv.Key, v.RawBytes); err != nil {
-				return true, err
+			v.InitChecksum(newKv.Key.Key)
+			// TODO(sumeer): this will not be correct with the separated
+			// lock table. We should iterate using EngineKey on the sst,
+			// and expose a PutEngine method to write directly.
+			if newKv.Key.Timestamp.IsEmpty() {
+				if err := batch.PutUnversioned(newKv.Key.Key, v.RawBytes); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := batch.PutMVCC(newKv.Key, v.RawBytes); err != nil {
+					t.Fatal(err)
+				}
 			}
-			return false, nil
-		}); err != nil {
-			t.Fatalf("%+v", err)
+			sst.Next()
 		}
 	}
 
 	var kvs []storage.MVCCKeyValue
-	it := batch.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+	it := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
 	for it.SeekGE(start); ; it.NextKey() {
 		if ok, err := it.Valid(); err != nil {
@@ -226,7 +243,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	defer s.Stopper().Stop(ctx)
 	init(s.ClusterSettings())
 
-	storage, err := cloudimpl.ExternalStorageConfFromURI("nodelocal://0/foo", security.RootUser)
+	storage, err := cloudimpl.ExternalStorageConfFromURI("nodelocal://0/foo", security.RootUserName())
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -89,20 +90,27 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 
 	require.NoError(
 		t,
-		kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			execCfg := s.ExecutorConfig().(ExecutorConfig)
-			err = cleanupSchemaObjects(
-				ctx,
-				execCfg.Settings,
-				txn,
-				execCfg.Codec,
-				s.InternalExecutor().(*InternalExecutor),
-				namesToID["defaultdb"],
-				tempSchemaName,
-			)
-			require.NoError(t, err)
-			return nil
-		}),
+		descs.Txn(
+			ctx,
+			s.ClusterSettings(),
+			s.LeaseManager().(*lease.Manager),
+			s.InternalExecutor().(*InternalExecutor),
+			kvDB,
+			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+				execCfg := s.ExecutorConfig().(ExecutorConfig)
+				err = cleanupSchemaObjects(
+					ctx,
+					execCfg.Settings,
+					txn,
+					descsCol,
+					execCfg.Codec,
+					s.InternalExecutor().(*InternalExecutor),
+					namesToID["defaultdb"],
+					tempSchemaName,
+				)
+				require.NoError(t, err)
+				return nil
+			}),
 	)
 
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
@@ -176,20 +184,27 @@ INSERT INTO perm_table VALUES (3, 4);
 
 	require.NoError(
 		t,
-		kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			execCfg := s.ExecutorConfig().(ExecutorConfig)
-			err = cleanupSchemaObjects(
-				ctx,
-				execCfg.Settings,
-				txn,
-				execCfg.Codec,
-				s.InternalExecutor().(*InternalExecutor),
-				namesToID["defaultdb"],
-				tempSchemaName,
-			)
-			require.NoError(t, err)
-			return nil
-		}),
+		descs.Txn(
+			ctx,
+			s.ClusterSettings(),
+			s.LeaseManager().(*lease.Manager),
+			s.InternalExecutor().(*InternalExecutor),
+			kvDB,
+			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+				execCfg := s.ExecutorConfig().(ExecutorConfig)
+				err = cleanupSchemaObjects(
+					ctx,
+					execCfg.Settings,
+					txn,
+					descsCol,
+					execCfg.Codec,
+					s.InternalExecutor().(*InternalExecutor),
+					namesToID["defaultdb"],
+					tempSchemaName,
+				)
+				require.NoError(t, err)
+				return nil
+			}),
 	)
 
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)

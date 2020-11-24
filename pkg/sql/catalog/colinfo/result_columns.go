@@ -146,37 +146,9 @@ func (r ResultColumns) String(printTypes bool, showHidden bool) string {
 	return f.CloseAndGetString()
 }
 
-// ExplainPlanColumns are the result columns of an EXPLAIN (PLAN) ...
-// statement.
+// ExplainPlanColumns are the result columns of various EXPLAIN variants.
 var ExplainPlanColumns = ResultColumns{
-	// Tree shows the node type with the tree structure.
-	{Name: "tree", Typ: types.String},
-	// Field is the part of the node that a row of output pertains to.
-	{Name: "field", Typ: types.String},
-	// Description contains details about the field.
-	{Name: "description", Typ: types.String},
-}
-
-// ExplainPlanVerboseColumns are the result columns of an
-// EXPLAIN (PLAN, ...) ...
-// statement when a flag like VERBOSE or TYPES is passed.
-var ExplainPlanVerboseColumns = ResultColumns{
-	// Tree shows the node type with the tree structure.
-	{Name: "tree", Typ: types.String},
-	// Level is the depth of the node in the tree. Hidden by default; can be
-	// retrieved using:
-	//   SELECT level FROM [ EXPLAIN (VERBOSE) ... ].
-	{Name: "level", Typ: types.Int, Hidden: true},
-	// Type is the node type. Hidden by default.
-	{Name: "node_type", Typ: types.String, Hidden: true},
-	// Field is the part of the node that a row of output pertains to.
-	{Name: "field", Typ: types.String},
-	// Description contains details about the field.
-	{Name: "description", Typ: types.String},
-	// Columns is the type signature of the data source.
-	{Name: "columns", Typ: types.String},
-	// Ordering indicates the known ordering of the data from this source.
-	{Name: "ordering", Typ: types.String},
+	{Name: "info", Typ: types.String},
 }
 
 // ExplainDistSQLColumns are the result columns of an
@@ -185,24 +157,6 @@ var ExplainDistSQLColumns = ResultColumns{
 	{Name: "automatic", Typ: types.Bool},
 	{Name: "url", Typ: types.String},
 	{Name: "json", Typ: types.String, Hidden: true},
-}
-
-// ExplainOptColumns are the result columns of an
-// EXPLAIN (OPT) statement.
-var ExplainOptColumns = ResultColumns{
-	{Name: "text", Typ: types.String},
-}
-
-// ExplainVecColumns are the result columns of an
-// EXPLAIN (VEC) statement.
-var ExplainVecColumns = ResultColumns{
-	{Name: "text", Typ: types.String},
-}
-
-// ExplainAnalyzeDebugColumns are the result columns of an
-// EXPLAIN ANALYZE (DEBUG) statement.
-var ExplainAnalyzeDebugColumns = ResultColumns{
-	{Name: "text", Typ: types.String},
 }
 
 // ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.

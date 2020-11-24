@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // claimJobs places a claim with the given SessionID to job rows that are
@@ -31,9 +31,17 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := r.ex.Query(
 			ctx, "claim-jobs", txn, `
-UPDATE system.jobs SET claim_session_id = $1, claim_instance_id = $2
-WHERE claim_session_id IS NULL ORDER BY created DESC LIMIT $3 RETURNING id`,
-			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop,
+   UPDATE system.jobs
+      SET claim_session_id = $1, claim_instance_id = $2
+    WHERE claim_session_id IS NULL
+      AND status NOT IN ($3, $4, $5)
+ ORDER BY created DESC
+    LIMIT $6
+RETURNING id;`,
+			s.ID().UnsafeBytes(), r.ID(),
+			// Don't touch terminal jobs.
+			StatusSucceeded, StatusCanceled, StatusFailed,
+			maxAdoptionsPerLoop,
 		)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
@@ -49,7 +57,7 @@ WHERE claim_session_id IS NULL ORDER BY created DESC LIMIT $3 RETURNING id`,
 func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
 	rows, err := r.ex.QueryEx(
 		ctx, "select-running/get-claimed-jobs", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 SELECT id FROM system.jobs
 WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)`,
 		StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID(),
@@ -124,7 +132,7 @@ func (r *Registry) resumeJob(ctx context.Context, jobID int64, s sqlliveness.Ses
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 SELECT status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)
 FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 		jobID, s.ID().UnsafeBytes(),
@@ -166,6 +174,7 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	job := &Job{id: &jobID, registry: r}
 	job.mu.payload = *payload
 	job.mu.progress = *progress
+	job.sessionID = s.ID()
 
 	resumer, err := r.createResumer(job, r.settings)
 	if err != nil {
@@ -228,20 +237,20 @@ func (r *Registry) runJob(
 	if job.mu.payload.FinalResumeError != nil {
 		finalResumeError = errors.DecodeError(ctx, *job.mu.payload.FinalResumeError)
 	}
-	username := job.mu.payload.Username
+	username := job.mu.payload.UsernameProto.Decode()
 	typ := job.mu.payload.Type()
 	job.mu.Unlock()
 
 	// Bookkeeping.
-	phs, cleanup := r.planFn("resume-"+taskName, username)
+	execCtx, cleanup := r.execCtx("resume-"+taskName, username)
 	defer cleanup()
 	spanName := fmt.Sprintf(`%s-%d`, typ, *job.ID())
-	var span opentracing.Span
+	var span *tracing.Span
 	ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
 	defer span.Finish()
 
 	// Run the actual job.
-	err := r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, finalResumeError)
+	err := r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, status, finalResumeError)
 	if err != nil {
 		// TODO (lucy): This needs to distinguish between assertion errors in
 		// the job registry and assertion errors in job execution returned from
@@ -261,14 +270,14 @@ func (r *Registry) runJob(
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := r.ex.QueryEx(
-			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
+			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 UPDATE system.jobs
 SET status =
 		CASE
 			WHEN status = $1 THEN $2
 			WHEN status = $3 THEN $4
 			ELSE status
-		END 
+		END
 WHERE (status IN ($1, $3)) AND (claim_session_id = $5 AND claim_instance_id = $6)
 RETURNING id, status`,
 			StatusPauseRequested, StatusPaused,

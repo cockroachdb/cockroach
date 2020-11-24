@@ -160,6 +160,7 @@ func TestEval(t *testing.T) {
 					Post: execinfrapb.PostProcessSpec{
 						RenderExprs: []execinfrapb.Expression{{LocalExpr: typedExpr}},
 					},
+					ResultTypes: []*types.T{typedExpr.ResolvedType()},
 				},
 				Inputs: []colexecbase.Operator{
 					&colexecbase.CallbackOperator{
@@ -192,7 +193,7 @@ func TestEval(t *testing.T) {
 				nil, /* output */
 				result.MetadataSources,
 				nil, /* toClose */
-				nil, /* outputStatsToTrace */
+				nil, /* execStatsForTrace */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)

@@ -17,8 +17,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -174,7 +175,7 @@ func (a *avroConsumer) convertNative(x interface{}, conv *row.DatumRowConverter)
 	}
 
 	for f, v := range record {
-		field := lex.NormalizeName(f)
+		field := lexbase.NormalizeName(f)
 		idx, ok := a.fieldNameToIdx[field]
 		if !ok {
 			if a.strict {
@@ -209,7 +210,7 @@ func (a *avroConsumer) FillDatums(
 	// Set any nil datums to DNull (in case native
 	// record didn't have the value set at all)
 	for i := range conv.Datums {
-		if _, isTargetCol := conv.IsTargetCol[i]; isTargetCol && conv.Datums[i] == nil {
+		if conv.TargetColOrds.Contains(i) && conv.Datums[i] == nil {
 			if a.strict {
 				return fmt.Errorf("field %s was not set in the avro import", conv.VisibleCols[i].Name)
 			}
@@ -363,6 +364,11 @@ func (r *avroRecordStream) readNative() {
 		if len(r.buf) > 0 {
 			r.row, remaining, decodeErr = r.decode()
 		}
+		// If we've already read all we can (either to eof or to max size), then
+		// any error during decoding should just be returned as an error.
+		if decodeErr != nil && (r.eof || len(r.buf) > r.maxBufSize) {
+			break
+		}
 	}
 
 	if decodeErr != nil {
@@ -475,7 +481,7 @@ func (a *avroInputReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user string,
+	user security.SQLUsername,
 ) error {
 	return readInputFiles(ctx, dataFiles, resumePos, format, a.readFile, makeExternalStorage, user)
 }
@@ -492,6 +498,7 @@ func (a *avroInputReader) readFile(
 		source:   inputIdx,
 		skip:     resumePos,
 		rejected: rejected,
+		rowLimit: a.opts.RowLimit,
 	}
 	return runParallelImport(ctx, a.importContext, fileCtx, producer, consumer)
 }

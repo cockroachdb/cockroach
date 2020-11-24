@@ -25,31 +25,43 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type dummy struct {
+// dummyVersion mocks out the dependency on the ClusterVersion type. It has a
+// msg1 prefix, and a growsbyone component that grows by one character on each
+// update (which is internally validated and asserted against). They're
+// separated by a '.' in string form. Neither component can contain a '.'
+// internally.
+type dummyVersion struct {
 	msg1       string
 	growsbyone string
 }
 
-func (d *dummy) Unmarshal(data []byte) error {
+var _ settings.ClusterVersionImpl = &dummyVersion{}
+
+func (d *dummyVersion) ClusterVersionImpl() {}
+
+// Unmarshal is part of the protoutil.Message interface.
+func (d *dummyVersion) Unmarshal(data []byte) error {
 	s := string(data)
 	parts := strings.Split(s, ".")
 	if len(parts) != 2 {
 		return errors.Errorf("expected two parts, not %v", parts)
 	}
-	*d = dummy{
+	*d = dummyVersion{
 		msg1: parts[0], growsbyone: parts[1],
 	}
 	return nil
 }
 
-func (d *dummy) Marshal() ([]byte, error) {
+// Marshal is part of the protoutil.Message interface.
+func (d *dummyVersion) Marshal() ([]byte, error) {
 	if c := d.msg1 + d.growsbyone; strings.Contains(c, ".") {
 		return nil, errors.Newf("must not contain dots: %s", c)
 	}
 	return []byte(d.msg1 + "." + d.growsbyone), nil
 }
 
-func (d *dummy) MarshalTo(data []byte) (int, error) {
+// MarshalTo is part of the protoutil.Message interface.
+func (d *dummyVersion) MarshalTo(data []byte) (int, error) {
 	encoded, err := d.Marshal()
 	if err != nil {
 		return 0, err
@@ -57,72 +69,59 @@ func (d *dummy) MarshalTo(data []byte) (int, error) {
 	return copy(data, encoded), nil
 }
 
-func (d *dummy) Size() int {
+// Size is part of the protoutil.Message interface.
+func (d *dummyVersion) Size() int {
 	encoded, _ := d.Marshal()
 	return len(encoded)
 }
 
-// implement the protoutil.Message interface
-func (d *dummy) ProtoMessage() {}
-func (d *dummy) Reset()        { *d = dummy{} }
-func (d *dummy) String() string {
-	return fmt.Sprintf("&{%s %s}", d.msg1, d.growsbyone)
-}
+// Implement the rest of the protoutil.Message interface.
+func (d *dummyVersion) ProtoMessage()  {}
+func (d *dummyVersion) Reset()         { *d = dummyVersion{} }
+func (d *dummyVersion) String() string { return fmt.Sprintf("&{%s %s}", d.msg1, d.growsbyone) }
 
-type dummyTransformer struct{}
+type dummyVersionSettingImpl struct{}
 
-var _ settings.StateMachineSettingImpl = &dummyTransformer{}
+var _ settings.VersionSettingImpl = &dummyVersionSettingImpl{}
 
-func (d *dummyTransformer) Decode(val []byte) (interface{}, error) {
-	var oldD dummy
+func (d *dummyVersionSettingImpl) Decode(val []byte) (settings.ClusterVersionImpl, error) {
+	var oldD dummyVersion
 	if err := protoutil.Unmarshal(val, &oldD); err != nil {
 		return nil, err
 	}
-	return oldD, nil
+	return &oldD, nil
 }
 
-func (d *dummyTransformer) DecodeToString(val []byte) (string, error) {
-	dum, err := d.Decode(val)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%v", dum), nil
-}
-
-func (d *dummyTransformer) ValidateLogical(
-	ctx context.Context, sv *settings.Values, old []byte, newV string,
+func (d *dummyVersionSettingImpl) Validate(
+	ctx context.Context, sv *settings.Values, oldV, newV []byte,
 ) ([]byte, error) {
-	var oldD dummy
-	if err := protoutil.Unmarshal(old, &oldD); err != nil {
+	var oldD dummyVersion
+	if err := protoutil.Unmarshal(oldV, &oldD); err != nil {
+		return nil, err
+	}
+
+	var newD dummyVersion
+	if err := protoutil.Unmarshal(newV, &newD); err != nil {
 		return nil, err
 	}
 
 	// We have a new proposed update to the value, validate it.
-	if len(newV) != len(oldD.growsbyone)+1 {
+	if len(newD.growsbyone) != len(oldD.growsbyone)+1 {
 		return nil, errors.New("dashes component must grow by exactly one")
 	}
-	newD := oldD
-	newD.growsbyone = newV
-	b, err := newD.Marshal()
-	return b, err
+
+	return newD.Marshal()
 }
 
-func (d *dummyTransformer) ValidateGossipUpdate(
+func (d *dummyVersionSettingImpl) ValidateBinaryVersions(
 	ctx context.Context, sv *settings.Values, val []byte,
 ) error {
-	var updateVal dummy
+	var updateVal dummyVersion
 	return protoutil.Unmarshal(val, &updateVal)
 }
 
-func (d *dummyTransformer) SettingsListDefault() string {
+func (d *dummyVersionSettingImpl) SettingsListDefault() string {
 	panic("unimplemented")
-}
-
-// BeforeChange is part of the StateMachineSettingImpl interface.
-func (d *dummyTransformer) BeforeChange(
-	ctx context.Context, encodedVal []byte, sv *settings.Values,
-) {
-	// noop
 }
 
 const mb = int64(1024 * 1024)
@@ -136,7 +135,6 @@ var changes = struct {
 	duA      int
 	eA       int
 	byteSize int
-	mA       int
 }{}
 
 var boolTA = settings.RegisterBoolSetting("bool.t", "desc", true)
@@ -151,7 +149,7 @@ var duA = settings.RegisterPublicNonNegativeDurationSettingWithExplicitUnit("d_w
 var _ = settings.RegisterPublicNonNegativeDurationSettingWithMaximum("d_with_maximum", "desc", time.Second, time.Hour)
 var eA = settings.RegisterEnumSetting("e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
-var mA = settings.RegisterStateMachineSettingImpl("statemachine", "foo", &dummyTransformer{})
+var mA = settings.TestingRegisterVersionSetting("v.1", "desc", &dummyVersionSettingImpl{})
 
 func init() {
 	settings.RegisterBoolSetting("sekretz", "desc", false).SetReportable(false)
@@ -205,7 +203,6 @@ func TestValidation(t *testing.T) {
 }
 
 func TestCache(t *testing.T) {
-	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(settings.TestOpaque)
 
@@ -217,35 +214,36 @@ func TestCache(t *testing.T) {
 	duA.SetOnChange(sv, func() { changes.duA++ })
 	eA.SetOnChange(sv, func() { changes.eA++ })
 	byteSize.SetOnChange(sv, func() { changes.byteSize++ })
-	mA.SetOnChange(sv, func() { changes.mA++ })
 
-	t.Run("StateMachineSetting", func(t *testing.T) {
+	t.Run("VersionSetting", func(t *testing.T) {
+		ctx := context.Background()
 		u := settings.NewUpdater(sv)
-		mB := settings.RegisterStateMachineSettingImpl("local.m", "foo", &dummyTransformer{})
-		// State-machine settings don't have defaults, so we need to start by
-		// setting it to something.
-		if err := u.Set("local.m", "default.X", "m"); err != nil {
+		mB := settings.TestingRegisterVersionSetting("local.m", "foo", &dummyVersionSettingImpl{})
+		// Version settings don't have defaults, so we need to start by setting
+		// it to something.
+		defaultDummyV := dummyVersion{msg1: "default", growsbyone: "X"}
+		if err := setDummyVersion(defaultDummyV, mB, sv); err != nil {
 			t.Fatal(err)
 		}
 
-		if exp, act := "{default X}", mB.String(sv); exp != act {
+		if exp, act := "&{default X}", mB.String(sv); exp != act {
 			t.Fatalf("wanted %q, got %q", exp, act)
 		}
 
-		growsTooFast := "grows too fast"
-		curVal := []byte(mB.Get(sv))
+		growsTooFast := []byte("default.grows too fast")
+		curVal := []byte(mB.Encoded(sv))
 		if _, err := mB.Validate(ctx, sv, curVal, growsTooFast); !testutils.IsError(err,
 			"must grow by exactly one") {
 			t.Fatal(err)
 		}
 
-		hasDots := "a."
+		hasDots := []byte("default.a.b.c")
 		if _, err := mB.Validate(ctx, sv, curVal, hasDots); !testutils.IsError(err,
-			"must not contain dots") {
+			"expected two parts") {
 			t.Fatal(err)
 		}
 
-		ab := "ab"
+		ab := []byte("default.ab")
 		if _, err := mB.Validate(ctx, sv, curVal, ab); err != nil {
 			t.Fatal(err)
 		}
@@ -254,15 +252,18 @@ func TestCache(t *testing.T) {
 			"must grow by exactly one") {
 			t.Fatal(err)
 		}
-		precedenceX := "precedencex"
+
+		precedenceX := []byte("takes.precedencex")
 		if _, err := mB.Validate(ctx, sv, []byte("takes.precedence"), precedenceX); err != nil {
 			t.Fatal(err)
 		}
-		if err := u.Set("local.m", "default.XX", "m"); err != nil {
+
+		newDummyV := dummyVersion{msg1: "default", growsbyone: "XX"}
+		if err := setDummyVersion(newDummyV, mB, sv); err != nil {
 			t.Fatal(err)
 		}
 		u.ResetRemaining()
-		if exp, act := "{default XX}", mB.String(sv); exp != act {
+		if exp, act := "&{default XX}", mB.String(sv); exp != act {
 			t.Fatalf("wanted %q, got %q", exp, act)
 		}
 	})
@@ -342,7 +343,7 @@ func TestCache(t *testing.T) {
 		if actual, ok := settings.Lookup("e", settings.LookupForLocalAccess); !ok || eA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", eA, actual, ok)
 		}
-		if actual, ok := settings.Lookup("statemachine", settings.LookupForLocalAccess); !ok || mA != actual {
+		if actual, ok := settings.Lookup("v.1", settings.LookupForLocalAccess); !ok || mA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", mA, actual, ok)
 		}
 		if actual, ok := settings.Lookup("d_with_explicit_unit", settings.LookupForLocalAccess); !ok || duA != actual {
@@ -427,15 +428,6 @@ func TestCache(t *testing.T) {
 		if err := u.Set("byteSize.Val", settings.EncodeInt(mb*5), "z"); err != nil {
 			t.Fatal(err)
 		}
-		if expected, actual := 0, changes.mA; expected != actual {
-			t.Fatalf("expected %d, got %d", expected, actual)
-		}
-		if err := u.Set("statemachine", "default.AB", "m"); err != nil {
-			t.Fatal(err)
-		}
-		if expected, actual := 1, changes.mA; expected != actual {
-			t.Fatalf("expected %d, got %d", expected, actual)
-		}
 		if expected, actual := 0, changes.eA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
@@ -448,6 +440,10 @@ func TestCache(t *testing.T) {
 		if expected, err := "strconv.Atoi: parsing \"notAValidValue\": invalid syntax",
 			u.Set("e", "notAValidValue", "e"); !testutils.IsError(err, expected) {
 			t.Fatalf("expected '%s' != actual error '%s'", expected, err)
+		}
+		defaultDummyV := dummyVersion{msg1: "default", growsbyone: "AB"}
+		if err := setDummyVersion(defaultDummyV, mA, sv); err != nil {
+			t.Fatal(err)
 		}
 		u.ResetRemaining()
 
@@ -490,7 +486,7 @@ func TestCache(t *testing.T) {
 		if expected, actual := mb*5, byteSizeVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "default.AB", mA.Get(sv); expected != actual {
+		if expected, actual := "default.AB", mA.Encoded(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
@@ -661,20 +657,6 @@ func TestCache(t *testing.T) {
 		if expected, actual := beforeIVal, iVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-
-		beforeMarsh := mA.Get(sv)
-		{
-			u := settings.NewUpdater(sv)
-			if err := u.Set("statemachine", "too.many.dots", "m"); !testutils.IsError(err,
-				"expected two parts",
-			) {
-				t.Fatal(err)
-			}
-			u.ResetRemaining()
-		}
-		if expected, actual := beforeMarsh, mA.Get(sv); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
-		}
 	})
 
 }
@@ -787,4 +769,16 @@ func TestOverride(t *testing.T) {
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
 	u.ResetRemaining()
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
+}
+
+func setDummyVersion(dv dummyVersion, vs *settings.VersionSetting, sv *settings.Values) error {
+	// This is a bit round about because the VersionSetting doesn't get updated
+	// through the updater, like most other settings. In order to set it, we set
+	// the internal encoded state by hand.
+	encoded, err := protoutil.Marshal(&dv)
+	if err != nil {
+		return err
+	}
+	vs.SetInternal(sv, encoded)
+	return nil
 }

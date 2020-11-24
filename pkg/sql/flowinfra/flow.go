@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 type flowStatus int
@@ -425,14 +425,6 @@ func (f *FlowBase) Wait() {
 	}
 }
 
-// Releasable is an interface for objects than can be Released back into a
-// memory pool when finished.
-type Releasable interface {
-	// Release allows this object to be returned to a memory pool. Objects must
-	// not be used after Release is called.
-	Release()
-}
-
 // Cleanup is part of the Flow interface.
 // NOTE: this implements only the shared clean up logic between row-based and
 // vectorized flows.
@@ -449,14 +441,14 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	// This closes the monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.Stop(ctx)
 	for _, p := range f.processors {
-		if d, ok := p.(Releasable); ok {
+		if d, ok := p.(execinfra.Releasable); ok {
 			d.Release()
 		}
 	}
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}
-	sp := opentracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(ctx)
 	// Local flows do not get registered.
 	if !f.IsLocal() && f.status != FlowNotStarted {
 		f.flowRegistry.UnregisterFlow(f.ID)

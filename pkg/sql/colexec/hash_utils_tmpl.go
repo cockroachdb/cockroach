@@ -23,10 +23,20 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+)
+
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ coldataext.Datum
 )
 
 // {{/*
@@ -102,11 +112,11 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker CancelChecker,
-	overloadHelper overloadHelper,
+	overloadHelper execgen.OverloadHelper,
 	datumAlloc *rowenc.DatumAlloc,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
+	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
 	_overloadHelper := overloadHelper
 	switch col.CanonicalTypeFamily() {
 	// {{range .}}

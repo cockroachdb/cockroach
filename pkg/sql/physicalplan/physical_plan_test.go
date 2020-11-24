@@ -311,9 +311,11 @@ func TestProjectionAndRendering(t *testing.T) {
 
 	for testIdx, tc := range testCases {
 		p := PhysicalPlan{
-			Processors: []Processor{
-				{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
-				{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
+			PhysicalInfrastructure: &PhysicalInfrastructure{
+				Processors: []Processor{
+					{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
+					{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
+				},
 			},
 			ResultRouters: []ProcessorIdx{0, 1},
 			Distribution:  LocalPlan,
@@ -334,8 +336,12 @@ func TestProjectionAndRendering(t *testing.T) {
 			}
 		}
 
+		var resultTypes []*types.T
 		for _, s := range strings.Split(tc.resultTypes, ",") {
-			p.ResultTypes = append(p.ResultTypes, strToType(s))
+			resultTypes = append(resultTypes, strToType(s))
+		}
+		for i := range p.Processors {
+			p.Processors[i].Spec.ResultTypes = resultTypes
 		}
 
 		tc.action(&p)
@@ -353,7 +359,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			t.Errorf("%d: incorrect post:\n%s\nexpected:\n%s", testIdx, &post, &tc.expPost)
 		}
 		var resTypes []string
-		for _, t := range p.ResultTypes {
+		for _, t := range p.GetResultTypes() {
 			resTypes = append(resTypes, t.Locale())
 		}
 		if r := strings.Join(resTypes, ","); r != tc.expResultTypes {

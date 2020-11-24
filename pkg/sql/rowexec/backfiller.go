@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -119,7 +118,7 @@ func (b *backfiller) Run(ctx context.Context) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, opName)
-	defer tracing.FinishSpan(span)
+	defer span.Finish()
 	meta := b.doRun(ctx)
 	execinfra.SendTraceData(ctx, b.output)
 	if emitHelper(ctx, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
@@ -138,22 +137,6 @@ func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	}
 	finishedSpans, err := b.mainLoop(ctx, mutations)
 	if err != nil {
-		return &execinfrapb.ProducerMetadata{Err: err}
-	}
-	st := b.flowCtx.Cfg.Settings
-	if !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicasTrigger) {
-		// There is a node of older version which could be the coordinator.
-		// So we communicate the finished work by writing to the jobs row.
-		err = WriteResumeSpan(
-			ctx,
-			b.flowCtx.Cfg.DB,
-			b.flowCtx.Codec(),
-			b.spec.Table.ID,
-			b.spec.Table.Mutations[0].MutationID,
-			b.filter,
-			finishedSpans,
-			b.flowCtx.Cfg.JobRegistry,
-		)
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
@@ -332,7 +315,7 @@ func WriteResumeSpan(
 	jobsRegistry *jobs.Registry,
 ) error {
 	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
-	defer tracing.FinishSpan(traceSpan)
+	defer traceSpan.Finish()
 
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		resumeSpans, job, mutationIdx, error := GetResumeSpans(

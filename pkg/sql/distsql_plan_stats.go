@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -64,11 +64,11 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	// Calculate the set of columns we need to scan.
 	var colCfg scanColumnsConfig
-	var tableColSet util.FastIntSet
+	var tableColSet catalog.TableColSet
 	for _, s := range reqStats {
 		for _, c := range s.columns {
-			if !tableColSet.Contains(int(c)) {
-				tableColSet.Add(int(c))
+			if !tableColSet.Contains(c) {
+				tableColSet.Add(c)
 				colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(c))
 			}
 		}
@@ -80,7 +80,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if err != nil {
 		return nil, err
 	}
-	sb := span.MakeBuilder(planCtx.planner.ExecCfg().Codec, desc, scan.index)
+	sb := span.MakeBuilder(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			StatName:            s.name,
 		}
 		for i, colID := range s.columns {
-			colIdx, ok := scan.colIdxMap[colID]
+			colIdx, ok := scan.colIdxMap.Get(colID)
 			if !ok {
 				panic("necessary column not scanned")
 			}
@@ -157,8 +157,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	// The sampler outputs the original columns plus a rank column, four
 	// sketch columns, and two inverted histogram columns.
-	outTypes := make([]*types.T, 0, len(p.ResultTypes)+5)
-	outTypes = append(outTypes, p.ResultTypes...)
+	outTypes := make([]*types.T, 0, len(p.GetResultTypes())+5)
+	outTypes = append(outTypes, p.GetResultTypes()...)
 	// An INT column for the rank of each row.
 	outTypes = append(outTypes, types.Int)
 	// An INT column indicating the sketch index.
@@ -183,7 +183,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	)
 
 	// Estimate the expected number of rows based on existing stats in the cache.
-	tableStats, err := planCtx.planner.execCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc.ID)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc.ID)
 	if err != nil {
 		return nil, err
 	}

@@ -26,6 +26,11 @@ type providerOpts struct {
 	operationTimeout time.Duration
 	syncDelete       bool
 	vnetName         string
+	zone             string
+	networkDiskType  string
+	networkDiskSize  int32
+	ultraDiskIOPS    int64
+	diskCaching      string
 }
 
 var defaultLocations = []string{
@@ -33,6 +38,8 @@ var defaultLocations = []string{
 	"westus",
 	"westeurope",
 }
+
+var defaultZone = "1"
 
 // ConfigureCreateFlags implements vm.ProviderFlags.
 func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
@@ -48,6 +55,15 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			strings.Join(defaultLocations, ",")))
 	flags.StringVar(&o.vnetName, ProviderName+"-vnet-name", "common",
 		"The name of the VNet to use")
+	flags.StringVar(&o.zone, ProviderName+"-availability-zone", "", "Availability Zone to create VMs in")
+	flags.StringVar(&o.networkDiskType, ProviderName+"-network-disk-type", "premium-disk",
+		"type of network disk [premium-disk, ultra-disk]. only used if local-ssd is false")
+	flags.Int32Var(&o.networkDiskSize, ProviderName+"-volume-size", 500,
+		"Size in GB of network disk volume, only used if local-ssd=false")
+	flags.Int64Var(&o.ultraDiskIOPS, ProviderName+"-ultra-disk-iops", 5000,
+		"Number of IOPS provisioned for ultra disk, only used if network-disk-type=ultra-disk")
+	flags.StringVar(&o.diskCaching, ProviderName+"-disk-caching", "none",
+		"Disk caching behavior for attached storage.  Valid values are: none, read-only, read-write.  Not applicable to Ultra disks.")
 }
 
 // ConfigureClusterFlags implements vm.ProviderFlags and is a no-op.

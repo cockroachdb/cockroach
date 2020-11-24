@@ -11,6 +11,7 @@
 package builtins
 
 import (
+	"context"
 	gojson "encoding/json"
 	"fmt"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geotransform"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -356,6 +358,56 @@ func fitMaxDecimalDigitsToBounds(maxDecimalDigits int) int {
 	}
 	return maxDecimalDigits
 }
+
+func makeMinimumBoundGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	geometry := tree.MustBeDGeometry(args[0])
+
+	_, center, radius, err := geomfn.MinimumBoundingCircle(geometry.Geometry)
+	if err != nil {
+		return nil, err
+	}
+	return &minimumBoundRadiusGen{
+		center: center,
+		radius: radius,
+		next:   true,
+	}, nil
+}
+
+var minimumBoundingRadiusReturnType = types.MakeLabeledTuple(
+	[]*types.T{types.Geometry, types.Float},
+	[]string{"center", "radius"},
+)
+
+type minimumBoundRadiusGen struct {
+	center geo.Geometry
+	radius float64
+	next   bool
+}
+
+func (m *minimumBoundRadiusGen) ResolvedType() *types.T {
+	return minimumBoundingRadiusReturnType
+}
+
+func (m *minimumBoundRadiusGen) Start(ctx context.Context, txn *kv.Txn) error {
+	return nil
+}
+
+func (m *minimumBoundRadiusGen) Next(ctx context.Context) (bool, error) {
+	if m.next {
+		m.next = false
+		return true, nil
+	}
+	return false, nil
+}
+
+func (m *minimumBoundRadiusGen) Values() (tree.Datums, error) {
+	return []tree.Datum{tree.NewDGeometry(m.center),
+		tree.NewDFloat(tree.DFloat(m.radius))}, nil
+}
+
+func (m *minimumBoundRadiusGen) Close() {}
 
 var geoBuiltins = map[string]builtinDefinition{
 	//
@@ -4132,7 +4184,15 @@ The matrix transformation will be applied as follows for each coordinate:
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return nil, unimplemented.NewWithIssue(49019, "st_rotate")
+				g := tree.MustBeDGeometry(args[0])
+				rotRadians := float64(tree.MustBeDFloat(args[1]))
+				x := float64(tree.MustBeDFloat(args[2]))
+				y := float64(tree.MustBeDFloat(args[3]))
+				geometry, err := geomfn.RotateWithXY(g.Geometry, rotRadians, x, y)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(geometry), nil
 			},
 			Info: infoBuilder{
 				info: `Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.`,
@@ -4827,6 +4887,134 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 		},
 	),
 
+	"st_asencodedpolyline": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0]).Geometry
+				s, err := geo.GeometryToEncodedPolyline(g, 5)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the geometry as an Encoded Polyline.
+This format is used by Google Maps with precision=5 and by Open Source Routing Machine with precision=5 and 6.
+Preserves 5 decimal places.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"precision", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0]).Geometry
+				p := int(tree.MustBeDInt(args[1]))
+				s, err := geo.GeometryToEncodedPolyline(g, p)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the geometry as an Encoded Polyline.
+This format is used by Google Maps with precision=5 and by Open Source Routing Machine with precision=5 and 6.
+Precision specifies how many decimal places will be preserved in Encoded Polyline. Value should be the same on encoding and decoding, or coordinates will be incorrect.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_linefromencodedpolyline": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"encoded_polyline", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				p := 5
+				g, err := geo.ParseEncodedPolyline(s, p)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info: infoBuilder{
+				info: `Creates a LineString from an Encoded Polyline string.
+
+Returns valid results only if the polyline was encoded with 5 decimal places.
+
+See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"encoded_polyline", types.String},
+				{"precision", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				p := int(tree.MustBeDInt(args[1]))
+				g, err := geo.ParseEncodedPolyline(s, p)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info: infoBuilder{
+				info: `Creates a LineString from an Encoded Polyline string.
+
+Precision specifies how many decimal places will be preserved in Encoded Polyline. Value should be the same on encoding and decoding, or coordinates will be incorrect.
+
+See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_unaryunion": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				res, err := geomfn.UnaryUnion(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(res), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a union of the components for any geometry or geometry collection provided. Dissolves boundaries of a multipolygon.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_node": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				res, err := geomfn.Node(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(res), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Adds a node on a geometry for each intersection. Resulting geometry is always a MultiLineString.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+
 	//
 	// BoundingBox
 	//
@@ -5276,63 +5464,232 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_pointinsidecircle": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"x_coord", types.Float},
+				{"y_coord", types.Float},
+				{"radius", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				point := tree.MustBeDGeometry(args[0])
+
+				geomT, err := point.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+
+				if _, ok := geomT.(*geom.Point); !ok {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"first parameter has to be of type Point",
+					)
+				}
+
+				x := float64(tree.MustBeDFloat(args[1]))
+				y := float64(tree.MustBeDFloat(args[2]))
+				radius := float64(tree.MustBeDFloat(args[3]))
+				if radius <= 0 {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"radius of the circle has to be positive",
+					)
+				}
+				center, err := geo.MakeGeometryFromPointCoords(x, y)
+				if err != nil {
+					return nil, err
+				}
+				dist, err := geomfn.MinDistance(point.Geometry, center)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(dist <= radius), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the true if the geometry is a point and is inside the circle. Returns false otherwise.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"st_memsize": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{
+					Name: "geometry",
+					Typ:  types.Geometry,
+				},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geo := tree.MustBeDGeometry(args[0])
+				return tree.NewDInt(tree.DInt(geo.Size())), nil
+			},
+			Info:       "Returns the amount of memory space (in bytes) the geometry takes.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
+	"st_linelocatepoint": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{
+					Name: "line",
+					Typ:  types.Geometry,
+				},
+				{
+					Name: "point",
+					Typ:  types.Geometry,
+				},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				line := tree.MustBeDGeometry(args[0])
+				p := tree.MustBeDGeometry(args[1])
+
+				// compute fraction of new line segment compared to total line length
+				fraction, err := geomfn.LineLocatePoint(line.Geometry, p.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(fraction)), nil
+			},
+			Info: "Returns a float between 0 and 1 representing the location of the closest point " +
+				"on LineString to the given Point, as a fraction of total 2d line length.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
+	"st_minimumboundingradius": makeBuiltin(genProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}},
+			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return nil, newUnsuitableUseOfGeneratorError()
+			},
+			Generator:  makeMinimumBoundGenerator,
+			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
+	"st_minimumboundingcircle": makeBuiltin(defProps(),
+		geometryOverload1(
+			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				polygon, _, _, err := geomfn.MinimumBoundingCircle(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(polygon), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the smallest circle polygon that can fully contain a geometry.",
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {" num_segs", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Info: infoBuilder{
+				info: "Returns the smallest circle polygon that can fully contain a geometry.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+			Fn: func(evalContext *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				numOfSeg := tree.MustBeDInt(args[1])
+				_, centroid, radius, err := geomfn.MinimumBoundingCircle(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				polygon, err := geomfn.Buffer(
+					centroid,
+					geomfn.MakeDefaultBufferParams().WithQuadrantSegments(int(numOfSeg)),
+					radius,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(polygon), nil
+			},
+		},
+	),
+	"st_transscale": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"delta_x", types.Float},
+				{"delta_y", types.Float},
+				{"x_factor", types.Float},
+				{"y_factor", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Volatility: tree.VolatilityImmutable,
+			Info: infoBuilder{
+				info: "Translates the geometry using the deltaX and deltaY args, then scales it using the XFactor, YFactor args, working in 2D only.",
+			}.String(),
+			Fn: func(_ *tree.EvalContext, datums tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(datums[0])
+				deltaX := float64(tree.MustBeDFloat(datums[1]))
+				deltaY := float64(tree.MustBeDFloat(datums[2]))
+				xFactor := float64(tree.MustBeDFloat(datums[3]))
+				yFactor := float64(tree.MustBeDFloat(datums[4]))
+				geometry, err := geomfn.TransScale(g.Geometry, deltaX, deltaY, xFactor, yFactor)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(geometry), nil
+			},
+		}),
 
 	//
 	// Unimplemented.
 	//
 
-	"st_asencodedpolyline":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48872}),
-	"st_asgml":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
-	"st_aslatlontext":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
-	"st_assvg":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
-	"st_astwkb":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48886}),
-	"st_boundingdiagonal":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
-	"st_buildarea":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
-	"st_chaikinsmoothing":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),
-	"st_cleangeometry":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48895}),
-	"st_clusterdbscan":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48898}),
-	"st_clusterintersecting":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48899}),
-	"st_clusterkmeans":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48900}),
-	"st_clusterwithin":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48901}),
-	"st_concavehull":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48906}),
-	"st_delaunaytriangles":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48915}),
-	"st_dump":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
-	"st_dumppoints":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
-	"st_dumprings":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
-	"st_generatepoints":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48941}),
-	"st_geometricmedian":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
-	"st_interpolatepoint":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
-	"st_isvaliddetail":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
-	"st_length2dspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
-	"st_lengthspheroid":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
-	"st_linecrossingdirection":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
-	"st_linelocatepoint":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48973}),
-	"st_linesubstring":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
-	"st_memsize":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48985}),
-	"st_minimumboundingcircle":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
-	"st_minimumboundingradius":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48988}),
-	"st_node":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
-	"st_orientedenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
-	"st_pointinsidecircle":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49007}),
-	"st_polygonize":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
-	"st_quantizecoordinates":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
-	"st_seteffectivearea":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
-	"st_shiftlongitude":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49034}),
-	"st_simplifyvw":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
-	"st_snap":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49040}),
-	"st_split":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
-	"st_subdivide":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49048}),
-	"st_tileenvelope":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
-	"st_transscale":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49061}),
-	"st_unaryunion":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49062}),
-	"st_voronoilines":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49065}),
-	"st_voronoipolygons":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49066}),
-	"st_wrapx":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
-	"st_bdpolyfromtext":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
-	"st_geomfromgml":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
-	"st_geomfromtwkb":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
-	"st_gmltosql":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48810}),
-	"st_linefromencodedpolyline": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48813}),
+	"st_asgml":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
+	"st_aslatlontext":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
+	"st_assvg":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
+	"st_astwkb":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48886}),
+	"st_boundingdiagonal":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
+	"st_buildarea":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
+	"st_chaikinsmoothing":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),
+	"st_cleangeometry":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48895}),
+	"st_clusterdbscan":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48898}),
+	"st_clusterintersecting":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48899}),
+	"st_clusterkmeans":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48900}),
+	"st_clusterwithin":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48901}),
+	"st_concavehull":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48906}),
+	"st_delaunaytriangles":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48915}),
+	"st_dump":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
+	"st_dumppoints":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
+	"st_dumprings":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
+	"st_generatepoints":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48941}),
+	"st_geometricmedian":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
+	"st_interpolatepoint":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
+	"st_isvaliddetail":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
+	"st_length2dspheroid":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
+	"st_lengthspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
+	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
+	"st_linesubstring":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
+	"st_orientedenvelope":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
+	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
+	"st_quantizecoordinates":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
+	"st_seteffectivearea":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
+	"st_shiftlongitude":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49034}),
+	"st_simplifyvw":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
+	"st_snap":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49040}),
+	"st_split":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
+	"st_subdivide":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49048}),
+	"st_tileenvelope":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
+	"st_voronoilines":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49065}),
+	"st_voronoipolygons":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49066}),
+	"st_wrapx":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
+	"st_bdpolyfromtext":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
+	"st_geomfromgml":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
+	"st_geomfromtwkb":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
+	"st_gmltosql":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48810}),
 }
 
 // returnCompatibilityFixedStringBuiltin is an overload that takes in 0 arguments
@@ -5348,7 +5705,7 @@ func returnCompatibilityFixedStringBuiltin(ret string) builtinDefinition {
 				return tree.NewDString(ret), nil
 			},
 			Info: infoBuilder{
-				info: fmt.Sprintf("Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits."),
+				info: "Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},

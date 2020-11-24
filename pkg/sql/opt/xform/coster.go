@@ -108,6 +108,10 @@ const (
 	// justification for this constant.
 	lookupJoinRetrieveRowCost = 2 * seqIOCostFactor
 
+	// virtualScanTableDescriptorFetchCost is the cost to retrieve the table
+	// descriptors when performing a virtual table scan.
+	virtualScanTableDescriptorFetchCost = 25 * randIOCostFactor
+
 	// Input rows to a join are processed in batches of this size.
 	// See joinreader.go.
 	joinReaderBatchSize = 100.0
@@ -579,6 +583,11 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 	baseCost := memo.Cost(numSpans * randIOCostFactor)
 
+	// If this is a virtual scan, add the cost of fetching table descriptors.
+	if c.mem.Metadata().Table(scan.Table).IsVirtualTable() {
+		baseCost += virtualScanTableDescriptorFetchCost
+	}
+
 	// Add a small cost if the scan is unconstrained, so all else being equal, we
 	// will prefer a constrained scan. This is important if our row count
 	// estimate turns out to be smaller than the actual row count.
@@ -625,6 +634,14 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	}
 	leftRowCount := join.Child(0).(memo.RelExpr).Relational().Stats.RowCount
 	rightRowCount := join.Child(1).(memo.RelExpr).Relational().Stats.RowCount
+	if (join.Op() == opt.SemiJoinOp || join.Op() == opt.AntiJoinOp) && leftRowCount < rightRowCount {
+		// If we have a semi or an anti join, during the execbuilding we choose
+		// the relation with smaller cardinality to be on the right side, so we
+		// need to swap row counts accordingly.
+		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
+		// choosing a side.
+		leftRowCount, rightRowCount = rightRowCount, leftRowCount
+	}
 
 	// A hash join must process every row from both tables once.
 	//
@@ -672,6 +689,9 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 }
 
 func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
+	if join.MergeJoinPrivate.Flags.Has(memo.DisallowMergeJoin) {
+		return hugeCost
+	}
 	leftRowCount := join.Left.Relational().Stats.RowCount
 	rightRowCount := join.Right.Relational().Stats.RowCount
 
@@ -710,6 +730,9 @@ func (c *coster) computeIndexJoinCost(
 func (c *coster) computeLookupJoinCost(
 	join *memo.LookupJoinExpr, required *physical.Required,
 ) memo.Cost {
+	if join.LookupJoinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
+		return hugeCost
+	}
 	return c.computeIndexLookupJoinCost(
 		join,
 		required,
@@ -777,6 +800,11 @@ func (c *coster) computeIndexLookupJoinCost(
 		// slower.
 		perLookupCost *= 5
 	}
+	if c.mem.Metadata().Table(table).IsVirtualTable() {
+		// It's expensive to perform a lookup join into a virtual table because
+		// we need to fetch the table descriptors on each lookup.
+		perLookupCost += virtualScanTableDescriptorFetchCost
+	}
 	cost := memo.Cost(lookupCount) * perLookupCost
 
 	filterSetup, filterPerRow := c.computeFiltersCost(on, util.FastIntMap{})
@@ -801,6 +829,9 @@ func (c *coster) computeIndexLookupJoinCost(
 func (c *coster) computeInvertedJoinCost(
 	join *memo.InvertedJoinExpr, required *physical.Required,
 ) memo.Cost {
+	if join.InvertedJoinPrivate.Flags.Has(memo.DisallowInvertedJoinIntoRight) {
+		return hugeCost
+	}
 	lookupCount := join.Input.Relational().Stats.RowCount
 
 	// Take into account that the "internal" row count is higher, according to

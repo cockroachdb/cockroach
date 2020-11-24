@@ -572,10 +572,20 @@ CREATE TABLE statistics_agg_test (y INT, x INT)
 statement ok
 INSERT INTO statistics_agg_test SELECT y, y%10 FROM generate_series(1, 100) AS y
 
-query R
-SELECT corr(y, x)::decimal FROM statistics_agg_test
+query FFF
+SELECT corr(y, x)::decimal, covar_pop(y, x)::decimal, covar_samp(y, x)::decimal FROM statistics_agg_test
 ----
-0.045228963191363145
+0.045228963191363145 3.75 3.787878787878788
+
+query FFF
+SELECT regr_intercept(y, x), regr_r2(y, x), regr_slope(y, x) FROM statistics_agg_test
+----
+48.4545454545455 0.00204565911136568 0.454545454545455
+
+query FFF
+SELECT regr_sxx(y, x), regr_sxy(y, x), regr_syy(y, x) FROM statistics_agg_test
+----
+825 375 83325
 
 # Regression test for #37211 (incorrect ordering between aggregator stages).
 statement ok
@@ -592,3 +602,24 @@ SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u
 60000
 70000
 80000
+
+statement ok
+CREATE TABLE t55837 (
+  i  int primary key,
+  y  float,
+  x  float
+);
+INSERT INTO t55837 (i, y, x) VALUES
+  (1, 1.0,   1),
+  (2, 1.0,   1),
+  (3, 2.0,   3),
+  (4, 3.0,   3);
+ALTER TABLE t55837 SPLIT AT VALUES (3);
+ALTER TABLE t55837 EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 2);
+SELECT * FROM t55837 -- make sure that the range cache is populated
+
+# Regression test for incorrectly planning a local distinct stage (#55837).
+query FI
+SELECT corr(DISTINCT y, x), count(y) FROM t55837
+----
+0.866025403784439 4

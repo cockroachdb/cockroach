@@ -217,6 +217,7 @@ define LookupJoin {
     EqColsAreKey bool
     LookupCols exec.TableColumnOrdinalSet
     OnCond tree.TypedExpr
+    IsSecondJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
     Locking *tree.LockingItem
 }
@@ -238,6 +239,7 @@ define InvertedJoin {
     Index cat.Index
     LookupCols exec.TableColumnOrdinalSet
     OnCond tree.TypedExpr
+    IsFirstJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
 }
 
@@ -323,6 +325,7 @@ define ExplainOpt {
 # Explain implements EXPLAIN, showing information about the given plan.
 define Explain {
     Options *tree.ExplainOptions
+    Analyze bool
     StmtType tree.StatementType
     Plan exec.Plan
 }
@@ -367,7 +370,7 @@ define Insert {
 
 # InsertFastPath implements a special (but very common) case of insert,
 # satisfying the following conditions:
-#  - the input is Values with at most InsertFastPathMaxRows, and there are no
+#  - the input is Values with at most mutations.MaxBatchSize, and there are no
 #    subqueries;
 #  - there are no other mutations in the statement, and the output of the
 #    insert is not processed through side-effecting expressions.

@@ -249,15 +249,127 @@ SHOW TABLES
 ----
 public  kv  table  root  0
 
-query TTT
+query T
 EXPLAIN ALTER TABLE kv RENAME TO kv2
 ----
-·             distribution  local
-·             vectorized    false
-rename table  ·             ·
+distribution: local
+vectorized: false
+·
+• rename table
 
 # Verify that the EXPLAIN above does not actually rename the table (#30543)
 query TTTTI
 SHOW TABLES
 ----
 public  kv  table  root  0
+
+# Test that tables can't be renamed to a different database unless both the
+# old and new schemas are in the public schema.
+subtest rename_table_across_dbs
+
+statement ok
+CREATE DATABASE olddb
+
+statement ok
+CREATE DATABASE newdb
+
+statement ok
+USE olddb
+
+statement ok
+CREATE SCHEMA oldsc
+
+statement ok
+USE newdb
+
+statement ok
+CREATE SCHEMA newsc
+
+statement ok
+CREATE TABLE olddb.public.tbl1();
+
+statement ok
+CREATE TABLE olddb.oldsc.tbl2();
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.public.tbl1 RENAME TO newdb.newsc.tbl1
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.oldsc.tbl2 RENAME TO newdb.public.tbl2
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.oldsc.tbl2 RENAME TO newdb.newsc.tbl2
+
+# Try different but equivalent names.
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.tbl1 RENAME TO newdb.newsc.tbl1
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.oldsc.tbl2 RENAME TO newdb.tbl2
+
+# Using the public schemas should still work.
+
+statement ok
+ALTER TABLE olddb.public.tbl1 RENAME TO newdb.public.tbl1
+
+statement ok
+DROP DATABASE olddb CASCADE
+
+statement ok
+DROP DATABASE newdb CASCADE
+
+subtest rename_table_using_types_to_different_database_not_allowed_55709
+
+statement ok
+CREATE DATABASE olddb
+
+statement ok
+CREATE DATABASE newdb
+
+statement ok
+USE olddb
+
+statement ok
+CREATE TYPE typ AS ENUM ('foo')
+
+statement ok
+CREATE TABLE tbl(a typ)
+
+statement error pgcode 55000 cannot change database of table if any of its column types are user-defined
+ALTER TABLE tbl RENAME TO newdb.tbl
+
+# Try it in a transaction with non-public columns.
+
+statement ok
+CREATE TABLE tbl2()
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE tbl2 ADD COLUMN b typ
+
+statement error pgcode 55000 cannot change database of table if any of its column types are user-defined
+ALTER TABLE tbl2 RENAME TO newdb.tbl2
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE tbl DROP COLUMN a
+
+statement error pgcode 55000 cannot change database of table if any of its column types are user-defined
+ALTER TABLE tbl RENAME TO newdb.tbl
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP DATABASE olddb CASCADE
+
+statement ok
+DROP DATABASE newdb CASCADE

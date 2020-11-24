@@ -15,13 +15,13 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -89,13 +89,12 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 	// is necessary after every release. For example, the day `master` becomes
 	// the 20.2 release, this test will fail because it is missing a fixture for
 	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
-	// Check it in (instructions are on the 'checkpointer' struct) and off we
-	// go.
+	// Check it in (instructions will be logged below) and off we go.
 	if false {
 		// The version to create/update the fixture for. Must be released (i.e.
 		// can download it from the homepage); if that is not the case use the
 		// empty string which uses the local cockroach binary.
-		newV := "19.2.6"
+		newV := "20.2.0-rc.3"
 		predV, err := PredecessorVersion(*version.MustParse("v" + newV))
 		if err != nil {
 			t.Fatal(err)
@@ -226,32 +225,30 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 func (u *versionUpgradeTest) uploadVersion(
 	ctx context.Context, t *test, nodes nodeListOption, newVersion string,
 ) option {
-	var binary string
 	if newVersion == "" {
-		binary = cockroach
-	} else {
-		var err error
-		binary, err = binfetcher.Download(ctx, binfetcher.Options{
-			Binary:  "cockroach",
-			Version: "v" + newVersion,
-			GOOS:    u.goOS,
-			GOARCH:  "amd64",
-		})
-		if err != nil {
+		binary := cockroach
+		target := "./cockroach"
+		u.c.Put(ctx, binary, target, nodes)
+		return startArgs("--binary=" + target)
+	}
+
+	newVersion = "v" + newVersion
+	dir := newVersion
+	target := filepath.Join(dir, "cockroach")
+	// Check if the cockroach binary already exists.
+	if err := u.c.RunE(ctx, nodes, "test", "-e", target); err != nil {
+		if err := u.c.RunE(ctx, nodes, "mkdir", "-p", dir); err != nil {
+			t.Fatal(err)
+		}
+		if err := u.c.Stage(ctx, u.c.l, "release", newVersion, dir, nodes); err != nil {
 			t.Fatal(err)
 		}
 	}
-
-	target := "./cockroach"
-	if newVersion != "" {
-		target += "-" + newVersion
-	}
-	u.c.Put(ctx, binary, target, nodes)
 	return startArgs("--binary=" + target)
 }
 
 // binaryVersion returns the binary running on the (one-indexed) node.
-// NB: version means major.minor[-unstable]; the patch level isn't returned. For example, a binary
+// NB: version means major.minor[-internal]; the patch level isn't returned. For example, a binary
 // of version 19.2.4 will return 19.2.
 func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) roachpb.Version {
 	db := u.conn(ctx, t, i)
@@ -275,7 +272,7 @@ func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) 
 // binaryVersion returns the cluster version active on the (one-indexed) node. Note that the
 // returned value might become stale due to the cluster auto-upgrading in the background plus
 // gossip asynchronicity.
-// NB: cluster versions are always major.minor[-unstable]; there isn't a patch level.
+// NB: cluster versions are always major.minor[-internal]; there isn't a patch level.
 func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int) roachpb.Version {
 	db := u.conn(ctx, t, i)
 
@@ -501,8 +498,15 @@ func makeVersionFixtureAndFatal(
 			// compatible).
 			name := checkpointName(u.binaryVersion(ctx, t, 1).String())
 			u.c.Stop(ctx, c.All())
-			c.Run(ctx, c.All(), cockroach, "debug", "rocksdb", "--db={store-dir}",
-				"checkpoint", "--checkpoint_dir={store-dir}/"+name)
+
+			c.Run(ctx, c.All(), cockroach, "debug", "pebble", "db", "checkpoint",
+				"{store-dir}", "{store-dir}/"+name)
+			// The `cluster-bootstrapped` marker can already be found within
+			// store-dir, but the rocksdb checkpoint step above does not pick it
+			// up as it isn't recognized by RocksDB. We copy the marker
+			// manually, it's necessary for roachprod created clusters. See
+			// #54761.
+			c.Run(ctx, c.Node(1), "cp", "{store-dir}/cluster-bootstrapped", "{store-dir}/"+name)
 			c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
 			t.Fatalf(`successfully created checkpoints; failing test on purpose.
 
@@ -511,7 +515,7 @@ result:
 
 for i in 1 2 3 4; do
   mkdir -p pkg/cmd/roachtest/fixtures/${i} && \
-  mv artifacts/acceptance/version-upgrade/run_1/${i}.logs/checkpoint-*.tgz \
+  mv artifacts/acceptance/version-upgrade/run_1/logs/${i}.unredacted/checkpoint-*.tgz \
      pkg/cmd/roachtest/fixtures/${i}/
 done
 `)

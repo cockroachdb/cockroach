@@ -72,14 +72,13 @@ func TestExportCmd(t *testing.T) {
 
 		var paths []string
 		var kvs []storage.MVCCKeyValue
-		ingestFunc := func(kv storage.MVCCKeyValue) (bool, error) {
-			kvs = append(kvs, kv)
-			return false, nil
-		}
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
 
-			sst := storage.MakeRocksDBSstFileReader()
+			sst, err := storage.NewMemSSTIterator(file.SST, false)
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
 			defer sst.Close()
 
 			fileContents, err := ioutil.ReadFile(filepath.Join(dir, "foo", file.Path))
@@ -89,11 +88,20 @@ func TestExportCmd(t *testing.T) {
 			if !bytes.Equal(fileContents, file.SST) {
 				t.Fatal("Returned SST and exported SST don't match!")
 			}
-			if err := sst.IngestExternalFile(file.SST); err != nil {
-				t.Fatalf("%+v", err)
-			}
-			if err := sst.Iterate(keys.MinKey, keys.MaxKey, ingestFunc); err != nil {
-				t.Fatalf("%+v", err)
+			sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+			for {
+				if valid, err := sst.Valid(); !valid || err != nil {
+					if err != nil {
+						t.Fatalf("%+v", err)
+					}
+					break
+				}
+				newKv := storage.MVCCKeyValue{}
+				newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
+				newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
+				newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
+				kvs = append(kvs, newKv)
+				sst.Next()
 			}
 		}
 
@@ -287,10 +295,8 @@ func exportUsingGoIterator(
 	enableTimeBoundIteratorOptimization bool,
 	reader storage.Reader,
 ) ([]byte, error) {
-	sst, err := storage.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return nil, nil //nolint:returnerrcheck
-	}
+	memFile := &storage.MemFile{}
+	sst := storage.MakeIngestionSSTWriter(memFile)
 	defer sst.Close()
 
 	var skipTombstones bool
@@ -340,18 +346,16 @@ func exportUsingGoIterator(
 			return nil, err
 		}
 	}
+	if err := sst.Finish(); err != nil {
+		return nil, err
+	}
 
-	if sst.DataSize() == 0 {
+	if len(memFile.Data()) == 0 {
 		// Let the defer Close the sstable.
 		return nil, nil
 	}
 
-	sstContents, err := sst.Finish()
-	if err != nil {
-		return nil, err
-	}
-
-	return sstContents, nil
+	return memFile.Data(), nil
 }
 
 func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKeyValue {
@@ -360,19 +364,30 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 		return nil
 	}
 
-	sst := storage.MakeRocksDBSstFileReader()
-	defer sst.Close()
-
-	if err := sst.IngestExternalFile(data); err != nil {
+	sst, err := storage.NewMemSSTIterator(data, false)
+	if err != nil {
 		t.Fatal(err)
 	}
+	defer sst.Close()
 
 	var kvs []storage.MVCCKeyValue
-	if err := sst.Iterate(start, end, func(kv storage.MVCCKeyValue) (bool, error) {
-		kvs = append(kvs, kv)
-		return false, nil
-	}); err != nil {
-		t.Fatal(err)
+	sst.SeekGE(storage.MVCCKey{Key: start})
+	for {
+		if valid, err := sst.Valid(); !valid || err != nil {
+			if err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+		if !sst.UnsafeKey().Less(storage.MVCCKey{Key: end}) {
+			break
+		}
+		newKv := storage.MVCCKeyValue{}
+		newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
+		newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
+		newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
+		kvs = append(kvs, newKv)
+		sst.Next()
 	}
 
 	return kvs
@@ -418,7 +433,7 @@ func assertEqualKVs(
 			var summary roachpb.BulkOpSummary
 			maxSize := uint64(0)
 			prevStart := start
-			sst, summary, start, err = e.ExportToSst(start, endKey, startTime, endTime,
+			sst, summary, start, err = e.ExportMVCCToSst(start, endKey, startTime, endTime,
 				exportAllRevisions, targetSize, maxSize, io)
 			require.NoError(t, err)
 			loaded := loadSST(t, sst, startKey, endKey)
@@ -457,7 +472,7 @@ func assertEqualKVs(
 				if dataSizeWhenExceeded == maxSize {
 					maxSize--
 				}
-				_, _, _, err = e.ExportToSst(prevStart, endKey, startTime, endTime,
+				_, _, _, err = e.ExportMVCCToSst(prevStart, endKey, startTime, endTime,
 					exportAllRevisions, targetSize, maxSize, io)
 				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
 					dataSizeWhenExceeded, maxSize), err)
@@ -566,11 +581,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 		}
 		batch.Close()
 
-		sort.Slice(timestamps, func(i, j int) bool {
-			return (timestamps[i].WallTime < timestamps[j].WallTime) ||
-				(timestamps[i].WallTime == timestamps[j].WallTime &&
-					timestamps[i].Logical < timestamps[j].Logical)
-		})
+		sort.Slice(timestamps, func(i, j int) bool { return timestamps[i].Less(timestamps[j]) })
 		return keys, timestamps
 	}
 

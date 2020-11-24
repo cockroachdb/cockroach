@@ -105,7 +105,7 @@ func newTestHelperForTables(
 func (h *testHelper) newScheduledJob(t *testing.T, scheduleLabel, sql string) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	j.SetScheduleLabel(scheduleLabel)
-	j.SetOwner("test")
+	j.SetOwner(security.TestUserName())
 	any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{Statement: sql})
 	require.NoError(t, err)
 	j.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
@@ -119,7 +119,7 @@ func (h *testHelper) newScheduledJobForExecutor(
 ) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	j.SetScheduleLabel(scheduleLabel)
-	j.SetOwner("test")
+	j.SetOwner(security.TestUserName())
 	j.SetExecutionDetails(executorName, jobspb.ExecutionArguments{Args: executorArgs})
 	return j
 }
@@ -129,7 +129,7 @@ func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	rows, cols, err := h.cfg.InternalExecutor.QueryWithCols(
 		context.Background(), "sched-load", nil,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			"SELECT * FROM %s WHERE schedule_id = %d",
 			h.env.ScheduledJobsTableName(), id),
@@ -159,7 +159,7 @@ func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) fu
 func addFakeJob(t *testing.T, h *testHelper, scheduleID int64, status Status, txn *kv.Txn) int64 {
 	payload := []byte("fake payload")
 	datums, err := h.cfg.InternalExecutor.QueryRowEx(context.Background(), "fake-job", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(`
 INSERT INTO %s (created_by_type, created_by_id, status, payload)
 VALUES ($1, $2, $3, $4)

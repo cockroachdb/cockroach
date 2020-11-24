@@ -32,8 +32,8 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM test.child
 ----
-child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id)  false
-child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                           true
+child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id) NOT VALID  false
+child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                                     true
 
 statement ok
 ALTER TABLE test.child VALIDATE CONSTRAINT fk_child_parent_id
@@ -924,9 +924,9 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  c_0      CHECK        CHECK ((c > 0))      false
-check_table  d_0      CHECK        CHECK ((d > 0))      true
-check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+check_table  c_0      CHECK        CHECK ((c > 0)) NOT VALID  false
+check_table  d_0      CHECK        CHECK ((d > 0))            true
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)        true
 
 statement ok
 BEGIN
@@ -957,9 +957,9 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  c_0      CHECK        CHECK ((c > 0))      false
-check_table  d_0      CHECK        CHECK ((d > 0))      true
-check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+check_table  c_0      CHECK        CHECK ((c > 0)) NOT VALID  false
+check_table  d_0      CHECK        CHECK ((d > 0))            true
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)        true
 
 # Adding column e was rolled back
 query TTBTTTB
@@ -1896,4 +1896,4 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM child_54265
 ----
-child_54265  fk_a_ref_parent_54265  FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a)  false
+child_54265  fk_a_ref_parent_54265  FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a) NOT VALID  false

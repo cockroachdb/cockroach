@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "uint128",
+    srcs = ["uint128.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/uint128",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
+)
+
+go_test(
+    name = "uint128_test",
+    srcs = ["uint128_test.go"],
+    embed = [":uint128"],
+)

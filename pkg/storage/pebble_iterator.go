@@ -18,40 +18,42 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
 
 // pebbleIterator is a wrapper around a pebble.Iterator that implements the
-// Iterator interface.
+// MVCCIterator and EngineIterator interfaces. A single pebbleIterator
+// should only be used in one of the two modes.
 type pebbleIterator struct {
 	// Underlying iterator for the DB.
 	iter    *pebble.Iterator
 	options pebble.IterOptions
-	// Reusable buffer for MVCC key encoding.
+	// Reusable buffer for MVCCKey or EngineKey encoding.
 	keyBuf []byte
 	// Buffers for copying iterator bounds to. Note that the underlying memory
 	// is not GCed upon Close(), to reduce the number of overall allocations. We
 	// use two slices for each of the bounds since this caller should not change
-	// the slice holding the current bounds, that the callee (pebble.Iterator)
+	// the slice holding the current bounds, that the callee (pebble.MVCCIterator)
 	// is currently using, until after the caller has made the SetBounds call.
 	lowerBoundBuf [2][]byte
 	upperBoundBuf [2][]byte
 	curBuf        int
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
-	// SSTables based on MVCC key when true.
+	// SSTables based on MVCC/Engine key when true.
 	prefix bool
 	// If reusable is true, Close() does not actually close the underlying
 	// iterator, but simply marks it as not inuse. Used by pebbleReadOnly.
 	reusable bool
 	inuse    bool
 	// Stat tracking the number of sstables encountered during time-bound
-	// iteration.
+	// iteration. Only used for MVCCIterator.
 	timeBoundNumSSTables int
 }
 
-var _ Iterator = &pebbleIterator{}
+var _ MVCCIterator = &pebbleIterator{}
+var _ EngineIterator = &pebbleIterator{}
 
 var pebbleIterPool = sync.Pool{
 	New: func() interface{} {
@@ -60,7 +62,7 @@ var pebbleIterPool = sync.Pool{
 }
 
 // Instantiates a new Pebble iterator, or gets one from the pool.
-func newPebbleIterator(handle pebble.Reader, opts IterOptions) Iterator {
+func newPebbleIterator(handle pebble.Reader, opts IterOptions) *pebbleIterator {
 	iter := pebbleIterPool.Get().(*pebbleIterator)
 	iter.init(handle, opts)
 	return iter
@@ -84,9 +86,11 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 
 	if opts.LowerBound != nil {
 		// This is the same as
-		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[0][:0], MVCCKey{Key: opts.LowerBound}) .
-		// Since we are encoding zero-timestamp MVCC Keys anyway, we can just append
-		// the NUL byte instead of calling EncodeKey which will do the same thing.
+		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[0][:0], MVCCKey{Key: opts.LowerBound})
+		// or EngineKey{Key: opts.LowerBound}.EncodeToBuf(...).
+		// Since we are encoding keys with an empty version anyway, we can just
+		// append the NUL byte instead of calling the above encode functions which
+		// will do the same thing.
 		p.lowerBoundBuf[0] = append(p.lowerBoundBuf[0][:0], opts.LowerBound...)
 		p.lowerBoundBuf[0] = append(p.lowerBoundBuf[0], 0x00)
 		p.options.LowerBound = p.lowerBoundBuf[0]
@@ -98,7 +102,7 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 		p.options.UpperBound = p.upperBoundBuf[0]
 	}
 
-	if opts.MaxTimestampHint != (hlc.Timestamp{}) {
+	if !opts.MaxTimestampHint.IsEmpty() {
 		encodedMinTS := string(encodeTimestamp(opts.MinTimestampHint))
 		encodedMaxTS := string(encodeTimestamp(opts.MaxTimestampHint))
 		p.options.TableFilter = func(userProps map[string]string) bool {
@@ -122,7 +126,7 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 			}
 			return used
 		}
-	} else if opts.MinTimestampHint != (hlc.Timestamp{}) {
+	} else if !opts.MinTimestampHint.IsEmpty() {
 		panic("min timestamp hint set without max timestamp hint")
 	}
 
@@ -138,7 +142,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions) {
 	// Overwrite any stale options from last time.
 	p.options = pebble.IterOptions{}
 
-	if opts.MinTimestampHint != (hlc.Timestamp{}) || opts.MaxTimestampHint != (hlc.Timestamp{}) {
+	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
 		panic("iterator with timestamp hints cannot be reused")
 	}
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
@@ -151,8 +155,10 @@ func (p *pebbleIterator) setOptions(opts IterOptions) {
 	if opts.LowerBound != nil {
 		// This is the same as
 		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[i][:0], MVCCKey{Key: opts.LowerBound}) .
-		// Since we are encoding zero-timestamp MVCC Keys anyway, we can just append
-		// the NUL byte instead of calling EncodeKey which will do the same thing.
+		// or EngineKey{Key: opts.LowerBound}.EncodeToBuf(...).
+		// Since we are encoding keys with an empty version anyway, we can just
+		// append the NUL byte instead of calling the above encode functions which
+		// will do the same thing.
 		p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i][:0], opts.LowerBound...)
 		p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i], 0x00)
 		p.options.LowerBound = p.lowerBoundBuf[i]
@@ -166,7 +172,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions) {
 	p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
 }
 
-// Close implements the Iterator interface.
+// Close implements the MVCCIterator interface.
 func (p *pebbleIterator) Close() {
 	if !p.inuse {
 		panic("closing idle iterator")
@@ -182,7 +188,7 @@ func (p *pebbleIterator) Close() {
 	pebbleIterPool.Put(p)
 }
 
-// SeekGE implements the Iterator interface.
+// SeekGE implements the MVCCIterator interface.
 func (p *pebbleIterator) SeekGE(key MVCCKey) {
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
 	if p.prefix {
@@ -192,7 +198,24 @@ func (p *pebbleIterator) SeekGE(key MVCCKey) {
 	}
 }
 
-// Valid implements the Iterator interface.
+// SeekEngineKeyGE implements the EngineIterator interface.
+func (p *pebbleIterator) SeekEngineKeyGE(key EngineKey) (valid bool, err error) {
+	p.keyBuf = key.EncodeToBuf(p.keyBuf[:0])
+	var ok bool
+	if p.prefix {
+		ok = p.iter.SeekPrefixGE(p.keyBuf)
+	} else {
+		ok = p.iter.SeekGE(p.keyBuf)
+	}
+	// NB: A Pebble Iterator always returns ok==false when an error is
+	// present.
+	if ok {
+		return true, nil
+	}
+	return false, p.iter.Error()
+}
+
+// Valid implements the MVCCIterator interface.
 func (p *pebbleIterator) Valid() (bool, error) {
 	// NB: A Pebble Iterator always returns Valid()==false when an error is
 	// present. If Valid() is true, there is no error.
@@ -202,12 +225,23 @@ func (p *pebbleIterator) Valid() (bool, error) {
 	return false, p.iter.Error()
 }
 
-// Next implements the Iterator interface.
+// Next implements the MVCCIterator interface.
 func (p *pebbleIterator) Next() {
 	p.iter.Next()
 }
 
-// NextKey implements the Iterator interface.
+// NextEngineKey implements the Engineterator interface.
+func (p *pebbleIterator) NextEngineKey() (valid bool, err error) {
+	ok := p.iter.Next()
+	// NB: A Pebble Iterator always returns ok==false when an error is
+	// present.
+	if ok {
+		return true, nil
+	}
+	return false, p.iter.Error()
+}
+
+// NextKey implements the MVCCIterator interface.
 func (p *pebbleIterator) NextKey() {
 	if valid, err := p.Valid(); err != nil || !valid {
 		return
@@ -223,7 +257,7 @@ func (p *pebbleIterator) NextKey() {
 	}
 }
 
-// UnsafeKey implements the Iterator interface.
+// UnsafeKey implements the MVCCIterator interface.
 func (p *pebbleIterator) UnsafeKey() MVCCKey {
 	if valid, err := p.Valid(); err != nil || !valid {
 		return MVCCKey{}
@@ -237,12 +271,21 @@ func (p *pebbleIterator) UnsafeKey() MVCCKey {
 	return mvccKey
 }
 
+// UnsafeEngineKey implements the EngineIterator interface.
+func (p *pebbleIterator) UnsafeEngineKey() (EngineKey, error) {
+	engineKey, ok := DecodeEngineKey(p.iter.Key())
+	if !ok {
+		return engineKey, errors.Errorf("invalid encoded engine key: %x", p.iter.Key())
+	}
+	return engineKey, nil
+}
+
 // UnsafeRawKey returns the raw key from the underlying pebble.Iterator.
 func (p *pebbleIterator) UnsafeRawKey() []byte {
 	return p.iter.Key()
 }
 
-// UnsafeValue implements the Iterator interface.
+// UnsafeValue implements the MVCCIterator and EngineIterator interfaces.
 func (p *pebbleIterator) UnsafeValue() []byte {
 	if valid, err := p.Valid(); err != nil || !valid {
 		return nil
@@ -250,18 +293,41 @@ func (p *pebbleIterator) UnsafeValue() []byte {
 	return p.iter.Value()
 }
 
-// SeekLT implements the Iterator interface.
+// SeekLT implements the MVCCIterator interface.
 func (p *pebbleIterator) SeekLT(key MVCCKey) {
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
 	p.iter.SeekLT(p.keyBuf)
 }
 
-// Prev implements the Iterator interface.
+// SeekEngineKeyLT implements the EngineIterator interface.
+func (p *pebbleIterator) SeekEngineKeyLT(key EngineKey) (valid bool, err error) {
+	p.keyBuf = key.EncodeToBuf(p.keyBuf[:0])
+	ok := p.iter.SeekLT(p.keyBuf)
+	// NB: A Pebble Iterator always returns ok==false when an error is
+	// present.
+	if ok {
+		return true, nil
+	}
+	return false, p.iter.Error()
+}
+
+// Prev implements the MVCCIterator interface.
 func (p *pebbleIterator) Prev() {
 	p.iter.Prev()
 }
 
-// Key implements the Iterator interface.
+// PrevEngineKey implements the EngineIterator interface.
+func (p *pebbleIterator) PrevEngineKey() (valid bool, err error) {
+	ok := p.iter.Prev()
+	// NB: A Pebble Iterator always returns ok==false when an error is
+	// present.
+	if ok {
+		return true, nil
+	}
+	return false, p.iter.Error()
+}
+
+// Key implements the MVCCIterator interface.
 func (p *pebbleIterator) Key() MVCCKey {
 	key := p.UnsafeKey()
 	keyCopy := make([]byte, len(key.Key))
@@ -270,7 +336,16 @@ func (p *pebbleIterator) Key() MVCCKey {
 	return key
 }
 
-// Value implements the Iterator interface.
+// EngineKey implements the EngineIterator interface.
+func (p *pebbleIterator) EngineKey() (EngineKey, error) {
+	key, err := p.UnsafeEngineKey()
+	if err != nil {
+		return key, err
+	}
+	return key.Copy(), nil
+}
+
+// Value implements the MVCCIterator and EngineIterator interfaces.
 func (p *pebbleIterator) Value() []byte {
 	value := p.UnsafeValue()
 	valueCopy := make([]byte, len(value))
@@ -278,34 +353,57 @@ func (p *pebbleIterator) Value() []byte {
 	return valueCopy
 }
 
-// ValueProto implements the Iterator interface.
+// ValueProto implements the MVCCIterator interface.
 func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 	value := p.UnsafeValue()
 
 	return protoutil.Unmarshal(value, msg)
 }
 
-// ComputeStats implements the Iterator interface.
+// ComputeStats implements the MVCCIterator interface.
 func (p *pebbleIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	return ComputeStatsGo(p, start, end, nowNanos)
+	return ComputeStatsForRange(p, start, end, nowNanos)
 }
 
 // Go-only version of IsValidSplitKey. Checks if the specified key is in
 // NoSplitSpans.
 func isValidSplitKey(key roachpb.Key, noSplitSpans []roachpb.Span) bool {
+	if key.Equal(keys.Meta2KeyMax) {
+		// We do not allow splits at Meta2KeyMax. The reason for this is that range
+		// descriptors are stored at RangeMetaKey(range.EndKey), so the new range
+		// that ends at Meta2KeyMax would naturally store its decriptor at
+		// RangeMetaKey(Meta2KeyMax) = Meta1KeyMax. However, Meta1KeyMax already
+		// serves a different role of holding a second copy of the descriptor for
+		// the range that spans the meta2/userspace boundary (see case 3a in
+		// rangeAddressing). If we allowed splits at Meta2KeyMax, the two roles
+		// would overlap. See #1206.
+		return false
+	}
 	for i := range noSplitSpans {
-		if noSplitSpans[i].ContainsKey(key) {
+		if noSplitSpans[i].ProperlyContainsKey(key) {
 			return false
 		}
 	}
 	return true
 }
 
-// FindSplitKey implements the Iterator interface.
+// IsValidSplitKey returns whether the key is a valid split key. Adapter for
+// the method above, for use from other packages.
+func IsValidSplitKey(key roachpb.Key) bool {
+	return isValidSplitKey(key, keys.NoSplitSpans)
+}
+
+// FindSplitKey implements the MVCCIterator interface.
 func (p *pebbleIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
+) (MVCCKey, error) {
+	return findSplitKeyUsingIterator(p, start, end, minSplitKey, targetSize)
+}
+
+func findSplitKeyUsingIterator(
+	iter MVCCIterator, start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	const timestampLen = 12
 
@@ -332,12 +430,16 @@ func (p *pebbleIterator) FindSplitKey(
 	// terminate iteration because the iterator's upper bound has already been
 	// set to end.
 	mvccMinSplitKey := MakeMVCCMetadataKey(minSplitKey)
-	p.SeekGE(MakeMVCCMetadataKey(start))
-	for ; p.iter.Valid(); p.iter.Next() {
-		mvccKey, err := DecodeMVCCKey(p.iter.Key())
+	iter.SeekGE(MakeMVCCMetadataKey(start))
+	for ; ; iter.Next() {
+		valid, err := iter.Valid()
 		if err != nil {
 			return MVCCKey{}, err
 		}
+		if !valid {
+			break
+		}
+		mvccKey := iter.UnsafeKey()
 
 		diff := targetSize - sizeSoFar
 		if diff < 0 {
@@ -378,7 +480,7 @@ func (p *pebbleIterator) FindSplitKey(
 			bestSplitKey.Key = append(bestSplitKey.Key[:0], prevKey.Key...)
 		}
 
-		sizeSoFar += int64(len(p.iter.Value()))
+		sizeSoFar += int64(len(iter.Value()))
 		if mvccKey.IsValue() && bytes.Equal(prevKey.Key, mvccKey.Key) {
 			// We only advanced timestamps, but not new mvcc keys.
 			sizeSoFar += timestampLen
@@ -418,7 +520,7 @@ func (p *pebbleIterator) FindSplitKey(
 	return bestSplitKey, nil
 }
 
-// SetUpperBound implements the Iterator interface.
+// SetUpperBound implements the MVCCIterator interface.
 func (p *pebbleIterator) SetUpperBound(upperBound roachpb.Key) {
 	p.curBuf = (p.curBuf + 1) % 2
 	i := p.curBuf
@@ -430,14 +532,14 @@ func (p *pebbleIterator) SetUpperBound(upperBound roachpb.Key) {
 	p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
 }
 
-// Stats implements the Iterator interface.
+// Stats implements the MVCCIterator interface.
 func (p *pebbleIterator) Stats() IteratorStats {
 	return IteratorStats{
 		TimeBoundNumSSTs: p.timeBoundNumSSTables,
 	}
 }
 
-// SupportsPrev implements the Iterator interface.
+// SupportsPrev implements the MVCCIterator interface.
 func (p *pebbleIterator) SupportsPrev() bool {
 	return true
 }

@@ -117,15 +117,17 @@ SELECT * FROM parent
 1 2
 4 5
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6] OFFSET 2
 ----
-filter     ·              ·
- │         filter         (y >= 2) AND (y <= 6)
- └── scan  ·              ·
-·          missing stats  ·
-·          table          child@primary
-·          spans          [/1/2 - /4/6]
+·
+• filter
+│ filter: (y >= 2) AND (y <= 6)
+│
+└── • scan
+      missing stats
+      table: child@primary
+      spans: [/1/2 - /4/6]
 
 query III rowsort
 SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6
@@ -172,13 +174,14 @@ child  CREATE TABLE public.child (
        FAMILY fam_0_x_y_z (x, y, z)
 )
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM child WHERE y >=2 AND y <= 6] OFFSET 2
 ----
-scan  ·              ·
-·     missing stats  ·
-·     table          child@primary
-·     spans          [/2 - /6]
+·
+• scan
+  missing stats
+  table: child@primary
+  spans: [/2 - /6]
 
 query III rowsort
 SELECT * FROM child WHERE y >=2 AND y <= 6
@@ -220,13 +223,14 @@ child                                     CREATE TABLE public.child (
 
 # If child@i was not properly rewritten, we wouldn't be able to select
 # all columns in child from it without an index join
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM child@i] OFFSET 2
 ----
-scan  ·              ·
-·     missing stats  ·
-·     table          child@i
-·     spans          FULL SCAN
+·
+• scan
+  missing stats
+  table: child@i
+  spans: FULL SCAN
 
 query IIII
 SELECT * FROM child@i
@@ -381,90 +385,102 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 
 # Make sure that each index can index join against the new primary key;
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM t@i1] OFFSET 2
 ----
-index join  ·              ·
- │          table          t@primary
- └── scan   ·              ·
-·           missing stats  ·
-·           table          t@i1
-·           spans          FULL SCAN
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@i1
+      spans: FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i1
 ----
 1 2 3 4 {}
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM t@i2] OFFSET 2
 ----
-index join  ·              ·
- │          table          t@primary
- └── scan   ·              ·
-·           missing stats  ·
-·           table          t@i2
-·           spans          FULL SCAN
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@i2
+      spans: FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i2
 ----
 1 2 3 4 {}
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM t@i3] OFFSET 2
 ----
-index join  ·              ·
- │          table          t@primary
- └── scan   ·              ·
-·           missing stats  ·
-·           table          t@i3
-·           spans          FULL SCAN
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@i3
+      spans: FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i3
 ----
 1 2 3 4 {}
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM t@i4] OFFSET 2
 ----
-index join  ·              ·
- │          table          t@primary
- └── scan   ·              ·
-·           missing stats  ·
-·           table          t@i4
-·           spans          FULL SCAN
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@i4
+      spans: FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i4
 ----
 1 2 3 4 {}
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM t@i5] OFFSET 2
 ----
-index join  ·              ·
- │          table          t@primary
- └── scan   ·              ·
-·           missing stats  ·
-·           table          t@i5
-·           spans          FULL SCAN
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@i5
+      spans: FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i5
 ----
 1 2 3 4 {}
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN SELECT * FROM t@i7] OFFSET 2
 ----
-index join  ·              ·
- │          table          t@primary
- └── scan   ·              ·
-·           missing stats  ·
-·           table          t@i7
-·           spans          FULL SCAN
+·
+• index join
+│ table: t@primary
+│
+└── • scan
+      missing stats
+      table: t@i7
+      spans: FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i5
@@ -498,13 +514,14 @@ t  CREATE TABLE public.t (
    FAMILY fam_0_x_y_z_crdb_internal_z_shard_5 (x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
 )
 
-query TTT
+query T
 SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
 ----
-insert fast path  ·            ·
-·                 into         t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
-·                 auto commit  ·
-·                 size         7 columns, 1 row
+·
+• insert fast path
+  into: t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
+  auto commit
+  size: 7 columns, 1 row
 
 # Ensure that all of the indexes have been rewritten.
 query IT

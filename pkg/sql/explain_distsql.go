@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 )
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
@@ -139,7 +139,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			params.extendedEvalCtx.copy,
 			n.plan.subqueryPlans,
 			recv,
-			willDistribute,
 		) {
 			if err := rw.Err(); err != nil {
 				return err
@@ -164,22 +163,22 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		// recording because we don't currently have a good way to ask for a
 		// separate recording for the child such that it's also guaranteed that we
 		// don't get a noopSpan.
-		var sp opentracing.Span
-		if parentSp := opentracing.SpanFromContext(params.ctx); parentSp != nil &&
-			!tracing.IsRecording(parentSp) {
+		var sp *tracing.Span
+		if parentSp := tracing.SpanFromContext(params.ctx); parentSp != nil &&
+			!parentSp.IsRecording() {
 			tracer := parentSp.Tracer()
 			sp = tracer.StartSpan(
-				"explain-distsql", tracing.Recordable,
-				opentracing.ChildOf(parentSp.Context()),
-				tracing.LogTagsFromCtx(params.ctx))
+				"explain-distsql", tracing.WithForceRealSpan(),
+				tracing.WithParent(parentSp),
+				tracing.WithCtxLogTags(params.ctx))
 		} else {
 			tracer := params.extendedEvalCtx.ExecCfg.AmbientCtx.Tracer
 			sp = tracer.StartSpan(
-				"explain-distsql", tracing.Recordable,
-				tracing.LogTagsFromCtx(params.ctx))
+				"explain-distsql", tracing.WithForceRealSpan(),
+				tracing.WithCtxLogTags(params.ctx))
 		}
-		tracing.StartRecording(sp, tracing.SnowballRecording)
-		ctx := opentracing.ContextWithSpan(params.ctx, sp)
+		sp.StartRecording(tracing.SnowballRecording)
+		ctx := tracing.ContextWithSpan(params.ctx, sp)
 		planCtx.ctx = ctx
 		// Make a copy of the evalContext with the recording span in it; we can't
 		// change the original.
@@ -207,8 +206,13 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		)
 		defer recv.Release()
 
-		planCtx.saveDiagram = func(d execinfrapb.FlowDiagram) {
+		planCtx.saveFlows = func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+			d, err := planCtx.flowSpecsToDiagram(ctx, flows)
+			if err != nil {
+				return err
+			}
 			diagram = d
+			return nil
 		}
 		planCtx.saveDiagramShowInputTypes = n.options.Flags[tree.ExplainFlagTypes]
 
@@ -219,7 +223,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		n.run.executedStatement = true
 
 		sp.Finish()
-		spans := tracing.GetRecording(sp)
+		spans := sp.GetRecording()
 
 		if err := rw.Err(); err != nil {
 			return err
@@ -263,7 +267,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			params.extendedEvalCtx.copy,
 			&n.plan,
 			recv,
-			willDistribute,
 		) {
 			if err := rw.Err(); err != nil {
 				return err

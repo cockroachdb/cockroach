@@ -1,0 +1,3 @@
+analyze_stmt ::=
+	'ANALYZE' analyze_target
+	| 'ANALYSE' analyze_target

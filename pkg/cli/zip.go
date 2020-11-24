@@ -12,6 +12,7 @@ package cli
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,7 +28,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -77,6 +78,7 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.schema_changes",
 	"crdb_internal.partitions",
 	"crdb_internal.zones",
+	"crdb_internal.invalid_objects",
 }
 
 // Tables collected from each node in a debug zip.
@@ -340,6 +342,17 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	{
+		var doctorData bytes.Buffer
+		fmt.Printf("doctor examining cluster...")
+		if err := runClusterDoctor(nil, nil, sqlConn, &doctorData, timeout); err != nil {
+			return err
+		}
+		if err := z.createRawOrError(reportsPrefix+"/doctor.txt", doctorData.Bytes(), err); err != nil {
+			return err
+		}
+	}
+
+	{
 		var nodes *serverpb.NodesResponse
 		err := runZipRequestWithTimeout(baseCtx, "requesting nodes", timeout, func(ctx context.Context) error {
 			nodes, err = status.Nodes(ctx, &serverpb.NodesRequest{})
@@ -372,7 +385,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		if cErr := z.createJSONOrError(livenessName+".json", nodes, err); cErr != nil {
 			return cErr
 		}
-		livenessByNodeID := map[roachpb.NodeID]kvserverpb.NodeLivenessStatus{}
+		livenessByNodeID := map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
 		if lresponse != nil {
 			livenessByNodeID = lresponse.Statuses
 		}
@@ -391,7 +404,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			// NB: this takes care not to produce non-deterministic log output.
 			resps := make([]profData, len(nodeList))
 			for i := range nodeList {
-				if livenessByNodeID[nodeList[i].Desc.NodeID] == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
+				if livenessByNodeID[nodeList[i].Desc.NodeID] == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
 					continue
 				}
 				wg.Add(1)
@@ -443,7 +456,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			nodeID := node.Desc.NodeID
 
 			liveness := livenessByNodeID[nodeID]
-			if liveness == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
+			if liveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
 				// Decommissioned + process terminated. Let's not waste time
 				// on this node.
 				//
@@ -662,7 +675,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 							// We're also going to print a warning at the end.
 							warnRedactLeak = true
 						}
-						if err := e.Format(logOut); err != nil {
+						if err := log.FormatEntry(e, logOut); err != nil {
 							return err
 						}
 					}

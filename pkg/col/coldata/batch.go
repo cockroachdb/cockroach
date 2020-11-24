@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,8 +42,8 @@ type Batch interface {
 	// ColVecs returns all of the underlying Vecs in this batch.
 	ColVecs() []Vec
 	// Selection, if not nil, returns the selection vector on this batch: a
-	// densely-packed list of the indices in each column that have not been
-	// filtered out by a previous step.
+	// densely-packed list of the *increasing* indices in each column that have
+	// not been filtered out by a previous step.
 	Selection() []int
 	// SetSelection sets whether this batch is using its selection vector or not.
 	SetSelection(bool)
@@ -77,9 +78,14 @@ var _ Batch = &MemBatch{}
 // confirmed to be very good using tpchvec/bench benchmark on TPC-H queries
 // (the best number according to that benchmark was 1280, but it was negligibly
 // better, so we decided to keep 1024 as it is a power of 2).
-const defaultBatchSize = 1024
+var defaultBatchSize = int64(util.ConstantWithMetamorphicTestRange(
+	1024, /* defaultValue */
+	// min is set to 3 to match colexec's minBatchSize setting.
+	3, /* min */
+	MaxBatchSize,
+))
 
-var batchSize int64 = defaultBatchSize
+var batchSize = defaultBatchSize
 
 // BatchSize is the maximum number of tuples that fit in a column batch.
 func BatchSize() int {
@@ -118,7 +124,7 @@ func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactor
 	for i, t := range typs {
 		b.b[i] = NewMemColumn(t, capacity, factory)
 		if b.b[i].CanonicalTypeFamily() == types.BytesFamily {
-			b.bytesVecIdxs = append(b.bytesVecIdxs, i)
+			b.bytesVecIdxs.Add(i)
 		}
 	}
 	return b
@@ -194,7 +200,7 @@ type MemBatch struct {
 	// vectors require special handling, so rather than iterating over all
 	// vectors and checking whether they are of Bytes type we store this slice
 	// separately.
-	bytesVecIdxs []int
+	bytesVecIdxs util.FastIntSet
 	useSel       bool
 	// sel is - if useSel is true - a selection vector from upstream. A
 	// selection vector is a list of selected tuple indices in this memBatch's
@@ -245,8 +251,8 @@ func (m *MemBatch) SetSelection(b bool) {
 func (m *MemBatch) SetLength(length int) {
 	m.length = length
 	if length > 0 {
-		for _, bytesVecIdx := range m.bytesVecIdxs {
-			m.b[bytesVecIdx].Bytes().UpdateOffsetsToBeNonDecreasing(length)
+		for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
+			m.b[i].Bytes().UpdateOffsetsToBeNonDecreasing(length)
 		}
 	}
 }
@@ -254,7 +260,7 @@ func (m *MemBatch) SetLength(length int) {
 // AppendCol implements the Batch interface.
 func (m *MemBatch) AppendCol(col Vec) {
 	if col.CanonicalTypeFamily() == types.BytesFamily {
-		m.bytesVecIdxs = append(m.bytesVecIdxs, len(m.b))
+		m.bytesVecIdxs.Add(len(m.b))
 	}
 	m.b = append(m.b, col)
 }
@@ -298,10 +304,9 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 		m.b[i].SetLength(length)
 	}
 	m.sel = m.sel[:length]
-	for i, idx := range m.bytesVecIdxs {
-		if idx >= len(typs) {
-			m.bytesVecIdxs = m.bytesVecIdxs[:i]
-			break
+	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
+		if i >= len(typs) {
+			m.bytesVecIdxs.Remove(i)
 		}
 	}
 	m.ResetInternalBatch()
@@ -315,8 +320,8 @@ func (m *MemBatch) ResetInternalBatch() {
 			v.Nulls().UnsetNulls()
 		}
 	}
-	for _, bytesVecIdx := range m.bytesVecIdxs {
-		m.b[bytesVecIdx].Bytes().Reset()
+	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
+		m.b[i].Bytes().Reset()
 	}
 }
 

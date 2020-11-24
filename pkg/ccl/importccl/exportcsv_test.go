@@ -84,11 +84,9 @@ func TestExportImportBank(t *testing.T) {
 
 	chunkSize := 13
 	for _, null := range []string{"", "NULL"} {
-		nullAs, nullIf := "", ", nullif = ''"
-		if null != "" {
-			nullAs = fmt.Sprintf(", nullas = '%s'", null)
-			nullIf = fmt.Sprintf(", nullif = '%s'", null)
-		}
+		nullAs := fmt.Sprintf(", nullas = '%s'", null)
+		nullIf := fmt.Sprintf(", nullif = '%s'", null)
+
 		t.Run("null="+null, func(t *testing.T) {
 			var files []string
 
@@ -121,6 +119,48 @@ func TestExportImportBank(t *testing.T) {
 			db.Exec(t, "DROP TABLE bank2")
 		})
 	}
+}
+
+// Tests if user does not specify nullas option and imports null data, an error is raised.
+func TestExportNullWithEmptyNullAs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	defer tc.Stopper().Stop(ctx)
+
+	conn := tc.Conns[0]
+	db := sqlutils.MakeSQLRunner(conn)
+
+	// Set up dummy accounts table with NULL value
+	db.Exec(t, `
+		CREATE TABLE accounts (id INT PRIMARY KEY, balance INT);
+		INSERT INTO accounts VALUES (1, NULL), (2, 8);
+	`)
+
+	// Case when `nullas` option is unspecified: expect error
+	const stmtWithoutNullas = "EXPORT INTO CSV 'nodelocal://0/t' FROM SELECT * FROM accounts"
+	db.ExpectErr(t, "NULL value encountered during EXPORT, "+
+		"use `WITH nullas` to specify the string representation of NULL", stmtWithoutNullas)
+
+	// Case when `nullas` option is specified: operation is successful and NULLs are encoded to "None"
+	const stmtWithNullas = `EXPORT INTO CSV 'nodelocal://0/t' WITH nullas="None" FROM SELECT * FROM accounts`
+	db.Exec(t, stmtWithNullas)
+	contents := readFileByGlob(t, filepath.Join(dir, "t", "export*-n1.0.csv"))
+	require.Equal(t, "1,None\n2,8\n", string(contents))
+
+	// Verify successful IMPORT statement `WITH nullif="None"` to complete round trip
+	const importStmt = `IMPORT TABLE accounts2(id INT PRIMARY KEY, balance INT) CSV DATA ('nodelocal://0/t/export*-n1.0.csv') WITH nullif="None"`
+	db.Exec(t, importStmt)
+	db.CheckQueryResults(t,
+		"SELECT * FROM accounts2", db.QueryStr(t, "SELECT * FROM accounts"),
+	)
+
 }
 
 func TestMultiNodeExportStmt(t *testing.T) {
@@ -368,4 +408,27 @@ func TestExportVectorized(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE t(a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `SET vectorize_row_count_threshold=0`)
 	sqlDB.Exec(t, `EXPORT INTO CSV 'http://0.1:37957/exp_1' FROM TABLE t`)
+}
+
+// TestExportFeatureFlag tests the feature flag logic that allows the EXPORT
+// command to be toggled off via cluster settings.
+func TestExportFeatureFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// Feature flag is off — test that EXPORT surfaces error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = FALSE`)
+	sqlDB.Exec(t, `CREATE TABLE feature_flag (a INT PRIMARY KEY)`)
+	sqlDB.ExpectErr(t, `EXPORT feature was disabled by the database administrator`,
+		`EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flag`)
+
+	// Feature flag is on — test that EXPORT does not error.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = TRUE`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flag`)
 }

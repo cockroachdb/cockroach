@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -139,7 +138,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 				User                string
 				CascadeDroppedViews []string
 			}{toDel.tn.FQString(), n.n.String(),
-				params.SessionData().User, droppedViews},
+				params.p.User().Normalized(), droppedViews},
 		); err != nil {
 			return err
 		}
@@ -173,20 +172,24 @@ func (p *planner) prepareDrop(
 	if tableDesc == nil {
 		return nil, err
 	}
-	if err := p.canDropTable(ctx, tableDesc); err != nil {
+	if err := p.canDropTable(ctx, tableDesc, true /* checkOwnership */); err != nil {
 		return nil, err
 	}
 	return tableDesc, nil
 }
 
 // canDropTable returns an error if the user cannot drop the table.
-func (p *planner) canDropTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	// Don't check for ownership if the table is a temp table.
-	// ResolveSchema currently doesn't work for temp schemas.
-	// Hack until #53163 is fixed.
-	hasOwnership := false
+func (p *planner) canDropTable(
+	ctx context.Context, tableDesc *tabledesc.Mutable, checkOwnership bool,
+) error {
 	var err error
-	if !tableDesc.Temporary {
+	hasOwnership := false
+	// This checkOwnership stuff is rather unfortunate, but is required when an
+	// active session has created a temporary object in a database that is being
+	// dropped by a different session. The session trying to drop the database
+	// can't resolve the temporary schema, and would therefore return an
+	// error if we tried to check for ownership on the schema.
+	if checkOwnership {
 		// If the user owns the schema the table is part of, they can drop the table.
 		hasOwnership, err = p.HasOwnershipOnSchema(ctx, tableDesc.GetParentSchemaID())
 		if err != nil {
@@ -366,7 +369,7 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 			if err := r.ValueProto(&desc); err != nil {
 				return err
 			}
-			if (desc.GetStickyBit() != hlc.Timestamp{}) {
+			if !desc.GetStickyBit().IsEmpty() {
 				// Swallow "key is not the start of a range" errors because it would mean
 				// that the sticky bit was removed and merged concurrently. DROP TABLE
 				// should not fail because of this.
@@ -421,7 +424,14 @@ func (p *planner) initiateDropTable(
 		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
 	}
 
-	// Mark all jobs scheduled for schema changes as successful.
+	// For this table descriptor, mark all previous jobs scheduled for schema changes as successful
+	// and delete them from the schema change job cache.
+	//
+	// Since the table is being dropped, any previous schema changes to the table do not need to complete
+	// and can be put in a terminal state such as Succeeded. Deleting the jobs from the cache ensures that
+	// subsequent schema changes in the transaction (ie. this drop table statement) do not get a cache hit
+	// and do not try to update succeeded jobs, which would raise an error. Instead, this drop table
+	// statement will create a new job to drop the table.
 	jobIDs := make(map[int64]struct{})
 	var id descpb.MutationID
 	for _, m := range tableDesc.Mutations {
@@ -439,7 +449,9 @@ func (p *planner) initiateDropTable(
 			return errors.Wrapf(err,
 				"failed to mark job %d as as successful", errors.Safe(jobID))
 		}
+		delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
 	}
+
 	// Initiate an immediate schema change. When dropping a table
 	// in a session, the data and the descriptor are not deleted.
 	// Instead, that is taken care of asynchronously by the schema
@@ -625,7 +637,7 @@ func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.
 		ctx,
 		"delete-table-comments",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE object_id=$1",
 		tableDesc.ID)
 	if err != nil {

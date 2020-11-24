@@ -174,9 +174,33 @@ var _ CCLOnlyStatement = &ScheduledBackup{}
 func (*AlterDatabaseOwner) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabaseOwner) StatementTag() string { return "ALTER DATABSE OWNER" }
+func (*AlterDatabaseOwner) StatementTag() string { return "ALTER DATABASE OWNER" }
 
 func (*AlterDatabaseOwner) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseAddRegion) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseAddRegion) StatementTag() string { return "ALTER DATABASE ADD REGION" }
+
+func (*AlterDatabaseAddRegion) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseDropRegion) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseDropRegion) StatementTag() string { return "ALTER DATABASE DROP REGION" }
+
+func (*AlterDatabaseDropRegion) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseSurvivalGoal) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseSurvivalGoal) StatementTag() string { return "ALTER DATABASE SURVIVE" }
+
+func (*AlterDatabaseSurvivalGoal) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*AlterIndex) StatementType() StatementType { return DDL }
@@ -193,6 +217,14 @@ func (*AlterTable) StatementType() StatementType { return DDL }
 func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
 
 func (*AlterTable) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
+func (*AlterTableRegionalAffinity) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTableRegionalAffinity) StatementTag() string { return "ALTER TABLE REGIONAL AFFINITY" }
+
+func (*AlterTableRegionalAffinity) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*AlterTableSetSchema) StatementType() StatementType { return DDL }
@@ -523,10 +555,10 @@ func (*Explain) StatementType() StatementType { return Rows }
 func (*Explain) StatementTag() string { return "EXPLAIN" }
 
 // StatementType implements the Statement interface.
-func (*ExplainAnalyzeDebug) StatementType() StatementType { return Rows }
+func (*ExplainAnalyze) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ExplainAnalyzeDebug) StatementTag() string { return "EXPLAIN ANALYZE (DEBUG)" }
+func (*ExplainAnalyze) StatementTag() string { return "EXPLAIN ANALYZE" }
 
 // StatementType implements the Statement interface.
 func (*Export) StatementType() StatementType { return Rows }
@@ -578,7 +610,13 @@ func (*Prepare) StatementTag() string { return "PREPARE" }
 func (*ReassignOwnedBy) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ReassignOwnedBy) StatementTag() string { return "REASSIGN OWNED" }
+func (*ReassignOwnedBy) StatementTag() string { return "REASSIGN OWNED BY" }
+
+// StatementType implements the Statement interface.
+func (*DropOwnedBy) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropOwnedBy) StatementTag() string { return "DROP OWNED BY" }
 
 // StatementType implements the Statement interface.
 func (*RefreshMaterializedView) StatementType() StatementType { return DDL }
@@ -940,6 +978,12 @@ func (*ShowRangeForRow) StatementType() StatementType { return Rows }
 func (*ShowRangeForRow) StatementTag() string { return "SHOW RANGE FOR ROW" }
 
 // StatementType implements the Statement interface.
+func (*ShowRegions) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowRegions) StatementTag() string { return "SHOW REGIONS" }
+
+// StatementType implements the Statement interface.
 func (*ShowFingerprints) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1016,6 +1060,9 @@ func (*ValuesClause) StatementTag() string { return "VALUES" }
 
 func (n *AlterIndex) String() string                     { return AsString(n) }
 func (n *AlterDatabaseOwner) String() string             { return AsString(n) }
+func (n *AlterDatabaseAddRegion) String() string         { return AsString(n) }
+func (n *AlterDatabaseDropRegion) String() string        { return AsString(n) }
+func (n *AlterDatabaseSurvivalGoal) String() string      { return AsString(n) }
 func (n *AlterSchema) String() string                    { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }
 func (n *AlterTableCmds) String() string                 { return AsString(n) }
@@ -1026,6 +1073,7 @@ func (n *AlterTableDropColumn) String() string           { return AsString(n) }
 func (n *AlterTableDropConstraint) String() string       { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string          { return AsString(n) }
 func (n *AlterTableDropStored) String() string           { return AsString(n) }
+func (n *AlterTableRegionalAffinity) String() string     { return AsString(n) }
 func (n *AlterTableSetDefault) String() string           { return AsString(n) }
 func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
 func (n *AlterTableSetSchema) String() string            { return AsString(n) }
@@ -1061,15 +1109,16 @@ func (n *Deallocate) String() string                     { return AsString(n) }
 func (n *Delete) String() string                         { return AsString(n) }
 func (n *DropDatabase) String() string                   { return AsString(n) }
 func (n *DropIndex) String() string                      { return AsString(n) }
+func (n *DropOwnedBy) String() string                    { return AsString(n) }
 func (n *DropSchema) String() string                     { return AsString(n) }
+func (n *DropSequence) String() string                   { return AsString(n) }
 func (n *DropTable) String() string                      { return AsString(n) }
 func (n *DropType) String() string                       { return AsString(n) }
 func (n *DropView) String() string                       { return AsString(n) }
-func (n *DropSequence) String() string                   { return AsString(n) }
 func (n *DropRole) String() string                       { return AsString(n) }
 func (n *Execute) String() string                        { return AsString(n) }
 func (n *Explain) String() string                        { return AsString(n) }
-func (n *ExplainAnalyzeDebug) String() string            { return AsString(n) }
+func (n *ExplainAnalyze) String() string                 { return AsString(n) }
 func (n *Export) String() string                         { return AsString(n) }
 func (n *Grant) String() string                          { return AsString(n) }
 func (n *GrantRole) String() string                      { return AsString(n) }
@@ -1122,6 +1171,7 @@ func (n *ShowJobs) String() string                       { return AsString(n) }
 func (n *ShowQueries) String() string                    { return AsString(n) }
 func (n *ShowRanges) String() string                     { return AsString(n) }
 func (n *ShowRangeForRow) String() string                { return AsString(n) }
+func (n *ShowRegions) String() string                    { return AsString(n) }
 func (n *ShowRoleGrants) String() string                 { return AsString(n) }
 func (n *ShowRoles) String() string                      { return AsString(n) }
 func (n *ShowSavepointStatus) String() string            { return AsString(n) }

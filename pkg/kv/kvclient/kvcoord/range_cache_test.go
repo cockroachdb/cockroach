@@ -35,6 +35,7 @@ import (
 
 type testDescriptorDB struct {
 	data            llrb.Tree
+	stopper         *stop.Stopper
 	cache           *RangeDescriptorCache
 	lookupCount     int64
 	disablePrefetch bool
@@ -256,9 +257,12 @@ func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 		}
 	}
 	// TODO(andrei): don't leak this Stopper. Someone needs to Stop() it.
-	db.cache = NewRangeDescriptorCache(st, db, staticSize(2<<10), stop.NewStopper())
+	db.stopper = stop.NewStopper()
+	db.cache = NewRangeDescriptorCache(st, db, staticSize(2<<10), db.stopper)
 	return db
 }
+
+func (db *testDescriptorDB) stop() { db.stopper.Stop(context.Background()) }
 
 // assertLookupCountEq fails unless exactly the number of lookups have been observed.
 func (db *testDescriptorDB) assertLookupCountEq(t *testing.T, exp int64, key string) {
@@ -331,6 +335,7 @@ func TestDescriptorDBGetDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
+	defer db.stop()
 
 	key := roachpb.RKey("k")
 	expectedRspansMap := map[bool][]roachpb.RSpan{
@@ -388,6 +393,7 @@ func TestRangeCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
+	defer db.stop()
 	ctx := context.Background()
 
 	// Totally uncached range.
@@ -504,6 +510,7 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
+	defer db.stop()
 	ctx := context.Background()
 
 	pauseLookupResumeAndAssert := func(key string, expected int64) {
@@ -561,6 +568,7 @@ func TestRangeCacheContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
+	defer db.stop()
 
 	// lookupAndWaitUntilJoin performs a RangeDescriptor lookup in a new
 	// goroutine and blocks until the request is added to the inflight request
@@ -627,6 +635,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
+	defer db.stop()
 	ctx := context.Background()
 
 	pauseLookupResumeAndAssert := func(key string, evictToken EvictionToken) {
@@ -696,6 +705,7 @@ func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
+	defer db.stop()
 	ctx := context.Background()
 
 	// A request initially looks up the range descriptor ["a"-"b").
@@ -827,6 +837,8 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("reverse=%t", tc.reverseScan), func(t *testing.T) {
 			db := initTestDescriptorDB(t)
+			defer db.stop()
+
 			db.disablePrefetch = true
 			ctx := context.Background()
 
@@ -951,6 +963,8 @@ func TestRangeCacheUseIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
+	defer db.stop()
+
 	ctx := context.Background()
 
 	// A request initially looks up the range descriptor ["a"-"b").
