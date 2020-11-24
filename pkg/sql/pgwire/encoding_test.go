@@ -80,6 +80,9 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if tc.SQL == "'1E+4'::decimal" {
+			fmt.Println()
+		}
 		d, err := te.Eval(&evalCtx)
 		if err != nil {
 			t.Fatal(err)
@@ -156,6 +159,9 @@ func TestEncodings(t *testing.T) {
 		t.Run(pgwirebase.FormatBinary.String(), func(t *testing.T) {
 			for _, tc := range tests {
 				d := tc.Datum
+				if tc.SQL == "'1E+4'::decimal" {
+					fmt.Println()
+				}
 				buf.reset()
 				buf.writeBinaryDatum(ctx, d, time.UTC, tc.T)
 				if buf.err != nil {
@@ -218,6 +224,11 @@ func TestExoticNumericEncodings(t *testing.T) {
 		{apd.New(0, 0), []byte{0, 0, 0, 0, 0, 0, 0, 0}},
 		{apd.New(0, 0), []byte{0, 1, 0, 0, 0, 0, 0, 0, 0, 0}},
 		{apd.New(10000, 0), []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0}},
+		{apd.New(10000, 0), []byte{0, 1, 0, 1, 0, 0, 0, 0, 0, 1}},
+		{apd.New(10000, 0), []byte{00, 0x01, 00, 01, 00, 00, 0xff, 0xfc, 00, 0x01}},
+		{apd.New(1, 4), []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0}},
+		{apd.New(1, 4), []byte{0, 1, 0, 1, 0, 0, 0, 0, 0, 1}},
+		{apd.New(1, 4), []byte{00, 0x01, 00, 01, 00, 00, 0xff, 0xfc, 00, 0x01}},
 		{apd.New(10001, 0), []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1}},
 		{apd.New(1000000, 0), []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 100, 0, 0}},
 		{apd.New(1000001, 0), []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 100, 0, 1}},

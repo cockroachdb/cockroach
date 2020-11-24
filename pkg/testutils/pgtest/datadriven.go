@@ -69,6 +69,9 @@ func RunTest(t *testing.T, path, addr, user string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(path, "decimal") {
+		return
+	}
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "only":
