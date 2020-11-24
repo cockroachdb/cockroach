@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -48,7 +49,22 @@ var createStatsPostEvents = settings.RegisterPublicBoolSetting(
 	false,
 )
 
+// featureStatsEnabled is used to enable and disable the CREATE STATISTICS and
+// ANALYZE features.
+var featureStatsEnabled = settings.RegisterPublicBoolSetting(
+	"feature.stats.enabled",
+	"set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true",
+	featureflag.FeatureFlagEnabledDefault)
+
 func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
+	if err := featureflag.CheckEnabled(
+		featureStatsEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ANALYZE/CREATE STATISTICS",
+	); err != nil {
+		return nil, err
+	}
+
 	return &createStatsNode{
 		CreateStats: *n,
 		p:           p,
@@ -57,6 +73,14 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 
 // Analyze is syntactic sugar for CreateStatistics.
 func (p *planner) Analyze(ctx context.Context, n *tree.Analyze) (planNode, error) {
+	if err := featureflag.CheckEnabled(
+		featureStatsEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ANALYZE/CREATE STATISTICS",
+	); err != nil {
+		return nil, err
+	}
+
 	return &createStatsNode{
 		CreateStats: tree.CreateStats{Table: n.Table},
 		p:           p,
