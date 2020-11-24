@@ -13,7 +13,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/util/bufalloc",
     ],
 )
 

@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -68,19 +67,6 @@ const (
 // Copy makes a copy of the key.
 func (k EngineKey) Copy() EngineKey {
 	buf := make([]byte, len(k.Key)+len(k.Version))
-	return k.copyUsingSizedBuf(buf)
-}
-
-// CopyUsingAlloc makes a copy of the key using the given allocator.
-func (k EngineKey) CopyUsingAlloc(
-	alloc bufalloc.ByteAllocator,
-) (EngineKey, bufalloc.ByteAllocator) {
-	var buf []byte
-	alloc, buf = alloc.Alloc(len(k.Key)+len(k.Version), 0)
-	return k.copyUsingSizedBuf(buf), alloc
-}
-
-func (k EngineKey) copyUsingSizedBuf(buf []byte) EngineKey {
 	copy(buf, k.Key)
 	k.Key = buf[:len(k.Key)]
 	if len(k.Version) > 0 {
