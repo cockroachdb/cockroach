@@ -56,11 +56,6 @@ func updateRangeAddressing(b *kv.Batch, desc *roachpb.RangeDescriptor) error {
 	return rangeAddressing(b, desc, putMeta)
 }
 
-// TODO (thesamhuang): Remove this temporary export
-func UpdateRangeAddressing(b *kv.Batch, desc *roachpb.RangeDescriptor) error {
-	return updateRangeAddressing(b, desc)
-}
-
 // rangeAddressing updates or deletes the range addressing metadata
 // for the range specified by desc. The action to take is specified by
 // the supplied metaAction function.

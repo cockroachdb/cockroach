@@ -387,16 +387,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// we expect the originator to campaign instead.
 		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
-		if req.Message.From == req.Message.To {
-			log.Info(context.Background(), "from is to")
-		}
 		err := raftGroup.Step(req.Message)
-
-		status := raftGroup.BasicStatus()
-		if status.RaftState == raft.StateFollower && status.ID == status.Lead {
-			log.Fatal(context.Background(), "raft status is follower and leader")
-		}
-
 		if errors.Is(err, raft.ErrProposalDropped) {
 			// A proposal was forwarded to this replica but we couldn't propose it.
 			// Swallow the error since we don't have an effective way of signaling
