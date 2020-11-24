@@ -192,7 +192,7 @@ func (n FiltersExpr) IsFalse() bool {
 
 // OuterCols returns the set of outer columns needed by any of the filter
 // condition expressions.
-func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
+func (n FiltersExpr) OuterCols() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
 		colSet.UnionWith(n[i].ScalarProps().OuterCols)
