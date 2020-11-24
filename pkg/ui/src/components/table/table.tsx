@@ -11,6 +11,7 @@
 import * as  React from "react";
 import { default as AntTable, ColumnProps } from "antd/es/table";
 import ConfigProvider from "antd/es/config-provider";
+import cn from "classnames";
 
 import "antd/es/table/style/css";
 import "./table.styl";
@@ -20,15 +21,15 @@ export interface ColumnsConfig<T> extends Array<ColumnProps<T>> {}
 export interface TableProps<T> {
   columns: Array<ColumnProps<T>>;
   dataSource: Array<T>;
-  noDataMessage?: string;
+  noDataMessage?: React.ReactNode;
   tableLayout?: "fixed" | "auto";
   pageSize?: number;
   className?: string;
 }
 
-const customizeRenderEmpty = (text: string) => () => (
+const customizeRenderEmpty = (node: React.ReactNode) => () => (
   <div className="empty-table__message">
-    {text}
+    {node}
   </div>
 );
 
@@ -43,7 +44,12 @@ export function Table<T>(props: TableProps<T>) {
   return (
     <ConfigProvider renderEmpty={customizeRenderEmpty(noDataMessage)}>
     <AntTable<T>
-      className={`crl-table-wrapper ${className}`}
+      className={cn(
+        `crl-table-wrapper ${className}`,
+        {
+          "crl-table-wrapper__empty": dataSource.length === 0,
+        },
+      )}
       columns={columns}
       dataSource={dataSource}
       expandRowByClick
