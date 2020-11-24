@@ -1496,10 +1496,72 @@ func (desc *Immutable) validateCrossReferences(ctx context.Context, dg catalog.D
 			}
 			return nil
 		})
-		if !found {
-			return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
+		if found {
+			continue
+		}
+		// In 20.2 we introduced a bug where we fail to upgrade the FK references
+		// on the referenced descriptors from their pre-19.2 format when reading
+		// them during validation (#57032). So we account for the possibility of
+		// un-upgraded foreign key references on the other table. This logic
+		// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
+		unupgradedFKsPresent := false
+		if err := referencedTable.ForeachIndex(catalog.IndexOpts{}, func(
+			referencedIdx *descpb.IndexDescriptor, isPrimary bool,
+		) error {
+			if found {
+				// TODO (lucy): If we ever revisit the tabledesc.Immutable methods, add
+				// a way to break out of the index loop.
+				return nil
+			}
+			if len(referencedIdx.ReferencedBy) > 0 {
+				unupgradedFKsPresent = true
+			} else {
+				return nil
+			}
+			// Determine whether the index on the other table is a unique index that
+			// could support this FK constraint.
+			if !referencedIdx.IsValidReferencedIndex(fk.ReferencedColumnIDs) {
+				return nil
+			}
+			// Now check the backreferences. Backreferences in ReferencedBy only had
+			// Index and Table populated.
+			for i := range referencedIdx.ReferencedBy {
+				backref := &referencedIdx.ReferencedBy[i]
+				if backref.Table != desc.ID {
+					continue
+				}
+				// Look up the index that the un-upgraded reference refers to and
+				// see if that index could support the foreign key reference. (Note
+				// that it shouldn't be possible for this index to not exist. See
+				// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
+				// called from the drop index implementation.)
+				originalOriginIndex, err := desc.FindIndexByID(backref.Index)
+				if err != nil {
+					return errors.AssertionFailedf(
+						"missing index %d on %q from pre-19.2 foreign key "+
+							"backreference %q on %q",
+						backref.Index, desc.Name, fk.Name, referencedTable.GetName(),
+					)
+				}
+				if originalOriginIndex.IsValidOriginIndex(fk.OriginColumnIDs) {
+					found = true
+					break
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if found {
+			continue
+		}
+		if unupgradedFKsPresent {
+			return errors.AssertionFailedf("missing fk back reference %q to %q "+
+				"from %q (un-upgraded foreign key references present)",
 				fk.Name, desc.Name, referencedTable.GetName())
 		}
+		return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
+			fk.Name, desc.Name, referencedTable.GetName())
 	}
 	for i := range desc.InboundFKs {
 		backref := &desc.InboundFKs[i]
@@ -1515,10 +1577,67 @@ func (desc *Immutable) validateCrossReferences(ctx context.Context, dg catalog.D
 			}
 			return nil
 		})
-		if !found {
-			return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
+		if found {
+			continue
+		}
+		// In 20.2 we introduced a bug where we fail to upgrade the FK references
+		// on the referenced descriptors from their pre-19.2 format when reading
+		// them during validation (#57032). So we account for the possibility of
+		// un-upgraded foreign key references on the other table. This logic
+		// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
+		unupgradedFKsPresent := false
+		if err := originTable.ForeachIndex(catalog.IndexOpts{}, func(
+			originIdx *descpb.IndexDescriptor, isPrimary bool,
+		) error {
+			if found {
+				// TODO (lucy): If we ever revisit the tabledesc.Immutable methods, add
+				// a way to break out of the index loop.
+				return nil
+			}
+			fk := originIdx.ForeignKey
+			if fk.IsSet() {
+				unupgradedFKsPresent = true
+			} else {
+				return nil
+			}
+			// Determine whether the index on the other table is a index that could
+			// support this FK constraint on the referencing side. Such an index would
+			// have been required in earlier versions.
+			if !originIdx.IsValidOriginIndex(backref.OriginColumnIDs) {
+				return nil
+			}
+			if fk.Table != desc.ID {
+				return nil
+			}
+			// Look up the index that the un-upgraded reference refers to and
+			// see if that index could support the foreign key reference. (Note
+			// that it shouldn't be possible for this index to not exist. See
+			// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
+			// called from the drop index implementation.)
+			originalReferencedIndex, err := desc.FindIndexByID(fk.Index)
+			if err != nil {
+				return errors.AssertionFailedf(
+					"missing index %d on %q from pre-19.2 foreign key forward reference %q on %q",
+					fk.Index, desc.Name, backref.Name, originTable.GetName(),
+				)
+			}
+			if originalReferencedIndex.IsValidReferencedIndex(backref.OriginColumnIDs) {
+				found = true
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if found {
+			continue
+		}
+		if unupgradedFKsPresent {
+			return errors.AssertionFailedf("missing fk forward reference %q to %q from %q "+
+				"(un-upgraded foreign key references present)",
 				backref.Name, desc.Name, originTable.GetName())
 		}
+		return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
+			backref.Name, desc.Name, originTable.GetName())
 	}
 
 	for _, index := range desc.AllNonDropIndexes() {
