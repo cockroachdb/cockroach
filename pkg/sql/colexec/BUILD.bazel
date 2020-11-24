@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load(":COLEXEC.bzl", "generate")
+load(":COLEXEC.bzl", "generate", "generate_like_ops")
 
 go_library(
     name = "colexec",
@@ -200,57 +200,313 @@ go_test(
 )
 
 # Define a file group for all the .eg.go targets.
-targets = [
-    "and_or_projection.eg.go",
-    "cast.eg.go",
-    "const.eg.go",
-    "default_cmp_expr.eg.go",
-    "default_cmp_proj_ops.eg.go",
-    "default_cmp_sel_ops.eg.go",
-    "distinct.eg.go",
-    "hashjoiner.eg.go",
-    "hashtable_distinct.eg.go",
-    "hashtable_full_default.eg.go",
-    "hashtable_full_deleting.eg.go",
-    "hash_aggregator.eg.go",
-    "hash_utils.eg.go",
-    "is_null_ops.eg.go",
-    "like_ops.eg.go",
-    "mergejoinbase.eg.go",
-    "mergejoiner_exceptall.eg.go",
-    "mergejoiner_fullouter.eg.go",
-    "mergejoiner_inner.eg.go",
-    "mergejoiner_intersectall.eg.go",
-    "mergejoiner_leftanti.eg.go",
-    "mergejoiner_leftouter.eg.go",
-    "mergejoiner_leftsemi.eg.go",
-    "mergejoiner_rightanti.eg.go",
-    "mergejoiner_rightouter.eg.go",
-    "mergejoiner_rightsemi.eg.go",
-    "ordered_synchronizer.eg.go",
-    "proj_const_left_ops.eg.go",
-    "proj_const_right_ops.eg.go",
-    "proj_non_const_ops.eg.go",
-    "quicksort.eg.go",
-    "rank.eg.go",
-    "relative_rank.eg.go",
-    "row_number.eg.go",
-    "rowstovec.eg.go",
-    "selection_ops.eg.go",
-    "select_in.eg.go",
-    "sort.eg.go",
-    "substring.eg.go",
-    "values_differ.eg.go",
-    "vec_comparators.eg.go",
-    "window_peer_grouper.eg.go",
-]
-
-# Define a generator for all execgen code. Look towards COLEXEC.bzl for the
-# implementation.
-generate(
+filegroup(
     name = "gen-exec",
-    execgen = "//pkg/sql/colexec/execgen/cmd/execgen",
-    goimports = "//vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
-    targets = targets,
-    templates = glob(["*_tmpl.go"]),
+    srcs = [
+        ":gen-and-or-projection",
+        ":gen-cast",
+        ":gen-const",
+        ":gen-default-cmp-expr",
+        ":gen-default-cmp-proj-ops",
+        ":gen-default-cmp-sel-ops",
+        ":gen-distinct",
+        ":gen-hash-aggregator",
+        ":gen-hash-utils",
+        ":gen-hashjoiner",
+        ":gen-hashtable-distinct",
+        ":gen-hashtable-full-default",
+        ":gen-hashtable-full-deleting",
+        ":gen-is-null-ops",
+        ":gen-like-ops",
+        ":gen-mergejoinbase",
+        ":gen-mergejoiner-exceptall",
+        ":gen-mergejoiner-fullouter",
+        ":gen-mergejoiner-inner",
+        ":gen-mergejoiner-intersectall",
+        ":gen-mergejoiner-leftanti",
+        ":gen-mergejoiner-leftouter",
+        ":gen-mergejoiner-leftsemi",
+        ":gen-mergejoiner-rightanti",
+        ":gen-mergejoiner-rightouter",
+        ":gen-mergejoiner-rightsemi",
+        ":gen-ordered-synchronizer",
+        ":gen-proj-const-left-ops",
+        ":gen-proj-const-right-ops",
+        ":gen-proj-non-const-ops",
+        ":gen-quicksort",
+        ":gen-rank",
+        ":gen-relative-rank",
+        ":gen-row-number",
+        ":gen-rowstovec",
+        ":gen-select-in",
+        ":gen-selection-ops",
+        ":gen-sort",
+        ":gen-substring",
+        ":gen-values-differ",
+        ":gen-vec-comparators",
+        ":gen-window-peer-grouper",
+    ],
+)
+
+alias(
+    name = "execgen",
+    actual = "//pkg/sql/colexec/execgen/cmd/execgen",
+)
+
+alias(
+    name = "goimports",
+    actual = "//vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
+)
+
+generate(
+    name = "gen-and-or-projection",
+    output = "and_or_projection.eg.go",
+    template = "and_or_projection_tmpl.go",
+)
+
+generate(
+    name = "gen-cast",
+    output = "cast.eg.go",
+    template = "cast_tmpl.go",
+)
+
+generate(
+    name = "gen-const",
+    output = "const.eg.go",
+    template = "const_tmpl.go",
+)
+
+generate(
+    name = "gen-default-cmp-expr",
+    output = "default_cmp_expr.eg.go",
+    template = "default_cmp_expr_tmpl.go",
+)
+
+generate(
+    name = "gen-default-cmp-proj-ops",
+    output = "default_cmp_proj_ops.eg.go",
+    template = "default_cmp_proj_ops_tmpl.go",
+)
+
+generate(
+    name = "gen-default-cmp-sel-ops",
+    output = "default_cmp_sel_ops.eg.go",
+    template = "default_cmp_sel_ops_tmpl.go",
+)
+
+generate(
+    name = "gen-distinct",
+    output = "distinct.eg.go",
+    template = "distinct_tmpl.go",
+)
+
+generate(
+    name = "gen-hash-aggregator",
+    output = "hash_aggregator.eg.go",
+    template = "hash_aggregator_tmpl.go",
+)
+
+generate(
+    name = "gen-hash-utils",
+    output = "hash_utils.eg.go",
+    template = "hash_utils_tmpl.go",
+)
+
+generate(
+    name = "gen-hashjoiner",
+    output = "hashjoiner.eg.go",
+    template = "hashjoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-hashtable-distinct",
+    output = "hashtable_distinct.eg.go",
+    template = "hashtable_tmpl.go",
+)
+
+generate(
+    name = "gen-hashtable-full-default",
+    output = "hashtable_full_default.eg.go",
+    template = "hashtable_tmpl.go",
+)
+
+generate(
+    name = "gen-hashtable-full-deleting",
+    output = "hashtable_full_deleting.eg.go",
+    template = "hashtable_tmpl.go",
+)
+
+generate(
+    name = "gen-is-null-ops",
+    output = "is_null_ops.eg.go",
+    template = "is_null_ops_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoinbase",
+    output = "mergejoinbase.eg.go",
+    template = "mergejoinbase_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-exceptall",
+    output = "mergejoiner_exceptall.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-fullouter",
+    output = "mergejoiner_fullouter.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-inner",
+    output = "mergejoiner_inner.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-intersectall",
+    output = "mergejoiner_intersectall.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-leftanti",
+    output = "mergejoiner_leftanti.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-leftouter",
+    output = "mergejoiner_leftouter.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-leftsemi",
+    output = "mergejoiner_leftsemi.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-rightanti",
+    output = "mergejoiner_rightanti.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-rightouter",
+    output = "mergejoiner_rightouter.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-mergejoiner-rightsemi",
+    output = "mergejoiner_rightsemi.eg.go",
+    template = "mergejoiner_tmpl.go",
+)
+
+generate(
+    name = "gen-ordered-synchronizer",
+    output = "ordered_synchronizer.eg.go",
+    template = "ordered_synchronizer_tmpl.go",
+)
+
+generate(
+    name = "gen-proj-const-left-ops",
+    output = "proj_const_left_ops.eg.go",
+    template = "proj_const_ops_tmpl.go",
+)
+
+generate(
+    name = "gen-proj-const-right-ops",
+    output = "proj_const_right_ops.eg.go",
+    template = "proj_const_ops_tmpl.go",
+)
+
+generate(
+    name = "gen-proj-non-const-ops",
+    output = "proj_non_const_ops.eg.go",
+    template = "proj_non_const_ops_tmpl.go",
+)
+
+generate(
+    name = "gen-quicksort",
+    output = "quicksort.eg.go",
+    template = "quicksort_tmpl.go",
+)
+
+generate(
+    name = "gen-rank",
+    output = "rank.eg.go",
+    template = "rank_tmpl.go",
+)
+
+generate(
+    name = "gen-relative-rank",
+    output = "relative_rank.eg.go",
+    template = "relative_rank_tmpl.go",
+)
+
+generate(
+    name = "gen-row-number",
+    output = "row_number.eg.go",
+    template = "row_number_tmpl.go",
+)
+
+generate(
+    name = "gen-rowstovec",
+    output = "rowstovec.eg.go",
+    template = "rowstovec_tmpl.go",
+)
+
+generate(
+    name = "gen-select-in",
+    output = "select_in.eg.go",
+    template = "select_in_tmpl.go",
+)
+
+generate(
+    name = "gen-selection-ops",
+    output = "selection_ops.eg.go",
+    template = "selection_ops_tmpl.go",
+)
+
+generate(
+    name = "gen-sort",
+    output = "sort.eg.go",
+    template = "sort_tmpl.go",
+)
+
+generate(
+    name = "gen-substring",
+    output = "substring.eg.go",
+    template = "substring_tmpl.go",
+)
+
+generate(
+    name = "gen-values-differ",
+    output = "values_differ.eg.go",
+    template = "values_differ_tmpl.go",
+)
+
+generate(
+    name = "gen-vec-comparators",
+    output = "vec_comparators.eg.go",
+    template = "vec_comparators_tmpl.go",
+)
+
+generate(
+    name = "gen-window-peer-grouper",
+    output = "window_peer_grouper.eg.go",
+    template = "window_peer_grouper_tmpl.go",
+)
+
+generate_like_ops(
+    name = "gen-like-ops",
+    misc = ["proj_const_ops_tmpl.go"],
+    output = "like_ops.eg.go",
+    template = "selection_ops_tmpl.go",
 )
