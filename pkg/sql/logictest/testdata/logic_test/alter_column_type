@@ -563,3 +563,10 @@ CREATE MATERIALIZED VIEW v AS SELECT x FROM t29
 
 statement error cannot alter type of column "x" because view "v" depends on it
 ALTER TABLE t29 ALTER COLUMN x TYPE INT2
+
+statement ok
+CREATE TABLE regression_54844 (i int8);
+INSERT INTO regression_54844 VALUES (-9223372036854775807)
+
+statement error integer out of range for type int2
+ALTER TABLE regression_54844 ALTER COLUMN i TYPE int2

@@ -427,7 +427,7 @@ func enforceLocalColumnConstraints(row tree.Datums, cols []descpb.ColumnDescript
 		if !col.Nullable && row[i] == tree.DNull {
 			return sqlerrors.NewNonNullViolationError(col.Name)
 		}
-		outVal, err := colinfo.AdjustValueToColumnType(col.Type, row[i], &col.Name)
+		outVal, err := tree.AdjustValueToType(col.Type, row[i])
 		if err != nil {
 			return err
 		}
