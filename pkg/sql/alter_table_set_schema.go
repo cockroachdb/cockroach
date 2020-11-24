@@ -33,6 +33,13 @@ type alterTableSetSchemaNode struct {
 func (p *planner) AlterTableSetSchema(
 	ctx context.Context, n *tree.AlterTableSetSchema,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER TABLE/VIEW/SEQUENCE SET SCHEMA",
+	); err != nil {
+		return nil, err
+	}
+
 	tn := n.Name.ToTableName()
 	requiredTableKind := tree.ResolveAnyTableKind
 	if n.IsView {

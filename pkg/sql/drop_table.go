@@ -47,6 +47,13 @@ type toDelete struct {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"DROP TABLE",
+	); err != nil {
+		return nil, err
+	}
+
 	td := make(map[descpb.ID]toDelete, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]

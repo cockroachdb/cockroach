@@ -34,6 +34,13 @@ type createSequenceNode struct {
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"CREATE SEQUENCE",
+	); err != nil {
+		return nil, err
+	}
+
 	un := n.Name.ToUnresolvedObjectName()
 	dbDesc, _, prefix, err := p.ResolveTargetObject(ctx, un)
 	if err != nil {
