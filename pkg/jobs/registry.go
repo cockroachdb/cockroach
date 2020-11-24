@@ -481,11 +481,19 @@ func (r *Registry) Start(
 	})
 
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		first := true
 		for {
+			interval := gcInterval
+			if first {
+				const jitter = 1 / 6
+				jitterFraction := 1 + (2*rand.Float64()-1)*jitter // 1 + [-1/6, +1/6)
+				interval = time.Duration(float64(gcInterval) * jitterFraction)
+			}
+			first = false
 			select {
 			case <-stopper.ShouldStop():
 				return
-			case <-time.After(gcInterval):
+			case <-time.After(interval):
 				old := timeutil.Now().Add(-1 * gcSetting.Get(&r.settings.SV))
 				if err := r.cleanupOldJobs(ctx, old); err != nil {
 					log.Warningf(ctx, "error cleaning up old job records: %v", err)
