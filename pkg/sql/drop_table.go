@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -47,6 +48,13 @@ type toDelete struct {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"DROP TABLE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	td := make(map[descpb.ID]toDelete, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]

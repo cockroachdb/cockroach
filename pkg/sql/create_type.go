@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -43,6 +44,13 @@ type createTypeNode struct {
 var _ planNode = &createTypeNode{n: nil}
 
 func (p *planner) CreateType(ctx context.Context, n *tree.CreateType) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"CREATE TYPE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	return &createTypeNode{n: n}, nil
 }
 

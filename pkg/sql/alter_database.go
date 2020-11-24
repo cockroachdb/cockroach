@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -30,6 +31,13 @@ type alterDatabaseOwnerNode struct {
 func (p *planner) AlterDatabaseOwner(
 	ctx context.Context, n *tree.AlterDatabaseOwner,
 ) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, n.Name.String(), true /* required */)
 	if err != nil {
 		return nil, err
@@ -102,6 +110,12 @@ func (n *alterDatabaseOwnerNode) Close(context.Context)        {}
 func (p *planner) AlterDatabaseAddRegion(
 	ctx context.Context, n *tree.AlterDatabaseAddRegion,
 ) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
 	return nil, unimplemented.New("alter database add region", "implementation pending")
 }
 
@@ -109,6 +123,12 @@ func (p *planner) AlterDatabaseAddRegion(
 func (p *planner) AlterDatabaseDropRegion(
 	ctx context.Context, n *tree.AlterDatabaseDropRegion,
 ) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
 	return nil, unimplemented.New("alter database drop region", "implementation pending")
 }
 
@@ -116,5 +136,11 @@ func (p *planner) AlterDatabaseDropRegion(
 func (p *planner) AlterDatabaseSurvivalGoal(
 	ctx context.Context, n *tree.AlterDatabaseSurvivalGoal,
 ) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
 	return nil, unimplemented.New("alter database survive", "implementation pending")
 }

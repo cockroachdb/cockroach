@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -36,6 +37,13 @@ type dropTypeNode struct {
 var _ planNode = &dropTypeNode{n: nil}
 
 func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"DROP TYPE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	node := &dropTypeNode{
 		n:  n,
 		td: make(map[descpb.ID]*typedesc.Mutable),

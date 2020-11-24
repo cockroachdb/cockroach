@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -42,6 +43,13 @@ type dropIndexNode struct {
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"DROP INDEX is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	// Keep a track of the indexes that exist to check. When the IF EXISTS
 	// options are provided, we will simply not include any indexes that
 	// don't exist and continue execution.

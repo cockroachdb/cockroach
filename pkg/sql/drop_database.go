@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -44,6 +45,13 @@ type dropDatabaseNode struct {
 //   Notes: postgres allows only the database owner to DROP a database.
 //          mysql requires the DROP privileges on the database.
 func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"DROP DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}

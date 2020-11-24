@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -34,6 +35,13 @@ type createSequenceNode struct {
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"CREATE SEQUENCE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	un := n.Name.ToUnresolvedObjectName()
 	dbDesc, _, prefix, err := p.ResolveTargetObject(ctx, un)
 	if err != nil {

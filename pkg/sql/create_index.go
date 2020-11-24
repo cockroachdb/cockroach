@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -43,6 +44,13 @@ type createIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"CREATE INDEX is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	tableDesc, err := p.ResolveMutableTableDescriptor(
 		ctx, &n.Table, true /*required*/, tree.ResolveRequireTableOrViewDesc,
 	)

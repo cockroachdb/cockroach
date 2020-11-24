@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -26,6 +27,13 @@ type dropOwnedByNode struct {
 }
 
 func (p *planner) DropOwnedBy(ctx context.Context) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"DROP OWNED BY is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	telemetry.Inc(sqltelemetry.CreateDropOwnedByCounter())
 	// TODO(angelaw): Implementation.
 	return nil, unimplemented.NewWithIssue(55381, "drop owned by is not yet implemented")

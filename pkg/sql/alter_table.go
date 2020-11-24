@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -53,6 +54,13 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER TABLE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	tableDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Table, !n.IfExists, tree.ResolveRequireTableDesc,
 	)

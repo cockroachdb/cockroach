@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -39,6 +40,13 @@ type alterSchemaNode struct {
 var _ planNode = &alterSchemaNode{n: nil}
 
 func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER SCHEMA is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	dbName := p.CurrentDatabase()
 	if n.Schema.ExplicitCatalog {
 		dbName = n.Schema.Catalog()

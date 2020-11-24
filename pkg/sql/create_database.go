@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -30,6 +31,13 @@ type createDatabaseNode struct {
 // CreateDatabase creates a database.
 // Privileges: superuser or CREATEDB
 func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"CREATE DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}

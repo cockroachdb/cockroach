@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -31,6 +32,13 @@ type alterIndexNode struct {
 // AlterIndex applies a schema change on an index.
 // Privileges: CREATE on table.
 func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER INDEX is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, &n.Index, privilege.CREATE)
 	if err != nil {
 		return nil, err

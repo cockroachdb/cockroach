@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
@@ -21,5 +22,11 @@ import (
 func (p *planner) AlterTableRegionalAffinity(
 	ctx context.Context, n *tree.AlterTableRegionalAffinity,
 ) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER TABLE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
 	return nil, unimplemented.New("alter table locality", "implementation pending")
 }

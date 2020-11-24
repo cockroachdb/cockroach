@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -29,6 +30,13 @@ type commentOnColumnNode struct {
 // CommentOnColumn add comment on a column.
 // Privileges: CREATE on table.
 func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"COMMENT ON COLUMN is part of the schema change category, which ",
+	); err != nil {
+		return nil, err
+	}
+
 	var tableName tree.TableName
 	if n.ColumnItem.TableName != nil {
 		tableName = n.ColumnItem.TableName.ToTableName()

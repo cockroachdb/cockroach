@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -39,6 +40,13 @@ type dropSchemaNode struct {
 var _ planNode = &dropSchemaNode{n: nil}
 
 func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"DROP DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	isAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err

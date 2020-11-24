@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -28,6 +29,13 @@ type alterSequenceNode struct {
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.
 func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER SEQUENCE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	seqDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Name, !n.IfExists, tree.ResolveRequireSequenceDesc,
 	)

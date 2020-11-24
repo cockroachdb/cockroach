@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1607,6 +1608,13 @@ func (ef *execFactory) ConstructDeleteRange(
 func (ef *execFactory) ConstructCreateTable(
 	schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&ef.planner.ExecCfg().Settings.SV,
+		"CREATE TABLE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	return &createTableNode{
 		n:      ct,
 		dbDesc: schema.(*optSchema).database,
@@ -1617,6 +1625,13 @@ func (ef *execFactory) ConstructCreateTable(
 func (ef *execFactory) ConstructCreateTableAs(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&ef.planner.ExecCfg().Settings.SV,
+		"CREATE TABLE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	return &createTableNode{
 		n:          ct,
 		dbDesc:     schema.(*optSchema).database,
@@ -1636,6 +1651,13 @@ func (ef *execFactory) ConstructCreateView(
 	columns colinfo.ResultColumns,
 	deps opt.ViewDeps,
 ) (exec.Node, error) {
+
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&ef.planner.ExecCfg().Settings.SV,
+		"CREATE VIEW is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
 
 	planDeps := make(planDependencies, len(deps))
 	for _, d := range deps {

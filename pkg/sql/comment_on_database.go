@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -32,6 +33,12 @@ type commentOnDatabaseNode struct {
 func (p *planner) CommentOnDatabase(
 	ctx context.Context, n *tree.CommentOnDatabase,
 ) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"COMMENT ON DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
 	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), true)
 	if err != nil {
 		return nil, err

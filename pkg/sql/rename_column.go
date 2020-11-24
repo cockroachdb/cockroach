@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -37,6 +38,13 @@ type renameColumnNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"RENAME COLUMN is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	// Check if table exists.
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, !n.IfExists, tree.ResolveRequireTableDesc)
 	if err != nil {

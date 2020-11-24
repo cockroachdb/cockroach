@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -32,6 +33,13 @@ type dropSequenceNode struct {
 }
 
 func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"DROP SEQUENCE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]

@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -31,6 +32,13 @@ type commentOnIndexNode struct {
 // CommentOnIndex adds a comment on an index.
 // Privileges: CREATE on table.
 func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"COMMENT ON INDEX is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, &n.Index, privilege.CREATE)
 	if err != nil {
 		return nil, err

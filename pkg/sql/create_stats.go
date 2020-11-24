@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -49,6 +50,12 @@ var createStatsPostEvents = settings.RegisterPublicBoolSetting(
 )
 
 func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ANALYZE/CREATE STATS is part of the schema change category, which"); err != nil {
+		return nil, err
+	}
+
 	return &createStatsNode{
 		CreateStats: *n,
 		p:           p,
@@ -57,6 +64,12 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 
 // Analyze is syntactic sugar for CreateStatistics.
 func (p *planner) Analyze(ctx context.Context, n *tree.Analyze) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ANALYZE/CREATE STATS is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
 	return &createStatsNode{
 		CreateStats: tree.CreateStats{Table: n.Table},
 		p:           p,

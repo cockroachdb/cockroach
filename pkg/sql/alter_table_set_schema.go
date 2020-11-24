@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -33,6 +34,13 @@ type alterTableSetSchemaNode struct {
 func (p *planner) AlterTableSetSchema(
 	ctx context.Context, n *tree.AlterTableSetSchema,
 ) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER TABLE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	tn := n.Name.ToTableName()
 	requiredTableKind := tree.ResolveAnyTableKind
 	if n.IsView {

@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -36,6 +37,13 @@ type alterTypeNode struct {
 var _ planNode = &alterTypeNode{n: nil}
 
 func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER TYPE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	// Resolve the type.
 	desc, err := p.ResolveMutableTypeDescriptor(ctx, n.Type, true /* required */)
 	if err != nil {

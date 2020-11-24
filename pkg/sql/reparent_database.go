@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -41,6 +42,13 @@ type reparentDatabaseNode struct {
 func (p *planner) ReparentDatabase(
 	ctx context.Context, n *tree.ReparentDatabase,
 ) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"REPARENT DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	// We'll only allow the admin to perform this reparenting action.
 	if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... CONVERT TO SCHEMA"); err != nil {
 		return nil, err

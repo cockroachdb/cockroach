@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -43,6 +44,13 @@ type renameDatabaseNode struct {
 // Privileges: superuser + DROP or ownership + CREATEDB privileges
 //   Notes: mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
 	}

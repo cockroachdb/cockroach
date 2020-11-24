@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -31,6 +32,13 @@ type reassignOwnedByNode struct {
 }
 
 func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"REASSIGN OWNED BY is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	// Check all roles in old roles exist. Checks in authorization.go will confirm that current user
 	// is a member of old roles and new roles and has CREATE privilege.
 	for _, oldRole := range n.OldRoles {

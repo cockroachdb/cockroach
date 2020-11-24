@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -41,6 +42,13 @@ type renameTableNode struct {
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
+	if err := featureflag.CheckEnabled(featureSchemaChangeEnabled,
+		&p.ExecCfg().Settings.SV,
+		"ALTER TABLE is part of the schema change category, which",
+	); err != nil {
+		return nil, err
+	}
+
 	oldTn := n.Name.ToTableName()
 	newTn := n.NewName.ToTableName()
 	toRequire := tree.ResolveRequireTableOrViewDesc
