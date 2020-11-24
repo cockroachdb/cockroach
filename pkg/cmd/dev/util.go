@@ -16,9 +16,8 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/cockroachdb/redact"
-
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 )
 
