@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,9 @@ var generateCmd = &cobra.Command{
 	dev generate protobuf
 	dev generate {exec,opt}gen`,
 	Args: cobra.MinimumNArgs(0),
+	// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
+	// invocations in something that prints out the appropriate error log
+	// (especially considering we've SilenceErrors-ed things away).
 	RunE: runGenerate,
 }
 
@@ -58,7 +62,8 @@ func runGenerate(cmd *cobra.Command, targets []string) error {
 		case "bazel":
 			gen = generateBazel
 		default:
-			return errors.Newf("unrecognized target: %s", target)
+			log.Errorf(ctx, "unrecognized target: %s", target)
+			return errors.Newf("unrecognized target")
 		}
 
 		if err := gen(ctx, cmd); err != nil {
