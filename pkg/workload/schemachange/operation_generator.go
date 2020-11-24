@@ -216,7 +216,7 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 		}
 
 		// Screen for schema change after write in the same transaction.
-		if op != insertRow {
+		if op != insertRow && op != validate {
 			if _, previous := og.opsInTxn[insertRow]; previous {
 				og.expectedExecErrors.add(pgcode.FeatureNotSupported)
 			}
