@@ -13,14 +13,19 @@ package schemachange
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
+	"os"
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -67,6 +72,9 @@ type schemaChange struct {
 	maxSourceTables    int
 	sequenceOwnedByPct int
 	logFilePath        string
+	logFile            *os.File
+	dumpLogsOnce       *sync.Once
+	workers            []*schemaChangeWorker
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -117,6 +125,15 @@ func (s *schemaChange) Tables() []workload.Table {
 	return nil
 }
 
+// Hooks implements the workload.Hookser interface.
+func (s *schemaChange) Hooks() workload.Hooks {
+	return workload.Hooks{
+		PostRun: func(_ time.Duration) error {
+			return s.closeJSONLogFile()
+		},
+	}
+}
+
 // Tables implements the workload.Opser interface.
 func (s *schemaChange) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
@@ -141,6 +158,18 @@ func (s *schemaChange) Ops(
 	ops := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), opWeights...)
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 
+	stdoutLog := makeAtomicLog(os.Stdout)
+	var artifactsLog *atomicLog
+	if s.logFilePath != "" {
+		err := s.initJSONLogFile(s.logFilePath)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		artifactsLog = makeAtomicLog(s.logFile)
+	}
+
+	s.dumpLogsOnce = &sync.Once{}
+
 	for i := 0; i < s.concurrency; i++ {
 
 		opGeneratorParams := operationGeneratorParams{
@@ -154,13 +183,27 @@ func (s *schemaChange) Ops(
 		}
 
 		w := &schemaChangeWorker{
+			id:              i,
+			workload:        s,
 			verbose:         s.verbose,
 			dryRun:          s.dryRun,
 			maxOpsPerWorker: s.maxOpsPerWorker,
 			pool:            pool,
 			hists:           reg.GetHandle(),
 			opGen:           makeOperationGenerator(&opGeneratorParams),
+			currentLogEntry: &struct {
+				mu struct {
+					syncutil.Mutex
+					entry *LogEntry
+				}
+			}{},
+			stdoutLog:           stdoutLog,
+			artifactsLog:        artifactsLog,
+			isHoldingEntryLocks: false,
 		}
+
+		s.workers = append(s.workers, w)
+
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
 	return ql, nil
@@ -192,18 +235,45 @@ SELECT max(regexp_extract(name, '[0-9]+$')::int)
 }
 
 type schemaChangeWorker struct {
-	verbose         int
-	dryRun          bool
-	maxOpsPerWorker int
-	pool            *workload.MultiConnPool
-	hists           *histogram.Histograms
-	opGen           *operationGenerator
+	id                  int
+	workload            *schemaChange
+	verbose             int
+	dryRun              bool
+	maxOpsPerWorker     int
+	pool                *workload.MultiConnPool
+	hists               *histogram.Histograms
+	opGen               *operationGenerator
+	isHoldingEntryLocks bool
+	currentLogEntry     *struct {
+		mu struct {
+			syncutil.Mutex
+			entry *LogEntry
+		}
+	}
+	stdoutLog    *atomicLog
+	artifactsLog *atomicLog
 }
 
 var (
 	errRunInTxnFatalSentinel = errors.New("fatal error when running txn")
 	errRunInTxnRbkSentinel   = errors.New("txn needs to rollback")
 )
+
+// LogEntry and its fields must be public so that the json package can encode this struct.
+type LogEntry struct {
+	WorkerID int
+	Ops      []string
+	// Optional message for errors or if a hook was called.
+	Message string
+	// TxStatus corresponds to a pgx.TxStatus
+	//  TxStatusInProgress      = 0
+	//	TxStatusCommitFailure   = -1
+	//	TxStatusRollbackFailure = -2
+	//	TxStatusInFailure       = -3
+	//	TxStatusCommitSuccess   = 1
+	//	TxStatusRollbackSuccess = 2
+	TxStatus int8
+}
 
 type histBin int
 
@@ -319,6 +389,9 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 		return errors.Wrap(err, "cannot get a connection and begin a txn")
 	}
 
+	// Release log entry locks if holding all.
+	w.releaseLocksIfHeld()
+
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	start := timeutil.Now()
 	w.opGen.resetTxnState()
@@ -411,4 +484,152 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	w.recordInHist(timeutil.Since(start), txnOk)
 	logs = logs + "COMMIT; \n"
 	return nil
+}
+
+// preErrorHook is called by a worker whose run() function is going to return an error
+// to terminate the workload. This function is used to log transactions that were
+// in progress by other workers at the time of the error. It acquires the transaction
+// log entry lock for each worker and flushes its logs. It does not release the
+// locks so that other workers make no progress between the time that this function ends
+// called and the workload terminates.
+//
+// In the case that the tolerate-errors flag is true, the worker calling this function will
+// get restarted. In run(), the worker will release locks if isHoldingEntryLocks is true.
+// If restarted, the log file will be closed and unset, so no new entries will be added. However,
+// transaction logs will continue to be printed to stdout.
+func (w *schemaChangeWorker) preErrorHook() {
+	w.workload.dumpLogsOnce.Do(func() {
+		for _, worker := range w.workload.workers {
+			worker.flushLogAndLock(nil, "Flushed by pre-error hook", false)
+			worker.artifactsLog = nil
+		}
+		w.workload.closeJSONLogFile()
+		w.isHoldingEntryLocks = true
+	})
+}
+
+func (w *schemaChangeWorker) releaseLocksIfHeld() {
+	if w.isHoldingEntryLocks && w.verbose >= 1 {
+		for _, worker := range w.workload.workers {
+			worker.currentLogEntry.mu.Unlock()
+		}
+	}
+	w.isHoldingEntryLocks = false
+}
+
+// startLog initializes the currentLogEntry of the schemaChangeWorker. It is a noop
+// if w.verbose < 1.
+func (w *schemaChangeWorker) startLog() {
+	if w.verbose < 1 {
+		return
+	}
+	w.currentLogEntry.mu.Lock()
+	defer w.currentLogEntry.mu.Unlock()
+	w.currentLogEntry.mu.entry = &LogEntry{}
+}
+
+// writeLog appends an op statement to the currentLogEntry of the schemaChangeWorker.
+// It is a noop if w.verbose < 1.
+func (w *schemaChangeWorker) writeLog(op string) {
+	if w.verbose < 1 {
+		return
+	}
+	w.currentLogEntry.mu.Lock()
+	defer w.currentLogEntry.mu.Unlock()
+	if w.currentLogEntry.mu.entry != nil {
+		w.currentLogEntry.mu.entry.Ops = append(w.currentLogEntry.mu.entry.Ops, op)
+	}
+}
+
+// flushLog outputs the currentLogEntry of the schemaChangeWorker.
+// It is a noop if w.verbose < 0.
+func (w *schemaChangeWorker) flushLog(tx *pgx.Tx, message string) {
+	if w.verbose < 1 {
+		return
+	}
+	w.flushLogAndLock(tx, message, true)
+	w.currentLogEntry.mu.Unlock()
+}
+
+// flushLogAndLock prints the currentLogEntry of the schemaChangeWorker and does not release
+// the lock for w.currentLogEntry upon returning. The lock will not be acquired if w.verbose < 1.
+func (w *schemaChangeWorker) flushLogAndLock(tx *pgx.Tx, message string, stdout bool) {
+	if w.verbose < 1 {
+		return
+	}
+
+	w.currentLogEntry.mu.Lock()
+
+	if w.currentLogEntry.mu.entry == nil || len(w.currentLogEntry.mu.entry.Ops) < 2 {
+		return
+	}
+
+	if message != "" {
+		w.currentLogEntry.mu.entry.Message = message
+	}
+	if tx != nil {
+		w.currentLogEntry.mu.entry.TxStatus = tx.Status()
+	}
+	jsonString, err := json.MarshalIndent(w.currentLogEntry.mu.entry, "", " ")
+	if err != nil {
+		return
+	}
+	if stdout {
+		w.stdoutLog.printLn(string(jsonString))
+	}
+	if w.artifactsLog != nil {
+		w.artifactsLog.printLn(string(jsonString) + ",")
+	}
+	w.currentLogEntry.mu.entry = nil
+}
+
+// atomicLog is used to make synchronized writes to an io.Writer.
+type atomicLog struct {
+	mu struct {
+		syncutil.Mutex
+		log io.Writer
+	}
+}
+
+func makeAtomicLog(w io.Writer) *atomicLog {
+	return &atomicLog{
+		mu: struct {
+			syncutil.Mutex
+			log io.Writer
+		}{log: w},
+	}
+}
+
+func (l *atomicLog) printLn(message string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	_, _ = l.mu.log.Write(append([]byte(message), '\n'))
+}
+
+// initJsonLogFile opens the file denoted by filePath and sets s.logFile on success.
+func (s *schemaChange) initJSONLogFile(filePath string) error {
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0660)
+	if err != nil {
+		return err
+	}
+	_, _ = f.WriteString("[\n")
+	s.logFile = f
+	return nil
+}
+
+// closeJsonLogFile closes s.logFile and is a noop if s.logFile is nil.
+func (s *schemaChange) closeJSONLogFile() error {
+	if s.logFile == nil {
+		return nil
+	}
+
+	_, _ = s.logFile.WriteString("{}\n")
+	_, _ = s.logFile.WriteString("]\n")
+	if err := s.logFile.Sync(); err != nil {
+		return err
+	}
+	err := s.logFile.Close()
+	s.logFile = nil
+	return err
 }
