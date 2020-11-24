@@ -490,7 +490,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// not used by the filter.
 		sel := e.(*memo.SelectExpr)
 		relProps.Rule.PruneCols = DerivePruneCols(sel.Input).Copy()
-		usedCols := sel.Filters.OuterCols(e.Memo())
+		usedCols := sel.Filters.OuterCols()
 		relProps.Rule.PruneCols.DifferenceWith(usedCols)
 
 	case opt.ProjectOp:
@@ -517,7 +517,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 			relProps.Rule.PruneCols = leftPruneCols.Union(rightPruneCols)
 		}
 		relProps.Rule.PruneCols.DifferenceWith(right.Relational().OuterCols)
-		onCols := e.Child(2).(*memo.FiltersExpr).OuterCols(e.Memo())
+		onCols := e.Child(2).(*memo.FiltersExpr).OuterCols()
 		relProps.Rule.PruneCols.DifferenceWith(onCols)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.EnsureDistinctOnOp:

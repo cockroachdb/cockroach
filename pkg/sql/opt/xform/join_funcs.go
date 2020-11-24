@@ -310,7 +310,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// right side in their output columns, so even if the ON filters no
 			// longer reference an un-covered column, they must be fetched (case
 			// 2, see function comment).
-			filterColsFromRight := scanPrivate.Cols.Intersection(onFilters.OuterCols(c.e.mem))
+			filterColsFromRight := scanPrivate.Cols.Intersection(onFilters.OuterCols())
 			if filterColsFromRight.SubsetOf(indexCols) {
 				lookupJoin.Cols = filterColsFromRight.Union(inputProps.OutputCols)
 				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)

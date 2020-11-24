@@ -1730,7 +1730,7 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 				continue
 			}
 			pred := *p.(*memo.FiltersExpr)
-			if pred.OuterCols(c.e.mem).Intersects(cols) {
+			if pred.OuterCols().Intersects(cols) {
 				return true
 			}
 		}

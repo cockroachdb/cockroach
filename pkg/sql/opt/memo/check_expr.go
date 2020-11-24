@@ -172,8 +172,8 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		}
 		var requiredCols opt.ColSet
 		requiredCols.UnionWith(t.Relational().OutputCols)
-		requiredCols.UnionWith(t.ConstFilters.OuterCols(m))
-		requiredCols.UnionWith(t.On.OuterCols(m))
+		requiredCols.UnionWith(t.ConstFilters.OuterCols())
+		requiredCols.UnionWith(t.On.OuterCols())
 		requiredCols.UnionWith(t.KeyCols.ToSet())
 		idx := m.Metadata().Table(t.Table).Index(t.Index)
 		for i := range t.KeyCols {
