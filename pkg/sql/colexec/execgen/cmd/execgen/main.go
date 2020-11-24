@@ -26,10 +26,6 @@ import (
 	"github.com/cockroachdb/gostdlib/x/tools/imports"
 )
 
-var (
-	errInvalidArgCount = errors.New("invalid number of arguments")
-)
-
 func main() {
 	gen := execgenTool{stdErr: os.Stderr}
 	if !gen.run(os.Args[1:]...) {
@@ -71,12 +67,14 @@ func registerGenerator(g generator, outputFile, inputFile string) {
 func (g *execgenTool) run(args ...string) bool {
 	// Parse command line.
 	var printDeps bool
+	var template string
 	g.cmdLine = flag.NewFlagSet("execgen", flag.ContinueOnError)
 	g.cmdLine.SetOutput(g.stdErr)
 	g.cmdLine.Usage = g.usage
 	g.cmdLine.BoolVar(&g.fmtSources, "fmt", true, "format and imports-process generated code")
 	g.cmdLine.BoolVar(&g.verbose, "verbose", false, "print out debug information to stderr")
 	g.cmdLine.BoolVar(&printDeps, "M", false, "print the dependency list")
+	g.cmdLine.StringVar(&template, "template", "", "path")
 	err := g.cmdLine.Parse(args)
 	if err != nil {
 		return false
@@ -84,32 +82,30 @@ func (g *execgenTool) run(args ...string) bool {
 
 	// Get remaining args after any flags have been parsed.
 	args = g.cmdLine.Args()
-	if len(args) < 1 {
+	if len(args) != 1 {
 		g.cmdLine.Usage()
-		g.reportError(errInvalidArgCount)
+		g.reportError(errors.New("invalid number of arguments"))
 		return false
 	}
 
-	for _, out := range args {
-		_, file := filepath.Split(out)
-		e := generators[file]
-		if e.fn == nil {
-			g.reportError(errors.Errorf("unrecognized filename: %s", file))
+	outPath := args[0]
+
+	_, file := filepath.Split(outPath)
+	e := generators[file]
+	if e.fn == nil {
+		g.reportError(errors.Errorf("unrecognized filename: %s", file))
+		return false
+	}
+	if template != "" {
+		if e.inputFile == "" {
+			g.reportError(errors.Errorf("file %s expected no input template, found %s", file, template))
 			return false
 		}
-		if printDeps {
-			if e.inputFile == "" {
-				// This output file has no template dependency (its template
-				// is embedded entirely in execgenTool). Skip it.
-				continue
-			}
-			fmt.Printf("%s: %s\n", out, e.inputFile)
-		} else {
-			if err := g.generate(out, e); err != nil {
-				g.reportError(err)
-				return false
-			}
-		}
+		e.inputFile = template
+	}
+	if err := g.generate(outPath, e); err != nil {
+		g.reportError(err)
+		return false
 	}
 	return true
 }
