@@ -907,7 +907,7 @@ func backupPlanHook(
 		var revs []BackupManifest_DescriptorRevision
 		if mvccFilter == MVCCFilter_All {
 			priorIDs = make(map[descpb.ID]descpb.ID)
-			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs, priorIDs, backupStmt.Coverage())
+			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs, priorIDs, backupStmt.Coverage())
 			if err != nil {
 				return err
 			}
@@ -996,7 +996,7 @@ func backupPlanHook(
 			}
 
 			if backupStmt.Coverage() != tree.AllDescriptors {
-				if err := checkForNewTables(ctx, p.ExecCfg().DB, targetDescs, tablesInPrev, dbsInPrev, priorIDs, startTime, endTime); err != nil {
+				if err := checkForNewTables(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, targetDescs, tablesInPrev, dbsInPrev, priorIDs, startTime, endTime); err != nil {
 					return err
 				}
 				// Let's check that we're not widening the scope of this backup to an
@@ -1422,6 +1422,7 @@ func checkForNewCompleteDatabases(
 // changed.
 func checkForNewTables(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	db *kv.DB,
 	targetDescs []catalog.Descriptor,
 	tablesInPrev map[descpb.ID]struct{},
@@ -1452,7 +1453,7 @@ func checkForNewTables(
 			// truncate we've encountered in non-MVCC backup).
 			if priorIDs == nil {
 				priorIDs = make(map[descpb.ID]descpb.ID)
-				_, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
+				_, err := getAllDescChanges(ctx, codec, db, startTime, endTime, priorIDs)
 				if err != nil {
 					return err
 				}
