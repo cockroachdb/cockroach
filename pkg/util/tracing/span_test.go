@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -180,4 +181,20 @@ Span grandchild:
     === operation:grandchild sb:1
 `
 	require.Equal(t, exp, recToStrippedString(childRec))
+}
+
+func TestChildSpan(t *testing.T) {
+	tr := NewTracer()
+	// Set up non-recording span.
+	sp := tr.StartSpan("foo", WithForceRealSpan())
+	ctx := ContextWithSpan(context.Background(), sp)
+	// Since the parent span was not recording, we would expect the
+	// noop span back. However - we don't, we get our inputs instead.
+	// This is a performance optimization; there is a to-do in
+	// childSpan asking for its removal, but for now it's here to stay.
+	{
+		newCtx, newSp := ChildSpan(ctx, "foo")
+		require.Equal(t, ctx, newCtx)
+		require.Equal(t, sp, newSp)
+	}
 }
