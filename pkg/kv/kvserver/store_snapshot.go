@@ -705,8 +705,9 @@ func (s *Store) shouldAcceptSnapshotData(
 	if snapHeader.IsPreemptive() {
 		return errors.AssertionFailedf(`expected a raft or learner snapshot`)
 	}
-	pErr := s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest,
-		func(ctx context.Context, r *Replica) *roachpb.Error {
+	pErr := s.withReplicaForRequest(
+		ctx, &snapHeader.RaftMessageRequest, func(ctx context.Context, r *Replica) *roachpb.Error {
+			ctx = r.AnnotateCtx(ctx)
 			// If the current replica is not initialized then we should accept this
 			// snapshot if it doesn't overlap existing ranges.
 			if !r.IsInitialized() {
@@ -717,7 +718,8 @@ func (s *Store) shouldAcceptSnapshotData(
 			// If the current range is initialized then we need to accept this
 			// snapshot.
 			return nil
-		})
+		},
+	)
 	return pErr.GoError()
 }
 

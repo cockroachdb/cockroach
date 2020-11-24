@@ -223,6 +223,9 @@ type Replica struct {
 	// connectionClass controls the ConnectionClass used to send raft messages.
 	connectionClass atomicConnectionClass
 
+	// schedulerCtx is a cached instance of an annotated Raft scheduler context.
+	schedulerCtx atomic.Value // context.Context
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
