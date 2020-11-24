@@ -43,6 +43,19 @@ NULL       /1       {1}       1
 /8         /9       {4}       4
 /9         NULL     {5}       5
 
+# Turn feature flag off and verify errors.
+statement ok
+SET CLUSTER SETTING feature.stats.enabled = FALSE
+
+statement error pq: ANALYZE/CREATE STATISTICS feature was disabled by the database administrator
+CREATE STATISTICS s1 ON a FROM data
+
+statement error pq: ANALYZE/CREATE STATISTICS feature was disabled by the database administrator
+ANALYZE data
+
+statement ok
+SET CLUSTER SETTING feature.stats.enabled = TRUE
+
 statement ok
 CREATE STATISTICS s1 ON a FROM data
 
