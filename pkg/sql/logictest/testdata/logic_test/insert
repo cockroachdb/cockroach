@@ -499,10 +499,10 @@ INSERT INTO sw VALUES (
    '', '', '', '', '', '', '',
    '' COLLATE en, '' COLLATE en, '' COLLATE en, '' COLLATE en, '' COLLATE en, '' COLLATE en)
 
-statement error value too long for type CHAR \(column "a"\)
+statement error value too long for type CHAR
 INSERT INTO sw(a) VALUES ('ab')
 
-statement error value too long for type CHAR COLLATE en \(column "ac"\)
+statement error value too long for type CHAR COLLATE en
 INSERT INTO sw(ac) VALUES ('ab' COLLATE en)
 
 statement ok
@@ -510,22 +510,22 @@ INSERT INTO sw (b, c, d, e, f, g, bc, cc, dc, ec, fc) VALUES (
    'b22', 'c22', 'd22', 'e22', 'f22', 'g22',
    'B22' COLLATE en, 'C22' COLLATE en, 'D22' COLLATE en, 'E22' COLLATE en, 'F22' COLLATE en)
 
-statement error value too long for type CHAR\(3\) \(column "b"\)
+statement error value too long for type CHAR\(3\)
 INSERT INTO sw(b) VALUES ('abcd')
 
-statement error value too long for type CHAR\(3\) COLLATE en \(column "bc"\)
+statement error value too long for type CHAR\(3\) COLLATE en
 INSERT INTO sw(bc) VALUES ('abcd' COLLATE en)
 
-statement error value too long for type VARCHAR\(3\) \(column "d"\)
+statement error value too long for type VARCHAR\(3\)
 INSERT INTO sw(d) VALUES ('abcd')
 
-statement error value too long for type VARCHAR\(3\) COLLATE en \(column "dc"\)
+statement error value too long for type VARCHAR\(3\) COLLATE en
 INSERT INTO sw(dc) VALUES ('abcd' COLLATE en)
 
-statement error value too long for type STRING\(3\) \(column "f"\)
+statement error value too long for type STRING\(3\)
 INSERT INTO sw(f) VALUES ('abcd')
 
-statement error value too long for type STRING\(3\) COLLATE en \(column "fc"\)
+statement error value too long for type STRING\(3\) COLLATE en
 INSERT INTO sw(fc) VALUES ('abcd' COLLATE en)
 
 subtest regression_26742
