@@ -16,7 +16,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -61,7 +64,7 @@ type castInfo struct {
 //    - current timezone
 //    - current time (e.g. 'now'::string).
 //
-// TODO(radu): move the PerformCast code for each cast into functions defined
+// TODO(#55094): move the PerformCast code for each cast into functions defined
 // within each cast.
 //
 var validCasts = []castInfo{
@@ -374,45 +377,236 @@ func LookupCastVolatility(from, to *types.T) (_ Volatility, ok bool) {
 // PerformCast performs a cast from the provided Datum to the specified
 // types.T.
 func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
+	ret, err := performCastWithoutPrecisionTruncation(ctx, d, t)
+	if err != nil {
+		return nil, err
+	}
+	return AdjustValueToType(t, ret)
+}
+
+// AdjustValueToType checks that the width (for strings, byte arrays, and bit
+// strings) and scale (decimal). and, shape/srid (for geospatial types) fits the
+// specified column type.
+//
+// Additionally, some precision truncation may occur for the specified column type.
+//
+// In case of decimals, it can truncate fractional digits in the input
+// value in order to fit the target column. If the input value fits the target
+// column, it is returned unchanged. If the input value can be truncated to fit,
+// then a truncated copy is returned. Otherwise, an error is returned.
+//
+// In the case of time, it can truncate fractional digits of time datums
+// to its relevant rounding for the given type definition.
+//
+// In the case of geospatial types, it will check whether the SRID and Shape in the
+// datum matches the type definition.
+//
+// This method is used by casts, parsing, INSERT and UPDATE. It is important to note
+// that width must be altered *before* this function, as width truncations should
+// only occur during casting and parsing but not update/inserts (see
+// enforceLocalColumnConstraints).
+func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
+	switch typ.Family() {
+	case types.StringFamily, types.CollatedStringFamily:
+		var sv string
+		if v, ok := AsDString(inVal); ok {
+			sv = string(v)
+		} else if v, ok := inVal.(*DCollatedString); ok {
+			sv = v.Contents
+		}
+
+		if typ.Oid() == oid.T_bpchar {
+			sv = strings.TrimRight(sv, " ")
+		}
+
+		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
+			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
+				"value too long for type %s",
+				typ.SQLString())
+		}
+
+		if typ.Oid() == oid.T_bpchar {
+			if _, ok := AsDString(inVal); ok {
+				return NewDString(strings.TrimRight(sv, " ")), nil
+			} else if _, ok := inVal.(*DCollatedString); ok {
+				return NewDCollatedString(strings.TrimRight(sv, " "), typ.Locale(), &CollationEnvironment{})
+			}
+		}
+	case types.IntFamily:
+		if v, ok := AsDInt(inVal); ok {
+			if typ.Width() == 32 || typ.Width() == 64 || typ.Width() == 16 {
+				// Width is defined in bits.
+				width := uint(typ.Width() - 1)
+
+				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
+				shifted := v >> width
+				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange,
+						"integer out of range for type %s",
+						typ.Name(),
+					)
+				}
+			}
+		}
+	case types.BitFamily:
+		if v, ok := AsDBitArray(inVal); ok {
+			if typ.Width() > 0 {
+				bitLen := v.BitLen()
+				switch typ.Oid() {
+				case oid.T_varbit:
+					if bitLen > uint(typ.Width()) {
+						return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
+							"bit string length %d too large for type %s", bitLen, typ.SQLString())
+					}
+				default:
+					if bitLen != uint(typ.Width()) {
+						return nil, pgerror.Newf(pgcode.StringDataLengthMismatch,
+							"bit string length %d does not match type %s", bitLen, typ.SQLString())
+					}
+				}
+			}
+		}
+	case types.DecimalFamily:
+		if inDec, ok := inVal.(*DDecimal); ok {
+			if inDec.Form != apd.Finite || typ.Precision() == 0 {
+				// Non-finite form or unlimited target precision, so no need to limit.
+				break
+			}
+			if int64(typ.Precision()) >= inDec.NumDigits() && typ.Scale() == inDec.Exponent {
+				// Precision and scale of target column are sufficient.
+				break
+			}
+
+			var outDec DDecimal
+			outDec.Set(&inDec.Decimal)
+			err := LimitDecimalWidth(&outDec.Decimal, int(typ.Precision()), int(typ.Scale()))
+			if err != nil {
+				return nil, errors.Wrapf(err, "type %s", typ.SQLString())
+			}
+			return &outDec, nil
+		}
+	case types.ArrayFamily:
+		if inArr, ok := inVal.(*DArray); ok {
+			var outArr *DArray
+			elementType := typ.ArrayContents()
+			for i, inElem := range inArr.Array {
+				outElem, err := AdjustValueToType(elementType, inElem)
+				if err != nil {
+					return nil, err
+				}
+				if outElem != inElem {
+					if outArr == nil {
+						outArr = &DArray{}
+						*outArr = *inArr
+						outArr.Array = make(Datums, len(inArr.Array))
+						copy(outArr.Array, inArr.Array[:i])
+					}
+				}
+				if outArr != nil {
+					outArr.Array[i] = inElem
+				}
+			}
+			if outArr != nil {
+				return outArr, nil
+			}
+		}
+	case types.TimeFamily:
+		if in, ok := inVal.(*DTime); ok {
+			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision())), nil
+		}
+	case types.TimestampFamily:
+		if in, ok := inVal.(*DTimestamp); ok {
+			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+		}
+	case types.TimestampTZFamily:
+		if in, ok := inVal.(*DTimestampTZ); ok {
+			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+		}
+	case types.TimeTZFamily:
+		if in, ok := inVal.(*DTimeTZ); ok {
+			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision())), nil
+		}
+	case types.IntervalFamily:
+		if in, ok := inVal.(*DInterval); ok {
+			itm, err := typ.IntervalTypeMetadata()
+			if err != nil {
+				return nil, err
+			}
+			return NewDInterval(in.Duration, itm), nil
+		}
+	case types.GeometryFamily:
+		if in, ok := inVal.(*DGeometry); ok {
+			if err := geo.SpatialObjectFitsColumnMetadata(
+				in.Geometry.SpatialObject(),
+				typ.InternalType.GeoMetadata.SRID,
+				typ.InternalType.GeoMetadata.ShapeType,
+			); err != nil {
+				return nil, err
+			}
+		}
+	case types.GeographyFamily:
+		if in, ok := inVal.(*DGeography); ok {
+			if err := geo.SpatialObjectFitsColumnMetadata(
+				in.Geography.SpatialObject(),
+				typ.InternalType.GeoMetadata.SRID,
+				typ.InternalType.GeoMetadata.ShapeType,
+			); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return inVal, nil
+}
+
+// formatBitArrayToType formats bit arrays such that they fill the total width
+// if too short, or truncate if too long.
+func formatBitArrayToType(d *DBitArray, t *types.T) *DBitArray {
+	if t.Width() == 0 || d.BitLen() == uint(t.Width()) {
+		return d
+	}
+	a := d.BitArray.Clone()
+	switch t.Oid() {
+	case oid.T_varbit:
+		// VARBITs do not have padding attached, so only truncate.
+		if uint(t.Width()) < a.BitLen() {
+			a = a.ToWidth(uint(t.Width()))
+		}
+	default:
+		a = a.ToWidth(uint(t.Width()))
+	}
+	return &DBitArray{a}
+}
+
+// performCastWithoutPrecisionTruncation performs the cast, but does not do a check on whether
+// the datum fits the type.
+// In an ideal state, components of AdjustValueToType should be embedded into
+// this function, but the code base needs a general refactor of parsing
+// and casting logic before this can happen.
+// See also: #55094.
+func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 	switch t.Family() {
 	case types.BitFamily:
 		switch v := d.(type) {
 		case *DBitArray:
-			if t.Width() == 0 || v.BitLen() == uint(t.Width()) {
-				return d, nil
-			}
-			var a DBitArray
-			switch t.Oid() {
-			case oid.T_varbit:
-				// VARBITs do not have padding attached.
-				a.BitArray = v.BitArray.Clone()
-				if uint(t.Width()) < a.BitArray.BitLen() {
-					a.BitArray = a.BitArray.ToWidth(uint(t.Width()))
-				}
-			default:
-				a.BitArray = v.BitArray.Clone().ToWidth(uint(t.Width()))
-			}
-			return &a, nil
+			return formatBitArrayToType(v, t), nil
 		case *DInt:
-			return NewDBitArrayFromInt(int64(*v), uint(t.Width()))
+			r, err := NewDBitArrayFromInt(int64(*v), uint(t.Width()))
+			if err != nil {
+				return nil, err
+			}
+			return formatBitArrayToType(r, t), nil
 		case *DString:
 			res, err := bitarray.Parse(string(*v))
 			if err != nil {
 				return nil, err
 			}
-			if t.Width() > 0 {
-				res = res.ToWidth(uint(t.Width()))
-			}
-			return &DBitArray{BitArray: res}, nil
+			return formatBitArrayToType(&DBitArray{res}, t), nil
 		case *DCollatedString:
 			res, err := bitarray.Parse(v.Contents)
 			if err != nil {
 				return nil, err
 			}
-			if t.Width() > 0 {
-				res = res.ToWidth(uint(t.Width()))
-			}
-			return &DBitArray{BitArray: res}, nil
+			return formatBitArrayToType(&DBitArray{res}, t), nil
 		}
 
 	case types.BoolFamily:

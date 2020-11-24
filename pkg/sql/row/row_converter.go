@@ -170,7 +170,7 @@ func GenerateInsertRow(
 
 	// Ensure that the values honor the specified column widths.
 	for i := 0; i < len(insertCols); i++ {
-		outVal, err := colinfo.AdjustValueToColumnType(insertCols[i].Type, rowVals[i], &insertCols[i].Name)
+		outVal, err := tree.AdjustValueToType(insertCols[i].Type, rowVals[i])
 		if err != nil {
 			return nil, err
 		}
