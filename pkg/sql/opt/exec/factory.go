@@ -273,9 +273,12 @@ type ExplainAnnotationID int
 const (
 	// EstimatedStatsID is an annotation with a *EstimatedStats value.
 	EstimatedStatsID ExplainAnnotationID = iota
+
+	// ExecutionStatsID is an annotation with a *ExecutionStats value.
+	ExecutionStatsID
 )
 
-// EstimatedStats  contains estimated statistics about a given operator.
+// EstimatedStats contains estimated statistics about a given operator.
 type EstimatedStats struct {
 	// TableStatsAvailable is true if all the tables involved by this operator
 	// (directly or indirectly) had table statistics.
@@ -285,6 +288,15 @@ type EstimatedStats struct {
 	// Cost is the estimated cost of the operator. This cost includes the costs of
 	// the child operators.
 	Cost float64
+}
+
+// ExecutionStats contain statistics about a given operator gathered from the
+// execution of the query.
+//
+// TODO(radu): can/should we just use execinfrapb.ComponentStats instead?
+type ExecutionStats struct {
+	// RowCount is the number of rows produced by the operator.
+	RowCount uint64
 }
 
 // BuildPlanForExplainFn builds an execution plan against the given
