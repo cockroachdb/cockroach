@@ -1834,3 +1834,85 @@ project
  │    └── key: (1)
  └── projections
       └── (k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS BOOL) [as="?column?":7, outer=(1)]
+
+exec-ddl
+CREATE TABLE arr (a INT ARRAY);
+----
+
+# --------------------------------------------------
+# SimplifyContainsArrayWithNulls
+# --------------------------------------------------
+
+norm expect-not=SimplifyContainsArrayWithNulls
+SELECT array[1, 3] <@ array[3, 2, 1]
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect-not=SimplifyContainsArrayWithNulls
+select array[]::text[] @> null
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
+norm expect-not=SimplifyContainsArrayWithNulls
+select a @> array[]::int[] from arr
+----
+project
+ ├── columns: "?column?":4
+ ├── immutable
+ ├── scan arr
+ │    └── columns: a:1
+ └── projections
+      └── a:1 @> ARRAY[] [as="?column?":4, outer=(1), immutable]
+
+# Case when the right argument is a VariableExpr.
+# Expecting no SimplifyContainsArrayWithNulls.
+norm expect-not=SimplifyContainsArrayWithNulls
+select array[1, 2, 3] @> a from arr
+----
+project
+ ├── columns: "?column?":4
+ ├── immutable
+ ├── scan arr
+ │    └── columns: a:1
+ └── projections
+      └── ARRAY[1,2,3] @> a:1 [as="?column?":4, outer=(1), immutable]
+
+norm expect=SimplifyContainsArrayWithNulls
+select array[null] @> array[null]
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=SimplifyContainsArrayWithNulls
+SELECT array[1, 3, 2] @> array[1, null]::int[]
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=SimplifyContainsArrayWithNulls
+select a @> array[null]::int[] from arr
+----
+project
+ ├── columns: "?column?":4!null
+ ├── fd: ()-->(4)
+ ├── scan arr
+ └── projections
+      └── false [as="?column?":4]

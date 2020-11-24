@@ -80,14 +80,20 @@ Remaining filter: a @> ARRAY[]
 index-constraints vars=(a int[]) inverted-index=a
 a @> ARRAY[NULL]::INT[]
 ----
+[ - ]
+Remaining filter: false
 
 index-constraints vars=(a int[]) inverted-index=a
 a @> ARRAY[1, NULL]::INT[]
 ----
+[ - ]
+Remaining filter: false
 
 index-constraints vars=(a int[]) inverted-index=a
 a @> ARRAY[NULL, 1]::INT[]
 ----
+[ - ]
+Remaining filter: false
 
 # NOTE: this should be a contradiction, but the test harness strips the
 # constraint out too early by accident, I think.

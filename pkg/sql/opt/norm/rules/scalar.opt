@@ -317,3 +317,10 @@ $input
 )
 =>
 (And (Is $left (Null (TypeOf $left))) (Null (BoolType)))
+
+# SimplifyContainsArrayWithNulls simplifies the Contains operator to false if
+# its right argument is a constant array that contains null elements.
+[SimplifyContainsArrayWithNulls, Normalize, HighPriority]
+(Contains * $right:* & (IsConstArrayWithNulls $right))
+=>
+(False)

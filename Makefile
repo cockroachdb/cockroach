@@ -1630,7 +1630,7 @@ unsafe-clean-c-deps:
 cleanshort: ## Clean up go build artifacts and go proto-generated code.
 cleanshort:
 	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources
-	-$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/cockroach...
+	-$(GO) clean $(GOFLAGS)  $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f -name '*.test' -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
 	rm -rf $(ARCHIVE) pkg/sql/parser/gen
