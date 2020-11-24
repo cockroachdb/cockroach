@@ -911,8 +911,6 @@ var _ transactionRestartError = &WriteTooOldError{}
 // NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
 // The read and existing timestamps as well as the txn are purely informational
 // and used for formatting the error message.
-// TODO(nvanbenschoten): what should these fields be after the introduction of
-// the observed max timestamp?
 func NewReadWithinUncertaintyIntervalError(
 	readTS, existingTS hlc.Timestamp, txn *Transaction,
 ) *ReadWithinUncertaintyIntervalError {
@@ -921,8 +919,8 @@ func NewReadWithinUncertaintyIntervalError(
 		ExistingTimestamp: existingTS,
 	}
 	if txn != nil {
-		maxTS := txn.MaxTimestamp
-		rwue.MaxTimestamp = &maxTS
+		rwue.MaxTimestamp = txn.MaxTimestamp
+		rwue.ObservedMaxTimestamp = txn.ObservedMaxTimestamp
 		rwue.ObservedTimestamps = txn.ObservedTimestamps
 	}
 	return rwue
@@ -931,9 +929,10 @@ func NewReadWithinUncertaintyIntervalError(
 // SafeFormat implements redact.SafeFormatter.
 func (e *ReadWithinUncertaintyIntervalError) SafeFormat(s redact.SafePrinter, _ rune) {
 	s.Printf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
-		"previous write with future timestamp %s within uncertainty interval `t <= %v`; "+
+		"previous write with future timestamp %s within uncertainty interval `t <= "+
+		"(observed_max=%v, max=%v)`; "+
 		"observed timestamps: ",
-		e.ReadTimestamp, e.ExistingTimestamp, e.MaxTimestamp)
+		e.ReadTimestamp, e.ExistingTimestamp, e.ObservedMaxTimestamp, e.MaxTimestamp)
 
 	s.SafeRune('[')
 	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {
