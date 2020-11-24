@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,7 +42,14 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	c.Put(ctx, cockroach, "./cockroach")
 
 	t.Status("restoring fixture")
-	c.Start(ctx, t)
+	// Randomize starting with encryption-at-rest enabled.
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	var opts []option
+	if rng.Intn(2) == 1 {
+		c.l.Printf("starting with encryption at rest enabled")
+		opts = append(opts, startArgs("--encrypt"))
+	}
+	c.Start(ctx, t, opts...)
 
 	// NB: on a 10 node cluster, this should take well below 3h.
 	tBegin := timeutil.Now()
@@ -56,12 +64,11 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 		// This slows down merges, so it might hide some races.
 		//
 		// NB: the below invocation was found to actually make it to the server at the time of writing.
-		c.Start(ctx, t, startArgs(
+		opts = append(opts, startArgs(
 			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true COCKROACH_ENFORCE_CONSISTENT_STATS=true",
 		))
-	} else {
-		c.Start(ctx, t)
 	}
+	c.Start(ctx, t, opts...)
 
 	// Also restore a much smaller table. We'll use it to run queries against
 	// the cluster after having dropped the large table above, verifying that
