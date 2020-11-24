@@ -400,6 +400,17 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 	})
 }
 
+// raftSchedulerCtx annotates a given Raft scheduler context with information
+// about the replica. The method may return a cached instance of this context.
+func (r *Replica) raftSchedulerCtx(schedulerCtx context.Context) context.Context {
+	if v := r.schedulerCtx.Load(); v != nil {
+		return v.(context.Context)
+	}
+	schedulerCtx = r.AnnotateCtx(schedulerCtx)
+	r.schedulerCtx.Store(schedulerCtx)
+	return schedulerCtx
+}
+
 type handleRaftReadyStats struct {
 	applyCommittedEntriesStats
 }
@@ -417,10 +428,6 @@ var noSnap IncomingSnapshot
 func (r *Replica) handleRaftReady(
 	ctx context.Context, inSnap IncomingSnapshot,
 ) (handleRaftReadyStats, string, error) {
-	defer func(start time.Time) {
-		elapsed := timeutil.Since(start)
-		r.store.metrics.RaftHandleReadyLatency.RecordValue(elapsed.Nanoseconds())
-	}(timeutil.Now())
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
@@ -877,9 +884,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (remo
 
 // tick the Raft group, returning true if the raft group exists and is
 // unquiesced; false otherwise.
-func (r *Replica) tick(livenessMap liveness.IsLiveMap) (bool, error) {
-	ctx := r.AnnotateCtx(context.TODO())
-
+func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
