@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -279,7 +280,7 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			TuplesRead: is.NumTuples,
-			BytesRead:  execinfrapb.MakeIntValue(uint64(tr.GetBytesRead())),
+			BytesRead:  optional.MakeUint(uint64(tr.GetBytesRead())),
 			KVTime:     is.WaitTime,
 		},
 		Output: tr.Out.Stats(),
