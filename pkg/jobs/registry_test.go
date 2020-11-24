@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 func FakePHS(opName string, user security.SQLUsername) (interface{}, func()) {
@@ -376,4 +377,27 @@ CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS S
 			}
 		}
 	}
+}
+
+func TestRegistryGCPagination(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(ctx)
+
+	for i := 0; i < 2*cleanupPageSize+1; i++ {
+		payload, err := protoutil.Marshal(&jobspb.Payload{})
+		require.NoError(t, err)
+		db.Exec(t,
+			`INSERT INTO system.jobs (status, created, payload) VALUES ($1, $2, $3)`,
+			StatusCanceled, timeutil.Now().Add(-time.Hour), payload)
+	}
+
+	ts := timeutil.Now()
+	require.NoError(t, s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(-10*time.Minute)))
+	var count int
+	db.QueryRow(t, `SELECT count(1) FROM system.jobs`).Scan(&count)
+	require.Zero(t, count)
 }
