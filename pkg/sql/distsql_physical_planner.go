@@ -613,6 +613,10 @@ type PlanningCtx struct {
 	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
 	// If set, the result of flowSpecsToDiagram will show the types of each stream.
 	saveDiagramShowInputTypes bool
+
+	// If set, we will record the mapping from planNode to tracing metadata to
+	// later allow associating statistics with the planNode.
+	traceMetadata execNodeTraceMetadata
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
@@ -2698,6 +2702,14 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	if err != nil {
 		return plan, err
+	}
+
+	if planCtx.traceMetadata != nil {
+		processors := make([]processorTraceMetadata, len(plan.ResultRouters))
+		for i := range plan.ResultRouters {
+			processors[i].id = execinfrapb.ProcessorID(plan.ResultRouters[i])
+		}
+		planCtx.traceMetadata.associateNodeWithProcessors(node, planCtx.infra.FlowID, processors)
 	}
 
 	if dsp.shouldPlanTestMetadata() {

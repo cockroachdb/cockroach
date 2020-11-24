@@ -72,6 +72,14 @@ func (n *Node) WrappedNode() exec.Node {
 	return n.wrappedNode
 }
 
+// Annotate annotates the node with extra information.
+func (n *Node) Annotate(id exec.ExplainAnnotationID, value interface{}) {
+	if n.annotations == nil {
+		n.annotations = make(map[exec.ExplainAnnotationID]interface{})
+	}
+	n.annotations[id] = value
+}
+
 func (f *Factory) newNode(
 	op execOperator, args interface{}, ordering exec.OutputOrdering, children ...*Node,
 ) (*Node, error) {
@@ -114,11 +122,7 @@ func NewFactory(wrappedFactory exec.Factory) *Factory {
 
 // AnnotateNode is part of the exec.ExplainFactory interface.
 func (f *Factory) AnnotateNode(execNode exec.Node, id exec.ExplainAnnotationID, value interface{}) {
-	n := execNode.(*Node)
-	if n.annotations == nil {
-		n.annotations = make(map[exec.ExplainAnnotationID]interface{})
-	}
-	n.annotations[id] = value
+	execNode.(*Node).Annotate(id, value)
 }
 
 // ConstructPlan is part of the exec.Factory interface.
