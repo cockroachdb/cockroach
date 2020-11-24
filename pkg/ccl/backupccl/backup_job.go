@@ -524,7 +524,7 @@ func (b *backupResumer) Resume(
 		statsCache,
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to run backup")
 	}
 
 	if err := b.clearStats(ctx, p.ExecCfg().DB); err != nil {

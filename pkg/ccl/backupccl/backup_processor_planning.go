@@ -50,7 +50,7 @@ func distBackup(
 
 	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to determine nodes on which to run")
 	}
 
 	backupSpecs, err := makeBackupDataProcessorSpecs(
@@ -68,7 +68,7 @@ func distBackup(
 		execCtx.ExecCfg(),
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to determine backup execution plan")
 	}
 
 	if len(backupSpecs) == 0 {
