@@ -2162,17 +2162,17 @@ func TestImportFeatureFlag(t *testing.T) {
 
 	// Feature flag is off — test that IMPORT and IMPORT INTO surface error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = FALSE`)
-	sqlDB.ExpectErr(t, `IMPORT feature was disabled by the database administrator`,
+	sqlDB.ExpectErr(t, `feature IMPORT was disabled by the database administrator`,
 		fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]))
-	sqlDB.Exec(t, `CREATE TABLE feature_flag (a INT8 PRIMARY KEY, b STRING)`)
-	sqlDB.ExpectErr(t, `IMPORT feature was disabled by the database administrator`,
-		fmt.Sprintf(`IMPORT INTO feature_flag (a, b) CSV DATA (%s)`, testFiles.files[0]))
+	sqlDB.Exec(t, `CREATE TABLE feature_flags (a INT8 PRIMARY KEY, b STRING)`)
+	sqlDB.ExpectErr(t, `feature IMPORT was disabled by the database administrator`,
+		fmt.Sprintf(`IMPORT INTO feature_flags (a, b) CSV DATA (%s)`, testFiles.files[0]))
 
 	// Feature flag is on — test that IMPORT and IMPORT INTO do not error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = TRUE`)
 	sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
 		testFiles.files[0]))
-	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO feature_flag (a, b) CSV DATA (%s)`, testFiles.files[0]))
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO feature_flags (a, b) CSV DATA (%s)`, testFiles.files[0]))
 }
 
 func TestImportObjectLevelRBAC(t *testing.T) {

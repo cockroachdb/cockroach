@@ -31,6 +31,13 @@ type commentOnIndexNode struct {
 // CommentOnIndex adds a comment on an index.
 // Privileges: CREATE on table.
 func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"COMMENT ON INDEX",
+	); err != nil {
+		return nil, err
+	}
+
 	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, &n.Index, privilege.CREATE)
 	if err != nil {
 		return nil, err

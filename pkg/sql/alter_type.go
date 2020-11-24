@@ -36,6 +36,13 @@ type alterTypeNode struct {
 var _ planNode = &alterTypeNode{n: nil}
 
 func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER TYPE",
+	); err != nil {
+		return nil, err
+	}
+
 	// Resolve the type.
 	desc, err := p.ResolveMutableTypeDescriptor(ctx, n.Type, true /* required */)
 	if err != nil {

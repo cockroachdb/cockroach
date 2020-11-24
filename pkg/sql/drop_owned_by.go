@@ -26,6 +26,12 @@ type dropOwnedByNode struct {
 }
 
 func (p *planner) DropOwnedBy(ctx context.Context) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"DROP OWNED BY",
+	); err != nil {
+		return nil, err
+	}
 	telemetry.Inc(sqltelemetry.CreateDropOwnedByCounter())
 	// TODO(angelaw): Implementation.
 	return nil, unimplemented.NewWithIssue(55381, "drop owned by is not yet implemented")

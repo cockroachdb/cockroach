@@ -29,6 +29,13 @@ type commentOnColumnNode struct {
 // CommentOnColumn add comment on a column.
 // Privileges: CREATE on table.
 func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"COMMENT ON COLUMN",
+	); err != nil {
+		return nil, err
+	}
+
 	var tableName tree.TableName
 	if n.ColumnItem.TableName != nil {
 		tableName = n.ColumnItem.TableName.ToTableName()

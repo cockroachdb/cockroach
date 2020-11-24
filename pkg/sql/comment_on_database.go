@@ -32,6 +32,13 @@ type commentOnDatabaseNode struct {
 func (p *planner) CommentOnDatabase(
 	ctx context.Context, n *tree.CommentOnDatabase,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"COMMENT ON DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
 	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), true)
 	if err != nil {
 		return nil, err
