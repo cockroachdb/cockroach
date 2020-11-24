@@ -275,7 +275,6 @@ func (t *oneLevelUncachedDescGetter) GetDescs(
 
 	}
 	return ret, nil
-
 }
 
 var _ catalog.DescGetter = (*oneLevelUncachedDescGetter)(nil)
