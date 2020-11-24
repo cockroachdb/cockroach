@@ -66,14 +66,17 @@ load("//c-deps:REPOSITORIES.bzl", "c_deps")
 c_deps()
 
 
-# Load the bazel utility that lets us build C/C++ projects using cmake/make/etc.
+# Load the bazel utility that lets us build C/C++ projects using
+# cmake/make/etc. We point our fork which adds autoconf support
+# (https://github.com/bazelbuild/rules_foreign_cc/pull/432) and BSD support
+# (https://github.com/bazelbuild/rules_foreign_cc/pull/387).
 #
-# TODO(irfansharif): Point to an upstream SHA once it picks up Oliver's changes
-# that add autoconf support.
+# TODO(irfansharif): Point to an upstream SHA once maintainers pick up the
+# aforementioned PRs.
 git_repository(
    name = "rules_foreign_cc",
-   commit = "605c77171f20840464301d7d01d6cd9e3a982888",
-   remote = "https://github.com/otan-cockroach/rules_foreign_cc",
+   commit = "8fdca4480f3fa9c084f4a73749a46fa17996beb1",
+   remote = "https://github.com/cockroachdb/rules_foreign_cc",
 )
 load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
 rules_foreign_cc_dependencies()
