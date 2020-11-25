@@ -160,25 +160,6 @@ func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
 	return true, ClusterWideID{uint128.Uint128{Hi: hi, Lo: lo}}, nil
 }
 
-// getTemporaryObjectNames returns all the temporary objects under the
-// temporary schema of the given dbID.
-func getTemporaryObjectNames(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, tempSchemaName string,
-) (tree.TableNames, error) {
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
-	if err != nil {
-		return nil, err
-	}
-	return descs.GetObjectNames(
-		ctx,
-		txn,
-		codec,
-		dbDesc,
-		tempSchemaName,
-		tree.DatabaseListFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: false}},
-	)
-}
-
 // cleanupSessionTempObjects removes all temporary objects (tables, sequences,
 // views, temporary schema) created by the session.
 func cleanupSessionTempObjects(
@@ -234,7 +215,17 @@ func cleanupSchemaObjects(
 	dbID descpb.ID,
 	schemaName string,
 ) error {
-	tbNames, err := getTemporaryObjectNames(ctx, txn, codec, dbID, schemaName)
+	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
+	if err != nil {
+		return err
+	}
+	tbNames, err := descsCol.GetObjectNames(
+		ctx,
+		txn,
+		dbDesc,
+		schemaName,
+		tree.DatabaseListFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: false}},
+	)
 	if err != nil {
 		return err
 	}

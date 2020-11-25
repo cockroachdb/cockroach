@@ -101,7 +101,7 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	}
 
 	// Fallthrough.
-	return descs.GetObjectNames(ctx, txn, codec, dbDesc, scName, flags)
+	return l.tc.GetObjectNames(ctx, txn, dbDesc, scName, flags)
 }
 
 // GetObjectDesc implements the ObjectAccessor interface.
