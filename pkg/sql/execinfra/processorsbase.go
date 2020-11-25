@@ -470,6 +470,8 @@ type ProcessorBase struct {
 	Out     ProcOutputHelper
 	FlowCtx *FlowCtx
 
+	SemaCtx tree.SemaContext
+
 	// EvalCtx is used for expression evaluation. It overrides the one in flowCtx.
 	EvalCtx *tree.EvalContext
 
@@ -857,10 +859,10 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	if err := resolver.HydrateTypeSlice(evalCtx.Context, coreOutputTypes); err != nil {
 		return err
 	}
-	semaCtx := tree.MakeSemaContext()
-	semaCtx.TypeResolver = resolver
+	pb.SemaCtx = tree.MakeSemaContext()
+	pb.SemaCtx.TypeResolver = resolver
 
-	return pb.Out.Init(post, coreOutputTypes, &semaCtx, pb.EvalCtx, output)
+	return pb.Out.Init(post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx, output)
 }
 
 // AddInputToDrain adds an input to drain when moving the processor to a

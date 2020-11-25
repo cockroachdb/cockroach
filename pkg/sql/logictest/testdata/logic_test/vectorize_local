@@ -104,7 +104,9 @@ EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
 └ Node 1
   └ *colexec.orderedAggregator
     └ *colexec.distinctChainOps
-      └ *rowexec.tableReader
+      └ *colexec.constInt64Op
+        └ *rowexec.filtererProcessor
+          └ *colfetcher.ColBatchScan
 
 # Regression test for #46122 (checking that we gracefully fallback to row
 # execution on cross joins).
