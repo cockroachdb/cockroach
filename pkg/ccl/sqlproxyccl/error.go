@@ -62,6 +62,10 @@ const (
 	// CodeProxyRefusedConnection indicates that the proxy refused the connection
 	// request due to high load or too many connection attempts.
 	CodeProxyRefusedConnection
+
+	// CodeExpiredConnection indicates that connection was expired and
+        // should be closed.
+	CodeExpiredConnection
 )
 
 type codeError struct {
