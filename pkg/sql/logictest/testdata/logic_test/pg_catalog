@@ -2806,3 +2806,17 @@ ORDER BY
 p
 p
 t
+
+# Issue 44793
+statement ok
+CREATE TABLE PARENT_TABLE_A(id UUID PRIMARY KEY);
+CREATE TABLE CHILD_TABLE_B(
+  id UUID PRIMARY KEY,
+  a_id UUID,
+  CONSTRAINT fk_b_to_a FOREIGN KEY (a_id) REFERENCES PARENT_TABLE_A (id)
+);
+
+query TT
+SELECT pg_typeof(confkey), pg_typeof(conkey) FROM pg_constraint WHERE conname = 'fk_b_to_a'
+----
+smallint[]  smallint[]

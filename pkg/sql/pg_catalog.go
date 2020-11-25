@@ -1019,7 +1019,7 @@ func colIDArrayToDatum(arr []descpb.ColumnID) (tree.Datum, error) {
 	if len(arr) == 0 {
 		return tree.DNull, nil
 	}
-	d := tree.NewDArray(types.Int)
+	d := tree.NewDArray(types.Int2)
 	for _, val := range arr {
 		if err := d.Append(tree.NewDInt(tree.DInt(val))); err != nil {
 			return nil, err
