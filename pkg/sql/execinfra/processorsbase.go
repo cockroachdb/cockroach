@@ -60,9 +60,6 @@ type ProcOutputHelper struct {
 	// post-processed row directly.
 	output   RowReceiver
 	RowAlloc rowenc.EncDatumRowAlloc
-	// filter is an optional filter that determines whether a single row is
-	// output or not.
-	filter *execinfrapb.ExprHelper
 	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
 	// and outputCols can be set.
 	renderExprs []execinfrapb.ExprHelper
@@ -120,12 +117,6 @@ func (h *ProcOutputHelper) Init(
 	}
 	h.output = output
 	h.numInternalCols = len(coreOutputTypes)
-	if post.Filter != (execinfrapb.Expression{}) {
-		h.filter = &execinfrapb.ExprHelper{}
-		if err := h.filter.Init(post.Filter, coreOutputTypes, semaCtx, evalCtx); err != nil {
-			return err
-		}
-	}
 	if post.Projection {
 		for _, col := range post.OutputColumns {
 			if int(col) >= h.numInternalCols {
@@ -203,12 +194,6 @@ func (h *ProcOutputHelper) NeededColumns() (colIdxs util.FastIntSet) {
 	}
 
 	for i := 0; i < h.numInternalCols; i++ {
-		// See if filter requires this column.
-		if h.filter != nil && h.filter.Vars.IndexedVarUsed(i) {
-			colIdxs.Add(i)
-			continue
-		}
-
 		// See if render expressions require this column.
 		for j := range h.renderExprs {
 			if h.renderExprs[j].Vars.IndexedVarUsed(i) {
@@ -285,19 +270,6 @@ func (h *ProcOutputHelper) ProcessRow(
 		return nil, false, nil
 	}
 
-	if h.filter != nil {
-		// Filtering.
-		passes, err := h.filter.EvalFilter(row)
-		if err != nil {
-			return nil, false, err
-		}
-		if !passes {
-			if log.V(4) {
-				log.Infof(ctx, "filtered out row %s", row.String(h.filter.Types))
-			}
-			return nil, true, nil
-		}
-	}
 	h.rowIdx++
 	if h.rowIdx <= h.offset {
 		// Suppress row.
