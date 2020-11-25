@@ -16,10 +16,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
@@ -410,4 +412,59 @@ func TestProxyRefuseConn(t *testing.T) {
 	)
 	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
 	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
+}
+
+func TestProxyKeepAlive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	outgoingTLSConfig, err := tc.Server(0).RPCContext().GetClientTLSConfig()
+	require.NoError(t, err)
+	outgoingTLSConfig.InsecureSkipVerify = true
+
+	opts := Options{
+		BackendConfigFromParams: func(params map[string]string, _ *Conn) (*BackendConfig, error) {
+			return &BackendConfig{
+				OutgoingAddress: tc.Server(0).ServingSQLAddr(),
+				TLSConf:         outgoingTLSConfig,
+				// Don't let connections last more than 100ms.
+				KeepAliveLoop: func(ctx context.Context) error {
+					t := timeutil.NewTimer()
+					t.Reset(100 * time.Millisecond)
+					for {
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-t.C:
+							t.Read = true
+							return errors.New("expired")
+						}
+					}
+				},
+			}, nil
+		},
+	}
+	s, addr, done := setupTestProxyWithCerts(t, &opts)
+	defer done()
+
+	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require", addr)
+	conn, err := pgx.Connect(context.Background(), url)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, conn.Close(ctx))
+		require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
+	}()
+
+	require.Eventuallyf(
+		t,
+		func() bool {
+			_, err = conn.Exec(context.Background(), "SELECT 1")
+			return err != nil && strings.Contains(err.Error(), "expired")
+		},
+		time.Second, 5*time.Millisecond,
+		"unexpected error received: %v", err,
+	)
 }
