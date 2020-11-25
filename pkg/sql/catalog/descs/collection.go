@@ -405,7 +405,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, schemaName,
+	foundSchema, resolvedSchema, err := tc.GetSchemaByName(ctx, txn, dbID, schemaName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -448,123 +448,106 @@ func (tc *Collection) getMutableObjectDescriptor(
 	return mutDesc, nil
 }
 
-func (tc *Collection) getMutableUserDefinedSchemaDescriptor(
+// TODO (lucy): Should this just take a database name? We're separately
+// resolving the database name in lots of places where we (indirectly) call
+// this.
+func (tc *Collection) getUserDefinedSchemaByName(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
-) (*schemadesc.Mutable, error) {
-	log.VEventf(ctx, 2, "reading mutable descriptor on '%s'", schemaName)
-	// First try the uncommitted descriptors.
-	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
-		dbID, keys.RootNamespaceID, schemaName, flags,
-	); refuseFurtherLookup || err != nil {
-		return nil, err
-	} else if mut := desc.mutable; mut != nil {
-		schema, ok := mut.(*schemadesc.Mutable)
-		if !ok {
-			return nil, nil
+) (catalog.SchemaDescriptor, error) {
+	getSchemaByName := func() (_ catalog.Descriptor, found bool, err error) {
+		if refuseFurtherLookup, desc := tc.getUncommittedDescriptorNew(
+			dbID, keys.RootNamespaceID, schemaName,
+		); refuseFurtherLookup {
+			return nil, false, nil
+		} else if immut := desc.immutable; immut != nil {
+			log.VEventf(ctx, 2, "found uncommitted descriptor %d", immut.GetID())
+			if flags.RequireMutable {
+				return desc.mutable, true, nil
+			}
+			return immut, true, nil
 		}
-		log.VEventf(ctx, 2, "found uncommitted descriptor %d", schema.GetID())
-		return schema, nil
+
+		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
+			return tc.getDescriptorFromStore(
+				ctx, txn, tc.codec(), dbID, keys.RootNamespaceID, schemaName, flags.RequireMutable)
+		}
+
+		// Look up whether the schema is on the database descriptor and return early
+		// if it's not.
+		dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, dbID, tree.DatabaseLookupFlags{Required: true})
+		if err != nil {
+			return nil, false, err
+		}
+		schemaInfo, found := dbDesc.LookupSchema(schemaName)
+		if !found {
+			return nil, false, nil
+		} else if schemaInfo.Dropped {
+			// If there's another schema name entry with the same ID as this one, then
+			// the schema has been renamed, so don't return anything.
+			for name, info := range dbDesc.GetSchemas() {
+				if name != schemaName && info.ID == schemaInfo.ID {
+					return nil, false, nil
+				}
+			}
+			// Otherwise, the schema has been dropped. Return early, except in the
+			// specific case where flags.Required and flags.IncludeDropped are both
+			// true, which forces us to look up the dropped descriptor and return it.
+			if !flags.Required {
+				return nil, false, nil
+			}
+			if !flags.IncludeDropped {
+				return nil, false, catalog.NewInactiveDescriptorError(catalog.ErrDescriptorDropped)
+			}
+		}
+
+		// If we have a schema ID from the database, get the schema descriptor. Since
+		// the schema and database descriptors are updated in the same transaction,
+		// their leased "versions" (not the descriptor version, but the state in the
+		// abstract sequence of states in adding, renaming, or dropping a schema) can
+		// differ by at most 1 while waiting for old leases to drain. So false
+		// negatives can occur from the database lookup, in some sense, if we have a
+		// lease on the latest version of the schema and on the previous version of
+		// the database which doesn't reflect the changes to the schema. But this
+		// isn't a problem for correctness; it can only happen on other sessions
+		// before the schema change has returned results.
+		desc, err := tc.getDescriptorVersionByID(ctx, txn, schemaInfo.ID, flags, true /* setTxnDeadline */)
+		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				return nil, false, nil
+			}
+			return nil, false, err
+		}
+		return desc, true, nil
 	}
 
-	found, schema, err := getSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
-	if err != nil || !found {
+	desc, found, err := getSchemaByName()
+	if err != nil {
 		return nil, err
+	} else if !found {
+		if flags.Required {
+			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
+		}
+		return nil, nil
 	}
-	return schema.Desc.(*schemadesc.Mutable), nil
-}
-
-func (tc *Collection) getUserDefinedSchemaVersion(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
-) (*schemadesc.Immutable, error) {
-	readFromStore := func() (*schemadesc.Immutable, error) {
-		exists, schema, err := getSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
-		if err != nil || !exists || schema.Kind != catalog.SchemaUserDefined {
+	schema, ok := desc.(catalog.SchemaDescriptor)
+	if !ok {
+		if flags.Required {
+			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
+		}
+		return nil, nil
+	}
+	if err := catalog.FilterDescriptorState(schema, flags); err != nil {
+		if flags.Required {
 			return nil, err
 		}
-		return schema.Desc.(*schemadesc.Immutable), nil
-	}
-
-	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
-		dbID,
-		keys.RootNamespaceID,
-		schemaName,
-		flags,
-	); refuseFurtherLookup || err != nil {
-		return nil, err
-	} else if immut := desc.immutable; immut != nil {
-		log.VEventf(ctx, 2, "found uncommitted descriptor %d", immut.GetID())
-		desc, ok := immut.(*schemadesc.Immutable)
-		if !ok {
-			if flags.Required {
-				return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
-			}
-			return nil, nil
-		}
-		return desc, nil
-	}
-
-	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled()
-	if avoidCache {
-		return readFromStore()
-	}
-
-	// Look up whether the schema is on the database descriptor and return early
-	// if it's not.
-	// TODO (lucy): It's unfortunate that our current API (where we look up
-	// schemas by database ID and name) forces us to look up the leased database
-	// descriptor here, since we'll already have done this lookup when we're
-	// resolving the schema by name. Arguably we should be doing this at a higher
-	// level.
-	dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, dbID, tree.DatabaseLookupFlags{Required: true})
-	if err != nil {
-		return nil, err
-	}
-	schemaInfo, found := dbDesc.LookupSchema(schemaName)
-	if !found {
-		if flags.Required {
-			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
-		}
 		return nil, nil
-	} else if schemaInfo.Dropped {
-		if flags.Required {
-			return nil, pgerror.New(pgcode.InvalidSchemaName, "schema %s is being dropped")
-		}
-		return nil, nil
-	}
-
-	// If we have a schema ID from the database, get the schema descriptor. Since
-	// the schema and database descriptors are updated in the same transaction,
-	// their leased "versions" (not the descriptor version, but the state in the
-	// abstract sequence of states in adding, renaming, or dropping a schema) can
-	// differ by at most 1 while waiting for old leases to drain. So false
-	// negatives can occur from the database lookup, in some sense, if we have a
-	// lease on the latest version of the schema and on the previous version of
-	// the database which doesn't reflect the changes to the schema. But this
-	// isn't a problem for correctness; it can only happen on other sessions
-	// before the schema change has returned results.
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, schemaInfo.ID, flags, true /* setTxnDeadline */)
-	if err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
-		}
-		return nil, err
-	}
-	schema, ok := desc.(*schemadesc.Immutable)
-	if !ok {
-		return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
 	}
 	return schema, nil
 }
 
-// ResolveSchema resolves the schema and, if applicable, returns a descriptor
+// GetSchemaByName resolves the schema and, if applicable, returns a descriptor
 // usable by the transaction.
-// This method departs from the pattern for the other descriptor types: there
-// are no separate methods for mutable and immutable descriptors. The only
-// reasons for this are that both paths require special handling for the public
-// schema and temp schemas, and currently the only user of the descriptor
-// collection for schemas is the CachedPhysicalAccessor, which needs access to
-// both variants anyway.
-func (tc *Collection) ResolveSchema(
+func (tc *Collection) GetSchemaByName(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
 ) (bool, catalog.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
@@ -591,28 +574,27 @@ func (tc *Collection) ResolveSchema(
 				}
 			}
 		}
-
-		exists, resolved, err := getSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
-		if err != nil || !exists {
-			return exists, catalog.ResolvedSchema{}, err
+		exists, schemaID, err := catalogkv.ResolveSchemaID(ctx, txn, tc.codec(), dbID, schemaName)
+		if err != nil {
+			return false, catalog.ResolvedSchema{}, err
+		} else if !exists {
+			if flags.Required {
+				return false, catalog.ResolvedSchema{}, sqlerrors.NewUndefinedSchemaError(schemaName)
+			}
+			return false, catalog.ResolvedSchema{}, nil
 		}
-		return exists, resolved, err
+		schema := catalog.ResolvedSchema{
+			Kind: catalog.SchemaTemporary,
+			Name: schemaName,
+			ID:   schemaID,
+		}
+		return true, schema, nil
 	}
 
 	// Otherwise, the schema is user-defined. Get the descriptor.
-	var desc catalog.SchemaDescriptor
-	if flags.RequireMutable {
-		mutDesc, err := tc.getMutableUserDefinedSchemaDescriptor(ctx, txn, dbID, schemaName, flags)
-		if err != nil || mutDesc == nil {
-			return false, catalog.ResolvedSchema{}, err
-		}
-		desc = mutDesc
-	} else {
-		immutDesc, err := tc.getUserDefinedSchemaVersion(ctx, txn, dbID, schemaName, flags)
-		if err != nil || immutDesc == nil {
-			return false, catalog.ResolvedSchema{}, err
-		}
-		desc = immutDesc
+	desc, err := tc.getUserDefinedSchemaByName(ctx, txn, dbID, schemaName, flags)
+	if err != nil || desc == nil {
+		return false, catalog.ResolvedSchema{}, err
 	}
 	return true, catalog.ResolvedSchema{
 		Kind: catalog.SchemaUserDefined,
@@ -692,7 +674,7 @@ func (tc *Collection) getObjectVersion(
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, schemaName,
+	foundSchema, resolvedSchema, err := tc.GetSchemaByName(ctx, txn, dbID, schemaName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
