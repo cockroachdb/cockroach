@@ -66,6 +66,7 @@ type schemaChange struct {
 	dryRun             bool
 	maxSourceTables    int
 	sequenceOwnedByPct int
+	logFilePath        string
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -91,6 +92,8 @@ var schemaChangeMeta = workload.Meta{
 			`Maximum tables or views that a newly created tables or views can depend on`)
 		s.flags.IntVar(&s.sequenceOwnedByPct, `seq-owned-pct`, defaultSequenceOwnedByPct,
 			`Percentage of times that a sequence is owned by column upon creation.`)
+		s.flags.StringVar(&s.logFilePath, `txn-log`, "",
+			`If provided, transactions will be written to this file in JSON form`)
 		return s
 	},
 }
