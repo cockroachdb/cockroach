@@ -498,7 +498,18 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
 				i, humanizeutil.IBytes(sizeInBytes)))
 			if spec.StickyInMemoryEngineID != "" {
-				e, err := getOrCreateStickyInMemEngine(ctx, spec.StickyInMemoryEngineID, spec.Attributes, sizeInBytes)
+				if cfg.TestingKnobs.Server == nil {
+					return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
+						"engine no server knobs available to get a registry. " +
+						"Please use Knobs.Server.StickyEngineRegistry to provide one.")
+				}
+				knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+				if knobs.StickyEngineRegistry == nil {
+					return Engines{}, errors.Errorf("Could not create a sticky " +
+						"engine no registry available. Please use " +
+						"Knobs.Server.StickyEngineRegistry to provide one.")
+				}
+				e, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, spec)
 				if err != nil {
 					return Engines{}, err
 				}
