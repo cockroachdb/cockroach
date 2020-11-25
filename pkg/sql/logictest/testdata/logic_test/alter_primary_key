@@ -726,14 +726,14 @@ t  CREATE TABLE public.t (
 statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (x INT NOT NULL);
-ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (x)
+ALTER TABLE t ADD CONSTRAINT "my_pk" PRIMARY KEY (x)
 
 query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
-   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   CONSTRAINT my_pk PRIMARY KEY (x ASC),
    FAMILY "primary" (x, rowid)
 )
 
