@@ -2002,6 +2002,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	// replica GC queue does its work, so we disable the replica gc queue here
 	// and run it manually when we're ready.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.TestingKnobs.DisableEagerReplicaRemoval = true
 	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
@@ -4779,6 +4780,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// Newly-started stores (including the "rogue" one) should not GC
 	// their replicas. We'll turn this back on when needed.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.RaftDelaySplitToSuppressSnapshotTicks = 0
 	// Make the tick interval short so we don't need to wait too long for the
 	// partitioned leader to time out. Also make the
