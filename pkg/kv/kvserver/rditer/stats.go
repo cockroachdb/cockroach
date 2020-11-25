@@ -26,7 +26,7 @@ func ComputeStatsForRange(
 	defer iter.Close()
 
 	ms := enginepb.MVCCStats{}
-	for _, keyRange := range MakeReplicatedKeyRanges(d) {
+	for _, keyRange := range MakeReplicatedKeyRangesExceptLockTable(d) {
 		msDelta, err := iter.ComputeStats(keyRange.Start.Key, keyRange.End.Key, nowNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err

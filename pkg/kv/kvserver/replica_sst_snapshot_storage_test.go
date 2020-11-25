@@ -106,7 +106,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 }
 
 // TestMultiSSTWriterInitSST tests that multiSSTWriter initializes each of the
-// SST files associated with the three replicated key ranges by writing a range
+// SST files associated with the replicated key ranges by writing a range
 // deletion tombstone that spans the entire range of each respectively.
 func TestMultiSSTWriterInitSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
