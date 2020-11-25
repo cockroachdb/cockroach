@@ -490,11 +490,11 @@ t3            rowid     -1         NULL      NULL        NULL      true        t
 primary       rowid     -1         NULL      NULL        NULL      true        true
 t3_a_b_idx    a         -1         NULL      NULL        NULL      false       false
 t3_a_b_idx    b         -1         NULL      NULL        NULL      false       false
-v1            p         -1         NULL      NULL        NULL      true        false
-v1            a         -1         NULL      NULL        NULL      true        false
-v1            b         -1         NULL      NULL        NULL      true        false
-v1            c         -1         NULL      NULL        NULL      true        false
-mv1           ?column?  -1         NULL      NULL        NULL      true        false
+v1            p         -1         NULL      NULL        NULL      false       false
+v1            a         -1         NULL      NULL        NULL      false       false
+v1            b         -1         NULL      NULL        NULL      false       false
+v1            c         -1         NULL      NULL        NULL      false       false
+mv1           ?column?  -1         NULL      NULL        NULL      false       false
 mv1           rowid     -1         NULL      NULL        NULL      true        true
 primary       rowid     -1         NULL      NULL        NULL      true        true
 
