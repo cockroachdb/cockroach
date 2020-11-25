@@ -75,7 +75,7 @@ func (l *LogicalSchemaAccessor) GetSchema(
 	}
 
 	// Fallthrough.
-	return l.tc.ResolveSchema(ctx, txn, dbID, scName, flags)
+	return l.tc.GetSchemaByName(ctx, txn, dbID, scName, flags)
 }
 
 // GetObjectNames implements the DatabaseLister interface.
