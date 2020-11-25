@@ -128,7 +128,7 @@ func mvccGetGo(
 	defer buf.release()
 
 	metaKey := MakeMVCCMetadataKey(key)
-	ok, _, _, err := mvccGetMetadata(iter, metaKey, &buf.meta)
+	ok, _, _, _, err := mvccGetMetadata(iter, metaKey, &buf.meta)
 	if !ok || err != nil {
 		return nil, nil, err
 	}
