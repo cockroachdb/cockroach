@@ -625,8 +625,8 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// Otherwise, continue with the rest of the schema change state machine.
-	if tableDesc.Dropped() && sc.droppedDatabaseID == descpb.InvalidID {
-		// We've dropped this table, let's kick off a GC job.
+	if tableDesc.Dropped() && tableDesc.IsPhysicalTable() && sc.droppedDatabaseID == descpb.InvalidID {
+		// We've dropped this physical table, let's kick off a GC job.
 		dropTime := timeutil.Now().UnixNano()
 		if tableDesc.TableDesc().DropTime > 0 {
 			dropTime = tableDesc.TableDesc().DropTime

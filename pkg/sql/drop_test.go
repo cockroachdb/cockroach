@@ -1385,3 +1385,70 @@ CREATE TABLE t.child(k INT PRIMARY KEY REFERENCES t.parent);
 	tests.CheckKeyCount(t, kvDB, parentDesc.TableSpan(keys.SystemSQLCodec), 0)
 	tests.CheckKeyCount(t, kvDB, childDesc.TableSpan(keys.SystemSQLCodec), 0)
 }
+
+// Test that GC jobs don't get scheduled following a DROP VIEW.
+func TestDropPhysicalTableGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params, _ := tests.CreateTestServerParams()
+
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+	_, err := sqlDB.Exec(`CREATE DATABASE test;`)
+	require.NoError(t, err)
+
+	type tableInstance struct {
+		name         string
+		sqlType      string
+		isPhysical   bool
+		createClause string
+	}
+
+	tables := [4]tableInstance{
+		{name: "t", sqlType: "TABLE", isPhysical: true, createClause: `(a INT PRIMARY KEY)`},
+		{name: "mv", sqlType: "MATERIALIZED VIEW", isPhysical: true, createClause: `AS SELECT 1`},
+		{name: "s", sqlType: "SEQUENCE", isPhysical: true, createClause: `START 1`},
+		{name: "v", sqlType: "VIEW", isPhysical: false, createClause: `AS SELECT 1`},
+	}
+
+	for _, table := range tables {
+		_, err := sqlDB.Exec(fmt.Sprintf(`CREATE %s test.%s %s;`, table.sqlType, table.name, table.createClause))
+		require.NoError(t, err)
+		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", table.name)
+		require.NotNil(t, desc)
+		_, err = sqlDB.Exec(fmt.Sprintf(`DROP %s test.%s;`, table.sqlType, table.name))
+		require.NoError(t, err)
+		// Push a new zone config for the tables with TTL=0 to cause GC jobs to start immediately
+		_, err = sqltestutils.AddImmediateGCZoneConfig(sqlDB, desc.GetParentID())
+		require.NoError(t, err)
+	}
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Ensure that no other GC jobs run other than those for physical tables
+	testutils.SucceedsSoon(t, func() error {
+		for _, table := range tables {
+			var expected int
+			if table.isPhysical {
+				expected = 1
+			}
+			var actual int
+			countSql := fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE description = 'GC for DROP %s test.public.%s'`, table.sqlType, table.name)
+			sqlRun.QueryRow(t, countSql).Scan(&actual)
+			if actual != expected {
+				if expected == 0 {
+					t.Fatalf("GC job for DROP %s when none was expected", table.sqlType)
+				}
+				return errors.Newf("expected %d GC jobs for table %s, got %d", expected, table.name, actual)
+			}
+		}
+		return nil
+	})
+}
