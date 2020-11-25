@@ -29,13 +29,24 @@ import (
 type EditSensitiveData int
 
 const (
-	invalidEditMode EditSensitiveData = iota
+	// The 4 reference values below require the first bit to be
+	// set. This ensures the API is not mistakenly used with an
+	// uninitialized mode parameter.
+	confValid       = 1
+	withKeepMarkers = 2
+	withRedaction   = 4
+
+	// WithFlattenedSensitiveData is the log including sensitive data,
+	// but markers stripped.
+	WithFlattenedSensitiveData EditSensitiveData = confValid
 	// WithMarkedSensitiveData is the "raw" log with sensitive data markers included.
-	WithMarkedSensitiveData
-	// WithFlattenedSensitiveData is the log with markers stripped.
-	WithFlattenedSensitiveData
-	// WithoutSensitiveData is the log with the sensitive data redacted.
-	WithoutSensitiveData
+	WithMarkedSensitiveData EditSensitiveData = confValid | withKeepMarkers
+	// WithoutSensitiveDataNorMarkers is the log with the sensitive data
+	// redacted, and markers stripped.
+	WithoutSensitiveDataNorMarkers EditSensitiveData = confValid | withRedaction
+	// WithoutSensitiveData is the log with the sensitive data redacted,
+	// but markers included.
+	WithoutSensitiveData EditSensitiveData = confValid | withKeepMarkers | withRedaction
 )
 
 // KeepRedactable can be used as an argument to SelectEditMode to indicate that
@@ -49,13 +60,14 @@ const KeepRedactable = true
 // (See the documentation for the Logs and LogFile RPCs
 // and that of the 'merge-logs' CLI command.)
 func SelectEditMode(redact, keepRedactable bool) EditSensitiveData {
-	editMode := WithMarkedSensitiveData
+	var editMode EditSensitiveData
 	if redact {
-		editMode = WithoutSensitiveData
+		editMode = editMode | withRedaction
 	}
-	if !keepRedactable && !redact {
-		editMode = WithFlattenedSensitiveData
+	if keepRedactable {
+		editMode = editMode | withKeepMarkers
 	}
+	editMode = editMode | confValid
 	return editMode
 }
 
@@ -89,12 +101,22 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 			}
 			return r
 		}
-	case invalidEditMode:
-		fallthrough
+	case WithoutSensitiveDataNorMarkers:
+		return func(r redactablePackage) redactablePackage {
+			if r.redactable {
+				r.msg = redact.RedactableBytes(r.msg).Redact().StripMarkers()
+				r.redactable = false
+			} else {
+				r.msg = strippedMarker
+			}
+			return r
+		}
 	default:
 		panic(errors.AssertionFailedf("unrecognized mode: %v", editMode))
 	}
 }
+
+var strippedMarker = redact.RedactableBytes(redact.RedactedMarker()).StripMarkers()
 
 // maybeRedactEntry transforms a logpb.Entry to either strip
 // sensitive data or keep it, or strip the redaction markers or keep them,
