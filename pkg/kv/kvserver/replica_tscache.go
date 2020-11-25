@@ -33,7 +33,7 @@ import (
 func setTimestampCacheLowWaterMark(
 	tc tscache.Cache, desc *roachpb.RangeDescriptor, ts hlc.Timestamp,
 ) {
-	for _, keyRange := range rditer.MakeReplicatedKeyRanges(desc) {
+	for _, keyRange := range rditer.MakeReplicatedKeyRangesExceptLockTable(desc) {
 		tc.SetLowWater(keyRange.Start.Key, keyRange.End.Key, ts)
 	}
 }

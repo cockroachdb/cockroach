@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
 // KeyRange is a helper struct for the ReplicaMVCCDataIterator and
@@ -36,46 +35,29 @@ type KeyRange struct {
 //
 // A ReplicaMVCCDataIterator provides a subset of the engine.MVCCIterator interface.
 //
-// TODO(tschottdorf): the API is awkward. By default, ReplicaMVCCDataIterator uses
-// a byte allocator which needs to be reset manually using `ResetAllocator`.
-// This is problematic as it requires of every user careful tracking of when
-// to call that method; some just never call it and pull the whole replica
-// into memory. Use of an allocator should be opt-in.
-//
 // TODO(sumeer): merge with ReplicaEngineDataIterator. We can use an EngineIterator
 // for MVCC key ranges and convert from EngineKey to MVCCKey.
 type ReplicaMVCCDataIterator struct {
 	curIndex int
 	ranges   []KeyRange
 	it       storage.MVCCIterator
-	a        bufalloc.ByteAllocator
 }
 
 // ReplicaEngineDataIterator is like ReplicaMVCCDataIterator, but iterates
 // using the general EngineKeys. It provides a subset of the engine.EngineIterator
 // interface.
-//
-// TODO(tschottdorf): the API is awkward. By default, ReplicaMVCCDataIterator uses
-// a byte allocator which needs to be reset manually using `ResetAllocator`.
-// This is problematic as it requires of every user careful tracking of when
-// to call that method; some just never call it and pull the whole replica
-// into memory. Use of an allocator should be opt-in.
 type ReplicaEngineDataIterator struct {
 	curIndex int
 	ranges   []KeyRange
 	it       storage.EngineIterator
 	valid    bool
 	err      error
-	a        bufalloc.ByteAllocator
 }
 
-// MakeAllKeyRanges returns all key ranges for the given Range.
+// MakeAllKeyRanges returns all key ranges for the given Range, in
+// sorted order.
 func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
-	return []KeyRange{
-		MakeRangeIDLocalKeyRange(d.RangeID, false /* replicatedOnly */),
-		MakeRangeLocalKeyRange(d),
-		MakeUserKeyRange(d),
-	}
+	return makeRangeKeyRanges(d, false /* replicatedOnly */)
 }
 
 // MakeReplicatedKeyRanges returns all key ranges that are fully Raft
@@ -86,13 +68,75 @@ func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 //
 // 1. Replicated range-id local key range
 // 2. Range-local key range
-// 3. User key range
+// 3. Lock-table key ranges (optional)
+// 4. User key range
 func MakeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
+	return makeRangeKeyRanges(d, true /* replicatedOnly */)
+}
+
+func makeRangeKeyRanges(d *roachpb.RangeDescriptor, replicatedOnly bool) []KeyRange {
+	rangeIDLocal := MakeRangeIDLocalKeyRange(d.RangeID, replicatedOnly)
+	rangeLocal := makeRangeLocalKeyRange(d)
+	user := MakeUserKeyRange(d)
+	if storage.DisallowSeparatedIntents {
+		return []KeyRange{
+			rangeIDLocal,
+			rangeLocal,
+			user,
+		}
+	}
+	rangeLockTable := makeRangeLockTableKeyRanges(d)
+	ranges := make([]KeyRange, 3+len(rangeLockTable))
+	ranges[0] = rangeIDLocal
+	ranges[1] = rangeLocal
+	i := 2
+	for j := range rangeLockTable {
+		ranges[i] = rangeLockTable[j]
+		i++
+	}
+	ranges[i] = user
+	return ranges
+}
+
+// MakeReplicatedKeyRangesExceptLockTable returns all key ranges that are fully Raft
+// replicated for the given Range, except for the lock table ranges. These are
+// returned in the following sorted order:
+// 1. Replicated range-id local key range
+// 2. Range-local key range
+// 3. User key range
+func MakeReplicatedKeyRangesExceptLockTable(d *roachpb.RangeDescriptor) []KeyRange {
 	return []KeyRange{
 		MakeRangeIDLocalKeyRange(d.RangeID, true /* replicatedOnly */),
-		MakeRangeLocalKeyRange(d),
+		makeRangeLocalKeyRange(d),
 		MakeUserKeyRange(d),
 	}
+}
+
+// MakeReplicatedKeyRangesExceptRangeID returns all key ranges that are fully Raft
+// replicated for the given Range, except for the replicated range-id local key range.
+// These are returned in the following sorted order:
+// 1. Range-local key range
+// 2. Lock-table key ranges (optional)
+// 3. User key range
+func MakeReplicatedKeyRangesExceptRangeID(d *roachpb.RangeDescriptor) []KeyRange {
+	rangeLocal := makeRangeLocalKeyRange(d)
+	user := MakeUserKeyRange(d)
+	if storage.DisallowSeparatedIntents {
+		return []KeyRange{
+			rangeLocal,
+			user,
+		}
+	}
+	rangeLockTable := makeRangeLockTableKeyRanges(d)
+	ranges := make([]KeyRange, 2+len(rangeLockTable))
+	ranges[0] = rangeLocal
+	i := 1
+	for j := range rangeLockTable {
+		ranges[i] = rangeLockTable[j]
+		i++
+	}
+	ranges[i] = user
+	return ranges
 }
 
 // MakeRangeIDLocalKeyRange returns the range-id local key range. If
@@ -112,14 +156,34 @@ func MakeRangeIDLocalKeyRange(rangeID roachpb.RangeID, replicatedOnly bool) KeyR
 	}
 }
 
-// MakeRangeLocalKeyRange returns the range local key range. Range-local keys
+// makeRangeLocalKeyRange returns the range local key range. Range-local keys
 // are replicated keys that do not belong to the range they would naturally
 // sort into. For example, /Local/Range/Table/1 would sort into [/Min,
 // /System), but it actually belongs to [/Table/1, /Table/2).
-func MakeRangeLocalKeyRange(d *roachpb.RangeDescriptor) KeyRange {
+func makeRangeLocalKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 	return KeyRange{
 		Start: storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
 		End:   storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
+	}
+}
+
+// makeRangeLockTableKeyRanges returns the 2 lock table key ranges.
+func makeRangeLockTableKeyRanges(d *roachpb.RangeDescriptor) [2]KeyRange {
+	// Handle doubly-local lock table keys since range descriptor key
+	// is a range local key that can have a replicated lock acquired on it.
+	startRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(d.StartKey), nil)
+	endRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(d.EndKey), nil)
+	startGlobal, _ := keys.LockTableSingleKey(roachpb.Key(d.StartKey), nil)
+	endGlobal, _ := keys.LockTableSingleKey(roachpb.Key(d.EndKey), nil)
+	return [2]KeyRange{
+		{
+			Start: storage.MakeMVCCMetadataKey(startRangeLocal),
+			End:   storage.MakeMVCCMetadataKey(endRangeLocal),
+		},
+		{
+			Start: storage.MakeMVCCMetadataKey(startGlobal),
+			End:   storage.MakeMVCCMetadataKey(endGlobal),
+		},
 	}
 }
 
@@ -138,20 +202,20 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 	}
 }
 
-// NewReplicaMVCCDataIterator creates a ReplicaMVCCDataIterator for the given replica.
-// TODO(sumeer): narrow this interface since only gcIterator uses
-// ReplicaMVCCDataIterator.
+// NewReplicaMVCCDataIterator creates a ReplicaMVCCDataIterator for the given
+// replica. It iterates over the replicated key ranges excluding the lock
+// table key range. Separated locks are made to appear as interleaved. The
+// iterator is initially positioned at the end of the last range.
+//
+// TODO(sumeer): narrow this interface after changing the test function
+// runGCOld().
 func NewReplicaMVCCDataIterator(
-	d *roachpb.RangeDescriptor, reader storage.Reader, replicatedOnly bool, seekEnd bool,
+	d *roachpb.RangeDescriptor, reader storage.Reader, seekEnd bool,
 ) *ReplicaMVCCDataIterator {
-	it := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
-
-	rangeFunc := MakeAllKeyRanges
-	if replicatedOnly {
-		rangeFunc = MakeReplicatedKeyRanges
-	}
+	it := reader.NewMVCCIterator(
+		storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 	ri := &ReplicaMVCCDataIterator{
-		ranges: rangeFunc(d),
+		ranges: MakeReplicatedKeyRangesExceptLockTable(d),
 		it:     it,
 	}
 	if seekEnd {
@@ -233,18 +297,21 @@ func (ri *ReplicaMVCCDataIterator) Valid() (bool, error) {
 	return ok, err
 }
 
-// Key returns the current key.
+// Key returns the current key. Only called in tests.
 func (ri *ReplicaMVCCDataIterator) Key() storage.MVCCKey {
 	key := ri.it.UnsafeKey()
-	ri.a, key.Key = ri.a.Copy(key.Key, 0)
+	keyCopy := make([]byte, len(key.Key))
+	copy(keyCopy, key.Key)
+	key.Key = keyCopy
 	return key
 }
 
-// Value returns the current value.
+// Value returns the current value. Only called in tests.
 func (ri *ReplicaMVCCDataIterator) Value() []byte {
 	value := ri.it.UnsafeValue()
-	ri.a, value = ri.a.Copy(value, 0)
-	return value
+	valueCopy := make([]byte, len(value))
+	copy(valueCopy, value)
+	return valueCopy
 }
 
 // UnsafeKey returns the same value as Key, but the memory is invalidated on
@@ -257,11 +324,6 @@ func (ri *ReplicaMVCCDataIterator) UnsafeKey() storage.MVCCKey {
 // the next call to {Next,Prev,Close}.
 func (ri *ReplicaMVCCDataIterator) UnsafeValue() []byte {
 	return ri.it.UnsafeValue()
-}
-
-// ResetAllocator resets the ReplicaMVCCDataIterator's internal byte allocator.
-func (ri *ReplicaMVCCDataIterator) ResetAllocator() {
-	ri.a = nil
 }
 
 // NewReplicaEngineDataIterator creates a ReplicaEngineDataIterator for the given replica.
@@ -331,24 +393,16 @@ func (ri *ReplicaEngineDataIterator) Valid() (bool, error) {
 	return ri.valid, ri.err
 }
 
-// Key returns the current key.
-// TODO(sumeer): only used in tests. Remove method and allocator.
-func (ri *ReplicaEngineDataIterator) Key() storage.EngineKey {
-	key := ri.UnsafeKey()
-	key, ri.a = key.CopyUsingAlloc(ri.a)
-	return key
-}
-
-// Value returns the current value.
-// TODO(sumeer): only used in tests. Remove method and allocator.
+// Value returns the current value. Only used in tests.
 func (ri *ReplicaEngineDataIterator) Value() []byte {
 	value := ri.it.UnsafeValue()
-	ri.a, value = ri.a.Copy(value, 0)
-	return value
+	valueCopy := make([]byte, len(value))
+	copy(valueCopy, value)
+	return valueCopy
 }
 
-// UnsafeKey returns the same value as Key, but the memory is invalidated on
-// the next call to {Next,Close}.
+// UnsafeKey returns the current key, but the memory is invalidated on the
+// next call to {Next,Close}.
 func (ri *ReplicaEngineDataIterator) UnsafeKey() storage.EngineKey {
 	key, err := ri.it.UnsafeEngineKey()
 	if err != nil {

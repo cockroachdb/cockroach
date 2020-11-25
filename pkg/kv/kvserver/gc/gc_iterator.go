@@ -28,8 +28,7 @@ type gcIterator struct {
 
 func makeGCIterator(desc *roachpb.RangeDescriptor, snap storage.Reader) gcIterator {
 	return gcIterator{
-		it: rditer.NewReplicaMVCCDataIterator(desc, snap,
-			true /* replicatedOnly */, true /* seekEnd */),
+		it: rditer.NewReplicaMVCCDataIterator(desc, snap, true /* seekEnd */),
 	}
 }
 
