@@ -452,25 +452,25 @@ run error
 get t=txn3 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=5.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=5.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn3 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=5.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=5.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -551,25 +551,25 @@ run error
 get t=txn4 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=5.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=5.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn4 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=5.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=5.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -757,25 +757,25 @@ run error
 get t=txn6 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn6 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn6 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn6 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -860,25 +860,25 @@ run error
 get t=txn7 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn7 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn7 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn7 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -963,25 +963,25 @@ run error
 get t=txn8 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn8 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1066,25 +1066,25 @@ run error
 get t=txn9 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn9 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1145,49 +1145,49 @@ run error
 get t=txn10 k=k5
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k5"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn10 k=k5
 ----
 scan: "k5"-"k5\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k5"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn10 k=k6
 ----
 get: "k6" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k6"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn10 k=k6
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k6"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn10 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn10 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn10 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn10 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1351,25 +1351,25 @@ run error
 get t=txn12 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn12 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn12 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn12 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1446,25 +1446,25 @@ run error
 get t=txn13 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn13 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn13 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn13 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=10.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1541,25 +1541,25 @@ run error
 get t=txn14 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn14 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn14 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn14 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1636,25 +1636,25 @@ run error
 get t=txn15 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn15 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn15 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn15 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1715,49 +1715,49 @@ run error
 get t=txn16 k=k5
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k5"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn16 k=k5
 ----
 scan: "k5"-"k5\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k5"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn16 k=k6
 ----
 get: "k6" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k6"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn16 k=k6
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k6"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn16 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn16 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn16 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn16 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1834,25 +1834,25 @@ run error
 get t=txn17 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn17 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn17 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn17 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1929,25 +1929,25 @@ run error
 get t=txn18 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn18 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn18 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn18 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=15.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -2008,49 +2008,49 @@ run error
 get t=txn19 k=k5
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k5"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn19 k=k5
 ----
 scan: "k5"-"k5\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k5"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn19 k=k6
 ----
 get: "k6" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k6"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn19 k=k6
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k6"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0 within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn19 k=k7
 ----
 get: "k7" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn19 k=k7
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k7"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn19 k=k8
 ----
 get: "k8" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn19 k=k8
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k8"
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0[syn] within uncertainty interval `t <= (observed_max=20.000000000,0, max=25.000000000,0)`; observed timestamps: []
 
 
 run ok

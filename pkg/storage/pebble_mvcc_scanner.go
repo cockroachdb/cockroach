@@ -384,9 +384,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 	}
 
 	ownIntent := p.txn != nil && p.meta.Txn.ID.Equal(p.txn.ID)
-	otherIntentVisible := metaTS.LessEq(p.ts) ||
-		(p.checkUncertainty && p.isUncertainValue(metaTS)) ||
-		p.failOnMoreRecent
+	otherIntentVisible := metaTS.LessEq(p.ts) || p.failOnMoreRecent
 
 	if !ownIntent && !otherIntentVisible {
 		// 8. The key contains an intent, but we're reading below the intent.
@@ -396,6 +394,10 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// we want to read the intent regardless of our read timestamp and fall
 		// into case 8 below.
 		if p.checkUncertainty {
+			if p.isUncertainValue(metaTS) {
+				return p.uncertaintyError(metaTS)
+			}
+
 			return p.seekVersion(p.txn.MaxTimestamp, true)
 		}
 		return p.seekVersion(p.ts, false)
