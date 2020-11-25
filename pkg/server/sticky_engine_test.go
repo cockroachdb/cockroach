@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,16 +30,28 @@ func TestStickyEngines(t *testing.T) {
 	attrs := roachpb.Attributes{}
 	cacheSize := int64(1 << 20)
 
-	engine1, err := getOrCreateStickyInMemEngine(ctx, "engine1", attrs, cacheSize)
+	registry := NewStickyInMemEnginesRegistry()
+
+	spec1 := base.StoreSpec{
+		StickyInMemoryEngineID: "engine1",
+		Attributes:             attrs,
+		Size:                   base.SizeSpec{InBytes: cacheSize},
+	}
+	engine1, err := registry.GetOrCreateStickyInMemEngine(ctx, spec1)
 	require.NoError(t, err)
 	require.False(t, engine1.Closed())
 
-	engine2, err := getOrCreateStickyInMemEngine(ctx, "engine2", attrs, cacheSize)
+	spec2 := base.StoreSpec{
+		StickyInMemoryEngineID: "engine2",
+		Attributes:             attrs,
+		Size:                   base.SizeSpec{InBytes: cacheSize},
+	}
+	engine2, err := registry.GetOrCreateStickyInMemEngine(ctx, spec2)
 	require.NoError(t, err)
 	require.False(t, engine2.Closed())
 
 	// Regetting the engine whilst it is not closed will fail.
-	_, err = getOrCreateStickyInMemEngine(ctx, "engine1", attrs, cacheSize)
+	_, err = registry.GetOrCreateStickyInMemEngine(ctx, spec1)
 	require.EqualError(t, err, "sticky engine engine1 has not been closed")
 
 	// Close the engine, which allows it to be refetched.
@@ -47,29 +60,14 @@ func TestStickyEngines(t *testing.T) {
 	require.False(t, engine1.(*stickyInMemEngine).Engine.Closed())
 
 	// Refetching the engine should give back the same engine.
-	engine1Refetched, err := getOrCreateStickyInMemEngine(ctx, "engine1", attrs, cacheSize)
+	engine1Refetched, err := registry.GetOrCreateStickyInMemEngine(ctx, spec1)
 	require.NoError(t, err)
 	require.Equal(t, engine1, engine1Refetched)
 	require.False(t, engine1.Closed())
 
-	// Closing an engine that does not exist will error.
-	err = CloseStickyInMemEngine("engine3")
-	require.EqualError(t, err, "sticky in-mem engine engine3 does not exist")
-
-	// Cleaning up the engine should result in a new engine.
-	err = CloseStickyInMemEngine("engine1")
-	require.NoError(t, err)
-	require.True(t, engine1.Closed())
-	require.True(t, engine1.(*stickyInMemEngine).Engine.Closed())
-
-	newEngine1, err := getOrCreateStickyInMemEngine(ctx, "engine1", attrs, cacheSize)
-	require.NoError(t, err)
-	require.NotEqual(t, engine1, newEngine1)
-
 	// Cleaning up everything asserts everything is closed.
-	CloseAllStickyInMemEngines()
-	require.Len(t, stickyInMemEnginesRegistry.entries, 0)
-	for _, engine := range []storage.Engine{engine1, newEngine1, engine2} {
+	registry.CloseAllStickyInMemEngines()
+	for _, engine := range []storage.Engine{engine1, engine2} {
 		require.True(t, engine.Closed())
 		require.True(t, engine.(*stickyInMemEngine).Engine.Closed())
 	}

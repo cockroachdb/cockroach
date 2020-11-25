@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
@@ -50,6 +51,11 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				NoAutoInitializeCluster: true,
 				TenantAddr:              new(string),
 				EnableDemoLoginEndpoint: true,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyEngineRegistry: server.NewStickyInMemEnginesRegistry(),
+					},
+				},
 			},
 		},
 		{
@@ -68,6 +74,11 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				NoAutoInitializeCluster: true,
 				TenantAddr:              new(string),
 				EnableDemoLoginEndpoint: true,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyEngineRegistry: server.NewStickyInMemEnginesRegistry(),
+					},
+				},
 			},
 		},
 	}
