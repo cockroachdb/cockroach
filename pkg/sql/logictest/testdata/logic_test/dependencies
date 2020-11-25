@@ -29,8 +29,8 @@ descriptor_id  descriptor_name  column_id  column_name  column_type             
 57             test_kvi1        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
 58             test_kvi2        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
 58             test_kvi2        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
-59             test_v1          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
-60             test_v2          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
+59             test_v1          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+60             test_v2          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
 
 query ITITTBB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id
