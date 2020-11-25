@@ -18,6 +18,7 @@ SHOW TABLES FROM information_schema
 ----
 information_schema  administrable_role_authorizations  table  NULL  NULL
 information_schema  applicable_roles                   table  NULL  NULL
+information_schema  character_sets                     table  NULL  NULL
 information_schema  check_constraints                  table  NULL  NULL
 information_schema  column_privileges                  table  NULL  NULL
 information_schema  column_udt_usage                   table  NULL  NULL
@@ -127,6 +128,7 @@ SHOW TABLES FROM test.information_schema
 ----
 information_schema  administrable_role_authorizations  table  NULL  NULL
 information_schema  applicable_roles                   table  NULL  NULL
+information_schema  character_sets                     table  NULL  NULL
 information_schema  check_constraints                  table  NULL  NULL
 information_schema  column_privileges                  table  NULL  NULL
 information_schema  column_udt_usage                   table  NULL  NULL
@@ -265,6 +267,7 @@ crdb_internal       tables
 crdb_internal       zones
 information_schema  administrable_role_authorizations
 information_schema  applicable_roles
+information_schema  character_sets
 information_schema  check_constraints
 information_schema  column_privileges
 information_schema  column_udt_usage
@@ -420,6 +423,7 @@ tables
 zones
 administrable_role_authorizations
 applicable_roles
+character_sets
 check_constraints
 column_privileges
 column_udt_usage
@@ -594,6 +598,7 @@ system         crdb_internal       tables                             SYSTEM VIE
 system         crdb_internal       zones                              SYSTEM VIEW  NO                  1
 system         information_schema  administrable_role_authorizations  SYSTEM VIEW  NO                  1
 system         information_schema  applicable_roles                   SYSTEM VIEW  NO                  1
+system         information_schema  character_sets                     SYSTEM VIEW  NO                  1
 system         information_schema  check_constraints                  SYSTEM VIEW  NO                  1
 system         information_schema  column_privileges                  SYSTEM VIEW  NO                  1
 system         information_schema  column_udt_usage                   SYSTEM VIEW  NO                  1
@@ -746,6 +751,7 @@ statement ok
 SET DATABASE = test
 
 ## information_schema.table_constraints
+## information_schema.character_sets
 ## information_schema.check_constraints
 ## information_schema.constraint_column_usage
 
@@ -894,6 +900,17 @@ system              public             630200280_19_7_not_null   system         
 system              public             primary                   system         public        web_sessions                     PRIMARY KEY      NO             NO
 system              public             630200280_5_1_not_null    system         public        zones                            CHECK            NO             NO
 system              public             primary                   system         public        zones                            PRIMARY KEY      NO             NO
+
+query TTTTTTTT colnames
+SELECT *
+FROM system.information_schema.character_sets
+----
+character_set_catalog  character_set_schema  character_set_name  character_repertoire  form_of_use  default_collate_catalog  default_collate_schema  default_collate_name
+NULL                   NULL                  UTF8                UCS                   UTF8         defaultdb                NULL                    NULL
+NULL                   NULL                  UTF8                UCS                   UTF8         postgres                 NULL                    NULL
+NULL                   NULL                  UTF8                UCS                   UTF8         system                   NULL                    NULL
+NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
+
 
 query TTTT colnames
 SELECT *
@@ -1704,6 +1721,7 @@ NULL     public   system         crdb_internal       tables                     
 NULL     public   system         crdb_internal       zones                              SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations  SELECT          NULL          YES
 NULL     public   system         information_schema  applicable_roles                   SELECT          NULL          YES
+NULL     public   system         information_schema  character_sets                     SELECT          NULL          YES
 NULL     public   system         information_schema  check_constraints                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_udt_usage                   SELECT          NULL          YES
@@ -2084,6 +2102,7 @@ NULL     public   system         crdb_internal       tables                     
 NULL     public   system         crdb_internal       zones                              SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations  SELECT          NULL          YES
 NULL     public   system         information_schema  applicable_roles                   SELECT          NULL          YES
+NULL     public   system         information_schema  character_sets                     SELECT          NULL          YES
 NULL     public   system         information_schema  check_constraints                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_udt_usage                   SELECT          NULL          YES

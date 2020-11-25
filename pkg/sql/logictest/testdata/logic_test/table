@@ -576,6 +576,7 @@ tables                             NULL
 zones                              NULL
 administrable_role_authorizations  NULL
 applicable_roles                   NULL
+character_sets                     NULL
 check_constraints                  NULL
 column_privileges                  NULL
 column_udt_usage                   NULL
