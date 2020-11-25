@@ -730,3 +730,91 @@ root
                                └── filters
                                     ├── c:43 = child_multi.c:45
                                     └── column3:44 = child_multi.q:47
+
+# Regression test for #57148. A check constraint or computed column in a child
+# table that references a column with the same name as the parent's synthesized
+# update column should not result in an ambiguous column reference error. In
+# this test the synthesized update column for the parent is "p" + "_new" =
+# "p_new", which is the name of the FK column in the child.
+exec-ddl
+CREATE TABLE parent_check_ambig (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_check_ambig (
+  c INT PRIMARY KEY,
+  p_new INT REFERENCES parent_check_ambig(p) ON UPDATE CASCADE,
+  i INT AS (p_new * 2) STORED,
+  CHECK (p_new > 0)
+)
+----
+
+build-cascades
+UPDATE parent_check_ambig SET p = p * 10 WHERE p > 1
+----
+root
+ ├── update parent_check_ambig
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── update-mapping:
+ │    │    └── p_new:5 => p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_new_ref_parent_check_ambig
+ │    └── project
+ │         ├── columns: p_new:5!null p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── select
+ │         │    ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    ├── scan parent_check_ambig
+ │         │    │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    └── filters
+ │         │         └── p:3 > 1
+ │         └── projections
+ │              └── p:3 * 10 [as=p_new:5]
+ └── cascade
+      └── update child_check_ambig
+           ├── columns: <none>
+           ├── fetch columns: c:10 child_check_ambig.p_new:11 i:12
+           ├── update-mapping:
+           │    ├── p_new:15 => child_check_ambig.p_new:7
+           │    └── column16:16 => i:8
+           ├── check columns: check1:17
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: check1:17!null c:10!null child_check_ambig.p_new:11!null i:12 p:14!null p_new:15!null column16:16!null
+           │    ├── project
+           │    │    ├── columns: column16:16!null c:10!null child_check_ambig.p_new:11!null i:12 p:14!null p_new:15!null
+           │    │    ├── inner-join (hash)
+           │    │    │    ├── columns: c:10!null child_check_ambig.p_new:11!null i:12 p:14!null p_new:15!null
+           │    │    │    ├── scan child_check_ambig
+           │    │    │    │    ├── columns: c:10!null child_check_ambig.p_new:11 i:12
+           │    │    │    │    └── computed column expressions
+           │    │    │    │         └── i:12
+           │    │    │    │              └── child_check_ambig.p_new:11 * 2
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    ├── with-scan &1
+           │    │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    │    └── mapping:
+           │    │    │    │    │         ├──  parent_check_ambig.p:3 => p:14
+           │    │    │    │    │         └──  p_new:5 => p_new:15
+           │    │    │    │    └── filters
+           │    │    │    │         └── p:14 IS DISTINCT FROM p_new:15
+           │    │    │    └── filters
+           │    │    │         └── child_check_ambig.p_new:11 = p:14
+           │    │    └── projections
+           │    │         └── p_new:15 * 2 [as=column16:16]
+           │    └── projections
+           │         └── p_new:15 > 0 [as=check1:17]
+           └── f-k-checks
+                └── f-k-checks-item: child_check_ambig(p_new) -> parent_check_ambig(p)
+                     └── anti-join (hash)
+                          ├── columns: p_new:18!null
+                          ├── with-scan &2
+                          │    ├── columns: p_new:18!null
+                          │    └── mapping:
+                          │         └──  p_new:15 => p_new:18
+                          ├── scan parent_check_ambig
+                          │    └── columns: parent_check_ambig.p:19!null
+                          └── filters
+                               └── p_new:18 = parent_check_ambig.p:19
