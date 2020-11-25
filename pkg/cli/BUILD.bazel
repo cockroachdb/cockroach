@@ -12,6 +12,7 @@ go_library(
         "debug.go",
         "debug_check_store.go",
         "debug_merge_logs.go",
+        "debug_reset_quorum.go",
         "debug_synctest.go",
         "decode.go",
         "demo.go",
