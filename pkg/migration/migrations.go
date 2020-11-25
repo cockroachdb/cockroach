@@ -10,12 +10,12 @@
 
 package migration
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import "github.com/cockroachdb/cockroach/pkg/clusterversion"
 
-// Registry defines the global mapping between a version, and the associated
-// migration. The migration is only executed after a cluster-wide bump of the
-// version gate.
-var Registry = make(map[roachpb.Version]Migration)
+// Registry defines the global mapping between a cluster version, and the
+// associated migration. The migration is only executed after a cluster-wide
+// bump of the version gate.
+var Registry = make(map[clusterversion.ClusterVersion]Migration)
 
 func init() {
 	// TODO(irfansharif): We'll want to register individual migrations with

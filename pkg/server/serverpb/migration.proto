@@ -12,12 +12,12 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
-import "roachpb/metadata.proto";
+import "clusterversion/cluster_version.proto";
 
 // ValidateTargetClusterVersion is used to verify that the target node is
 // running a binary that's able to support the specified cluster version.
 message ValidateTargetClusterVersionRequest {
-   roachpb.Version version = 1;
+   clusterversion.ClusterVersion cluster_version = 1;
 }
 
 // ValidateTargetClusterVersionResponse is the response to a
@@ -28,7 +28,7 @@ message ValidateTargetClusterVersionResponse {
 // BumpClusterVersionRequest is used to inform a given node of a cluster version
 // bump.
 message BumpClusterVersionRequest {
-   roachpb.Version version = 1;
+   clusterversion.ClusterVersion cluster_version = 1;
 }
 
 // BumpClusterVersionResponse is the response to an BumpClusterVersionRequest.
