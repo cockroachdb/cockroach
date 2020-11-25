@@ -157,25 +157,27 @@ func (t *Tracer) getShadowTracer() *shadowTracer {
 	return (*shadowTracer)(atomic.LoadPointer(&t.shadowTracer))
 }
 
-// StartSpan starts a Span. See spanOptions for details.
+// StartSpan starts a Span. See SpanOption for details.
 func (t *Tracer) StartSpan(operationName string, os ...SpanOption) *Span {
 	// Fast paths to avoid the allocation of StartSpanOptions below when tracing
 	// is disabled: if we have no options or a single SpanReference (the common
 	// case) with a black hole span, return a noop Span now.
-	if len(os) == 1 {
-		switch o := os[0].(type) {
-		case *parentOption:
-			if (*Span)(o).IsBlackHole() {
-				return t.noopSpan
-			}
-		case *remoteParentOption:
-			if (*SpanMeta)(o).isNilOrNoop() {
-				return t.noopSpan
+	if !t.AlwaysTrace() {
+		if len(os) == 1 {
+			switch o := os[0].(type) {
+			case *parentAndAutoCollectionOption:
+				if (*Span)(o).IsBlackHole() {
+					return t.noopSpan
+				}
+			case *parentAndManualCollectionOption:
+				if (*SpanMeta)(o).isNilOrNoop() {
+					return t.noopSpan
+				}
 			}
 		}
-	}
-	if len(os) == 0 && !t.AlwaysTrace() {
-		return t.noopSpan
+		if len(os) == 0 {
+			return t.noopSpan
+		}
 	}
 
 	// NB: apply takes and returns a value to avoid forcing
@@ -207,9 +209,13 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 		}
 	}
 
-	// If tracing is disabled, avoid overhead and return a noop Span.
+	// Avoid creating a real span when possible. If tracing is globally
+	// enabled, we always need to create spans. If the incoming
+	// span is recording (which implies that there is a parent) then
+	// we also have to create a real child. Additionally, if the
+	// caller explicitly asked for a real span they need to get one.
+	// In all other cases, a noop span will do.
 	if !t.AlwaysTrace() &&
-		opts.parentTraceID() == 0 &&
 		opts.recordingType() == NoRecording &&
 		!opts.ForceRealSpan {
 		return t.noopSpan
@@ -321,7 +327,7 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 		if opts.Parent != nil {
 			p = opts.Parent.crdb
 		}
-		s.crdb.enableRecording(p, recordingType, opts.SeparateRecording)
+		s.crdb.enableRecording(p, recordingType)
 	}
 
 	// Set initial tags. These will propagate to the crdbSpan, ot, and netTr
@@ -531,42 +537,54 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 			return ctx, sp
 		}
 		tr := sp.Tracer()
-		newSpan := tr.StartSpan(opName, WithParent(sp), WithCtxLogTags(ctx))
+		newSpan := tr.StartSpan(opName, WithParentAndAutoCollection(sp), WithCtxLogTags(ctx))
 		return ContextWithSpan(ctx, newSpan), newSpan
 	}
 	return ctx, nil
 }
 
 // ChildSpan opens a Span as a child of the current Span in the context (if
-// there is one).
+// there is one), via the WithParentAndAutoCollection option.
 // The Span's tags are inherited from the ctx's log tags automatically.
 //
-// Returns the new context and the new Span (if any). The Span should be
-// closed via FinishSpan.
+// Returns the new context and the new Span (if any). If a non-nil Span is
+// returned, it is the caller's duty to eventually call Finish() on it.
 func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
-	return childSpan(ctx, opName, spanOptions{})
+	return childSpan(ctx, opName, false /* remote */)
 }
 
-// ChildSpanSeparateRecording is like ChildSpan but the new Span has separate
-// recording (see StartChildSpan).
-func ChildSpanSeparateRecording(ctx context.Context, opName string) (context.Context, *Span) {
-	return childSpan(ctx, opName, spanOptions{SeparateRecording: true})
+// ChildSpanRemote is like ChildSpan but the new Span is created using WithParentAndManualCollection
+// instead of WithParentAndAutoCollection. When this is used, it's the caller's duty to collect this span's
+// recording and return it to the root span of the trace.
+func ChildSpanRemote(ctx context.Context, opName string) (context.Context, *Span) {
+	return childSpan(ctx, opName, true /* remote */)
 }
 
-func childSpan(ctx context.Context, opName string, opts spanOptions) (context.Context, *Span) {
+func childSpan(ctx context.Context, opName string, remote bool) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
-	if sp == nil || sp.isNoop() {
-		// Optimization: avoid ContextWithSpan call if tracing is disabled.
-		return ctx, sp
+	if sp == nil {
+		return ctx, nil
 	}
 	tr := sp.Tracer()
-	if sp.IsBlackHole() {
-		ns := tr.noopSpan
-		return ContextWithSpan(ctx, ns), ns
-	}
+	var opts spanOptions
 	opts.LogTags = logtags.FromContext(ctx)
-	opts.Parent = sp
+	// NB: this code is correct when sp == nil.
+	if !remote {
+		opts.Parent = sp
+	} else {
+		opts.RemoteParent = sp.Meta()
+	}
 	newSpan := tr.startSpanGeneric(opName, opts)
+	if newSpan.isNoop() {
+		// Optimization: if we end up with a noop, return the inputs
+		// to avoid ContextWithSpan call below.
+		//
+		// TODO(tbg): this is unsound. We are returning the incoming
+		// context which may have a Span that could later start recording.
+		// So in effect that span may capture parts of two goroutines
+		// accidentally.
+		return ctx, sp
+	}
 	return ContextWithSpan(ctx, newSpan), newSpan
 }
 
@@ -626,7 +644,7 @@ func StartSnowballTrace(
 	var span *Span
 	if sp := SpanFromContext(ctx); sp != nil {
 		span = sp.Tracer().StartSpan(
-			opName, WithParent(sp), WithForceRealSpan(), WithCtxLogTags(ctx),
+			opName, WithParentAndAutoCollection(sp), WithForceRealSpan(), WithCtxLogTags(ctx),
 		)
 	} else {
 		span = tracer.StartSpan(opName, WithForceRealSpan(), WithCtxLogTags(ctx))

@@ -1516,7 +1516,7 @@ func (st *SessionTracing) StartTracing(
 		// Create a child span while recording.
 		sp = parentSp.Tracer().StartSpan(
 			opName,
-			tracing.WithParent(parentSp),
+			tracing.WithParentAndAutoCollection(parentSp),
 			tracing.WithCtxLogTags(connCtx),
 			tracing.WithForceRealSpan(),
 		)

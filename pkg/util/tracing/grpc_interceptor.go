@@ -128,7 +128,7 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 		serverSpan := tracer.StartSpan(
 			info.FullMethod,
 			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
-			WithRemoteParent(spanMeta),
+			WithParentAndManualCollection(spanMeta),
 		)
 		defer serverSpan.Finish()
 
@@ -171,7 +171,7 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		serverSpan := tracer.StartSpan(
 			info.FullMethod,
 			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
-			WithRemoteParent(spanMeta),
+			WithParentAndManualCollection(spanMeta),
 		)
 		defer serverSpan.Finish()
 		ss = &tracingServerStream{
@@ -257,7 +257,7 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		}
 		clientSpan := tracer.StartSpan(
 			method,
-			WithParent(parent),
+			WithParentAndAutoCollection(parent),
 			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
 		init(clientSpan)
@@ -306,7 +306,7 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 
 		clientSpan := tracer.StartSpan(
 			method,
-			WithParent(parent),
+			WithParentAndAutoCollection(parent),
 			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
 		init(clientSpan)

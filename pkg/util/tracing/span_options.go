@@ -20,13 +20,12 @@ import (
 // field comment below are invoked as arguments to `Tracer.StartSpan`.
 // See the SpanOption interface for a synopsis.
 type spanOptions struct {
-	Parent            *Span                         // see WithParent
-	RemoteParent      *SpanMeta                     // see WithRemoteParent
-	RefType           opentracing.SpanReferenceType // see WithFollowsFrom
-	LogTags           *logtags.Buffer               // see WithLogTags
-	Tags              map[string]interface{}        // see WithTags
-	SeparateRecording bool                          // see WithSeparateRecording
-	ForceRealSpan     bool                          // see WithForceRealSpan
+	Parent        *Span                         // see WithParentAndAutoCollection
+	RemoteParent  *SpanMeta                     // see WithParentAndManualCollection
+	RefType       opentracing.SpanReferenceType // see WithFollowsFrom
+	LogTags       *logtags.Buffer               // see WithLogTags
+	Tags          map[string]interface{}        // see WithTags
+	ForceRealSpan bool                          // see WithForceRealSpan
 }
 
 func (opts *spanOptions) parentTraceID() uint64 {
@@ -48,7 +47,7 @@ func (opts *spanOptions) parentSpanID() uint64 {
 }
 
 func (opts *spanOptions) recordingType() RecordingType {
-	var recordingType RecordingType
+	recordingType := NoRecording
 	if opts.Parent != nil && !opts.Parent.isNoop() {
 		recordingType = opts.Parent.crdb.getRecordingType()
 	} else if opts.RemoteParent != nil {
@@ -70,29 +69,31 @@ func (opts *spanOptions) shadowTrTyp() (string, bool) {
 // SpanOption is the interface satisfied by options to `Tracer.StartSpan`.
 // A synopsis of the options follows. For details, see their comments.
 //
-// - WithParent: create a child Span from a Span (local span).
-// - WithRemoteParent: create a child Span from a SpanMeta (remote span).
+// - WithParentAndAutoCollection: create a child Span from a Span.
+// - WithParentAndManualCollection: create a child Span from a SpanMeta.
 // - WithFollowsFrom: indicate that child may outlive parent.
 // - WithLogTags: populates the Span tags from a `logtags.Buffer`.
 // - WithCtxLogTags: like WithLogTags, but takes a `context.Context`.
 // - WithTags: adds tags to a Span on creation.
-// - WithSeparateRecording: prevents recording to be shared with local parent span.
 // - WithForceRealSpan: prevents optimizations that can avoid creating a real span.
 type SpanOption interface {
 	apply(spanOptions) spanOptions
 }
 
-type parentOption Span
+type parentAndAutoCollectionOption Span
 
-// WithParent instructs StartSpan to create a child span referring to the
-// given local parent Span.
+// WithParentAndAutoCollection instructs StartSpan to create a child Span
+// from a parent Span.
 //
-// Children of local parents inherit the parent's log tags, and will
-// share their recording with the parent (unless WithSeparateRecording is
-// used). They will also start recording if the parent is recording at
-// the time of child instantiation. If the parent span is not recording,
-// the child could be a "noop span" (depending on whether the Tracer is
-// configured to trace to an external tracing system) which does not support
+// The child inherits the parent's log tags. The data collected in the
+// child trace will be retrieved automatically when the parent's data is
+// retrieved, meaning that the caller has no obligation (and in fact
+// must not) manually propagate the recording to the parent Span.
+//
+// The child will start recording if the parent is recording at the time
+// of child instantiation. If the parent span is not recording, the child
+// could be a "noop span" (depending on whether the Tracer is configured
+// to trace to an external tracing system) which does not support
 // recording, unless the WithForceRealSpan option is passed to StartSpan.
 //
 // By default, children are derived using a ChildOf relationship,
@@ -100,28 +101,47 @@ type parentOption Span
 // wait for the child to Finish(). If this expectation does not hold,
 // WithFollowsFrom should be added to the StartSpan invocation.
 //
-// When no local Span is available, WithRemoteParent should be used.
-func WithParent(sp *Span) SpanOption {
-	return (*parentOption)(sp)
+// When the parent Span is not available at the caller,
+// WithParentAndManualCollection should be used, which incurs an
+// obligation to manually propagate the trace data to the parent Span.
+func WithParentAndAutoCollection(sp *Span) SpanOption {
+	return (*parentAndAutoCollectionOption)(sp)
 }
 
-func (p *parentOption) apply(opts spanOptions) spanOptions {
+func (p *parentAndAutoCollectionOption) apply(opts spanOptions) spanOptions {
 	opts.Parent = (*Span)(p)
 	return opts
 }
 
-type remoteParentOption SpanMeta
+type parentAndManualCollectionOption SpanMeta
 
-// WithRemoteParent instructs StartSpan to create child span descending
-// from a parent described via SpanMeta. Since no local parent is
-// available (in contrast to WithParent), this Span will not share a
-// recording with any other Span. Typically RPC middleware ensures that the
-// child's recording is collected and propagated back to the parent Span.
-func WithRemoteParent(parent *SpanMeta) SpanOption {
-	return (*remoteParentOption)(parent)
+// WithParentAndManualCollection instructs StartSpan to create a
+// child span descending from a parent described via a SpanMeta. In
+// contrast with WithParentAndAutoCollection, the caller must call
+// `Span.GetRecording` when finishing the returned Span, and propagate the
+// result to the parent Span by calling `Span.ImportRemoteSpans` on it.
+//
+// The canonical use case for this is around RPC boundaries, where a
+// server handling a request wants to create a child span descending
+// from a parent on a remote machine.
+//
+// node 1                     (network)          node 2
+// --------------------------------------------------------------------------
+// Span.Meta()               ----------> sp2 := Tracer.StartSpan(
+//                                       		WithParentAndManualCollection(.))
+//                                       doSomething(sp2)
+//                                       sp2.Finish()
+// Span.ImportRemoteSpans(.) <---------- sp2.GetRecording()
+//
+// By default, the child span is derived using a ChildOf relationship,
+// which corresponds to the expectation that the parent span will
+// wait for the child to Finish(). If this expectation does not hold,
+// WithFollowsFrom should be added to the StartSpan invocation.
+func WithParentAndManualCollection(parent *SpanMeta) SpanOption {
+	return (*parentAndManualCollectionOption)(parent)
 }
 
-func (p *remoteParentOption) apply(opts spanOptions) spanOptions {
+func (p *parentAndManualCollectionOption) apply(opts spanOptions) spanOptions {
 	opts.RemoteParent = (*SpanMeta)(p)
 	return opts
 }
@@ -150,7 +170,7 @@ func (o tagsOption) apply(opts spanOptions) spanOptions {
 type followsFromOpt struct{}
 
 // WithFollowsFrom instructs StartSpan to use a FollowsFrom relationship
-// should a child span be created (i.e. should WithParent or WithRemoteParent
+// should a child span be created (i.e. should WithParentAndAutoCollection or WithParentAndManualCollection
 // be supplied as well). A WithFollowsFrom child is expected to, in the common
 // case, outlive the parent span (for example: asynchronous cleanup work),
 // whereas a "regular" child span is not (i.e. the parent span typically
@@ -181,20 +201,5 @@ func WithForceRealSpan() SpanOption {
 
 func (forceRealSpanOption) apply(opts spanOptions) spanOptions {
 	opts.ForceRealSpan = true
-	return opts
-}
-
-type withSeparateRecordingOpt struct{}
-
-// WithSeparateRecording instructs StartSpan to configure any child span
-// started via WithParent to *not* share the recording with that parent.
-//
-// See WithParent and WithRemoteParent for details about recording inheritance.
-func WithSeparateRecording() SpanOption {
-	return withSeparateRecordingOpt{}
-}
-
-func (o withSeparateRecordingOpt) apply(opts spanOptions) spanOptions {
-	opts.SeparateRecording = true
 	return opts
 }
