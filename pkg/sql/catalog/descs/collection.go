@@ -163,6 +163,11 @@ type Collection struct {
 	// own transaction to read the descriptor and will hang waiting for the
 	// uncommitted changes to the descriptor. These descriptors are local to this
 	// Collection and invisible to other transactions.
+	// TODO (lucy): Replace this with a data structure for faster lookups.
+	// Currently, the order in which descriptors are inserted matters, since we
+	// look at the draining names to account for descriptors being renamed. Any
+	// replacement data structure may have to store the name information in some
+	// different, more explicit way.
 	uncommittedDescriptors []uncommittedDescriptor
 
 	// allDescriptors is a slice of all available descriptors. The descriptors
@@ -246,40 +251,107 @@ func (tc *Collection) getLeasedDescriptorByName(
 	return desc, false, nil
 }
 
-// GetMutableDatabaseDescriptor returns a mutable database descriptor.
-func (tc *Collection) GetMutableDatabaseDescriptor(
-	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (*dbdesc.Mutable, error) {
-	if log.V(2) {
-		log.Infof(ctx, "reading mutable descriptor on '%s'", name)
+// getDescriptorFromStore gets a descriptor from its namespace entry. It does
+// not return the descriptor if the name is being drained.
+func (tc *Collection) getDescriptorFromStore(
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	parentID descpb.ID,
+	parentSchemaID descpb.ID,
+	name string,
+	mutable bool,
+) (desc catalog.Descriptor, found bool, err error) {
+	found, descID, err := catalogkv.LookupObjectID(ctx, txn, codec, parentID, parentSchemaID, name)
+	if err != nil || !found {
+		return nil, found, err
 	}
-	// First try the uncommitted descriptors.
-	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
-		keys.RootNamespaceID, keys.RootNamespaceID, name, flags,
-	); refuseFurtherLookup || err != nil {
-		return nil, err
-	} else if mut := desc.mutable; mut != nil {
-		db, ok := mut.(*dbdesc.Mutable)
-		if !ok {
-			return nil, nil
+	desc, err = catalogkv.GetAnyDescriptorByID(ctx, txn, codec, descID, catalogkv.Mutability(mutable))
+	if err != nil {
+		return nil, false, err
+	} else if desc == nil {
+		// Having done the namespace lookup, the descriptor must exist.
+		return nil, false, errors.AssertionFailedf("descriptor %d not found", descID)
+	}
+	// Immediately after a RENAME an old name still points to the descriptor
+	// during the drain phase for the name. Do not return a descriptor during
+	// draining.
+	if desc.GetName() != name {
+		return nil, false, nil
+	}
+	return desc, true, nil
+}
+
+// GetDatabaseByName returns a database descriptor with properties according to
+// the provided lookup flags.
+func (tc *Collection) GetDatabaseByName(
+	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
+) (catalog.DatabaseDescriptor, error) {
+	if name == systemschema.SystemDatabaseName {
+		// The system database descriptor should never actually be mutated, which is
+		// why we return the same hard-coded descriptor every time. It's assumed
+		// that callers of this method will check the privileges on the descriptor
+		// (like any other database) and return an error.
+		if flags.RequireMutable {
+			return dbdesc.NewExistingMutable(
+				*systemschema.MakeSystemDatabaseDesc().DatabaseDesc()), nil
 		}
-		log.VEventf(ctx, 2, "found uncommitted descriptor %d", db.GetID())
-		return db, nil
+		return systemschema.MakeSystemDatabaseDesc(), nil
 	}
 
-	db, err := getDatabaseDesc(ctx, txn, tc.codec(), name, flags)
-	if err != nil || db == nil {
-		return nil, err
+	getDatabaseByName := func() (_ catalog.Descriptor, found bool, err error) {
+		if refuseFurtherLookup, desc := tc.getUncommittedDescriptorNew(
+			keys.RootNamespaceID, keys.RootNamespaceID, name,
+		); refuseFurtherLookup {
+			return nil, false, nil
+		} else if immut := desc.immutable; immut != nil {
+			log.VEventf(ctx, 2, "found uncommitted descriptor %d", immut.GetID())
+			if flags.RequireMutable {
+				return desc.mutable, true, nil
+			}
+			return immut, true, nil
+		}
+
+		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
+			return tc.getDescriptorFromStore(
+				ctx, txn, tc.codec(), keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable)
+		}
+
+		desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
+			ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
+		if err != nil {
+			return nil, false, err
+		}
+		if shouldReadFromStore {
+			return tc.getDescriptorFromStore(
+				ctx, txn, tc.codec(), keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable)
+		}
+		return desc, true, nil
 	}
-	mutDesc, ok := db.(*dbdesc.Mutable)
-	if !ok {
-		// TODO (lucy): Here and elsewhere in the Collection, we return a nil
-		// descriptor with a nil error if the type cast doesn't succeed, regardless
-		// of whether flags.Required is true. This seems like a potential source
-		// of bugs.
+
+	desc, found, err := getDatabaseByName()
+	if err != nil {
+		return nil, err
+	} else if !found {
+		if flags.Required {
+			return nil, sqlerrors.NewUndefinedDatabaseError(name)
+		}
 		return nil, nil
 	}
-	return mutDesc, nil
+	db, ok := desc.(catalog.DatabaseDescriptor)
+	if !ok {
+		if flags.Required {
+			return nil, sqlerrors.NewUndefinedDatabaseError(name)
+		}
+		return nil, nil
+	}
+	if err := catalog.FilterDescriptorState(db, flags); err != nil {
+		if flags.Required {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return db, nil
 }
 
 // GetMutableTableDescriptor returns a mutable table descriptor.
@@ -313,7 +385,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 	}
 
 	// Resolve the database.
-	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
+	db, err := tc.GetDatabaseByName(ctx, txn, name.Catalog(),
 		tree.DatabaseLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -543,70 +615,6 @@ func (tc *Collection) ResolveSchema(
 	}, nil
 }
 
-// GetDatabaseVersion returns a database descriptor with a version suitable for
-// the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
-// The table must be released by calling tc.ReleaseAll().
-//
-// If flags.required is false, GetTableVersion() will gracefully
-// return a nil descriptor and no error if the table does not exist.
-//
-// It might also add a transaction deadline to the transaction that is
-// enforced at the KV layer to ensure that the transaction doesn't violate
-// the validity window of the table descriptor version returned.
-func (tc *Collection) GetDatabaseVersion(
-	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (*dbdesc.Immutable, error) {
-	readFromStore := func() (*dbdesc.Immutable, error) {
-		desc, err := getDatabaseDesc(ctx, txn, tc.codec(), name, flags)
-		if err != nil || desc == nil {
-			return nil, err
-		}
-		return desc.(*dbdesc.Immutable), nil
-	}
-
-	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
-		keys.RootNamespaceID,
-		keys.RootNamespaceID,
-		name,
-		flags,
-	); refuseFurtherLookup || err != nil {
-		return nil, err
-	} else if immut := desc.immutable; immut != nil {
-		log.VEventf(ctx, 2, "found uncommitted descriptor %d", immut.GetID())
-		db, ok := immut.(*dbdesc.Immutable)
-		if !ok {
-			if flags.Required {
-				return nil, sqlerrors.NewUndefinedDatabaseError(name)
-			}
-			return nil, nil
-		}
-		return db, nil
-	}
-
-	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
-		name == systemschema.SystemDatabaseName
-	if avoidCache {
-		return readFromStore()
-	}
-
-	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
-		ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
-	if err != nil {
-		return nil, err
-	}
-	if shouldReadFromStore {
-		return readFromStore()
-	}
-	db, ok := desc.(*dbdesc.Immutable)
-	if !ok {
-		if flags.Required {
-			return nil, sqlerrors.NewUndefinedDatabaseError(name)
-		}
-		return nil, nil
-	}
-	return db, nil
-}
-
 // GetTableVersion returns a table descriptor with a version suitable for
 // the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
 // The table must be released by calling tc.ReleaseAll().
@@ -656,7 +664,7 @@ func (tc *Collection) getObjectVersion(
 	}
 
 	// Resolve the database.
-	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
+	db, err := tc.GetDatabaseByName(ctx, txn, name.Catalog(),
 		tree.DatabaseLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -1291,6 +1299,47 @@ func (tc *Collection) getUncommittedDescriptor(
 		}
 	}
 	return false, uncommittedDescriptor{}, nil
+}
+
+// getUncommittedDescriptorNew returns a descriptor for the requested name
+// if the requested name is for a descriptor modified within the transaction
+// affiliated with the Collection.
+//
+// The first return value "refuseFurtherLookup" is true when there is a known
+// rename of that descriptor, so it would be invalid to miss the cache and go to
+// KV (where the descriptor prior to the rename may still exist).
+//
+// TODO (lucy): This will be renamed in a later commit.
+func (tc *Collection) getUncommittedDescriptorNew(
+	dbID descpb.ID, schemaID descpb.ID, name string,
+) (refuseFurtherLookup bool, desc uncommittedDescriptor) {
+	// Walk latest to earliest so that a DROP followed by a CREATE with the same
+	// name will result in the CREATE being seen.
+	for i := len(tc.uncommittedDescriptors) - 1; i >= 0; i-- {
+		desc := tc.uncommittedDescriptors[i]
+		mutDesc := desc.mutable
+		// If a descriptor has gotten renamed we'd like to disallow using the old
+		// names. The renames could have happened in another transaction but it's
+		// still okay to disallow the use of the old name in this transaction
+		// because the other transaction has already committed and this transaction
+		// is seeing the effect of it.
+		for _, drain := range mutDesc.GetDrainingNames() {
+			if drain.Name == name &&
+				drain.ParentID == dbID &&
+				drain.ParentSchemaID == schemaID {
+				return true, uncommittedDescriptor{}
+			}
+		}
+
+		// Otherwise, if the name matches, we return it. It's up to the caller to
+		// filter descriptors in non-public states.
+		// TODO (lucy): Is it possible to return dropped descriptors at this point,
+		// after the previous draining names check?
+		if lease.NameMatchesDescriptor(mutDesc, dbID, schemaID, name) {
+			return false, desc
+		}
+	}
+	return false, uncommittedDescriptor{}
 }
 
 // GetUncommittedTableByID returns an uncommitted table by its ID.
