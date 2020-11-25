@@ -64,9 +64,6 @@ func writeLogStream(
 		if _, err = w.Write(prefixBytes); err != nil {
 			return err
 		}
-		if !keepRedactable {
-			ei.Redactable = false
-		}
 		return log.FormatEntry(ei.Entry, w)
 	}
 

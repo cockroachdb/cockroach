@@ -133,6 +133,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 		{WithMarkedSensitiveData, true, "marker: this is safe, stray marks ??, ‹this is not safe›"},
 		{WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ??, this is not safe"},
 		{WithoutSensitiveData, true, "marker: this is safe, stray marks ??, ‹×›"},
+		{WithoutSensitiveDataNorMarkers, false, "marker: this is safe, stray marks ??, ×"},
 	}
 
 	for _, tc := range testData {
