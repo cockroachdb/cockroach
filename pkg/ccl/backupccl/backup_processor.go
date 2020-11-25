@@ -76,7 +76,7 @@ type backupDataProcessor struct {
 
 var _ execinfra.Processor = &backupDataProcessor{}
 
-func (cp *backupDataProcessor) OutputTypes() []*types.T {
+func (bp *backupDataProcessor) OutputTypes() []*types.T {
 	return backupOutputTypes
 }
 
@@ -86,18 +86,18 @@ func newBackupDataProcessor(
 	spec execinfrapb.BackupDataSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	cp := &backupDataProcessor{
+	bp := &backupDataProcessor{
 		flowCtx: flowCtx,
 		spec:    spec,
 		output:  output,
 	}
-	return cp, nil
+	return bp, nil
 }
 
-func (cp *backupDataProcessor) Run(ctx context.Context) {
+func (bp *backupDataProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "backupDataProcessor")
 	defer span.Finish()
-	defer cp.output.ProducerDone()
+	defer bp.output.ProducerDone()
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
@@ -106,17 +106,17 @@ func (cp *backupDataProcessor) Run(ctx context.Context) {
 	// which is closed only after the go routine returns.
 	go func() {
 		defer close(progCh)
-		err = runBackupProcessor(ctx, cp.flowCtx, &cp.spec, progCh)
+		err = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, progCh)
 	}()
 
 	for prog := range progCh {
 		// Take a copy so that we can send the progress address to the output processor.
 		p := prog
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
+		bp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
 	}
 
 	if err != nil {
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+		bp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 	}
 }
 
