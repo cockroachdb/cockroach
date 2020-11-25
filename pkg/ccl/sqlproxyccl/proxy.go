@@ -160,6 +160,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		sendErrToClient(conn, code, "unable to reach backend SQL server")
 		return NewErrorf(code, "dialing backend server: %v", err)
 	}
+	defer func() { _ = crdbConn.Close() }()
 
 	if backendConfig.TLSConf != nil {
 		// Send SSLRequest.
