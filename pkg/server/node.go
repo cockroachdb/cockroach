@@ -1134,9 +1134,10 @@ func (n *Node) Join(
 	log.Infof(ctx, "allocated IDs: n%d, s%d", nodeID, storeID)
 
 	return &roachpb.JoinNodeResponse{
-		ClusterID:     n.clusterID.Get().GetBytes(),
-		NodeID:        int32(nodeID),
-		StoreID:       int32(storeID),
-		ActiveVersion: &activeVersion.Version,
+		ClusterID:         n.clusterID.Get().GetBytes(),
+		NodeID:            int32(nodeID),
+		StoreID:           int32(storeID),
+		ActiveVersion:     &activeVersion,
+		DeprecatedVersion: &activeVersion.Version,
 	}, nil
 }

@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "clusterversion/cluster_version.proto";
 import "kv/kvserver/concurrency/lock/locking.proto";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
@@ -2127,7 +2128,10 @@ message JoinNodeResponse {
   bytes cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
   int32 node_id = 2 [(gogoproto.customname) = "NodeID"];
   int32 store_id = 3 [(gogoproto.customname) = "StoreID"];
-  roachpb.Version active_version = 4;
+  // TODO(irfansharif): This field was deprecated in v21.1. It can be removed in
+  // v21.2.
+  roachpb.Version deprecated_version = 4;
+  clusterversion.ClusterVersion active_version = 5;
 }
 
 // Batch and RangeFeed service implemented by nodes for KV API requests.

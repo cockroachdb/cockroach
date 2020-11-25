@@ -517,7 +517,7 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 	ctx context.Context, resp *roachpb.JoinNodeResponse,
 ) (*initState, error) {
 	firstEngine := s.inspectedDiskState.uninitializedEngines[0]
-	clusterVersion := clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
+	clusterVersion := *resp.ActiveVersion
 	if err := kvserver.WriteClusterVersion(ctx, firstEngine, clusterVersion); err != nil {
 		return nil, err
 	}
