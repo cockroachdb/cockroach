@@ -2135,14 +2135,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testReplicaAddRemove(t, true /* addFirst */)
-}
-
-func TestReplicateRemoveAndAdd(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testReplicaAddRemove(t, false /* addFirst */)
+	testutils.RunTrueAndFalse(t, "addFirst", testReplicaAddRemove)
 }
 
 // TestQuotaPool verifies that writes get throttled in the case where we have
