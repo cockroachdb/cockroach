@@ -101,6 +101,22 @@ CREATE TABLE information_schema.applicable_roles (
 	IS_GRANTABLE STRING NOT NULL
 )`
 
+// InformationSchemaCharacterSets describes the schema of the
+// information_schema.character_sets table.
+// Postgres: https://www.postgresql.org/docs/9.5/infoschema-character-sets.html
+// MySQL:	 https://dev.mysql.com/doc/refman/5.7/en/information-schema-character-sets-table.html
+const InformationSchemaCharacterSets = `
+CREATE TABLE information_schema.character_sets (
+    CHARACTER_SET_CATALOG   STRING,
+    CHARACTER_SET_SCHEMA    STRING,
+    CHARACTER_SET_NAME      STRING NOT NULL,
+    CHARACTER_REPERTOIRE    STRING NOT NULL,
+    FORM_OF_USE             STRING NOT NULL,
+    DEFAULT_COLLATE_CATALOG STRING,
+    DEFAULT_COLLATE_SCHEMA  STRING,
+    DEFAULT_COLLATE_NAME    STRING
+)`
+
 // InformationSchemaCheckConstraints describes the schema of the
 // information_schema.check_constraints table.
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-check-constraints.html
