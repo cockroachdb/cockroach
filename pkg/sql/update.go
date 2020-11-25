@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -43,12 +44,19 @@ type updateNode struct {
 	run updateRun
 }
 
+// partialIndexSet contains a subset of partial indexes, as ordinals of the
+// collection of partial indexes of a table. These partial indexes have boolean
+// columns produced as input to mutations, indicating whether or not the old and
+// new version of the row satisfies a partial index's predicate.
+type partialIndexSet = util.FastIntSet
+
 // updateRun contains the run-time state of updateNode during local execution.
 type updateRun struct {
 	tu         tableUpdater
 	rowsNeeded bool
 
-	checkOrds checkSet
+	checkOrds        checkSet
+	partialIndexOrds partialIndexSet
 
 	// done informs a new call to BatchedNext() that the previous call to
 	// BatchedNext() has completed the work already.
@@ -303,8 +311,8 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	if !partialIndexOrds.Empty() {
 		partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
 		partialIndexVals := sourceVals[partialIndexValOffset:]
-		partialIndexPutVals := partialIndexVals[:len(partialIndexVals)/2]
-		partialIndexDelVals := partialIndexVals[len(partialIndexVals)/2:]
+		partialIndexPutVals := partialIndexVals[:u.run.partialIndexOrds.Len()]
+		partialIndexDelVals := partialIndexVals[u.run.partialIndexOrds.Len() : u.run.partialIndexOrds.Len()*2]
 
 		err := pm.Init(partialIndexPutVals, partialIndexDelVals, u.run.tu.tableDesc())
 		if err != nil {

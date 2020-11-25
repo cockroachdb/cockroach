@@ -44,6 +44,8 @@ func (b *Builder) buildMutationInput(
 		return execPlan{}, err
 	}
 
+	// TODO(mgartner/radu): This can incorrectly append columns in a FK cascade
+	// update that are never used during execution. See issue #57097.
 	if p.WithID != 0 {
 		// The input might have extra columns that are used only by FK or unique
 		// checks; make sure we don't project them away.
@@ -310,6 +312,17 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
 	returnColOrds := ordinalSetFromColList(upd.ReturnCols)
 	checkOrds := ordinalSetFromColList(upd.CheckCols)
+	partialIndexPutOrds := ordinalSetFromColList(upd.PartialIndexPutCols)
+	partialIndexDelOrds := ordinalSetFromColList(upd.PartialIndexDelCols)
+
+	if partialIndexPutOrds.Len() != partialIndexDelOrds.Len() {
+		err := errors.AssertionFailedf(
+			"expected the same number of partial index PUT and DEL cols, got %d PUT columns and %d DEL columns",
+			partialIndexPutOrds.Len(),
+			partialIndexDelOrds.Len(),
+		)
+		return execPlan{}, err
+	}
 
 	// Construct the result columns for the passthrough set.
 	var passthroughCols colinfo.ResultColumns
@@ -327,6 +340,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		updateColOrds,
 		returnColOrds,
 		checkOrds,
+		partialIndexPutOrds,
 		passthroughCols,
 		b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
 			len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0,

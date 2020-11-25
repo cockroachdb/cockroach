@@ -125,6 +125,10 @@ type NodeColumnOrdinalSet = util.FastIntSet
 // taken from the opt.Table.Check collection.
 type CheckOrdinalSet = util.FastIntSet
 
+// PartialIndexSet contains the ordinal positions of a set of partial indexes
+// from a table's collection of indexes.
+type PartialIndexOrdinalSet = util.FastIntSet
+
 // AggInfo represents an aggregation (see ConstructGroupBy).
 type AggInfo struct {
 	FuncName   string

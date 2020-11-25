@@ -421,6 +421,7 @@ define Update {
     UpdateCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
     Checks exec.CheckOrdinalSet
+    PartialIndexes exec.PartialIndexOrdinalSet
     Passthrough colinfo.ResultColumns
 
     # If set, the operator will commit the transaction as part of its execution.

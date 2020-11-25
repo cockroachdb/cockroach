@@ -634,6 +634,9 @@ func (cb *onUpdateCascadeBuilder) Build(
 			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues, newValues,
 		)
 
+		// Set the fetchScope to the scope of the fetch expression.
+		mb.fetchScope = mb.outScope
+
 		// The scope created by b.buildUpdateCascadeMutationInput has the table
 		// columns, followed by the old FK values, followed by the new FK values.
 		numFKCols := fk.ColumnCount()

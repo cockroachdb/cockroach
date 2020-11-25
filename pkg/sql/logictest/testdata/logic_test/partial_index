@@ -1426,6 +1426,7 @@ SELECT k FROM t55387 WHERE a > 1 AND b > 3
 
 # Regression test for #55672. Do not build partial index predicates when the
 # scope does not include all table columns, like FK check scans.
+subtest regression_55672
 
 statement ok
 CREATE TABLE t55672_a (
@@ -1451,3 +1452,84 @@ INSERT INTO t55672_a (a, t) VALUES (2, now())
 
 statement ok
 INSERT INTO t55672_b (b,a) VALUES (2,2)
+
+# Regression test for #57085. Cascading UPDATEs should correctly update partial
+# indexes of the child table.
+subtest regression_57085
+
+# Update a partial index in a child table.
+statement ok
+CREATE TABLE t57085a_groups (
+    id INT PRIMARY KEY
+);
+CREATE TABLE t57085a_users (
+    id INT PRIMARY KEY,
+    group_id INT REFERENCES t57085a_groups ON UPDATE CASCADE,
+    i INT,
+    INDEX idx (group_id) WHERE i > 0
+);
+
+statement ok
+INSERT INTO t57085a_groups VALUES (1);
+INSERT INTO t57085a_users VALUES (10, 1, 100), (20, 1, -100);
+UPDATE t57085a_groups SET id = 2 WHERE id = 1;
+
+query II rowsort
+SELECT id, i FROM t57085a_users@idx WHERE i > 0 AND group_id = 2
+----
+10  100
+
+# Update a partial index in a child table with a single variable boolean
+# predicate.
+statement ok
+CREATE TABLE t57085b_groups (
+    id INT PRIMARY KEY
+);
+CREATE TABLE t57085b_users (
+    id INT PRIMARY KEY,
+    group_id INT REFERENCES t57085b_groups ON UPDATE CASCADE,
+    b BOOL,
+    INDEX idx (group_id) WHERE b
+);
+
+statement ok
+INSERT INTO t57085b_groups VALUES (1);
+INSERT INTO t57085b_users VALUES (10, 1, true), (20, 1, false);
+UPDATE t57085b_groups SET id = 2 WHERE id = 1;
+
+query IB rowsort
+SELECT id, b FROM t57085b_users@idx WHERE b AND group_id = 2
+----
+10  true
+
+# Update the group's id with an INSERT ON CONFLICT DO UPDATE.
+statement ok
+INSERT INTO t57085b_groups VALUES (2) ON CONFLICT (id) DO UPDATE SET id = 3
+
+query IB rowsort
+SELECT id, b FROM t57085b_users@idx WHERE b AND group_id = 3
+----
+10  true
+
+# Update a partial index that references the column being updated in the
+# cascade.
+statement ok
+CREATE TABLE t57085c_groups (
+    id INT PRIMARY KEY
+);
+CREATE TABLE t57085c_users (
+    id INT PRIMARY KEY,
+    group_id INT REFERENCES t57085c_groups ON UPDATE CASCADE,
+    i INT,
+    INDEX idx (i) WHERE group_id = 3
+);
+
+statement ok
+INSERT INTO t57085c_groups VALUES (1), (2);
+INSERT INTO t57085c_users VALUES (10, 1, 100), (20, 2, 200);
+UPDATE t57085c_groups SET id = 3 WHERE id = 1;
+
+query II rowsort
+SELECT id, i FROM t57085c_users@idx WHERE group_id = 3 AND i = 100
+----
+10  100

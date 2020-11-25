@@ -649,8 +649,8 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
-	// Add any partial index put boolean columns to the input.
-	mb.projectPartialIndexPutCols(preCheckScope)
+	// Project partial index PUT boolean columns.
+	mb.projectPartialIndexCols(preCheckScope, nil /* delScope */)
 
 	mb.buildUniqueChecksForInsert()
 
@@ -918,6 +918,9 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		inScope,
 	)
 
+	// Set the fetchScope to the scope of the fetch expression.
+	mb.fetchScope = fetchScope
+
 	// If the index is a unique partial index, then rows that are not in the
 	// partial index cannot conflict with insert rows. Therefore, a Select wraps
 	// the scan on the right side of the left outer join with the partial index
@@ -998,9 +1001,6 @@ func (mb *mutationBuilder) buildInputForUpsert(
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
 	mb.targetColSet = opt.ColSet{}
-
-	// Add any partial index del boolean columns to the input for UPSERTs.
-	mb.projectPartialIndexDelCols(fetchScope)
 }
 
 // setUpsertCols sets the list of columns to be updated in case of conflict.
@@ -1070,25 +1070,8 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
-	// Add any partial index put boolean columns. The variables in these partial
-	// index predicates must resolve to the new column values of the row which
-	// are either the existing values of the columns or new values provided in
-	// the upsert. Therefore, the variables must resolve to the upsert CASE
-	// expression columns, so the project must be added after the upsert columns
-	// are.
-	//
-	// For example, consider the table and upsert:
-	//
-	//   CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b) WHERE a > 1)
-	//   INSERT INTO t (a, b) VALUES (1, 2) ON CONFLICT (a) DO UPDATE a = t.a + 1
-	//
-	// An entry in the partial index should only be added when a > 1. The
-	// resulting value of a is dependent on whether or not there is a conflict.
-	// In the case of no conflict, the (1, 2) is inserted into the table, and no
-	// partial index entry should be added. But if there is a conflict, The
-	// existing row where a = 1 has a incremented to 2, and an entry should be
-	// added to the partial index.
-	mb.projectPartialIndexPutCols(preCheckScope)
+	// Project partial index PUT and DEL boolean columns.
+	mb.projectPartialIndexCols(preCheckScope, mb.fetchScope)
 
 	mb.buildFKChecksForUpsert()
 

@@ -819,6 +819,7 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	updateCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	partialIndexes exec.PartialIndexOrdinalSet,
 	passthrough colinfo.ResultColumns,
 	autoCommit bool,
 ) (exec.Node, error) {

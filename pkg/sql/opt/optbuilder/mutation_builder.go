@@ -56,6 +56,9 @@ type mutationBuilder struct {
 	// expression is completed, it will be contained in outScope.expr.
 	outScope *scope
 
+	// fetchScope contains the set of columns fetched from the target table.
+	fetchScope *scope
+
 	// targetColList is an ordered list of IDs of the table columns into which
 	// values will be inserted, or which will be updated with new values. It is
 	// incrementally built as the mutation operator is built.
@@ -335,8 +338,8 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		}
 	}
 
-	// Add partial index del boolean columns to the input.
-	mb.projectPartialIndexDelCols(scanScope)
+	// Set the fetchScope to the scope of the fetch expression.
+	mb.fetchScope = mb.outScope
 }
 
 // buildInputForDelete constructs a Select expression from the fields in
@@ -402,8 +405,8 @@ func (mb *mutationBuilder) buildInputForDelete(
 	// Set list of columns that will be fetched by the input expression.
 	mb.setFetchColIDs(mb.outScope.cols)
 
-	// Add partial index boolean columns to the input.
-	mb.projectPartialIndexDelCols(scanScope)
+	// Set the fetchScope to the scope of the fetch expression.
+	mb.fetchScope = mb.outScope
 }
 
 // addTargetColsByName adds one target column for each of the names in the given
@@ -796,33 +799,11 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 	return cols
 }
 
-// projectPartialIndexPutCols builds a Project that synthesizes boolean output
-// columns for each partial index defined on the target table. The execution
-// code uses these booleans to determine whether or not to add a row in the
-// partial index.
-//
-// predScope is the scope of columns available to the partial index predicate
-// expression.
-func (mb *mutationBuilder) projectPartialIndexPutCols(predScope *scope) {
-	mb.projectPartialIndexCols(mb.partialIndexPutColIDs, predScope, "partial_index_put")
-}
-
-// projectPartialIndexPutCols builds a Project that synthesizes boolean output
-// columns for each partial index defined on the target table. The execution
-// code uses these booleans to determine whether or not to remove a row in the
-// partial index.
-//
-// predScope is the scope of columns available to the partial index predicate
-// expression.
-func (mb *mutationBuilder) projectPartialIndexDelCols(predScope *scope) {
-	mb.projectPartialIndexCols(mb.partialIndexDelColIDs, predScope, "partial_index_del")
-}
-
 // projectPartialIndexCols builds a Project that synthesizes boolean output
-// columns for each partial index defined on the target table.
-func (mb *mutationBuilder) projectPartialIndexCols(
-	colIDs opt.ColList, predScope *scope, aliasPrefix string,
-) {
+// columns for each partial index defined on the target table. PUT columns are
+// only projected if putScope is not nil and DEL columns are only projected if
+// delScope is not nil.
+func (mb *mutationBuilder) projectPartialIndexCols(putScope *scope, delScope *scope) {
 	if partialIndexCount(mb.tab) > 0 {
 		projectionScope := mb.outScope.replace()
 		projectionScope.appendColumnsFromScope(mb.outScope)
@@ -830,17 +811,33 @@ func (mb *mutationBuilder) projectPartialIndexCols(
 		ord := 0
 		for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
 			index := mb.tab.Index(i)
+
+			// Skip non-partial indexes.
 			if _, isPartial := index.Predicate(); !isPartial {
 				continue
 			}
 
 			expr := mb.parsePartialIndexPredicateExpr(i)
-			texpr := predScope.resolveAndRequireType(expr, types.Bool)
-			alias := fmt.Sprintf("%s%d", aliasPrefix, ord+1)
-			scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
 
-			mb.b.buildScalar(texpr, predScope, projectionScope, scopeCol, nil)
-			colIDs[ord] = scopeCol.id
+			// Build a synthesized PUT columns.
+			if putScope != nil {
+				texpr := putScope.resolveAndRequireType(expr, types.Bool)
+				alias := fmt.Sprintf("partial_index_put%d", ord+1)
+				scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
+
+				mb.b.buildScalar(texpr, putScope, projectionScope, scopeCol, nil)
+				mb.partialIndexPutColIDs[ord] = scopeCol.id
+			}
+
+			// Build a synthesized DEL columns.
+			if delScope != nil {
+				texpr := delScope.resolveAndRequireType(expr, types.Bool)
+				alias := fmt.Sprintf("partial_index_del%d", ord+1)
+				scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
+
+				mb.b.buildScalar(texpr, delScope, projectionScope, scopeCol, nil)
+				mb.partialIndexDelColIDs[ord] = scopeCol.id
+			}
 
 			ord++
 		}

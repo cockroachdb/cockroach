@@ -1295,6 +1295,7 @@ func (ef *execFactory) ConstructUpdate(
 	updateColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	partialIndexes exec.PartialIndexOrdinalSet,
 	passthrough colinfo.ResultColumns,
 	autoCommit bool,
 ) (exec.Node, error) {
@@ -1349,8 +1350,9 @@ func (ef *execFactory) ConstructUpdate(
 	*upd = updateNode{
 		source: input.(planNode),
 		run: updateRun{
-			tu:        tableUpdater{ru: ru},
-			checkOrds: checks,
+			tu:               tableUpdater{ru: ru},
+			checkOrds:        checks,
+			partialIndexOrds: partialIndexes,
 			iVarContainerForComputedCols: schemaexpr.RowIndexedVarContainer{
 				CurSourceRow: make(tree.Datums, len(ru.FetchCols)),
 				Cols:         ru.FetchCols,
