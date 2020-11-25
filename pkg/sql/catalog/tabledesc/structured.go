@@ -1657,7 +1657,7 @@ func (desc *Immutable) validateCrossReferences(ctx context.Context, dg catalog.D
 					fk.Index, desc.Name, backref.Name, originTable.GetName(),
 				)
 			}
-			if originalReferencedIndex.IsValidReferencedIndex(backref.OriginColumnIDs) {
+			if originalReferencedIndex.IsValidReferencedIndex(backref.ReferencedColumnIDs) {
 				found = true
 			}
 			return nil
