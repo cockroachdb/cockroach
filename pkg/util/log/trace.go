@@ -199,7 +199,6 @@ func Event(ctx context.Context, msg string) {
 	// Format the tracing event and add it to the trace.
 	entry := MakeEntry(ctx,
 		severity.INFO, /* unused for trace events */
-		nil,           /* logCounter, unused for trace events */
 		1,             /* depth */
 		// redactable is false because we want to flatten the data in traces
 		// -- we don't have infrastructure yet for trace redaction.
@@ -222,7 +221,6 @@ func Eventf(ctx context.Context, format string, args ...interface{}) {
 	// Format the tracing event and add it to the trace.
 	entry := MakeEntry(ctx,
 		severity.INFO, /* unused for trace events */
-		nil,           /* logCounter, unused for trace events */
 		1,             /* depth */
 		// redactable is false because we want to flatten the data in traces
 		// -- we don't have infrastructure yet for trace redaction.
@@ -249,7 +247,6 @@ func vEventf(
 		}
 		entry := MakeEntry(ctx,
 			severity.INFO, /* unused for trace events */
-			nil,           /* logCounter, unused for trace events */
 			depth+1,
 			// redactable is false because we want to flatten the data in traces
 			// -- we don't have infrastructure yet for trace redaction.

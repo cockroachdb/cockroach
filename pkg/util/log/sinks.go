@@ -10,26 +10,19 @@
 
 package log
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/cli/exit"
 
 // logSink abstracts the destination of logging events, after all
 // their details have been collected into a logpb.Entry.
 //
 // Each logger can have zero or more logSinks attached to it.
 type logSink interface {
-	// activeAtSeverity returns true if this sink accepts entries at
-	// severity sev or higher.
-	activeAtSeverity(sev logpb.Severity) bool
+	// active returns true if this sink is currently active.
+	active() bool
 
 	// attachHints attaches some hints about the location of the message
 	// to the stack message.
 	attachHints([]byte) []byte
-
-	// getFormatter retrieves the entry formatter for this sink.
-	getFormatter() logFormatter
 
 	// output emits some formatted bytes to this sink.
 	// the sink is invited to perform an extra flush if indicated
