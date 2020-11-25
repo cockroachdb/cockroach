@@ -37,6 +37,13 @@ func (n *createSchemaNode) startExec(params runParams) error {
 }
 
 func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema) error {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"CREATE SCHEMA",
+	); err != nil {
+		return err
+	}
+
 	// Users can't create a schema without being connected to a DB.
 	if p.CurrentDatabase() == "" {
 		return pgerror.New(pgcode.UndefinedDatabase,
@@ -177,6 +184,13 @@ func (n *createSchemaNode) Close(ctx context.Context)  {}
 
 // CreateSchema creates a schema.
 func (p *planner) CreateSchema(ctx context.Context, n *tree.CreateSchema) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"CREATE SCHEMA",
+	); err != nil {
+		return nil, err
+	}
+
 	return &createSchemaNode{
 		n: n,
 	}, nil

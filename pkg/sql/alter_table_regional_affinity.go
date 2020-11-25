@@ -21,5 +21,11 @@ import (
 func (p *planner) AlterTableRegionalAffinity(
 	ctx context.Context, n *tree.AlterTableRegionalAffinity,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER TABLE",
+	); err != nil {
+		return nil, err
+	}
 	return nil, unimplemented.New("alter table locality", "implementation pending")
 }

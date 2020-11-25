@@ -39,6 +39,13 @@ type alterSchemaNode struct {
 var _ planNode = &alterSchemaNode{n: nil}
 
 func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER SCHEMA",
+	); err != nil {
+		return nil, err
+	}
+
 	dbName := p.CurrentDatabase()
 	if n.Schema.ExplicitCatalog {
 		dbName = n.Schema.Catalog()
