@@ -458,6 +458,10 @@ func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error
 		return nil, errors.Errorf("key %q is not for a single-key lock", key)
 	}
 	b = b[len(LockTableSingleKeyInfix):]
+	// We pass nil as the second parameter instead of trying to reuse a
+	// previously allocated buffer since escaping of \x00 to \x00\xff is not
+	// common. And when there is no such escaping, lockedKey will be a sub-slice
+	// of b.
 	b, lockedKey, err = encoding.DecodeBytesAscending(b, nil)
 	if err != nil {
 		return nil, err
