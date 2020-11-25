@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -86,36 +87,12 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	var regionConfig descpb.DatabaseRegionConfig
-	regionConfig.SurvivalGoal, err = translateSurvivalGoal(database.SurvivalGoal)
+	regionConfig, err := p.createRegionConfig(
+		database.SurvivalGoal,
+		database.PrimaryRegion,
+		database.Regions,
+	)
 	if err != nil {
-		return nil, false, err
-	}
-	if len(database.Regions) > 0 {
-		liveRegions, err := p.getLiveClusterRegions()
-		if err != nil {
-			return nil, false, err
-		}
-		regionConfig.Regions = make([]string, 0, len(database.Regions))
-		seenRegions := make(map[string]struct{}, len(database.Regions))
-		for _, r := range database.Regions {
-			region := string(r)
-			if err := checkLiveClusterRegion(liveRegions, region); err != nil {
-				return nil, false, err
-			}
-
-			if _, ok := seenRegions[region]; ok {
-				return nil, false, pgerror.Newf(
-					pgcode.InvalidName,
-					"region %q defined multiple times",
-					region,
-				)
-			}
-			seenRegions[region] = struct{}{}
-			regionConfig.Regions = append(regionConfig.Regions, region)
-		}
-	}
-	if err := validateDatabaseRegionConfig(regionConfig); err != nil {
 		return nil, false, err
 	}
 
@@ -262,4 +239,68 @@ func validateDatabaseRegionConfig(regionConfig descpb.DatabaseRegionConfig) erro
 		)
 	}
 	return nil
+}
+
+// createRegionConfig creates a new region config from the given parameters.
+func (p *planner) createRegionConfig(
+	survivalGoal tree.SurvivalGoal, primaryRegion tree.Name, regions []tree.Name,
+) (descpb.DatabaseRegionConfig, error) {
+	var regionConfig descpb.DatabaseRegionConfig
+	var err error
+	regionConfig.SurvivalGoal, err = translateSurvivalGoal(survivalGoal)
+	if err != nil {
+		return descpb.DatabaseRegionConfig{}, err
+	}
+	if primaryRegion != "" || len(regions) > 0 {
+		liveRegions, err := p.getLiveClusterRegions()
+		if err != nil {
+			return descpb.DatabaseRegionConfig{}, err
+		}
+		regionConfig.PrimaryRegion = string(primaryRegion)
+		if regionConfig.PrimaryRegion != "" {
+			if err := checkLiveClusterRegion(liveRegions, regionConfig.PrimaryRegion); err != nil {
+				return descpb.DatabaseRegionConfig{}, err
+			}
+		}
+		if len(regions) > 0 {
+			if regionConfig.PrimaryRegion == "" {
+				return descpb.DatabaseRegionConfig{}, pgerror.Newf(
+					pgcode.InvalidDatabaseDefinition,
+					"PRIMARY REGION must be specified if REGIONS are specified",
+				)
+			}
+			regionConfig.Regions = make([]string, 0, len(regions)+1)
+			seenRegions := make(map[string]struct{}, len(regions)+1)
+			for _, r := range regions {
+				region := string(r)
+				if err := checkLiveClusterRegion(liveRegions, region); err != nil {
+					return descpb.DatabaseRegionConfig{}, err
+				}
+
+				if _, ok := seenRegions[region]; ok {
+					return descpb.DatabaseRegionConfig{}, pgerror.Newf(
+						pgcode.InvalidName,
+						"region %q defined multiple times",
+						region,
+					)
+				}
+				seenRegions[region] = struct{}{}
+				regionConfig.Regions = append(regionConfig.Regions, region)
+			}
+			// If PRIMARY REGION is not in REGIONS, add it implicitly.
+			if _, ok := seenRegions[regionConfig.PrimaryRegion]; !ok {
+				regionConfig.Regions = append(
+					regionConfig.Regions,
+					regionConfig.PrimaryRegion,
+				)
+			}
+			sort.Strings(regionConfig.Regions)
+		} else {
+			regionConfig.Regions = []string{regionConfig.PrimaryRegion}
+		}
+	}
+	if err := validateDatabaseRegionConfig(regionConfig); err != nil {
+		return descpb.DatabaseRegionConfig{}, err
+	}
+	return regionConfig, nil
 }
