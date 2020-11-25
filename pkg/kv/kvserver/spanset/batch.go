@@ -157,6 +157,11 @@ func (i *MVCCIterator) UnsafeRawKey() []byte {
 	return i.i.UnsafeRawKey()
 }
 
+// UnsafeRawMVCCKey is part of the storage.MVCCIterator interface.
+func (i *MVCCIterator) UnsafeRawMVCCKey() []byte {
+	return i.i.UnsafeRawMVCCKey()
+}
+
 // UnsafeValue is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) UnsafeValue() []byte {
 	return i.i.UnsafeValue()
@@ -305,6 +310,11 @@ func (i *EngineIterator) EngineKey() (storage.EngineKey, error) {
 // Value is part of the storage.EngineIterator interface.
 func (i *EngineIterator) Value() []byte {
 	return i.i.Value()
+}
+
+// UnsafeRawEngineKey is part of the storage.EngineIterator interface.
+func (i *EngineIterator) UnsafeRawEngineKey() []byte {
+	return i.i.UnsafeRawEngineKey()
 }
 
 // SetUpperBound is part of the storage.EngineIterator interface.
