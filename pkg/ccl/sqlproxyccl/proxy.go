@@ -9,6 +9,7 @@
 package sqlproxyccl
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"io"
@@ -32,6 +33,10 @@ type BackendConfig struct {
 	TLSConf *tls.Config
 	// Called after successfully connecting to OutgoingAddr.
 	OnConnectionSuccess func()
+	// KeepAliveLoop is a loop that can be provided to determine if the connection
+	// should be closed due to external reasons like credentials expiring for
+	// example. The loop should be canceled is ctx is done.
+	KeepAliveLoop func(context.Context) error
 }
 
 // Options are the options to the Proxy method.
@@ -196,7 +201,10 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	// These channels are buffered because we'll only consume one of them.
 	errOutgoing := make(chan error, 1)
 	errIncoming := make(chan error, 1)
+	errExpired := make(chan error, 1)
 
+	ctx, done := context.WithCancel(context.Background())
+	defer done()
 	go func() {
 		_, err := io.Copy(crdbConn, conn)
 		errOutgoing <- err
@@ -204,6 +212,12 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	go func() {
 		_, err := io.Copy(conn, crdbConn)
 		errIncoming <- err
+	}()
+	go func() {
+		if backendConfig.KeepAliveLoop == nil {
+			return
+		}
+		errExpired <- backendConfig.KeepAliveLoop(ctx)
 	}()
 
 	select {
@@ -224,6 +238,15 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		if err != nil {
 			s.metrics.ClientDisconnectCount.Inc(1)
 			return NewErrorf(CodeClientDisconnected, "copying from target server to client: %v", err)
+		}
+		return nil
+	case err := <-errExpired:
+		// The connection expired
+		if err != nil {
+			s.metrics.ExpiredConnCount.Inc(1)
+			code := CodeExpiredConnection
+			sendErrToClient(conn, code, err.Error())
+			return NewErrorf(code, err.Error())
 		}
 		return nil
 	}
