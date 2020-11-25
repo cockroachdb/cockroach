@@ -202,12 +202,12 @@ func (ds *ServerImpl) setupFlow(
 		// TODO(andrei): localState.IsLocal is not quite the right thing to use.
 		//  If that field is unset, we might still want to create a child span if
 		//  this flow is run synchronously.
-		sp = ds.Tracer.StartSpan(opName, tracing.WithParent(parentSpan), tracing.WithCtxLogTags(ctx))
+		sp = ds.Tracer.StartSpan(opName, tracing.WithParentAndAutoCollection(parentSpan), tracing.WithCtxLogTags(ctx))
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
 		sp = ds.Tracer.StartSpan(
 			opName,
-			tracing.WithParent(parentSpan),
+			tracing.WithParentAndAutoCollection(parentSpan),
 			tracing.WithFollowsFrom(),
 			tracing.WithCtxLogTags(ctx),
 		)

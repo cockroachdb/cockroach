@@ -169,7 +169,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			tracer := parentSp.Tracer()
 			sp = tracer.StartSpan(
 				"explain-distsql", tracing.WithForceRealSpan(),
-				tracing.WithParent(parentSp),
+				tracing.WithParentAndAutoCollection(parentSp),
 				tracing.WithCtxLogTags(params.ctx))
 		} else {
 			tracer := params.extendedEvalCtx.ExecCfg.AmbientCtx.Tracer

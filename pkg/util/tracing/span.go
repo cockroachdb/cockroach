@@ -213,14 +213,12 @@ func (s *Span) IsRecording() bool {
 // parent.
 // If separate recording is specified, the child is not registered with the
 // parent. Thus, the parent's recording will not include this child.
-func (s *crdbSpan) enableRecording(
-	parent *crdbSpan, recType RecordingType, separateRecording bool,
-) {
+func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	atomic.StoreInt32(&s.recording, 1)
 	s.mu.recording.recordingType = recType
-	if parent != nil && !separateRecording {
+	if parent != nil {
 		parent.addChild(s)
 	}
 	if recType == SnowballRecording {
@@ -257,7 +255,7 @@ func (s *Span) StartRecording(recType RecordingType) {
 	// If we're already recording (perhaps because the parent was recording when
 	// this Span was created), there's nothing to do.
 	if !s.crdb.isRecording() {
-		s.crdb.enableRecording(nil /* parent */, recType, false /* separateRecording */)
+		s.crdb.enableRecording(nil /* parent */, recType)
 	}
 }
 
@@ -367,7 +365,7 @@ func (s *Span) IsBlackHole() bool {
 // or corresponds to a "no-op" Span. If this is true, any Span
 // derived from this context will be a "black hole Span".
 func (sc *SpanMeta) isNilOrNoop() bool {
-	return sc.recordingType == NoRecording && sc.shadowTracerType == ""
+	return sc == nil || (sc.recordingType == NoRecording && sc.shadowTracerType == "")
 }
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
@@ -406,7 +404,7 @@ func (s *Span) Finish() {
 
 // Meta returns the information which needs to be propagated across
 // process boundaries in order to derive child spans from this Span.
-// This may return nil, which is a valid input to `WithRemoteParent`,
+// This may return nil, which is a valid input to `WithParentAndManualCollection`,
 // if the Span has been optimized out.
 func (s *Span) Meta() *SpanMeta {
 	var traceID uint64
@@ -438,6 +436,14 @@ func (s *Span) Meta() *SpanMeta {
 		shadowCtx = s.ot.shadowSpan.Context()
 	}
 
+	if traceID == 0 &&
+		spanID == 0 &&
+		shadowTrTyp == "" &&
+		shadowCtx == nil &&
+		recordingType == 0 &&
+		baggage == nil {
+		return nil
+	}
 	return &SpanMeta{
 		traceID:          traceID,
 		spanID:           spanID,
