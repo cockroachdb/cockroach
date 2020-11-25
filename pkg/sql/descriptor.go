@@ -256,7 +256,7 @@ func (p *planner) createRegionConfig(
 		if err != nil {
 			return descpb.DatabaseRegionConfig{}, err
 		}
-		regionConfig.PrimaryRegion = string(primaryRegion)
+		regionConfig.PrimaryRegion = descpb.Region(primaryRegion)
 		if regionConfig.PrimaryRegion != "" {
 			if err := checkLiveClusterRegion(liveRegions, regionConfig.PrimaryRegion); err != nil {
 				return descpb.DatabaseRegionConfig{}, err
@@ -269,10 +269,10 @@ func (p *planner) createRegionConfig(
 					"PRIMARY REGION must be specified if REGIONS are specified",
 				)
 			}
-			regionConfig.Regions = make([]string, 0, len(regions)+1)
-			seenRegions := make(map[string]struct{}, len(regions)+1)
+			regionConfig.Regions = make([]descpb.Region, 0, len(regions)+1)
+			seenRegions := make(map[descpb.Region]struct{}, len(regions)+1)
 			for _, r := range regions {
-				region := string(r)
+				region := descpb.Region(r)
 				if err := checkLiveClusterRegion(liveRegions, region); err != nil {
 					return descpb.DatabaseRegionConfig{}, err
 				}
@@ -294,9 +294,11 @@ func (p *planner) createRegionConfig(
 					regionConfig.PrimaryRegion,
 				)
 			}
-			sort.Strings(regionConfig.Regions)
+			sort.Slice(regionConfig.Regions, func(i, j int) bool {
+				return regionConfig.Regions[i] < regionConfig.Regions[j]
+			})
 		} else {
-			regionConfig.Regions = []string{regionConfig.PrimaryRegion}
+			regionConfig.Regions = []descpb.Region{regionConfig.PrimaryRegion}
 		}
 	}
 	if err := validateDatabaseRegionConfig(regionConfig); err != nil {

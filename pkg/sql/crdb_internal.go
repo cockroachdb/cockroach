@@ -246,12 +246,12 @@ CREATE TABLE crdb_internal.databases (
 				}
 				var primaryRegion tree.Datum = tree.DNull
 				if db.RegionConfig.PrimaryRegion != "" {
-					primaryRegion = tree.NewDString(db.RegionConfig.PrimaryRegion)
+					primaryRegion = tree.NewDString(string(db.RegionConfig.PrimaryRegion))
 				}
 
 				regions := tree.NewDArray(types.String)
 				for _, region := range db.RegionConfig.Regions {
-					if err := regions.Append(tree.NewDString(region)); err != nil {
+					if err := regions.Append(tree.NewDString(string(region))); err != nil {
 						return err
 					}
 				}
