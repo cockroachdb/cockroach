@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load(":COLEXEC.bzl", "generate")
+load(":COLEXEC.bzl", "eg_go_filegroup", "gen_eg_go_rules", "gen_like_ops_rule")
 
 go_library(
     name = "colexec",
@@ -52,6 +52,7 @@ go_library(
         "unordered_distinct.go",
         "utils.go",
         ":gen-exec",  # keep
+        ":gen-like-ops",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec",
     visibility = ["//visibility:public"],
@@ -200,57 +201,17 @@ go_test(
 )
 
 # Define a file group for all the .eg.go targets.
-targets = [
-    "and_or_projection.eg.go",
-    "cast.eg.go",
-    "const.eg.go",
-    "default_cmp_expr.eg.go",
-    "default_cmp_proj_ops.eg.go",
-    "default_cmp_sel_ops.eg.go",
-    "distinct.eg.go",
-    "hashjoiner.eg.go",
-    "hashtable_distinct.eg.go",
-    "hashtable_full_default.eg.go",
-    "hashtable_full_deleting.eg.go",
-    "hash_aggregator.eg.go",
-    "hash_utils.eg.go",
-    "is_null_ops.eg.go",
-    "like_ops.eg.go",
-    "mergejoinbase.eg.go",
-    "mergejoiner_exceptall.eg.go",
-    "mergejoiner_fullouter.eg.go",
-    "mergejoiner_inner.eg.go",
-    "mergejoiner_intersectall.eg.go",
-    "mergejoiner_leftanti.eg.go",
-    "mergejoiner_leftouter.eg.go",
-    "mergejoiner_leftsemi.eg.go",
-    "mergejoiner_rightanti.eg.go",
-    "mergejoiner_rightouter.eg.go",
-    "mergejoiner_rightsemi.eg.go",
-    "ordered_synchronizer.eg.go",
-    "proj_const_left_ops.eg.go",
-    "proj_const_right_ops.eg.go",
-    "proj_non_const_ops.eg.go",
-    "quicksort.eg.go",
-    "rank.eg.go",
-    "relative_rank.eg.go",
-    "row_number.eg.go",
-    "rowstovec.eg.go",
-    "selection_ops.eg.go",
-    "select_in.eg.go",
-    "sort.eg.go",
-    "substring.eg.go",
-    "values_differ.eg.go",
-    "vec_comparators.eg.go",
-    "window_peer_grouper.eg.go",
-]
+eg_go_filegroup(name = "gen-exec")
 
-# Define a generator for all execgen code. Look towards COLEXEC.bzl for the
-# implementation.
-generate(
-    name = "gen-exec",
-    execgen = "//pkg/sql/colexec/execgen/cmd/execgen",
-    goimports = "//vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
-    targets = targets,
-    templates = glob(["*_tmpl.go"]),
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules()
+
+# Special-case the gen rule for like_ops.eg.go.
+gen_like_ops_rule(
+    name = "gen-like-ops",
+    target = "like_ops.eg.go",
+    templates = [
+        "selection_ops_tmpl.go",
+        "proj_const_ops_tmpl.go",
+    ],
 )
