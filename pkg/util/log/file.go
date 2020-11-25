@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -82,20 +81,12 @@ type fileSink struct {
 	// temporarily be up to logFileMaxSize larger.
 	logFilesCombinedMaxSize int64
 
-	// Level beyond which entries submitted to this sink are written
-	// to the output file. This acts as a filter between the log entry
-	// producers and the file sink.
-	threshold Severity
-
-	// formatter for entries.
-	formatter logFormatter
-
 	// notify GC daemon that a new log file was created.
 	gcNotify chan struct{}
 
 	// getStartLines retrieves a list of log entries to
 	// include at the start of a log file.
-	getStartLines func(time.Time) []logpb.Entry
+	getStartLines func(time.Time) []*buffer
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize output to this file sink..
@@ -139,9 +130,8 @@ type fileSink struct {
 func newFileSink(
 	dir, fileNamePrefix string,
 	forceSyncWrites bool,
-	fileThreshold Severity,
 	fileMaxSize, combinedMaxSize int64,
-	getStartLines func(time.Time) []logpb.Entry,
+	getStartLines func(time.Time) []*buffer,
 ) *fileSink {
 	prefix := program
 	if fileNamePrefix != "" {
@@ -149,8 +139,6 @@ func newFileSink(
 	}
 	f := &fileSink{
 		prefix:                  prefix,
-		threshold:               fileThreshold,
-		formatter:               formatCrdbV1WithCounter{},
 		syncWrites:              forceSyncWrites,
 		logFileMaxSize:          fileMaxSize,
 		logFilesCombinedMaxSize: combinedMaxSize,
@@ -163,8 +151,8 @@ func newFileSink(
 }
 
 // activeAtSeverity implements the logSink interface.
-func (l *fileSink) activeAtSeverity(sev logpb.Severity) bool {
-	return l.enabled.Get() && sev >= l.threshold
+func (l *fileSink) active() bool {
+	return l.enabled.Get()
 }
 
 // attachHints implements the logSink interface.
@@ -178,11 +166,6 @@ func (l *fileSink) attachHints(stacks []byte) []byte {
 		"\nFor more context, check log files in: %s\n", l.mu.logDir))...)
 	l.mu.Unlock()
 	return stacks
-}
-
-// getFormatter implements the logSink interface.
-func (l *fileSink) getFormatter() logFormatter {
-	return l.formatter
 }
 
 // output implements the logSink interface.
