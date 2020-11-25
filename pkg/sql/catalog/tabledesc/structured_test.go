@@ -821,7 +821,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Indexes: []descpb.IndexDescriptor{
 					{
 						ID:        2,
-						ColumnIDs: []descpb.ColumnID{1},
+						ColumnIDs: []descpb.ColumnID{7},
 						Unique:    true,
 					},
 				},
@@ -829,7 +829,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					{
 						Name:                "fk",
 						ReferencedTableID:   51,
-						ReferencedColumnIDs: []descpb.ColumnID{1},
+						ReferencedColumnIDs: []descpb.ColumnID{7},
 						OriginTableID:       52,
 						OriginColumnIDs:     []descpb.ColumnID{1},
 					},
