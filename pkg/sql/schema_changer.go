@@ -606,6 +606,10 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		return nil
 	}
 
+	deleteDescriptor := func() error {
+		return sc.execCfg.DB.Del(ctx, catalogkeys.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID()))
+	}
+
 	tableDesc, ok := desc.(*tabledesc.Immutable)
 	if !ok {
 		// If our descriptor is not a table, then just drain leases.
@@ -616,7 +620,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		switch desc.(type) {
 		case catalog.SchemaDescriptor, catalog.DatabaseDescriptor:
 			if desc.Dropped() {
-				if err := sc.execCfg.DB.Del(ctx, catalogkeys.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
+				if err := deleteDescriptor(); err != nil {
 					return err
 				}
 			}
@@ -626,23 +630,37 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 
 	// Otherwise, continue with the rest of the schema change state machine.
 	if tableDesc.Dropped() && sc.droppedDatabaseID == descpb.InvalidID {
-		// We've dropped this table, let's kick off a GC job.
-		dropTime := timeutil.Now().UnixNano()
-		if tableDesc.TableDesc().DropTime > 0 {
-			dropTime = tableDesc.TableDesc().DropTime
-		}
-		gcDetails := jobspb.SchemaChangeGCDetails{
-			Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
-				{
-					ID:       tableDesc.GetID(),
-					DropTime: dropTime,
+		if tableDesc.IsPhysicalTable() {
+			// We've dropped this physical table, let's kick off a GC job.
+			dropTime := timeutil.Now().UnixNano()
+			if tableDesc.TableDesc().DropTime > 0 {
+				dropTime = tableDesc.TableDesc().DropTime
+			}
+			gcDetails := jobspb.SchemaChangeGCDetails{
+				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
+					{
+						ID:       tableDesc.GetID(),
+						DropTime: dropTime,
+					},
 				},
-			},
-		}
-		if err := startGCJob(
-			ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
-		); err != nil {
-			return err
+			}
+			if err := startGCJob(
+				ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
+			); err != nil {
+				return err
+			}
+		} else {
+			// We've dropped a non-physical table, no need for a GC job, let's delete its descriptor right away
+			if err := deleteDescriptor(); err != nil {
+				return err
+			}
+			// Also delete the zone config entry for this table, if necessary.
+			if sc.execCfg.Codec.ForSystemTenant() {
+				zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(tableDesc.ID))
+				if err := sc.execCfg.DB.DelRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd()); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
