@@ -1062,9 +1062,9 @@ enum SurvivalGoal {
 message DatabaseRegionConfig {
   option (gogoproto.equal) = true;
 
-  repeated string regions = 1;
+  repeated string regions = 1 [(gogoproto.casttype)="Region"];
   optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
-  optional string primary_region = 3 [(gogoproto.nullable)=false];
+  optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="Region"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

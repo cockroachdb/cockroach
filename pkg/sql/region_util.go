@@ -14,14 +14,15 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
-type liveClusterRegions map[string]struct{}
+type liveClusterRegions map[descpb.Region]struct{}
 
-func (s *liveClusterRegions) isActive(region string) bool {
+func (s *liveClusterRegions) isActive(region descpb.Region) bool {
 	_, ok := (*s)[region]
 	return ok
 }
@@ -29,7 +30,7 @@ func (s *liveClusterRegions) isActive(region string) bool {
 func (s *liveClusterRegions) toStrings() []string {
 	ret := make([]string, 0, len(*s))
 	for region := range *s {
-		ret = append(ret, region)
+		ret = append(ret, string(region))
 	}
 	sort.Slice(ret, func(i, j int) bool {
 		return ret[i] < ret[j]
@@ -45,11 +46,11 @@ func (p *planner) getLiveClusterRegions() (liveClusterRegions, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ret liveClusterRegions = make(map[string]struct{})
+	var ret liveClusterRegions = make(map[descpb.Region]struct{})
 	for _, node := range nodes {
 		for _, tier := range node.Locality.Tiers {
 			if tier.Key == "region" {
-				ret[tier.Value] = struct{}{}
+				ret[descpb.Region(tier.Value)] = struct{}{}
 				break
 			}
 		}
@@ -59,7 +60,7 @@ func (p *planner) getLiveClusterRegions() (liveClusterRegions, error) {
 
 // checkLiveClusterRegion checks whether a region can be added to a database
 // based on whether the cluster regions are alive.
-func checkLiveClusterRegion(liveClusterRegions liveClusterRegions, region string) error {
+func checkLiveClusterRegion(liveClusterRegions liveClusterRegions, region descpb.Region) error {
 	if !liveClusterRegions.isActive(region) {
 		return errors.WithHintf(
 			pgerror.Newf(
