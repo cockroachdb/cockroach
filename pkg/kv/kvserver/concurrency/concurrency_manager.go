@@ -417,7 +417,6 @@ func (r *Request) readConflictTimestamp() hlc.Timestamp {
 	ts := r.Timestamp
 	if r.Txn != nil {
 		ts = r.Txn.ReadTimestamp
-		ts.Forward(r.Txn.MaxTimestamp)
 	}
 	return ts
 }
