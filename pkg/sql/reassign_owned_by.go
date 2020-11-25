@@ -31,6 +31,13 @@ type reassignOwnedByNode struct {
 }
 
 func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"REASSIGN OWNED BY",
+	); err != nil {
+		return nil, err
+	}
+
 	// Check all roles in old roles exist. Checks in authorization.go will confirm that current user
 	// is a member of old roles and new roles and has CREATE privilege.
 	for _, oldRole := range n.OldRoles {

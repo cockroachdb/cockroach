@@ -32,6 +32,13 @@ type dropSequenceNode struct {
 }
 
 func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"DROP SEQUENCE",
+	); err != nil {
+		return nil, err
+	}
+
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]

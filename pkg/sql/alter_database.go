@@ -30,6 +30,13 @@ type alterDatabaseOwnerNode struct {
 func (p *planner) AlterDatabaseOwner(
 	ctx context.Context, n *tree.AlterDatabaseOwner,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
 	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, n.Name.String(), true /* required */)
 	if err != nil {
 		return nil, err
@@ -102,6 +109,12 @@ func (n *alterDatabaseOwnerNode) Close(context.Context)        {}
 func (p *planner) AlterDatabaseAddRegion(
 	ctx context.Context, n *tree.AlterDatabaseAddRegion,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
 	return nil, unimplemented.New("alter database add region", "implementation pending")
 }
 
@@ -109,6 +122,12 @@ func (p *planner) AlterDatabaseAddRegion(
 func (p *planner) AlterDatabaseDropRegion(
 	ctx context.Context, n *tree.AlterDatabaseDropRegion,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
 	return nil, unimplemented.New("alter database drop region", "implementation pending")
 }
 
@@ -123,5 +142,11 @@ func (p *planner) AlterDatabasePrimaryRegion(
 func (p *planner) AlterDatabaseSurvivalGoal(
 	ctx context.Context, n *tree.AlterDatabaseSurvivalGoal,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
 	return nil, unimplemented.New("alter database survive", "implementation pending")
 }

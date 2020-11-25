@@ -43,6 +43,13 @@ type createTypeNode struct {
 var _ planNode = &createTypeNode{n: nil}
 
 func (p *planner) CreateType(ctx context.Context, n *tree.CreateType) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"CREATE TYPE",
+	); err != nil {
+		return nil, err
+	}
+
 	return &createTypeNode{n: n}, nil
 }
 

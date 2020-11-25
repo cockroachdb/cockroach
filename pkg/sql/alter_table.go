@@ -53,6 +53,13 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"ALTER TABLE",
+	); err != nil {
+		return nil, err
+	}
+
 	tableDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Table, !n.IfExists, tree.ResolveRequireTableDesc,
 	)

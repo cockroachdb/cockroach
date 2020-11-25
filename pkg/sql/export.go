@@ -92,8 +92,10 @@ func (ef *execFactory) ConstructExport(
 	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {
 	if !featureExportEnabled.Get(&ef.planner.ExecCfg().Settings.SV) {
-		return nil, pgerror.Newf(pgcode.OperatorIntervention,
-			"EXPORT feature was disabled by the database administrator")
+		return nil, pgerror.Newf(
+			pgcode.OperatorIntervention,
+			"feature EXPORT was disabled by the database administrator",
+		)
 	}
 
 	if err := featureflag.CheckEnabled(featureExportEnabled,

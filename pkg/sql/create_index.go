@@ -44,6 +44,12 @@ type createIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		&p.ExecCfg().Settings.SV,
+		"CREATE INDEX",
+	); err != nil {
+		return nil, err
+	}
 	tableDesc, err := p.ResolveMutableTableDescriptor(
 		ctx, &n.Table, true /*required*/, tree.ResolveRequireTableOrViewDesc,
 	)
