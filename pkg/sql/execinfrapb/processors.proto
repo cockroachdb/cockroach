@@ -87,6 +87,7 @@ message ProcessorCoreUnion {
 
   optional NoopCoreSpec noop = 1;
   optional TableReaderSpec tableReader = 2;
+  optional FiltererSpec filterer = 34;
   optional JoinReaderSpec joinReader = 3;
   optional SorterSpec sorter = 4;
   optional AggregatorSpec aggregator = 5;

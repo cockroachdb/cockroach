@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,6 +55,11 @@ func newNoopProcessor(
 	); err != nil {
 		return nil, err
 	}
+	ctx := flowCtx.EvalCtx.Ctx()
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
+		n.input = newInputStatCollector(n.input)
+		n.ExecStatsForTrace = n.execStatsForTrace
+	}
 	return n, nil
 }
 
@@ -90,6 +96,19 @@ func (n *noopProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadat
 func (n *noopProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	n.InternalClose()
+}
+
+// execStatsForTrace outputs the collected distinct stats to the trace. Will
+// fail silently if the Distinct processor is not collecting stats.
+func (n *noopProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := getInputStats(n.input)
+	if !ok {
+		return nil
+	}
+	return &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Output: n.Out.Stats(),
+	}
 }
 
 // ChildCount is part of the execinfra.OpNode interface.
