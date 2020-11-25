@@ -70,6 +70,13 @@ func (*NoopCoreSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (f *FiltererSpec) summary() (string, []string) {
+	return "Filterer", []string{
+		fmt.Sprintf("Filter: %s", f.Filter),
+	}
+}
+
+// summary implements the diagramCellType interface.
 func (mts *MetadataTestSenderSpec) summary() (string, []string) {
 	return "MetadataTestSender", []string{mts.ID}
 }

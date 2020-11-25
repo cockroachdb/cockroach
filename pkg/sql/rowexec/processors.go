@@ -137,6 +137,12 @@ func NewProcessor(
 		}
 		return newTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 	}
+	if core.Filterer != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newFiltererProcessor(flowCtx, processorID, core.Filterer, inputs[0], post, outputs[0])
+	}
 	if core.JoinReader != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
