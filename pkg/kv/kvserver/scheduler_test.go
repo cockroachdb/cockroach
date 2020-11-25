@@ -195,7 +195,7 @@ func TestSchedulerLoop(t *testing.T) {
 	ctx := context.TODO()
 	defer stopper.Stop(ctx)
 	s.Start(ctx, stopper)
-	s.EnqueueRaftTick(1, 2, 3)
+	s.EnqueueRaftTicks(1, 2, 3)
 
 	testutils.SucceedsSoon(t, func() error {
 		const expected = "ready=[] request=[] tick=[1:1,2:1,3:1]"
