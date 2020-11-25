@@ -1619,11 +1619,6 @@ func IntEncDatum(i int) EncDatum {
 	return EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
 }
 
-// StrEncDatum returns an EncDatum representation of DString(s).
-func StrEncDatum(s string) EncDatum {
-	return EncDatum{Datum: tree.NewDString(s)}
-}
-
 // NullEncDatum returns and EncDatum representation of tree.DNull.
 func NullEncDatum() EncDatum {
 	return EncDatum{Datum: tree.DNull}

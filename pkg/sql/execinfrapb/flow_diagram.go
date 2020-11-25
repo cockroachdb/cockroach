@@ -430,9 +430,6 @@ func (post *PostProcessSpec) summary() []string {
 // (namely InterleavedReaderJoiner) that have multiple PostProcessors.
 func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 	var res []string
-	if !post.Filter.Empty() {
-		res = append(res, fmt.Sprintf("%sFilter: %s", prefix, post.Filter))
-	}
 	if post.Projection {
 		outputColumns := "None"
 		if len(post.OutputColumns) > 0 {

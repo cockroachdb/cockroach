@@ -152,7 +152,7 @@ func newSorter(
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	count := uint64(0)
-	if post.Limit != 0 && post.Filter.Empty() {
+	if post.Limit != 0 {
 		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
 		// will discard the first Offset ones.
 		if post.Limit <= math.MaxUint64-post.Offset {
