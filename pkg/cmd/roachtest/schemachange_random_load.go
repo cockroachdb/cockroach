@@ -136,6 +136,7 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 		" --histograms=" + perfArtifactsDir + "/stats.json",
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
+		fmt.Sprintf("--txn-log %s", filepath.Join(string(storeDirectory), "transactions.json")),
 	}
 	t.Status("running schemachange workload")
 	err = c.RunE(ctx, loadNode, runCmd...)
@@ -178,10 +179,18 @@ func saveArtifacts(ctx context.Context, c *cluster, storeDirectory string) {
 
 	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange")
 	localBackupFilePath := filepath.Join(c.t.ArtifactsDir(), "backup")
+	remoteTransactionsFilePath := filepath.Join(storeDirectory, "transactions.jsonl")
+	localTransactionsFilePath := filepath.Join(c.t.ArtifactsDir(), "transactions.jsonl")
 
 	// Copy the backup from the store directory to the artifacts directory.
 	err = c.Get(ctx, c.l, remoteBackupFilePath, localBackupFilePath, c.Node(1))
 	if err != nil {
 		c.l.Printf("Failed to copy backup file from node 1 to artifacts directory: %v\n", err.Error())
+	}
+
+	// Copy the txn log from the store directory to the artifacts directory.
+	err = c.Get(ctx, c.l, remoteTransactionsFilePath, localTransactionsFilePath, c.Node(1))
+	if err != nil {
+		c.l.Printf("Failed to copy txn log file from node 1 to artifacts directory: %v\n", err.Error())
 	}
 }
