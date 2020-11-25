@@ -93,7 +93,6 @@ type waitingState struct {
 // TODO(sbhola):
 // - metrics about lockTable state to export to observability debug pages:
 //   number of locks, number of waiting requests, wait time?, ...
-// - test cases where guard.readTS != guard.writeTS.
 
 // The btree for a particular SpanScope.
 type treeMu struct {
@@ -258,10 +257,9 @@ type lockTableGuardImpl struct {
 	seqNum uint64
 
 	// Information about this request.
-	txn     *enginepb.TxnMeta
-	spans   *spanset.SpanSet
-	readTS  hlc.Timestamp
-	writeTS hlc.Timestamp
+	txn   *enginepb.TxnMeta
+	ts    hlc.Timestamp
+	spans *spanset.SpanSet
 
 	// Snapshots of the trees for which this request has some spans. Note that
 	// the lockStates in these snapshots may have been removed from
@@ -784,7 +782,7 @@ func (l *lockState) Format(buf *strings.Builder) {
 	txn, ts := l.getLockHolder()
 	if txn == nil {
 		fmt.Fprintf(buf, "  res: req: %d, ", l.reservation.seqNum)
-		writeResInfo(buf, l.reservation.txn, l.reservation.writeTS)
+		writeResInfo(buf, l.reservation.txn, l.reservation.ts)
 	} else {
 		writeHolderInfo(buf, txn, ts)
 	}
@@ -1053,7 +1051,7 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 			return false
 		}
 		// Locked by some other txn.
-		if g.readTS.Less(lockHolderTS) {
+		if g.ts.Less(lockHolderTS) {
 			return false
 		}
 		g.mu.Lock()
@@ -1357,7 +1355,7 @@ func (l *lockState) discoveredLock(
 		// the lock table. If not then it shouldn't have discovered the lock in
 		// the first place. Bugs here would cause infinite loops where the same
 		// lock is repeatedly re-discovered.
-		if g.readTS.Less(ts) {
+		if g.ts.Less(ts) {
 			return errors.AssertionFailedf("discovered non-conflicting lock")
 		}
 
@@ -1581,7 +1579,7 @@ func (l *lockState) increasedLockTs(newTs hlc.Timestamp) {
 		g := e.Value.(*lockTableGuardImpl)
 		curr := e
 		e = e.Next()
-		if g.readTS.Less(newTs) {
+		if g.ts.Less(newTs) {
 			// Stop waiting.
 			l.waitingReaders.Remove(curr)
 			if g == l.distinguishedWaiter {
@@ -1780,9 +1778,8 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		g = newLockTableGuardImpl()
 		g.seqNum = atomic.AddUint64(&t.seqNum, 1)
 		g.txn = req.txnMeta()
+		g.ts = req.Timestamp
 		g.spans = req.LockSpans
-		g.readTS = req.readConflictTimestamp()
-		g.writeTS = req.writeConflictTimestamp()
 		g.sa = spanset.NumSpanAccess - 1
 		g.index = -1
 	} else {
