@@ -667,51 +667,6 @@ func (tc *Collection) GetSchemaByName(
 	}, nil
 }
 
-// GetMutableTableDescriptor returns a mutable table descriptor.
-//
-// If flags.required is false, GetMutableTableDescriptor() will gracefully
-// return a nil descriptor and no error if the table does not exist.
-// TODO (lucy): Replace this with GetTableByName in a later commit.
-func (tc *Collection) GetMutableTableDescriptor(
-	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
-) (*tabledesc.Mutable, error) {
-	if !flags.RequireMutable {
-		panic("incompatible flag")
-		// return nil, nil
-	}
-	table, err := tc.GetTableByName(ctx, txn, tn, flags)
-	if err != nil || table == nil {
-		return nil, err
-	}
-	return table.(*tabledesc.Mutable), nil
-}
-
-// GetTableVersion returns a table descriptor with a version suitable for
-// the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
-// The table must be released by calling tc.ReleaseAll().
-//
-// If flags.required is false, GetTableVersion() will gracefully
-// return a nil descriptor and no error if the table does not exist.
-//
-// It might also add a transaction deadline to the transaction that is
-// enforced at the KV layer to ensure that the transaction doesn't violate
-// the validity window of the table descriptor version returned.
-//
-// TODO (lucy): Replace this with GetTableByName in a later commit.
-func (tc *Collection) GetTableVersion(
-	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
-) (*tabledesc.Immutable, error) {
-	if flags.RequireMutable {
-		panic("incompatible flag")
-		// return nil, nil
-	}
-	table, err := tc.GetTableByName(ctx, txn, tn, flags)
-	if err != nil || table == nil {
-		return nil, err
-	}
-	return table.(*tabledesc.Immutable), nil
-}
-
 // GetDatabaseVersionByID returns a database descriptor valid for the
 // transaction. See GetDatabaseVersion.
 func (tc *Collection) GetDatabaseVersionByID(
@@ -1153,23 +1108,6 @@ func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.Immutable) {
 
 // User defined type accessors.
 
-// GetMutableTypeDescriptor is the equivalent of GetMutableTableDescriptor but
-// for accessing types.
-// TODO (lucy): Replace this with GetTypeByName in a later commit.
-func (tc *Collection) GetMutableTypeDescriptor(
-	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
-) (*typedesc.Mutable, error) {
-	if !flags.RequireMutable {
-		panic("incompatible flag")
-		// return nil, nil
-	}
-	typ, err := tc.GetTypeByName(ctx, txn, tn, flags)
-	if err != nil || typ == nil {
-		return nil, err
-	}
-	return typ.(*typedesc.Mutable), nil
-}
-
 // GetMutableTypeVersionByID is the equivalent of GetMutableTableDescriptorByID
 // but for accessing types.
 func (tc *Collection) GetMutableTypeVersionByID(
@@ -1180,22 +1118,6 @@ func (tc *Collection) GetMutableTypeVersionByID(
 		return nil, err
 	}
 	return desc.(*typedesc.Mutable), nil
-}
-
-// GetTypeVersion is the equivalent of GetTableVersion but for accessing types.
-// TODO (lucy): Replace this with GetTypeByName in a later commit.
-func (tc *Collection) GetTypeVersion(
-	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
-) (*typedesc.Immutable, error) {
-	if flags.RequireMutable {
-		panic("incompatible flag")
-		// return nil, nil
-	}
-	typ, err := tc.GetTypeByName(ctx, txn, tn, flags)
-	if err != nil || typ == nil {
-		return nil, err
-	}
-	return typ.(*typedesc.Immutable), nil
 }
 
 // GetTypeVersionByID is the equivalent of GetTableVersionByID but for accessing
