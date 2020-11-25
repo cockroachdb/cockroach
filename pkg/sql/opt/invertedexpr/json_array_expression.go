@@ -25,7 +25,7 @@ func JSONOrArrayToContainingSpanExpr(
 	evalCtx *tree.EvalContext, d tree.Datum,
 ) (*SpanExpression, error) {
 	var b []byte
-	spansSlice, tight, err := rowenc.EncodeContainingInvertedIndexSpans(
+	spansSlice, tight, unique, err := rowenc.EncodeContainingInvertedIndexSpans(
 		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion,
 	)
 	if err != nil {
@@ -60,6 +60,7 @@ func JSONOrArrayToContainingSpanExpr(
 	}
 
 	if spanExpr, ok := invExpr.(*SpanExpression); ok {
+		spanExpr.Unique = unique
 		return spanExpr, nil
 	}
 	return nil, nil
