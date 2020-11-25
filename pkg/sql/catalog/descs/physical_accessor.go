@@ -17,13 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -193,95 +190,4 @@ func GetObjectNames(
 	}
 
 	return tableNames, nil
-}
-
-// getObjectDesc reads an object descriptor from the store.
-func getObjectDesc(
-	ctx context.Context,
-	txn *kv.Txn,
-	settings *cluster.Settings,
-	codec keys.SQLCodec,
-	db, scName, object string,
-	flags tree.ObjectLookupFlags,
-) (catalog.Descriptor, error) {
-	// Look up the database ID.
-	dbID, err := catalogkv.GetDatabaseID(ctx, txn, codec, db, flags.Required)
-	if err != nil || dbID == descpb.InvalidID {
-		// dbID can still be invalid if required is false and the database is not found.
-		return nil, err
-	}
-
-	ok, schema, err := getSchema(ctx, txn, codec, dbID, scName,
-		tree.SchemaLookupFlags{
-			Required:       flags.Required,
-			AvoidCached:    flags.AvoidCached,
-			IncludeDropped: flags.IncludeDropped,
-			IncludeOffline: flags.IncludeOffline,
-		})
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		if flags.Required {
-			tn := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&tn))
-		}
-		return nil, nil
-	}
-
-	// Try to use the system name resolution bypass. This avoids a hotspot.
-	// Note: we can only bypass name to ID resolution. The desc
-	// lookup below must still go through KV because system descriptors
-	// can be modified on a running cluster.
-	descID := bootstrap.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
-	if descID == descpb.InvalidID {
-		var found bool
-		found, descID, err = catalogkv.LookupObjectID(ctx, txn, codec, dbID, schema.ID, object)
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			// KV name resolution failed.
-			if flags.Required {
-				tn := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-				return nil, sqlerrors.NewUndefinedObjectError(&tn, flags.DesiredObjectKind)
-			}
-			return nil, nil
-		}
-	}
-
-	// Look up the object using the discovered database descriptor.
-	desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, descID, catalogkv.Mutability(flags.RequireMutable))
-	if err != nil {
-		return nil, err
-	}
-	// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
-	// OFFLINE if the relevant flag is set.
-	if err := catalog.FilterDescriptorState(desc, flags.CommonLookupFlags); err != nil {
-		if flags.Required {
-			return nil, err
-		}
-		return nil, nil
-	}
-	// Immediately after a RENAME an old name still points to the descriptor
-	// during the drain phase for the name. Do not return a descriptor during
-	// draining.
-	if _, ok := desc.(catalog.TableDescriptor); ok {
-		// This condition ensures that clusters < 20.1 access the
-		// system.namespace_deprecated table when selecting from system.namespace.
-		// As this table can not be renamed by users, it is okay that the subsequent
-		// check fails.
-		if object == systemschema.NamespaceTableName &&
-			db == systemschema.SystemDatabaseName {
-			return desc, nil
-		}
-	}
-	if desc.GetName() != object {
-		if flags.Required {
-			tn := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-			return nil, sqlerrors.NewUndefinedObjectError(&tn, flags.DesiredObjectKind)
-		}
-		return nil, nil
-	}
-	return desc, nil
 }

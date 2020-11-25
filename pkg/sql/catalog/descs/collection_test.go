@@ -78,12 +78,12 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		require.Equal(t, descpb.DescriptorVersion(1), newTable.Version)
 
 		// Ensure that the descriptor has been added to the collection.
-		mut2, err := descriptors.GetMutableTableDescriptor(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+		mut2, err := descriptors.GetMutableTableDescriptor(ctx, txn, &tn, flags)
 		require.NoError(t, err)
 		require.Equal(t, mut, mut2)
 
 		t2n := tree.MakeTableNameWithSchema("db", "schema", "table2")
-		newTableResolved, err := descriptors.GetMutableTableDescriptor(ctx, txn, &t2n, tree.ObjectLookupFlagsWithRequired())
+		newTableResolved, err := descriptors.GetMutableTableDescriptor(ctx, txn, &t2n, flags)
 		require.NoError(t, err)
 		require.Equal(t, newTable, newTableResolved)
 		return txn.Run(ctx, b)
