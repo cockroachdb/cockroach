@@ -624,23 +624,31 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 
 	// Otherwise, continue with the rest of the schema change state machine.
 	if tableDesc.Dropped() && sc.droppedDatabaseID == descpb.InvalidID {
-		// We've dropped this table, let's kick off a GC job.
-		dropTime := timeutil.Now().UnixNano()
-		if tableDesc.TableDesc().DropTime > 0 {
-			dropTime = tableDesc.TableDesc().DropTime
-		}
-		gcDetails := jobspb.SchemaChangeGCDetails{
-			Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
-				{
-					ID:       tableDesc.GetID(),
-					DropTime: dropTime,
+		if tableDesc.IsPhysicalTable() {
+			// We've dropped this physical table, let's kick off a GC job.
+			dropTime := timeutil.Now().UnixNano()
+			if tableDesc.TableDesc().DropTime > 0 {
+				dropTime = tableDesc.TableDesc().DropTime
+			}
+			gcDetails := jobspb.SchemaChangeGCDetails{
+				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
+					{
+						ID:       tableDesc.GetID(),
+						DropTime: dropTime,
+					},
 				},
-			},
-		}
-		if err := startGCJob(
-			ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
-		); err != nil {
-			return err
+			}
+			if err := startGCJob(
+				ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
+			); err != nil {
+				return err
+			}
+		} else {
+			// We've dropped a non-physical table, no need for a GC job, let's delete
+			// its descriptor and zone config immediately.
+			if err := DeleteTableDescAndZoneConfig(ctx, sc.db, sc.execCfg.Codec, tableDesc); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -2377,4 +2385,27 @@ func (sc *SchemaChanger) queueCleanupJobs(
 		})
 	}
 	return childJobs, nil
+}
+
+// DeleteTableDescAndZoneConfig removes a table's descriptor and zone config from the KV database.
+func DeleteTableDescAndZoneConfig(
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc *tabledesc.Immutable,
+) error {
+	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.ID)
+	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
+			return err
+		}
+		b := &kv.Batch{}
+
+		// Delete the descriptor.
+		descKey := catalogkeys.MakeDescMetadataKey(codec, tableDesc.ID)
+		b.Del(descKey)
+		// Delete the zone config entry for this table, if necessary.
+		if codec.ForSystemTenant() {
+			zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(tableDesc.ID))
+			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+		}
+		return txn.Run(ctx, b)
+	})
 }
