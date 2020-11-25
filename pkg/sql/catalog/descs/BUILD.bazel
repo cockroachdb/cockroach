@@ -4,7 +4,6 @@ go_library(
     name = "descs",
     srcs = [
         "collection.go",
-        "physical_accessor.go",
         "txn.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descs",
