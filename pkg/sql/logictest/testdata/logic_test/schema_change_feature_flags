@@ -126,6 +126,18 @@ ALTER TABLE t SET SCHEMA s
 statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
 ALTER TABLE t SET REGIONAL AFFINITY TO NONE
 
+# Test ALTER TABLE SPLIT AT.
+statement error pq: feature ALTER TABLE/INDEX SPLIT AT is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 SPLIT AT VALUES ('1')
+
+# Test ALTER TABLE UNSPLIT AT.
+statement error pq: feature ALTER TABLE/INDEX UNSPLIT AT is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 UNSPLIT AT VALUES ('1')
+
+# Test ALTER TABLE UNSPLIT ALL.
+statement error pq: feature ALTER TABLE/INDEX UNSPLIT ALL is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 UNSPLIT ALL
+
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
 CREATE INDEX i on t1 (a, b);
@@ -142,6 +154,18 @@ ALTER INDEX t1@i CONFIGURE ZONE DISCARD
 # Test RENAME INDEX
 statement error pq: feature RENAME INDEX is part of the schema change category, which was disabled by the database administrator
 ALTER INDEX t1@i RENAME TO r
+
+# TODO(angelaw): Test ALTER INDEX SPLIT AT. This does not throw error.
+statement error pq: feature ALTER TABLE/INDEX SPLIT AT is part of the schema change category, which was disabled by the database administrator
+ALTER INDEX t1@i SPLIT AT VALUES('1')
+
+# Test ALTER INDEX UNSPLIT AT.
+statement error pq: feature ALTER TABLE/INDEX UNSPLIT AT is part of the schema change category, which was disabled by the database administrator
+ALTER INDEX t1@i UNSPLIT AT VALUES('1')
+
+# Test ALTER INDEX UNSPLIT ALL.
+statement error pq: feature ALTER TABLE/INDEX UNSPLIT ALL is part of the schema change category, which was disabled by the database administrator
+ALTER INDEX t1@i UNSPLIT ALL
 
 # Test RENAME SCHEMA, throws ALTER SCHEMA error.
 statement error pq: feature ALTER SCHEMA is part of the schema change category, which was disabled by the database administrator
