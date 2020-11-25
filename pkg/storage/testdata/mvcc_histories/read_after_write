@@ -11,11 +11,13 @@ with t=A
 >> txn_begin ts=11 t=A
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 >> put v=abc k=a t=A
+called PutIntent("a", _, NoExistingIntent, TDNUM(true), 00000000-0000-0000-0000-000000000001)
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} ts=0.000000011,0 del=false klen=12 vlen=8
 data: "a"/0.000000011,0 -> /BYTES/abc
 >> get k=a t=A
 get: "a" -> /BYTES/abc @0.000000011,0
 >> resolve_intent k=a t=A
+called ClearIntent("a", ExistingIntentInterleaved, TDNUM(false), 00000000-0000-0000-0000-000000000000)
 data: "a"/0.000000011,0 -> /BYTES/abc
 
 run ok

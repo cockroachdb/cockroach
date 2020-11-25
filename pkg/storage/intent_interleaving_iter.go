@@ -619,6 +619,10 @@ func (i *intentInterleavingIter) ValueProto(msg protoutil.Message) error {
 	return protoutil.Unmarshal(value, msg)
 }
 
+func (i *intentInterleavingIter) IsCurIntentSeparated() bool {
+	return i.isCurAtIntentIter()
+}
+
 func (i *intentInterleavingIter) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
