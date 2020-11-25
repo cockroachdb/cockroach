@@ -1,0 +1,132 @@
+# LogicTest: 5node
+
+# TODO(rytaft): When zigzag joins are supported with multicolumn inverted
+# indexes, change this test to use a multicolumn inverted index and split
+# the index.
+
+subtest json
+
+statement ok
+CREATE TABLE json_tab (
+  a INT PRIMARY KEY,
+  b JSONB,
+  FAMILY (a, b)
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON json_tab(b)
+
+statement ok
+INSERT INTO json_tab VALUES
+  (1, '{"a": "b"}'),
+  (2, '[1,2,3,4, "foo"]'),
+  (3, '{"a": {"b": "c"}}'),
+  (4, '{"a": {"b": [1]}}'),
+  (5, '{"a": {"b": [1, [2]]}}'),
+  (6, '{"a": {"b": [[2]]}}'),
+  (7, '{"a": "b", "c": "d"}'),
+  (8, '{"a": {"b":true}}'),
+  (9, '{"a": {"b":false}}'),
+  (10, '"a"'),
+  (11, 'null'),
+  (12, 'true'),
+  (13, 'false'),
+  (14, '1'),
+  (15, '1.23'),
+  (16, '[{"a": {"b": [1, [2]]}}, "d"]'),
+  (17, '{}'),
+  (18, '[]'),
+  (19, '["a", "a"]'),
+  (20, '[{"a": "a"}, {"a": "a"}]'),
+  (21, '[[[["a"]]], [[["a"]]]]'),
+  (22, '[1,2,3,1]'),
+  (23, '{"a": 123.123}'),
+  (24, '{"a": 123.123000}'),
+  (25, '{"a": [{}]}'),
+  (26, '[[], {}]'),
+  (27, '[true, false, null, 1.23, "a"]'),
+  (28, '{"a": {}}'),
+  (29, NULL),
+  (30, '{"a": []}'),
+  (31, '{"a": {"b": "c", "d": "e"}, "f": "g"}'),
+  (32, '{"a": [1]}'),
+  (33, '[1, "bar"]')
+
+statement ok
+ALTER TABLE json_tab SPLIT AT VALUES (10), (20)
+
+statement ok
+ALTER TABLE json_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10), (ARRAY[3], 20)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE json_tab] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /10      {1}       1
+/10        /20      {2}       2
+/20        NULL     {3}       3
+
+# Filter with a fully-specified array. This should use a zigzag join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1, 2]' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk9v1DAQxe98itFcCsLSxtmbT6E0iK2WTUkq8WeJKjcZIpfUE2wHAat8d5QEFRbaVfc48-a995PlHfqvLSos0nX68hJ618KrPHsD2_T9xfrFagNPz1bFZfF2_Qx-n-j54MazvQr6Gt69TvMUriH51EfRkuBkKwXE5Qlk-Vmaw-kH0CUKtFzTRt-SR7VFiaXAznFF3rMbV7vpYFV_RxUJNLbrw7guBVbsCNUOgwktocKPpvmpm3M2ltwiQoE1BW3aKbcwNUGk7uCSz8xXxn5DMUvyXinrg4JEYjkI5D78qfZBN4RKDuLxeCNYTromt5D7cHfNnTO32v1AgWvmL30HN2wssJ0gBGYbSJb_PadS6rzINqeP4I2P4S3YBXKLeJ81kc8fjF8eE5-T79h62ot_KDkaSoFUNzT_CM-9q-jCcTXVzGM2-aZFTT7MqpyHlZ2lEfBvszxojg-b44Pm5T_mcnjyKwAA___NrxBc
+
+# Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
+# This should use a zigzag join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' AND b @> '[2]' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1v00AQfOdXrPalqTgpPuftntwSI1IFu9iV-AhWdY2X6Ep6a-7OCIjy35HtqtSojZrHm9mZnVndDv2PLSos02X65gpat4W3Rf4eVumny-XZIoPJfFFelR-Wp3A_ooeBW8_2Ougb-PguLVKY3EDytY2iGcHJSlYnp3CWzcdo3KF5MU8LOP8MukKBlmvK9B15VCuUWAlsHK_Je3YdtOsHFvUvVJFAY5s2dHAlcM2OUO0wmLAlVPjFbP7ozQUbS24aocCagjbb3rc0NUGkHhIn35ivjf2JYqDkk1TeBgWJxGovkNvwb7UPekOo5F68PF4XrCBdk5vKcbiHzY0zd9r9RoFL5u9tA7dsLLDtQwjMM5gks_GNlVIXZZ6d3996RMeP6Be0iY9pU7IL5KbxuEkiXz9rPzvGviDfsPU0sn_OOdpXAqne0PBfPLduTZeO1_2a4Zn3uh6oyYeBlcNjYQeqC_hYLA-K48Pi-KB49p-42r_6GwAA__8MxBzL
+
+# Filter with a nested array. This index expression is not tight.
+# This should use a zigzag join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[[1, 2]]' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zAUxd_5FFf3ZSAsNU7f_BTGguhUmpFM4k-xJq-5VB6Zb7AdBFT57igJGnTaqvXx3nPPOT9Z3mH43qDCKl_mry-h8w28KYt3sM4_XixfLVbw_GxRXVbvly_g74mZDm4Cu6toruHD27zM4RqyL12SzAlO1mspINX6BIryLC_h9BMYjQId17QytxRQrVGiFth63lAI7IfVbjxY1D9RJQKta7s4rLXADXtCtcNoY0Oo8LPd_jbbc7aO_CxBgTVFY5sxt7I1QaLu8LKvzFfW_UAxSfJBqeiigkyi7gVyF_9Vh2i2hEr24ul4A1hJpiY_k_twd82tt7fG_0KBS-ZvXQs3bB2wGyEEFivI5g88qFLqvCpWp08gTo8hrthH8rN0nzaTLx-Nnx8TX1Jo2QXai38sOem1QKq3NP2JwJ3f0IXnzVgzjcXoGxc1hTipchoWbpIGwP_N8qA5PWxOD5rn98y6f_YnAAD__2R8Ecw=
+
+subtest array
+
+statement ok
+CREATE TABLE array_tab (
+  a INT PRIMARY KEY,
+  b INT[],
+  FAMILY (a, b)
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON array_tab(b)
+
+statement ok
+INSERT INTO array_tab VALUES
+  (1, '{}'),
+  (2, '{1}'),
+  (3, '{1, 2}'),
+  (4, '{1, 3}'),
+  (5, '{1, 2, 3, 4}')
+
+statement ok
+ALTER TABLE array_tab SPLIT AT VALUES (3), (3)
+
+statement ok
+ALTER TABLE array_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 3), (ARRAY[3], 5)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE array_tab] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /3       {1}       1
+/3         NULL     {3}       3
+
+# This should use a zigzag join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT a FROM array_tab@foo_inv WHERE b @> '{1, 2}' ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkkFv00AQhe_8itFcCmKleJ0L2pMDNcIoxGUdCUqwqm08RAvpjtldI0rk_45iV5RAG7U3z7x5732ydofh-xYVVvk8f7WEzm_htS7fwSr_eDafFQt4elpUy-r9_BncnJjxwHhvri-iucy-MF9Y9wM-vMl1DpeQfe6SZEpwspMC0v4ESn2aa3h5DqZGgY4bWpgrCqhWKLEW2HpeUwjs96vdcFA0P1ElAq1ru7hf1wLX7AnVDqONW0KFn-zml9m8ZevITxIU2FA0djvkVrYhSNT_lChGTd6tlV1UkEmse4HcxdvyEM2GUMlePBxwj6bJNOQn8hDvtrr19sr4axQ4Z_7WtfCVrQN2A4XAcgHZ9M8fnWk9O19JpVSxWL4Q6c1H_QDw9DHgFftIfpIeQmfy-b3x08fEawotu0AH8fclJ30tkJoNjY8jcOfXdOZ5PdSMYzn4hkVDIY6qHIfCjdIe8G-zPGpOj5vTo-bpP-a6f_I7AAD__5XSF-k=

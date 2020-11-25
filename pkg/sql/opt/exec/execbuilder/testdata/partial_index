@@ -907,7 +907,7 @@ vectorized: true
 • scan
   missing stats
   table: inv@i (partial index)
-  spans: [/'{"x": "y"}' - /'{"x": "y"}']
+  spans: 1 span
 
 query T
 EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'foo'
@@ -924,7 +924,7 @@ vectorized: true
     └── • scan
           missing stats
           table: inv@i (partial index)
-          spans: [/'{"x": "y"}' - /'{"x": "y"}']
+          spans: 1 span
 
 query T
 EXPLAIN SELECT * FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
@@ -938,4 +938,4 @@ vectorized: true
 └── • scan
       missing stats
       table: inv@i (partial index)
-      spans: [/'{"x": "y"}' - /'{"x": "y"}']
+      spans: 1 span

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -60,81 +59,10 @@ func GetGeoIndexRelationship(expr opt.ScalarExpr) (_ geoindex.RelationshipType, 
 // getSpanExprForGeoIndexFn is a function that returns a SpanExpression that
 // constrains the given geo index according to the given constant and
 // geospatial relationship. It is implemented by getSpanExprForGeographyIndex
-// and getSpanExprForGeometryIndex and used in constrainGeoIndex.
+// and getSpanExprForGeometryIndex and used in extractGeoFilterCondition.
 type getSpanExprForGeoIndexFn func(
 	context.Context, tree.Datum, []tree.Datum, geoindex.RelationshipType, *geoindex.Config,
 ) *invertedexpr.SpanExpression
-
-// TryConstrainGeoIndex tries to derive an inverted index constraint for the
-// given geospatial index from the specified filters. If a constraint is
-// derived, it is returned with ok=true. If no constraint can be derived,
-// then TryConstrainGeoIndex returns ok=false.
-func TryConstrainGeoIndex(
-	evalCtx *tree.EvalContext,
-	factory *norm.Factory,
-	filters memo.FiltersExpr,
-	optionalFilters memo.FiltersExpr,
-	tabID opt.TableID,
-	index cat.Index,
-) (
-	invertedConstraint *invertedexpr.SpanExpression,
-	constraint *constraint.Constraint,
-	remainingFilters memo.FiltersExpr,
-	preFiltererState *invertedexpr.PreFiltererStateForInvertedFilterer,
-	ok bool,
-) {
-	// Attempt to constrain the prefix columns, if there are any. If they cannot
-	// be constrained to single values, the index cannot be used.
-	constraint, filters, ok = constrainPrefixColumns(evalCtx, factory, filters, optionalFilters, tabID, index)
-	if !ok {
-		return nil, nil, nil, nil, false
-	}
-
-	config := index.GeoConfig()
-	var getSpanExpr getSpanExprForGeoIndexFn
-	var typ *types.T
-	if geoindex.IsGeographyConfig(config) {
-		getSpanExpr = getSpanExprForGeographyIndex
-		typ = types.Geography
-	} else if geoindex.IsGeometryConfig(config) {
-		getSpanExpr = getSpanExprForGeometryIndex
-		typ = types.Geometry
-	} else {
-		return nil, nil, nil, nil, false
-	}
-
-	var invertedExpr invertedexpr.InvertedExpression
-	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
-	for i := range filters {
-		invertedExprLocal, pfStateLocal := constrainGeoIndex(
-			evalCtx.Context, factory, filters[i].Condition, tabID, index, getSpanExpr,
-		)
-		if invertedExpr == nil {
-			invertedExpr = invertedExprLocal
-			pfState = pfStateLocal
-		} else {
-			invertedExpr = invertedexpr.And(invertedExpr, invertedExprLocal)
-			// Do pre-filtering using the first of the conjuncts that provided
-			// non-nil pre-filtering state.
-			if pfState == nil {
-				pfState = pfStateLocal
-			}
-		}
-	}
-
-	if invertedExpr == nil {
-		return nil, nil, nil, nil, false
-	}
-
-	spanExpr, ok := invertedExpr.(*invertedexpr.SpanExpression)
-	if !ok {
-		return nil, nil, nil, nil, false
-	}
-	if pfState != nil {
-		pfState.Typ = typ
-	}
-	return spanExpr, constraint, filters, pfState, true
-}
 
 // getSpanExprForGeographyIndex gets a SpanExpression that constrains the given
 // geography index according to the given constant and geospatial relationship.
@@ -394,28 +322,26 @@ func constructFunction(
 	})
 }
 
-// constrainGeoIndex returns an InvertedExpression representing a constraint
-// of the given geospatial index.
-func constrainGeoIndex(
-	ctx context.Context,
-	factory *norm.Factory,
-	expr opt.ScalarExpr,
-	tabID opt.TableID,
-	index cat.Index,
-	getSpanExpr getSpanExprForGeoIndexFn,
-) (invertedexpr.InvertedExpression, *invertedexpr.PreFiltererStateForInvertedFilterer) {
+type geoFilterPlanner struct {
+	factory     *norm.Factory
+	tabID       opt.TableID
+	index       cat.Index
+	getSpanExpr getSpanExprForGeoIndexFn
+}
+
+var _ invertedFilterPlanner = &geoFilterPlanner{}
+
+// extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
+// interface.
+func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
+	evalCtx *tree.EvalContext, expr opt.ScalarExpr,
+) (
+	invertedExpr invertedexpr.InvertedExpression,
+	remainingFilters opt.ScalarExpr,
+	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
+) {
 	var args memo.ScalarListExpr
 	switch t := expr.(type) {
-	case *memo.AndExpr:
-		l, _ := constrainGeoIndex(ctx, factory, t.Left, tabID, index, getSpanExpr)
-		r, _ := constrainGeoIndex(ctx, factory, t.Right, tabID, index, getSpanExpr)
-		return invertedexpr.And(l, r), nil
-
-	case *memo.OrExpr:
-		l, _ := constrainGeoIndex(ctx, factory, t.Left, tabID, index, getSpanExpr)
-		r, _ := constrainGeoIndex(ctx, factory, t.Right, tabID, index, getSpanExpr)
-		return invertedexpr.Or(l, r), nil
-
 	case *memo.FunctionExpr:
 		args = t.Args
 
@@ -426,18 +352,18 @@ func constrainGeoIndex(
 		// Cast the arguments to type Geometry if they are type Box2d.
 		for i := 0; i < len(args); i++ {
 			if args[i].DataType().Family() == types.Box2DFamily {
-				args[i] = factory.ConstructCast(args[i], types.Geometry)
+				args[i] = g.factory.ConstructCast(args[i], types.Geometry)
 			}
 		}
 
 	default:
-		return invertedexpr.NonInvertedColExpression{}, nil
+		return invertedexpr.NonInvertedColExpression{}, expr, nil
 	}
 
-	// Try to constrain the index with the given expression. If the resulting
-	// inverted expression is not a SpanExpression, try constraining the index
-	// with an equivalent function in which the arguments are commuted. For
-	// example:
+	// Try to extract an inverted filter condition from the given expression.
+	// If the resulting inverted expression is not a SpanExpression, try
+	// extracting the condition with an equivalent function in which the
+	// arguments are commuted. For example:
 	//
 	//   ST_Intersects(g1, g2) <-> ST_Intersects(g2, g1)
 	//   ST_Covers(g1, g2) <-> ST_CoveredBy(g2, g1)
@@ -445,23 +371,26 @@ func constrainGeoIndex(
 	//   g1 ~ g2 -> ST_CoveredBy(g2, g1)
 	//
 	// See geoindex.CommuteRelationshipMap for the full list of mappings.
-	invertedExpr, pfState := constrainGeoIndexFromExpr(
-		ctx, factory, expr, args, false /* commuteArgs */, tabID, index, getSpanExpr,
+	invertedExpr, pfState := extractGeoFilterCondition(
+		evalCtx.Context, g.factory, expr, args, false /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
 	)
 	if _, ok := invertedExpr.(invertedexpr.NonInvertedColExpression); ok {
-		invertedExpr, pfState = constrainGeoIndexFromExpr(
-			ctx, factory, expr, args, true /* commuteArgs */, tabID, index, getSpanExpr,
+		invertedExpr, pfState = extractGeoFilterCondition(
+			evalCtx.Context, g.factory, expr, args, true /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
 		)
 	}
-	return invertedExpr, pfState
+	if !invertedExpr.IsTight() {
+		remainingFilters = expr
+	}
+	return invertedExpr, remainingFilters, pfState
 }
 
-// constrainGeoIndexFromExpr returns an InvertedExpression representing a
-// constraint of the given geospatial index, based on the given expression.
-// If commuteArgs is true, constrainGeoIndexFromExpr constrains the index
-// based on an equivalent version of the given expression in which the first
-// two arguments are swapped.
-func constrainGeoIndexFromExpr(
+// extractGeoFilterCondition extracts an InvertedExpression representing an
+// inverted filter condition over the given geospatial index, based on the
+// given expression. If commuteArgs is true, extractGeoFilterCondition extracts
+// the InvertedExpression based on an equivalent version of the given
+// expression in which the first two arguments are swapped.
+func extractGeoFilterCondition(
 	ctx context.Context,
 	factory *norm.Factory,
 	expr opt.ScalarExpr,

@@ -809,14 +809,14 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 		var spansToRead invertedexpr.InvertedSpans
 		var constraint *constraint.Constraint
-		var geoOk, nonGeoOk bool
+		var filterOk, constraintOk bool
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
-		spanExpr, constraint, remainingFilters, pfState, geoOk := invertedidx.TryConstrainGeoIndex(
+		spanExpr, constraint, remainingFilters, pfState, filterOk := invertedidx.TryFilterInvertedIndex(
 			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index,
 		)
-		if geoOk {
+		if filterOk {
 			spansToRead = spanExpr.SpansToRead
 			// Override the filters with remainingFilters. If the index is a
 			// multi-column inverted index, the non-inverted prefix columns are
@@ -838,14 +838,14 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 			// (a = 1 AND ST_Intersects(.., g)).
 			filters = remainingFilters
 		} else {
-			constraint, filters, nonGeoOk = c.tryConstrainIndex(
+			constraint, filters, constraintOk = c.tryConstrainIndex(
 				filters,
 				nil, /* optionalFilters */
 				scanPrivate.Table,
 				index.Ordinal(),
 				true, /* isInverted */
 			)
-			if !nonGeoOk {
+			if !constraintOk {
 				return
 			}
 		}
@@ -856,12 +856,17 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate.Constraint = constraint
 		newScanPrivate.InvertedConstraint = spansToRead
 
-		// We scan the PK columns, and the inverted key column if there is an
-		// inverted filter.
+		// We will need an inverted filter above the scan if the spanExpr might
+		// produce duplicate primary keys or requires at least one UNION or
+		// INTERSECTION. In this case, we must scan both the primary key columns
+		// and the inverted key column.
+		needInvertedFilter := spanExpr != nil &&
+			(!spanExpr.Unique || spanExpr.Operator != invertedexpr.None)
 		pkCols := sb.primaryKeyCols()
 		newScanPrivate.Cols = pkCols.Copy()
-		invertedCol := scanPrivate.Table.ColumnID(index.VirtualInvertedColumn().Ordinal())
-		if spanExpr != nil {
+		var invertedCol opt.ColumnID
+		if needInvertedFilter {
+			invertedCol = scanPrivate.Table.ColumnID(index.VirtualInvertedColumn().Ordinal())
 			newScanPrivate.Cols.Add(invertedCol)
 		}
 
@@ -874,8 +879,10 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// place.
 		sb.setScan(&newScanPrivate)
 
-		// Add an inverted filter if it exists.
-		sb.addInvertedFilter(spanExpr, pfState, invertedCol)
+		// Add an inverted filter if needed.
+		if needInvertedFilter {
+			sb.addInvertedFilter(spanExpr, pfState, invertedCol)
+		}
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.

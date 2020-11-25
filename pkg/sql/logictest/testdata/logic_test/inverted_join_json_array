@@ -328,8 +328,8 @@ WHERE inv_join.a1 IS NULL OR cross_join.a1 IS NULL
 
 # This query performs an inverted join with an additional filter.
 query ITIT
-SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2
-WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+SELECT j1.*, j2.* FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
+ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
 3   {"a": {"b": "c"}}                      3   {"a": {"b": "c"}}
@@ -379,8 +379,8 @@ ORDER BY j1.a, j2.a
 query IIII
 SELECT * FROM
 (
-  SELECT j1.a, j2.a FROM json_tab@foo_inv AS j1, json_tab AS j2
-  WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+  SELECT j1.a, j2.a FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
+  ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ) AS inv_join(a1, a2)
 FULL OUTER JOIN
 (
@@ -456,29 +456,19 @@ NULL  NULL                                   44  [{"a": "b"}, {"c": "d"}]
 query IT
 SELECT * FROM json_tab AS j2 WHERE EXISTS (
   SELECT * FROM json_tab@foo_inv AS j1
-  WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
-)
-ORDER BY j2.a
-----
-3   {"a": {"b": "c"}}
-4   {"a": {"b": [1]}}
-5   {"a": {"b": [1, [2]]}}
-6   {"a": {"b": [[2]]}}
-8   {"a": {"b": true}}
-9   {"a": {"b": false}}
-17  {}
-
-# This query performs an anti inverted join with an additional filter.
-query IT
-SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
-  SELECT * FROM json_tab@foo_inv AS j1
-  WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+  WHERE j1.b @> j2.b AND j2.a < 20
 )
 ORDER BY j2.a
 ----
 1   {"a": "b"}
 2   [1, 2, 3, 4, "foo"]
+3   {"a": {"b": "c"}}
+4   {"a": {"b": [1]}}
+5   {"a": {"b": [1, [2]]}}
+6   {"a": {"b": [[2]]}}
 7   {"a": "b", "c": "d"}
+8   {"a": {"b": true}}
+9   {"a": {"b": false}}
 10  "a"
 11  null
 12  true
@@ -486,8 +476,18 @@ ORDER BY j2.a
 14  1
 15  1.23
 16  [{"a": {"b": [1, [2]]}}, "d"]
+17  {}
 18  []
 19  ["a", "a"]
+
+# This query performs an anti inverted join with an additional filter.
+query IT
+SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
+  SELECT * FROM json_tab@foo_inv AS j1
+  WHERE j1.b @> j2.b AND j2.a < 20
+)
+ORDER BY j2.a
+----
 20  [{"a": "a"}, {"a": "a"}]
 21  [[[["a"]]], [[["a"]]]]
 22  [1, 2, 3, 1]

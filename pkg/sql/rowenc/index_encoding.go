@@ -844,25 +844,37 @@ func EncodeInvertedIndexTableKeys(
 //
 // Returns tight=true if the returned spans are tight and cannot produce false
 // positives. Otherwise, returns tight=false.
+//
+// Returns unique=true if the spans are guaranteed not to produce duplicate
+// primary keys. Otherwise, returns unique=false. This distinction is important
+// for the case where the length of spans is 1, and the single element has
+// length greater than 0. Per the above description, this would represent a
+// UNION over the returned spans, with no INTERSECTION. If unique is true, that
+// allows the optimizer to remove the UNION altogether (implemented
+// with the invertedFilterer), and simply return the results of the constrained
+// scan. unique is always false if the length of spans is greater than 1.
+//
+// The spans are not guaranteed to be sorted, so the caller must sort them if
+// needed.
 func EncodeContainingInvertedIndexSpans(
 	evalCtx *tree.EvalContext, val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spans []roachpb.Spans, tight bool, err error) {
+) (spans []roachpb.Spans, tight, unique bool, err error) {
 	if val == tree.DNull {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 	datum := tree.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
 		return json.EncodeContainingInvertedIndexSpans(inKey, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
-		spans, err := encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), inKey, version)
+		spans, unique, err := encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), inKey, version)
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 		// Spans for array inverted indexes are always tight.
-		return spans, true, err
+		return spans, true /* tight */, unique, err
 	}
-	return nil, false, errors.AssertionFailedf(
+	return nil, false, false, errors.AssertionFailedf(
 		"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
 	)
 }
@@ -906,31 +918,37 @@ func encodeArrayInvertedIndexTableKeys(
 // scanned in the inverted index to evaluate a contains (@>) predicate with
 // the given array, one slice of spans per entry in the array. The input
 // inKey is prefixed to all returned keys.
+//
+// Returns unique=true if the spans are guaranteed not to produce
+// duplicate primary keys. Otherwise, returns unique=false.
 func encodeContainingArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spans []roachpb.Spans, err error) {
+) (spans []roachpb.Spans, unique bool, err error) {
 	if val.Array.Len() == 0 {
 		// All arrays contain the empty array.
 		endKey := roachpb.Key(inKey).PrefixEnd()
-		return []roachpb.Spans{{roachpb.Span{Key: inKey, EndKey: endKey}}}, nil
+		return []roachpb.Spans{{roachpb.Span{Key: inKey, EndKey: endKey}}}, false, nil
 	}
 
 	if val.HasNulls {
 		// If there are any nulls, return empty spans. This is needed to ensure
 		// that `SELECT ARRAY[NULL, 2] @> ARRAY[NULL, 2]` is false.
-		return nil, nil
+		return nil, true, nil
 	}
 
 	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, version)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	spans = make([]roachpb.Spans, len(keys))
 	for i, key := range keys {
 		endKey := roachpb.Key(key).PrefixEnd()
 		spans[i] = roachpb.Spans{{Key: key, EndKey: endKey}}
 	}
-	return spans, nil
+	// More than 1 key means that there could be duplicate primary keys in an
+	// inverted index.
+	unique = len(keys) == 1
+	return spans, unique, nil
 }
 
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys

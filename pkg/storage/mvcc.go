@@ -87,12 +87,6 @@ func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 	return roachpb.Value{RawBytes: meta.RawBytes}
 }
 
-// IsIntentOf returns true if the meta record is an intent of the supplied
-// transaction.
-func IsIntentOf(meta *enginepb.MVCCMetadata, txn *roachpb.Transaction) bool {
-	return meta.Txn != nil && txn != nil && meta.Txn.ID == txn.ID
-}
-
 func emptyKeyError() error {
 	return errors.Errorf("attempted access to empty key")
 }
@@ -202,6 +196,34 @@ func (k MVCCKey) Len() int {
 type MVCCKeyValue struct {
 	Key   MVCCKey
 	Value []byte
+}
+
+// optionalValue represents an optional roachpb.Value. It is preferred
+// over a *roachpb.Value to avoid the forced heap allocation.
+type optionalValue struct {
+	roachpb.Value
+	exists bool
+}
+
+func makeOptionalValue(v roachpb.Value) optionalValue {
+	return optionalValue{Value: v, exists: true}
+}
+
+func (v *optionalValue) IsPresent() bool {
+	return v.exists && v.Value.IsPresent()
+}
+
+func (v *optionalValue) IsTombstone() bool {
+	return v.exists && !v.Value.IsPresent()
+}
+
+func (v *optionalValue) ToPointer() *roachpb.Value {
+	if !v.exists {
+		return nil
+	}
+	// Copy to prevent forcing receiver onto heap.
+	cpy := v.Value
+	return &cpy
 }
 
 // isSysLocal returns whether the key is system-local.
@@ -743,31 +765,6 @@ func MVCCBlindPutProto(
 	return MVCCBlindPut(ctx, writer, ms, key, timestamp, value, txn)
 }
 
-type getBuffer struct {
-	meta             enginepb.MVCCMetadata
-	value            roachpb.Value
-	allowUnsafeValue bool
-	isUnsafeValue    bool
-}
-
-var getBufferPool = sync.Pool{
-	New: func() interface{} {
-		return &getBuffer{}
-	},
-}
-
-func newGetBuffer() *getBuffer {
-	buf := getBufferPool.Get().(*getBuffer)
-	buf.allowUnsafeValue = false
-	buf.isUnsafeValue = false
-	return buf
-}
-
-func (b *getBuffer) release() {
-	*b = getBuffer{}
-	getBufferPool.Put(b)
-}
-
 // MVCCGetOptions bundles options for the MVCCGet family of functions.
 type MVCCGetOptions struct {
 	// See the documentation for MVCCGet for information on these parameters.
@@ -824,7 +821,8 @@ func MVCCGet(
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
-	return mvccGet(ctx, iter, key, timestamp, opts)
+	value, intent, err := mvccGet(ctx, iter, key, timestamp, opts)
+	return value.ToPointer(), intent, err
 }
 
 func mvccGet(
@@ -833,15 +831,15 @@ func mvccGet(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	opts MVCCGetOptions,
-) (value *roachpb.Value, intent *roachpb.Intent, err error) {
+) (value optionalValue, intent *roachpb.Intent, err error) {
 	if len(key) == 0 {
-		return nil, nil, emptyKeyError()
+		return optionalValue{}, nil, emptyKeyError()
 	}
 	if timestamp.WallTime < 0 {
-		return nil, nil, errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
+		return optionalValue{}, nil, errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
 	}
 	if err := opts.validate(); err != nil {
-		return nil, nil, err
+		return optionalValue{}, nil, err
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
@@ -865,36 +863,36 @@ func mvccGet(
 	mvccScanner.get()
 
 	if mvccScanner.err != nil {
-		return nil, nil, mvccScanner.err
+		return optionalValue{}, nil, mvccScanner.err
 	}
 	intents, err := buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
-		return nil, nil, err
+		return optionalValue{}, nil, err
 	}
 	if !opts.Inconsistent && len(intents) > 0 {
-		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
+		return optionalValue{}, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
 
 	if len(intents) > 1 {
-		return nil, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
+		return optionalValue{}, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
 	} else if len(intents) == 1 {
 		intent = &intents[0]
 	}
 
 	if len(mvccScanner.results.repr) == 0 {
-		return nil, intent, nil
+		return optionalValue{}, intent, nil
 	}
 
 	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
 	if err != nil {
-		return nil, nil, err
+		return optionalValue{}, nil, err
 	}
 
-	value = &roachpb.Value{
+	value = makeOptionalValue(roachpb.Value{
 		RawBytes:  rawValue,
 		Timestamp: mvccKey.Timestamp,
-	}
-	return
+	})
+	return value, intent, nil
 }
 
 // MVCCGetAsTxn constructs a temporary transaction from the given transaction
@@ -966,195 +964,6 @@ func mvccGetMetadata(
 	meta.Deleted = meta.ValBytes == 0
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
-}
-
-type valueSafety int
-
-const (
-	unsafeValue valueSafety = iota
-	safeValue
-)
-
-// mvccGetInternal parses the MVCCMetadata from the specified raw key
-// value, and reads the versioned value indicated by timestamp, taking
-// the transaction txn into account. getValue is a helper function to
-// get an earlier version of the value when doing historical reads.
-//
-// The consistent parameter specifies whether reads should ignore any write
-// intents (regardless of the actual status of their transaction) and read the
-// most recent non-intent value instead. In the event that an inconsistent read
-// does encounter an intent (currently there can only be one), it is returned
-// via the roachpb.Intent slice, in addition to the result.
-//
-// TODO(peter): mvccGetInternal is used by maybeGetValue and
-// mvccResolveWriteIntent. Removing those uses is a bit tricky to do in a
-// performant way as they are touching optimizations which result in the calls
-// usually not hitting RocksDB. This shows up on benchmarks such as
-// BenchmarkMVCCConditionalPut_RocksDB/Replace.
-func mvccGetInternal(
-	_ context.Context,
-	iter MVCCIterator,
-	metaKey MVCCKey,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	allowedSafety valueSafety,
-	txn *roachpb.Transaction,
-	buf *getBuffer,
-) (*roachpb.Value, *roachpb.Intent, valueSafety, error) {
-	if !consistent && txn != nil {
-		return nil, nil, safeValue, errors.Errorf(
-			"cannot allow inconsistent reads within a transaction")
-	}
-
-	if timestamp.WallTime < 0 {
-		return nil, nil, safeValue, errors.Errorf("cannot write to %q at timestamp %s", metaKey.Key, timestamp)
-	}
-
-	meta := &buf.meta
-
-	// If value is inline, return immediately; txn & timestamp are irrelevant.
-	if meta.IsInline() {
-		value := &buf.value
-		*value = roachpb.Value{RawBytes: meta.RawBytes}
-		if err := value.Verify(metaKey.Key); err != nil {
-			return nil, nil, safeValue, err
-		}
-		return value, nil, safeValue, nil
-	}
-	var ignoredIntent *roachpb.Intent
-	metaTimestamp := meta.Timestamp.ToTimestamp()
-	if !consistent && meta.Txn != nil && metaTimestamp.LessEq(timestamp) {
-		// If we're doing inconsistent reads and there's an intent, we
-		// ignore the intent by insisting that the timestamp we're reading
-		// at is a historical timestamp < the intent timestamp. However, we
-		// return the intent separately; the caller may want to resolve it.
-		intent := roachpb.MakeIntent(meta.Txn, metaKey.Key)
-		ignoredIntent = &intent
-		timestamp = metaTimestamp.Prev()
-	}
-
-	checkUncertainty := txn != nil && timestamp.Less(txn.MaxTimestamp)
-	isIntent := meta.Txn != nil
-	ownIntent := IsIntentOf(meta, txn) // false if !isIntent
-	if isIntent && !ownIntent {
-		// Trying to read the last value, but it's another transaction's intent.
-		// The reader will have to act on this if the intent has a low enough
-		// timestamp. Intents for other transactions are visible at or below:
-		//   max(txn.MaxTimestamp, timestamp)
-		maxVisibleTimestamp := timestamp
-		if checkUncertainty {
-			maxVisibleTimestamp = txn.MaxTimestamp
-		}
-		if metaTimestamp.LessEq(maxVisibleTimestamp) {
-			return nil, nil, safeValue, &roachpb.WriteIntentError{
-				Intents: []roachpb.Intent{
-					roachpb.MakeIntent(meta.Txn, metaKey.Key),
-				},
-			}
-		}
-	}
-
-	seekKey := metaKey
-	checkValueTimestamp := false
-	if metaTimestamp.LessEq(timestamp) || ownIntent {
-		// We are reading the latest value, which is either an intent written
-		// by this transaction or not an intent at all (so there's no
-		// conflict). Note that when reading the own intent, the timestamp
-		// specified is irrelevant; we always want to see the intent (see
-		// TestMVCCGetWithPushedTimestamp).
-		seekKey.Timestamp = metaTimestamp
-
-		// Check for case where we're reading our own txn's intent
-		// but it's got a different epoch. This can happen if the
-		// txn was restarted and an earlier iteration wrote the value
-		// we're now reading. In this case, we skip the intent.
-		if ownIntent && txn.Epoch != meta.Txn.Epoch {
-			if txn.Epoch < meta.Txn.Epoch {
-				return nil, nil, safeValue, errors.Errorf(
-					"failed to read with epoch %d due to a write intent with epoch %d",
-					txn.Epoch, meta.Txn.Epoch)
-			}
-			// Seek past the intent's timestamp and at least as far
-			// back as the read timestamp. This is necessary if the
-			// intent is at a higher timestamp than we're trying to
-			// read at.
-			if timestamp.Less(metaTimestamp) {
-				seekKey.Timestamp = timestamp
-			} else {
-				seekKey.Timestamp = metaTimestamp.Prev()
-			}
-		}
-	} else if checkUncertainty {
-		// In this branch, the latest timestamp is ahead, and so the read of an
-		// "old" value in a transactional context at time (timestamp, MaxTimestamp]
-		// occurs, leading to a clock uncertainty error if a version exists in
-		// that time interval.
-		if metaTimestamp.LessEq(txn.MaxTimestamp) {
-			// Second case: Our read timestamp is behind the latest write, but the
-			// latest write could possibly have happened before our read in
-			// absolute time if the writer had a fast clock.
-			// The reader should try again with a later timestamp than the
-			// one given below.
-			return nil, nil, safeValue, roachpb.NewReadWithinUncertaintyIntervalError(
-				timestamp, metaTimestamp, txn)
-		}
-
-		// We want to know if anything has been written ahead of timestamp, but
-		// before MaxTimestamp.
-		seekKey.Timestamp = txn.MaxTimestamp
-		checkValueTimestamp = true
-	} else {
-		// Third case: We're reading a historical value either outside of a
-		// transaction, or in the absence of future versions that clock uncertainty
-		// would apply to.
-		seekKey.Timestamp = timestamp
-	}
-	if seekKey.Timestamp.IsEmpty() {
-		return nil, ignoredIntent, safeValue, nil
-	}
-
-	iter.SeekGE(seekKey)
-	if ok, err := iter.Valid(); err != nil {
-		return nil, nil, safeValue, err
-	} else if !ok {
-		return nil, ignoredIntent, safeValue, nil
-	}
-
-	unsafeKey := iter.UnsafeKey()
-	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return nil, ignoredIntent, safeValue, nil
-	}
-	if !unsafeKey.IsValue() {
-		return nil, nil, safeValue, errors.Errorf(
-			"expected scan to versioned value reading key %s; got %s %s",
-			metaKey.Key, unsafeKey, unsafeKey.Timestamp)
-	}
-
-	if checkValueTimestamp {
-		if timestamp.Less(unsafeKey.Timestamp) {
-			// Fourth case: Our read timestamp is sufficiently behind the newest
-			// value, but there is another previous write with the same issues as in
-			// the second case, so the reader will have to come again with a higher
-			// read timestamp.
-			return nil, nil, safeValue, roachpb.NewReadWithinUncertaintyIntervalError(
-				timestamp, unsafeKey.Timestamp, txn)
-		}
-		// Fifth case: There's no value in our future up to MaxTimestamp, and those
-		// are the only ones that we're not certain about. The correct key has
-		// already been read above, so there's nothing left to do.
-	}
-
-	value := &buf.value
-	if allowedSafety == unsafeValue {
-		value.RawBytes = iter.UnsafeValue()
-	} else {
-		value.RawBytes = iter.Value()
-	}
-	value.Timestamp = unsafeKey.Timestamp
-	if err := value.Verify(metaKey.Key); err != nil {
-		return nil, nil, safeValue, err
-	}
-	return value, ignoredIntent, allowedSafety, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -1318,7 +1127,7 @@ func mvccPutUsingIter(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
-	valueFn func(*roachpb.Value) ([]byte, error),
+	valueFn func(optionalValue) ([]byte, error),
 ) error {
 	var rawBytes []byte
 	if valueFn == nil {
@@ -1339,30 +1148,26 @@ func mvccPutUsingIter(
 }
 
 // maybeGetValue returns either value (if valueFn is nil) or else
-// the result of calling valueFn on the data read at readTS.
+// the result of calling valueFn on the data read at readTimestamp.
 func maybeGetValue(
 	ctx context.Context,
 	iter MVCCIterator,
-	metaKey MVCCKey,
+	key roachpb.Key,
 	value []byte,
 	exists bool,
-	readTS hlc.Timestamp,
+	readTimestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
-	buf *putBuffer,
-	valueFn func(*roachpb.Value) ([]byte, error),
+	valueFn func(optionalValue) ([]byte, error),
 ) ([]byte, error) {
 	// If a valueFn is specified, read existing value using the iter.
 	if valueFn == nil {
 		return value, nil
 	}
-	var exVal *roachpb.Value
+	var exVal optionalValue
 	if exists {
-		getBuf := newGetBuffer()
-		defer getBuf.release()
-		getBuf.meta = buf.meta // initialize get metadata from what we've already read
 		var err error
-		if exVal, _, _, err = mvccGetInternal(
-			ctx, iter, metaKey, readTS, true /* consistent */, safeValue, txn, getBuf); err != nil {
+		exVal, _, err = mvccGet(ctx, iter, key, readTimestamp, MVCCGetOptions{Txn: txn, Tombstones: true})
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -1415,32 +1220,23 @@ func MVCCScanDecodeKeyValues(repr [][]byte, fn func(key MVCCKey, rawBytes []byte
 // transactional idempotency.
 func replayTransactionalWrite(
 	ctx context.Context,
-	writer Writer,
 	iter MVCCIterator,
 	meta *enginepb.MVCCMetadata,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value []byte,
 	txn *roachpb.Transaction,
-	buf *putBuffer,
-	valueFn func(*roachpb.Value) ([]byte, error),
+	valueFn func(optionalValue) ([]byte, error),
 ) error {
 	var found bool
 	var writtenValue []byte
-	var writtenValueSafety valueSafety
 	var err error
-	metaKey := MakeMVCCMetadataKey(key)
 	if txn.Sequence == meta.Txn.Sequence {
 		// This is a special case. This is when the intent hasn't made it
 		// to the intent history yet. We must now assert the value written
 		// in the intent to the value we're trying to write.
-		getBuf := newGetBuffer()
-		defer getBuf.release()
-		getBuf.meta = buf.meta
-		var exVal *roachpb.Value
-		if exVal, _, writtenValueSafety, err = mvccGetInternal(
-			ctx, iter, metaKey, timestamp, true /* consistent */, unsafeValue, txn, getBuf); err != nil {
+		exVal, _, err := mvccGet(ctx, iter, key, timestamp, MVCCGetOptions{Txn: txn, Tombstones: true})
+		if err != nil {
 			return err
 		}
 		writtenValue = exVal.RawBytes
@@ -1448,7 +1244,6 @@ func replayTransactionalWrite(
 	} else {
 		// Get the value from the intent history.
 		writtenValue, found = meta.GetIntentValue(txn.Sequence)
-		writtenValueSafety = safeValue
 	}
 	if !found {
 		return errors.Errorf("transaction %s with sequence %d missing an intent with lower sequence %d",
@@ -1457,7 +1252,7 @@ func replayTransactionalWrite(
 
 	// If the valueFn is specified, we must apply it to the would-be value at the key.
 	if valueFn != nil {
-		var exVal *roachpb.Value
+		var exVal optionalValue
 
 		// If there's an intent history, use that.
 		prevIntent, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence, txn.IgnoredSeqNums)
@@ -1467,26 +1262,14 @@ func replayTransactionalWrite(
 			// to get the would-be value.
 			prevVal := prevIntent.Value
 
-			exVal = &roachpb.Value{RawBytes: prevVal}
+			exVal = makeOptionalValue(roachpb.Value{RawBytes: prevVal})
 		} else {
-			// We're going to be using the iterator again, so make sure the
-			// existing writtenValue bytes are safe and won't be corrupted.
-			if writtenValueSafety == unsafeValue {
-				writtenValue = append([]byte(nil), writtenValue...)
-				writtenValueSafety = safeValue
-			}
-
 			// If the previous value at the key wasn't written by this
-			// transaction, or it was hidden by a rolled back seqnum, we
-			// look at last committed value on the key.
-			getBuf := newGetBuffer()
-			defer getBuf.release()
-			getBuf.meta = buf.meta
-
-			// Since we want the last committed value on the key, we must make
-			// an inconsistent read so we ignore our previous intents here.
-			exVal, _, _, err = mvccGetInternal(
-				ctx, iter, metaKey, timestamp, false /* consistent */, unsafeValue, nil /* txn */, getBuf)
+			// transaction, or it was hidden by a rolled back seqnum, we look at
+			// last committed value on the key. Since we want the last committed
+			// value on the key, we must make an inconsistent read so we ignore
+			// our previous intents here.
+			exVal, _, err = mvccGet(ctx, iter, key, timestamp, MVCCGetOptions{Inconsistent: true, Tombstones: true})
 			if err != nil {
 				return err
 			}
@@ -1542,7 +1325,7 @@ func mvccPutInternal(
 	value []byte,
 	txn *roachpb.Transaction,
 	buf *putBuffer,
-	valueFn func(*roachpb.Value) ([]byte, error),
+	valueFn func(optionalValue) ([]byte, error),
 ) error {
 	if len(key) == 0 {
 		return emptyKeyError()
@@ -1572,7 +1355,7 @@ func mvccPutInternal(
 		}
 		var metaKeySize, metaValSize int64
 		if value, err = maybeGetValue(
-			ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
+			ctx, iter, key, value, ok, timestamp, txn, valueFn); err != nil {
 			return err
 		}
 		if value == nil {
@@ -1646,7 +1429,7 @@ func mvccPutInternal(
 				// The transaction has executed at this sequence before. This is merely a
 				// replay of the transactional write. Assert that all is in order and return
 				// early.
-				return replayTransactionalWrite(ctx, writer, iter, meta, ms, key, readTimestamp, value, txn, buf, valueFn)
+				return replayTransactionalWrite(ctx, iter, meta, key, readTimestamp, value, txn, valueFn)
 			}
 
 			// We're overwriting the intent that was present at this key, before we do
@@ -1670,7 +1453,7 @@ func mvccPutInternal(
 			// committed values, and all past writes by this transaction have been
 			// rolled back, either due to transaction retries or transaction savepoint
 			// rollbacks.)
-			var existingVal *roachpb.Value
+			var exVal optionalValue
 			// Set to true when the current provisional value is not ignored due to
 			// a txn restart or a savepoint rollback.
 			var curProvNotIgnored bool
@@ -1678,13 +1461,7 @@ func mvccPutInternal(
 				if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, txn.IgnoredSeqNums) {
 					// Seqnum of last write is not ignored. Retrieve the value
 					// using a consistent read.
-					getBuf := newGetBuffer()
-					// Release the buffer after using the existing value.
-					defer getBuf.release()
-					getBuf.meta = buf.meta // initialize get metadata from what we've already read
-
-					existingVal, _, _, err = mvccGetInternal(
-						ctx, iter, metaKey, readTimestamp, true /* consistent */, safeValue, txn, getBuf)
+					exVal, _, err = mvccGet(ctx, iter, key, readTimestamp, MVCCGetOptions{Txn: txn, Tombstones: true})
 					if err != nil {
 						return err
 					}
@@ -1693,23 +1470,19 @@ func mvccPutInternal(
 					// Seqnum of last write was ignored. Try retrieving the value from the history.
 					prevIntent, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence, txn.IgnoredSeqNums)
 					if prevValueWritten {
-						existingVal = &roachpb.Value{RawBytes: prevIntent.Value}
+						exVal = makeOptionalValue(roachpb.Value{RawBytes: prevIntent.Value})
 					}
 				}
 			}
-			if existingVal == nil {
+			if !exVal.exists {
 				// "last write inside txn && seqnum of all writes are ignored"
 				// OR
 				// "last write outside txn"
 				// => use inconsistent mvccGetInternal to retrieve the last committed value at key.
-				getBuf := newGetBuffer()
-				defer getBuf.release()
-				getBuf.meta = buf.meta
-
+				//
 				// Since we want the last committed value on the key, we must make
 				// an inconsistent read so we ignore our previous intents here.
-				existingVal, _, _, err = mvccGetInternal(
-					ctx, iter, metaKey, readTimestamp, false /* consistent */, unsafeValue, nil /* txn */, getBuf)
+				exVal, _, err = mvccGet(ctx, iter, key, readTimestamp, MVCCGetOptions{Inconsistent: true, Tombstones: true})
 				if err != nil {
 					return err
 				}
@@ -1719,7 +1492,7 @@ func mvccPutInternal(
 			// version. For example, a conditional put within same
 			// transaction should read previous write.
 			if valueFn != nil {
-				value, err = valueFn(existingVal)
+				value, err = valueFn(exVal)
 				if err != nil {
 					return err
 				}
@@ -1761,26 +1534,27 @@ func mvccPutInternal(
 				writeTimestamp = metaTimestamp
 			}
 			// Since an intent with a smaller sequence number exists for the
-			// same transaction, we must add the previous value and sequence
-			// to the intent history, if that previous value does not belong to an
+			// same transaction, we must add the previous value and sequence to
+			// the intent history, if that previous value does not belong to an
 			// ignored sequence number.
 			//
 			// If the epoch of the transaction doesn't match the epoch of the
-			// intent, or if the existing value is nil due to all past writes being
-			// ignored and there are no other committed values, blow away the intent
-			// history.
+			// intent, or if the existing value is nil due to all past writes
+			// being ignored and there are no other committed values, blow away
+			// the intent history.
 			//
 			// Note that the only case where txn.Epoch == meta.Txn.Epoch &&
-			// existingVal == nil will be true is when all past writes by this
-			// transaction are ignored, and there are no past committed values at this
-			// key. In that case, we can also blow up the intent history.
-			if txn.Epoch == meta.Txn.Epoch && existingVal != nil {
+			// exVal == nil will be true is when all past writes by this
+			// transaction are ignored, and there are no past committed values
+			// at this key. In that case, we can also blow up the intent
+			// history.
+			if txn.Epoch == meta.Txn.Epoch && exVal.exists {
 				// Only add the current provisional value to the intent
 				// history if the current sequence number is not ignored. There's no
 				// reason to add past committed values or a value already in the intent
 				// history back into it.
 				if curProvNotIgnored {
-					prevIntentValBytes := existingVal.RawBytes
+					prevIntentValBytes := exVal.RawBytes
 					prevIntentSequence := meta.Txn.Sequence
 					buf.newMeta.AddToIntentHistory(prevIntentSequence, prevIntentValBytes)
 				}
@@ -1815,7 +1589,7 @@ func mvccPutInternal(
 			// timestamp.
 			if txn != nil {
 				if value, err = maybeGetValue(
-					ctx, iter, metaKey, value, ok, readTimestamp, txn, buf, valueFn); err != nil {
+					ctx, iter, key, value, ok, readTimestamp, txn, valueFn); err != nil {
 					return err
 				}
 			} else {
@@ -1826,13 +1600,13 @@ func mvccPutInternal(
 				// value, but that's a concern of evaluateBatch and not here.
 				readTimestamp = writeTimestamp
 				if value, err = maybeGetValue(
-					ctx, iter, metaKey, value, ok, readTimestamp, txn, buf, valueFn); err != nil {
+					ctx, iter, key, value, ok, readTimestamp, txn, valueFn); err != nil {
 					return err
 				}
 			}
 		} else {
 			if value, err = maybeGetValue(
-				ctx, iter, metaKey, value, ok, readTimestamp, txn, buf, valueFn); err != nil {
+				ctx, iter, key, value, ok, readTimestamp, txn, valueFn); err != nil {
 				return err
 			}
 		}
@@ -1840,7 +1614,7 @@ func mvccPutInternal(
 		// There is no existing value for this key. Even if the new value is
 		// nil write a deletion tombstone for the key.
 		if valueFn != nil {
-			value, err = valueFn(nil)
+			value, err = valueFn(optionalValue{exists: false})
 			if err != nil {
 				return err
 			}
@@ -1943,7 +1717,7 @@ func MVCCIncrement(
 
 	var int64Val int64
 	var newInt64Val int64
-	err := mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, func(value *roachpb.Value) ([]byte, error) {
+	err := mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, func(value optionalValue) ([]byte, error) {
 		if value.IsPresent() {
 			var err error
 			if int64Val, err = value.GetInt(); err != nil {
@@ -2053,16 +1827,16 @@ func mvccConditionalPutUsingIter(
 ) error {
 	return mvccPutUsingIter(
 		ctx, writer, iter, ms, key, timestamp, noValue, txn,
-		func(existVal *roachpb.Value) ([]byte, error) {
+		func(existVal optionalValue) ([]byte, error) {
 			if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
 				if !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
 					return nil, &roachpb.ConditionFailedError{
-						ActualValue: existVal.ShallowClone(),
+						ActualValue: existVal.ToPointer(),
 					}
 				}
 			} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
 				return nil, &roachpb.ConditionFailedError{
-					ActualValue: existVal.ShallowClone(),
+					ActualValue: existVal.ToPointer(),
 				}
 			}
 			return value.RawBytes, nil
@@ -2127,15 +1901,17 @@ func mvccInitPutUsingIter(
 ) error {
 	return mvccPutUsingIter(
 		ctx, rw, iter, ms, key, timestamp, noValue, txn,
-		func(existVal *roachpb.Value) ([]byte, error) {
-			if failOnTombstones && existVal != nil && len(existVal.RawBytes) == 0 {
+		func(existVal optionalValue) ([]byte, error) {
+			if failOnTombstones && existVal.IsTombstone() {
 				// We found a tombstone and failOnTombstones is true: fail.
-				return nil, &roachpb.ConditionFailedError{ActualValue: existVal.ShallowClone()}
+				return nil, &roachpb.ConditionFailedError{
+					ActualValue: existVal.ToPointer(),
+				}
 			}
 			if existVal.IsPresent() && !existVal.EqualTagAndData(value) {
 				// The existing value does not match the supplied value.
 				return nil, &roachpb.ConditionFailedError{
-					ActualValue: existVal.ShallowClone(),
+					ActualValue: existVal.ToPointer(),
 				}
 			}
 			return value.RawBytes, nil

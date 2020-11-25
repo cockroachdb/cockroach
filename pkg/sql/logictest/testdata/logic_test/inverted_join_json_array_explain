@@ -67,8 +67,8 @@ vectorized: true
 
 # This query performs an inverted join with an additional filter.
 query T
-EXPLAIN SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2
-WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+EXPLAIN SELECT * FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
+ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
 distribution: local
@@ -147,41 +147,35 @@ vectorized: true
               spans: FULL SCAN
 
 # This query performs a semi inverted join with an additional filter.
-# TODO(rytaft): A better plan would use an inner inverted join followed by a
-#  semi lookup join. Adjust the costing so that plan is chosen instead.
 query T
 EXPLAIN SELECT * FROM json_tab AS j2 WHERE EXISTS (
   SELECT * FROM json_tab@foo_inv AS j1
-  WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+  WHERE j1.b @> j2.b AND j2.a < 20
 )
 ORDER BY j2.a
 ----
 distribution: local
 vectorized: true
 ·
-• distinct
-│ distinct on: a
-│ order key: a
+• lookup join (semi)
+│ table: json_tab@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> b
 │
-└── • lookup join
-    │ table: json_tab@primary
-    │ equality: (a) = (a)
-    │ equality cols are key
-    │ pred: (b @> b) AND (b @> '{"a": {}}')
+└── • inverted join
+    │ table: json_tab@foo_inv
     │
-    └── • inverted join
-        │ table: json_tab@foo_inv
-        │
-        └── • scan
-              missing stats
-              table: json_tab@primary
-              spans: [ - /19]
+    └── • scan
+          missing stats
+          table: json_tab@primary
+          spans: [ - /19]
 
 # This query performs an anti inverted join with an additional filter.
 query T
 EXPLAIN SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
   SELECT * FROM json_tab@foo_inv AS j1
-  WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
+  WHERE j1.b @> j2.b AND j2.a < 20
 )
 ORDER BY j2.a
 ----
@@ -192,7 +186,7 @@ vectorized: true
 │ table: json_tab@primary
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: (b @> b) AND (b @> '{"a": {}}')
+│ pred: b @> b
 │
 └── • inverted join (left outer)
     │ table: json_tab@foo_inv

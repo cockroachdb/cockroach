@@ -717,10 +717,10 @@ func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) ([]roachpb.Spans, bool, error) {
+) ([]roachpb.Spans, bool, bool, error) {
 	decoded, err := j.decode()
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	return decoded.encodeContainingInvertedIndexSpans(b, isRoot, isObjectValue)
 }
