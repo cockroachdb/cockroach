@@ -285,6 +285,16 @@ func (p *pebbleIterator) UnsafeRawKey() []byte {
 	return p.iter.Key()
 }
 
+// UnsafeRawMVCCKey implements the MVCCIterator interface.
+func (p *pebbleIterator) UnsafeRawMVCCKey() []byte {
+	return p.iter.Key()
+}
+
+// UnsafeRawEngineKey implements the EngineIterator interface.
+func (p *pebbleIterator) UnsafeRawEngineKey() []byte {
+	return p.iter.Key()
+}
+
 // UnsafeValue implements the MVCCIterator and EngineIterator interfaces.
 func (p *pebbleIterator) UnsafeValue() []byte {
 	if valid, err := p.Valid(); err != nil || !valid {

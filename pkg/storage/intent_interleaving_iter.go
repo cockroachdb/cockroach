@@ -67,7 +67,9 @@ type intentInterleavingIter struct {
 	// exhausted. Note that the intentIter may still be positioned
 	// at a valid position in the case of prefix iteration, but the
 	// state of the intentKey overrides that state.
-	intentKey roachpb.Key
+	intentKey                            roachpb.Key
+	intentKeyAsNoTimestampMVCCKey        []byte
+	intentKeyAsNoTimestampMVCCKeyBacking []byte
 
 	// - cmp output of (intentKey, current iter key) when both are valid.
 	//   This does not take timestamps into consideration. So if intentIter
@@ -208,6 +210,26 @@ func (i *intentInterleavingIter) tryDecodeLockKey(valid bool) error {
 		i.err = err
 		i.valid = false
 		return err
+	}
+
+	// The common case is for the intentKey to not need un-escaping, so will
+	// point to the slice that was backing engineKey.Key. engineKey.Key uses an
+	// encoding that terminates using \x00\x01. And we happen to use \x00 as the
+	// last byte when encoding an MVCCKey which has an empty timestamp. So we
+	// can use this fortunate situation to avoid any byte copying in the
+	// construction of intentKeyAsNoTimestampMVCCKey. This optimization also
+	// works when there was un-escaping, but the slice growth ended up with a
+	// cap greater than len. Since these extra bytes in the cap are
+	// 0-initialized, we can use the first such byte.
+	//
+	// If neither works, we leave intentKeyAsNoTimestampMVCCKey as nil, and lazily
+	// initialize it, if needed.
+	i.intentKeyAsNoTimestampMVCCKey = nil
+	if cap(i.intentKey) > len(i.intentKey) {
+		prospectiveKey := i.intentKey[:len(i.intentKey)+1]
+		if prospectiveKey[len(i.intentKey)] == 0 {
+			i.intentKeyAsNoTimestampMVCCKey = prospectiveKey
+		}
 	}
 	return nil
 }
@@ -602,14 +624,26 @@ func (i *intentInterleavingIter) Prev() {
 
 func (i *intentInterleavingIter) UnsafeRawKey() []byte {
 	if i.isCurAtIntentIter() {
-		// TODO(sumeer): this is inefficient, but the users of UnsafeRawKey are
-		// incorrect, so this method will go away.
-		key, err := i.intentIter.UnsafeEngineKey()
-		if err != nil {
-			// Should be able to parse it again.
-			panic(err)
+		return i.intentIter.UnsafeRawEngineKey()
+	}
+	return i.iter.UnsafeRawKey()
+}
+
+func (i *intentInterleavingIter) UnsafeRawMVCCKey() []byte {
+	if i.isCurAtIntentIter() {
+		if i.intentKeyAsNoTimestampMVCCKey == nil {
+			// Slow-path: tryDecodeLockKey was not able to initialize.
+			if cap(i.intentKeyAsNoTimestampMVCCKeyBacking) < len(i.intentKey)+1 {
+				i.intentKeyAsNoTimestampMVCCKeyBacking = make([]byte, 0, len(i.intentKey)+1)
+			}
+			i.intentKeyAsNoTimestampMVCCKeyBacking = append(
+				i.intentKeyAsNoTimestampMVCCKeyBacking[:0], i.intentKey...)
+			// Append the 0 byte representing the absence of a timestamp.
+			i.intentKeyAsNoTimestampMVCCKeyBacking = append(
+				i.intentKeyAsNoTimestampMVCCKeyBacking, 0)
+			i.intentKeyAsNoTimestampMVCCKey = i.intentKeyAsNoTimestampMVCCKeyBacking
 		}
-		return key.Encode()
+		return i.intentKeyAsNoTimestampMVCCKey
 	}
 	return i.iter.UnsafeRawKey()
 }

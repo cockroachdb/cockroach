@@ -249,10 +249,11 @@ func (fw *SSTWriter) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) e
 
 	valid, err := iter.Valid()
 	for valid && err == nil {
-		key := iter.UnsafeKey()
-		fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
-		fw.DataSize += int64(len(key.Key))
-		if err := fw.fw.Delete(fw.scratch); err != nil {
+		// NB: UnsafeRawKey could be a serialized lock table key, and not just an
+		// MVCCKey.
+		key := iter.UnsafeRawKey()
+		fw.DataSize += int64(len(iter.UnsafeKey().Key))
+		if err := fw.fw.Delete(key); err != nil {
 			return err
 		}
 
