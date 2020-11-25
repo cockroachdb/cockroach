@@ -613,6 +613,12 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 		// could race). Since the subsequent execution of the original request
 		// might mutate the transaction, make a copy here. See #9130.
 		h.Txn = req.Txn.Clone()
+		// We must push at least to req.readConflictTimestamp(), but for
+		// transactional requests we actually want to go all the way up to the
+		// top of the transaction's uncertainty interval. This allows us to not
+		// have to restart for uncertainty if the push succeeds and we come back
+		// and read.
+		h.Timestamp.Forward(req.Txn.MaxTimestamp)
 	}
 	return h
 }
