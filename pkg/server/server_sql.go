@@ -649,8 +649,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.circularInternalExecutor,
 			cfg.db,
 		)
-		execCfg.VersionUpgradeHook = func(ctx context.Context, targetV roachpb.Version) error {
-			return migrationMgr.MigrateTo(ctx, targetV)
+		execCfg.VersionUpgradeHook = func(ctx context.Context, from, to clusterversion.ClusterVersion) error {
+			return migrationMgr.Migrate(ctx, from, to)
 		}
 	}
 
