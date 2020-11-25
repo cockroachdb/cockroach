@@ -142,44 +142,14 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 		}
 	}
 
-	// Fallthrough.
-	return l.getPhysicalObjectDesc(ctx, txn, db, schema, object, flags)
-}
-
-func (l *LogicalSchemaAccessor) getPhysicalObjectDesc(
-	ctx context.Context, txn *kv.Txn, db, schema, object string, flags tree.ObjectLookupFlags,
-) (catalog.Descriptor, error) {
+	// Fall back to physical descriptor access.
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
 		typeName := tree.MakeNewQualifiedTypeName(db, schema, object)
-		if flags.RequireMutable {
-			typ, err := l.tc.GetMutableTypeDescriptor(ctx, txn, &typeName, flags)
-			if typ == nil {
-				return nil, err
-			}
-			return typ, err
-		}
-		typ, err := l.tc.GetTypeVersion(ctx, txn, &typeName, flags)
-		if typ == nil {
-			return nil, err
-		}
-		return typ, err
+		return l.tc.GetTypeByName(ctx, txn, &typeName, flags)
 	case tree.TableObject:
 		tableName := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
-		if flags.RequireMutable {
-			table, err := l.tc.GetMutableTableDescriptor(ctx, txn, &tableName, flags)
-			if table == nil {
-				// return nil interface.
-				return nil, err
-			}
-			return table, err
-		}
-		table, err := l.tc.GetTableVersion(ctx, txn, &tableName, flags)
-		if table == nil {
-			// return nil interface.
-			return nil, err
-		}
-		return table, err
+		return l.tc.GetTableByName(ctx, txn, &tableName, flags)
 	default:
 		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}

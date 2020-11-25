@@ -146,15 +146,16 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		}
 		lookupFlags.Required = false
 		for i := range tbNames {
-			tbDesc, err := p.Descriptors().GetTableVersion(
+			t, err := p.Descriptors().GetTableByName(
 				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
 			)
 			if err != nil {
 				return err
 			}
-			if tbDesc == nil {
+			if t == nil {
 				continue
 			}
+			tbDesc := t.(*tabledesc.Immutable)
 
 			if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
 				dependentDesc, err := catalogkv.MustGetTableDescByID(ctx, p.txn, p.ExecCfg().Codec, dependedOn.ID)
