@@ -124,11 +124,11 @@ func (f *Factory) FoldingControl() *FoldingControl {
 // placeholders are assigned. If there are no placeholders, there is no need
 // for column statistics, since the memo is already fully optimized.
 func (f *Factory) DetachMemo() *memo.Memo {
-	f.mem.ClearColStats(f.mem.RootExpr())
-	detach := f.mem
+	m := f.mem
 	f.mem = nil
+	m.Detach()
 	f.Init(f.evalCtx, nil /* catalog */)
-	return detach
+	return m
 }
 
 // DisableOptimizations disables all transformation rules. The unaltered input
