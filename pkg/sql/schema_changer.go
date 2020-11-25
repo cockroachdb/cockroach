@@ -626,23 +626,38 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 
 	// Otherwise, continue with the rest of the schema change state machine.
 	if tableDesc.Dropped() && sc.droppedDatabaseID == descpb.InvalidID {
-		// We've dropped this table, let's kick off a GC job.
-		dropTime := timeutil.Now().UnixNano()
-		if tableDesc.TableDesc().DropTime > 0 {
-			dropTime = tableDesc.TableDesc().DropTime
-		}
-		gcDetails := jobspb.SchemaChangeGCDetails{
-			Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
-				{
-					ID:       tableDesc.GetID(),
-					DropTime: dropTime,
+		if tableDesc.IsPhysicalTable() {
+			// We've dropped this physical table, let's kick off a GC job.
+			dropTime := timeutil.Now().UnixNano()
+			if tableDesc.TableDesc().DropTime > 0 {
+				dropTime = tableDesc.TableDesc().DropTime
+			}
+			gcDetails := jobspb.SchemaChangeGCDetails{
+				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
+					{
+						ID:       tableDesc.GetID(),
+						DropTime: dropTime,
+					},
 				},
-			},
-		}
-		if err := startGCJob(
-			ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
-		); err != nil {
-			return err
+			}
+			if err := startGCJob(
+				ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
+			); err != nil {
+				return err
+			}
+		} else {
+			// We've dropped a non-physical table, no need for a GC job, let's delete
+			// its descriptor and zone config immediately.
+			b := &kv.Batch{}
+			descKey := catalogkeys.MakeDescMetadataKey(sc.execCfg.Codec, tableDesc.GetID())
+			b.Del(descKey)
+			if sc.execCfg.Codec.ForSystemTenant() {
+				zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(tableDesc.ID))
+				b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false)
+			}
+			if err := sc.db.Run(ctx, b); err != nil {
+				return err
+			}
 		}
 	}
 
