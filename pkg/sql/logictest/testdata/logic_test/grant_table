@@ -82,6 +82,7 @@ test           information_schema  NULL                               admin    A
 test           information_schema  NULL                               root     ALL
 test           information_schema  administrable_role_authorizations  public   SELECT
 test           information_schema  applicable_roles                   public   SELECT
+test           information_schema  character_sets                     public   SELECT
 test           information_schema  check_constraints                  public   SELECT
 test           information_schema  column_privileges                  public   SELECT
 test           information_schema  column_udt_usage                   public   SELECT
