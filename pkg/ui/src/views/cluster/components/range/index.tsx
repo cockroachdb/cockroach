@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Button, TimePicker, notification, Calendar, Icon } from "antd";
+import { Button, notification, Icon } from "antd";
 import moment, { Moment } from "moment";
 import { TimeWindow } from "src/redux/timewindow";
 import { trackTimeScaleSelected } from "src/util/analytics";
 import React from "react";
 import "./range.styl";
 import { arrowRenderer } from "src/views/shared/components/dropdown";
+import { RangeCalendar } from "src/components";
 
 export enum DateTypes {
   DATE_FROM,
@@ -38,7 +39,7 @@ export type Selected = {
 interface RangeSelectProps {
   options: RangeOption[];
   onChange: (arg0: RangeOption) => void;
-  changeDate: (arg0: moment.Moment, arg1: DateTypes) => void;
+  changeDate: (dateRange: [moment.Moment, moment.Moment]) => void;
   onOpened?: () => void;
   onClosed?: () => void;
   value: TimeWindow;
@@ -54,7 +55,6 @@ interface RangeSelectState {
   custom: boolean;
   selectMonthStart: Nullable<moment.Moment>;
   selectMonthEnd: Nullable<moment.Moment>;
-  currentDateTime: moment.Moment;
 }
 
 class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
@@ -64,7 +64,6 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     custom: false,
     selectMonthStart: null as moment.Moment,
     selectMonthEnd: null as moment.Moment,
-    currentDateTime: moment.utc(),
   };
 
   private rangeContainer = React.createRef<HTMLDivElement>();
@@ -83,45 +82,11 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     });
   }
 
-  isValid = (date: moment.Moment, direction: DateTypes) => {
-    const { value } = this.props;
-    let valid = true;
-    switch (direction) {
-      case DateTypes.DATE_FROM:
-        valid = !(date >= value.end);
-        break;
-      case DateTypes.DATE_TO:
-        valid = !(date <= value.start);
-        break;
-      default:
-        valid = true;
-    }
-    return valid;
+  onChangeDate = (dateRange: [Moment, Moment]) => {
+    const { changeDate } = this.props;
+    this.toggleDropDown();
+    changeDate(dateRange);
   }
-
-  onChangeDate = (direction: DateTypes) => (date: Moment) => {
-    const { changeDate, value } = this.props;
-    this.clearPanelValues();
-    if (this.isValid(date, direction)) {
-      changeDate(moment.utc(date), direction);
-    } else {
-      if (direction === DateTypes.DATE_TO) {
-        changeDate(moment.utc(value.start).add(10, "minute"), direction);
-      } else {
-        changeDate(moment.utc(value.end).add(-10, "minute"), direction);
-      }
-      notification.info({
-        message: "The timeframe has been set to a 10 minute range",
-        description: "An invalid timeframe was entered. The timeframe has been set to a 10 minute range.",
-      });
-    }
-  }
-
-  renderTimePickerAddon = (direction: DateTypes) => () => <Button type="default" onClick={() => this.onChangeDate(direction)(moment.utc())} size="small">Now</Button>;
-
-  renderDatePickerAddon = (direction: DateTypes) => <div className="calendar-today-btn"><Button type="default" onClick={() => this.onChangeDate(direction)(moment.utc())} size="small">Today</Button></div>;
-
-  clearPanelValues = () => this.setState({ selectMonthEnd: null, selectMonthStart: null });
 
   onChangeOption = (option: RangeOption) => () => {
     const { onChange } = this.props;
@@ -130,7 +95,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
   }
 
   toggleCustomPicker = (custom: boolean) => () => {
-    this.setState({ custom, currentDateTime: moment.utc() }, this.clearPanelValues);
+    this.setState({ custom });
   }
 
   toggleDropDown = () => {
@@ -194,61 +159,6 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     );
   }
 
-  getDisabledHours = (isStart?: boolean) => () => {
-    const { value } = this.props;
-    const start = Number(moment.utc(value.start).format("HH"));
-    const end = Number(moment.utc(value.end).format("HH"));
-    const hours = [];
-    for (let i = 0 ; i < (isStart ? moment.utc().hour() : start); i++) {
-      if (isStart) {
-        hours.push((end + 1) + i);
-      } else {
-        hours.push(i);
-      }
-    }
-    return hours;
-  }
-
-  getDisabledMinutes = (isStart?: boolean) => () => {
-    const { value } = this.props;
-    const startHour = Number(moment.utc(value.start).format("HH"));
-    const endHour = Number(moment.utc(value.end).format("HH"));
-    const startMinutes = Number(moment.utc(value.start).format("mm"));
-    const endMinutes = Number(moment.utc(value.end).format("mm"));
-    const minutes = [];
-    if (startHour === endHour) {
-      for (let i = 0 ; i < (isStart ? moment.utc().minute() : startMinutes); i++) {
-        if (isStart) {
-          minutes.push((endMinutes + 1) + i);
-        } else {
-          minutes.push(i);
-        }
-      }
-    }
-    return minutes;
-  }
-
-  getDisabledSeconds = (isStart?: boolean) => () => {
-    const { value } = this.props;
-    const startHour = Number(moment.utc(value.start).format("HH"));
-    const endHour = Number(moment.utc(value.end).format("HH"));
-    const startMinutes = Number(moment.utc(value.start).format("mm"));
-    const endMinutes = Number(moment.utc(value.end).format("mm"));
-    const startSeconds = Number(moment.utc(value.start).format("ss"));
-    const endSeconds = Number(moment.utc(value.end).format("ss"));
-    const seconds = [];
-    if (startHour === endHour && startMinutes === endMinutes) {
-      for (let i = 0 ; i < (isStart ? moment.utc().second() : startSeconds + 1); i++) {
-        if (isStart) {
-          seconds.push(endSeconds + i);
-        } else {
-          seconds.push(i);
-        }
-      }
-    }
-    return seconds;
-  }
-
   headerRender = (item: any) => (
     <div className="calendar-month-picker">
       <Button
@@ -267,81 +177,25 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     </div>
   )
 
-  onPanelChange = (direction: DateTypes) => (date: Moment) => {
-    const { selectMonthStart, selectMonthEnd } = this.state;
-
-    this.setState({
-      selectMonthStart: direction === DateTypes.DATE_FROM ? date : selectMonthStart,
-      selectMonthEnd: direction === DateTypes.DATE_TO ? date : selectMonthEnd,
-    });
-  }
-
   renderContent = () => {
-    const { value, useTimeRange } = this.props;
-    const { custom , selectMonthStart, selectMonthEnd, currentDateTime } = this.state;
-    const start = useTimeRange ? moment.utc(value.start) : currentDateTime;
-    const end = useTimeRange ? moment.utc(value.end) : currentDateTime;
-    const timePickerFormat = "h:mm:ss A (UTC)";
-    const isSameDate = useTimeRange && moment.utc(start).isSame(end, "day");
-    const calendarStartValue = selectMonthStart ? selectMonthStart : start ? start : moment.utc();
-    const calendarEndValue = selectMonthEnd ? selectMonthEnd : end ? end : moment.utc();
+    const { custom } = this.state;
 
     if (!custom) {
       return <div className="_quick-view">{this.renderOptions()}</div>;
     }
 
     return (
-      <React.Fragment>
-        <div className="_start">
-          <span className="_title">From</span>
-          <div className="range-calendar">
-            <Calendar
-              fullscreen={false}
-              value={calendarStartValue}
-              disabledDate={(currentDate) => (currentDate > (end || moment.utc()))}
-              headerRender={this.headerRender}
-              onSelect={this.onChangeDate(DateTypes.DATE_FROM)}
-              onPanelChange={this.onPanelChange(DateTypes.DATE_FROM)}
-            />
-            {this.renderDatePickerAddon(DateTypes.DATE_FROM)}
-          </div>
-          <TimePicker
-            value={start}
-            allowClear={false}
-            format={timePickerFormat}
-            use12Hours
-            onChange={this.onChangeDate(DateTypes.DATE_FROM)}
-            disabledHours={isSameDate && this.getDisabledHours(true) || undefined}
-            disabledMinutes={isSameDate && this.getDisabledMinutes(true) || undefined}
-            disabledSeconds={isSameDate && this.getDisabledSeconds(true) || undefined}
-          />
-        </div>
-        <div className="_end">
-          <span className="_title">To</span>
-          <div className="range-calendar">
-            <Calendar
-              fullscreen={false}
-              value={calendarEndValue}
-              disabledDate={(currentDate) => (currentDate > moment.utc() || currentDate < (start || moment.utc()))}
-              headerRender={this.headerRender}
-              onSelect={this.onChangeDate(DateTypes.DATE_TO)}
-              onPanelChange={this.onPanelChange(DateTypes.DATE_TO)}
-            />
-            {this.renderDatePickerAddon(DateTypes.DATE_TO)}
-          </div>
-          <TimePicker
-            value={end}
-            allowClear={false}
-            format={timePickerFormat}
-            use12Hours
-            addon={this.renderTimePickerAddon(DateTypes.DATE_TO)}
-            onChange={this.onChangeDate(DateTypes.DATE_TO)}
-            disabledHours={isSameDate && this.getDisabledHours() || undefined}
-            disabledMinutes={isSameDate && this.getDisabledMinutes() || undefined}
-            disabledSeconds={isSameDate && this.getDisabledSeconds() || undefined}
-          />
-        </div>
-      </React.Fragment>
+      <RangeCalendar
+        onSubmit={this.onChangeDate}
+        onCancel={this.toggleDropDown}
+        showBorders={false}
+        onInvalidRangeSelect={() => {
+          notification.info({
+            message: "The timeframe has been set to a 10 minute range",
+            description: "An invalid timeframe was entered. The timeframe has been set to a 10 minute range.",
+          });
+        }}
+      />
     );
   }
 
