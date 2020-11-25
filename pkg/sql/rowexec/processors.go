@@ -247,7 +247,7 @@ func NewProcessor(
 		if NewBackupDataProcessor == nil {
 			return nil, errors.New("BackupData processor unimplemented")
 		}
-		return NewBackupDataProcessor(flowCtx, processorID, *core.BackupData, outputs[0])
+		return NewBackupDataProcessor(flowCtx, processorID, *core.BackupData, post, outputs[0])
 	}
 	if core.SplitAndScatter != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
@@ -366,7 +366,7 @@ func NewProcessor(
 var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewBackupDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewBackupDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewSplitAndScatterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewSplitAndScatterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.SplitAndScatterSpec, execinfra.RowReceiver) (execinfra.Processor, error)
