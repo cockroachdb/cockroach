@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,60 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
-
-// getDatabaseDesc reads a database descriptor from the store.
-func getDatabaseDesc(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	name string,
-	flags tree.DatabaseLookupFlags,
-) (desc catalog.DatabaseDescriptor, err error) {
-	if name == systemschema.SystemDatabaseName {
-		if flags.RequireMutable {
-			return dbdesc.NewExistingMutable(
-				*systemschema.MakeSystemDatabaseDesc().DatabaseDesc()), nil
-		}
-		return systemschema.MakeSystemDatabaseDesc(), nil
-	}
-
-	found, descID, err := catalogkv.LookupDatabaseID(ctx, txn, codec, name)
-	if err != nil {
-		return nil, err
-	} else if !found {
-		if flags.Required {
-			return nil, sqlerrors.NewUndefinedDatabaseError(name)
-		}
-		return nil, nil
-	}
-
-	// NB: Take care to actually return nil here rather than a typed nil which
-	// will not compare to nil when wrapped in the returned interface.
-	untypedDesc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, descID, catalogkv.Mutability(flags.RequireMutable))
-	if err != nil {
-		return nil, err
-	}
-	db, ok := untypedDesc.(catalog.DatabaseDescriptor)
-	if !ok {
-		return nil, nil
-	}
-	if err := catalog.FilterDescriptorState(db, flags); err != nil {
-		if flags.Required {
-			return nil, err
-		}
-		return nil, nil
-	}
-	// Immediately after a RENAME an old name still points to the descriptor
-	// during the drain phase for the name. Do not return a descriptor during
-	// draining.
-	if db.GetName() != name {
-		if flags.Required {
-			return nil, sqlerrors.NewUndefinedDatabaseError(name)
-		}
-		return nil, nil
-	}
-	return db, nil
-}
 
 // getSchema reads a schema descriptor from the store.
 func getSchema(
