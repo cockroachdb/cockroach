@@ -1084,6 +1084,81 @@ func (tc *TestCluster) GetFirstStoreFromServer(t testing.TB, server int) *kvserv
 	return store
 }
 
+// Restart stops and then starts all the servers in the cluster.
+func (tc *TestCluster) Restart() error {
+	for i := range tc.Servers {
+		tc.StopServer(i)
+		if err := tc.RestartServer(i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RestartServer uses the cached ServerArgs to restart a Server specified by
+// the passed index.
+func (tc *TestCluster) RestartServer(idx int) error {
+	if !tc.serverStopped(idx) {
+		return errors.Errorf("server %d must be stopped before attempting to restart", idx)
+	}
+	serverArgs := tc.serverArgs[idx]
+
+	if idx == 0 {
+		// If it's the first server, then we need to restart the RPC listener by hand.
+		// Look at NewTestCluster for more details.
+		listener, err := net.Listen("tcp", serverArgs.Listener.Addr().String())
+		if err != nil {
+			return err
+		}
+		serverArgs.Listener = listener
+		serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
+	} else {
+		serverArgs.Addr = ""
+		// Try and point the server to a live server in the cluster to join.
+		for i := range tc.Servers {
+			if !tc.serverStopped(i) {
+				serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
+			}
+		}
+	}
+
+	for i, specs := range serverArgs.StoreSpecs {
+		if specs.StickyInMemoryEngineID == "" {
+			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky engine", i)
+		}
+	}
+	srv, err := serverutils.NewServer(serverArgs)
+	if err != nil {
+		return err
+	}
+	s := srv.(*server.TestServer)
+
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.Servers[idx] = s
+	tc.mu.serverStoppers[idx] = s.Stopper()
+
+	if err := srv.Start(); err != nil {
+		return err
+	}
+
+	dbConn, err := serverutils.OpenDBConnE(srv.ServingSQLAddr(),
+		serverArgs.UseDatabase, serverArgs.Insecure, srv.Stopper())
+	if err != nil {
+		return err
+	}
+	tc.Conns[idx] = dbConn
+	return nil
+}
+
+// serverStopped determines if a server has been explicitly
+// stopped by StopServer(s).
+func (tc *TestCluster) serverStopped(idx int) bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.serverStoppers[idx] == nil
+}
+
 type testClusterFactoryImpl struct{}
 
 // TestClusterFactory can be passed to serverutils.InitTestClusterFactory
