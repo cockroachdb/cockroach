@@ -136,6 +136,7 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 		" --histograms=" + perfArtifactsDir + "/stats.json",
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
+		fmt.Sprintf("--txn-log %s", filepath.Join(string(storeDirectory), "transactions.json")),
 	}
 	t.Status("running schemachange workload")
 	err = c.RunE(ctx, loadNode, runCmd...)
@@ -180,5 +181,11 @@ func saveArtifacts(ctx context.Context, c *cluster, storeDirectory string) {
 	err = c.Get(ctx, c.l, filepath.Join(storeDirectory, "extern", "schemachange"), filepath.Join(c.t.ArtifactsDir(), "backup"), c.Node(1))
 	if err != nil {
 		c.l.Printf("Failed to copy backup file from node 1 to artifacts directory: %v\n", err.Error())
+	}
+
+	// Copy the txn log from the store directory to the artifacts directory.
+	err = c.Get(ctx, c.l, filepath.Join(storeDirectory, "transactions.json"), filepath.Join(c.t.ArtifactsDir(), "transactions.json"), c.Node(1))
+	if err != nil {
+		c.l.Printf("Failed to copy txn log file from node 1 to artifacts directory: %v\n", err.Error())
 	}
 }
