@@ -415,10 +415,10 @@ func (r opResult) createDiskBackedSort(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen),
 		)
-	} else if post.Limit != 0 && post.Filter.Empty() && post.Limit < math.MaxUint64-post.Offset {
-		// There is a limit specified with no post-process filter, so we know
-		// exactly how many rows the sorter should output. The last part of the
-		// condition is making sure there is no overflow.
+	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
+		// There is a limit specified, so we know exactly how many rows the sorter
+		// should output. The last part of the condition is making sure there is no
+		// overflow.
 		//
 		// Choose a top K sorter, which uses a heap to avoid storing more rows
 		// than necessary.
@@ -1243,8 +1243,7 @@ func NewColOperator(
 }
 
 // planAndMaybeWrapFilter plans a filter. If the filter is unsupported, it is
-// planned as a wrapped noop processor with the filter as a post-processing
-// stage.
+// planned as a wrapped filterer processor.
 func (r opResult) planAndMaybeWrapFilter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -1267,8 +1266,18 @@ func (r opResult) planAndMaybeWrapFilter(
 			)
 		}
 
-		post := &execinfrapb.PostProcessSpec{Filter: filter}
-		return r.wrapPostProcessSpec(ctx, flowCtx, args, post, args.Spec.ResultTypes, factory, err)
+		filtererSpec := &execinfrapb.ProcessorSpec{
+			Core: execinfrapb.ProcessorCoreUnion{
+				Filterer: &execinfrapb.FiltererSpec{
+					Filter: filter,
+				},
+			},
+			ResultTypes: args.Spec.ResultTypes,
+		}
+		return r.createAndWrapRowSource(
+			ctx, flowCtx, args, []colexecbase.Operator{r.Op}, [][]*types.T{r.ColumnTypes},
+			filtererSpec, factory, err,
+		)
 	}
 	r.Op = op
 	return nil
@@ -1311,16 +1320,6 @@ func (r *postProcessResult) planPostProcessSpec(
 	post *execinfrapb.PostProcessSpec,
 	factory coldata.ColumnFactory,
 ) error {
-	if !post.Filter.Empty() {
-		op, err := planFilterExpr(
-			ctx, flowCtx, evalCtx, r.Op, r.ColumnTypes, post.Filter, args.StreamingMemAccount, factory, args.ExprHelper,
-		)
-		if err != nil {
-			return err
-		}
-		r.Op = op
-	}
-
 	if post.Projection {
 		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, post.OutputColumns)
 	} else if post.RenderExprs != nil {
