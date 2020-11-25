@@ -195,6 +195,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						Columns:    d.Columns,
 						Sharded:    d.Sharded,
 						Interleave: d.Interleave,
+						Name:       d.Name,
 					}
 					if err := params.p.AlterPrimaryKey(params.ctx, n.tableDesc, alterPK); err != nil {
 						return err
