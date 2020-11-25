@@ -167,6 +167,7 @@ func TestMVCCHistories(t *testing.T) {
 						// output.
 						var buf bytes.Buffer
 						e.results.buf = &buf
+						e.results.traceIntentWrites = trace
 
 						// foundErr remembers which error was last encountered while
 						// executing the script under "run".
@@ -497,11 +498,43 @@ func cmdTxnUpdate(e *evalCtx) error {
 	return nil
 }
 
+type intentPrintingReadWriter struct {
+	ReadWriter
+	buf io.Writer
+}
+
+func (rw intentPrintingReadWriter) PutIntent(
+	key roachpb.Key,
+	value []byte,
+	state PrecedingIntentState,
+	txnDidNotUpdateMeta bool,
+	txnUUID uuid.UUID,
+) error {
+	fmt.Fprintf(rw.buf, "called PutIntent(%v, _, %v, TDNUM(%t), %v)\n",
+		key, state, txnDidNotUpdateMeta, txnUUID)
+	return rw.ReadWriter.PutIntent(key, value, state, txnDidNotUpdateMeta, txnUUID)
+}
+
+func (rw intentPrintingReadWriter) ClearIntent(
+	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+) error {
+	fmt.Fprintf(rw.buf, "called ClearIntent(%v, %v, TDNUM(%t), %v)\n",
+		key, state, txnDidNotUpdateMeta, txnUUID)
+	return rw.ReadWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)
+}
+
+func (e *evalCtx) tryWrapForIntentPrinting(rw ReadWriter) ReadWriter {
+	if e.results.traceIntentWrites {
+		return intentPrintingReadWriter{ReadWriter: rw, buf: e.results.buf}
+	}
+	return rw
+}
+
 func cmdResolveIntent(e *evalCtx) error {
 	txn := e.getTxn(mandatory)
 	key := e.getKey()
 	status := e.getTxnStatus()
-	return e.resolveIntent(e.engine, key, txn, status)
+	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status)
 }
 
 func (e *evalCtx) resolveIntent(
@@ -765,8 +798,9 @@ func cmdScan(e *evalCtx) error {
 // script.
 type evalCtx struct {
 	results struct {
-		buf io.Writer
-		txn *roachpb.Transaction
+		buf               io.Writer
+		txn               *roachpb.Transaction
+		traceIntentWrites bool
 	}
 	ctx        context.Context
 	engine     Engine
@@ -901,6 +935,7 @@ func (e *evalCtx) withWriter(cmd string, fn func(_ ReadWriter) error) error {
 		defer batch.Close()
 		rw = batch
 	}
+	rw = e.tryWrapForIntentPrinting(rw)
 	origErr := fn(rw)
 	if batch != nil {
 		batchStatus := "non-empty"

@@ -162,6 +162,11 @@ func (i *MVCCIterator) UnsafeValue() []byte {
 	return i.i.UnsafeValue()
 }
 
+// IsCurIntentSeparated implements the MVCCIterator interface.
+func (i *MVCCIterator) IsCurIntentSeparated() bool {
+	return i.i.IsCurIntentSeparated()
+}
+
 // ComputeStats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
