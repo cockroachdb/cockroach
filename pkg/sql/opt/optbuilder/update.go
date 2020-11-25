@@ -203,6 +203,21 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	}
 
 	addCol := func(expr tree.Expr, targetColID opt.ColumnID) {
+		// If the expression is already a scopeColumn, we can skip creating a
+		// new scopeColumn and proceed with type checking and adding the column
+		// to the list of source columns to update. The expression can be a
+		// scopeColumn when addUpdateCols is called from the
+		// onUpdateCascadeBuilder while building foreign key cascading updates.
+		//
+		// The input scopeColumn is a pointer to a column in mb.outScope. It was
+		// copied by value to projectionsScope. The checkCol function mutates
+		// the name of projected columns, so we must lookup the column in
+		// projectionsScope so that the correct scopeColumn is renamed.
+		if scopeCol, ok := expr.(*scopeColumn); ok {
+			checkCol(projectionsScope.getColumn(scopeCol.id), targetColID)
+			return
+		}
+
 		// Allow right side of SET to be DEFAULT.
 		if _, ok := expr.(tree.DefaultVal); ok {
 			expr = mb.parseDefaultOrComputedExpr(targetColID)
