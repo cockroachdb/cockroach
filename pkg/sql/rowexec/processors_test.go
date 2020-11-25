@@ -82,16 +82,6 @@ func TestPostProcess(t *testing.T) {
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 
-		// Filter.
-		{
-			post: execinfrapb.PostProcessSpec{
-				Filter: execinfrapb.Expression{Expr: "@1 = 1"},
-			},
-			outputTypes:   rowenc.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[1 2 3] [1 2 4] [1 3 4]]",
-		},
-
 		// Projection.
 		{
 			post: execinfrapb.PostProcessSpec{
@@ -103,30 +93,6 @@ func TestPostProcess(t *testing.T) {
 			expected:      "[[0 2] [0 3] [0 4] [0 3] [0 4] [0 4] [1 3] [1 4] [1 4] [2 4]]",
 		},
 
-		// Filter and projection; filter only refers to projected column.
-		{
-			post: execinfrapb.PostProcessSpec{
-				Filter:        execinfrapb.Expression{Expr: "@1 = 1"},
-				Projection:    true,
-				OutputColumns: []uint32{0, 2},
-			},
-			outputTypes:   rowenc.TwoIntCols,
-			expNeededCols: []int{0, 2},
-			expected:      "[[1 3] [1 4] [1 4]]",
-		},
-
-		// Filter and projection; filter refers to non-projected column.
-		{
-			post: execinfrapb.PostProcessSpec{
-				Filter:        execinfrapb.Expression{Expr: "@2 = 2"},
-				Projection:    true,
-				OutputColumns: []uint32{0, 2},
-			},
-			outputTypes:   rowenc.TwoIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 3] [0 4] [1 3] [1 4]]",
-		},
-
 		// Rendering.
 		{
 			post: execinfrapb.PostProcessSpec{
@@ -135,28 +101,6 @@ func TestPostProcess(t *testing.T) {
 			outputTypes:   rowenc.ThreeIntCols,
 			expNeededCols: []int{0, 1},
 			expected:      "[[0 1 1] [0 1 1] [0 1 1] [0 2 2] [0 2 2] [0 3 3] [1 2 3] [1 2 3] [1 3 4] [2 3 5]]",
-		},
-
-		// Rendering and filtering; filter refers to column used in rendering.
-		{
-			post: execinfrapb.PostProcessSpec{
-				Filter:      execinfrapb.Expression{Expr: "@2 = 2"},
-				RenderExprs: []execinfrapb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
-			},
-			outputTypes:   rowenc.ThreeIntCols,
-			expNeededCols: []int{0, 1},
-			expected:      "[[0 2 2] [0 2 2] [1 2 3] [1 2 3]]",
-		},
-
-		// Rendering and filtering; filter refers to column not used in rendering.
-		{
-			post: execinfrapb.PostProcessSpec{
-				Filter:      execinfrapb.Expression{Expr: "@3 = 4"},
-				RenderExprs: []execinfrapb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
-			},
-			outputTypes:   rowenc.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 1] [0 2 2] [0 3 3] [1 2 3] [1 3 4] [2 3 5]]",
 		},
 
 		// More complex rendering expressions.
@@ -245,28 +189,6 @@ func TestPostProcess(t *testing.T) {
 			outputTypes:   rowenc.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
-		},
-
-		// Filter + offset.
-		{
-			post: execinfrapb.PostProcessSpec{
-				Filter: execinfrapb.Expression{Expr: "@1 = 1"},
-				Offset: 1,
-			},
-			outputTypes:   rowenc.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[1 2 4] [1 3 4]]",
-		},
-
-		// Filter + limit.
-		{
-			post: execinfrapb.PostProcessSpec{
-				Filter: execinfrapb.Expression{Expr: "@1 = 1"},
-				Limit:  2,
-			},
-			outputTypes:   rowenc.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[1 2 3] [1 2 4]]",
 		},
 	}
 
