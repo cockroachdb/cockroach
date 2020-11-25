@@ -232,7 +232,7 @@ func NewProcessor(
 		if NewReadImportDataProcessor == nil {
 			return nil, errors.New("ReadImportData processor unimplemented")
 		}
-		return NewReadImportDataProcessor(flowCtx, processorID, *core.ReadImport, outputs[0])
+		return NewReadImportDataProcessor(flowCtx, processorID, *core.ReadImport, post, outputs[0])
 	}
 	if core.BackupData != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
@@ -348,7 +348,7 @@ func NewProcessor(
 }
 
 // NewReadImportDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewBackupDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
