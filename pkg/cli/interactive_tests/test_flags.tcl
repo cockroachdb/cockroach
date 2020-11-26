@@ -93,6 +93,13 @@ interrupt
 eexpect ":/# "
 end_test
 
+start_test "Check that locality flags without a region tier warn"
+send "$argv start-single-node --insecure --locality=data-center=us-east,zone=a\r"
+eexpect "WARNING: The --locality flag does not contain a"
+interrupt
+eexpect ":/# "
+end_test
+
 start_server $argv
 
 start_test "Check that server start-up flags are reported to telemetry"
