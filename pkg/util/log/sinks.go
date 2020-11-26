@@ -49,3 +49,4 @@ type logSink interface {
 
 var _ logSink = (*stderrSink)(nil)
 var _ logSink = (*fileSink)(nil)
+var _ logSink = (*fluentSink)(nil)
