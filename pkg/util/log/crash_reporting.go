@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package logcrash
+package log
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -137,14 +136,14 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 	// sure, whether some other caller further in the call stack is
 	// catching the panic object in the end or not.
 	panicErr := PanicAsError(depth+1, r)
-	log.Shoutf(ctx, severity.ERROR, "a panic has occurred!\n%+v", panicErr)
+	Shoutf(ctx, severity.ERROR, "a panic has occurred!\n%+v", panicErr)
 
 	// In addition to informing the user, also report the details to telemetry.
 	sendCrashReport(ctx, sv, panicErr, ReportTypePanic)
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
-	log.Flush()
+	Flush()
 }
 
 // PanicAsError turns r into an error if it is not one already.
@@ -320,10 +319,10 @@ func SendReport(
 
 	res := sentry.CaptureEvent(event)
 	if res != nil {
-		log.Shoutf(ctx, severity.ERROR, "Queued as error %v", string(*res))
+		Shoutf(ctx, severity.ERROR, "Queued as error %v", string(*res))
 	}
 	if !sentry.Flush(10 * time.Second) {
-		log.Shout(ctx, severity.ERROR, "Timeout trying to submit crash report")
+		Shout(ctx, severity.ERROR, "Timeout trying to submit crash report")
 	}
 }
 
@@ -341,7 +340,7 @@ func ReportOrPanic(
 	if !build.IsRelease() || (sv != nil && PanicOnAssertions.Get(sv)) {
 		panic(err)
 	}
-	log.Warningf(ctx, "%v", err)
+	Warningf(ctx, "%v", err)
 	sendCrashReport(ctx, sv, err, ReportTypeError)
 }
 
@@ -368,16 +367,4 @@ var tagFns []tagFn
 // This is intended to be called by other packages at init time.
 func RegisterTagFn(key string, value func(context.Context) string) {
 	tagFns = append(tagFns, tagFn{key, value})
-}
-
-func maybeSendCrashReport(ctx context.Context, err error) {
-	// We load the ReportingSettings from the a global singleton in this
-	// call path. See the singleton's comment for a rationale.
-	if sv := settings.TODO(); sv != nil {
-		sendCrashReport(ctx, sv, err, ReportTypeLogFatal)
-	}
-}
-
-func init() {
-	log.MaybeSendCrashReport = maybeSendCrashReport
 }

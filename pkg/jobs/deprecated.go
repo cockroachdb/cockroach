@@ -375,7 +375,7 @@ func (r *Registry) deprecatedResume(
 				// assertion errors, which shouldn't cause the test to panic. For now,
 				// comment this out.
 				// if errors.HasAssertionFailure(err) {
-				// 	logcrash.ReportOrPanic(ctx, nil, err.Error())
+				// 	log.ReportOrPanic(ctx, nil, err.Error())
 				// }
 				log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 			}

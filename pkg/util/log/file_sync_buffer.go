@@ -235,22 +235,17 @@ func (l *fileSink) initializeNewOutputFile(
 	newWriter = bufio.NewWriterSize(file, bufferSize)
 
 	if l.getStartLines != nil {
-		bufs := l.getStartLines(now)
-		for _, buf := range bufs {
+		messages := l.getStartLines(now)
+		for _, entry := range messages {
+			buf := l.formatter.formatEntry(entry, nil)
 			var n int
-			var thisErr error
-			n, thisErr = file.Write(buf.Bytes())
-			nbytes += int64(n)
-			// Note: we combine the errors, instead of stopping at the first
-			// error encountered, to ensure that all the buffers get
-			// released back to the pool.
-			err = errors.CombineErrors(err, thisErr)
+			n, err = file.Write(buf.Bytes())
 			putBuffer(buf)
+			nbytes += int64(n)
+			if err != nil {
+				return nil, 0, err
+			}
 		}
-	}
-
-	if err != nil {
-		return nil, nbytes, err
 	}
 
 	return newWriter, nbytes, nil

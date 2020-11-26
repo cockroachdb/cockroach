@@ -62,10 +62,6 @@ type config struct {
 
 var debugLog *loggerT
 
-// debugLogFileSinkIndex is the index of the fileSink inside
-// debugLog.sinkInfos.
-var debugLogFileSinkIndex int
-
 // stderrLog is the logger where writes performed directly
 // to the stderr file descriptor (such as that performed
 // by the go runtime) *may* be redirected.
@@ -78,21 +74,8 @@ func init() {
 	// both to the output file and to the process' external stderr
 	// (OrigStderr).
 	logging.fileThreshold = severity.INFO
-	// TODO(knz): make the stderr settings below configurable.
-	logging.stderrSinkInfo = sinkInfo{
-		sink:      &logging.stderrSink,
-		threshold: severity.INFO,
-		// stderr editor.
-		// We don't redact upfront, and we keep the redaction markers.
-		editor:    getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
-		formatter: formatCrdbV1TTY{},
-		// failure to write to stderr is critical for now. We may want
-		// to make this non-critical in the future, since it's common
-		// for folk to close the terminal where they launched 'cockroach
-		// start --background'.
-		// We keep this true for now for backward-compatibility.
-		criticality: true,
-	}
+	logging.stderrSink.threshold = severity.INFO
+	logging.stderrSink.formatter = formatCrdbV1TTYWithCounter{}
 
 	// Default maximum size of individual log files.
 	logging.logFileMaxSize = 10 << 20 // 10MiB
@@ -104,18 +87,31 @@ func init() {
 		"",    /* dir */
 		"",    /* fileNamePrefix */
 		false, /* forceSyncWrites */
+		logging.fileThreshold,
 		logging.logFileMaxSize,
 		logging.logFilesCombinedMaxSize,
 		debugLog.getStartLines,
 	)
 	// TODO(knz): Make all this configurable.
 	// (As done in https://github.com/cockroachdb/cockroach/pull/51987.)
-	debugLog.sinkInfos = []*sinkInfo{
-		&logging.stderrSinkInfo,
+	debugLog.sinkInfos = []sinkInfo{
 		{
-			sink:      debugFileSink,
-			threshold: logging.fileThreshold,
-			formatter: formatCrdbV1{},
+			// Nb: some tests in this package assume that the stderr sink is
+			// the first one. If this changes, the tests need to be updated
+			// as well.
+			sink: &logging.stderrSink,
+			// stderr editor.
+			// We don't redact upfront, and we keep the redaction markers.
+			editor: getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
+			// failure to write to stderr is critical for now. We may want
+			// to make this non-critical in the future, since it's common
+			// for folk to close the terminal where they launched 'cockroach
+			// start --background'.
+			// We keep this true for now for backward-compatibility.
+			criticality: true,
+		},
+		{
+			sink: debugFileSink,
 			// file editor.
 			// We don't redact upfront, and the "--redactable-logs" flag decides
 			// whether to keep the redaction markers in the output.
@@ -124,7 +120,6 @@ func init() {
 			criticality: true,
 		},
 	}
-	debugLogFileSinkIndex = 1
 	allLoggers.put(debugLog)
 	allFileSinks.put(debugFileSink)
 
@@ -141,7 +136,7 @@ func init() {
 	)
 	// We define these flags here because they have the type Severity
 	// which we can't pass to logflags without creating an import cycle.
-	flag.Var(&logging.stderrSinkInfo.threshold, logflags.LogToStderrName,
+	flag.Var(&logging.stderrSink.threshold, logflags.LogToStderrName,
 		"logs at or above this threshold go to stderr")
 	flag.Var(&logging.fileThreshold, logflags.LogFileVerbosityThresholdName,
 		"minimum verbosity of messages written to the log file")
@@ -153,24 +148,30 @@ func init() {
 // during SetupRedactionAndStderrRedirects() after the custom
 // logging configuration has been selected.
 func initDebugLogFromDefaultConfig() {
-	debugLogFileSinkInfo := debugLog.sinkInfos[debugLogFileSinkIndex]
-	// Re-configure the redaction editor. This may have changed
-	// after SetupRedactionAndStderrRedirects() reconfigures
-	// logging.redactableLogs.
-	//
-	// TODO(knz): Remove this initialization when
-	// https://github.com/cockroachdb/cockroach/pull/51987 introduces
-	// proper configurability.
-	debugLogFileSinkInfo.editor = getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */))
-	debugLogFileSinkInfo.threshold = logging.fileThreshold
-	fileSink := debugLogFileSinkInfo.sink.(*fileSink)
-	fileSink.mu.Lock()
-	defer fileSink.mu.Unlock()
-	fileSink.prefix = program
-	fileSink.mu.logDir = logging.logDir.String()
-	fileSink.enabled.Set(fileSink.mu.logDir != "")
-	fileSink.logFileMaxSize = logging.logFileMaxSize
-	fileSink.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
+	for i := range debugLog.sinkInfos {
+		fileSink, ok := debugLog.sinkInfos[i].sink.(*fileSink)
+		if !ok {
+			continue
+		}
+		// Re-configure the redaction editor. This may have changed
+		// after SetupRedactionAndStderrRedirects() reconfigures
+		// logging.redactableLogs.
+		//
+		// TODO(knz): Remove this initialization when
+		// https://github.com/cockroachdb/cockroach/pull/51987 introduces
+		// proper configurability.
+		debugLog.sinkInfos[i].editor = getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */))
+		func() {
+			fileSink.mu.Lock()
+			defer fileSink.mu.Unlock()
+			fileSink.prefix = program
+			fileSink.mu.logDir = logging.logDir.String()
+			fileSink.enabled.Set(fileSink.mu.logDir != "")
+			fileSink.logFileMaxSize = logging.logFileMaxSize
+			fileSink.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
+			fileSink.threshold = logging.fileThreshold
+		}()
+	}
 }
 
 // IsActive returns true iff the main logger already has some events
@@ -296,7 +297,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 	// If redaction is requested and we have a chance to produce some
 	// log entries on stderr, that's a configuration we cannot support
 	// safely. Reject it.
-	if logging.redactableLogsRequested && logging.stderrSinkInfo.threshold != severity.NONE {
+	if logging.redactableLogsRequested && logging.stderrSink.threshold != severity.NONE {
 		return nil, errors.WithHintf(
 			errors.New("cannot enable redactable logging without a logging directory"),
 			"You can pass --%s to set up a logging directory explicitly.", cliflags.LogDir.Name)

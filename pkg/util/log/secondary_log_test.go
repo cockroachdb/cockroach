@@ -49,29 +49,27 @@ func TestSecondaryLog(t *testing.T) {
 
 	// Check that the messages indeed made it to different files.
 
-	bcontents, err := ioutil.ReadFile(debugLog.getFileSink().mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(debugLog.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
-	contents := string(bcontents)
-	if !strings.Contains(contents, "test1") || !strings.Contains(contents, "test2") {
+	if !strings.Contains(string(contents), "test1") || !strings.Contains(string(contents), "test2") {
 		t.Errorf("log does not contain error text\n%s", contents)
 	}
-	if strings.Contains(contents, "world") {
+	if strings.Contains(string(contents), "world") {
 		t.Errorf("secondary log spilled into debug log\n%s", contents)
 	}
 
-	bcontents, err = ioutil.ReadFile(l.logger.getFileSink().mu.file.(*syncBuffer).file.Name())
+	contents, err = ioutil.ReadFile(l.logger.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
-	contents = string(bcontents)
-	if !strings.Contains(contents, "hello") ||
-		!strings.Contains(contents, "world") ||
-		!strings.Contains(contents, "1 " /* entry counter */ +"story time") {
-		t.Errorf("secondary log does not contain text or counter\n%s", contents)
+	if !strings.Contains(string(contents), "hello") ||
+		!strings.Contains(string(contents), "world") ||
+		!strings.Contains(string(contents), "story time") {
+		t.Errorf("secondary log does not contain text\n%s", contents)
 	}
-	if strings.Contains(contents, "test1") {
+	if strings.Contains(string(contents), "test1") {
 		t.Errorf("primary log spilled into secondary\n%s", contents)
 	}
 
@@ -82,7 +80,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrSinkInfo.threshold = severity.NONE
+	logging.stderrSink.threshold = severity.NONE
 
 	// Take over stderr.
 	TestingResetActive()

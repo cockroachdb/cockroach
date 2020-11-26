@@ -28,7 +28,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
         "//pkg/util/mon",
         "//vendor/github.com/cockroachdb/errors",
     ],

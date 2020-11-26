@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -772,7 +771,7 @@ const (
 
 func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{}) {
 	if recovered != nil {
-		panicErr := logcrash.PanicAsError(1, recovered)
+		panicErr := log.PanicAsError(1, recovered)
 
 		// If there's a statement currently being executed, we'll report
 		// on it.
@@ -789,7 +788,7 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 		}
 
 		// Report the panic to telemetry in any case.
-		logcrash.ReportPanic(ctx, &ex.server.cfg.Settings.SV, panicErr, 1 /* depth */)
+		log.ReportPanic(ctx, &ex.server.cfg.Settings.SV, panicErr, 1 /* depth */)
 
 		// Close the executor before propagating the panic further.
 		ex.close(ctx, panicClose)
@@ -2696,7 +2695,7 @@ func statementFromCtx(ctx context.Context) tree.Statement {
 
 func init() {
 	// Register a function to include the anonymized statement in crash reports.
-	logcrash.RegisterTagFn("statement", func(ctx context.Context) string {
+	log.RegisterTagFn("statement", func(ctx context.Context) string {
 		stmt := statementFromCtx(ctx)
 		if stmt == nil {
 			return ""

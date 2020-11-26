@@ -28,7 +28,6 @@ go_library(
         "//pkg/sql/sqlutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
         "//pkg/util/quotapool",
         "//pkg/util/retry",
         "//pkg/util/stop",

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
@@ -59,12 +58,12 @@ func Main() {
 
 	cmdName := commandName(os.Args[1:])
 
-	logcrash.SetupCrashReporter(
+	log.SetupCrashReporter(
 		context.Background(),
 		cmdName,
 	)
 
-	defer logcrash.RecoverAndReportPanic(context.Background(), &serverCfg.Settings.SV)
+	defer log.RecoverAndReportPanic(context.Background(), &serverCfg.Settings.SV)
 
 	err := Run(os.Args[1:])
 

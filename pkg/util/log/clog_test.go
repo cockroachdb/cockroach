@@ -104,7 +104,7 @@ func setFlags() {
 	ResetExitFunc()
 	// Make all logged errors go to the external stderr, in addition to
 	// the log file.
-	logging.stderrSinkInfo.threshold = severity.ERROR
+	logging.stderrSink.threshold = severity.ERROR
 }
 
 // Test that Info works as advertised.
@@ -622,7 +622,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrSinkInfo.threshold = severity.NONE
+	logging.stderrSink.threshold = severity.NONE
 	SetExitFunc(false /* hideStack */, func(exit.Code) {})
 
 	defer setFlags()
@@ -660,7 +660,7 @@ func TestRedirectStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrSinkInfo.threshold = severity.NONE
+	logging.stderrSink.threshold = severity.NONE
 
 	Infof(context.Background(), "test")
 
@@ -688,16 +688,15 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	debugFileSinkInfo := debugLog.sinkInfos[debugLogFileSinkIndex]
-	defer func(save Severity) { debugFileSinkInfo.threshold = save }(debugFileSinkInfo.threshold)
-	debugFileSinkInfo.threshold = severity.ERROR
+	debugFileSink := debugLog.getFileSink()
+	defer func(save Severity) { debugFileSink.threshold = save }(debugFileSink.threshold)
+	debugFileSink.threshold = severity.ERROR
 
 	Infof(context.Background(), "test1")
 	Errorf(context.Background(), "test2")
 
 	Flush()
 
-	debugFileSink := debugFileSinkInfo.sink.(*fileSink)
 	contents, err := ioutil.ReadFile(debugFileSink.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
@@ -727,7 +726,7 @@ func TestExitOnFullDisk(t *testing.T) {
 	})
 
 	fs := &fileSink{}
-	l := &loggerT{sinkInfos: []*sinkInfo{{
+	l := &loggerT{sinkInfos: []sinkInfo{{
 		sink:        fs,
 		editor:      func(r redactablePackage) redactablePackage { return r },
 		criticality: true,
@@ -800,7 +799,7 @@ func TestLogEntryPropagation(t *testing.T) {
 	const specialMessage = `CAPTAIN KIRK`
 
 	// Enable output to stderr (the Scope disabled it).
-	logging.stderrSinkInfo.threshold.SetValue(severity.INFO)
+	logging.stderrSink.threshold.SetValue(severity.INFO)
 
 	// Make stderr non-critical.
 	// We assume that the stderr sink is the first one.

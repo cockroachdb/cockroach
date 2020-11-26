@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -202,7 +201,7 @@ func (s *Stopper) Recover(ctx context.Context) {
 			return
 		}
 		if sv := settings.TODO(); sv != nil {
-			logcrash.ReportPanic(ctx, sv, r, 1)
+			log.ReportPanic(ctx, sv, r, 1)
 		}
 		panic(r)
 	}
