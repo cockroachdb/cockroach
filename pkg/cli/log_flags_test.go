@@ -35,12 +35,11 @@ func TestSetupLogging(t *testing.T) {
 	reSimplify := regexp.MustCompile(`(?ms:^\s*(auditable: false|redact: false|exit-on-error: true|max-group-size: 100MiB)\n)`)
 
 	const defaultFluentConfig = `fluent-defaults: {` +
-		`buffered-writes: true, ` +
 		`filter: INFO, ` +
 		`format: json-fluent-compact, ` +
 		`redactable: true, ` +
 		`exit-on-error: false` +
-		`}, `
+		`}`
 	stdFileDefaultsRe := regexp.MustCompile(
 		`file-defaults: \{dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: true, filter: INFO, format: crdb-v2, redactable: true\}`)
 	fileDefaultsNoMaxSizeRe := regexp.MustCompile(
@@ -106,7 +105,7 @@ func TestSetupLogging(t *testing.T) {
 		actual = reWhitespace2.ReplaceAllString(actual, "{")
 
 		// Shorten the configuration for legibility during reviews of test changes.
-		actual = strings.ReplaceAll(actual, defaultFluentConfig, "")
+		actual = strings.ReplaceAll(actual, defaultFluentConfig, "<fluentDefaults>")
 		actual = stdFileDefaultsRe.ReplaceAllString(actual, "<stdFileDefaults($path)>")
 		actual = fileDefaultsNoMaxSizeRe.ReplaceAllString(actual, "<fileDefaultsNoMaxSize($path)>")
 		actual = strings.ReplaceAll(actual, fileDefaultsNoDir, "<fileDefaultsNoDir>")
