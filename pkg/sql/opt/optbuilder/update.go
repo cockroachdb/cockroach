@@ -345,8 +345,8 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 
 	mb.addCheckConstraintCols()
 
-	// Add partial index put boolean columns to the input.
-	mb.projectPartialIndexPutCols(preCheckScope)
+	// Project partial index PUT and DEL boolean columns.
+	mb.projectPartialIndexPutAndDelCols(preCheckScope, mb.fetchScope)
 
 	mb.buildFKChecksForUpdate()
 

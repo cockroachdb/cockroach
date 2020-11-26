@@ -762,3 +762,92 @@ root
                                └── filters
                                     ├── c_new:50 = child_multi.c:52
                                     └── q_new:51 = child_multi.q:54
+
+# Test a cascade to a child with a partial index.
+exec-ddl
+CREATE TABLE parent_partial (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_partial (
+  c INT PRIMARY KEY,
+  p INT DEFAULT 0 NOT NULL REFERENCES parent_partial(p) ON UPDATE SET DEFAULT,
+  i INT,
+  INDEX (p) WHERE i > 0,
+  INDEX (i) WHERE p > 0
+)
+----
+
+build-cascades
+UPDATE parent_partial SET p = p * 10 WHERE p > 1
+----
+root
+ ├── update parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── update-mapping:
+ │    │    └── p_new:5 => p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent_partial
+ │    └── project
+ │         ├── columns: p_new:5!null p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── select
+ │         │    ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    ├── scan parent_partial
+ │         │    │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    └── filters
+ │         │         └── p:3 > 1
+ │         └── projections
+ │              └── p:3 * 10 [as=p_new:5]
+ └── cascade
+      └── update child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:10 child_partial.p:11 i:12
+           ├── update-mapping:
+           │    └── p_new:16 => child_partial.p:7
+           ├── partial index put columns: partial_index_put1:17 partial_index_put2:18
+           ├── partial index del columns: partial_index_put1:17 partial_index_del2:19
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: partial_index_put1:17 partial_index_put2:18!null partial_index_del2:19!null c:10!null child_partial.p:11!null i:12 p:14!null p_new:15!null p_new:16!null
+           │    ├── project
+           │    │    ├── columns: p_new:16!null c:10!null child_partial.p:11!null i:12 p:14!null p_new:15!null
+           │    │    ├── inner-join (hash)
+           │    │    │    ├── columns: c:10!null child_partial.p:11!null i:12 p:14!null p_new:15!null
+           │    │    │    ├── scan child_partial
+           │    │    │    │    ├── columns: c:10!null child_partial.p:11!null i:12
+           │    │    │    │    └── partial index predicates
+           │    │    │    │         ├── secondary: filters
+           │    │    │    │         │    └── i:12 > 0
+           │    │    │    │         └── secondary: filters
+           │    │    │    │              └── child_partial.p:11 > 0
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    ├── with-scan &1
+           │    │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    │    └── mapping:
+           │    │    │    │    │         ├──  parent_partial.p:3 => p:14
+           │    │    │    │    │         └──  p_new:5 => p_new:15
+           │    │    │    │    └── filters
+           │    │    │    │         └── p:14 IS DISTINCT FROM p_new:15
+           │    │    │    └── filters
+           │    │    │         └── child_partial.p:11 = p:14
+           │    │    └── projections
+           │    │         └── 0 [as=p_new:16]
+           │    └── projections
+           │         ├── i:12 > 0 [as=partial_index_put1:17]
+           │         ├── p_new:16 > 0 [as=partial_index_put2:18]
+           │         └── child_partial.p:11 > 0 [as=partial_index_del2:19]
+           └── f-k-checks
+                └── f-k-checks-item: child_partial(p) -> parent_partial(p)
+                     └── anti-join (hash)
+                          ├── columns: p_new:20!null
+                          ├── with-scan &2
+                          │    ├── columns: p_new:20!null
+                          │    └── mapping:
+                          │         └──  p_new:16 => p_new:20
+                          ├── scan parent_partial
+                          │    └── columns: parent_partial.p:21!null
+                          └── filters
+                               └── p_new:20 = parent_partial.p:21
