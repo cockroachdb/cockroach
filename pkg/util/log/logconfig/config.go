@@ -30,6 +30,10 @@ const DefaultFileFormat = `crdb-v1`
 // when not specified in a configuration.
 const DefaultStderrFormat = `crdb-v1-tty`
 
+// DefaultFluentFormat is the entry format for fluent sinks
+// when not specified in a configuration.
+const DefaultFluentFormat = `json-fluent-compact`
+
 // DefaultConfig returns a suitable default configuration when logging
 // is meant to primarily go to files.
 func DefaultConfig() (c Config) {
@@ -43,6 +47,11 @@ file-defaults:
     max-file-size: 10mib
     max-group-size: 100mib
     exit-on-error: true
+fluent-defaults:
+    filter: INFO
+    format: ` + DefaultFluentFormat + `
+    redactable: true
+    exit-on-error: false
 sinks:
   stderr:
     filter: NONE
@@ -86,6 +95,11 @@ type Config struct {
 	// configuration value.
 	FileDefaults FileDefaults `yaml:"file-defaults,omitempty"`
 
+	// FluentDefaults represents the default configuration for fluent sinks,
+	// inherited when a specific fluent sink config does not provide a
+	// configuration value.
+	FluentDefaults FluentDefaults `yaml:"fluent-defaults,omitempty"`
+
 	// Sinks represents the sink configurations.
 	Sinks SinkConfig `yaml:",omitempty"`
 
@@ -115,12 +129,15 @@ type CaptureFd2Config struct {
 type SinkConfig struct {
 	// FileGroups represents the list of configured file sinks.
 	FileGroups map[string]*FileConfig `yaml:"file-groups,omitempty"`
+	// FluentServer represents the list of configured fluent sinks.
+	FluentServers map[string]*FluentConfig `yaml:"fluent-servers,omitempty"`
 	// Stderr represents the configuration for the stderr sink.
 	Stderr StderrConfig `yaml:",omitempty"`
 
-	// sortedFileGroupNames is used internally to
+	// sortedFileGroupNames and sortedServerNames are used internally to
 	// make the Export() function deterministic.
 	sortedFileGroupNames []string
+	sortedServerNames    []string
 }
 
 // StderrConfig represents the configuration for the stderr sink.
@@ -166,6 +183,26 @@ type CommonSinkConfig struct {
 	Auditable *bool `yaml:",omitempty"`
 }
 
+// FluentConfig represents the configuration for one fluentd sink.
+type FluentConfig struct {
+	// Channels is the list of logging channels that use this sink.
+	Channels ChannelList `yaml:",omitempty"`
+
+	// Net is the protocol for the fluent server. Can be "tcp", "udp",
+	// "tcp4", etc.
+	Net string `yaml:",omitempty"`
+	// Address is the network address of the fluent server. The
+	// host/address and port parts are separated with a colon. IPv6
+	// numeric addresses should be included within square brackets,
+	// e.g.: [::1]:1234.
+	Address string
+
+	CommonSinkConfig `yaml:",inline"`
+
+	// used during validation.
+	serverName string
+}
+
 // FileDefaults represent configuration defaults for file sinks.
 type FileDefaults struct {
 	// Dir stores the default output directory for file sinks.
@@ -187,6 +224,11 @@ type FileDefaults struct {
 	// sinks, which implies synchronization on every log write.
 	SyncWrites bool `yaml:"sync-writes,omitempty"`
 
+	CommonSinkConfig `yaml:",inline"`
+}
+
+// FluentDefaults represent configuration defaults for fluent sinks.
+type FluentDefaults struct {
 	CommonSinkConfig `yaml:",inline"`
 }
 
