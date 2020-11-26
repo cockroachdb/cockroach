@@ -68,7 +68,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	// suitable storage.
 	serverCfg.Stores.Specs = nil
 
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd)
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err
 	}

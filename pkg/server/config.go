@@ -130,6 +130,9 @@ type BaseConfig struct {
 	// heapprofiler. If empty, no heap profiles will be collected.
 	HeapProfileDirName string
 
+	// CPUProfileDirName is the directory name for CPU profile dumps.
+	CPUProfileDirName string
+
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
 	// server testing knob.
@@ -318,9 +321,6 @@ type SQLConfig struct {
 	// MemoryPoolSize is the amount of memory in bytes that can be
 	// used by SQL clients to store row data in server RAM.
 	MemoryPoolSize int64
-
-	// AuditLogDirName is the target directory name for SQL audit logs.
-	AuditLogDirName *log.DirName
 
 	// TableStatCacheSize is the size (number of tables) of the table
 	// statistics cache.

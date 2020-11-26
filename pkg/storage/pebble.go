@@ -395,36 +395,17 @@ func DefaultPebbleOptions() *pebble.Options {
 	return opts
 }
 
-var pebbleLog *log.SecondaryLogger
-
-// InitPebbleLogger initializes the logger to use for Pebble log messages. If
-// not called, WARNING, ERROR, and FATAL logs will be output to the normal
-// CockroachDB log. The caller is responsible for ensuring the
-// Close() method is eventually called on the new logger.
-func InitPebbleLogger(ctx context.Context) *log.SecondaryLogger {
-	pebbleLog = log.NewSecondaryLogger(ctx, nil, "pebble",
-		true /* enableGC */, false /* forceSyncWrites */, false /* enableMsgCount */)
-	return pebbleLog
-}
-
 type pebbleLogger struct {
 	ctx   context.Context
 	depth int
 }
 
 func (l pebbleLogger) Infof(format string, args ...interface{}) {
-	if pebbleLog != nil {
-		pebbleLog.LogfDepth(l.ctx, l.depth, format, args...)
-		return
-	}
-	// Only log INFO logs to the normal CockroachDB log at --v=3 and above.
-	if log.V(3) {
-		log.InfofDepth(l.ctx, l.depth, format, args...)
-	}
+	log.Storage.InfofDepth(l.ctx, l.depth, format, args...)
 }
 
 func (l pebbleLogger) Fatalf(format string, args ...interface{}) {
-	log.FatalfDepth(l.ctx, l.depth, format, args...)
+	log.Storage.FatalfDepth(l.ctx, l.depth, format, args...)
 }
 
 // PebbleConfig holds all configuration parameters and knobs used in setting up
@@ -551,6 +532,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// The context dance here is done so that we have a clean context without
 	// timeouts that has a copy of the log tags.
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	logCtx = logtags.AddTag(logCtx, "pebble", nil)
 	cfg.Opts.Logger = pebbleLogger{
 		ctx:   logCtx,
 		depth: 1,

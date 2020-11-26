@@ -494,7 +494,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// This registers the connection to the authentication log.
 	connStart := timeutil.Now()
 	if s.connLogEnabled() {
-		s.execCfg.AuthLogger.Logf(ctx, "received connection")
+		log.Sessions.Infof(ctx, "received connection")
 	}
 	defer func() {
 		// The duration of the session is logged at the end so that the
@@ -502,7 +502,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		// to find when the connection was opened. This is important
 		// because the log files may have been rotated since.
 		if s.connLogEnabled() {
-			s.execCfg.AuthLogger.Logf(ctx, "disconnected; duration: %s", timeutil.Now().Sub(connStart))
+			log.Sessions.Infof(ctx, "disconnected; duration: %s", timeutil.Now().Sub(connStart))
 		}
 	}()
 
