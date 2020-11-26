@@ -6,19 +6,19 @@ import "github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 
 
 // LoggingChannel implements the EventPayload interface.
-func (m *NodeDecommissioned) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *NodeDecommissioned) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *NodeDecommissioning) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *NodeDecommissioning) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *NodeJoin) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *NodeJoin) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *NodeRecommissioned) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *NodeRecommissioned) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *NodeRestart) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *NodeRestart) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SetClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }

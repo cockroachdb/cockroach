@@ -205,7 +205,7 @@ func SetClusterID(clusterID string) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	logfDepth(ctx, 1, severity.INFO, channel.DEV, "clusterID: %s", clusterID) // TODO(knz): Use OPS here.
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, "clusterID: %s", clusterID)
 
 	// Perform the change proper.
 	logging.mu.Lock()

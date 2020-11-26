@@ -5,6 +5,8 @@ yaml
 left to right direction
 component sources {
 () DEV
+() OPS
+() HEALTH
 () STORAGE
 () SESSIONS
 () SENSITIVE_ACCESS
@@ -22,6 +24,8 @@ artifact files {
  }
 }
 DEV --> p__1
+OPS --> p__1
+HEALTH --> p__1
 STORAGE --> p__1
 SESSIONS --> p__1
 SENSITIVE_ACCESS --> p__1
@@ -31,7 +35,7 @@ SQL_INTERNAL_PERF --> p__1
 p__1 --> f1
 stray --> stderrfile
 @enduml
-# http://www.plantuml.com/plantuml/uml/L99FIyD04CNl-oc6dFGGfLSFqjAk4f1Kcr8y267TFsrmcwcp4q6atrsoczBab3VlFRApFtOUM15tHo-yTGoCGCt-m60QifeRR8N6umbRsp84x4ZR07_YvXPMSjT_gkrwitYMKSggAjPbbNHP5TjY9-l5SYchvBszrF9TBY_wLMwUBheejt9JBWPJU-mC12Rr2of05jL7QucGGYREuhkpdON0nX89hSZ0gQvdiUkGZeeVD9dF_6UM2KNSEAKPNEFZxk3G6qkGtHlhLESvDmrbVH0huD9_DEelGgKFTnxtsILCHqOvAUKf6BfdSHOhkOCyVuoBYO7Io1XOZPqfiL4oS9iwFQYfCs5uZIAPVd8paP3sm_KYOcvRqp-0_m000F__
+# http://www.plantuml.com/plantuml/uml/L9BBQkCm58RtUeg3LpCBpv1j5oKcKHj3iDF8X2uAHjKbCLMiz4Wkb99tBv8S7A_qtx2j3o-Tv-Y7io56QG_U0dR7amVPeHA-ipqHzdonlUezE3kWK0v-o9-_iAQ7SDGx5euDBRRD9YZMrFlYcKP96IlhYYLTiR8f3xGjLYlAKlQoRUahNTtqZkwVRhgi6hglYZ4KnWuId4V-3Tn15jLRhn0jkenSoUUW1WNEIuL814S9bxPTnAssUER-GQ1ypxyM6U7eEys51zsPU1dGraY5aFsNIlF1-5nsc8KYJa2dvmWhFj1oSVfdx36xbUcLKSv6UIh6xPLSoPeU8CyVuuUHUiSca-1DVaHu5umWxvCvphjcX3fF0iLvCWCyLH5RS7f14kzWfbkIfUfb-5r-0m00__y0
 
 # Capture everything to one file with sync and warnings only to stderr.
 yaml only-channels=DEV,SESSIONS
