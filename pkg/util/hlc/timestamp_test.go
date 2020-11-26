@@ -103,13 +103,15 @@ func TestIsEmpty(t *testing.T) {
 	assert.False(t, a.IsEmpty())
 }
 
-func TestSetFlag(t *testing.T) {
+func TestSetAndClearFlag(t *testing.T) {
 	a := Timestamp{}
 	assert.False(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
 	a = a.SetFlag(TimestampFlag_UNKNOWN)
 	assert.False(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
 	a = a.SetFlag(TimestampFlag_SYNTHETIC)
 	assert.True(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
+	a = a.ClearFlag(TimestampFlag_SYNTHETIC)
+	assert.False(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
 }
 
 func TestTimestampNext(t *testing.T) {
@@ -161,6 +163,74 @@ func TestTimestampFloorPrev(t *testing.T) {
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expPrev, c.ts.FloorPrev())
+	}
+}
+
+func TestTimestampForward(t *testing.T) {
+	flagSyn := TimestampFlag_SYNTHETIC
+	testCases := []struct {
+		ts, arg   Timestamp
+		expFwd    Timestamp
+		expFwdRes bool
+	}{
+		{makeTS(2, 0), makeTS(1, 0), makeTS(2, 0), false},
+		{makeTS(2, 0), makeTS(1, 1), makeTS(2, 0), false},
+		{makeTS(2, 0), makeTS(2, 0), makeTS(2, 0), false},
+		{makeTS(2, 0), makeTS(2, 1), makeTS(2, 1), true},
+		{makeTS(2, 0), makeTS(3, 0), makeTS(3, 0), true},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(1, 0), makeTSWithFlags(2, 0, flagSyn), false},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(1, 1), makeTSWithFlags(2, 0, flagSyn), false},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(2, 0), makeTS(2, 0), false},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(2, 1), makeTS(2, 1), true},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(3, 0), makeTS(3, 0), true},
+		{makeTS(2, 0), makeTSWithFlags(1, 0, flagSyn), makeTS(2, 0), false},
+		{makeTS(2, 0), makeTSWithFlags(1, 1, flagSyn), makeTS(2, 0), false},
+		{makeTS(2, 0), makeTSWithFlags(2, 0, flagSyn), makeTS(2, 0), false},
+		{makeTS(2, 0), makeTSWithFlags(2, 1, flagSyn), makeTSWithFlags(2, 1, flagSyn), true},
+		{makeTS(2, 0), makeTSWithFlags(3, 0, flagSyn), makeTSWithFlags(3, 0, flagSyn), true},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(1, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn), false},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(1, 1, flagSyn), makeTSWithFlags(2, 0, flagSyn), false},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn), false},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 1, flagSyn), makeTSWithFlags(2, 1, flagSyn), true},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(3, 0, flagSyn), makeTSWithFlags(3, 0, flagSyn), true},
+	}
+	for _, c := range testCases {
+		ts := c.ts
+		assert.Equal(t, c.expFwdRes, ts.Forward(c.arg))
+		assert.Equal(t, c.expFwd, ts)
+	}
+}
+
+func TestTimestampBackward(t *testing.T) {
+	flagSyn := TimestampFlag_SYNTHETIC
+	testCases := []struct {
+		ts, arg, expBwd Timestamp
+	}{
+		{makeTS(2, 0), makeTS(1, 0), makeTS(1, 0)},
+		{makeTS(2, 0), makeTS(1, 1), makeTS(1, 1)},
+		{makeTS(2, 0), makeTS(2, 0), makeTS(2, 0)},
+		{makeTS(2, 0), makeTS(2, 1), makeTS(2, 0)},
+		{makeTS(2, 0), makeTS(3, 0), makeTS(2, 0)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(1, 0), makeTS(1, 0)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(1, 1), makeTS(1, 1)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(2, 0), makeTS(2, 0)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(2, 1), makeTS(2, 0)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTS(3, 0), makeTS(2, 0)},
+		{makeTS(2, 0), makeTSWithFlags(1, 0, flagSyn), makeTS(1, 0)},
+		{makeTS(2, 0), makeTSWithFlags(1, 1, flagSyn), makeTS(1, 1)},
+		{makeTS(2, 0), makeTSWithFlags(2, 0, flagSyn), makeTS(2, 0)},
+		{makeTS(2, 0), makeTSWithFlags(2, 1, flagSyn), makeTS(2, 0)},
+		{makeTS(2, 0), makeTSWithFlags(3, 0, flagSyn), makeTS(2, 0)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(1, 0, flagSyn), makeTSWithFlags(1, 0, flagSyn)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(1, 1, flagSyn), makeTSWithFlags(1, 1, flagSyn)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 1, flagSyn), makeTSWithFlags(2, 0, flagSyn)},
+		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(3, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn)},
+	}
+	for _, c := range testCases {
+		ts := c.ts
+		ts.Backward(c.arg)
+		assert.Equal(t, c.expBwd, ts)
 	}
 }
 

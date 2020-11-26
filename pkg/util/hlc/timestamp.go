@@ -229,6 +229,12 @@ func (t Timestamp) SetFlag(f TimestampFlag) Timestamp {
 	return t
 }
 
+// ClearFlag returns a timestamp with the specified flag cleared.
+func (t Timestamp) ClearFlag(f TimestampFlag) Timestamp {
+	t.Flags = t.Flags &^ uint32(f)
+	return t
+}
+
 // Clone return a new timestamp that has the same contents as the receiver.
 func (t Timestamp) Clone() *Timestamp {
 	return &t
@@ -291,13 +297,16 @@ func (t Timestamp) FloorPrev() Timestamp {
 }
 
 // Forward replaces the receiver with the argument, if that moves it forwards in
-// time. Returns true if the timestamp was adjusted and false otherwise.
+// time. Returns true if the timestamp was adjusted to a larger time and false
+// otherwise.
 func (t *Timestamp) Forward(s Timestamp) bool {
-	// TODO(nvanbenschoten): if the timestamps equal and either is
-	// non-synthetic, we can remove the synthetic bit.
 	if t.Less(s) {
 		*t = s
 		return true
+	} else if t.EqOrdering(s) && onlyLeftSynthetic(*t, s) {
+		// If the times are equal but t is synthetic while s is not, remove the
+		// synthtic flag but continue to return false.
+		*t = t.ClearFlag(TimestampFlag_SYNTHETIC)
 	}
 	return false
 }
@@ -305,11 +314,20 @@ func (t *Timestamp) Forward(s Timestamp) bool {
 // Backward replaces the receiver with the argument, if that moves it backwards
 // in time.
 func (t *Timestamp) Backward(s Timestamp) {
-	// TODO(nvanbenschoten): remove the synthetic bit from the older
-	// value if the younger one is non-synthetic.
 	if s.Less(*t) {
+		// Replace t with s. If s is synthetic while t is not, remove the
+		// synthtic flag.
+		if onlyLeftSynthetic(s, *t) {
+			s = s.ClearFlag(TimestampFlag_SYNTHETIC)
+		}
 		*t = s
+	} else if onlyLeftSynthetic(*t, s) {
+		*t = t.ClearFlag(TimestampFlag_SYNTHETIC)
 	}
+}
+
+func onlyLeftSynthetic(l, r Timestamp) bool {
+	return l.IsFlagSet(TimestampFlag_SYNTHETIC) && !r.IsFlagSet(TimestampFlag_SYNTHETIC)
 }
 
 // GoTime converts the timestamp to a time.Time.
