@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -110,6 +111,7 @@ func TestFormatLocation(t *testing.T) {
 type logger struct {
 	TB       testing.TB
 	Severity log.Severity
+	Channel  log.Channel
 	Err      error
 }
 
@@ -118,6 +120,7 @@ func (l *logger) Log(_ context.Context, sev log.Severity, msg string, args ...in
 	err, ok := args[0].(error)
 	require.True(l.TB, ok, "expected to log an error")
 	l.Severity = sev
+	l.Channel = channel.SESSIONS
 	l.Err = err
 }
 
@@ -179,6 +182,7 @@ func TestErrorReporting(t *testing.T) {
 			checked := checkAndMaybeShoutTo(tt.err, got.Log)
 			assert.Equal(t, tt.err, checked, "should return error unchanged")
 			assert.Equal(t, tt.wantSeverity, got.Severity, "wrong severity log")
+			assert.Equal(t, channel.SESSIONS, got.Channel, "wrong channel")
 			gotCLI := errors.HasType(got.Err, (*cliError)(nil))
 			if tt.wantCLICause {
 				assert.True(t, gotCLI, "logged cause should be *cliError, got %T", got.Err)

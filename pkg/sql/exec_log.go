@@ -140,6 +140,9 @@ func (p *planner) maybeLogStatement(
 	p.maybeLogStatementInternal(ctx, execType, numRetries, rows, err, queryReceived)
 }
 
+var sqlPerfLogger log.ChannelLogger = log.SqlPerf
+var sqlPerfInternalLogger log.ChannelLogger = log.SqlInternalPerf
+
 func (p *planner) maybeLogStatementInternal(
 	ctx context.Context, execType executorType, numRetries, rows int, err error, startTime time.Time,
 ) {
@@ -203,36 +206,34 @@ func (p *planner) maybeLogStatementInternal(
 
 	// Now log!
 	if auditEventsDetected {
-		logger := p.execCfg.AuditLogger
-		logger.Logf(ctx, "%s %q %s %q %s %.3f %d %s %d",
+		log.SensitiveAccess.Infof(ctx, "%s %q %s %q %s %.3f %d %s %d",
 			lbl, appName, logTrigger, stmtStr, plStr, age, rows, auditErrStr, numRetries)
 	}
 	if slowQueryLogEnabled && (queryDuration > slowLogThreshold || slowLogFullTableScans) {
 		logReason, shouldLog := p.slowQueryLogReason(queryDuration, slowLogThreshold)
 
-		var logger *log.SecondaryLogger
+		var logger log.ChannelLogger
 		// Non-internal queries are always logged to the slow query log.
 		if execType == executorTypeExec {
-			logger = p.execCfg.SlowQueryLogger
+			logger = sqlPerfLogger
 		}
 		// Internal queries that surpass the slow query log threshold should only
 		// be logged to the slow-internal-only log if the cluster setting dictates.
 		if execType == executorTypeInternal && slowInternalQueryLogEnabled {
-			logger = p.execCfg.SlowInternalQueryLogger
+			logger = sqlPerfInternalLogger
 		}
 
 		if logger != nil && shouldLog {
-			logger.Logf(ctx, "%.3fms %s %q %s %q %s %d %q %d %s",
+			logger.Infof(ctx, "%.3fms %s %q %s %q %s %d %q %d %s",
 				age, lbl, appName, logTrigger, stmtStr, plStr, rows, execErrStr, numRetries, logReason)
 		}
 	}
 	if logExecuteEnabled {
-		logger := p.execCfg.ExecLogger
-		logger.Logf(ctx, "%s %q %s %q %s %.3f %d %q %d",
+		log.SqlExec.Infof(ctx, "%s %q %s %q %s %.3f %d %q %d",
 			lbl, appName, logTrigger, stmtStr, plStr, age, rows, execErrStr, numRetries)
 	}
 	if logV {
-		// Copy to the main log.
+		// Copy to the debug log.
 		log.VEventf(ctx, execType.vLevel(), "%s %q %s %q %s %.3f %d %q %d",
 			lbl, appName, logTrigger, stmtStr, plStr, age, rows, execErrStr, numRetries)
 	}

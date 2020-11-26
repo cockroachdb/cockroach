@@ -42,6 +42,10 @@ const (
 	// stores dump when one of the dump heuristics is triggered.
 	GoroutineDumpDir = "goroutine_dump"
 
+	// CPUProfileDir is the directory name where the CPU profile dumper
+	// stores profiles when the periodic CPU profile dump is enabled.
+	CPUProfileDir = "pprof_dump"
+
 	// MinRangeMaxBytes is the minimum value for range max bytes.
 	MinRangeMaxBytes = 64 << 10 // 64 KB
 )

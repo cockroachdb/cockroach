@@ -66,41 +66,12 @@ enum Channel {
   // sensitive operational data.
   DEV = 0;
 
-  // FD2_CAPTURE is the channel used internally by the logging
-  // package to capture direct writes to file descriptor 2 inside
-  // the process, such as those performed by the Go runtime.
-  //
-  // It exists so that these writes are guaranteed to go to
-  // the configured logging output files, and so that the stderr
-  // data becomes visible to the log file navigation API.
-  FD2_CAPTURE = 1;
-
-  // OPS is the channel used to report "point" operational events,
-  // initiated by user operators or automation:
-  //
-  // - operator or system actions on server processes: process starts,
-  //   stops, shutdowns, crashes (if they can be logged),
-  //   including each time: command-line parameters, current version being run.
-  // - actions that impact the topology of a cluster: node additions,
-  //   removals, decommissions, etc.
-  // - job-related initiation or termination.
-  // - cluster setting changes.
-  // - zone configuration changes.
-  OPS = 2;
-
-  // HEALTH is the channel used to report "background" operational
-  // events, initiated by CockroachDB or reporting on automatic processes:
-  //
-  // - current resource usage, including critical resource usage.
-  // - node-node connection events, including connection errors and
-  //   gossip details.
-  // - range and table leasing events.
-  // - up-, down-replication; range unavailability.
-  HEALTH = 3;
+  // TODO(knz): Add the OPS and HEALTH channels.
+  reserved 1,2;
 
   // STORAGE is the channel used to report low-level storage
   // layer events (RocksDB/Pebble).
-  STORAGE = 4;
+  STORAGE = 3;
 
   // SESSIONS is the channel used to report client network activity:
   //
@@ -110,29 +81,10 @@ enum Channel {
   //
   // This is typically configured in "audit" mode, with event
   // numbering and synchronous writes.
-  SESSIONS = 5;
+  SESSIONS = 4;
 
-  // USER_ADMIN is the channel used to report changes
-  // in users and roles, including:
-  //
-  // - users added/dropped.
-  // - changes to authentication credentials, incl passwords, validity etc.
-  // - role grants/revocations.
-  // - role option grants/revocations.
-  //
-  // This is typically configured in "audit" mode, with event
-  // numbering and synchronous writes.
-  USER_ADMIN = 6;
-
-  // PRIVILEGES is the channel used to report data
-  // authorization changes, including:
-  //
-  // - privilege grants/revocations on database, objects etc.
-  // - object ownership changes.
-  //
-  // This is typically configured in "audit" mode, with event
-  // numbering and synchronous writes.
-  PRIVILEGES = 7;
+  // TODO(knz): Add the USER_ADMIN and PRIVILEGES channels.
+  reserved 5,6;
 
   // SENSITIVE_ACCESS is the channel used to report SQL
   // data access to sensitive data (when enabled):
@@ -143,14 +95,14 @@ enum Channel {
   //
   // This is typically configured in "audit" mode, with event
   // numbering and synchronous writes.
-  SENSITIVE_ACCESS = 8;
+  SENSITIVE_ACCESS = 7;
 
   // SQL_EXEC is the channel used to report SQL execution on
   // behalf of client connections:
   //
   // - logical SQL statement executions (if enabled)
   // - pgwire events (if enabled)
-  SQL_EXEC = 9;
+  SQL_EXEC = 8;
 
   // SQL_PERF is the channel used to report SQL executions
   // that are marked to be highlighted as "out of the ordinary"
@@ -161,30 +113,38 @@ enum Channel {
   // However, we keep them separate for backward-compatibility
   // with previous versions, where the corresponding events
   // were redirected to separate files.
-  SQL_PERF = 10;
+  SQL_PERF = 9;
 
   // SQL_INTERNAL_PERF is like the SQL perf channel above but aimed at
   // helping developers of CockroachDB itself. It exists as a separate
   // channel so as to not pollute the SQL perf logging output with
   // internal troubleshooting details.
-  SQL_INTERNAL_PERF = 11;
+  SQL_INTERNAL_PERF = 10;
 }
 
 // Entry represents a cockroach structured log entry.
 message Entry {
+  // Severity is the importance of the log entry. See the
+  // documentation for the Severity enum for more details.
   Severity severity = 1;
   // Nanoseconds since the epoch.
   int64 time = 2;
+  // Goroutine ID. This helps match logging events with goroutine
+  // stack dumps.
   int64 goroutine = 6;
+  // File name where the logging event was produced. Logging client
+  // code can adjust this with the "depth" parameter.
   string file = 3;
+  // Line number in the file where the logging event was produced.
   int64 line = 4;
+  // Message contains the main text of the logging message.
   string message = 5;
 
-  // tags contains the context tags available in the context where the
+  // Tags contains the context tags available in the context where the
   // entry was created.
   string tags = 7;
 
-  // counter is an entry counter, meant for use in audit logs as an
+  // Counter is an entry counter, meant for use in audit logs as an
   // instrument against log repudiation.
   // See: https://en.wikipedia.org/wiki/Non-repudiation
   //
@@ -192,7 +152,7 @@ message Entry {
   // produced.
   uint64 counter = 8;
 
-  // redactable is true if the message and tags fields include markers
+  // Redactable is true iff the message and tags fields include markers
   // to delineate sensitive information. In that case, confidentiality
   // can be obtained by only stripping away the data within this
   // marker. If redactable is false or unknown, the message should be
@@ -200,7 +160,7 @@ message Entry {
   // stripped away completely for confidentiality.
   bool redactable = 9;
 
-  // channel is the channel on which the message was sent.
+  // Channel is the channel on which the message was sent.
   Channel channel = 10;
 }
 

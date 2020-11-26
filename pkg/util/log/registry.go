@@ -21,26 +21,6 @@ type loggerRegistry struct {
 
 var allLoggers = loggerRegistry{}
 
-// len returns the number of known loggers.
-func (r *loggerRegistry) len() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.mu.loggers)
-}
-
-// iterate iterates over all the loggers and stops at the first error
-// encountered.
-func (r *loggerRegistry) iter(fn func(l *loggerT) error) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, l := range r.mu.loggers {
-		if err := fn(l); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // put adds a logger into the registry.
 func (r *loggerRegistry) put(l *loggerT) {
 	r.mu.Lock()
@@ -64,21 +44,21 @@ func (r *loggerRegistry) del(l *loggerT) {
 	}
 }
 
-type fileSinkRegistry struct {
+type sinkInfoRegistry struct {
 	mu struct {
 		syncutil.Mutex
-		sinks []*fileSink
+		sinkInfos []*sinkInfo
 	}
 }
 
-var allFileSinks = fileSinkRegistry{}
+var allSinkInfos = sinkInfoRegistry{}
 
-// iterate iterates over all the file sinks and stops at the first
-// error encountered.
-func (r *fileSinkRegistry) iter(fn func(l *fileSink) error) error {
+// iter iterates over all the sinks infos and stops at the first error
+// encountered.
+func (r *sinkInfoRegistry) iter(fn func(l *sinkInfo) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, l := range r.mu.sinks {
+	for _, l := range r.mu.sinkInfos {
 		if err := fn(l); err != nil {
 			return err
 		}
@@ -86,25 +66,35 @@ func (r *fileSinkRegistry) iter(fn func(l *fileSink) error) error {
 	return nil
 }
 
-// put adds a logger into the registry.
-func (r *fileSinkRegistry) put(l *fileSink) {
+// iterate iterates over all the file sinks and stops at the first
+// error encountered.
+func (r *sinkInfoRegistry) iterFileSinks(fn func(l *fileSink) error) error {
+	return r.iter(func(si *sinkInfo) error {
+		if fs, ok := si.sink.(*fileSink); ok {
+			if err := fn(fs); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// put adds a sinkInfo into the registry.
+func (r *sinkInfoRegistry) put(l *sinkInfo) {
 	r.mu.Lock()
-	r.mu.sinks = append(r.mu.sinks, l)
+	r.mu.sinkInfos = append(r.mu.sinkInfos, l)
 	r.mu.Unlock()
 }
 
-// del removes one logger from the registry.
-func (r *fileSinkRegistry) del(l *fileSink) {
-	// Make the registry forget about this logger. This avoids
-	// stacking many secondary loggers together when there are
-	// subsequent tests starting servers in the same package.
+// del removes one sinkInfo from the registry.
+func (r *sinkInfoRegistry) del(l *sinkInfo) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for i, thatSink := range r.mu.sinks {
+	for i, thatSink := range r.mu.sinkInfos {
 		if thatSink != l {
 			continue
 		}
-		r.mu.sinks = append(r.mu.sinks[:i], r.mu.sinks[i+1:]...)
+		r.mu.sinkInfos = append(r.mu.sinkInfos[:i], r.mu.sinkInfos[i+1:]...)
 		return
 	}
 }

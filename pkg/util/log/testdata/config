@@ -1,0 +1,69 @@
+# Test the default config with no changes.
+yaml
+----
+sinks:
+  file-groups:
+    default:
+      channels: all
+      dir: TMPDIR
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: false
+      filter: INFO
+      format: crdb-v1
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: all
+    filter: NONE
+    format: crdb-v1-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: TMPDIR
+  max-group-size: 100MiB
+
+
+
+# Test the default config with a catch-all auditable file.
+yaml
+sinks:
+ file-groups: {all: {auditable: true, channels: ALL}}
+----
+sinks:
+  file-groups:
+    all:
+      channels: all
+      dir: TMPDIR
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: true
+      filter: INFO
+      format: crdb-v1-count
+      redact: false
+      redactable: true
+      exit-on-error: true
+    default:
+      dir: TMPDIR
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: false
+      filter: INFO
+      format: crdb-v1
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: all
+    filter: NONE
+    format: crdb-v1-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: TMPDIR
+  max-group-size: 100MiB

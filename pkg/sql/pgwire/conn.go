@@ -220,13 +220,11 @@ func (c *conn) serveImpl(
 	}
 
 	inTestWithoutSQL := sqlServer == nil
-	var authLogger *log.SecondaryLogger
 	if !inTestWithoutSQL {
-		authLogger = sqlServer.GetExecutorConfig().AuthLogger
 		sessionStart := timeutil.Now()
 		defer func() {
 			if c.authLogEnabled() {
-				authLogger.Logf(ctx, "session terminated; duration: %s", timeutil.Now().Sub(sessionStart))
+				log.Sessions.Infof(ctx, "session terminated; duration: %s", timeutil.Now().Sub(sessionStart))
 			}
 		}()
 	}
@@ -259,13 +257,10 @@ func (c *conn) serveImpl(
 
 	// the authPipe below logs authentication messages iff its auth
 	// logger is non-nil. We define this here.
-	var sessionAuthLogger *log.SecondaryLogger
-	if !inTestWithoutSQL && c.authLogEnabled() {
-		sessionAuthLogger = authLogger
-	}
+	logAuthn := !inTestWithoutSQL && c.authLogEnabled()
 
 	// We'll build an authPipe to communicate with the authentication process.
-	authPipe := newAuthPipe(c, sessionAuthLogger)
+	authPipe := newAuthPipe(c, logAuthn)
 	var authenticator authenticatorIO = authPipe
 
 	// procCh is the channel on which we'll receive the termination signal from

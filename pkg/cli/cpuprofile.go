@@ -65,6 +65,20 @@ func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 	if cpuProfileInterval <= 0 {
 		return
 	}
+
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		// This is possible when running with only in-memory stores;
+		// in that case the start-up code sets the output directory
+		// to the current directory (.). If running the process
+		// from a directory which is not writable, we won't
+		// be able to create a sub-directory here.
+		log.Warningf(ctx, "cannot create CPU profile dump dir -- CPU profiles will be disabled: %v", err)
+		return
+	}
+
 	if min := time.Second; cpuProfileInterval < min {
 		log.Infof(ctx, "fixing excessively short cpu profiling interval: %s -> %s",
 			cpuProfileInterval, min)

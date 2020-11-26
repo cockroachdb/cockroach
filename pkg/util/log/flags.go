@@ -12,10 +12,14 @@ package log
 
 import (
 	"context"
-	"flag"
+	"fmt"
+	"math"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -30,147 +34,44 @@ type config struct {
 	// synchronize to disk. This is set via SetSync() and used e.g. in
 	// start.go upon encountering errors.
 	syncWrites syncutil.AtomicBool
-
-	// the --log-dir flag. This is the directory used for file loggers when
-	// not overridden for a given logger.
-	logDir DirName
-
-	// Default value of logFileMaxSize for loggers.
-	logFileMaxSize int64
-
-	// Default value of logFilesCombinedMaxSize for loggers.
-	logFilesCombinedMaxSize int64
-
-	// Default value of fileThreshold for loggers.
-	fileThreshold Severity
-
-	// Default value of redactableLogs for loggers.
-	redactableLogs bool
-
-	// Whether redactable logs are requested.
-	//
-	// We use redactableLogsRequested instead of setting redactableLogs
-	// above directly when parsing command-line flags, to prevent the
-	// redactable flag from being set until
-	// SetupRedactionAndStderrRedirects() has been called.
-	//
-	// This ensures that we don't mistakenly start producing redaction
-	// markers until we have some confidence they won't be interleaved
-	// with arbitrary writes to the stderr file descriptor.
-	redactableLogsRequested bool
 }
 
 var debugLog *loggerT
 
-// debugLogFileSinkIndex is the index of the fileSink inside
-// debugLog.sinkInfos.
-var debugLogFileSinkIndex int
-
-// stderrLog is the logger where writes performed directly
-// to the stderr file descriptor (such as that performed
-// by the go runtime) *may* be redirected.
-// NB: whether they are actually redirected is determined
-// by stderrLog.redirectInternalStderrWrites().
-var stderrLog *loggerT
-
 func init() {
-	// Default stderrThreshold and fileThreshold to log everything
-	// both to the output file and to the process' external stderr
-	// (OrigStderr).
-	logging.fileThreshold = severity.INFO
-	// TODO(knz): make the stderr settings below configurable.
-	logging.stderrSinkInfo = sinkInfo{
-		sink:      &logging.stderrSink,
-		threshold: severity.INFO,
-		// stderr editor.
-		// We don't redact upfront, and we keep the redaction markers.
-		editor:    getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
-		formatter: formatCrdbV1TTY{},
-		// failure to write to stderr is critical for now. We may want
-		// to make this non-critical in the future, since it's common
-		// for folk to close the terminal where they launched 'cockroach
-		// start --background'.
-		// We keep this true for now for backward-compatibility.
-		criticality: true,
-	}
-
-	// Default maximum size of individual log files.
-	logging.logFileMaxSize = 10 << 20 // 10MiB
-	// Default combined size of a log file group.
-	logging.logFilesCombinedMaxSize = logging.logFileMaxSize * 10 // 100MiB
-
-	debugLog = &loggerT{}
-	debugFileSink := newFileSink(
-		"",    /* dir */
-		"",    /* fileNamePrefix */
-		false, /* forceSyncWrites */
-		logging.logFileMaxSize,
-		logging.logFilesCombinedMaxSize,
-		debugLog.getStartLines,
-	)
-	// TODO(knz): Make all this configurable.
-	// (As done in https://github.com/cockroachdb/cockroach/pull/51987.)
-	debugLog.sinkInfos = []*sinkInfo{
-		&logging.stderrSinkInfo,
-		{
-			sink:      debugFileSink,
-			threshold: logging.fileThreshold,
-			formatter: formatCrdbV1{},
-			// file editor.
-			// We don't redact upfront, and the "--redactable-logs" flag decides
-			// whether to keep the redaction markers in the output.
-			editor: getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */)),
-			// failure to write to file is definitely critical.
-			criticality: true,
-		},
-	}
-	debugLogFileSinkIndex = 1
-	allLoggers.put(debugLog)
-	allFileSinks.put(debugFileSink)
-
-	stderrLog = debugLog
-
 	logflags.InitFlags(
-		&logging.logDir,
 		&logging.showLogs,
-		&logging.stderrSink.noColor,
-		&logging.redactableLogsRequested,
 		&logging.vmoduleConfig.mu.vmodule,
-		&logging.logFileMaxSize,
-		&logging.logFilesCombinedMaxSize,
 	)
-	// We define these flags here because they have the type Severity
-	// which we can't pass to logflags without creating an import cycle.
-	flag.Var(&logging.stderrSinkInfo.threshold, logflags.LogToStderrName,
-		"logs at or above this threshold go to stderr")
-	flag.Var(&logging.fileThreshold, logflags.LogFileVerbosityThresholdName,
-		"minimum verbosity of messages written to the log file")
-}
+	// package is imported but not further initialized.
+	defaultConfig := logconfig.DefaultConfig()
 
-// initDebugLogFromDefaultConfig initializes debugLog from the defaults
-// in logging.config. This is called upon package initialization
-// so that tests have a default config to work with; and also
-// during SetupRedactionAndStderrRedirects() after the custom
-// logging configuration has been selected.
-func initDebugLogFromDefaultConfig() {
-	debugLogFileSinkInfo := debugLog.sinkInfos[debugLogFileSinkIndex]
-	// Re-configure the redaction editor. This may have changed
-	// after SetupRedactionAndStderrRedirects() reconfigures
-	// logging.redactableLogs.
-	//
-	// TODO(knz): Remove this initialization when
-	// https://github.com/cockroachdb/cockroach/pull/51987 introduces
-	// proper configurability.
-	debugLogFileSinkInfo.editor = getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */))
-	debugLogFileSinkInfo.threshold = logging.fileThreshold
-	fileSink := debugLogFileSinkInfo.sink.(*fileSink)
-	fileSink.mu.Lock()
-	defer fileSink.mu.Unlock()
-	fileSink.prefix = program
-	fileSink.mu.logDir = logging.logDir.String()
-	fileSink.enabled.Set(fileSink.mu.logDir != "")
-	fileSink.logFileMaxSize = logging.logFileMaxSize
-	fileSink.logFilesCombinedMaxSize = logging.logFilesCombinedMaxSize
+	if err := defaultConfig.Validate(nil /* no default directory */); err != nil {
+		panic(err)
+	}
+
+	// Default stderrThreshold to log everything to the process'
+	// external stderr (OrigStderr).
+	defaultConfig.Sinks.Stderr.Filter = severity.INFO
+	// We only register it for the DEV channels. No other
+	// channels get a configuration, whereby every channel
+	// ends up sharing the DEV logger (debugLog).
+	defaultConfig.Sinks.Stderr.Channels.Channels = []logpb.Channel{channel.DEV}
+	// We also don't capture internal writes to fd2 by default:
+	// let the writes go to the external stderr.
+	defaultConfig.CaptureFd2.Enable = false
+	// Since we are letting writes go to the external stderr,
+	// we cannot keep redaction markers there.
+	*defaultConfig.Sinks.Stderr.Redactable = false
+	// Remove all sinks other than stderr.
+	defaultConfig.Sinks.FileGroups = nil
+
+	if _, err := ApplyConfig(defaultConfig); err != nil {
+		panic(err)
+	}
+	// Reset the "active' flag so that the main commands can reset the
+	// configuration.
+	logging.mu.active = false
 }
 
 // IsActive returns true iff the main logger already has some events
@@ -185,88 +86,128 @@ func IsActive() (active bool, firstUse string) {
 	return logging.mu.active, logging.mu.firstUseStack
 }
 
-// SetupRedactionAndStderrRedirects should be called once after
-// command-line flags have been parsed, and before the first log entry
-// is emitted.
+// ApplyConfig applies the given configuration.
 //
-// The returned cleanup fn can be invoked by the caller to terminate
-// the secondary logger. This is only useful in tests: for a
-// long-running server process the cleanup function should likely not
-// be called, to ensure that the file used to capture direct stderr
-// writes remains open up until the process entirely terminates. This
-// ensures that any Go runtime assertion failures on the way to
-// termination can be properly captured.
-func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error) {
-	// The general goal of this function is to set up a secondary logger
-	// to capture internal Go writes to os.Stderr / fd 2 and redirect
-	// them to a separate (non-redactable) log file, This is, of course,
-	// only possible if there is a log directory to work with -- until
-	// we extend the log package to use e.g. network sinks.
-	//
-	// In case there is no log directory, we must be careful to not
-	// enable log redaction whatsoever.
-	//
-	// This is because otherwise, it is possible for some direct writer
-	// to fd 2, for example the Go runtime when processing an internal
-	// assertion error, to interleave its writes going to stderr
-	// together with a logger that wants to insert log redaction markers
-	// also on stderr. Because the log code cannot control this
-	// interleaving, it cannot guarantee that the direct fd 2 writes
-	// won't be positioned outside of log redaction markers and
-	// mistakenly considered as "safe for reporting".
-
+// The returned cleanup fn can be invoked by the caller to close
+// asynchronous processes.
+// NB: This is only useful in tests: for a long-running server process the
+// cleanup function should likely not be called, to ensure that the
+// file used to capture internal fd2 writes remains open up until the
+// process entirely terminates. This ensures that any Go runtime
+// assertion failures on the way to termination can be properly
+// captured.
+func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
 		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
 	}
 
-	// Regardless of what happens below, we are going to set the
-	// debugLog parameters from the outcome.
-	defer initDebugLogFromDefaultConfig()
+	// Our own cancellable context to stop the secondary loggers below.
+	//
+	// Note: we don't want to take a cancellable context from the
+	// caller, because in the usual case we don't want to stop the
+	// logger when the remainder of the process stops. See the
+	// discussion on cancel at the top of the function.
+	secLoggersCtx, secLoggersCancel := context.WithCancel(context.Background())
 
-	if logging.logDir.IsSet() {
-		// We have a log directory. We can enable stderr redirection.
+	// secLoggers collects the secondary loggers derived by the configuration.
+	var secLoggers []*loggerT
+	// sinkInfos collects the sinkInfos derived by the configuration.
+	var sinkInfos []*sinkInfo
+	// fd2CaptureCleanupFn is the cleanup function for the fd2 capture,
+	// which is populated if fd2 capture is enabled, below.
+	fd2CaptureCleanupFn := func() {}
 
-		// Our own cancellable context to stop the secondary logger.
-		//
-		// Note: we don't want to take a cancellable context from the
-		// caller, because in the usual case we don't want to stop the
-		// logger when the remainder of the process stops. See the
-		// discussion on cancel at the top of the function.
-		ctx, cancel := context.WithCancel(context.Background())
-		secLogger := NewSecondaryLogger(ctx, &logging.logDir, "stderr",
-			true /* enableGC */, true /* forceSyncWrites */, false /* enableMsgCount */)
-		fileSink := secLogger.logger.getFileSink()
+	// cleanupFn is the returned cleanup function, whose purpose
+	// is to tear down the work we are doing here.
+	cleanupFn = func() {
+		// Reset the logging channels to default.
+		si := logging.stderrSinkInfoTemplate
+		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
+		fd2CaptureCleanupFn()
+		secLoggersCancel()
+		for _, l := range secLoggers {
+			allLoggers.del(l)
+		}
+		for _, l := range sinkInfos {
+			allSinkInfos.del(l)
+		}
+	}
 
-		// Stderr capture produces unsafe strings. This logger
-		// thus generally produces non-redactable entries.
-		for i := range secLogger.logger.sinkInfos {
-			secLogger.logger.sinkInfos[i].editor = getEditor(SelectEditMode(false /* redact */, false /* keepRedactable */))
+	// If capture of internal fd2 writes is enabled, set it up here.
+	if config.CaptureFd2.Enable {
+		if logging.testingFd2CaptureLogger != nil {
+			cleanupFn()
+			return nil, errors.New("fd2 capture already set up. Maybe use TestLogScope?")
+		}
+		// We use a secondary logger, even though no logging *event* will ever
+		// be logged to it, for the convenience of getting a standard log
+		// file header at the beginning of the file (which will contain
+		// a timestamp, command-line arguments, etc.).
+		secLogger := &loggerT{}
+		allLoggers.put(secLogger)
+		secLoggers = append(secLoggers, secLogger)
+
+		// A pseudo file sink. Again, for convenience, so we don't need
+		// to implement separate file management.
+		bt, bf := true, false
+		mf := logconfig.ByteSize(math.MaxInt64)
+		f := logconfig.DefaultFileFormat
+		fakeConfig := logconfig.FileConfig{
+			CommonSinkConfig: logconfig.CommonSinkConfig{
+				Filter:      severity.INFO,
+				Criticality: &bt,
+				Format:      &f,
+				Redact:      &bf,
+				// Be careful about stripping the redaction markers from log
+				// entries. The captured fd2 writes are inherently unsafe, so
+				// we don't want the header entry to give a mistaken
+				// impression to the entry parser.
+				Redactable: &bf,
+			},
+			Dir:          config.CaptureFd2.Dir,
+			MaxGroupSize: config.CaptureFd2.MaxGroupSize,
+			MaxFileSize:  &mf,
+			SyncWrites:   &bt,
+		}
+		fileSinkInfo, fileSink, err := newFileSinkInfo("stderr", fakeConfig)
+		if err != nil {
+			cleanupFn()
+			return nil, err
+		}
+		sinkInfos = append(sinkInfos, fileSinkInfo)
+		allSinkInfos.put(fileSinkInfo)
+
+		if fileSink.logFilesCombinedMaxSize > 0 {
+			// Start the GC process. This ensures that old capture files get
+			// erased as necessary.
+			go fileSink.gcDaemon(secLoggersCtx)
 		}
 
-		// Force a log entry. This does two things: it forces
-		// the creation of a file and introduces a timestamp marker
-		// for any writes to the file performed after this point.
-		secLogger.Logf(ctx, "stderr capture started")
+		// Connect the sink to the logger.
+		secLogger.sinkInfos = []*sinkInfo{fileSinkInfo}
+
+		// Force a log entry. This does two things: it forces the creation
+		// of a file and it also introduces a timestamp marker.
+		entry := MakeEntry(secLoggersCtx, severity.INFO, channel.DEV, 0, false,
+			"stderr capture started")
+		secLogger.outputLogEntry(entry)
 
 		// Now tell this logger to capture internal stderr writes.
-		if err := fileSink.takeOverInternalStderr(&secLogger.logger); err != nil {
+		if err := fileSink.takeOverInternalStderr(secLogger); err != nil {
 			// Oof, it turns out we can't use this logger after all. Give up
-			// on it.
-			cancel()
-			secLogger.Close()
+			// on everything we did.
+			cleanupFn()
 			return nil, err
 		}
 
 		// Now inform the other functions using stderrLog that we
 		// have a new logger for it.
-		prevStderrLogger := stderrLog
-		stderrLog = &secLogger.logger
+		logging.testingFd2CaptureLogger = secLogger
 
-		// The cleanup fn is for use in tests.
-		cleanup := func() {
+		fd2CaptureCleanupFn = func() {
 			// Relinquish the stderr redirect.
-			if err := secLogger.logger.getFileSink().relinquishInternalStderr(); err != nil {
+			if err := secLogger.getFileSink().relinquishInternalStderr(); err != nil {
 				// This should not fail. If it does, some caller messed up by
 				// switching over stderr redirection to a different logger
 				// without our involvement. That's invalid API usage.
@@ -274,39 +215,116 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 			}
 
 			// Restore the apparent stderr logger used by Shout() and tests.
-			stderrLog = prevStderrLogger
+			logging.testingFd2CaptureLogger = nil
 
-			// Cancel the gc process for the secondary logger.
-			cancel()
-
-			// Close the logger.
-			secLogger.Close()
+			// Note: the remainder of the code in cleanupFn() will remove
+			// the logger and close it. No need to also do it here.
 		}
-
-		// Now that stderr is properly redirected, we can enable log file
-		// redaction as requested. It is safe because no interleaving
-		// is possible any more.
-		logging.redactableLogs = logging.redactableLogsRequested
-
-		return cleanup, nil
 	}
 
-	// There is no log directory.
-
-	// If redaction is requested and we have a chance to produce some
-	// log entries on stderr, that's a configuration we cannot support
-	// safely. Reject it.
-	if logging.redactableLogsRequested && logging.stderrSinkInfo.threshold != severity.NONE {
-		return nil, errors.WithHintf(
-			errors.New("cannot enable redactable logging without a logging directory"),
-			"You can pass --%s to set up a logging directory explicitly.", cliflags.LogDir.Name)
+	// Apply the stderr sink configuration.
+	logging.stderrSink.noColor = config.Sinks.Stderr.NoColor
+	if err := logging.stderrSinkInfoTemplate.applyConfig(config.Sinks.Stderr.CommonSinkConfig); err != nil {
+		cleanupFn()
+		return nil, err
 	}
 
-	// Configuration valid. Assign it.
-	// (Note: This is a no-op, because either redactableLogsRequested is false,
-	// or it's true but stderrThreshold filters everything.)
-	logging.redactableLogs = logging.redactableLogsRequested
-	return nil, nil
+	// Create the per-channel loggers.
+	chans := make(map[Channel]*loggerT, len(logpb.Channel_name))
+	for chi := range logpb.Channel_name {
+		ch := Channel(chi)
+		chans[ch] = &loggerT{}
+		if ch == channel.DEV {
+			debugLog = chans[ch]
+		}
+	}
+
+	// Make a copy of the template so that any subsequent config
+	// changes don't race with logging operations.
+	stderrSinkInfo := logging.stderrSinkInfoTemplate
+
+	// Connect the stderr channels.
+	for _, ch := range config.Sinks.Stderr.Channels.Channels {
+		// Note: we connect stderr even if the severity is NONE
+		// so that tests can raise the severity after configuration.
+		l := chans[ch]
+		l.sinkInfos = append(l.sinkInfos, &stderrSinkInfo)
+	}
+
+	// Create the file sinks.
+	for prefix, fc := range config.Sinks.FileGroups {
+		if fc.Filter == severity.NONE || fc.Dir == nil {
+			continue
+		}
+		if prefix == "default" {
+			prefix = ""
+		}
+		fileSinkInfo, _, err := newFileSinkInfo(prefix, *fc)
+		if err != nil {
+			cleanupFn()
+			return nil, err
+		}
+		sinkInfos = append(sinkInfos, fileSinkInfo)
+		allSinkInfos.put(fileSinkInfo)
+
+		// Connect the channels for this sink.
+		for _, ch := range fc.Channels.Channels {
+			l := chans[ch]
+			l.sinkInfos = append(l.sinkInfos, fileSinkInfo)
+		}
+	}
+
+	logging.setChannelLoggers(chans, &stderrSinkInfo)
+	setActive()
+
+	return cleanupFn, nil
+}
+
+// newFileSinkInfo creates a new fileSink and its accompanying sinkInfo
+// from the provided configuration.
+func newFileSinkInfo(fileNamePrefix string, c logconfig.FileConfig) (*sinkInfo, *fileSink, error) {
+	info := &sinkInfo{}
+	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
+		return nil, nil, err
+	}
+	fileSink := newFileSink(
+		*c.Dir,
+		fileNamePrefix,
+		*c.SyncWrites,
+		int64(*c.MaxFileSize),
+		int64(*c.MaxGroupSize),
+		info.getStartLines)
+	info.sink = fileSink
+	return info, fileSink, nil
+}
+
+// applyConfig applies a common sink configuration to a sinkInfo.
+func (l *sinkInfo) applyConfig(c logconfig.CommonSinkConfig) error {
+	l.threshold = c.Filter
+	l.redact = *c.Redact
+	l.redactable = *c.Redactable
+	l.editor = getEditor(SelectEditMode(*c.Redact, *c.Redactable))
+	l.criticality = *c.Criticality
+	f, ok := formatters[*c.Format]
+	if !ok {
+		return errors.Newf("unknown format: %q", *c.Format)
+	}
+	l.formatter = f
+	return nil
+}
+
+// describeAppliedConfig reports a sinkInfo's configuration as a
+// CommonSinkConfig. Note that the returned config object
+// holds into the sinkInfo parameters by reference and thus should
+// not be reused if the configuration can change asynchronously.
+func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
+	c.Filter = l.threshold
+	c.Redact = &l.redact
+	c.Redactable = &l.redactable
+	c.Criticality = &l.criticality
+	f := l.formatter.formatterName()
+	c.Format = &f
+	return c
 }
 
 // TestingResetActive clears the active bit. This is for use in tests
@@ -318,10 +336,93 @@ func TestingResetActive() {
 	logging.mu.active = false
 }
 
-// RedactableLogsEnabled reports whether redaction markers were
-// actually enabled. This is used for flag telemetry; a better API
-// would be needed for more fine grained information, as each
-// different logger may have a different redaction setting.
-func RedactableLogsEnabled() bool {
-	return logging.redactableLogs
+// DescribeAppliedConfig describes the current setup as effected by
+// ApplyConfig(). This is useful in tests and also to check
+// when something may be wrong with the logging configuration.
+func DescribeAppliedConfig() string {
+	var config logconfig.Config
+	// Describe the fd2 capture, if installed.
+	if logging.testingFd2CaptureLogger != nil {
+		config.CaptureFd2.Enable = true
+		fs := logging.testingFd2CaptureLogger.sinkInfos[0].sink.(*fileSink)
+		fs.mu.Lock()
+		dir := fs.mu.logDir
+		fs.mu.Unlock()
+		config.CaptureFd2.Dir = &dir
+		m := logconfig.ByteSize(fs.logFilesCombinedMaxSize)
+		config.CaptureFd2.MaxGroupSize = &m
+	}
+
+	// Describe the stderr sink.
+	config.Sinks.Stderr.NoColor = logging.stderrSink.noColor
+	config.Sinks.Stderr.CommonSinkConfig = logging.stderrSinkInfoTemplate.describeAppliedConfig()
+
+	describeConnections := func(l *loggerT, ch Channel,
+		target *sinkInfo, list *logconfig.ChannelList) {
+		for _, s := range l.sinkInfos {
+			if s == target {
+				list.Channels = append(list.Channels, ch)
+			}
+		}
+		list.Sort()
+	}
+
+	// Describe the connections to the stderr sink.
+	logging.rmu.RLock()
+	chans := logging.rmu.channels
+	stderrSinkInfo := logging.rmu.currentStderrSinkInfo
+	logging.rmu.RUnlock()
+	for ch, logger := range chans {
+		describeConnections(logger, ch,
+			stderrSinkInfo, &config.Sinks.Stderr.Channels)
+	}
+
+	// Describe the file sinks.
+	config.Sinks.FileGroups = make(map[string]*logconfig.FileConfig)
+	_ = allSinkInfos.iter(func(l *sinkInfo) error {
+		if cl := logging.testingFd2CaptureLogger; cl != nil && cl.sinkInfos[0] == l {
+			// Not a real sink. Omit.
+			return nil
+		}
+		fileSink, ok := l.sink.(*fileSink)
+		if !ok {
+			return nil
+		}
+
+		fc := &logconfig.FileConfig{}
+		fc.CommonSinkConfig = l.describeAppliedConfig()
+		mf := logconfig.ByteSize(fileSink.logFileMaxSize)
+		fc.MaxFileSize = &mf
+		mg := logconfig.ByteSize(fileSink.logFilesCombinedMaxSize)
+		fc.MaxGroupSize = &mg
+		fileSink.mu.Lock()
+		dir := fileSink.mu.logDir
+		fileSink.mu.Unlock()
+		fc.Dir = &dir
+		fc.SyncWrites = &fileSink.syncWrites
+
+		// Describe the connections to this file sink.
+		for ch, logger := range chans {
+			describeConnections(logger, ch, l, &fc.Channels)
+		}
+
+		prefix := strings.TrimPrefix(fileSink.prefix, program)
+		if prefix == "" {
+			prefix = "default"
+		} else {
+			prefix = strings.TrimPrefix(prefix, "-")
+		}
+		if prev, ok := config.Sinks.FileGroups[prefix]; ok {
+			fmt.Fprintf(OrigStderr,
+				"warning: multiple file loggers with prefix %q, previous: %+v\n",
+				prefix, prev)
+		}
+		config.Sinks.FileGroups[prefix] = fc
+		return nil
+	})
+
+	// Note: we cannot return 'config' directly, because this captures
+	// certain variables from the loggers by reference and thus could be
+	// invalidated by concurrent uses of ApplyConfig().
+	return config.String()
 }
