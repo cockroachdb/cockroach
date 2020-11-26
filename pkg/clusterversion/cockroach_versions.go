@@ -351,3 +351,23 @@ var (
 func VersionByKey(key VersionKey) roachpb.Version {
 	return versionsSingleton.MustByKey(key)
 }
+
+// GetVersionsBetween returns the list of cluster versions in the range
+// (from, to].
+func GetVersionsBetween(from, to ClusterVersion) []ClusterVersion {
+	return getVersionBetweenInternal(from, to, versionsSingleton)
+}
+
+func getVersionBetweenInternal(from, to ClusterVersion, vs keyedVersions) []ClusterVersion {
+	var cvs []ClusterVersion
+	for _, keyedV := range vs {
+		if keyedV.Version.Less(from.Version) || keyedV.Version == from.Version {
+			continue
+		}
+		if keyedV.Version.Less(to.Version) || keyedV.Version == to.Version {
+			cvs = append(cvs, ClusterVersion{Version: keyedV.Version})
+		}
+	}
+
+	return cvs
+}

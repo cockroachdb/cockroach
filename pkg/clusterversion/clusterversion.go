@@ -233,11 +233,21 @@ func (cv ClusterVersion) IsActive(versionKey VersionKey) bool {
 	return cv.IsActiveVersion(v)
 }
 
-func (cv ClusterVersion) String() string { return redact.StringWithoutMarkers(cv) }
+func (cv ClusterVersion) String() string {
+	return redact.StringWithoutMarkers(cv)
+}
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (cv ClusterVersion) SafeFormat(p redact.SafePrinter, _ rune) {
-	p.Print(cv.Version)
+	// If we're a version greater than v20.2 and have an odd internal
+	// version, we're a "fence" version. See migrations.FenceVersionFor to
+	// understand what these are.
+	v20_2 := roachpb.Version{Major: 20, Minor: 2}
+	if !(cv.Version.Less(v20_2) || cv.Version == v20_2) && (cv.Internal%2) != 0 {
+		p.Printf("%d.%d(fence=%d)", cv.Major, cv.Minor, cv.Internal)
+	} else {
+		p.Print(cv.Version)
+	}
 }
 
 // ClusterVersionImpl implements the settings.ClusterVersionImpl interface.
