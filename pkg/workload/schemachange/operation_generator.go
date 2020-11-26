@@ -203,8 +203,7 @@ var opWeights = []int{
 // change constructed. Constructing a random schema change may require a few
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
-func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
-	var log strings.Builder
+func (og *operationGenerator) randOp(tx *pgx.Tx) (stmt string, noops []string, err error) {
 	savepointCount := 0
 	for {
 		op := opType(og.params.ops.Int())
@@ -224,7 +223,7 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 		// the transaction from being aborted by spurious errors such as in the above example.
 		savepointCount++
 		if _, err := tx.Exec(fmt.Sprintf(`SAVEPOINT s%d`, savepointCount)); err != nil {
-			return "", log.String(), err
+			return "", noops, err
 		}
 
 		stmt, err := opFuncs[op](og, tx)
@@ -242,14 +241,13 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 
 			og.opsInTxn[op] = true
 
-			return stmt, log.String(), err
+			return stmt, noops, err
 		}
-
 		if _, err := tx.Exec(fmt.Sprintf(`ROLLBACK TO SAVEPOINT s%d`, savepointCount)); err != nil {
-			return "", log.String(), err
+			return "", noops, err
 		}
 
-		log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
+		noops = append(noops, fmt.Sprintf("NOOP: %s -> %v", op, err))
 	}
 }
 
