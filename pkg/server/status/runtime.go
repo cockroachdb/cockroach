@@ -328,11 +328,11 @@ func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSa
 
 	diskCounters, err := getSummedDiskCounters(ctx)
 	if err != nil {
-		log.Errorf(ctx, "could not get initial disk IO counters: %v", err)
+		log.Ops.Errorf(ctx, "could not get initial disk IO counters: %v", err)
 	}
 	netCounters, err := getSummedNetStats(ctx)
 	if err != nil {
-		log.Errorf(ctx, "could not get initial disk IO counters: %v", err)
+		log.Ops.Errorf(ctx, "could not get initial disk IO counters: %v", err)
 	}
 
 	rsr := &RuntimeStatSampler{
@@ -449,11 +449,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	pid := os.Getpid()
 	mem := gosigar.ProcMem{}
 	if err := mem.Get(pid); err != nil {
-		log.Errorf(ctx, "unable to get mem usage: %v", err)
+		log.Ops.Errorf(ctx, "unable to get mem usage: %v", err)
 	}
 	cpuTime := gosigar.ProcTime{}
 	if err := cpuTime.Get(pid); err != nil {
-		log.Errorf(ctx, "unable to get cpu usage: %v", err)
+		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 	}
 	cgroupCPU, _ := cgroups.GetCgroupCPU()
 	cpuShare := cgroupCPU.CPUShares()
@@ -463,17 +463,17 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		if gosigar.IsNotImplemented(err) {
 			if !rsr.fdUsageNotImplemented {
 				rsr.fdUsageNotImplemented = true
-				log.Warningf(ctx, "unable to get file descriptor usage (will not try again): %s", err)
+				log.Ops.Warningf(ctx, "unable to get file descriptor usage (will not try again): %s", err)
 			}
 		} else {
-			log.Errorf(ctx, "unable to get file descriptor usage: %s", err)
+			log.Ops.Errorf(ctx, "unable to get file descriptor usage: %s", err)
 		}
 	}
 
 	var deltaDisk diskStats
 	diskCounters, err := getSummedDiskCounters(ctx)
 	if err != nil {
-		log.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
+		log.Ops.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
 	} else {
 		deltaDisk = diskCounters
 		subtractDiskCounters(&deltaDisk, rsr.last.disk)
@@ -494,7 +494,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	var deltaNet net.IOCountersStat
 	netCounters, err := getSummedNetStats(ctx)
 	if err != nil {
-		log.Warningf(ctx, "problem fetching net stats: %s; net stats will be empty.", err)
+		log.Ops.Warningf(ctx, "problem fetching net stats: %s; net stats will be empty.", err)
 	} else {
 		deltaNet = netCounters
 		subtractNetworkCounters(&deltaNet, rsr.last.net)
@@ -550,7 +550,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		}); err != nil {
 		log.Warningf(ctx, "failed to render runtime stats: %s", err)
 	}
-	log.Infof(ctx, "%s", redact.Safe(buf.String()))
+	log.Health.Infof(ctx, "%s", redact.Safe(buf.String()))
 
 	rsr.last.cgoCall = numCgoCall
 	rsr.last.gcCount = gc.NumGC

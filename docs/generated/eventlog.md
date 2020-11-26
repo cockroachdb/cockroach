@@ -8,7 +8,7 @@ tenants cannot contain a copy of cluster-level events; conversely,
 the system.eventlog table in the system tenant cannot contain the
 SQL-level events for individual tenants.
 
-Events in this category are logged to channel DEV.
+Events in this category are logged to channel OPS.
 
 
 ## `node_decommissioned`

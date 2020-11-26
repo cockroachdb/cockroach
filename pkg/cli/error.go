@@ -380,7 +380,7 @@ func maybeShoutError(
 }
 
 func checkAndMaybeShout(err error) error {
-	return checkAndMaybeShoutTo(err, log.Shoutf)
+	return checkAndMaybeShoutTo(err, log.Ops.Shoutf)
 }
 
 func checkAndMaybeShoutTo(

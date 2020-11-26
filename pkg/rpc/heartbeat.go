@@ -75,7 +75,7 @@ func checkClusterName(clusterName string, peerName string) error {
 			err = errors.Errorf(
 				"local cluster name %q does not match peer cluster name %q", clusterName, peerName)
 		}
-		log.Shoutf(context.Background(), severity.ERROR, "%v", err)
+		log.Ops.Shoutf(context.Background(), severity.ERROR, "%v", err)
 		return err
 	}
 	return nil
@@ -104,7 +104,7 @@ func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb
 // with the requester's address.
 func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
 	if log.V(2) {
-		log.Infof(ctx, "received heartbeat: %+v vs local cluster %+v node %+v", args, hs.clusterID, hs.nodeID)
+		log.Health.Infof(ctx, "received heartbeat: %+v vs local cluster %+v node %+v", args, hs.clusterID, hs.nodeID)
 	}
 	// Check that cluster IDs match.
 	clusterID := hs.clusterID.Get()

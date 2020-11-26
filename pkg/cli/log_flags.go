@@ -181,8 +181,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	if cliCtx.ambiguousLogDir {
 		// Note that we can't report this message earlier, because the log directory
 		// may not have been ready before the call to MkdirAll() above.
-		// TODO(knz): send this this to the OPS channel.
-		log.Dev.Shout(ctx, severity.WARNING,
+		log.Ops.Shout(ctx, severity.WARNING,
 			"multiple stores configured, "+
 				"you may want to specify --log='file-defaults: {dir: ...}' to disambiguate.")
 	}
@@ -426,7 +425,7 @@ var predefinedLogFiles = map[logpb.Channel]string{
 // non-repudiability.
 var predefinedAuditFiles = map[logpb.Channel]bool{
 	channel.SESSIONS: true,
-	// FIXME(knz): Add this:
-	// channel.PRIVILEGES:       true,
+	// TODO(knz): add the PRIVILEGES channel.
+	//  channel.PRIVILEGES:       true,
 	channel.SENSITIVE_ACCESS: true,
 }

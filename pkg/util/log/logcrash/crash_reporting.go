@@ -137,7 +137,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 	// sure, whether some other caller further in the call stack is
 	// catching the panic object in the end or not.
 	panicErr := PanicAsError(depth+1, r)
-	log.Shoutf(ctx, severity.ERROR, "a panic has occurred!\n%+v", panicErr)
+	log.Ops.Shoutf(ctx, severity.ERROR, "a panic has occurred!\n%+v", panicErr)
 
 	// In addition to informing the user, also report the details to telemetry.
 	sendCrashReport(ctx, sv, panicErr, ReportTypePanic)

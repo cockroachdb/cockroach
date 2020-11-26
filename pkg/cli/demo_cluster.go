@@ -572,7 +572,7 @@ func maybeWarnMemSize(ctx context.Context) {
 		requestedMem := (demoCtx.cacheSize + demoCtx.sqlPoolMemorySize) * int64(demoCtx.nodes)
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
-			log.Shoutf(
+			log.Ops.Shoutf(
 				ctx, severity.WARNING,
 				`HIGH MEMORY USAGE
 The sum of --max-sql-memory (%s) and --cache (%s) multiplied by the

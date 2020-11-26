@@ -304,7 +304,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	rpcContext.HeartbeatCB = func() {
 		if err := rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
-			log.Fatalf(ctx, "%v", err)
+			log.Ops.Fatalf(ctx, "%v", err)
 		}
 	}
 	registry.AddMetricStruct(rpcContext.Metrics())
@@ -849,7 +849,7 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) error {
 		return errors.Wrap(err, "monitoring forward clock jumps")
 	}
 
-	log.Info(ctx, "monitoring forward clock jumps based on server.clock.forward_jump_check_enabled")
+	log.Ops.Info(ctx, "monitoring forward clock jumps based on server.clock.forward_jump_check_enabled")
 	return nil
 }
 
@@ -895,7 +895,7 @@ func ensureClockMonotonicity(
 	currentWallTime := currentWallTimeFn()
 	delta := time.Duration(sleepUntil - currentWallTime)
 	if delta > 0 {
-		log.Infof(
+		log.Ops.Infof(
 			ctx,
 			"Sleeping till wall time %v to catches up to %v to ensure monotonicity. Delta: %v",
 			currentWallTime,
@@ -939,7 +939,7 @@ func periodicallyPersistHLCUpperBound(
 			persistHLCUpperBoundFn,
 			int64(persistInterval*3), /* delta to compute upper bound */
 		); err != nil {
-			log.Fatalf(
+			log.Ops.Fatalf(
 				context.Background(),
 				"error persisting HLC upper bound: %v",
 				err,
@@ -958,16 +958,16 @@ func periodicallyPersistHLCUpperBound(
 			if persistInterval > 0 {
 				ticker = tickerFn(persistInterval)
 				persistHLCUpperBound()
-				log.Info(context.Background(), "persisting HLC upper bound is enabled")
+				log.Ops.Info(context.Background(), "persisting HLC upper bound is enabled")
 			} else {
 				if err := clock.ResetHLCUpperBound(persistHLCUpperBoundFn); err != nil {
-					log.Fatalf(
+					log.Ops.Fatalf(
 						context.Background(),
 						"error resetting hlc upper bound: %v",
 						err,
 					)
 				}
-				log.Info(context.Background(), "persisting HLC upper bound is disabled")
+				log.Ops.Info(context.Background(), "persisting HLC upper bound is disabled")
 			}
 
 		case <-ticker.C:
@@ -1292,7 +1292,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 		<-s.stopper.ShouldQuiesce()
 		if err := conn.Close(); err != nil {
-			log.Fatalf(workersCtx, "%v", err)
+			log.Ops.Fatalf(workersCtx, "%v", err)
 		}
 	})
 
@@ -1461,10 +1461,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// but this gossip only happens once the first range has a leaseholder, i.e.
 	// when a quorum of nodes has gone fully operational.
 	_ = s.stopper.RunAsyncTask(ctx, "connect-gossip", func(ctx context.Context) {
-		log.Infof(ctx, "connecting to gossip network to verify cluster ID %q", state.clusterID)
+		log.Ops.Infof(ctx, "connecting to gossip network to verify cluster ID %q", state.clusterID)
 		select {
 		case <-s.gossip.Connected:
-			log.Infof(ctx, "node connected via gossip")
+			log.Ops.Infof(ctx, "node connected via gossip")
 		case <-ctx.Done():
 		case <-s.stopper.ShouldQuiesce():
 		}
@@ -1591,15 +1591,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//   stores)
 	s.node.waitForAdditionalStoreInit()
 
-	log.Infof(ctx, "starting %s server at %s (use: %s)",
+	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
 	rpcConnType := redact.SafeString("grpc/postgres")
 	if s.cfg.SplitListenSQL {
 		rpcConnType = "grpc"
-		log.Infof(ctx, "starting postgres server at %s (use: %s)", s.cfg.SQLAddr, s.cfg.SQLAdvertiseAddr)
+		log.Ops.Infof(ctx, "starting postgres server at %s (use: %s)", s.cfg.SQLAddr, s.cfg.SQLAdvertiseAddr)
 	}
-	log.Infof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
-	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
+	log.Ops.Infof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
+	log.Ops.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
 
@@ -1614,7 +1614,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 			if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
 				return s.WriteLastUpTimestamp(ctx, now)
 			}); err != nil {
-				log.Warningf(ctx, "writing last up timestamp: %v", err)
+				log.Ops.Warningf(ctx, "writing last up timestamp: %v", err)
 			}
 		},
 	})
@@ -1704,7 +1704,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 					http.Error(w, "admin privilege required", http.StatusUnauthorized)
 					return
 				} else if err != nil {
-					log.Infof(authCtx, "web session error: %s", err)
+					log.Ops.Infof(authCtx, "web session error: %s", err)
 					http.Error(w, "error checking authentication", http.StatusInternalServerError)
 					return
 				}
@@ -1816,7 +1816,7 @@ func (s *Server) startListenRPCAndSQL(
 		s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 			<-s.stopper.ShouldQuiesce()
 			if err := pgL.Close(); err != nil {
-				log.Fatalf(workersCtx, "%v", err)
+				log.Ops.Fatalf(workersCtx, "%v", err)
 			}
 		})
 		log.Eventf(ctx, "listening on sql port %s", s.cfg.SQLAddr)
@@ -1897,7 +1897,7 @@ func (s *Server) startServeUI(
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 		<-s.stopper.ShouldQuiesce()
 		if err := httpLn.Close(); err != nil {
-			log.Fatalf(workersCtx, "%v", err)
+			log.Ops.Fatalf(workersCtx, "%v", err)
 		}
 	})
 
@@ -1949,7 +1949,7 @@ func (s *sqlServer) startServeSQL(
 	pgL net.Listener,
 	socketFile string,
 ) error {
-	log.Info(ctx, "serving sql connections")
+	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
@@ -1963,14 +1963,14 @@ func (s *sqlServer) startServeSQL(
 			tcpKeepAlive.configure(connCtx, conn)
 
 			if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
-				log.Errorf(connCtx, "serving SQL client conn: %v", err)
+				log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
 			}
 		}))
 	})
 
 	// If a unix socket was requested, start serving there too.
 	if len(socketFile) != 0 {
-		log.Infof(ctx, "starting postgres server at unix:%s", socketFile)
+		log.Ops.Infof(ctx, "starting postgres server at unix:%s", socketFile)
 
 		// Unix socket enabled: postgres protocol only.
 		unixLn, err := net.Listen("unix", socketFile)
@@ -1981,7 +1981,7 @@ func (s *sqlServer) startServeSQL(
 		stopper.RunWorker(ctx, func(workersCtx context.Context) {
 			<-stopper.ShouldQuiesce()
 			if err := unixLn.Close(); err != nil {
-				log.Fatalf(workersCtx, "%v", err)
+				log.Ops.Fatalf(workersCtx, "%v", err)
 			}
 		})
 
@@ -1989,7 +1989,7 @@ func (s *sqlServer) startServeSQL(
 			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, unixLn, func(conn net.Conn) {
 				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
-					log.Errorf(connCtx, "%v", err)
+					log.Ops.Errorf(connCtx, "%v", err)
 				}
 			}))
 		})
@@ -2060,7 +2060,7 @@ func (s *Server) Decommission(
 					true, /* skipExternalLog - we already call log.StructuredEvent above */
 					event)
 			}); err != nil {
-				log.Errorf(ctx, "unable to record event: %+v: %+v", event, err)
+				log.Ops.Errorf(ctx, "unable to record event: %+v: %+v", event, err)
 			}
 		}
 	}
@@ -2231,7 +2231,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// which results in a 304 Not Modified.
 			if err := gzw.Close(); err != nil && !errors.Is(err, http.ErrBodyNotAllowed) {
 				ctx := s.AnnotateCtx(r.Context())
-				log.Warningf(ctx, "error closing gzip response writer: %v", err)
+				log.Ops.Warningf(ctx, "error closing gzip response writer: %v", err)
 			}
 		}()
 		w = gzw
@@ -2329,14 +2329,14 @@ func (k *tcpKeepAliveManager) configure(ctx context.Context, conn net.Conn) {
 	doLog := atomic.CompareAndSwapInt32(&k.loggedKeepAliveStatus, 0, 1)
 	if err := tcpConn.SetKeepAlive(true); err != nil {
 		if doLog {
-			log.Warningf(ctx, "failed to enable TCP keep-alive for pgwire: %v", err)
+			log.Ops.Warningf(ctx, "failed to enable TCP keep-alive for pgwire: %v", err)
 		}
 		return
 
 	}
 	if err := tcpConn.SetKeepAlivePeriod(k.tcpKeepAlive); err != nil {
 		if doLog {
-			log.Warningf(ctx, "failed to set TCP keep-alive duration for pgwire: %v", err)
+			log.Ops.Warningf(ctx, "failed to set TCP keep-alive duration for pgwire: %v", err)
 		}
 		return
 	}

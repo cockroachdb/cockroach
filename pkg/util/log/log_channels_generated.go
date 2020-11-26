@@ -943,6 +943,833 @@ func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{
 	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
 }
 
+// loggerOps is the logger type for the OPS channel.
+type loggerOps struct{}
+
+// Ops is a logger that logs to the OPS channel.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+var Ops loggerOps
+
+// Ops and loggerOps implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Ops
+
+// Infof logs to the OPS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerOps) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, format, args...)
+}
+
+// VInfof logs to the OPS channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerOps) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.OPS, format, args...)
+	}
+}
+
+// Info logs to the OPS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerOps) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, msg)
+}
+
+// InfofDepth logs to the OPS channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerOps) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.OPS, format, args...)
+}
+
+// Warningf logs to the OPS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerOps) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.OPS, format, args...)
+}
+
+// VWarningf logs to the OPS channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerOps) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.OPS, format, args...)
+	}
+}
+
+// Warning logs to the OPS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerOps) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.OPS, msg)
+}
+
+// WarningfDepth logs to the OPS channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerOps) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.OPS, format, args...)
+}
+
+// Errorf logs to the OPS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerOps) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.OPS, format, args...)
+}
+
+// VErrorf logs to the OPS channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerOps) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.OPS, format, args...)
+	}
+}
+
+// Error logs to the OPS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerOps) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.OPS, msg)
+}
+
+// ErrorfDepth logs to the OPS channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerOps) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.OPS, format, args...)
+}
+
+// Fatalf logs to the OPS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerOps) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.OPS, format, args...)
+}
+
+// VFatalf logs to the OPS channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerOps) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.OPS, format, args...)
+	}
+}
+
+// Fatal logs to the OPS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerOps) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.OPS, msg)
+}
+
+// FatalfDepth logs to the OPS channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerOps) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.OPS, format, args...)
+}
+
+// Shout logs to channel OPS, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+func (loggerOps) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.OPS, msg)
+}
+
+// Shoutf logs to channel OPS, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The OPS channel is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+func (loggerOps) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.OPS, format, args...)
+}
+
+// loggerHealth is the logger type for the HEALTH channel.
+type loggerHealth struct{}
+
+// Health is a logger that logs to the HEALTH channel.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+var Health loggerHealth
+
+// Health and loggerHealth implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Health
+
+// Infof logs to the HEALTH channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerHealth) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.HEALTH, format, args...)
+}
+
+// VInfof logs to the HEALTH channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerHealth) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.HEALTH, format, args...)
+	}
+}
+
+// Info logs to the HEALTH channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerHealth) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.HEALTH, msg)
+}
+
+// InfofDepth logs to the HEALTH channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerHealth) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.HEALTH, format, args...)
+}
+
+// Warningf logs to the HEALTH channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerHealth) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.HEALTH, format, args...)
+}
+
+// VWarningf logs to the HEALTH channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerHealth) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.HEALTH, format, args...)
+	}
+}
+
+// Warning logs to the HEALTH channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerHealth) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.HEALTH, msg)
+}
+
+// WarningfDepth logs to the HEALTH channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerHealth) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.HEALTH, format, args...)
+}
+
+// Errorf logs to the HEALTH channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerHealth) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.HEALTH, format, args...)
+}
+
+// VErrorf logs to the HEALTH channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerHealth) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.HEALTH, format, args...)
+	}
+}
+
+// Error logs to the HEALTH channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerHealth) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.HEALTH, msg)
+}
+
+// ErrorfDepth logs to the HEALTH channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerHealth) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.HEALTH, format, args...)
+}
+
+// Fatalf logs to the HEALTH channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerHealth) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.HEALTH, format, args...)
+}
+
+// VFatalf logs to the HEALTH channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerHealth) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.HEALTH, format, args...)
+	}
+}
+
+// Fatal logs to the HEALTH channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerHealth) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.HEALTH, msg)
+}
+
+// FatalfDepth logs to the HEALTH channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerHealth) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.HEALTH, format, args...)
+}
+
+// Shout logs to channel HEALTH, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+func (loggerHealth) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.HEALTH, msg)
+}
+
+// Shoutf logs to channel HEALTH, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The HEALTH channel is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+func (loggerHealth) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.HEALTH, format, args...)
+}
+
 // loggerStorage is the logger type for the STORAGE channel.
 type loggerStorage struct{}
 
