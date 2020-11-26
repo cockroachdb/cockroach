@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -81,7 +80,7 @@ type versionInfo struct {
 // phones home to check for updates and report usage.
 func (s *Server) PeriodicallyCheckForUpdates(ctx context.Context) {
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
-		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &s.st.SV)
+		defer log.RecoverAndReportNonfatalPanic(ctx, &s.st.SV)
 		nextUpdateCheck := s.startTime
 		nextDiagnosticReport := s.startTime
 
@@ -121,7 +120,7 @@ func (s *Server) maybeCheckForUpdates(
 
 	// if diagnostics reporting is disabled, we should assume that means that the
 	// user doesn't want us phoning home for new-version checks either.
-	if !logcrash.DiagnosticsReportingEnabled.Get(&s.st.SV) {
+	if !log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
 		return now.Add(updateCheckFrequency)
 	}
 
@@ -252,7 +251,7 @@ func (s *Server) maybeReportDiagnostics(ctx context.Context, now, scheduled time
 	// TODO(dt): we should allow tuning the reset and report intervals separately.
 	// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 	// stat reset periods for reporting.
-	if logcrash.DiagnosticsReportingEnabled.Get(&s.st.SV) {
+	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
 		s.ReportDiagnostics(ctx)
 	}
 

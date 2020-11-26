@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -404,7 +403,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	}
 
 	if check && mm.mu.curAllocated != 0 {
-		logcrash.ReportOrPanic(
+		log.ReportOrPanic(
 			ctx, &mm.settings.SV,
 			"%s: unexpected %d leftover bytes",
 			log.Safe(mm.name), log.Safe(mm.mu.curAllocated))
@@ -583,7 +582,7 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 // Shrink releases part of the cumulated allocations by the specified size.
 func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	if b.used < delta {
-		logcrash.ReportOrPanic(ctx, &b.mon.settings.SV,
+		log.ReportOrPanic(ctx, &b.mon.settings.SV,
 			"%s: no bytes in account to release, current %d, free %d",
 			b.mon.name, b.used, delta)
 		delta = b.used
@@ -656,7 +655,7 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	if mm.mu.curAllocated < sz {
-		logcrash.ReportOrPanic(ctx, &mm.settings.SV,
+		log.ReportOrPanic(ctx, &mm.settings.SV,
 			"%s: no bytes to release, current %d, free %d",
 			mm.name, mm.mu.curAllocated, sz)
 		sz = mm.mu.curAllocated

@@ -117,7 +117,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 
 	sc = &TestLogScope{
 		// Remember the stderr threshold. Close() will restore it.
-		stderrThreshold: logging.stderrSinkInfo.threshold.Get(),
+		stderrThreshold: logging.stderrSink.threshold.Get(),
 	}
 	defer func() {
 		// If any of the following initialization fails, we close the scope.
@@ -145,7 +145,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// Override the stderr threshold for the main logger.
 	// From this point log entries do not show up on stderr any more;
 	// they only go to files.
-	logging.stderrSinkInfo.threshold.SetValue(severity.NONE)
+	logging.stderrSink.threshold.SetValue(severity.NONE)
 
 	t.Logf("test logs captured to: %s", tempDir)
 	return sc
@@ -170,7 +170,7 @@ func (l *TestLogScope) Rotate(t tShim) {
 // restoreStderrThreshold restores the stderr output threshold at the end
 // of a scope.
 func (l *TestLogScope) restoreStderrThreshold() {
-	logging.stderrSinkInfo.threshold.SetValue(l.stderrThreshold)
+	logging.stderrSink.threshold.SetValue(l.stderrThreshold)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are

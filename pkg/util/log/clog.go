@@ -50,8 +50,7 @@ type loggingT struct {
 	vmoduleConfig vmoduleConfig
 
 	// The common stderr sink.
-	stderrSink     stderrSink
-	stderrSinkInfo sinkInfo
+	stderrSink stderrSink
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
@@ -93,21 +92,9 @@ type sinkInfo struct {
 	// sink is where the log entries should be written.
 	sink logSink
 
-	// Level at or beyond which entries are output to this sink.
-	threshold Severity
-
 	// editor is the optional step that occurs prior to emitting the log
 	// entry.
 	editor redactEditor
-
-	// formatter for entries written via this sink.
-	formatter logFormatter
-
-	// msgCount supports the generation of a per-entry log entry
-	// counter. This is needed in audit logs to hinder malicious
-	// repudiation of log events by manually erasing log files or log
-	// entries.
-	msgCount uint64
 
 	// criticality indicates whether a failure to output some log
 	// entries should incur the process to terminate.
@@ -117,30 +104,39 @@ type sinkInfo struct {
 // loggerT represents the logging source for a given log channel.
 type loggerT struct {
 	// sinkInfos stores the destinations for log entries.
-	sinkInfos []*sinkInfo
+	sinkInfos []sinkInfo
+
+	// logCounter supports the generation of a per-entry log entry
+	// counter. This is needed in audit logs to hinder malicious
+	// repudiation of log events by manually erasing log files or log
+	// entries.
+	logCounter EntryCounter
 
 	// outputMu is used to coordinate output to the sinks, to guarantee
 	// that the ordering of events the the same on all sinks.
 	outputMu syncutil.Mutex
 }
 
-// getFileSinkIndex retrieves the index of the fileSink, if defined,
-// in the sinkInfos. Returns -1 if there is no file sink.
-func (l *loggerT) getFileSinkIndex() int {
-	for i, s := range l.sinkInfos {
-		if _, ok := s.sink.(*fileSink); ok {
-			return i
-		}
-	}
-	return -1
-}
-
 // getFileSink retrieves the file sink if defined.
 func (l *loggerT) getFileSink() *fileSink {
-	if i := l.getFileSinkIndex(); i != -1 {
-		return l.sinkInfos[i].sink.(*fileSink)
+	for _, s := range l.sinkInfos {
+		if fs, ok := s.sink.(*fileSink); ok {
+			return fs
+		}
 	}
 	return nil
+}
+
+// EntryCounter supports the generation of a per-entry log entry
+// counter. This is needed in audit logs to hinder malicious
+// repudiation of log events by manually erasing log files or log
+// entries.
+type EntryCounter struct {
+	// EnableMsgCount, if true, enables the production of entry
+	// counters.
+	EnableMsgCount bool
+	// msgCount is the current value of the counter.
+	msgCount uint64
 }
 
 // FatalChan is closed when Fatal is called. This can be used to make
@@ -273,18 +269,11 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	// not eliminate the event.
 	someSinkActive := false
 	for i, s := range l.sinkInfos {
-		if entry.Severity < s.threshold || !s.sink.active() {
-			continue
+		if s.sink.activeAtSeverity(entry.Severity) {
+			editedEntry := maybeRedactEntry(entry, s.editor)
+			bufs.b[i] = s.sink.getFormatter().formatEntry(editedEntry, stacks)
+			someSinkActive = true
 		}
-		editedEntry := maybeRedactEntry(entry, s.editor)
-
-		// Add a counter. This is important for e.g. the SQL audit logs.
-		// Note: whether the counter is displayed or not depends on
-		// the formatter.
-		editedEntry.Counter = atomic.AddUint64(&s.msgCount, 1)
-
-		bufs.b[i] = s.formatter.formatEntry(editedEntry, stacks)
-		someSinkActive = true
 	}
 
 	// If any of the sinks is active, it is now time to send it out.

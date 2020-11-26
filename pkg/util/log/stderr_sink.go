@@ -10,21 +10,37 @@
 
 package log
 
-import "github.com/cockroachdb/cockroach/pkg/cli/exit"
+import (
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+)
 
 // Type of a stderr copy sink.
 type stderrSink struct {
 	// the --no-color flag. When set it disables escapes code on the
 	// stderr copy.
 	noColor bool
+
+	// Level at or beyond which entries are output to this sink.
+	threshold Severity
+
+	// formatter for entries written via this sink.
+	formatter logFormatter
 }
 
 // activeAtSeverity implements the logSink interface.
-func (l *stderrSink) active() bool { return true }
+func (l *stderrSink) activeAtSeverity(sev logpb.Severity) bool {
+	return sev >= l.threshold.Get()
+}
 
 // attachHints implements the logSink interface.
 func (l *stderrSink) attachHints(stacks []byte) []byte {
 	return stacks
+}
+
+// getFormatter implements the logSink interface.
+func (l *stderrSink) getFormatter() logFormatter {
+	return l.formatter
 }
 
 // output implements the logSink interface.

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -395,7 +394,7 @@ func (rb *rowSourceBase) consumerDone() {
 func (rb *rowSourceBase) consumerClosed(name string) {
 	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
 	if status == ConsumerClosed {
-		logcrash.ReportOrPanic(context.Background(), nil, "%s already closed", log.Safe(name))
+		log.ReportOrPanic(context.Background(), nil, "%s already closed", log.Safe(name))
 	}
 	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(ConsumerClosed))
 }

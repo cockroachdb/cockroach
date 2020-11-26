@@ -16,7 +16,6 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "//vendor/github.com/cockroachdb/errors",
