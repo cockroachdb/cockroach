@@ -53,7 +53,7 @@ type NewInitialOption func(*descpb.DatabaseDescriptor)
 // NewInitialOptionDatabaseRegionConfig is an option allowing an optional
 // regional configuration to be set on the database descriptor.
 func NewInitialOptionDatabaseRegionConfig(
-	regionConfig descpb.DatabaseRegionConfig,
+	regionConfig *descpb.DatabaseDescriptor_RegionConfig,
 ) NewInitialOption {
 	return func(desc *descpb.DatabaseDescriptor) {
 		desc.RegionConfig = regionConfig
