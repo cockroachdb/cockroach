@@ -259,17 +259,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// namespace2, and re-edit the old descriptor's Name to
 		// be just "namespace" again, to try to help clusters that might have
 		// upgraded to the 20.1 betas with the problem.
-		name:                "create new system.namespace table v2",
-		workFn:              createNewSystemNamespaceDescriptor,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
-		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
+		name:             "create new system.namespace table v2",
+		workFn:           createNewSystemNamespaceDescriptor,
+		newDescriptorIDs: staticIDs(keys.NamespaceTableID),
 	},
 	{
 		// Introduced in v20.10. Replaced in v20.1.1 and v20.2 by the
 		// StartSystemNamespaceMigration post-finalization-style migration.
 		name: "migrate system.namespace_deprecated entries into system.namespace",
-		// workFn:              migrateSystemNamespace,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
 	},
 	{
 		// Introduced in v20.1, baked into v20.2.
@@ -719,7 +716,7 @@ var systemNamespaceMigrationEnabled = settings.RegisterBoolSetting(
 func (m *Manager) StartSystemNamespaceMigration(
 	ctx context.Context, bootstrapVersion roachpb.Version,
 ) error {
-	if !bootstrapVersion.Less(clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas)) {
+	if !bootstrapVersion.Less(clusterversion.VersionByKey(clusterversion.Version20_1)) {
 		// Our bootstrap version is equal to or greater than 20.1, where no old
 		// namespace table is created: we can skip this migration.
 		return nil
@@ -738,9 +735,7 @@ func (m *Manager) StartSystemNamespaceMigration(
 			if !systemNamespaceMigrationEnabled.Get(&m.settings.SV) {
 				continue
 			}
-			if m.settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
-				break
-			}
+			break
 		}
 		select {
 		case <-m.stopper.ShouldQuiesce():
@@ -920,7 +915,7 @@ func createSystemTable(ctx context.Context, r runner, desc catalog.TableDescript
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		tKey := catalogkv.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
+		tKey := catalogkv.MakePublicTableNameKey(desc.GetParentID(), desc.GetName())
 		b.CPut(tKey.Key(r.codec), desc.GetID(), nil)
 		b.CPut(catalogkeys.MakeDescMetadataKey(r.codec, desc.GetID()), desc.DescriptorProto(), nil)
 		if err := txn.SetSystemConfigTrigger(r.codec.ForSystemTenant()); err != nil {

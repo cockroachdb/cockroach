@@ -66,7 +66,7 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
-	VersionNamespaceTableWithSchemas
+	Version20_1
 
 	VersionStart20_2
 	VersionGeospatialType
@@ -121,13 +121,9 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 1},
 	},
 	{
-		// VersionNamespaceTableWithSchemas is https://github.com/cockroachdb/cockroach/pull/41977
-		//
-		// It represents the migration to a new system.namespace table that has an
-		// added parentSchemaID column. In addition to the new column, the table is
-		// no longer in the system config range -- implying it is no longer gossiped.
-		Key:     VersionNamespaceTableWithSchemas,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 5},
+		// Version20_1 is CockroachDB v20.1. It's used for all v20.1.x patch releases.
+		Key:     Version20_1,
+		Version: roachpb.Version{Major: 20, Minor: 1},
 	},
 	{
 		// VersionStart20_2 demarcates work towards CockroachDB v20.2.

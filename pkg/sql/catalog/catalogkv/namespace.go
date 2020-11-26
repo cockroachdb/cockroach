@@ -13,10 +13,8 @@ package catalogkv
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -119,19 +117,11 @@ func RemoveSchemaNamespaceEntry(
 // MakeObjectNameKey returns a key in the system.namespace table for
 // a given parentID and name, based on the cluster version.
 // - If cluster version >= 20.1, the key is in the new system.namespace table.
-// - If cluster version < 20.1, the key is in the deprecated system.namespace table.
-// - The parentSchemaID field is ignored in < 20.1 clusters.
 func MakeObjectNameKey(
-	ctx context.Context,
-	settings *cluster.Settings,
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
 ) catalogkeys.DescriptorKey {
-	// TODO(solon): This if condition can be removed in 20.2
-	if !settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
-		return catalogkeys.NewDeprecatedTableKey(parentID, name)
-	}
 	var key catalogkeys.DescriptorKey
 	if parentID == keys.RootNamespaceID {
 		key = catalogkeys.NewDatabaseKey(name)
@@ -144,17 +134,13 @@ func MakeObjectNameKey(
 }
 
 // MakePublicTableNameKey is a wrapper around MakeObjectNameKey for public tables.
-func MakePublicTableNameKey(
-	ctx context.Context, settings *cluster.Settings, parentID descpb.ID, name string,
-) catalogkeys.DescriptorKey {
-	return MakeObjectNameKey(ctx, settings, parentID, keys.PublicSchemaID, name)
+func MakePublicTableNameKey(parentID descpb.ID, name string) catalogkeys.DescriptorKey {
+	return MakeObjectNameKey(parentID, keys.PublicSchemaID, name)
 }
 
 // MakeDatabaseNameKey is a wrapper around MakeObjectNameKey for databases.
-func MakeDatabaseNameKey(
-	ctx context.Context, settings *cluster.Settings, name string,
-) catalogkeys.DescriptorKey {
-	return MakeObjectNameKey(ctx, settings, keys.RootNamespaceID, keys.RootNamespaceID, name)
+func MakeDatabaseNameKey(name string) catalogkeys.DescriptorKey {
+	return MakeObjectNameKey(keys.RootNamespaceID, keys.RootNamespaceID, name)
 }
 
 // LookupObjectID returns the ObjectID for the given

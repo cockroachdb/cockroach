@@ -16,7 +16,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -268,11 +267,6 @@ func LookupSystemTableDescriptorID(
 		return descpb.InvalidID
 	}
 
-	if settings != nil &&
-		!settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) &&
-		tableName == systemschema.NamespaceTableName {
-		return systemschema.DeprecatedNamespaceTable.ID
-	}
 	systemTenant := boolToInt(codec.ForSystemTenant())
 	dbID, ok := systemTableIDCache[systemTenant][tableName]
 	if !ok {

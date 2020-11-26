@@ -129,8 +129,6 @@ func doCreateSequence(
 	// desc.ValidateTable() needed here.
 
 	key := catalogkv.MakeObjectNameKey(
-		params.ctx,
-		params.ExecCfg().Settings,
 		dbDesc.GetID(),
 		schemaID,
 		name.Object(),

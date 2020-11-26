@@ -290,7 +290,6 @@ func WriteDescriptors(
 	tables []catalog.TableDescriptor,
 	types []catalog.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
-	settings *cluster.Settings,
 	extra []roachpb.KeyValue,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
@@ -321,7 +320,7 @@ func WriteDescriptors(
 			// Depending on which cluster version we are restoring to, we decide which
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
-			dKey := catalogkv.MakeDatabaseNameKey(ctx, settings, desc.GetName())
+			dKey := catalogkv.MakeDatabaseNameKey(desc.GetName())
 			b.CPut(dKey.Key(keys.SystemSQLCodec), desc.GetID(), nil)
 		}
 
@@ -368,12 +367,9 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			// Depending on which cluster version we are restoring to, we decide which
-			// namespace table to write the descriptor into. This may cause wrong
-			// behavior if the cluster version is bumped DURING a restore.
+			// Let's grab a handle on the namespace table to write the
+			// descriptor into.
 			tkey := catalogkv.MakeObjectNameKey(
-				ctx,
-				settings,
 				table.GetParentID(),
 				table.GetParentSchemaID(),
 				table.GetName(),
@@ -402,7 +398,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			tkey := catalogkv.MakeObjectNameKey(ctx, settings, typ.GetParentID(), typ.GetParentSchemaID(), typ.GetName())
+			tkey := catalogkv.MakeObjectNameKey(typ.GetParentID(), typ.GetParentSchemaID(), typ.GetName())
 			b.CPut(tkey.Key(keys.SystemSQLCodec), typ.GetID(), nil)
 		}
 
@@ -1034,7 +1030,7 @@ func createImportingDescriptors(
 				// Write the new descriptors which are set in the OFFLINE state.
 				if err := WriteDescriptors(
 					ctx, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
-					details.DescriptorCoverage, r.settings, nil, /* extra */
+					details.DescriptorCoverage, nil, /* extra */
 				); err != nil {
 					return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 				}

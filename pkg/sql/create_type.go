@@ -116,7 +116,7 @@ func getCreateTypeParams(
 		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 	}
 
-	typeKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, name.Type())
+	typeKey = catalogkv.MakeObjectNameKey(db.GetID(), schemaID, name.Type())
 	exists, collided, err := catalogkv.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, name.Type())
 	if err == nil && exists {
@@ -189,7 +189,7 @@ func (p *planner) createArrayType(
 	if err != nil {
 		return 0, err
 	}
-	arrayTypeKey := catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, arrayTypeName)
+	arrayTypeKey := catalogkv.MakeObjectNameKey(db.GetID(), schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
 	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)

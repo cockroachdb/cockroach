@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -2632,21 +2631,19 @@ func getAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
 ) (map[descpb.ID]NamespaceKey, error) {
 	namespace := map[descpb.ID]NamespaceKey{}
-	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
-		rows, err := executor.Query(
-			ctx, "get-all-names", txn,
-			`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
-		)
-		if err != nil {
-			return nil, err
-		}
-		for _, r := range rows {
-			id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
-			namespace[descpb.ID(id)] = NamespaceKey{
-				ParentID:       descpb.ID(parentID),
-				ParentSchemaID: descpb.ID(parentSchemaID),
-				Name:           string(name),
-			}
+	rows, err := executor.Query(
+		ctx, "get-all-names", txn,
+		`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
+		namespace[descpb.ID(id)] = NamespaceKey{
+			ParentID:       descpb.ID(parentID),
+			ParentSchemaID: descpb.ID(parentSchemaID),
+			Name:           string(name),
 		}
 	}
 
