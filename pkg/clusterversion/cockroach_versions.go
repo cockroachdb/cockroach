@@ -66,7 +66,6 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
-	VersionContainsEstimatesCounter
 	VersionNamespaceTableWithSchemas
 	VersionAuthLocalAndTrustRejectMethods
 
@@ -121,25 +120,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch releases.
 		Key:     Version19_1,
 		Version: roachpb.Version{Major: 19, Minor: 1},
-	},
-	{
-		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
-		//
-		// MVCCStats.ContainsEstimates has been migrated from boolean to a
-		// counter so that the consistency checker and splits can reset it by
-		// returning -ContainsEstimates, avoiding racing with other operations
-		// that want to also change it.
-		//
-		// The migration maintains the invariant that raft commands with
-		// ContainsEstimates zero or one want the bool behavior (i.e. 1+1=1).
-		// Before the cluster version is active, at proposal time we'll refuse
-		// any negative ContainsEstimates plus we clamp all others to {0,1}.
-		// When the version is active, and ContainsEstimates is positive, we
-		// multiply it by 2 (i.e. we avoid 1). Downstream of raft, we use old
-		// behavior for ContainsEstimates=1 and the additive behavior for
-		// anything else.
-		Key:     VersionContainsEstimatesCounter,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 2},
 	},
 	{
 		// VersionNamespaceTableWithSchemas is https://github.com/cockroachdb/cockroach/pull/41977
