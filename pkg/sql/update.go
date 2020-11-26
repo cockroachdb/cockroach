@@ -299,8 +299,8 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	if !partialIndexOrds.Empty() {
 		partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
 		partialIndexVals := sourceVals[partialIndexValOffset:]
-		partialIndexPutVals := partialIndexVals[:len(partialIndexVals)/2]
-		partialIndexDelVals := partialIndexVals[len(partialIndexVals)/2:]
+		partialIndexPutVals := partialIndexVals[:partialIndexOrds.Len()]
+		partialIndexDelVals := partialIndexVals[partialIndexOrds.Len() : partialIndexOrds.Len()*2]
 
 		err := pm.Init(partialIndexPutVals, partialIndexDelVals, u.run.tu.tableDesc())
 		if err != nil {

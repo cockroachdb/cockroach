@@ -1298,6 +1298,7 @@ SELECT k FROM t55387 WHERE a > 1 AND b > 3
 
 # Regression test for #55672. Do not build partial index predicates when the
 # scope does not include all table columns, like FK check scans.
+subtest regression_55672
 
 statement ok
 CREATE TABLE t55672_a (
@@ -1323,3 +1324,91 @@ INSERT INTO t55672_a (a, t) VALUES (2, now())
 
 statement ok
 INSERT INTO t55672_b (b,a) VALUES (2,2)
+
+# Regression test for #57085. Cascading UPDATEs should correctly update partial
+# indexes of the child table.
+subtest regression_57085
+
+# Update a partial index in a child table.
+statement ok
+CREATE TABLE t57085_p1 (
+    p INT PRIMARY KEY
+);
+CREATE TABLE t57085_c1 (
+    c INT PRIMARY KEY,
+    p INT REFERENCES t57085_p1 ON UPDATE CASCADE,
+    i INT,
+    INDEX idx (p) WHERE i > 0
+);
+
+statement ok
+INSERT INTO t57085_p1 VALUES (1);
+INSERT INTO t57085_c1 VALUES (10, 1, 100), (20, 1, -100);
+UPDATE t57085_p1 SET p = 2 WHERE p = 1;
+
+query III rowsort
+SELECT c, p, i FROM t57085_c1@idx WHERE p = 2 AND i > 0
+----
+10  2  100
+
+# Update a partial index in a child table with a single variable boolean
+# predicate.
+statement ok
+CREATE TABLE t57085_p2 (
+    p INT PRIMARY KEY
+);
+CREATE TABLE t57085_c2 (
+    c INT PRIMARY KEY,
+    p INT REFERENCES t57085_p2 ON UPDATE CASCADE,
+    b BOOL,
+    INDEX idx (p) WHERE b
+);
+
+statement ok
+INSERT INTO t57085_p2 VALUES (1);
+INSERT INTO t57085_c2 VALUES (10, 1, true), (20, 1, false);
+UPDATE t57085_p2 SET p = 2 WHERE p = 1;
+
+query IIB rowsort
+SELECT c, p, b FROM t57085_c2@idx WHERE p = 2 AND b
+----
+10  2  true
+
+# Update the parent with an INSERT ON CONFLICT DO UPDATE.
+statement ok
+INSERT INTO t57085_p2 VALUES (2) ON CONFLICT (p) DO UPDATE SET p = 3
+
+query IIB rowsort
+SELECT c, p, b FROM t57085_c2@idx WHERE p = 3 AND b
+----
+10  3  true
+
+# Update a partial index that references the column being updated in the
+# cascade.
+statement ok
+CREATE TABLE t57085_p3 (
+    p INT PRIMARY KEY
+);
+CREATE TABLE t57085_c3 (
+    c INT PRIMARY KEY,
+    p INT REFERENCES t57085_p3 ON UPDATE CASCADE,
+    i INT,
+    INDEX idx (i) WHERE p = 3
+);
+
+statement ok
+INSERT INTO t57085_p3 VALUES (1), (2);
+INSERT INTO t57085_c3 VALUES (10, 1, 100), (20, 2, 200);
+UPDATE t57085_p3 SET p = 3 WHERE p = 1;
+
+query III rowsort
+SELECT c, p, i FROM t57085_c3@idx WHERE p = 3 AND i = 100
+----
+10  3  100
+
+statement ok
+UPDATE t57085_p3 SET p = 4 WHERE p = 3;
+
+query III rowsort
+SELECT c, p, i FROM t57085_c3@idx WHERE p = 3 AND i = 100
+----

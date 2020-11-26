@@ -43,6 +43,8 @@ func (b *Builder) buildMutationInput(
 		return execPlan{}, err
 	}
 
+	// TODO(mgartner/radu): This can incorrectly append columns in a FK cascade
+	// update that are never used during execution. See issue #57097.
 	if p.WithID != 0 {
 		// The input might have extra columns that are used only by FK checks; make
 		// sure we don't project them away.
