@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package logcrash
+package log
 
 import (
 	"context"
@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -78,9 +77,9 @@ Error types: (1) *runtime.TypeAssertionError`,
 			expErr: `some visible detail: interface conversion: interface {} is nil, not int
 (1) attached stack trace
   -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   | 	...crash_reporting_test.go:NN
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
   | 	...crash_reporting_test.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -100,9 +99,9 @@ Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *runtime.TypeA
 			expErr: `interface conversion: interface {} is nil, not int
 (1) attached stack trace
   -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   | 	...crash_reporting_test.go:NN
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
   | 	...crash_reporting_test.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -128,13 +127,13 @@ Wraps: (2) interface conversion: interface {} is nil, not int
 Error types: (1) *safedetails.withSafeDetails (2) *runtime.TypeAssertionError`,
 		},
 		{
-			err: errors.Newf("I like %s and my pin code is %v or %v", log.Safe("A"), "1234", log.Safe("9999")),
+			err: errors.Newf("I like %s and my pin code is %d or %d", Safe("A"), 1234, Safe(9999)),
 			expErr: `I like A and my pin code is ` + rm + ` or 9999
 (1) attached stack trace
   -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   | 	...crash_reporting_test.go:NN
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
   | 	...crash_reporting_test.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -148,13 +147,13 @@ Wraps: (2) I like A and my pin code is ` + rm + ` or 9999
 Error types: (1) *withstack.withStack (2) *errutil.leafError`,
 		},
 		{
-			err: errors.Wrapf(context.Canceled, "this is preserved: %d", log.Safe(6)),
+			err: errors.Wrapf(context.Canceled, "this is preserved: %d", Safe(6)),
 			expErr: `this is preserved: 6: context canceled
 (1) attached stack trace
   -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   | 	...crash_reporting_test.go:NN
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
   | 	...crash_reporting_test.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -175,7 +174,7 @@ Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *errors.errorS
 (1) moo ` + rm + ` ` + rm + `
 Wraps: (2) assumed safe
 Wraps: (3) ` + rm + `
-Error types: (1) *os.LinkError (2) *safedetails.withSafeDetails (3) logcrash.leafErr`,
+Error types: (1) *os.LinkError (2) *safedetails.withSafeDetails (3) log.leafErr`,
 		},
 		{
 			// Verify that invalid sentinel errors print something and don't
@@ -188,9 +187,9 @@ Error types: (1) *os.LinkError (2) *safedetails.withSafeDetails (3) logcrash.lea
 			expErr: `this is reportable as well: this is reportable too: this is reportable: ` + rm + `
 (1) attached stack trace
   -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   | 	...crash_reporting_test.go:NN
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
   | 	...crash_reporting_test.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -201,9 +200,9 @@ Error types: (1) *os.LinkError (2) *safedetails.withSafeDetails (3) logcrash.lea
 Wraps: (2) this is reportable as well
 Wraps: (3) attached stack trace
   -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   | 	...crash_reporting_test.go:NN
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
   | 	...crash_reporting_test.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -214,15 +213,15 @@ Wraps: (3) attached stack trace
 Wraps: (4) this is reportable too
 Wraps: (5) attached stack trace
   -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   | 	...crash_reporting_test.go:NN
   | [...repeated from below...]
 Wraps: (6) this is reportable
 Wraps: (7) attached stack trace
   -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   | 	...crash_reporting_test.go:NN
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
   | 	...crash_reporting_test.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -246,16 +245,16 @@ Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *withstack.wit
 			expErr: `write tcp ` + rm + ` -> ` + rm + `: ` + rm + `
 (1) write tcp ` + rm + ` -> ` + rm + `
 Wraps: (2) ` + rm + `
-Error types: (1) *net.OpError (2) logcrash.leafErr`,
+Error types: (1) *net.OpError (2) log.leafErr`,
 		},
 		{
 			err: errFormatted,
 			expErr: `this embed an error: this is reportable too: this is reportable: ` + rm + `
 (1) attached stack trace
   -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   | 	...crash_reporting_test.go:NN
-  | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  | github.com/cockroachdb/cockroach/pkg/util/log.init
   | 	...crash_reporting_test.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -269,9 +268,9 @@ Wraps: (2) secondary error attachment
   | this is reportable too: this is reportable: ` + rm + `
   | (1) attached stack trace
   |   -- stack trace:
-  |   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   |   | 	...crash_reporting_test.go:NN
-  |   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.init
   |   | 	...crash_reporting_test.go:NN
   |   | runtime.doInit
   |   | 	...proc.go:NN
@@ -282,15 +281,15 @@ Wraps: (2) secondary error attachment
   | Wraps: (2) this is reportable too
   | Wraps: (3) attached stack trace
   |   -- stack trace:
-  |   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   |   | 	...crash_reporting_test.go:NN
   |   | [...repeated from below...]
   | Wraps: (4) this is reportable
   | Wraps: (5) attached stack trace
   |   -- stack trace:
-  |   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.glob..func2
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
   |   | 	...crash_reporting_test.go:NN
-  |   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
+  |   | github.com/cockroachdb/cockroach/pkg/util/log.init
   |   | 	...crash_reporting_test.go:NN
   |   | runtime.doInit
   |   | 	...proc.go:NN

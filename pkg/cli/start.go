@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
@@ -527,7 +526,7 @@ If problems persist, please see %s.`
 				// actually been started successfully. If there's no server,
 				// we won't know enough to decide whether reporting is
 				// permitted.
-				logcrash.RecoverAndReportPanic(ctx, &s.ClusterSettings().SV)
+				log.RecoverAndReportPanic(ctx, &s.ClusterSettings().SV)
 			}
 		}()
 		// When the start up goroutine completes, so can the start up span

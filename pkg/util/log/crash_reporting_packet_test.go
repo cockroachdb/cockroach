@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package logcrash_test
+package log_test
 
 import (
 	"context"
@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/sentry-go"
 	"github.com/kr/pretty"
@@ -62,11 +61,11 @@ func TestCrashReportingPacket(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	// Enable all crash-reporting settings.
-	logcrash.DiagnosticsReportingEnabled.Override(&st.SV, true)
+	log.DiagnosticsReportingEnabled.Override(&st.SV, true)
 
-	defer logcrash.TestingSetCrashReportingURL("https://ignored:ignored@ignored/1234")()
+	defer log.TestingSetCrashReportingURL("https://ignored:ignored@ignored/1234")()
 
-	logcrash.SetupCrashReporter(ctx, "test")
+	log.SetupCrashReporter(ctx, "test")
 
 	// Install a Transport that locally records events rather than sending them
 	// to Sentry over HTTP.
@@ -92,13 +91,13 @@ func TestCrashReportingPacket(t *testing.T) {
 
 	func() {
 		defer expectPanic("before server start")
-		defer logcrash.RecoverAndReportPanic(ctx, &st.SV)
+		defer log.RecoverAndReportPanic(ctx, &st.SV)
 		panic(log.Safe(panicPre))
 	}()
 
 	func() {
 		defer expectPanic("after server start")
-		defer logcrash.RecoverAndReportPanic(ctx, &st.SV)
+		defer log.RecoverAndReportPanic(ctx, &st.SV)
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		s.Stopper().Stop(ctx)
 		panic(log.Safe(panicPost))
@@ -152,7 +151,7 @@ func TestCrashReportingPacket(t *testing.T) {
 		p := packets[0]
 		packets = packets[1:]
 		t.Run("", func(t *testing.T) {
-			if !logcrash.ReportSensitiveDetails {
+			if !log.ReportSensitiveDetails {
 				e, a := "<redacted>", p.ServerName
 				if e != a {
 					t.Errorf("expected ServerName to be '<redacted>', but got '%s'", a)
@@ -210,11 +209,11 @@ func TestInternalErrorReporting(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	// Enable all crash-reporting settings.
-	logcrash.DiagnosticsReportingEnabled.Override(&st.SV, true)
+	log.DiagnosticsReportingEnabled.Override(&st.SV, true)
 
-	defer logcrash.TestingSetCrashReportingURL("https://ignored:ignored@ignored/1234")()
+	defer log.TestingSetCrashReportingURL("https://ignored:ignored@ignored/1234")()
 
-	logcrash.SetupCrashReporter(ctx, "test")
+	log.SetupCrashReporter(ctx, "test")
 
 	// Install a Transport that locally records packets rather than sending them
 	// to Sentry over HTTP.
