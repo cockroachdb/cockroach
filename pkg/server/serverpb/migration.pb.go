@@ -36,7 +36,7 @@ func (m *ValidateTargetClusterVersionRequest) Reset()         { *m = ValidateTar
 func (m *ValidateTargetClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionRequest) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_23f3ba74c87bf5d5, []int{0}
+	return fileDescriptor_migration_8dfeb6fcf9144e4c, []int{0}
 }
 func (m *ValidateTargetClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -70,7 +70,7 @@ func (m *ValidateTargetClusterVersionResponse) Reset()         { *m = ValidateTa
 func (m *ValidateTargetClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionResponse) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_23f3ba74c87bf5d5, []int{1}
+	return fileDescriptor_migration_8dfeb6fcf9144e4c, []int{1}
 }
 func (m *ValidateTargetClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -105,7 +105,7 @@ func (m *BumpClusterVersionRequest) Reset()         { *m = BumpClusterVersionReq
 func (m *BumpClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionRequest) ProtoMessage()    {}
 func (*BumpClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_23f3ba74c87bf5d5, []int{2}
+	return fileDescriptor_migration_8dfeb6fcf9144e4c, []int{2}
 }
 func (m *BumpClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -138,7 +138,7 @@ func (m *BumpClusterVersionResponse) Reset()         { *m = BumpClusterVersionRe
 func (m *BumpClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionResponse) ProtoMessage()    {}
 func (*BumpClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_23f3ba74c87bf5d5, []int{3}
+	return fileDescriptor_migration_8dfeb6fcf9144e4c, []int{3}
 }
 func (m *BumpClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -195,43 +195,6 @@ type MigrationClient interface {
 	// This RPC is typically used together with ValidateTargetClusterVersion,
 	// which checks to see that all nodes in the cluster are running binaries
 	// that would be able to support the intended version bump.
-	//
-	// The migrations infrastructure makes use of internal fence/noop-versions
-	// when stepping through consecutive versions. It's instructive to walk
-	// through how we expect a version migration from v21.1 to v21.2 to take
-	// place, and how we behave in the presence of new v21.1 or v21.2 nodes being
-	// added to the cluster during.
-	//   - All nodes are running v21.1
-	//   - All nodes are rolled into v21.2 binaries, but with active cluster
-	//     version still as v21.1
-	//   - The first version bump will be into v21.2.0-1noop
-	//   - Validation for setting active cluster version to v21.2.0-1noop first
-	//     checks to see that all nodes are running v21.2 binaries
-	// Then concurrently:
-	//   - A new node is added to the cluster, but running binary v21.1
-	//   - We try bumping the cluster gates to v21.2.0-1noop
-	//
-	//  If the v21.1 nodes manages to sneak in before the version bump, it's
-	//  fine as the version bump is a no-op one. Any subsequent bumps (including
-	//  the "actual" one bumping to v21.2.0) will fail during validation.
-	//
-	//  If the v21.1 node is only added after v21.2.0-1noop is active, it won't
-	//  be able to actually join the cluster (it'll be prevented by the join
-	//  RPC).
-	//
-	// The general mechanism for bumping any cluster version across every node in
-	// the system goes through the following steps (the complexity here again
-	// arising from the possibility of new nodes being added during version
-	// upgrades):
-	//   (a) We'll retrieve the list of node IDs for all nodes in the system
-	//   (b) For each node, we'll bump the cluster version
-	//   (c) We'll load the list of node IDs again to account for the possibility
-	//       of a new node being added during (b). It's possible for this node to
-	//       have joined the cluster by pointing to an existing node that hadn't
-	//       yet seen the cluster version bump
-	//   (d) If there any discrepancies between the node ID list retrieved in (a)
-	//       and (c), we'll bump the cluster version for the newly found node IDs
-	//   (e) We'll continue to loop around until the node ID list stabilizes
 	BumpClusterVersion(ctx context.Context, in *BumpClusterVersionRequest, opts ...grpc.CallOption) (*BumpClusterVersionResponse, error)
 }
 
@@ -276,43 +239,6 @@ type MigrationServer interface {
 	// This RPC is typically used together with ValidateTargetClusterVersion,
 	// which checks to see that all nodes in the cluster are running binaries
 	// that would be able to support the intended version bump.
-	//
-	// The migrations infrastructure makes use of internal fence/noop-versions
-	// when stepping through consecutive versions. It's instructive to walk
-	// through how we expect a version migration from v21.1 to v21.2 to take
-	// place, and how we behave in the presence of new v21.1 or v21.2 nodes being
-	// added to the cluster during.
-	//   - All nodes are running v21.1
-	//   - All nodes are rolled into v21.2 binaries, but with active cluster
-	//     version still as v21.1
-	//   - The first version bump will be into v21.2.0-1noop
-	//   - Validation for setting active cluster version to v21.2.0-1noop first
-	//     checks to see that all nodes are running v21.2 binaries
-	// Then concurrently:
-	//   - A new node is added to the cluster, but running binary v21.1
-	//   - We try bumping the cluster gates to v21.2.0-1noop
-	//
-	//  If the v21.1 nodes manages to sneak in before the version bump, it's
-	//  fine as the version bump is a no-op one. Any subsequent bumps (including
-	//  the "actual" one bumping to v21.2.0) will fail during validation.
-	//
-	//  If the v21.1 node is only added after v21.2.0-1noop is active, it won't
-	//  be able to actually join the cluster (it'll be prevented by the join
-	//  RPC).
-	//
-	// The general mechanism for bumping any cluster version across every node in
-	// the system goes through the following steps (the complexity here again
-	// arising from the possibility of new nodes being added during version
-	// upgrades):
-	//   (a) We'll retrieve the list of node IDs for all nodes in the system
-	//   (b) For each node, we'll bump the cluster version
-	//   (c) We'll load the list of node IDs again to account for the possibility
-	//       of a new node being added during (b). It's possible for this node to
-	//       have joined the cluster by pointing to an existing node that hadn't
-	//       yet seen the cluster version bump
-	//   (d) If there any discrepancies between the node ID list retrieved in (a)
-	//       and (c), we'll bump the cluster version for the newly found node IDs
-	//   (e) We'll continue to loop around until the node ID list stabilizes
 	BumpClusterVersion(context.Context, *BumpClusterVersionRequest) (*BumpClusterVersionResponse, error)
 }
 
@@ -903,10 +829,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_migration_23f3ba74c87bf5d5)
+	proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_migration_8dfeb6fcf9144e4c)
 }
 
-var fileDescriptor_migration_23f3ba74c87bf5d5 = []byte{
+var fileDescriptor_migration_8dfeb6fcf9144e4c = []byte{
 	// 278 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x4e, 0x2d, 0x2a,
 	0x4b, 0x2d, 0xd2, 0x87, 0x50, 0x05, 0x49, 0xfa, 0xb9, 0x99, 0xe9, 0x45, 0x89, 0x25, 0x99, 0xf9,
