@@ -83,6 +83,13 @@ sinks:
        filter: INFO
        redact: true
 
+  fluent-servers:
+    default:
+      address: 127.0.0.1:5170
+    other:
+      net: udp
+      address: 127.0.0.1:5111
+
   stderr:
     filter: WARNING
     redact: false
@@ -107,6 +114,12 @@ sinks:
     perf:
       filter: INFO
       redact: true
+  fluent-servers:
+    default:
+      address: 127.0.0.1:5170
+    other:
+      net: udp
+      address: 127.0.0.1:5111
   stderr:
     filter: WARNING
     redact: false
