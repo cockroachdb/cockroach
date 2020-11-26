@@ -1724,6 +1724,13 @@ func (ef *execFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, 
 func (ef *execFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
+	if err := checkSchemaChangeEnabled(
+		&ef.planner.ExecCfg().Settings.SV,
+		"ALTER TABLE/INDEX SPLIT AT",
+	); err != nil {
+		return nil, err
+	}
+
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
@@ -1745,6 +1752,13 @@ func (ef *execFactory) ConstructAlterTableSplit(
 func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
+	if err := checkSchemaChangeEnabled(
+		&ef.planner.ExecCfg().Settings.SV,
+		"ALTER TABLE/INDEX UNSPLIT AT",
+	); err != nil {
+		return nil, err
+	}
+
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
@@ -1758,6 +1772,13 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
+	if err := checkSchemaChangeEnabled(
+		&ef.planner.ExecCfg().Settings.SV,
+		"ALTER TABLE/INDEX UNSPLIT ALL",
+	); err != nil {
+		return nil, err
+	}
+
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
