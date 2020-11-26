@@ -46,9 +46,15 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	if c.FileDefaults.Filter == logpb.Severity_UNKNOWN {
 		c.FileDefaults.Filter = logpb.Severity_INFO
 	}
+	if c.FluentDefaults.Filter == logpb.Severity_UNKNOWN {
+		c.FluentDefaults.Filter = logpb.Severity_INFO
+	}
 	// Sinks are not auditable by default.
 	if c.FileDefaults.Auditable == nil {
 		c.FileDefaults.Auditable = &bf
+	}
+	if c.FluentDefaults.Auditable == nil {
+		c.FluentDefaults.Auditable = &bf
 	}
 	// File sinks are buffered by default.
 	if c.FileDefaults.BufferedWrites == nil {
@@ -59,17 +65,30 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		s := DefaultFileFormat
 		c.FileDefaults.Format = &s
 	}
+	if c.FluentDefaults.Format == nil {
+		s := DefaultFluentFormat
+		c.FluentDefaults.Format = &s
+	}
 	// No redaction markers -> default keep them.
 	if c.FileDefaults.Redactable == nil {
 		c.FileDefaults.Redactable = &bt
+	}
+	if c.FluentDefaults.Redactable == nil {
+		c.FluentDefaults.Redactable = &bt
 	}
 	// No redaction specification -> default false.
 	if c.FileDefaults.Redact == nil {
 		c.FileDefaults.Redact = &bf
 	}
-	// No criticality -> default true for files.
+	if c.FluentDefaults.Redact == nil {
+		c.FluentDefaults.Redact = &bf
+	}
+	// No criticality -> default true for files, false for fluent.
 	if c.FileDefaults.Criticality == nil {
 		c.FileDefaults.Criticality = &bt
+	}
+	if c.FluentDefaults.Criticality == nil {
+		c.FluentDefaults.Criticality = &bf
 	}
 
 	// Validate and fill in defaults for file sinks.
@@ -81,6 +100,18 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		fc.prefix = prefix
 		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
 			fmt.Fprintf(&errBuf, "file group %q: %v\n", prefix, err)
+		}
+	}
+
+	// Validate and defaults for fluent.
+	for serverName, fc := range c.Sinks.FluentServers {
+		if fc == nil {
+			fc = &FluentSinkConfig{}
+			c.Sinks.FluentServers[serverName] = fc
+		}
+		fc.serverName = serverName
+		if err := c.validateFluentSinkConfig(fc); err != nil {
+			fmt.Fprintf(&errBuf, "fluent server %q: %v\n", serverName, err)
 		}
 	}
 
@@ -103,6 +134,8 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 
 	// fileSinks maps channels to files.
 	fileSinks := make(map[logpb.Channel]*FileSinkConfig)
+	// fluentSinks maps channels to fluent servers.
+	fluentSinks := make(map[logpb.Channel]*FluentSinkConfig)
 
 	// Check that no channel is listed by more than one file sink,
 	// and every file has at least one channel.
@@ -121,6 +154,23 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					fc.prefix, ch, prevPrefix)
 			} else {
 				fileSinks[ch] = fc
+			}
+		}
+	}
+
+	// Check that no channel is listed by more than one fluent sink, and
+	// every sink has at least one channel.
+	for _, fc := range c.Sinks.FluentServers {
+		if len(fc.Channels.Channels) == 0 {
+			fmt.Fprintf(&errBuf, "fluent server %q: no channel selected\n", fc.serverName)
+		}
+		fc.Channels.Sort()
+		for _, ch := range fc.Channels.Channels {
+			if prev := fluentSinks[ch]; prev != nil {
+				fmt.Fprintf(&errBuf, "fluent server %q: channel %s already captured by server %q\n",
+					fc.serverName, ch, prev.serverName)
+			} else {
+				fluentSinks[ch] = fc
 			}
 		}
 	}
@@ -194,10 +244,25 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		}
 	}
 
+	// serverNames collects the names of the servers. We need this to
+	// store this sorted in c.Sinks.sortedServerNames later.
+	serverNames := make([]string, 0, len(c.Sinks.FluentServers))
+	// Elide all the file sinks without a directory or with severity set
+	// to NONE. Also collect the remaining names for sorting below.
+	for serverName, fc := range c.Sinks.FluentServers {
+		if fc.Filter == logpb.Severity_NONE {
+			delete(c.Sinks.FluentServers, serverName)
+		} else {
+			serverNames = append(serverNames, serverName)
+		}
+	}
+
 	// Remember the sorted names, so we get deterministic output in
 	// export.
 	sort.Strings(fileGroupNames)
 	c.Sinks.sortedFileGroupNames = fileGroupNames
+	sort.Strings(serverNames)
+	c.Sinks.sortedServerNames = serverNames
 
 	return nil
 }
@@ -264,6 +329,34 @@ func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *strin
 			s := "`crdb-v1-count"
 			fc.Format = &s
 		}
+	}
+	fc.Auditable = nil
+
+	return nil
+}
+
+func (c *Config) validateFluentSinkConfig(fc *FluentSinkConfig) error {
+	c.inheritCommonDefaults(&fc.CommonSinkConfig, &c.FluentDefaults.CommonSinkConfig)
+
+	fc.Net = strings.ToLower(strings.TrimSpace(fc.Net))
+	switch fc.Net {
+	case "tcp", "tcp4", "tcp6":
+	case "udp", "udp4", "udp6":
+	case "unix":
+	case "":
+		fc.Net = "tcp"
+	default:
+		return errors.Newf("unknown protocol: %q", fc.Net)
+	}
+	fc.Address = strings.TrimSpace(fc.Address)
+	if fc.Address == "" {
+		return errors.New("address cannot be empty")
+	}
+
+	// Apply the auditable flag if set.
+	if *fc.Auditable {
+		bt := true
+		fc.Criticality = &bt
 	}
 	fc.Auditable = nil
 

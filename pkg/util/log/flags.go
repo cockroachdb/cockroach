@@ -64,6 +64,7 @@ func init() {
 	// we cannot keep redaction markers there.
 	*defaultConfig.Sinks.Stderr.Redactable = false
 	// Remove all sinks other than stderr.
+	defaultConfig.Sinks.FluentServers = nil
 	defaultConfig.Sinks.FileGroups = nil
 
 	if _, err := ApplyConfig(defaultConfig); err != nil {
@@ -279,6 +280,26 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		}
 	}
 
+	// Create the fluent sinks.
+	for _, fc := range config.Sinks.FluentServers {
+		if fc.Filter == severity.NONE {
+			continue
+		}
+		fluentSinkInfo, err := newFluentSinkInfo(*fc)
+		if err != nil {
+			cleanupFn()
+			return nil, err
+		}
+		sinkInfos = append(sinkInfos, fluentSinkInfo)
+		allSinkInfos.put(fluentSinkInfo)
+
+		// Connect the channels for this sink.
+		for _, ch := range fc.Channels.Channels {
+			l := chans[ch]
+			l.sinkInfos = append(l.sinkInfos, fluentSinkInfo)
+		}
+	}
+
 	logging.setChannelLoggers(chans, &stderrSinkInfo)
 	setActive()
 
@@ -303,6 +324,18 @@ func newFileSinkInfo(
 		info.getStartLines)
 	info.sink = fileSink
 	return info, fileSink, nil
+}
+
+// newFluentSinkInfo creates a new fluentSink and its accompanying sinkInfo
+// from the provided configuration.
+func newFluentSinkInfo(c logconfig.FluentSinkConfig) (*sinkInfo, error) {
+	info := &sinkInfo{}
+	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
+		return nil, err
+	}
+	fluentSink := newFluentSink(c.Net, c.Address)
+	info.sink = fluentSink
+	return info, nil
 }
 
 // applyConfig applies a common sink configuration to a sinkInfo.
@@ -435,6 +468,30 @@ func DescribeAppliedConfig() string {
 				prefix, prev)
 		}
 		config.Sinks.FileGroups[prefix] = fc
+		return nil
+	})
+
+	// Describe the fluent sinks.
+	config.Sinks.FluentServers = make(map[string]*logconfig.FluentSinkConfig)
+	sIdx := 1
+	_ = allSinkInfos.iter(func(l *sinkInfo) error {
+		fluentSink, ok := l.sink.(*fluentSink)
+		if !ok {
+			return nil
+		}
+
+		fc := &logconfig.FluentSinkConfig{}
+		fc.CommonSinkConfig = l.describeAppliedConfig()
+		fc.Net = fluentSink.network
+		fc.Address = fluentSink.addr
+
+		// Describe the connections to this fluent sink.
+		for ch, logger := range chans {
+			describeConnections(logger, ch, l, &fc.Channels)
+		}
+		skey := fmt.Sprintf("s%d", sIdx)
+		sIdx++
+		config.Sinks.FluentServers[skey] = fc
 		return nil
 	})
 

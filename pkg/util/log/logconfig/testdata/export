@@ -55,6 +55,11 @@ sinks:
       channels: ALL
   stderr:
     filter: WARNING
+  fluent-servers:
+    local:
+      channels: SESSIONS
+      redactable: false
+      address: localhost:5170
 ----
 @startuml
 left to right direction
@@ -66,22 +71,30 @@ cloud stray as "stray\nerrors"
 queue stderr
 card p__1 as "redact"
 card p__2 as "format:crdb-v2"
-card p__3 as "format:crdb-v2-tty"
-card p__4 as "filter:W"
+card p__3 as "strip"
+card p__4 as "format:json-fluent-compact"
+card p__5 as "format:crdb-v2-tty"
+card p__6 as "filter:W"
 artifact files {
  folder "/default-dir" {
   file f1 as "cockroach-everything.log"
   file stderrfile as "cockroach-stderr.log"
  }
 }
+cloud network {
+ queue s__local as "fluent: tcp:localhost:5170"
+}
 DEV --> p__2
 SESSIONS --> p__2
 p__1 --> f1
 p__2 --> p__1
 stray --> stderrfile
-DEV --> p__4
 SESSIONS --> p__4
-p__3 --> stderr
+p__3 ..> s__local
 p__4 --> p__3
+DEV --> p__6
+SESSIONS --> p__6
+p__5 --> stderr
+p__6 --> p__5
 @enduml
-# http://www.plantuml.com/plantuml/uml/R96_JWCn3CPtFuML2OO3zS_K0NLe1nOOJYeBKXKIfur8pyNnLQfGtnrTxig1O8hjxnV7_hBCQaNRGu94GL4P9UxsYZuAEOtSWEF3aHjg53EtuYZZ9zpSucgzwOvwNTUFpqyrkCIjnwnYpsWpcXAzDYJ2aWrSuAEbbZ2h9n5mLZmUjzj9OOMyTMg-gzDI3Im7gmid_gqwJKTrzezQgPv7OjuJCId9uiM05Ot1EiKGKvaV0oTFWkRUKx1jqif7CPrG40pzN8xTkx1r-ufE96VTnsPtbtXdhbo_JGb_yxqmi1Uum6gzmQfwADl1rRInKgpeiZ21Oi2WJA1tj4l7ntvsc__fDeTYqdW5YYM3EeCbDRxxyAy0003__m00
+# http://www.plantuml.com/plantuml/uml/R58zRzim4DtlLnmqjOFSEebTG4EG8Hwwj8E1T2bWiEJHPaFprECfXL7ulnUav2X1Cebyx_4-tjDTLYCw72D4yehAA65_K7H1o6hW19QFFITAYfa7iPJn7tpuYFURX_BPRhRRhz-_RS567Xnc5ND2ax6ffv-9H5Xo0sVuCz10cDMH25WZ3llTRbcrGivORPxHgufwbgFHpehxrJvTpUprfNxeP_3cvPFVcLFhuq19spB-g-AhTugtggTPiHuL8If9zwC18ngyiOe-nBe-UewE19jFZhmPehOkI5E8Aa4_hcNPFWeRUsZfYUIaXv3sYyZxvg8RpQZ7r_gHcBHdE4_k9jA_B8-bqUJcRXVPcZWEN1VkK6tVLVJ0MRlLyildOl_zvW7RzhRQ2vVKPgHcKMv-2JM1YLd266cvpkE-AN03DPZ5ulPv9gYfJFpro_xhDy_NK8EPcq2DOM9NS4V9bN_qVm000F__
