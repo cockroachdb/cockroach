@@ -143,13 +143,6 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		switch entry.ConnType {
 		case hba.ConnHostAny:
 		case hba.ConnLocal:
-			if vh != nil &&
-				!vh.IsActive(context.TODO(), clusterversion.VersionAuthLocalAndTrustRejectMethods) {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					`authentication rule type 'local' requires all nodes to be upgraded to %s`,
-					clusterversion.VersionByKey(clusterversion.VersionAuthLocalAndTrustRejectMethods),
-				)
-			}
 		case hba.ConnHostSSL, hba.ConnHostNoSSL:
 			if vh != nil &&
 				!vh.IsActive(context.TODO(), clusterversion.VersionHBAForNonTLS) {
@@ -198,13 +191,6 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 				"unknown auth method %q", entry.Method.Value),
 				"Supported methods: %s", listRegisteredMethods())
 		}
-		// Verify that the cluster setting is at least the required version.
-		if vh != nil && !vh.IsActive(context.TODO(), method.minReqVersion) {
-			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				`authentication method '%s' requires all nodes to be upgraded to %s`,
-				entry.Method.Value,
-				clusterversion.VersionByKey(method.minReqVersion))
-		}
 		// Run the per-method validation.
 		if check := hbaCheckHBAEntries[entry.Method.Value]; check != nil {
 			if err := check(entry); err != nil {
@@ -238,14 +224,14 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 	// Lookup and cache the auth methods.
 	for i := range conf.Entries {
 		method := conf.Entries[i].Method.Value
-		methodEntry, ok := hbaAuthMethods[method]
+		info, ok := hbaAuthMethods[method]
 		if !ok {
 			// TODO(knz): Determine if an error should be reported
 			// upon unknown auth methods.
 			// See: https://github.com/cockroachdb/cockroach/issues/43716
 			return nil, errors.Errorf("unknown auth method %s", method)
 		}
-		conf.Entries[i].MethodFn = methodEntry.methodInfo
+		conf.Entries[i].MethodFn = info
 	}
 
 	return conf, nil
@@ -323,13 +309,9 @@ func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
 // configuration. It can block the configuration if e.g. the syntax is
 // invalid.
 func RegisterAuthMethod(
-	method string,
-	fn AuthMethod,
-	minReqVersion clusterversion.VersionKey,
-	validConnTypes hba.ConnType,
-	checkEntry CheckHBAEntry,
+	method string, fn AuthMethod, validConnTypes hba.ConnType, checkEntry CheckHBAEntry,
 ) {
-	hbaAuthMethods[method] = authMethodEntry{methodInfo{validConnTypes, fn}, minReqVersion}
+	hbaAuthMethods[method] = methodInfo{validConnTypes, fn}
 	if checkEntry != nil {
 		hbaCheckHBAEntries[method] = checkEntry
 	}
@@ -347,14 +329,9 @@ func listRegisteredMethods() string {
 }
 
 var (
-	hbaAuthMethods     = map[string]authMethodEntry{}
+	hbaAuthMethods     = map[string]methodInfo{}
 	hbaCheckHBAEntries = map[string]CheckHBAEntry{}
 )
-
-type authMethodEntry struct {
-	methodInfo
-	minReqVersion clusterversion.VersionKey
-}
 
 type methodInfo struct {
 	validConnTypes hba.ConnType
