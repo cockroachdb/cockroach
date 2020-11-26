@@ -261,34 +261,34 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 	// with the provided certificate.
 	certInfo := cm.NodeCert()
 	if certInfo.Error != nil {
-		log.Shoutf(cctx, severity.ERROR,
+		log.Ops.Shoutf(cctx, severity.ERROR,
 			"invalid node certificate: %v", certInfo.Error)
 	} else {
 		cert := certInfo.ParsedCertificates[0]
 		addrInfo := certAddrs(cert)
 
 		// Log the certificate details in any case. This will aid during troubleshooting.
-		log.Infof(cctx, "server certificate addresses: %s", addrInfo)
+		log.Ops.Infof(cctx, "server certificate addresses: %s", addrInfo)
 
 		var msg bytes.Buffer
 		// Verify the compatibility. This requires that ValidateAddrs() has
 		// been called already.
 		host, _, err := net.SplitHostPort(ctx.config.AdvertiseAddr)
 		if err != nil {
-			panic("programming error: call ValidateAddrs() first")
+			panic(errors.AssertionFailedf("programming error: call ValidateAddrs() first"))
 		}
 		if err := cert.VerifyHostname(host); err != nil {
 			fmt.Fprintf(&msg, "advertise address %q not in node certificate (%s)\n", host, addrInfo)
 		}
 		host, _, err = net.SplitHostPort(ctx.config.SQLAdvertiseAddr)
 		if err != nil {
-			panic("programming error: call ValidateAddrs() first")
+			panic(errors.AssertionFailedf("programming error: call ValidateAddrs() first"))
 		}
 		if err := cert.VerifyHostname(host); err != nil {
 			fmt.Fprintf(&msg, "advertise SQL address %q not in node certificate (%s)\n", host, addrInfo)
 		}
 		if msg.Len() > 0 {
-			log.Shoutf(cctx, severity.WARNING,
+			log.Ops.Shoutf(cctx, severity.WARNING,
 				"%s"+
 					"Secure client connections are likely to fail.\n"+
 					"Consider extending the node certificate or tweak --listen-addr/--advertise-addr/--sql-addr/--advertise-sql-addr.",
@@ -309,7 +309,7 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 		certInfo = cm.NodeCert()
 	}
 	if certInfo.Error != nil {
-		log.Shoutf(cctx, severity.ERROR,
+		log.Ops.Shoutf(cctx, severity.ERROR,
 			"invalid UI certificate: %v", certInfo.Error)
 	} else {
 		cert := certInfo.ParsedCertificates[0]
@@ -317,7 +317,7 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 
 		// Log the certificate details in any case. This will aid during
 		// troubleshooting.
-		log.Infof(cctx, "web UI certificate addresses: %s", addrInfo)
+		log.Ops.Infof(cctx, "web UI certificate addresses: %s", addrInfo)
 	}
 }
 

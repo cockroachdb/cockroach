@@ -52,6 +52,7 @@ func TestStdFlagToPflag(t *testing.T) {
 func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	// Verify that the cockroach binary doesn't depend on certain packages.
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach", true,

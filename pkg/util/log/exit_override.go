@@ -78,7 +78,7 @@ func (l *loggerT) exitLocked(err error, code exit.Code) {
 func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// Make a valid log entry for this error.
 	entry := MakeEntry(
-		ctx, severity.ERROR, channel.DEV, // FIXME(knz): use OPS here.
+		ctx, severity.ERROR, channel.OPS,
 		2 /* depth */, true, /* redactable */
 		"logging error: %v", err)
 

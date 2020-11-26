@@ -16,6 +16,29 @@ import "github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 // sensitive operational data.
 const DEV = logpb.Channel_DEV
 
+// OPS is the channel used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run.
+// - actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - job-related initiation or termination.
+// - cluster setting changes.
+// - zone configuration changes.
+const OPS = logpb.Channel_OPS
+
+// HEALTH is the channel used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - current resource usage, including critical resource usage.
+// - node-node connection events, including connection errors and
+//   gossip details.
+// - range and table leasing events.
+// - up-, down-replication; range unavailability.
+const HEALTH = logpb.Channel_HEALTH
+
 // STORAGE is the channel used to report low-level storage
 // layer events (RocksDB/Pebble).
 const STORAGE = logpb.Channel_STORAGE
