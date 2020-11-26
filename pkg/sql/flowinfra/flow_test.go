@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// BenchmarkFlowSetup sets up GOMAXPROCS goroutines where each is setting up
-// a flow for a scan that is dominated by the setup cost.
+// BenchmarkFlowSetup sets up a flow for a scan that is dominated by the setup
+// cost.
 func BenchmarkFlowSetup(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	logScope := log.Scope(b)
@@ -56,30 +56,28 @@ func BenchmarkFlowSetup(b *testing.B) {
 				if vectorize {
 					vectorizeMode = sessiondatapb.VectorizeOn
 				}
-				b.RunParallel(func(pb *testing.PB) {
-					for pb.Next() {
-						// NB: planner cannot be reset and can only be used for
-						// a single statement, so we create a new one on every
-						// iteration.
-						planner, cleanup := sql.NewInternalPlanner(
-							"test",
-							kv.NewTxn(ctx, s.DB(), s.NodeID()),
-							security.RootUserName(),
-							&sql.MemoryMetrics{},
-							&execCfg,
-							sessiondatapb.SessionData{VectorizeMode: vectorizeMode},
-						)
-						defer cleanup()
-						if err := dsp.Exec(
-							ctx,
-							planner,
-							"SELECT k FROM b.test WHERE k=1",
-							distribute,
-						); err != nil {
-							b.Fatal(err)
-						}
+				for i := 0; i < b.N; i++ {
+					// NB: planner cannot be reset and can only be used for
+					// a single statement, so we create a new one on every
+					// iteration.
+					planner, cleanup := sql.NewInternalPlanner(
+						"test",
+						kv.NewTxn(ctx, s.DB(), s.NodeID()),
+						security.RootUserName(),
+						&sql.MemoryMetrics{},
+						&execCfg,
+						sessiondatapb.SessionData{VectorizeMode: vectorizeMode},
+					)
+					if err := dsp.Exec(
+						ctx,
+						planner,
+						"SELECT k FROM b.test WHERE k=1",
+						distribute,
+					); err != nil {
+						b.Fatal(err)
 					}
-				})
+					cleanup()
+				}
 			})
 		}
 	}
