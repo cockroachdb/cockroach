@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -52,6 +53,13 @@ type loggingT struct {
 	// The common stderr sink.
 	stderrSink     stderrSink
 	stderrSinkInfo sinkInfo
+
+	// the mapping of channels to loggers.
+	channels map[Channel]*loggerT
+
+	// testingFd2CaptureLogger remembers the logger that was last set up
+	// to capture fd2 writes. Used by unit tests in this package.
+	testingFd2CaptureLogger *loggerT
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
@@ -87,6 +95,9 @@ func init() {
 	logging.bufPool.New = newBuffer
 	logging.bufSlicePool.New = newBufferSlice
 	logging.mu.fatalCh = make(chan struct{})
+	logging.stderrSinkInfo.sink = &logging.stderrSink
+	logging.channels = make(map[Channel]*loggerT)
+
 }
 
 type sinkInfo struct {
@@ -112,6 +123,10 @@ type sinkInfo struct {
 	// criticality indicates whether a failure to output some log
 	// entries should incur the process to terminate.
 	criticality bool
+
+	// redact and redactable memorize the input configuration
+	// that was used to create the editor above.
+	redact, redactable bool
 }
 
 // loggerT represents the logging source for a given log channel.
@@ -174,7 +189,7 @@ func SetClusterID(clusterID string) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	addStructured(ctx, severity.INFO, 1, "clusterID: %s", []interface{}{clusterID})
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, "clusterID: %s", clusterID) // TODO(knz): Use OPS here.
 
 	// Perform the change proper.
 	logging.mu.Lock()

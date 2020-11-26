@@ -72,6 +72,11 @@ func (l *fileSink) gcOldFiles() {
 	}
 
 	logFilesCombinedMaxSize := atomic.LoadInt64(&l.logFilesCombinedMaxSize)
+	if logFilesCombinedMaxSize == 0 {
+		// Nothing to do.
+		return
+	}
+
 	files := selectFiles(allFiles, math.MaxInt64)
 	if len(files) == 0 {
 		return
