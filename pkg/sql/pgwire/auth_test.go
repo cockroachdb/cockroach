@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
@@ -145,13 +147,37 @@ func hbaRunTest(t *testing.T, insecure bool) {
 	if !insecure {
 		httpScheme = "https://"
 	}
+
 	datadriven.Walk(t, "testdata/auth", func(t *testing.T, path string) {
+		defer leaktest.AfterTest(t)()
+
 		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)
 		defer cleanup()
 
 		// We really need to have the logs go to files, so that -show-logs
 		// does not break the "authlog" directives.
-		defer log.ScopeWithoutShowLogs(t).Close(t)
+		sc := log.ScopeWithoutShowLogs(t)
+		defer sc.Close(t)
+
+		// Enable logging channels.
+		log.TestingResetActive()
+		cfg := logconfig.DefaultConfig()
+		// Make a sink for just the session log.
+		bt := true
+		cfg.Sinks.FileGroups = map[string]*logconfig.FileConfig{
+			"auth": {
+				CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
+				Channels:         logconfig.ChannelList{Channels: []log.Channel{channel.SESSIONS}},
+			}}
+		dir := sc.GetDirectory()
+		if err := cfg.Validate(&dir); err != nil {
+			t.Fatal(err)
+		}
+		cleanup, err := log.ApplyConfig(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cleanup()
 
 		s, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
@@ -258,7 +284,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					var buf strings.Builder
 					if err := testutils.SucceedsSoonError(func() error {
 						buf.Reset()
-						t.Logf("attempting to scan logs...")
+						// t.Logf("attempting to scan logs...")
 
 						// Note: even though FetchEntriesFromFiles advertises a mechanism
 						// to filter entries by timestamp or just retrieve the last N entries,
@@ -266,7 +292,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						// See: https://github.com/cockroachdb/cockroach/issues/45745
 						// So instead we need to do the filtering ourselves.
 						entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, authLogFileRe,
-							log.WithFlattenedSensitiveData)
+							log.WithMarkedSensitiveData)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -280,7 +306,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 							}
 							for ; i >= 0; i-- {
 								entry := &entries[i]
-								t.Logf("found log entry: %+v", *entry)
+								// t.Logf("found log entry: %+v", *entry)
 
 								// The tag part is going to contain a client address, with a random port number.
 								// To make the test deterministic, erase the random part.

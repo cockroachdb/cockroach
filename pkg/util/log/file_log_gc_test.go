@@ -13,50 +13,65 @@ package log
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestGC(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
 
 	testLogGC(t, debugLog, Infof)
 }
 
 func TestSecondaryGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
-	setFlags()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	tmpDir, err := ioutil.TempDir(logging.logDir.String(), "gctest")
+	// Create a standalone secondary logger.
+	m := logconfig.ByteSize(math.MaxInt64)
+	f := logconfig.DefaultFileFormat
+	common := logconfig.DefaultConfig().FileDefaults.CommonSinkConfig
+	common.Format = &f
+	bt := true
+	fc := logconfig.FileConfig{
+		CommonSinkConfig: common,
+		Dir:              &s.logDir,
+		MaxFileSize:      &m,
+		MaxGroupSize:     &m,
+		SyncWrites:       &bt,
+	}
+	logger := &loggerT{}
+	si, fileSink, err := newFileSinkInfo("gctest", fc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		if !t.Failed() {
-			// If the test failed, we'll want to keep the artifacts for
-			// troubleshooting.
-			_ = os.RemoveAll(tmpDir)
-		}
-	}()
-	tmpDirName := DirName(tmpDir)
+	logger.sinkInfos = []*sinkInfo{si}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	l := NewSecondaryLogger(ctx, &tmpDirName, "woo", false /*enableGc*/, false /*syncWrites*/, true /*msgCount*/)
-	defer l.Close()
+	// Enable the garbage collector.
+	go fileSink.gcDaemon(ctx)
 
-	testLogGC(t, &l.logger, l.Logf)
+	testLogGC(t, logger,
+		func(ctx context.Context, format string, args ...interface{}) {
+			entry := MakeEntry(ctx, severity.INFO, channel.DEV, 1, si.redactable,
+				format, /* nolint:fmtsafe */
+				args...)
+			logger.outputLogEntry(entry)
+		})
 }
 
 func testLogGC(

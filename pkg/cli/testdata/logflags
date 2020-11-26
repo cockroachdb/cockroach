@@ -1,0 +1,333 @@
+# Legacy flags and --log cannot be used together.
+run
+start
+--logtostderr=INFO
+--log=file-defaults: dir: /tmp
+----
+error: --log is incompatible with legacy discrete logging flags
+
+subtest server_defaults
+
+# Default parameters for server commands.
+run
+start
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+sinks: {file-groups: {default: <fileCfg([DEV],<defaultLogDir>,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+<stderrDisabled>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+
+run
+start-single-node
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+sinks: {file-groups: {default: <fileCfg([DEV],<defaultLogDir>,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+<stderrDisabled>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+subtest end
+
+subtest client_defaults
+
+# Default parameters for client commands.
+run
+sql
+----
+config: {<fileDefaultsNoDir>,
+sinks: {<stderrEnabledWarningNoRedaction>}}
+
+run
+init
+----
+config: {<fileDefaultsNoDir>,
+sinks: {<stderrEnabledWarningNoRedaction>}}
+
+
+# Special case is "workload" and its sub-commands. It logs to stderr
+# with level INFO by default. (Legacy behavior)
+run
+workload
+run
+bank
+----
+config: {<fileDefaultsNoDir>,
+sinks: {<stderrEnabledInfoNoRedaction>}}
+
+
+# Special case is "demo" and its sub-commands. It disables
+# logging to stderr.
+run
+demo
+----
+config: {<fileDefaultsNoDir>,
+sinks: {<stderrCfg(NONE,false)>}}
+
+
+subtest end
+
+subtest server_overrides
+
+# When "start" is used with no on-disk store, derive no file logging.
+# Also for server commands the default stderr level is INFO.
+run
+start
+--store=type=mem,size=3g
+----
+config: {<fileDefaultsNoDir>,
+sinks: {<stderrEnabledInfoNoRedaction>}}
+
+
+# If there are multiple on-disk stores, the first one is used;
+# however, the resulting configuration is ambiguous.
+run ambiguous
+start
+--store=path=/pathA
+--store=path=/pathB
+----
+config: {<stdFileDefaults(/pathA/logs)>,
+sinks: {file-groups: {default: <fileCfg([DEV],/pathA/logs,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/pathA/logs,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA/logs,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/pathA/logs,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/pathA/logs,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/pathA/logs,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA/logs,false,crdb-v1)>},
+<stderrDisabled>},
+<stdCaptureFd2(/pathA/logs)>}
+
+
+# It is possible to override the output directory also via --log.
+run
+start
+--log=file-defaults: {dir: /mypath}
+----
+config: {<stdFileDefaults(/mypath)>,
+sinks: {file-groups: {default: <fileCfg([DEV],/mypath,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/mypath,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/mypath,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/mypath,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/mypath,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,false,crdb-v1)>},
+<stderrDisabled>},
+<stdCaptureFd2(/mypath)>}
+
+# If there were multiple stores, configuring via --log disambiguates.
+run
+start
+--store=path=/pathA
+--store=path=/pathB
+--log=file-defaults: {dir: /pathA/logs}
+----
+config: {<stdFileDefaults(/pathA/logs)>,
+sinks: {file-groups: {default: <fileCfg([DEV],/pathA/logs,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/pathA/logs,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA/logs,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/pathA/logs,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/pathA/logs,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/pathA/logs,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA/logs,false,crdb-v1)>},
+<stderrDisabled>},
+<stdCaptureFd2(/pathA/logs)>}
+
+
+# If the specified log directory is completely different, the
+# configuration is not ambiguous either. We need the different
+# test case because the ambiguity condition is detected
+# differently whether we use the same directory name as the first
+# store or not.
+run
+start
+--store=path=/pathA
+--store=path=/pathB
+--log=file-defaults: {dir: /mypath}
+----
+config: {<stdFileDefaults(/mypath)>,
+sinks: {file-groups: {default: <fileCfg([DEV],/mypath,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/mypath,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/mypath,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/mypath,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/mypath,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,false,crdb-v1)>},
+<stderrDisabled>},
+<stdCaptureFd2(/mypath)>}
+
+# It's possible to override the stderr threshold.
+run
+start
+--log=sinks: {stderr: {filter: ERROR}}
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+sinks: {file-groups: {default: <fileCfg([DEV],<defaultLogDir>,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+<stderrCfg(ERROR,true)>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+
+# It's possible to disable the stderr capture.
+run
+start
+--log=capture-stray-errors: {enable: false}
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+sinks: {file-groups: {default: <fileCfg([DEV],<defaultLogDir>,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+<stderrDisabled>}}
+
+# Logging to stderr without stderr capture causes an error in the default config.
+run
+start
+--log=capture-stray-errors: {enable: false}, sinks: {stderr: {filter: INFO}}
+----
+error: yaml: did not find expected key
+
+
+# This configuration becomes possible if redactability is explicitly retracted.
+run
+start
+--log=capture-stray-errors: {enable: false}, sinks: {stderr: {filter: INFO, redactable: false}}
+----
+error: yaml: did not find expected key
+
+subtest end
+
+subtest legacy_compat
+
+# Legacy config flags follow.
+# TODO(knz): Deprecated in v21.1. Remove in v21.2.
+
+# Server commands have a logging directory by
+# default. --log-dir="" removes it.
+run
+start
+--log-dir=
+----
+config: {<fileDefaultsNoDir>,
+sinks: {<stderrEnabledInfoNoRedaction>}}
+
+
+# For server commands, --log-dir can also override the directory.
+run
+start
+--log-dir=/mypath
+----
+config: {<stdFileDefaults(/mypath)>,
+sinks: {file-groups: {default: <fileCfg([DEV],/mypath,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/mypath,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/mypath,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/mypath,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/mypath,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,false,crdb-v1)>},
+<stderrDisabled>},
+<stdCaptureFd2(/mypath)>}
+
+# If there were multiple stores, this disambiguates.
+run
+start
+--store=path=/pathA
+--store=path=/pathB
+--log-dir=/pathA
+----
+config: {<stdFileDefaults(/pathA)>,
+sinks: {file-groups: {default: <fileCfg([DEV],/pathA,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/pathA,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/pathA,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/pathA,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/pathA,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA,false,crdb-v1)>},
+<stderrDisabled>},
+<stdCaptureFd2(/pathA)>}
+
+# Client commands have no logging directory by default.
+# --log-dir adds one. However, the file configurations are not server-like:
+# the max sizes don't apply.
+run
+init
+--log-dir=/mypath
+----
+config: {<fileDefaultsNoMaxSize(/mypath)>,
+sinks: {file-groups: {default: {channels: all,
+dir: /mypath,
+sync-writes: false,
+filter: INFO,
+format: crdb-v1,
+redactable: true}},
+<stderrEnabledWarningNoRedaction>}}
+
+# For servers, --logtostderr overrides the threshold and keeps
+# redaction markers.
+run
+start
+--logtostderr=INFO
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+sinks: {file-groups: {default: <fileCfg([DEV],<defaultLogDir>,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+<stderrCfg(INFO,true)>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+# Default when no severity is specified is WARNING.
+run
+start
+--logtostderr
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+sinks: {file-groups: {default: <fileCfg([DEV],<defaultLogDir>,false,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+<stderrCfg(INFO,true)>},
+<stdCaptureFd2(<defaultLogDir>)>}
+
+# For clients, --logtostderr overrides the threshold.
+run
+init
+--logtostderr=INFO
+----
+config: {<fileDefaultsNoDir>,
+sinks: {<stderrEnabledInfoNoRedaction>}}
+
+# Default when no severity is specified is WARNING.
+run
+init
+--logtostderr
+----
+config: {<fileDefaultsNoDir>,
+sinks: {<stderrEnabledWarningNoRedaction>}}
+
+
+subtest end
