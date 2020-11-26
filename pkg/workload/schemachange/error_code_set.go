@@ -44,7 +44,7 @@ func (set errorCodeSet) contains(code pgcode.Code) bool {
 	return ok
 }
 
-func (set errorCodeSet) string() string {
+func (set errorCodeSet) String() string {
 	var codes []string
 	for code := range set {
 		codes = append(codes, code.String())
