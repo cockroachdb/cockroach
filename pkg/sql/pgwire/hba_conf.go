@@ -143,13 +143,6 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		switch entry.ConnType {
 		case hba.ConnHostAny:
 		case hba.ConnLocal:
-			if vh != nil &&
-				!vh.IsActive(context.TODO(), clusterversion.VersionAuthLocalAndTrustRejectMethods) {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					`authentication rule type 'local' requires all nodes to be upgraded to %s`,
-					clusterversion.VersionByKey(clusterversion.VersionAuthLocalAndTrustRejectMethods),
-				)
-			}
 		case hba.ConnHostSSL, hba.ConnHostNoSSL:
 			if vh != nil &&
 				!vh.IsActive(context.TODO(), clusterversion.VersionHBAForNonTLS) {

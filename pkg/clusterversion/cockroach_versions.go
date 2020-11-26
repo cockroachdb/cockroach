@@ -67,7 +67,6 @@ const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
 	VersionNamespaceTableWithSchemas
-	VersionAuthLocalAndTrustRejectMethods
 
 	VersionStart20_2
 	VersionGeospatialType
@@ -129,17 +128,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// no longer in the system config range -- implying it is no longer gossiped.
 		Key:     VersionNamespaceTableWithSchemas,
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 5},
-	},
-	{
-		// VersionAuthLocalAndTrustRejectMethods introduces the HBA rule
-		// prefix 'local' and auth methods 'trust' and 'reject', for use
-		// in server.host_based_authentication.configuration.
-		//
-		// A separate cluster version ensures the new syntax is not
-		// introduced while previous-version nodes are still running, as
-		// this would block any new SQL client.
-		Key:     VersionAuthLocalAndTrustRejectMethods,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 8},
 	},
 	{
 		// VersionStart20_2 demarcates work towards CockroachDB v20.2.

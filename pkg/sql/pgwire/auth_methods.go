@@ -56,11 +56,11 @@ func loadDefaultMethods() {
 
 	// The "reject" method rejects any connection attempt that matches
 	// the current rule.
-	RegisterAuthMethod("reject", authReject, clusterversion.VersionAuthLocalAndTrustRejectMethods, hba.ConnAny, nil)
+	RegisterAuthMethod("reject", authReject, clusterversion.Version19_1, hba.ConnAny, nil)
 
 	// The "trust" method accepts any connection attempt that matches
 	// the current rule.
-	RegisterAuthMethod("trust", authTrust, clusterversion.VersionAuthLocalAndTrustRejectMethods, hba.ConnAny, nil)
+	RegisterAuthMethod("trust", authTrust, clusterversion.Version19_1, hba.ConnAny, nil)
 
 }
 
