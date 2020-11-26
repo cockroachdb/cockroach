@@ -115,10 +115,6 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 
-	// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch
-	// releases.
-	Version19_1
-
 	// v20.1 versions.
 	//
 	// VersionNamespaceTableWithSchemas is
@@ -128,14 +124,6 @@ const (
 	// added parentSchemaID column. In addition to the new column, the table is
 	// no longer in the system config range -- implying it is no longer gossiped.
 	VersionNamespaceTableWithSchemas
-	// VersionAuthLocalAndTrustRejectMethods introduces the HBA rule
-	// prefix 'local' and auth methods 'trust' and 'reject', for use
-	// in server.host_based_authentication.configuration.
-	//
-	// A separate cluster version ensures the new syntax is not
-	// introduced while previous-version nodes are still running, as
-	// this would block any new SQL client.
-	VersionAuthLocalAndTrustRejectMethods
 
 	// TODO(irfansharif): The versions above can/should all be removed. They
 	// were orinally introduced in v20.1. There are inflight PRs to do so
@@ -241,16 +229,8 @@ const (
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions([]keyedVersion{
 	{
-		Key:     Version19_1,
-		Version: roachpb.Version{Major: 19, Minor: 1},
-	},
-	{
 		Key:     VersionNamespaceTableWithSchemas,
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 5},
-	},
-	{
-		Key:     VersionAuthLocalAndTrustRejectMethods,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 8},
 	},
 
 	// v20.2 versions.

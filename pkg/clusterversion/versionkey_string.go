@@ -8,38 +8,36 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[Version19_1-0]
-	_ = x[VersionNamespaceTableWithSchemas-1]
-	_ = x[VersionAuthLocalAndTrustRejectMethods-2]
-	_ = x[VersionStart20_2-3]
-	_ = x[VersionGeospatialType-4]
-	_ = x[VersionEnums-5]
-	_ = x[VersionRangefeedLeases-6]
-	_ = x[VersionAlterColumnTypeGeneral-7]
-	_ = x[VersionAlterSystemJobsAddCreatedByColumns-8]
-	_ = x[VersionAddScheduledJobsTable-9]
-	_ = x[VersionUserDefinedSchemas-10]
-	_ = x[VersionNoOriginFKIndexes-11]
-	_ = x[VersionClientRangeInfosOnBatchResponse-12]
-	_ = x[VersionNodeMembershipStatus-13]
-	_ = x[VersionRangeStatsRespHasDesc-14]
-	_ = x[VersionMinPasswordLength-15]
-	_ = x[VersionAbortSpanBytes-16]
-	_ = x[VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable-17]
-	_ = x[VersionMaterializedViews-18]
-	_ = x[VersionBox2DType-19]
-	_ = x[VersionLeasedDatabaseDescriptors-20]
-	_ = x[VersionUpdateScheduledJobsSchema-21]
-	_ = x[VersionCreateLoginPrivilege-22]
-	_ = x[VersionHBAForNonTLS-23]
-	_ = x[Version20_2-24]
-	_ = x[VersionStart21_1-25]
-	_ = x[VersionEmptyArraysInInvertedIndexes-26]
+	_ = x[VersionNamespaceTableWithSchemas-0]
+	_ = x[VersionStart20_2-1]
+	_ = x[VersionGeospatialType-2]
+	_ = x[VersionEnums-3]
+	_ = x[VersionRangefeedLeases-4]
+	_ = x[VersionAlterColumnTypeGeneral-5]
+	_ = x[VersionAlterSystemJobsAddCreatedByColumns-6]
+	_ = x[VersionAddScheduledJobsTable-7]
+	_ = x[VersionUserDefinedSchemas-8]
+	_ = x[VersionNoOriginFKIndexes-9]
+	_ = x[VersionClientRangeInfosOnBatchResponse-10]
+	_ = x[VersionNodeMembershipStatus-11]
+	_ = x[VersionRangeStatsRespHasDesc-12]
+	_ = x[VersionMinPasswordLength-13]
+	_ = x[VersionAbortSpanBytes-14]
+	_ = x[VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable-15]
+	_ = x[VersionMaterializedViews-16]
+	_ = x[VersionBox2DType-17]
+	_ = x[VersionLeasedDatabaseDescriptors-18]
+	_ = x[VersionUpdateScheduledJobsSchema-19]
+	_ = x[VersionCreateLoginPrivilege-20]
+	_ = x[VersionHBAForNonTLS-21]
+	_ = x[Version20_2-22]
+	_ = x[VersionStart21_1-23]
+	_ = x[VersionEmptyArraysInInvertedIndexes-24]
 }
 
-const _VersionKey_name = "Version19_1VersionNamespaceTableWithSchemasVersionAuthLocalAndTrustRejectMethodsVersionStart20_2VersionGeospatialTypeVersionEnumsVersionRangefeedLeasesVersionAlterColumnTypeGeneralVersionAlterSystemJobsAddCreatedByColumnsVersionAddScheduledJobsTableVersionUserDefinedSchemasVersionNoOriginFKIndexesVersionClientRangeInfosOnBatchResponseVersionNodeMembershipStatusVersionRangeStatsRespHasDescVersionMinPasswordLengthVersionAbortSpanBytesVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableVersionMaterializedViewsVersionBox2DTypeVersionLeasedDatabaseDescriptorsVersionUpdateScheduledJobsSchemaVersionCreateLoginPrivilegeVersionHBAForNonTLSVersion20_2VersionStart21_1VersionEmptyArraysInInvertedIndexes"
+const _VersionKey_name = "VersionNamespaceTableWithSchemasVersionStart20_2VersionGeospatialTypeVersionEnumsVersionRangefeedLeasesVersionAlterColumnTypeGeneralVersionAlterSystemJobsAddCreatedByColumnsVersionAddScheduledJobsTableVersionUserDefinedSchemasVersionNoOriginFKIndexesVersionClientRangeInfosOnBatchResponseVersionNodeMembershipStatusVersionRangeStatsRespHasDescVersionMinPasswordLengthVersionAbortSpanBytesVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableVersionMaterializedViewsVersionBox2DTypeVersionLeasedDatabaseDescriptorsVersionUpdateScheduledJobsSchemaVersionCreateLoginPrivilegeVersionHBAForNonTLSVersion20_2VersionStart21_1VersionEmptyArraysInInvertedIndexes"
 
-var _VersionKey_index = [...]uint16{0, 11, 43, 80, 96, 117, 129, 151, 180, 221, 249, 274, 298, 336, 363, 391, 415, 436, 507, 531, 547, 579, 611, 638, 657, 668, 684, 719}
+var _VersionKey_index = [...]uint16{0, 32, 48, 69, 81, 103, 132, 173, 201, 226, 250, 288, 315, 343, 367, 388, 459, 483, 499, 531, 563, 590, 609, 620, 636, 671}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
