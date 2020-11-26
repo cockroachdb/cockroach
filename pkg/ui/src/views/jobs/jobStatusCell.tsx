@@ -14,11 +14,19 @@ import {HighwaterTimestamp} from "src/views/jobs/highwaterTimestamp";
 import {JobStatus} from "./jobStatus";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 
-export class JobStatusCell extends React.Component<{ job: Job, lineWidth?: number }, {}> {
-  render() {
-    if (this.props.job.highwater_timestamp) {
-      return <HighwaterTimestamp highwater={this.props.job.highwater_timestamp} tooltip={this.props.job.highwater_decimal}/>;
-    }
-    return <JobStatus job={this.props.job} lineWidth={this.props.lineWidth} />;
-  }
+export interface JobStatusCellProps {
+  job: Job;
+  lineWidth?: number;
+  compact?: boolean;
 }
+
+export const JobStatusCell: React.FC<JobStatusCellProps> = ({
+  job,
+  lineWidth,
+  compact = false,
+}) => {
+  if (job.highwater_timestamp) {
+    return <HighwaterTimestamp highwater={job.highwater_timestamp} tooltip={job.highwater_decimal}/>;
+  }
+  return <JobStatus job={job} lineWidth={lineWidth} compact={compact} />;
+};
