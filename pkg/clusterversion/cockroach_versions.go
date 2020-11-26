@@ -15,19 +15,52 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 // VersionKey is a unique identifier for a version of CockroachDB.
 type VersionKey int
 
-// Version constants.
+// Version constants. You'll want to add a new one in the following cases:
 //
-// To add a version:
-//   - Add it at the end of this block.
-//   - Add it at the end of the `Versions` block below.
-//   - For major or minor versions, bump binaryMinSupportedVersion. For
-//     example, if introducing the `20.1` release, bump it to
-//     VersionStart19_2 (i.e. `19.1-1`).
+// (a) When introducing a backwards incompatible feature. Broadly, by this we
+//     mean code that's structured as follows:
 //
-// To delete a version.
-//   - Remove its associated runtime checks.
-//   - If the version is not the latest one, delete the constant and remove its
-//     entry in the versionsSingleton.
+//      if (given-version is active) {
+//          // Implies that all nodes in the cluster are running binaries that
+//          // have this code. We can "enable" the new feature knowing that
+//          // outbound RPCs, requests, etc. will be handled by nodes that know
+//          // how to do so.
+//      } else {
+//          // There may be some nodes running older binaries without this code.
+//          // To be safe, we'll want to behave as we did before introducing
+//         // this feature.
+//      }
+//
+//     See clusterversion.Handle.IsActive and usage of existing versions below
+//     for additional commentary.
+//
+// (b) When cutting a major release branch. When cutting release-20.2 for
+//     example, you'll want to introduce the following to `master`.
+//
+//       (i)  Version20_2 (keyed to v20.2.0-0})
+//	     (ii) VersionStart21_1 (keyed to v20.2.0-1})
+//
+//    You'll then want to backport (i) to the release branch itself (i.e.
+//    release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
+//    example above, you'll set it to Version20_2. This indicates that the
+//    minimum binary version required in a cluster with with nodes running
+//    v21.1 binaries (including pre-release alphas) is v20.2
+//
+// When introducing a version constant, you'll want to:
+//   (1) Add it at the end of this block
+//   (2) Add it at the end of the `versionsSingleton` block below.
+//
+// 									---
+//
+// You'll want to delete versions from this list after cutting a major release.
+// Once the development for 21.1 begins, after step (ii) from above, all
+// versions introduced in the previous release can be removed (everything prior
+// to Version20_2 in our example).
+//
+// When removing a version, you'll want to remove its associated runtime checks.
+// All "is active" checks for the key will always evaluate to true. You'll also
+// want to delete the constant and remove its entry in the `versionsSingleton`
+// block below.
 //
 //go:generate stringer -type=VersionKey
 const (
@@ -36,6 +69,7 @@ const (
 	VersionContainsEstimatesCounter
 	VersionNamespaceTableWithSchemas
 	VersionAuthLocalAndTrustRejectMethods
+
 	VersionStart20_2
 	VersionGeospatialType
 	VersionEnums
@@ -58,10 +92,11 @@ const (
 	VersionCreateLoginPrivilege
 	VersionHBAForNonTLS
 	Version20_2
+
 	VersionStart21_1
 	VersionEmptyArraysInInvertedIndexes
 
-	// Add new versions here (step one of two).
+	// Step (1): Add new versions here.
 )
 
 // versionsSingleton lists all historical versions here in chronological order,
@@ -269,7 +304,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
 	},
 
-	// Add new versions here (step two of two).
+	// Step (2): Add new versions here.
 })
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
