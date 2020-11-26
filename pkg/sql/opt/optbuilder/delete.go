@@ -76,6 +76,9 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 func (mb *mutationBuilder) buildDelete(returning tree.ReturningExprs) {
 	mb.buildFKChecksAndCascadesForDelete()
 
+	// Project partial index DEL boolean columns.
+	mb.projectPartialIndexCols(nil /* putScope */, mb.fetchScope, delCols)
+
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructDelete(
 		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
