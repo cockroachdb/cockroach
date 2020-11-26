@@ -38,6 +38,31 @@ production deployments are invited to not collect DEV logs in
 centralized logging facilities, because they likely contain
 sensitive operational data.
 
+## OPS
+
+The OPS channel is the channel used to report "point" operational events,
+initiated by user operators or automation:
+
+- operator or system actions on server processes: process starts,
+  stops, shutdowns, crashes (if they can be logged),
+  including each time: command-line parameters, current version being run.
+- actions that impact the topology of a cluster: node additions,
+  removals, decommissions, etc.
+- job-related initiation or termination.
+- cluster setting changes.
+- zone configuration changes.
+
+## HEALTH
+
+The HEALTH channel is the channel used to report "background" operational
+events, initiated by CockroachDB or reporting on automatic processes:
+
+- current resource usage, including critical resource usage.
+- node-node connection events, including connection errors and
+  gossip details.
+- range and table leasing events.
+- up-, down-replication; range unavailability.
+
 ## STORAGE
 
 The STORAGE channel is the channel used to report low-level storage

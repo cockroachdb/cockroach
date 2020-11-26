@@ -447,7 +447,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// Maintain lock ordering.
 	var storedBI BootstrapInfo
 	if err := storage.ReadBootstrapInfo(&storedBI); err != nil {
-		log.Warningf(ctx, "failed to read gossip bootstrap info: %s", err)
+		log.Ops.Warningf(ctx, "failed to read gossip bootstrap info: %s", err)
 	}
 
 	g.mu.Lock()
@@ -492,7 +492,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// If a new resolver was found, immediately signal bootstrap.
 	if newResolverFound {
 		if log.V(1) {
-			log.Infof(ctx, "found new resolvers from storage; signaling bootstrap")
+			log.Ops.Infof(ctx, "found new resolvers from storage; signaling bootstrap")
 		}
 		g.signalStalledLocked()
 	}
@@ -564,7 +564,7 @@ func (g *Gossip) LogStatus() {
 	}
 
 	ctx := g.AnnotateCtx(context.TODO())
-	log.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s%s",
+	log.Health.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s%s",
 		status, n, util.Pluralize(int64(n)),
 		g.clientStatus(), g.server.status(),
 		connectivity)
@@ -688,7 +688,7 @@ func (g *Gossip) maybeAddResolverLocked(addr util.UnresolvedAddr) bool {
 	ctx := g.AnnotateCtx(context.TODO())
 	r, err := resolver.NewResolverFromUnresolvedAddr(addr)
 	if err != nil {
-		log.Warningf(ctx, "bad address %s: %s", addr, err)
+		log.Ops.Warningf(ctx, "bad address %s: %s", addr, err)
 		return false
 	}
 	g.resolvers = append(g.resolvers, r)
@@ -814,10 +814,10 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	if desc.NodeID == 0 || desc.Address.IsEmpty() {
 		nodeID, err := NodeIDFromKey(key, KeyNodeIDPrefix)
 		if err != nil {
-			log.Errorf(ctx, "unable to update node address for removed node: %s", err)
+			log.Health.Errorf(ctx, "unable to update node address for removed node: %s", err)
 			return
 		}
-		log.Infof(ctx, "removed n%d from gossip", nodeID)
+		log.Health.Infof(ctx, "removed n%d from gossip", nodeID)
 		g.removeNodeDescriptorLocked(nodeID)
 		return
 	}
@@ -1273,7 +1273,7 @@ func (g *Gossip) getNextBootstrapAddressLocked() net.Addr {
 		if addr, err := resolver.GetAddress(); err != nil {
 			if _, ok := g.resolversTried[g.resolverIdx]; !ok {
 				ctx := g.AnnotateCtx(context.TODO())
-				log.Warningf(ctx, "invalid bootstrap address: %+v, %v", resolver, err)
+				log.Ops.Warningf(ctx, "invalid bootstrap address: %+v, %v", resolver, err)
 			}
 			continue
 		} else {
@@ -1396,7 +1396,7 @@ func (g *Gossip) manage() {
 							return c.peerID == leastUsefulID
 						}); c != nil {
 							if log.V(1) {
-								log.Infof(ctx, "closing least useful client %+v to tighten network graph", c)
+								log.Health.Infof(ctx, "closing least useful client %+v to tighten network graph", c)
 							}
 							log.Eventf(ctx, "culling %s", c.addr)
 							c.close()
@@ -1408,7 +1408,7 @@ func (g *Gossip) manage() {
 						} else {
 							if log.V(1) {
 								g.clientsMu.Lock()
-								log.Infof(ctx, "couldn't find least useful client among %+v", g.clientsMu.clients)
+								log.Health.Infof(ctx, "couldn't find least useful client among %+v", g.clientsMu.clients)
 								g.clientsMu.Unlock()
 							}
 						}
@@ -1447,9 +1447,9 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 			return
 		}
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
-			log.Errorf(ctx, "unable to get address for n%d: %s", distantNodeID, err)
+			log.Health.Errorf(ctx, "unable to get address for n%d: %s", distantNodeID, err)
 		} else {
-			log.Infof(ctx, "starting client to n%d (%d > %d) to tighten network graph",
+			log.Health.Infof(ctx, "starting client to n%d (%d > %d) to tighten network graph",
 				distantNodeID, distantHops, maxHops)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
 			g.startClientLocked(nodeAddr)
@@ -1487,15 +1487,15 @@ func (g *Gossip) maybeSignalStatusChangeLocked() {
 			if orphaned {
 				if len(g.resolvers) == 0 {
 					if log.V(1) {
-						log.Warningf(ctx, "no resolvers found; use --join to specify a connected node")
+						log.Ops.Warningf(ctx, "no resolvers found; use --join to specify a connected node")
 					}
 				} else {
-					log.Warningf(ctx, "no incoming or outgoing connections")
+					log.Health.Warningf(ctx, "no incoming or outgoing connections")
 				}
 			} else if len(g.resolversTried) == len(g.resolvers) {
-				log.Warningf(ctx, "first range unavailable; resolvers exhausted")
+				log.Health.Warningf(ctx, "first range unavailable; resolvers exhausted")
 			} else {
-				log.Warningf(ctx, "first range unavailable; trying remaining resolvers")
+				log.Health.Warningf(ctx, "first range unavailable; trying remaining resolvers")
 			}
 		}
 		if len(g.resolvers) > 0 {
@@ -1504,7 +1504,7 @@ func (g *Gossip) maybeSignalStatusChangeLocked() {
 	} else {
 		if g.stalled {
 			log.Eventf(ctx, "connected")
-			log.Infof(ctx, "node has connected to cluster via gossip")
+			log.Ops.Infof(ctx, "node has connected to cluster via gossip")
 			g.signalConnectedLocked()
 		}
 		g.maybeCleanupBootstrapAddressesLocked()
