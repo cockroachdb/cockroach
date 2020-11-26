@@ -230,8 +230,8 @@ func translateSurvivalGoal(g tree.SurvivalGoal) (descpb.SurvivalGoal, error) {
 	}
 }
 
-// validateDatabaseRegionConfig validates that a descpb.DatabaseRegionConfig is valid.
-func validateDatabaseRegionConfig(regionConfig descpb.DatabaseRegionConfig) error {
+// validateDatabaseRegionConfig validates that a descpb.DatabaseDescriptor_RegionConfig is valid.
+func validateDatabaseRegionConfig(regionConfig descpb.DatabaseDescriptor_RegionConfig) error {
 	if regionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE && len(regionConfig.Regions) < 3 {
 		return pgerror.New(
 			pgcode.InvalidParameterValue,
@@ -244,65 +244,67 @@ func validateDatabaseRegionConfig(regionConfig descpb.DatabaseRegionConfig) erro
 // createRegionConfig creates a new region config from the given parameters.
 func (p *planner) createRegionConfig(
 	survivalGoal tree.SurvivalGoal, primaryRegion tree.Name, regions []tree.Name,
-) (descpb.DatabaseRegionConfig, error) {
-	var regionConfig descpb.DatabaseRegionConfig
+) (*descpb.DatabaseDescriptor_RegionConfig, error) {
+	if primaryRegion == "" && len(regions) == 0 {
+		return nil, nil
+	}
+
+	var regionConfig descpb.DatabaseDescriptor_RegionConfig
 	var err error
 	regionConfig.SurvivalGoal, err = translateSurvivalGoal(survivalGoal)
 	if err != nil {
-		return descpb.DatabaseRegionConfig{}, err
+		return nil, err
 	}
-	if primaryRegion != "" || len(regions) > 0 {
-		liveRegions, err := p.getLiveClusterRegions()
-		if err != nil {
-			return descpb.DatabaseRegionConfig{}, err
+	liveRegions, err := p.getLiveClusterRegions()
+	if err != nil {
+		return nil, err
+	}
+	regionConfig.PrimaryRegion = descpb.Region(primaryRegion)
+	if regionConfig.PrimaryRegion != "" {
+		if err := checkLiveClusterRegion(liveRegions, regionConfig.PrimaryRegion); err != nil {
+			return nil, err
 		}
-		regionConfig.PrimaryRegion = descpb.Region(primaryRegion)
-		if regionConfig.PrimaryRegion != "" {
-			if err := checkLiveClusterRegion(liveRegions, regionConfig.PrimaryRegion); err != nil {
-				return descpb.DatabaseRegionConfig{}, err
-			}
+	}
+	if len(regions) > 0 {
+		if regionConfig.PrimaryRegion == "" {
+			return nil, pgerror.Newf(
+				pgcode.InvalidDatabaseDefinition,
+				"PRIMARY REGION must be specified if REGIONS are specified",
+			)
 		}
-		if len(regions) > 0 {
-			if regionConfig.PrimaryRegion == "" {
-				return descpb.DatabaseRegionConfig{}, pgerror.Newf(
-					pgcode.InvalidDatabaseDefinition,
-					"PRIMARY REGION must be specified if REGIONS are specified",
-				)
+		regionConfig.Regions = make([]descpb.Region, 0, len(regions)+1)
+		seenRegions := make(map[descpb.Region]struct{}, len(regions)+1)
+		for _, r := range regions {
+			region := descpb.Region(r)
+			if err := checkLiveClusterRegion(liveRegions, region); err != nil {
+				return nil, err
 			}
-			regionConfig.Regions = make([]descpb.Region, 0, len(regions)+1)
-			seenRegions := make(map[descpb.Region]struct{}, len(regions)+1)
-			for _, r := range regions {
-				region := descpb.Region(r)
-				if err := checkLiveClusterRegion(liveRegions, region); err != nil {
-					return descpb.DatabaseRegionConfig{}, err
-				}
 
-				if _, ok := seenRegions[region]; ok {
-					return descpb.DatabaseRegionConfig{}, pgerror.Newf(
-						pgcode.InvalidName,
-						"region %q defined multiple times",
-						region,
-					)
-				}
-				seenRegions[region] = struct{}{}
-				regionConfig.Regions = append(regionConfig.Regions, region)
-			}
-			// If PRIMARY REGION is not in REGIONS, add it implicitly.
-			if _, ok := seenRegions[regionConfig.PrimaryRegion]; !ok {
-				regionConfig.Regions = append(
-					regionConfig.Regions,
-					regionConfig.PrimaryRegion,
+			if _, ok := seenRegions[region]; ok {
+				return nil, pgerror.Newf(
+					pgcode.InvalidName,
+					"region %q defined multiple times",
+					region,
 				)
 			}
-			sort.SliceStable(regionConfig.Regions, func(i, j int) bool {
-				return regionConfig.Regions[i] < regionConfig.Regions[j]
-			})
-		} else {
-			regionConfig.Regions = []descpb.Region{regionConfig.PrimaryRegion}
+			seenRegions[region] = struct{}{}
+			regionConfig.Regions = append(regionConfig.Regions, region)
 		}
+		// If PRIMARY REGION is not in REGIONS, add it implicitly.
+		if _, ok := seenRegions[regionConfig.PrimaryRegion]; !ok {
+			regionConfig.Regions = append(
+				regionConfig.Regions,
+				regionConfig.PrimaryRegion,
+			)
+		}
+		sort.SliceStable(regionConfig.Regions, func(i, j int) bool {
+			return regionConfig.Regions[i] < regionConfig.Regions[j]
+		})
+	} else {
+		regionConfig.Regions = []descpb.Region{regionConfig.PrimaryRegion}
 	}
 	if err := validateDatabaseRegionConfig(regionConfig); err != nil {
-		return descpb.DatabaseRegionConfig{}, err
+		return nil, err
 	}
-	return regionConfig, nil
+	return &regionConfig, nil
 }
