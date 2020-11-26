@@ -10,7 +10,7 @@
 
 // +build !windows
 
-package logcrash
+package log
 
 import (
 	"os"

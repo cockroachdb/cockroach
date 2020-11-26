@@ -54,35 +54,43 @@ func NewSecondaryLogger(
 		dir = logging.logDir.String()
 	}
 	l := &SecondaryLogger{
-		logger: loggerT{},
+		logger: loggerT{
+			logCounter: EntryCounter{EnableMsgCount: enableMsgCount},
+		},
 	}
-	// TODO(knz): Make all this configurable.
-	// (As done in https://github.com/cockroachdb/cockroach/pull/51987.)
 	fileSink := newFileSink(
 		dir,
 		fileNamePrefix,
 		forceSyncWrites,
+		severity.INFO,
 		logging.logFileMaxSize,
 		logging.logFilesCombinedMaxSize,
 		l.logger.getStartLines,
 	)
-	fileSinkInfo := &sinkInfo{
-		sink:      fileSink,
-		threshold: severity.INFO,
-		formatter: formatCrdbV1{},
-		// file editor.
-		// We don't redact upfront, and the "--redactable-logs" flag decides
-		// whether to keep the redaction markers in the output.
-		editor: getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */)),
-		// failure to write to file is definitely critical.
-		criticality: true,
-	}
-	if enableMsgCount {
-		fileSinkInfo.formatter = formatCrdbV1WithCounter{}
-	}
-	l.logger.sinkInfos = []*sinkInfo{
-		&logging.stderrSinkInfo,
-		fileSinkInfo,
+	// TODO(knz): Make all this configurable.
+	// (As done in https://github.com/cockroachdb/cockroach/pull/51987.)
+	l.logger.sinkInfos = []sinkInfo{
+		{
+			sink: &logging.stderrSink,
+			// stderr editor.
+			// We don't redact upfront, and we keep the redaction markers.
+			editor: getEditor(SelectEditMode(false /* redact */, true /* keepRedactable */)),
+			// failure to write to stderr is critical for now. We may want
+			// to make this non-critical in the future, since it's common
+			// for folk to close the terminal where they launched 'cockroach
+			// start --background'.
+			// We keep this true for now for backward-compatibility.
+			criticality: true,
+		},
+		{
+			sink: fileSink,
+			// file editor.
+			// We don't redact upfront, and the "--redactable-logs" flag decides
+			// whether to keep the redaction markers in the output.
+			editor: getEditor(SelectEditMode(false /* redact */, logging.redactableLogs /* keepRedactable */)),
+			// failure to write to file is definitely critical.
+			criticality: true,
+		},
 	}
 
 	// Ensure the registry knows about this logger.
@@ -109,7 +117,7 @@ func (l *SecondaryLogger) output(
 	ctx context.Context, depth int, sev Severity, format string, args ...interface{},
 ) {
 	entry := MakeEntry(
-		ctx, sev, depth+1, true /* redactable */, format, args...)
+		ctx, sev, &l.logger.logCounter, depth+1, true /* redactable */, format, args...)
 	l.logger.outputLogEntry(entry)
 }
 

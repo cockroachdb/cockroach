@@ -11,7 +11,7 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
-        "//pkg/util/log/logcrash",
+        "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
     ],

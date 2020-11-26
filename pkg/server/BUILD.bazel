@@ -135,7 +135,6 @@ go_library(
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
         "//pkg/util/metric",

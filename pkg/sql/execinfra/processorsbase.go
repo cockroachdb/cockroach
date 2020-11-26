@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -613,7 +612,7 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 		// However, calling it with an error in states other than StateRunning is
 		// not permitted.
 		if err != nil {
-			logcrash.ReportOrPanic(
+			log.ReportOrPanic(
 				pb.Ctx,
 				&pb.FlowCtx.Cfg.Settings.SV,
 				"MoveToDraining called in state %s with err: %+v",
@@ -643,7 +642,7 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 // also moves from StateDraining to StateTrailingMeta when appropriate.
 func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 	if pb.State == StateRunning {
-		logcrash.ReportOrPanic(
+		log.ReportOrPanic(
 			pb.Ctx,
 			&pb.FlowCtx.Cfg.Settings.SV,
 			"drain helper called in StateRunning",
@@ -717,7 +716,7 @@ func (pb *ProcessorBase) popTrailingMeta() *execinfrapb.ProducerMetadata {
 // draining its inputs (if it wants to drain them).
 func (pb *ProcessorBase) moveToTrailingMeta() {
 	if pb.State == StateTrailingMeta || pb.State == StateExhausted {
-		logcrash.ReportOrPanic(
+		log.ReportOrPanic(
 			pb.Ctx,
 			&pb.FlowCtx.Cfg.Settings.SV,
 			"moveToTrailingMeta called in state: %s",

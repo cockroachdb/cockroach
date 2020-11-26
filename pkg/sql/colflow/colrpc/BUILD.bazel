@@ -20,7 +20,6 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/types",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
         "//pkg/util/timeutil",
         "//vendor/github.com/apache/arrow/go/arrow/array",
         "//vendor/github.com/cockroachdb/errors",
