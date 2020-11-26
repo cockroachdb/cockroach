@@ -88,7 +88,7 @@ func (c *transientCluster) checkConfigAndSetupLogging(
 	// decide how to enable logging.
 	serverCfg.Stores.Specs = nil
 
-	c.stopper, err = setupAndInitializeLoggingAndProfiling(ctx, cmd)
+	c.stopper, err = setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err
 	}

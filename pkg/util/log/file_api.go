@@ -91,13 +91,17 @@ var errNoFileLogging = errors.New("log: file logging is not configured")
 // ListLogFiles returns a slice of logpb.FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
 func ListLogFiles() (logFiles []logpb.FileInfo, err error) {
-	mainDir, isSet := logging.logDir.get()
-	if !isSet {
-		// Shortcut.
-		return nil, nil
-	}
+	mainDir := func() string {
+		fileSink := debugLog.getFileSink()
+		if fileSink == nil {
+			return ""
+		}
+		fileSink.mu.Lock()
+		defer fileSink.mu.Unlock()
+		return fileSink.mu.logDir
+	}()
 
-	err = allFileSinks.iter(func(l *fileSink) error {
+	err = allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		// For now, only gather logs from the main log directory.
 		// This is because the other APIs don't yet understand
 		// secondary log directories, and we don't want

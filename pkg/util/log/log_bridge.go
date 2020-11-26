@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
@@ -75,7 +76,13 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 	}
 
 	entry := MakeEntry(context.Background(),
-		Severity(lb), 0, /* depth */
+		Severity(lb),
+		// Note: because the caller is using the stdLog interface, we don't
+		// really know what is being logged. Therefore we must use the
+		// DEV channel because we can't assume anything about the sensitivity
+		// of the information.
+		channel.DEV,
+		0, /* depth */
 		// Note: because the caller is using the stdLog interface, they are
 		// bypassing all the log marker logic. This means that the entire
 		// log message should be assumed to contain confidential

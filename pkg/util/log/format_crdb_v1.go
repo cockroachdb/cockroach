@@ -37,6 +37,8 @@ func FormatEntry(e logpb.Entry, w io.Writer) error {
 // a counter column.
 type formatCrdbV1 struct{}
 
+func (formatCrdbV1) formatterName() string { return "crdb-v1" }
+
 func (formatCrdbV1) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 	return formatLogEntryInternal(entry, false /*showCounter*/, nil, stacks)
 }
@@ -44,6 +46,8 @@ func (formatCrdbV1) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 // formatCrdbV1WithCounter is the canonical log format including a
 // counter column.
 type formatCrdbV1WithCounter struct{}
+
+func (formatCrdbV1WithCounter) formatterName() string { return "crdb-v1-count" }
 
 func (formatCrdbV1WithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 	return formatLogEntryInternal(entry, true /*showCounter*/, nil, stacks)
@@ -53,6 +57,8 @@ func (formatCrdbV1WithCounter) formatEntry(entry logpb.Entry, stacks []byte) *bu
 // the stderr output is a TTY and -nocolor is not passed on the
 // command line.
 type formatCrdbV1TTY struct{}
+
+func (formatCrdbV1TTY) formatterName() string { return "crdb-v1-tty" }
 
 func (formatCrdbV1TTY) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 	cp := ttycolor.StderrProfile
@@ -66,6 +72,8 @@ func (formatCrdbV1TTY) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 // includes VT color codes if the stderr output is a TTY and -nocolor
 // is not passed on the command line.
 type formatCrdbV1TTYWithCounter struct{}
+
+func (formatCrdbV1TTYWithCounter) formatterName() string { return "crdb-v1-tty-count" }
 
 func (formatCrdbV1TTYWithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 	cp := ttycolor.StderrProfile
@@ -81,7 +89,7 @@ func (formatCrdbV1TTYWithCounter) formatEntry(entry logpb.Entry, stacks []byte) 
 // for calling putBuffer() afterwards.
 //
 // Log lines have this form:
-// 	Lyymmdd hh:mm:ss.uuuuuu goid file:line <redactable> [tags] counter msg...
+// 	Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line <redactable> [tags] counter msg...
 // where the fields are defined as follows:
 // 	L                A single character, representing the log level (eg 'I' for INFO)
 // 	yy               The year (zero padded; ie 2016 is '16')
@@ -89,6 +97,7 @@ func (formatCrdbV1TTYWithCounter) formatEntry(entry logpb.Entry, stacks []byte) 
 // 	dd               The day (zero padded)
 // 	hh:mm:ss.uuuuuu  Time in hours, minutes and fractional seconds
 // 	goid             The goroutine id (omitted if zero for use by tests)
+// 	chan             The channel number (omitted if zero for backward-compatibility)
 // 	file             The file name
 // 	line             The line number
 // 	tags             The context tags
@@ -149,6 +158,12 @@ func formatLogEntryInternal(
 	if entry.Goroutine > 0 {
 		n += buf.someDigits(n, int(entry.Goroutine))
 		tmp[n] = ' '
+		n++
+	}
+	if entry.Channel != 0 {
+		// Prefix the filename with the channel number.
+		n += buf.someDigits(n, int(entry.Channel))
+		tmp[n] = '@'
 		n++
 	}
 	buf.Write(tmp[:n])
@@ -222,7 +237,7 @@ var entryRE = regexp.MustCompile(
 		/* Severity         */ `([IWEF])` +
 		/* Date and time    */ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
 		/* Goroutine ID     */ `(?:(\d+) )?` +
-		/* File/Line        */ `([^:]+):(\d+) ` +
+		/* Channel/File/Line*/ `([^:]+):(\d+) ` +
 		/* Redactable flag  */ `((?:` + redactableIndicator + `)?) ` +
 		/* Context tags     */ `(?:\[([^]]+)\] )?`,
 )
@@ -289,8 +304,17 @@ func (d *EntryDecoder) Decode(entry *logpb.Entry) error {
 			entry.Goroutine = int64(goroutine)
 		}
 
-		// Process the file/line details.
+		// Process the channel/file/line details.
 		entry.File = string(m[4])
+		if idx := strings.IndexByte(entry.File, '@'); idx != -1 {
+			ch, err := strconv.Atoi(entry.File[:idx])
+			if err != nil {
+				return err
+			}
+			entry.Channel = Channel(ch)
+			entry.File = entry.File[idx+1:]
+		}
+
 		line, err := strconv.Atoi(string(m[5]))
 		if err != nil {
 			return err

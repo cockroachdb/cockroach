@@ -31,23 +31,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/spf13/cobra"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	cf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
 		if strings.HasPrefix(f.Name, "test.") {
-			return
-		}
-		switch f.Name {
-		case logflags.LogDirName,
-			logflags.LogFileMaxSizeName,
-			logflags.LogFilesCombinedMaxSizeName,
-			logflags.LogFileVerbosityThresholdName:
 			return
 		}
 		if pf := cf.Lookup(f.Name); pf == nil {

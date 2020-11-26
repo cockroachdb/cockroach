@@ -5,5 +5,4 @@ go_library(
     srcs = ["logflags.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logflags",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/humanizeutil"],
 )
