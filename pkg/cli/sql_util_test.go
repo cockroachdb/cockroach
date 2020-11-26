@@ -221,6 +221,62 @@ SET
 	b.Reset()
 }
 
+func TestUtfName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+
+	conn := makeSQLConn(url.String())
+	defer conn.Close()
+
+	setCLIDefaultsForTests()
+
+	var b bytes.Buffer
+
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`CREATE DATABASE test_utf;
+CREATE TABLE test_utf.żółw (id INT PRIMARY KEY, value INT);
+ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
+		t.Fatal(err)
+	}
+
+	b.Reset()
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`SELECT table_name FROM [SHOW TABLES FROM test_utf];`)); err != nil {
+		t.Fatal(err)
+	}
+	expected := `
+  table_name
+--------------
+  żółw
+(1 row)
+`
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Errorf("expected output:\n%s\ngot:\n%s", e, a)
+	}
+	b.Reset()
+
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`SELECT table_name, constraint_name FROM [SHOW CONSTRAINTS FROM test_utf.żółw] ORDER BY 1,2;`)); err != nil {
+		t.Fatal(err)
+	}
+	expected = `
+  table_name | constraint_name
+-------------+------------------
+  żółw       | primary
+  żółw       | żó
+(2 rows)
+`
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Errorf("expected output:\n%s\ngot:\n%s", e, a)
+	}
+	b.Reset()
+}
+
 func TestTransactionRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
