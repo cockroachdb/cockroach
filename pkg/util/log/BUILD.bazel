@@ -15,6 +15,7 @@ go_library(
         "file_log_gc.go",
         "file_sync_buffer.go",
         "flags.go",
+        "fluent_client.go",
         "format_crdb_v1.go",
         "format_json.go",
         "formats.go",
