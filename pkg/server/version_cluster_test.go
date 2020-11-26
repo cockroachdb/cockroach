@@ -445,7 +445,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 				return err
 			}
 
-			if !testutils.IsError(err, fmt.Sprintf("binary version %s less than target cluster version %s", v0s, v1s)) {
+			if !testutils.IsError(err, fmt.Sprintf("binary version %s less than target cluster version", v0s)) {
 				t.Fatal(i, err)
 			}
 			return nil

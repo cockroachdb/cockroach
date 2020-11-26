@@ -43,6 +43,11 @@ func (v Version) Less(otherV Version) bool {
 	return false
 }
 
+// LessEq returns whether the receiver is less than or equal to the parameter.
+func (v Version) LessEq(otherV Version) bool {
+	return v.Equal(otherV) || v.Less(otherV)
+}
+
 // String implements the fmt.Stringer interface.
 func (v Version) String() string { return redact.StringWithoutMarkers(v) }
 
