@@ -1058,15 +1058,6 @@ enum SurvivalGoal {
   REGION_FAILURE = 1;
 }
 
-// DatabaseRegionConfig stores region configuration for a given database.
-message DatabaseRegionConfig {
-  option (gogoproto.equal) = true;
-
-  repeated string regions = 1 [(gogoproto.casttype)="Region"];
-  optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
-  optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="Region"];
-}
-
 // DatabaseDescriptor represents a namespace (aka database) and is stored
 // in a structured metadata key. The DatabaseDescriptor has a globally-unique ID
 // shared with other Descriptors.
@@ -1106,7 +1097,16 @@ message DatabaseDescriptor {
   optional DescriptorState state = 8 [(gogoproto.nullable) = false];
   optional string offline_reason = 9 [(gogoproto.nullable) = false];
 
-  optional DatabaseRegionConfig region_config = 10 [(gogoproto.nullable)=false];
+  // RegionConfig stores region configuration for a given database.
+  message RegionConfig {
+    option (gogoproto.equal) = true;
+
+    repeated string regions = 1 [(gogoproto.casttype)="Region"];
+    optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
+    optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="Region"];
+  }
+  // RegionConfig is only set if multiregion controls are set on the database.
+  optional RegionConfig region_config = 10;
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
