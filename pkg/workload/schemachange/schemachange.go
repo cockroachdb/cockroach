@@ -20,7 +20,6 @@ import (
 	"os"
 	"regexp"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -292,12 +291,12 @@ func (w *schemaChangeWorker) recordInHist(elapsed time.Duration, bin histBin) {
 	w.hists.Get(bin.String()).Record(elapsed)
 }
 
-func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
-	var log strings.Builder
+func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
+	w.startLog()
+	w.writeLog("BEGIN")
 	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
 
 	for i := 0; i < opsNum; i++ {
-
 		// Terminating this loop early if there are expected commit errors prevents unexpected commit behavior from being
 		// hidden by subsequent operations. Consider the case where there are expected commit errors.
 		// It is possible that committing the transaction now will fail the workload because the error does not occur
@@ -310,17 +309,16 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
 		}
 
 		op, noops, err := w.opGen.randOp(tx)
-		if err != nil {
-			return noops, errors.Mark(
-				errors.Wrap(err, "could not generate a random operation"),
-				errRunInTxnFatalSentinel,
-			)
-		}
 		if w.verbose >= 2 {
-			// Print the failed attempts to produce a random operation.
-			log.WriteString(noops)
+			for _, noop := range noops {
+				w.writeLog(noop)
+			}
 		}
-		log.WriteString(fmt.Sprintf("  %s;\n", op))
+		if err != nil {
+			return constructError(err, "***UNEXPECTED ERROR; Could not generate a random operation", errRunInTxnFatalSentinel)
+		}
+
+		w.writeLog(op)
 		if !w.dryRun {
 			start := timeutil.Now()
 
@@ -328,19 +326,14 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
 				// If the error not an instance of pgx.PgError, then it is unexpected.
 				pgErr := pgx.PgError{}
 				if !errors.As(err, &pgErr) {
-					log.WriteString(fmt.Sprintf("***FAIL; Non pg error %v\n", err))
-					return log.String(), errors.Mark(
-						errors.Wrap(err, "***UNEXPECTED ERROR"),
-						errRunInTxnFatalSentinel,
-					)
+					return constructError(err, "***UNEXPECTED ERROR; Non pg error", errRunInTxnFatalSentinel)
 				}
 
 				// Transaction retry errors are acceptable. Allow the transaction
 				// to rollback.
 				if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
-					log.WriteString(fmt.Sprintf("ROLLBACK; %v\n", err))
 					w.recordInHist(timeutil.Since(start), txnRollback)
-					return log.String(), errors.Mark(
+					return errors.Mark(
 						err,
 						errRunInTxnRbkSentinel,
 					)
@@ -348,39 +341,27 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
 
 				// Screen for any unexpected errors.
 				if w.opGen.expectedExecErrors.empty() || !w.opGen.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
-					var logMsg string
+					var errMsg string
 					if w.opGen.expectedExecErrors.empty() {
-						logMsg = fmt.Sprintf("***FAIL; Expected no errors, but got %v\n", err)
+						errMsg = "***UNEXPECTED ERROR; Expected no errors, but got"
 					} else {
-						logMsg = fmt.Sprintf("***FAIL; Expected one of SQLSTATES %s, but got %v\n", w.opGen.expectedExecErrors.string(), err)
+						errMsg = fmt.Sprintf("***FAIL; Expected one of SQLSTATES %s, but got", w.opGen.expectedExecErrors.string())
 					}
-					log.WriteString(logMsg)
-					return log.String(), errors.Mark(
-						errors.Wrap(err, "***UNEXPECTED ERROR"),
-						errRunInTxnFatalSentinel,
-					)
+					return constructError(err, errMsg, errRunInTxnFatalSentinel)
 				}
 
 				// Rollback because the error was anticipated.
-				log.WriteString(fmt.Sprintf("ROLLBACK; expected SQLSTATE(S) %s, and got %v\n", w.opGen.expectedExecErrors.string(), err))
 				w.recordInHist(timeutil.Since(start), txnRollback)
-				return log.String(), errors.Mark(
-					err,
-					errRunInTxnRbkSentinel,
-				)
+				return constructError(err, fmt.Sprintf("ROLLBACK; expected SQLSTATE(S) %s, and successfully got", w.opGen.expectedExecErrors.string()), errRunInTxnRbkSentinel)
 			}
 			if !w.opGen.expectedExecErrors.empty() {
-				log.WriteString(fmt.Sprintf("Expected SQLSTATE(S) %s, but got no errors\n", w.opGen.expectedExecErrors.string()))
-				return log.String(), errors.Mark(
-					errors.Errorf("***UNEXPECTED SUCCESS"),
-					errRunInTxnFatalSentinel,
-				)
+				return errors.Mark(errors.Errorf("Expected SQLSTATE(S) %s, but got no errors", w.opGen.expectedExecErrors.string()), errRunInTxnFatalSentinel)
 			}
 
 			w.recordInHist(timeutil.Since(start), operationOk)
 		}
 	}
-	return log.String(), nil
+	return nil
 }
 
 func (w *schemaChangeWorker) run(_ context.Context) error {
@@ -395,48 +376,46 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	start := timeutil.Now()
 	w.opGen.resetTxnState()
-	logs, err := w.runInTxn(tx)
-	logs = "BEGIN\n" + logs
-	defer func() {
-		if w.verbose >= 1 {
-			fmt.Print(logs)
-		}
-	}()
+	err = w.runInTxn(tx)
 
 	if err != nil {
-		// Rollback in all cases to release the txn object and its conn pool.
+		// Rollback in all cases to release the txn object and its conn pool. Wrap the original
+		// error with a rollback error if necessary.
 		if rbkErr := tx.Rollback(); rbkErr != nil {
-			return errors.Wrapf(err, "***UNEXPECTED ERROR IN ROLLBACK %v", rbkErr)
+			err = constructError(err, fmt.Sprintf("***UNEXPECTED ERROR IN ROLLBACK %v", rbkErr), errRunInTxnFatalSentinel)
 		}
+
+		w.flushLog(tx, err.Error())
 		switch {
 		case errors.Is(err, errRunInTxnFatalSentinel):
+			w.preErrorHook()
 			return err
 		case errors.Is(err, errRunInTxnRbkSentinel):
 			// Rollbacks are acceptable because all unexpected errors will be
 			// of errRunInTxnFatalSentinel.
 			return nil
 		default:
+			w.preErrorHook()
 			return errors.Wrapf(err, "***UNEXPECTED ERROR")
 		}
 	}
 
+	w.writeLog("COMMIT")
 	if err = tx.Commit(); err != nil {
 		// If the error not an instance of pgx.PgError, then it is unexpected.
 		pgErr := pgx.PgError{}
 		if !errors.As(err, &pgErr) {
-			w.recordInHist(timeutil.Since(start), txnCommitError)
-			logs = logs + fmt.Sprintf("COMMIT; ***FAIL; Non pg error %v\n", err)
-			return errors.Mark(
-				errors.Wrap(err, "***UNEXPECTED ERROR"),
-				errRunInTxnFatalSentinel,
-			)
+			err = constructError(err, "***FAIL; Non pg error", errRunInTxnFatalSentinel)
+			w.flushLog(tx, err.Error())
+			w.preErrorHook()
+			return err
 		}
 
 		// Transaction retry errors are acceptable. Allow the transaction
 		// to rollback.
 		if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			w.recordInHist(timeutil.Since(start), txnCommitError)
-			logs = logs + fmt.Sprintf("COMMIT; %v\n", err)
+			w.flushLog(tx, "Transaction retry error")
 			return nil
 		}
 
@@ -452,38 +431,42 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 
 		// Check for any expected errors.
 		if !w.opGen.expectedCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) {
-			var logMsg string
+			var errMsg string
 			if w.opGen.expectedCommitErrors.empty() {
-				logMsg = fmt.Sprintf("COMMIT; ***FAIL; Expected no errors, but got %v\n", err)
+				errMsg = "***FAIL; Expected no errors, but got"
 			} else {
-				logMsg = fmt.Sprintf("COMMIT; ***FAIL; Expected one of SQLSTATES %s, but got %v\n", w.opGen.expectedCommitErrors.string(), err)
+				errMsg = fmt.Sprintf("***FAIL; Expected one of SQLSTATES %s, but got", w.opGen.expectedCommitErrors.string())
 			}
-
-			logs = logs + logMsg
-			return errors.Mark(
-				errors.Wrap(err, "***UNEXPECTED ERROR"),
-				errRunInTxnFatalSentinel,
-			)
+			err = constructError(err, errMsg, errRunInTxnFatalSentinel)
+			w.flushLog(tx, err.Error())
+			w.preErrorHook()
+			return err
 		}
 
 		// Error was anticipated, so it is acceptable.
 		w.recordInHist(timeutil.Since(start), txnCommitError)
-		logs = logs + fmt.Sprintf("COMMIT; expected SQLSTATE(S) %s, and got %v\n", w.opGen.expectedCommitErrors.string(), err)
+		w.flushLog(tx, fmt.Sprintf("COMMIT; expected SQLSTATE(S) %s, and successfully got", w.opGen.expectedCommitErrors.string()))
 		return nil
 	}
 
 	if !w.opGen.expectedCommitErrors.empty() {
-		logs = logs + fmt.Sprintf("COMMIT; Expected SQLSTATE(S) %s, but got no errors\n", w.opGen.expectedCommitErrors.string())
-		return errors.Mark(
-			errors.Errorf("***UNEXPECTED SUCCESS"),
-			errRunInTxnFatalSentinel,
-		)
+		errMsg := fmt.Sprintf("***FAIL; Expected SQLSTATE(S) %s, but got no errors\n", w.opGen.expectedCommitErrors.string())
+		w.flushLog(tx, errMsg)
+		w.preErrorHook()
+		return errors.Mark(errors.New(errMsg), errRunInTxnFatalSentinel)
 	}
 
 	// If there were no errors while committing the txn.
+	w.flushLog(tx, "")
 	w.recordInHist(timeutil.Since(start), txnOk)
-	logs = logs + "COMMIT; \n"
 	return nil
+}
+
+func constructError(err error, wrap string, mark error) error {
+	return errors.Mark(
+		errors.Wrap(err, wrap),
+		mark,
+	)
 }
 
 // preErrorHook is called by a worker whose run() function is going to return an error
