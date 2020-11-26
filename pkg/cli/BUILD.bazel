@@ -11,6 +11,7 @@ go_library(
         "cpuprofile.go",
         "debug.go",
         "debug_check_store.go",
+        "debug_logconfig.go",
         "debug_merge_logs.go",
         "debug_synctest.go",
         "decode.go",
@@ -201,6 +202,7 @@ go_library(
         "//vendor/google.golang.org/grpc",
         "//vendor/google.golang.org/grpc/codes",
         "//vendor/google.golang.org/grpc/status",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "//vendor/golang.org/x/sys/unix",
