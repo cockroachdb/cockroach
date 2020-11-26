@@ -793,6 +793,10 @@ func init() {
 		stringFlag(f, &debugCtx.decodeAsTableDesc, cliflags.DecodeAsTable)
 	}
 	{
+		f := debugCheckLogConfigCmd.Flags()
+		varFlag(f, &serverCfg.Stores, cliflags.Store)
+	}
+	{
 		f := debugRangeDataCmd.Flags()
 		boolFlag(f, &debugCtx.replicated, cliflags.Replicated)
 		intFlag(f, &debugCtx.maxResults, cliflags.Limit)

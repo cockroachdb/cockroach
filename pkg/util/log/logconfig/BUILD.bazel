@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "config.go",
         "doc.go",
+        "export.go",
         "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logconfig",
@@ -21,6 +22,7 @@ go_test(
     name = "logconfig_test",
     srcs = [
         "config_test.go",
+        "export_test.go",
         "validate_test.go",
     ],
     data = glob(["testdata/**"]),
