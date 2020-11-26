@@ -792,26 +792,9 @@ func (r *Replica) evaluateProposal(
 		res.Replicated.Timestamp = ba.Timestamp
 		res.Replicated.Delta = ms.ToStatsDelta()
 
-		_ = clusterversion.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
-		if r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
-			// Encode that this command (and any that follow) uses regular arithmetic for ContainsEstimates
-			// by making sure ContainsEstimates is > 1.
-			// This will be interpreted during command application.
-			if res.Replicated.Delta.ContainsEstimates > 0 {
-				res.Replicated.Delta.ContainsEstimates *= 2
-			}
-		} else {
-			// This range may still need to have its commands processed by nodes which treat ContainsEstimates
-			// as a bool, so clamp it to {0,1}. This enables use of bool semantics in command application.
-			if res.Replicated.Delta.ContainsEstimates > 1 {
-				res.Replicated.Delta.ContainsEstimates = 1
-			} else if res.Replicated.Delta.ContainsEstimates < 0 {
-				// The caller should have checked the cluster version. At the
-				// time of writing, this is only RecomputeStats and the split
-				// trigger, which both have the check, but better safe than sorry.
-				log.Fatalf(ctx, "cannot propose negative ContainsEstimates "+
-					"without VersionContainsEstimatesCounter in %s", ba.Summary())
-			}
+		// This is the result of a migration. See the field for more details.
+		if res.Replicated.Delta.ContainsEstimates > 0 {
+			res.Replicated.Delta.ContainsEstimates *= 2
 		}
 
 		// If the cluster version doesn't track abort span size in MVCCStats, we
