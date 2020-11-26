@@ -78,7 +78,7 @@ type MVCCMetadata struct {
 func (m *MVCCMetadata) Reset()      { *m = MVCCMetadata{} }
 func (*MVCCMetadata) ProtoMessage() {}
 func (*MVCCMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_883f89000dcabd92, []int{0}
+	return fileDescriptor_mvcc_33d1719bb1dfaf1f, []int{0}
 }
 func (m *MVCCMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -118,7 +118,7 @@ type MVCCMetadata_SequencedIntent struct {
 func (m *MVCCMetadata_SequencedIntent) Reset()      { *m = MVCCMetadata_SequencedIntent{} }
 func (*MVCCMetadata_SequencedIntent) ProtoMessage() {}
 func (*MVCCMetadata_SequencedIntent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_883f89000dcabd92, []int{0, 0}
+	return fileDescriptor_mvcc_33d1719bb1dfaf1f, []int{0, 0}
 }
 func (m *MVCCMetadata_SequencedIntent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -162,7 +162,7 @@ func (m *MVCCMetadataSubsetForMergeSerialization) Reset() {
 }
 func (*MVCCMetadataSubsetForMergeSerialization) ProtoMessage() {}
 func (*MVCCMetadataSubsetForMergeSerialization) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_883f89000dcabd92, []int{1}
+	return fileDescriptor_mvcc_33d1719bb1dfaf1f, []int{1}
 }
 func (m *MVCCMetadataSubsetForMergeSerialization) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -221,8 +221,20 @@ type MVCCStats struct {
 	// contains_estimates indicates that the MVCCStats object contains values
 	// which have been estimated. This means that the stats should not be used
 	// where complete accuracy is required, and instead should be recomputed
-	// when necessary. See clusterversion.VersionContainsEstimatesCounter for
-	// details about the migration from bool to int64.
+	// when necessary.
+	//
+	// This field used to be a bool; in #37583 we migrated it to int64. See #37120
+	// for the motivation for doing so. If zero, it's "false". If non-zero, it's
+	// "true".
+	//
+	// As a result of the migration, our usage of this int64 field is now a bit
+	// involved. When ContainsEstimates is 0 or 1, we behave like a boolean
+	// (i.e. `1+1=1` aka `true+true=true`). Downstream of raft, we use the
+	// boolean behavior for ContainsEstimates=1 and the additive behavior for
+	// anything else. If non-zero, we encode the fact that we're allowed to use
+	// regular arithmetic for this field by making sure it contains a value >1 (we
+	// multiply it by 2, and thus avoiding 1). This is then interpreted during
+	// command application.
 	ContainsEstimates int64 `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates" json:"contains_estimates"`
 	// last_update_nanos is a timestamp at which the ages were last
 	// updated. See the comment on MVCCStats.
@@ -280,7 +292,7 @@ func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
 func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
 func (*MVCCStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_883f89000dcabd92, []int{2}
+	return fileDescriptor_mvcc_33d1719bb1dfaf1f, []int{2}
 }
 func (m *MVCCStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -334,7 +346,7 @@ func (m *MVCCStatsLegacyRepresentation) Reset()         { *m = MVCCStatsLegacyRe
 func (m *MVCCStatsLegacyRepresentation) String() string { return proto.CompactTextString(m) }
 func (*MVCCStatsLegacyRepresentation) ProtoMessage()    {}
 func (*MVCCStatsLegacyRepresentation) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_883f89000dcabd92, []int{3}
+	return fileDescriptor_mvcc_33d1719bb1dfaf1f, []int{3}
 }
 func (m *MVCCStatsLegacyRepresentation) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2277,9 +2289,9 @@ var (
 	ErrIntOverflowMvcc   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/enginepb/mvcc.proto", fileDescriptor_mvcc_883f89000dcabd92) }
+func init() { proto.RegisterFile("storage/enginepb/mvcc.proto", fileDescriptor_mvcc_33d1719bb1dfaf1f) }
 
-var fileDescriptor_mvcc_883f89000dcabd92 = []byte{
+var fileDescriptor_mvcc_33d1719bb1dfaf1f = []byte{
 	// 780 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x95, 0x31, 0x4f, 0xdb, 0x4c,
 	0x18, 0xc7, 0xe3, 0x37, 0x01, 0x9c, 0x4b, 0x48, 0xc0, 0x2f, 0xd2, 0x1b, 0x85, 0xb7, 0x4e, 0x0a,
