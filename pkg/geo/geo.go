@@ -184,7 +184,8 @@ func MustParseGeometryFromEWKB(ewkb geopb.EWKB) Geometry {
 
 // ParseGeometryFromGeoJSON parses the GeoJSON into a given Geometry.
 func ParseGeometryFromGeoJSON(json []byte) (Geometry, error) {
-	g, err := parseGeoJSON(geopb.SpatialObjectType_GeometryType, json, geopb.DefaultGeometrySRID)
+	// Note we set SRID to 4326 from here, to match PostGIS's behavior as per RFC7946.
+	g, err := parseGeoJSON(geopb.SpatialObjectType_GeometryType, json, geopb.DefaultGeographySRID)
 	if err != nil {
 		return Geometry{}, err
 	}
