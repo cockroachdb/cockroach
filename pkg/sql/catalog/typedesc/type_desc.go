@@ -444,20 +444,13 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	var reqs []descpb.ID
 
 	// Validate the parentID.
-	// TODO(#multiregion): This is hacky and in reality we should be checking the parentID
-	// exists regardless of what the type descriptor kind is. For now, I have this
-	// here because the multi region enum can't read the database descriptor that
-	// was created as part of the same txn.
-	// See https://github.com/cockroachdb/cockroach/issues/57087
-	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
-		reqs = append(reqs, desc.ParentID)
-		checks = append(checks, func(got catalog.Descriptor) error {
-			if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
-				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
-			}
-			return nil
-		})
-	}
+	reqs = append(reqs, desc.ParentID)
+	checks = append(checks, func(got catalog.Descriptor) error {
+		if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
+			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+		}
+		return nil
+	})
 
 	// Validate the parentSchemaID.
 	if desc.ParentSchemaID != keys.PublicSchemaID {
