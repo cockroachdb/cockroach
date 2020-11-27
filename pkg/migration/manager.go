@@ -24,6 +24,7 @@ package migration
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -188,14 +189,18 @@ func NewManager(
 	}
 }
 
-// MigrateTo runs the set of migrations required to upgrade the cluster version
-// to the provided target version.
-//
-// TODO(irfansharif): Do something real here.
-func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error {
+// Migrate runs the set of migrations required to upgrade the cluster version
+// from the current version to the target one.
+func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVersion) error {
+	if from == to {
+		// Nothing to do here.
+		return nil
+	}
+
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
 	// for each migration, so they log distinctly?
 	ctx = logtags.AddTag(ctx, "migration-mgr", nil)
+	log.Infof(ctx, "migrating cluster from %s to %s", from, to)
 
 	// TODO(irfansharif): We'll need to acquire a lease here and refresh it
 	// throughout during the migration to ensure mutual exclusion.
@@ -242,9 +247,9 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 	// defining migrations is that they'd only care about introducing the next
 	// version key within pkg/clusterversion, and registering a corresponding
 	// migration for it here.
-	var vs = []roachpb.Version{targetV}
+	var clusterVersions = []clusterversion.ClusterVersion{to}
 
-	for _, version := range vs {
+	for _, clusterVersion := range clusterVersions {
 		h := &Helper{Manager: m}
 
 		// Push out the version gate to every node in the cluster. Each node
@@ -255,7 +260,9 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 		{
 			// First sanity check that we'll actually be able to perform the
 			// cluster version bump, cluster-wide.
-			req := &serverpb.ValidateTargetClusterVersionRequest{Version: &version}
+			req := &serverpb.ValidateTargetClusterVersionRequest{
+				ClusterVersion: &clusterVersion,
+			}
 			err := h.EveryNode(ctx, "validate-cv", func(ctx context.Context, client serverpb.MigrationClient) error {
 				_, err := client.ValidateTargetClusterVersion(ctx, req)
 				return err
@@ -265,7 +272,9 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 			}
 		}
 		{
-			req := &serverpb.BumpClusterVersionRequest{Version: &version}
+			req := &serverpb.BumpClusterVersionRequest{
+				ClusterVersion: &clusterVersion,
+			}
 			err := h.EveryNode(ctx, "bump-cv", func(ctx context.Context, client serverpb.MigrationClient) error {
 				_, err := client.BumpClusterVersion(ctx, req)
 				return err
@@ -280,7 +289,7 @@ func (m *Manager) MigrateTo(ctx context.Context, targetV roachpb.Version) error 
 		// TODO(irfansharif): We'll want to be able to override which migration
 		// is retrieved here within tests. We could make the registry be a part
 		// of the manager, and all tests to provide their own.
-		_ = Registry[version]
+		_ = Registry[clusterVersion]
 	}
 
 	return nil
