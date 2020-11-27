@@ -6,7 +6,7 @@ package serverpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import clusterversion "github.com/cockroachdb/cockroach/pkg/clusterversion"
 
 import (
 	context "context"
@@ -29,14 +29,14 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 // ValidateTargetClusterVersion is used to verify that the target node is
 // running a binary that's able to support the specified cluster version.
 type ValidateTargetClusterVersionRequest struct {
-	Version *roachpb.Version `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	ClusterVersion *clusterversion.ClusterVersion `protobuf:"bytes,1,opt,name=cluster_version,json=clusterVersion,proto3" json:"cluster_version,omitempty"`
 }
 
 func (m *ValidateTargetClusterVersionRequest) Reset()         { *m = ValidateTargetClusterVersionRequest{} }
 func (m *ValidateTargetClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionRequest) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_37957468907239c5, []int{0}
+	return fileDescriptor_migration_23f3ba74c87bf5d5, []int{0}
 }
 func (m *ValidateTargetClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -70,7 +70,7 @@ func (m *ValidateTargetClusterVersionResponse) Reset()         { *m = ValidateTa
 func (m *ValidateTargetClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionResponse) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_37957468907239c5, []int{1}
+	return fileDescriptor_migration_23f3ba74c87bf5d5, []int{1}
 }
 func (m *ValidateTargetClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -98,14 +98,14 @@ var xxx_messageInfo_ValidateTargetClusterVersionResponse proto.InternalMessageIn
 // BumpClusterVersionRequest is used to inform a given node of a cluster version
 // bump.
 type BumpClusterVersionRequest struct {
-	Version *roachpb.Version `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	ClusterVersion *clusterversion.ClusterVersion `protobuf:"bytes,1,opt,name=cluster_version,json=clusterVersion,proto3" json:"cluster_version,omitempty"`
 }
 
 func (m *BumpClusterVersionRequest) Reset()         { *m = BumpClusterVersionRequest{} }
 func (m *BumpClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionRequest) ProtoMessage()    {}
 func (*BumpClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_37957468907239c5, []int{2}
+	return fileDescriptor_migration_23f3ba74c87bf5d5, []int{2}
 }
 func (m *BumpClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -138,7 +138,7 @@ func (m *BumpClusterVersionResponse) Reset()         { *m = BumpClusterVersionRe
 func (m *BumpClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionResponse) ProtoMessage()    {}
 func (*BumpClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_37957468907239c5, []int{3}
+	return fileDescriptor_migration_23f3ba74c87bf5d5, []int{3}
 }
 func (m *BumpClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -388,11 +388,11 @@ func (m *ValidateTargetClusterVersionRequest) MarshalTo(dAtA []byte) (int, error
 	_ = i
 	var l int
 	_ = l
-	if m.Version != nil {
+	if m.ClusterVersion != nil {
 		dAtA[i] = 0xa
 		i++
-		i = encodeVarintMigration(dAtA, i, uint64(m.Version.Size()))
-		n1, err := m.Version.MarshalTo(dAtA[i:])
+		i = encodeVarintMigration(dAtA, i, uint64(m.ClusterVersion.Size()))
+		n1, err := m.ClusterVersion.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -434,11 +434,11 @@ func (m *BumpClusterVersionRequest) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Version != nil {
+	if m.ClusterVersion != nil {
 		dAtA[i] = 0xa
 		i++
-		i = encodeVarintMigration(dAtA, i, uint64(m.Version.Size()))
-		n2, err := m.Version.MarshalTo(dAtA[i:])
+		i = encodeVarintMigration(dAtA, i, uint64(m.ClusterVersion.Size()))
+		n2, err := m.ClusterVersion.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -480,8 +480,8 @@ func (m *ValidateTargetClusterVersionRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Version != nil {
-		l = m.Version.Size()
+	if m.ClusterVersion != nil {
+		l = m.ClusterVersion.Size()
 		n += 1 + l + sovMigration(uint64(l))
 	}
 	return n
@@ -502,8 +502,8 @@ func (m *BumpClusterVersionRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Version != nil {
-		l = m.Version.Size()
+	if m.ClusterVersion != nil {
+		l = m.ClusterVersion.Size()
 		n += 1 + l + sovMigration(uint64(l))
 	}
 	return n
@@ -562,7 +562,7 @@ func (m *ValidateTargetClusterVersionRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterVersion", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -586,10 +586,10 @@ func (m *ValidateTargetClusterVersionRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Version == nil {
-				m.Version = &roachpb.Version{}
+			if m.ClusterVersion == nil {
+				m.ClusterVersion = &clusterversion.ClusterVersion{}
 			}
-			if err := m.Version.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.ClusterVersion.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -695,7 +695,7 @@ func (m *BumpClusterVersionRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterVersion", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -719,10 +719,10 @@ func (m *BumpClusterVersionRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Version == nil {
-				m.Version = &roachpb.Version{}
+			if m.ClusterVersion == nil {
+				m.ClusterVersion = &clusterversion.ClusterVersion{}
 			}
-			if err := m.Version.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.ClusterVersion.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -903,27 +903,27 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_migration_37957468907239c5)
+	proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_migration_23f3ba74c87bf5d5)
 }
 
-var fileDescriptor_migration_37957468907239c5 = []byte{
-	// 279 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_migration_23f3ba74c87bf5d5 = []byte{
+	// 278 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x4e, 0x2d, 0x2a,
 	0x4b, 0x2d, 0xd2, 0x87, 0x50, 0x05, 0x49, 0xfa, 0xb9, 0x99, 0xe9, 0x45, 0x89, 0x25, 0x99, 0xf9,
 	0x79, 0x7a, 0x05, 0x45, 0xf9, 0x25, 0xf9, 0x42, 0x92, 0xc9, 0xf9, 0xc9, 0xd9, 0x45, 0xf9, 0x89,
-	0xc9, 0x19, 0x7a, 0x10, 0x35, 0x7a, 0x30, 0xa5, 0x52, 0x62, 0x60, 0x61, 0x90, 0x9e, 0xd4, 0x92,
-	0xc4, 0x94, 0xc4, 0x92, 0x44, 0x88, 0x16, 0xa5, 0x68, 0x2e, 0xe5, 0xb0, 0xc4, 0x9c, 0xcc, 0x94,
-	0xc4, 0x92, 0xd4, 0x90, 0xc4, 0xa2, 0xf4, 0xd4, 0x12, 0xe7, 0x9c, 0xd2, 0xe2, 0x92, 0xd4, 0xa2,
-	0xb0, 0xd4, 0xa2, 0xe2, 0xcc, 0xfc, 0xbc, 0xa0, 0xd4, 0xc2, 0xd2, 0xd4, 0xe2, 0x12, 0x21, 0x13,
-	0x2e, 0xf6, 0x32, 0x88, 0x88, 0x04, 0xa3, 0x02, 0xa3, 0x06, 0xb7, 0x91, 0x94, 0x1e, 0xc2, 0x2e,
-	0xa8, 0xd1, 0x7a, 0x30, 0x3d, 0x30, 0xa5, 0x4a, 0x6a, 0x5c, 0x2a, 0xf8, 0x0d, 0x2f, 0x2e, 0xc8,
-	0xcf, 0x2b, 0x4e, 0x55, 0x0a, 0xe4, 0x92, 0x74, 0x2a, 0xcd, 0x2d, 0xa0, 0xa6, 0xd5, 0x32, 0x5c,
-	0x52, 0xd8, 0x8c, 0x84, 0x58, 0x68, 0xb4, 0x95, 0x89, 0x8b, 0xd3, 0x17, 0x16, 0x78, 0x42, 0x0b,
-	0x19, 0xb9, 0x64, 0xf0, 0xb9, 0x53, 0xc8, 0x4e, 0x0f, 0x67, 0xc0, 0xea, 0x11, 0x11, 0x7a, 0x52,
-	0xf6, 0x64, 0xeb, 0x87, 0x06, 0x10, 0x83, 0x50, 0x33, 0x23, 0x97, 0x10, 0xa6, 0x87, 0x84, 0x4c,
-	0xf0, 0x98, 0x8c, 0x33, 0x48, 0xa5, 0x4c, 0x49, 0xd4, 0x05, 0x73, 0x85, 0x93, 0xd6, 0x89, 0x87,
-	0x72, 0x0c, 0x27, 0x1e, 0xc9, 0x31, 0x5e, 0x78, 0x24, 0xc7, 0x78, 0xe3, 0x91, 0x1c, 0xe3, 0x83,
-	0x47, 0x72, 0x8c, 0x13, 0x1e, 0xcb, 0x31, 0x5c, 0x78, 0x2c, 0xc7, 0x70, 0xe3, 0xb1, 0x1c, 0x43,
-	0x14, 0x07, 0xcc, 0xa0, 0x24, 0x36, 0x70, 0x02, 0x33, 0x06, 0x04, 0x00, 0x00, 0xff, 0xff, 0xf8,
-	0x76, 0x3a, 0x9f, 0xb6, 0x02, 0x00, 0x00,
+	0xc9, 0x19, 0x7a, 0x10, 0x35, 0x7a, 0x30, 0xa5, 0x52, 0x2a, 0xc9, 0x39, 0xa5, 0xc5, 0x25, 0x60,
+	0x5e, 0x71, 0x66, 0x7e, 0x9e, 0x3e, 0x94, 0x1b, 0x0f, 0xe5, 0x43, 0x0c, 0x50, 0xaa, 0xe0, 0x52,
+	0x0e, 0x4b, 0xcc, 0xc9, 0x4c, 0x49, 0x2c, 0x49, 0x0d, 0x49, 0x2c, 0x4a, 0x4f, 0x2d, 0x71, 0x86,
+	0x28, 0x0b, 0x83, 0xa8, 0x0a, 0x4a, 0x2d, 0x2c, 0x4d, 0x2d, 0x2e, 0x11, 0x0a, 0xe4, 0xe2, 0x47,
+	0xd3, 0x2f, 0xc1, 0xa8, 0xc0, 0xa8, 0xc1, 0x6d, 0xa4, 0xa1, 0x87, 0x70, 0x01, 0xaa, 0x85, 0x7a,
+	0x68, 0x26, 0xf1, 0x25, 0xa3, 0xf0, 0x95, 0xd4, 0xb8, 0x54, 0xf0, 0xdb, 0x5c, 0x5c, 0x90, 0x9f,
+	0x57, 0x9c, 0xaa, 0x94, 0xc7, 0x25, 0xe9, 0x54, 0x9a, 0x5b, 0x40, 0x37, 0x77, 0xc9, 0x70, 0x49,
+	0x61, 0xb3, 0x0f, 0xe2, 0x1a, 0xa3, 0xad, 0x4c, 0x5c, 0x9c, 0xbe, 0xb0, 0x48, 0x10, 0x5a, 0xc8,
+	0xc8, 0x25, 0x83, 0xcf, 0x13, 0x42, 0x76, 0x7a, 0x38, 0x23, 0x48, 0x8f, 0x88, 0x70, 0x97, 0xb2,
+	0x27, 0x5b, 0x3f, 0x34, 0xf4, 0x18, 0x84, 0x9a, 0x19, 0xb9, 0x84, 0x30, 0x3d, 0x24, 0x64, 0x82,
+	0xc7, 0x64, 0x9c, 0xe1, 0x2d, 0x65, 0x4a, 0xa2, 0x2e, 0x98, 0x2b, 0x9c, 0xb4, 0x4e, 0x3c, 0x94,
+	0x63, 0x38, 0xf1, 0x48, 0x8e, 0xf1, 0xc2, 0x23, 0x39, 0xc6, 0x1b, 0x8f, 0xe4, 0x18, 0x1f, 0x3c,
+	0x92, 0x63, 0x9c, 0xf0, 0x58, 0x8e, 0xe1, 0xc2, 0x63, 0x39, 0x86, 0x1b, 0x8f, 0xe5, 0x18, 0xa2,
+	0x38, 0x60, 0x06, 0x25, 0xb1, 0x81, 0x93, 0xa6, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0x08, 0xa5,
+	0xf0, 0xc3, 0xfe, 0x02, 0x00, 0x00,
 }

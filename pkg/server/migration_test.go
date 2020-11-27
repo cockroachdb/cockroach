@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,36 +30,39 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 	v := func(major, minor int32) roachpb.Version {
 		return roachpb.Version{Major: major, Minor: minor}
 	}
+	cv := func(major, minor int32) clusterversion.ClusterVersion {
+		return clusterversion.ClusterVersion{Version: v(major, minor)}
+	}
 
 	var tests = []struct {
 		binaryVersion             roachpb.Version
 		binaryMinSupportedVersion roachpb.Version
-		targetVersion             roachpb.Version
+		targetClusterVersion      clusterversion.ClusterVersion
 		expErrMatch               string // empty if expecting a nil error
 	}{
 		{
 			binaryVersion:             v(20, 2),
 			binaryMinSupportedVersion: v(20, 1),
-			targetVersion:             v(20, 1),
+			targetClusterVersion:      cv(20, 1),
 			expErrMatch:               "",
 		},
 		{
 			binaryVersion:             v(20, 2),
 			binaryMinSupportedVersion: v(20, 1),
-			targetVersion:             v(20, 2),
+			targetClusterVersion:      cv(20, 2),
 			expErrMatch:               "",
 		},
 		{
 			binaryVersion:             v(20, 2),
 			binaryMinSupportedVersion: v(20, 1),
-			targetVersion:             v(21, 1),
-			expErrMatch:               "binary version.*less than target version",
+			targetClusterVersion:      cv(21, 1),
+			expErrMatch:               "binary version.*less than target cluster version",
 		},
 		{
 			binaryVersion:             v(20, 2),
 			binaryMinSupportedVersion: v(20, 1),
-			targetVersion:             v(19, 2),
-			expErrMatch:               "target version.*less than binary's min supported version",
+			targetClusterVersion:      cv(19, 2),
+			expErrMatch:               "target cluster version.*less than binary's min supported version",
 		},
 	}
 
@@ -82,7 +86,7 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 
 		migrationServer := s.MigrationServer().(*migrationServer)
 		req := &serverpb.ValidateTargetClusterVersionRequest{
-			Version: &test.targetVersion,
+			ClusterVersion: &test.targetClusterVersion,
 		}
 		_, err := migrationServer.ValidateTargetClusterVersion(context.Background(), req)
 		if !testutils.IsError(err, test.expErrMatch) {
