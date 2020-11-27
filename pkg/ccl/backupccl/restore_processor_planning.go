@@ -70,7 +70,7 @@ func distRestore(
 		}
 	}
 	// Wrap the relevant BackupEncryptionOptions to be used by the Restore
-	// processor and KV ImportRequest.
+	// processor.
 	var fileEncryption *roachpb.FileEncryptionOptions
 	if encryption != nil {
 		fileEncryption = &roachpb.FileEncryptionOptions{Key: encryption.Key}

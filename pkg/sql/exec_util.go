@@ -880,6 +880,10 @@ type BackupRestoreTestingKnobs struct {
 	// resolved during backup planning, and will eventually be backed up during
 	// execution.
 	CaptureResolvedTableDescSpans func([]roachpb.Span)
+
+	// RunAfterProcessingRestoreSpanEntry allows blocking the RESTORE job after a
+	// single RestoreSpanEntry has been processed and added to the SSTBatcher.
+	RunAfterProcessingRestoreSpanEntry func(ctx context.Context)
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
