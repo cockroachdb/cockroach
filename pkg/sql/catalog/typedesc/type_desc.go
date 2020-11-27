@@ -464,22 +464,18 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	}
 
 	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		// Ensure that the referenced array type exists.
 		reqs = append(reqs, desc.ArrayTypeID)
 		checks = append(checks, func(got catalog.Descriptor) error {
 			if _, isType := got.(catalog.TypeDescriptor); !isType {
-				return errors.AssertionFailedf("arrayTypeID %d does not exist", errors.Safe(desc.ArrayTypeID))
+				return errors.AssertionFailedf("arrayTypeID %d does not exist for %q", errors.Safe(desc.ArrayTypeID), desc.Kind.String())
 			}
 			return nil
 		})
 	case descpb.TypeDescriptor_ALIAS:
 		if desc.ArrayTypeID != descpb.InvalidID {
 			return errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.ArrayTypeID)
-		}
-	case descpb.TypeDescriptor_MULTIREGION_ENUM:
-		if desc.ArrayTypeID != descpb.InvalidID {
-			return errors.AssertionFailedf("MULTIREGION_ENUM type desc has array type ID %d", desc.ArrayTypeID)
 		}
 	default:
 		return errors.New("unknown type descriptor type")
