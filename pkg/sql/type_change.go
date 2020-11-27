@@ -147,7 +147,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// If there are any read only enum members, promote them to writeable.
-	if typeDesc.Kind == descpb.TypeDescriptor_ENUM && enumHasNonPublic(typeDesc) {
+	if (typeDesc.Kind == descpb.TypeDescriptor_ENUM ||
+		typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
+		enumHasNonPublic(typeDesc) {
 		if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
 			fn()
 		}

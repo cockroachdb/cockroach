@@ -95,6 +95,19 @@ func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
 	}}
 }
 
+// NewQualifiedTypeName returns a fully qualified type name.
+func NewQualifiedTypeName(db, schema, typ string) *TypeName {
+	return &TypeName{objName{
+		ObjectNamePrefix: ObjectNamePrefix{
+			ExplicitCatalog: true,
+			ExplicitSchema:  true,
+			CatalogName:     Name(db),
+			SchemaName:      Name(schema),
+		},
+		ObjectName: Name(typ),
+	}}
+}
+
 // TypeReferenceResolver is the interface that will provide the ability
 // to actually look up type metadata and transform references into
 // *types.T's. Implementers of TypeReferenceResolver should also implement
