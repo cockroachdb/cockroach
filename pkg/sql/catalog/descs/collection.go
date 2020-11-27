@@ -1503,9 +1503,9 @@ type DistSQLTypeResolverFactory struct {
 
 // NewTypeResolver creates a new TypeResolver that is bound under the input
 // transaction. It returns a nil resolver if the factory itself is nil.
-func (df *DistSQLTypeResolverFactory) NewTypeResolver(txn *kv.Txn) *DistSQLTypeResolver {
+func (df *DistSQLTypeResolverFactory) NewTypeResolver(txn *kv.Txn) DistSQLTypeResolver {
 	if df == nil {
-		return nil
+		return DistSQLTypeResolver{}
 	}
 	return NewDistSQLTypeResolver(df.Descriptors, txn)
 }
@@ -1526,24 +1526,22 @@ type DistSQLTypeResolver struct {
 }
 
 // NewDistSQLTypeResolver creates a new DistSQLTypeResolver.
-func NewDistSQLTypeResolver(descs *Collection, txn *kv.Txn) *DistSQLTypeResolver {
-	return &DistSQLTypeResolver{
+func NewDistSQLTypeResolver(descs *Collection, txn *kv.Txn) DistSQLTypeResolver {
+	return DistSQLTypeResolver{
 		descriptors: descs,
 		txn:         txn,
 	}
 }
 
 // ResolveType implements the tree.TypeReferenceResolver interface.
-func (dt *DistSQLTypeResolver) ResolveType(
+func (dt DistSQLTypeResolver) ResolveType(
 	context.Context, *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
-func (dt *DistSQLTypeResolver) ResolveTypeByOID(
-	ctx context.Context, oid oid.Oid,
-) (*types.T, error) {
+func (dt DistSQLTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
 	name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.UserDefinedTypeOIDToID(oid))
 	if err != nil {
 		return nil, err
@@ -1552,7 +1550,7 @@ func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 }
 
 // GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
-func (dt *DistSQLTypeResolver) GetTypeDescriptor(
+func (dt DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
 	desc, err := dt.descriptors.getDescriptorVersionByID(
@@ -1570,7 +1568,7 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.
-func (dt *DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
+func (dt DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
 	for _, t := range typs {
 		if t.UserDefined() {
 			name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.GetTypeDescID(t))
