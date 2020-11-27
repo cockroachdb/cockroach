@@ -13,6 +13,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"hash/crc32"
 	"io"
 	"io/ioutil"
@@ -1291,17 +1292,23 @@ func checkInProgressBackupRestore(
 	// assert the progress of the job.
 	var allowResponse chan struct{}
 	params := base.TestClusterArgs{}
-	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-			for _, ru := range br.Responses {
-				switch ru.GetInner().(type) {
-				case *roachpb.ExportResponse, *roachpb.ImportResponse:
-					<-allowResponse
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{BackupRestoreTestingKnobs:
+		&sql.BackupRestoreTestingKnobs{RunAfterProcessingRestoreSpanEntry: func(ctx context.Context) {
+			<-allowResponse
+		}}},
+		Store: &kvserver.StoreTestingKnobs{
+			TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+				for _, ru := range br.Responses {
+					switch ru.GetInner().(type) {
+					case *roachpb.ExportResponse:
+						<-allowResponse
+					}
 				}
-			}
-			return nil
-		},
-	}
+				return nil
+			},
+		}}
+	params.ServerArgs.Knobs = knobs
 
 	const numAccounts = 1000
 	const totalExpectedResponses = backupRestoreDefaultRanges
@@ -6321,25 +6328,36 @@ func TestClientDisconnect(t *testing.T) {
 			// then wait to be signaled.
 			allowResponse := make(chan struct{})
 			gotRequest := make(chan struct{}, 1)
+
+			blockBackupOrRestore := func(ctx context.Context) {
+				select {
+				case gotRequest <- struct{}{}:
+				default:
+				}
+				select {
+				case <-allowResponse:
+				case <-ctx.Done(): // Deal with test failures.
+				}
+			}
+
 			args := base.TestClusterArgs{}
-			args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+			knobs := base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{BackupRestoreTestingKnobs:
+					&sql.BackupRestoreTestingKnobs{RunAfterProcessingRestoreSpanEntry: func(ctx context.Context) {
+						blockBackupOrRestore(ctx)
+			}}},
+			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 					for _, ru := range br.Responses {
 						switch ru.GetInner().(type) {
-						case *roachpb.ExportResponse, *roachpb.ImportResponse:
-							select {
-							case gotRequest <- struct{}{}:
-							default:
-							}
-							select {
-							case <-allowResponse:
-							case <-ctx.Done(): // Deal with test failures.
-							}
+						case *roachpb.ExportResponse:
+							blockBackupOrRestore(ctx)
 						}
 					}
 					return nil
 				},
-			}
+			}}
+			args.ServerArgs.Knobs = knobs
 			ctx, tc, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, MultiNode, 1 /* numAccounts */, InitNone, args)
 			defer cleanup()
 			ctx, cancel := context.WithCancel(ctx)

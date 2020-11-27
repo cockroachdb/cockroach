@@ -220,6 +220,9 @@ type TestingKnobs struct {
 
 	// JobsTestingKnobs is jobs infra specific testing knobs.
 	JobsTestingKnobs base.ModuleTestingKnobs
+
+	// BackupRestoreTestingKnobs are backup and restore specific testing knobs.
+	BackupRestoreTestingKnobs base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
