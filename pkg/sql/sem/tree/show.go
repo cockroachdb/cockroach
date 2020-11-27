@@ -148,7 +148,9 @@ func (node *ShowDatabases) Format(ctx *FmtCtx) {
 }
 
 // ShowEnums represents a SHOW ENUMS statement.
-type ShowEnums struct{}
+type ShowEnums struct {
+	ObjectNamePrefix
+}
 
 // Format implements the NodeFormatter interface.
 func (node *ShowEnums) Format(ctx *FmtCtx) {

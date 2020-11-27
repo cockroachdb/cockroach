@@ -1235,3 +1235,51 @@ DROP DATABASE to_drop CASCADE;
 # the referenced type no longer exists.
 statement ok
 SELECT * FROM crdb_internal.tables
+
+statement ok
+create DATABASE test_57196;
+CREATE SCHEMA test_57196.sc;
+CREATE TYPE test_57196.public.greeting AS ENUM ('hi');
+CREATE TYPE test_57196.sc.greeting AS ENUM('hello');
+
+query TTTT colnames
+SHOW ENUMS FROM test_57196.public
+----
+schema  name      values  owner
+public  greeting  {hi}    root
+
+query TTTT colnames
+SHOW ENUMS FROM test_57196.sc
+----
+schema  name      values   owner
+sc      greeting  {hello}  root
+
+# In this context, test_57196 will be resolved to a database because of our
+# legacy name resolution compat. In other words, this is analogous to test_57196.public
+query TTTT colnames
+SHOW ENUMS FROM test_57196
+----
+schema  name      values  owner
+public  greeting  {hi}    root
+
+statement ok
+USE test_57196
+
+query TTTT colnames
+SHOW ENUMS
+----
+schema  name      values   owner
+public  greeting  {hi}     root
+sc      greeting  {hello}  root
+
+query TTTT colnames
+SHOW ENUMS FROM public
+----
+schema  name      values  owner
+public  greeting  {hi}    root
+
+query TTTT colnames
+SHOW ENUMS FROM sc
+----
+schema  name      values   owner
+sc      greeting  {hello}  root
