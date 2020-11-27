@@ -929,15 +929,13 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 			}
 		}
 		switch t := typ.Kind; t {
-		case descpb.TypeDescriptor_ENUM:
+		case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 			if rw, ok := descriptorRewrites[typ.ArrayTypeID]; ok {
 				typ.ArrayTypeID = rw.ID
 			}
 		case descpb.TypeDescriptor_ALIAS:
 			// We need to rewrite any ID's present in the aliased types.T.
 			rewriteIDsInTypesT(typ.Alias, descriptorRewrites)
-		case descpb.TypeDescriptor_MULTIREGION_ENUM:
-			typ.ArrayTypeID = descpb.InvalidID
 		default:
 			return errors.AssertionFailedf("unknown type kind %s", t.String())
 		}
