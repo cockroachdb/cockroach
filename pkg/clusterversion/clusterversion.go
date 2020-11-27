@@ -82,7 +82,7 @@ type Handle interface {
 	//
 	// If this returns true then all nodes in the cluster will eventually see
 	// this version. However, this is not atomic because version gates (for a
-	// given version) are pushed through to each node in parallel. Because of
+	// given version) are pushed through to each node concurrently. Because of
 	// this, nodes should not be gating proper handling of remotely initiated
 	// requests that their binary knows how to handle on this state. The
 	// following example shows why this is important:
