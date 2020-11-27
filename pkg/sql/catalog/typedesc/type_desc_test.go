@@ -48,7 +48,30 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 				Name: "b",
 				Kind: descpb.TypeDescriptor_ALIAS,
 			},
-			err: `"b" is not an enum`,
+			err: `"b" of type "ALIAS" is not compatible with type "ENUM"`,
+		},
+		{
+			a: descpb.TypeDescriptor{
+				Name: "a",
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{128},
+					},
+				},
+			},
+			b: descpb.TypeDescriptor{
+				Name: "b",
+				Kind: descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{128},
+					},
+				},
+			},
+			err: `"b" of type "MULTIREGION_ENUM" is not compatible with type "ENUM"`,
 		},
 		// We aren't considering compatibility between different alias kinds.
 		{
@@ -106,6 +129,35 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 			},
 			err: ``,
 		},
+		{
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{128},
+					},
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{200},
+					},
+				},
+			},
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{128},
+					},
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{200},
+					},
+				},
+			},
+			err: ``,
+		},
 		// An enum with only some members of another enum should be compatible.
 		{
 			a: descpb.TypeDescriptor{
@@ -126,6 +178,31 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 					},
 					{
 						LogicalRepresentation:  "hi",
+						PhysicalRepresentation: []byte{200},
+					},
+				},
+			},
+			err: ``,
+		},
+		{
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{200},
+					},
+				},
+			},
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{128},
+					},
+					{
+						LogicalRepresentation:  "us-east-2",
 						PhysicalRepresentation: []byte{200},
 					},
 				},
@@ -162,6 +239,35 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 			},
 			err: `could not find enum value "howdy"`,
 		},
+		{
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{128},
+					},
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{200},
+					},
+				},
+			},
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-3",
+						PhysicalRepresentation: []byte{128},
+					},
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{200},
+					},
+				},
+			},
+			err: `could not find enum value "us-east-1"`,
+		},
 		// An enum with a different physical representation shouldn't be compatible.
 		{
 			a: descpb.TypeDescriptor{
@@ -192,9 +298,38 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 			},
 			err: `has differing physical representation for value "hi"`,
 		},
+		{
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{128},
+					},
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{201},
+					},
+				},
+			},
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{128},
+					},
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{200},
+					},
+				},
+			},
+			err: `has differing physical representation for value "us-east-2"`,
+		},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 		a := typedesc.NewImmutable(test.a)
 		b := typedesc.NewImmutable(test.b)
 		err := a.IsCompatibleWith(b)
@@ -202,7 +337,7 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 			require.NoError(t, err)
 		} else {
 			if !testutils.IsError(err, test.err) {
-				t.Errorf("expected error %s, but found %s", test.err, err)
+				t.Errorf("#%d expected error %s, but found %s", i, test.err, err)
 			}
 		}
 	}
@@ -296,6 +431,26 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
+			`duplicate enum physical rep [1]`,
+			descpb.TypeDescriptor{
+				Name:     "t",
+				ID:       typeDescID,
+				ParentID: 1,
+				Kind:     descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{1},
+					},
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{1},
+					},
+				},
+				Privileges: defaultPrivileges,
+			},
+		},
+		{
 			`duplicate enum member "a"`,
 			descpb.TypeDescriptor{
 				Name:     "t",
@@ -309,6 +464,26 @@ func TestValidateTypeDesc(t *testing.T) {
 					},
 					{
 						LogicalRepresentation:  "a",
+						PhysicalRepresentation: []byte{2},
+					},
+				},
+				Privileges: defaultPrivileges,
+			},
+		},
+		{
+			`duplicate enum member "us-east-1"`,
+			descpb.TypeDescriptor{
+				Name:     "t",
+				ID:       typeDescID,
+				ParentID: 1,
+				Kind:     descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{1},
+					},
+					{
+						LogicalRepresentation:  "us-east-1",
 						PhysicalRepresentation: []byte{2},
 					},
 				},
@@ -374,6 +549,18 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
+			"referencing descriptor 500 does not exist",
+			descpb.TypeDescriptor{
+				Name:                     "t",
+				ID:                       typeDescID,
+				ParentID:                 100,
+				ParentSchemaID:           101,
+				Kind:                     descpb.TypeDescriptor_MULTIREGION_ENUM,
+				ReferencingDescriptorIDs: []descpb.ID{500},
+				Privileges:               defaultPrivileges,
+			},
+		},
+		{
 			"user testuser must not have SELECT privileges on system type with ID=50",
 			descpb.TypeDescriptor{
 				Name:           "t",
@@ -387,12 +574,12 @@ func TestValidateTypeDesc(t *testing.T) {
 		},
 	}
 
-	for _, test := range testData {
+	for i, test := range testData {
 		desc := typedesc.NewImmutable(test.desc)
 		if err := desc.Validate(ctx, descs); err == nil {
-			t.Errorf("expected err: %s but found nil: %v", test.err, test.desc)
+			t.Errorf("#%d expected err: %s but found nil: %v", i, test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
-			t.Errorf("expected err: %s but found: %s", test.err, err)
+			t.Errorf("#%d expected err: %s but found: %s", i, test.err, err)
 		}
 	}
 }

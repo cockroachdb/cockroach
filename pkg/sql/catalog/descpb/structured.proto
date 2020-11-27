@@ -1104,8 +1104,13 @@ message DatabaseDescriptor {
     repeated string regions = 1 [(gogoproto.casttype)="Region"];
     optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
     optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="Region"];
+
+    // RegionEnumID represents ID of the type descriptor corresponding to the
+    // region enum for a multi-region database. If the database is not a
+    // multi-region database then this field is 0 and no such region enum exists.
+    optional uint32 region_enum_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "RegionEnumID", (gogoproto.casttype) = "ID"];
   }
-  // RegionConfig is only set if multiregion controls are set on the database.
+  // RegionConfig is only set if multi-region controls are set on the database.
   optional RegionConfig region_config = 10;
 }
 
@@ -1160,6 +1165,9 @@ message TypeDescriptor {
     // Represents a user defined type that is just an alias for another type.
     // As of now, it is used only internally.
     ALIAS = 1;
+    // Represents a special multi-region enum type which tracks available regions
+    // as its enum values.
+    MULTIREGION_ENUM = 2;
     // Add more entries as we support more user defined types.
   }
   optional Kind kind = 5 [(gogoproto.nullable) = false];
