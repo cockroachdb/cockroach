@@ -294,7 +294,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 func (tc *Collection) GetMutableTableDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*tabledesc.Mutable, error) {
-	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
+	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn.Catalog(), tn.Schema(), tn.Object(), flags)
 	if err != nil {
 		return nil, err
 	}
@@ -310,14 +310,17 @@ func (tc *Collection) GetMutableTableDescriptor(
 }
 
 func (tc *Collection) getMutableObjectDescriptor(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *kv.Txn,
+	catalogName, schemaName, objectName string,
+	flags tree.ObjectLookupFlags,
 ) (catalog.MutableDescriptor, error) {
 	if log.V(2) {
-		log.Infof(ctx, "reading mutable descriptor on '%s'", name)
+		log.Infof(ctx, "reading mutable descriptor on '%s.%s.%s'", catalogName, schemaName, objectName)
 	}
 
 	// Resolve the database.
-	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
+	db, err := tc.GetDatabaseVersion(ctx, txn, catalogName,
 		tree.DatabaseLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -330,7 +333,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, schemaName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -344,7 +347,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
 		dbID,
 		resolvedSchema.ID,
-		name.Object(),
+		objectName,
 		flags.CommonLookupFlags,
 	); refuseFurtherLookup || err != nil {
 		return nil, err
@@ -358,9 +361,9 @@ func (tc *Collection) getMutableObjectDescriptor(
 		txn,
 		tc.settings,
 		tc.codec(),
-		name.Catalog(),
-		name.Schema(),
-		name.Object(),
+		catalogName,
+		schemaName,
+		objectName,
 		flags,
 	)
 	if err != nil || obj == nil {
@@ -625,14 +628,19 @@ func (tc *Collection) GetDatabaseVersion(
 func (tc *Collection) GetTableVersion(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*tabledesc.Immutable, error) {
-	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
+	desc, err := tc.getObjectVersion(ctx, txn, tn.Catalog(), tn.Schema(), tn.Object(), flags)
 	if err != nil {
 		return nil, err
 	}
 	table, ok := desc.(*tabledesc.Immutable)
 	if !ok {
 		if flags.Required {
-			return nil, sqlerrors.NewUndefinedRelationError(tn)
+			// Copy the input TableName to avoid allocations:
+			// NewUndefinedRelationError requires that we promote TableName to a
+			// NodeFormatter, which causes the input TableName to get heap allocated
+			// even in cases where it wouldn't otherwise.
+			errorTn := *tn
+			return nil, sqlerrors.NewUndefinedRelationError(&errorTn)
 		}
 		return nil, nil
 	}
@@ -644,7 +652,10 @@ func (tc *Collection) GetTableVersion(
 }
 
 func (tc *Collection) getObjectVersion(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *kv.Txn,
+	catalogName, schemaName, objectName string,
+	flags tree.ObjectLookupFlags,
 ) (catalog.Descriptor, error) {
 	readObjectFromStore := func() (catalog.Descriptor, error) {
 		return getObjectDesc(
@@ -652,15 +663,15 @@ func (tc *Collection) getObjectVersion(
 			txn,
 			tc.settings,
 			tc.codec(),
-			name.Catalog(),
-			name.Schema(),
-			name.Object(),
+			catalogName,
+			schemaName,
+			objectName,
 			flags,
 		)
 	}
 
 	// Resolve the database.
-	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
+	db, err := tc.GetDatabaseVersion(ctx, txn, catalogName,
 		tree.DatabaseLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -673,7 +684,7 @@ func (tc *Collection) getObjectVersion(
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, schemaName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -693,12 +704,12 @@ func (tc *Collection) getObjectVersion(
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-desc.
 	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
-		(name.Catalog() == systemschema.SystemDatabaseName && name.Object() != systemschema.RoleMembersTable.Name)
+		(catalogName == systemschema.SystemDatabaseName && objectName != systemschema.RoleMembersTable.Name)
 
 	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
 		dbID,
 		schemaID,
-		name.Object(),
+		objectName,
 		flags.CommonLookupFlags,
 	); refuseFurtherLookup || err != nil {
 		return nil, err
@@ -719,7 +730,7 @@ func (tc *Collection) getObjectVersion(
 		return readObjectFromStore()
 	}
 
-	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(ctx, txn, dbID, schemaID, name.Object())
+	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(ctx, txn, dbID, schemaID, objectName)
 	if err != nil {
 		return nil, err
 	}
@@ -1175,7 +1186,7 @@ func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.Immutable) {
 func (tc *Collection) GetMutableTypeDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
 ) (*typedesc.Mutable, error) {
-	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
+	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn.Catalog(), tn.Schema(), tn.Object(), flags)
 	if err != nil {
 		return nil, err
 	}
@@ -1205,7 +1216,7 @@ func (tc *Collection) GetMutableTypeVersionByID(
 func (tc *Collection) GetTypeVersion(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
 ) (*typedesc.Immutable, error) {
-	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
+	desc, err := tc.getObjectVersion(ctx, txn, tn.Catalog(), tn.Schema(), tn.Object(), flags)
 	if err != nil {
 		return nil, err
 	}
