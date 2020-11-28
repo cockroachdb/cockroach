@@ -212,7 +212,9 @@ func (tc *Collection) getLeasedDescriptorByName(
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	if desc = tc.leasedDescriptors.getByName(parentID, parentSchemaID, name); desc != nil {
-		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
+		if log.V(2) {
+			log.Eventf(ctx, "found descriptor in collection for '%s'", name)
+		}
 		return desc, false, nil
 	}
 
@@ -236,7 +238,9 @@ func (tc *Collection) getLeasedDescriptorByName(
 	}
 
 	tc.leasedDescriptors.add(desc)
-	log.VEventf(ctx, 2, "added descriptor '%s' to collection: %+v", name, desc)
+	if log.V(2) {
+		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", name, desc)
+	}
 
 	// If the descriptor we just acquired expires before the txn's deadline,
 	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
