@@ -1871,13 +1871,8 @@ func payloadHasError(payload fsm.EventPayload) bool {
 	return hasErr
 }
 
-// recordTransactionStart records the start of the transaction and returns
-// closures to be called once the transaction finishes or if the transaction
-// restarts.
-func (ex *connExecutor) recordTransactionStart() (
-	onTxnFinish func(context.Context, txnEvent),
-	onTxnRestart func(),
-) {
+// recordTransactionStart records the start of the transaction.
+func (ex *connExecutor) recordTransactionStart() {
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
@@ -1906,7 +1901,21 @@ func (ex *connExecutor) recordTransactionStart() (
 
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
 
-	onTxnFinish = func(ctx context.Context, ev txnEvent) {
+	ex.extraTxnState.shouldExecuteOnTxnFinish = true
+	ex.extraTxnState.txnFinishClosure.txnStartTime = txnStart
+	ex.extraTxnState.txnFinishClosure.implicit = implicit
+	ex.extraTxnState.shouldExecuteOnTxnRestart = true
+
+	if !implicit {
+		ex.statsCollector.StartExplicitTransaction()
+	}
+}
+
+func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
+	if ex.extraTxnState.shouldExecuteOnTxnFinish {
+		ex.extraTxnState.shouldExecuteOnTxnFinish = false
+		txnStart := ex.extraTxnState.txnFinishClosure.txnStartTime
+		implicit := ex.extraTxnState.txnFinishClosure.implicit
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
 		transactionFingerprintID :=
 			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
@@ -1924,7 +1933,10 @@ func (ex *connExecutor) recordTransactionStart() (
 			ex.metrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 		}
 	}
-	onTxnRestart = func() {
+}
+
+func (ex *connExecutor) onTxnRestart() {
+	if ex.extraTxnState.shouldExecuteOnTxnRestart {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, timeutil.Now())
 		ex.extraTxnState.transactionStatementFingerprintIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
@@ -1940,12 +1952,6 @@ func (ex *connExecutor) recordTransactionStart() (
 			ex.server.cfg.TestingKnobs.BeforeRestart(ex.Ctx(), ex.extraTxnState.autoRetryReason)
 		}
 	}
-
-	if !implicit {
-		ex.statsCollector.StartExplicitTransaction()
-	}
-
-	return onTxnFinish, onTxnRestart
 }
 
 func (ex *connExecutor) recordTransaction(
