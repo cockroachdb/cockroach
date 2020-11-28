@@ -1024,6 +1024,11 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	return tree.ReadOnly, ts.GoTime(), &ts, nil
 }
 
+var (
+	eventStartImplicitTxn = fsm.Event(eventTxnStart{ImplicitTxn: fsm.True})
+	eventStartExplicitTxn = fsm.Event(eventTxnStart{ImplicitTxn: fsm.False})
+)
+
 // execStmtInNoTxnState "executes" a statement when no transaction is in scope.
 // For anything but BEGIN, this method doesn't actually execute the statement;
 // it just returns an Event that will generate a transaction. The statement will
@@ -1048,7 +1053,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}
-		return eventTxnStart{ImplicitTxn: fsm.False},
+		return eventStartExplicitTxn,
 			makeEventTxnStartPayload(
 				ex.txnPriorityWithSessionDefault(s.Modes.UserPriority),
 				mode,
@@ -1062,7 +1067,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		// NB: Implicit transactions are created without a historical timestamp even
 		// though the statement might contain an AOST clause. In these cases the
 		// clause is evaluated and applied execStmtInOpenState.
-		return eventTxnStart{ImplicitTxn: fsm.True},
+		return eventStartImplicitTxn,
 			makeEventTxnStartPayload(
 				ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
 				ex.readWriteModeWithSessionDefault(tree.UnspecifiedReadWriteMode),
