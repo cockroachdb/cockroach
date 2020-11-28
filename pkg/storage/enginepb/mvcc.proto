@@ -141,8 +141,20 @@ message MVCCStats {
   // contains_estimates indicates that the MVCCStats object contains values
   // which have been estimated. This means that the stats should not be used
   // where complete accuracy is required, and instead should be recomputed
-  // when necessary. See clusterversion.VersionContainsEstimatesCounter for
-  // details about the migration from bool to int64.
+  // when necessary.
+  //
+  // This field used to be a bool; in #37583 we migrated it to int64. See #37120
+  // for the motivation for doing so. If zero, it's "false". If non-zero, it's
+  // "true".
+  //
+  // As a result of the migration, our usage of this int64 field is now a bit
+  // involved. When ContainsEstimates is 0 or 1, we behave like a boolean
+  // (i.e. `1+1=1` aka `true+true=true`). Downstream of raft, we use the
+  // boolean behavior for ContainsEstimates=1 and the additive behavior for
+  // anything else. If non-zero, we encode the fact that we're allowed to use
+  // regular arithmetic for this field by making sure it contains a value >1 (we
+  // multiply it by 2, and thus avoiding 1). This is then interpreted during
+  // command application.
   optional int64 contains_estimates = 14 [(gogoproto.nullable) = false];
 
   // last_update_nanos is a timestamp at which the ages were last

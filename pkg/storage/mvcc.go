@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -305,7 +304,6 @@ func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCS
 	sys := isSysLocal(key)
 	ms.AgeTo(nowNanos)
 
-	_ = clusterversion.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
 	ms.ContainsEstimates = 1
 
 	if sys {

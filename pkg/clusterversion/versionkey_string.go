@@ -8,39 +8,36 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[Version19_1-0]
-	_ = x[VersionContainsEstimatesCounter-1]
-	_ = x[VersionNamespaceTableWithSchemas-2]
-	_ = x[VersionAuthLocalAndTrustRejectMethods-3]
-	_ = x[VersionStart20_2-4]
-	_ = x[VersionGeospatialType-5]
-	_ = x[VersionEnums-6]
-	_ = x[VersionRangefeedLeases-7]
-	_ = x[VersionAlterColumnTypeGeneral-8]
-	_ = x[VersionAlterSystemJobsAddCreatedByColumns-9]
-	_ = x[VersionAddScheduledJobsTable-10]
-	_ = x[VersionUserDefinedSchemas-11]
-	_ = x[VersionNoOriginFKIndexes-12]
-	_ = x[VersionClientRangeInfosOnBatchResponse-13]
-	_ = x[VersionNodeMembershipStatus-14]
-	_ = x[VersionRangeStatsRespHasDesc-15]
-	_ = x[VersionMinPasswordLength-16]
-	_ = x[VersionAbortSpanBytes-17]
-	_ = x[VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable-18]
-	_ = x[VersionMaterializedViews-19]
-	_ = x[VersionBox2DType-20]
-	_ = x[VersionLeasedDatabaseDescriptors-21]
-	_ = x[VersionUpdateScheduledJobsSchema-22]
-	_ = x[VersionCreateLoginPrivilege-23]
-	_ = x[VersionHBAForNonTLS-24]
-	_ = x[Version20_2-25]
-	_ = x[VersionStart21_1-26]
-	_ = x[VersionEmptyArraysInInvertedIndexes-27]
+	_ = x[VersionNamespaceTableWithSchemas-0]
+	_ = x[VersionStart20_2-1]
+	_ = x[VersionGeospatialType-2]
+	_ = x[VersionEnums-3]
+	_ = x[VersionRangefeedLeases-4]
+	_ = x[VersionAlterColumnTypeGeneral-5]
+	_ = x[VersionAlterSystemJobsAddCreatedByColumns-6]
+	_ = x[VersionAddScheduledJobsTable-7]
+	_ = x[VersionUserDefinedSchemas-8]
+	_ = x[VersionNoOriginFKIndexes-9]
+	_ = x[VersionClientRangeInfosOnBatchResponse-10]
+	_ = x[VersionNodeMembershipStatus-11]
+	_ = x[VersionRangeStatsRespHasDesc-12]
+	_ = x[VersionMinPasswordLength-13]
+	_ = x[VersionAbortSpanBytes-14]
+	_ = x[VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable-15]
+	_ = x[VersionMaterializedViews-16]
+	_ = x[VersionBox2DType-17]
+	_ = x[VersionLeasedDatabaseDescriptors-18]
+	_ = x[VersionUpdateScheduledJobsSchema-19]
+	_ = x[VersionCreateLoginPrivilege-20]
+	_ = x[VersionHBAForNonTLS-21]
+	_ = x[Version20_2-22]
+	_ = x[VersionStart21_1-23]
+	_ = x[VersionEmptyArraysInInvertedIndexes-24]
 }
 
-const _VersionKey_name = "Version19_1VersionContainsEstimatesCounterVersionNamespaceTableWithSchemasVersionAuthLocalAndTrustRejectMethodsVersionStart20_2VersionGeospatialTypeVersionEnumsVersionRangefeedLeasesVersionAlterColumnTypeGeneralVersionAlterSystemJobsAddCreatedByColumnsVersionAddScheduledJobsTableVersionUserDefinedSchemasVersionNoOriginFKIndexesVersionClientRangeInfosOnBatchResponseVersionNodeMembershipStatusVersionRangeStatsRespHasDescVersionMinPasswordLengthVersionAbortSpanBytesVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableVersionMaterializedViewsVersionBox2DTypeVersionLeasedDatabaseDescriptorsVersionUpdateScheduledJobsSchemaVersionCreateLoginPrivilegeVersionHBAForNonTLSVersion20_2VersionStart21_1VersionEmptyArraysInInvertedIndexes"
+const _VersionKey_name = "VersionNamespaceTableWithSchemasVersionStart20_2VersionGeospatialTypeVersionEnumsVersionRangefeedLeasesVersionAlterColumnTypeGeneralVersionAlterSystemJobsAddCreatedByColumnsVersionAddScheduledJobsTableVersionUserDefinedSchemasVersionNoOriginFKIndexesVersionClientRangeInfosOnBatchResponseVersionNodeMembershipStatusVersionRangeStatsRespHasDescVersionMinPasswordLengthVersionAbortSpanBytesVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableVersionMaterializedViewsVersionBox2DTypeVersionLeasedDatabaseDescriptorsVersionUpdateScheduledJobsSchemaVersionCreateLoginPrivilegeVersionHBAForNonTLSVersion20_2VersionStart21_1VersionEmptyArraysInInvertedIndexes"
 
-var _VersionKey_index = [...]uint16{0, 11, 42, 74, 111, 127, 148, 160, 182, 211, 252, 280, 305, 329, 367, 394, 422, 446, 467, 538, 562, 578, 610, 642, 669, 688, 699, 715, 750}
+var _VersionKey_index = [...]uint16{0, 32, 48, 69, 81, 103, 132, 173, 201, 226, 250, 288, 315, 343, 367, 388, 459, 483, 499, 531, 563, 590, 609, 620, 636, 671}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
