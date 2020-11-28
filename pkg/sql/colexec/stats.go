@@ -37,7 +37,7 @@ type NetworkReader interface {
 // VectorizedStatsCollector is the common interface implemented by collectors.
 type VectorizedStatsCollector interface {
 	colexecbase.Operator
-	OutputStats(ctx context.Context, flowID string, deterministicStats bool)
+	OutputStats(ctx context.Context, flowID string)
 }
 
 // ChildStatsCollector gives access to the stopwatches of a
@@ -212,13 +212,8 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 }
 
 // OutputStats is part of the VectorizedStatsCollector interface.
-func (vsc *vectorizedStatsCollectorImpl) OutputStats(
-	ctx context.Context, flowID string, deterministicStats bool,
-) {
+func (vsc *vectorizedStatsCollectorImpl) OutputStats(ctx context.Context, flowID string) {
 	s := vsc.finish()
-	if deterministicStats {
-		s.MakeDeterministic()
-	}
 	createStatsSpan(ctx, fmt.Sprintf("%T", vsc.Operator), flowID, vsc.idTagKey, s)
 }
 
@@ -267,13 +262,8 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 }
 
 // OutputStats is part of the VectorizedStatsCollector interface.
-func (nvsc *networkVectorizedStatsCollectorImpl) OutputStats(
-	ctx context.Context, flowID string, deterministicStats bool,
-) {
+func (nvsc *networkVectorizedStatsCollectorImpl) OutputStats(ctx context.Context, flowID string) {
 	s := nvsc.finish()
-	if deterministicStats {
-		s.MakeDeterministic()
-	}
 	createStatsSpan(ctx, fmt.Sprintf("%T", nvsc.Operator), flowID, execinfrapb.StreamIDTagKey, s)
 }
 

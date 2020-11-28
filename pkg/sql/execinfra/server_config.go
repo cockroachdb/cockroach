@@ -197,10 +197,6 @@ type TestingKnobs struct {
 	// checked by a test receiver on the gateway.
 	MetadataTestLevel MetadataTestLevel
 
-	// DeterministicStats overrides stats which don't have reliable values, like
-	// stall time and bytes sent. It replaces them with a zero value.
-	DeterministicStats bool
-
 	// CheckVectorizedFlowIsClosedCorrectly checks that all components in a flow
 	// were closed explicitly in flow.Cleanup.
 	CheckVectorizedFlowIsClosedCorrectly bool

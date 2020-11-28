@@ -136,7 +136,10 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		},
 	}
 
-	json, url, err := GeneratePlanDiagramURL("SOME SQL HERE", flows, true /* showInputTypes */)
+	flags := DiagramFlags{
+		ShowInputTypes: true,
+	}
+	json, url, err := GeneratePlanDiagramURL("SOME SQL HERE", flows, flags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +361,10 @@ func TestPlanDiagramJoin(t *testing.T) {
 		}},
 	}
 
-	diagram, err := GeneratePlanDiagram("SOME SQL HERE", flows, true /* showInputTypes */)
+	flags := DiagramFlags{
+		ShowInputTypes: true,
+	}
+	diagram, err := GeneratePlanDiagram("SOME SQL HERE", flows, flags)
 	if err != nil {
 		t.Fatal(err)
 	}

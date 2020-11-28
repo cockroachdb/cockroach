@@ -728,9 +728,6 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	if pb.span != nil {
 		if pb.ExecStatsForTrace != nil {
 			if stats := pb.ExecStatsForTrace(); stats != nil {
-				if pb.FlowCtx.Cfg.TestingKnobs.DeterministicStats {
-					stats.MakeDeterministic()
-				}
 				pb.span.SetSpanStats(stats)
 			}
 		}
