@@ -1671,7 +1671,7 @@ func AdjustEndKeyForInterleave(
 	end roachpb.Key,
 	inclusive bool,
 ) (roachpb.Key, error) {
-	if index.Type == descpb.IndexDescriptor_INVERTED {
+	if !index.IsInterleaved() || index.Type == descpb.IndexDescriptor_INVERTED {
 		return end.PrefixEnd(), nil
 	}
 
