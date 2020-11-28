@@ -33,6 +33,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/util/leaktest",
         "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/dustin/go-humanize",
         "//vendor/github.com/stretchr/testify/require",
     ],
 )

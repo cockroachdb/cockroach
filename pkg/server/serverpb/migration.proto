@@ -49,42 +49,5 @@ service Migration {
    // This RPC is typically used together with ValidateTargetClusterVersion,
    // which checks to see that all nodes in the cluster are running binaries
    // that would be able to support the intended version bump.
-   //
-   // The migrations infrastructure makes use of internal fence/noop-versions
-   // when stepping through consecutive versions. It's instructive to walk
-   // through how we expect a version migration from v21.1 to v21.2 to take
-   // place, and how we behave in the presence of new v21.1 or v21.2 nodes being
-   // added to the cluster during.
-   //   - All nodes are running v21.1
-   //   - All nodes are rolled into v21.2 binaries, but with active cluster
-   //     version still as v21.1
-   //   - The first version bump will be into v21.2.0-1noop
-   //   - Validation for setting active cluster version to v21.2.0-1noop first
-   //     checks to see that all nodes are running v21.2 binaries
-   // Then concurrently:
-   //   - A new node is added to the cluster, but running binary v21.1
-   //   - We try bumping the cluster gates to v21.2.0-1noop
-   //
-   //  If the v21.1 nodes manages to sneak in before the version bump, it's
-   //  fine as the version bump is a no-op one. Any subsequent bumps (including
-   //  the "actual" one bumping to v21.2.0) will fail during validation.
-   //
-   //  If the v21.1 node is only added after v21.2.0-1noop is active, it won't
-   //  be able to actually join the cluster (it'll be prevented by the join
-   //  RPC).
-   //
-   // The general mechanism for bumping any cluster version across every node in
-   // the system goes through the following steps (the complexity here again
-   // arising from the possibility of new nodes being added during version
-   // upgrades):
-   //   (a) We'll retrieve the list of node IDs for all nodes in the system
-   //   (b) For each node, we'll bump the cluster version
-   //   (c) We'll load the list of node IDs again to account for the possibility
-   //       of a new node being added during (b). It's possible for this node to
-   //       have joined the cluster by pointing to an existing node that hadn't
-   //       yet seen the cluster version bump
-   //   (d) If there any discrepancies between the node ID list retrieved in (a)
-   //       and (c), we'll bump the cluster version for the newly found node IDs
-   //   (e) We'll continue to loop around until the node ID list stabilizes
    rpc BumpClusterVersion(BumpClusterVersionRequest) returns (BumpClusterVersionResponse) { }
 }
