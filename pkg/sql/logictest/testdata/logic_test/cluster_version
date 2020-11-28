@@ -43,7 +43,7 @@ SHOW CLUSTER SETTING version
 ----
 1.0
 
-# Can skip versions on unstable patch upgrades.
+# Can skip versions on unstable patch upgrades. The internal version here (500) must be even.
 statement ok
 SET CLUSTER SETTING version = '1.0-500'
 

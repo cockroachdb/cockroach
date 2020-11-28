@@ -52,6 +52,18 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
 
+	// TODO(irfansharif): These errors are propagated all the way back to the
+	// user during improper version upgrades. Given the migrations
+	// infrastructure is stepping through internal versions during major cluster
+	// version upgrades, and given we don't use negative internal versions (as
+	// suggested in #33578), it currently manifests (see
+	// TestClusterVersionMixedVersionTooOld) as errors of the form:
+	//
+	//     "binary version 20.1 less than target cluster version 20.1-1"
+	//
+	// It would be a bit clearer to use negative internal versions, to be able
+	// to surface more obvious errors. Alternatively we could simply construct
+	// a better error message here.
 	if versionSetting.BinaryVersion().Less(targetCV.Version) {
 		msg := fmt.Sprintf("binary version %s less than target cluster version %s",
 			versionSetting.BinaryVersion(), targetCV)
@@ -112,7 +124,8 @@ func (m *migrationServer) BumpClusterVersion(
 		if err := m.server.ClusterSettings().Version.SetActiveVersion(ctx, newCV); err != nil {
 			return err
 		}
-		log.Infof(ctx, "active cluster version setting is now %s (up from %s)", newCV, prevCV)
+		log.Infof(ctx, "active cluster version setting is now %s (up from %s)",
+			newCV.PrettyPrint(), prevCV.PrettyPrint())
 		return nil
 	}(); err != nil {
 		return nil, err

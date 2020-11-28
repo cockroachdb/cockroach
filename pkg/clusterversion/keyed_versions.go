@@ -43,14 +43,17 @@ func (kv keyedVersions) MustByKey(k VersionKey) roachpb.Version {
 // Validate makes sure that the keyedVersions are sorted chronologically, that
 // their keys correspond to their position in the list, and that no obsolete
 // versions (i.e. known to always be active) are present.
+//
+// For versions introduced in v21.1 and beyond, the internal versions must be
+// even.
 func (kv keyedVersions) Validate() error {
 	type majorMinor struct {
 		major, minor int32
 		vs           []keyedVersion
 	}
 	// byRelease maps major.minor to a slice of versions that were first
-	// released right after major.minor. For example, a version 2.1-12 would
-	// first be released in 19.1, and would be slotted under 2.1. We'll need
+	// released right after major.minor. For example, a version 20.1-12 would
+	// first be released in 20.2, and would be slotted under 20.1. We'll need
 	// this to determine which versions are always active with a binary built
 	// from the current SHA.
 	var byRelease []majorMinor
@@ -78,13 +81,13 @@ func (kv keyedVersions) Validate() error {
 
 	// Iterate through all versions known to be active. For example, if
 	//
-	//   byRelease = ["2.0", "2.1", "19.1"]
+	//   byRelease = ["19.1", "19.2", "20.1", "20.2"]
 	//
-	// then we know that the current release cycle is 19.2, so mixed version
-	// clusters are running at least 19.1, so anything slotted under 2.1 (like
-	// 2.1-12) and 2.0 is always-on. To avoid interfering with backports, we're
+	// then we know that the current release cycle is 21.1, so mixed version
+	// clusters are running at least 20.2, so anything slotted under 20.1 (like
+	// 20.1-12) and 19.2 is always-on. To avoid interfering with backports, we're
 	// a bit more lenient and allow one more release cycle until validation fails.
-	// In the above example, we would tolerate 2.1-x but not 2.0-x.
+	// In the above example, we would tolerate 20.1-x but not 19.2-x.
 	// Currently we're actually a few versions behind in enforcing a ban on old
 	// versions/migrations. See #47447.
 	if n := len(byRelease) - 5; n >= 0 {
@@ -107,5 +110,27 @@ func (kv keyedVersions) Validate() error {
 			buf.String(),
 		)
 	}
+
+	// Check to see that for versions introduced in v21.1 and beyond, the
+	// internal versions are always even. The odd versions are used for internal
+	// book-keeping.
+	for _, release := range byRelease {
+		// v21.1 versions (20.2-x) will be slotted under 20.2. Ignore all other
+		// releases.
+		if release.major < 20 {
+			continue
+		}
+		if release.major == 20 && release.minor == 1 {
+			continue
+		}
+
+		for _, v := range release.vs {
+			if (v.Internal % 2) != 0 {
+				return errors.Errorf("found version %s with odd-numbered internal version (%s);"+
+					" versions introduced in 21.1+ must have even-numbered internal versions", v.Key, v.Version)
+			}
+		}
+	}
+
 	return nil
 }

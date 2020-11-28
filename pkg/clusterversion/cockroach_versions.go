@@ -96,7 +96,9 @@ type VersionKey int
 //    frequent release schedule.
 //
 // When introducing a version constant, you'll want to:
-//   (1) Add it at the end of this block
+//   (1) Add it at the end of this block. For versions introduced during and
+//       after the 21.1 release, Internal versions must be even-numbered. The
+//       odd versions are used for internal book-keeping.
 //   (2) Add it at the end of the `versionsSingleton` block below.
 //
 // 									---
@@ -323,14 +325,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 2},
 	},
 
-	// v21.1 versions.
+	// v21.1 versions. Internal versions defined here-on-forth must be even.
 	{
 		Key:     VersionStart21_1,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 1},
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
 	},
 	{
 		Key:     VersionEmptyArraysInInvertedIndexes,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 2},
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 4},
 	},
 
 	// Step (2): Add new versions here.
@@ -356,4 +358,21 @@ var (
 // It is a fatal error to use an invalid key.
 func VersionByKey(key VersionKey) roachpb.Version {
 	return versionsSingleton.MustByKey(key)
+}
+
+// GetVersionsBetween returns the list of cluster versions in the range
+// (from, to].
+func GetVersionsBetween(from, to ClusterVersion) []ClusterVersion {
+	return getVersionBetweenInternal(from, to, versionsSingleton)
+}
+
+func getVersionBetweenInternal(from, to ClusterVersion, vs keyedVersions) []ClusterVersion {
+	var cvs []ClusterVersion
+	for _, keyedV := range vs {
+		// Read: "from < keyedV <= to".
+		if from.Less(keyedV.Version) && keyedV.Version.LessEq(to.Version) {
+			cvs = append(cvs, ClusterVersion{Version: keyedV.Version})
+		}
+	}
+	return cvs
 }
