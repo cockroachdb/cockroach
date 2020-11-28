@@ -57,7 +57,7 @@ type projectSetProcessor struct {
 	// thus also whether NULLs should be emitted instead.
 	done []bool
 
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 }
 
 var _ execinfra.Processor = &projectSetProcessor{}
@@ -124,7 +124,7 @@ func newProjectSetProcessor(
 func (ps *projectSetProcessor) Start(ctx context.Context) {
 	ctx = ps.StartInternal(ctx, projectSetProcName)
 	ps.input.Start(ctx)
-	ps.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	ps.cancelChecker.Reset(ctx)
 }
 
 // nextInputRow returns the next row or metadata from ps.input. It also
