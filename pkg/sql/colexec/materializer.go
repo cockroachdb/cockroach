@@ -33,7 +33,7 @@ type Materializer struct {
 	input colexecbase.Operator
 	typs  []*types.T
 
-	drainHelper *drainHelper
+	drainHelper drainHelper
 
 	// runtime fields --
 
@@ -77,18 +77,9 @@ type drainHelper struct {
 }
 
 var _ execinfra.RowSource = &drainHelper{}
-var _ execinfra.Releasable = &drainHelper{}
 
-var drainHelperPool = sync.Pool{
-	New: func() interface{} {
-		return &drainHelper{}
-	},
-}
-
-func newDrainHelper(sources execinfrapb.MetadataSources) *drainHelper {
-	d := drainHelperPool.Get().(*drainHelper)
-	d.sources = sources
-	return d
+func newDrainHelper(sources execinfrapb.MetadataSources) drainHelper {
+	return drainHelper{sources: sources}
 }
 
 // OutputTypes implements the RowSource interface.
@@ -126,12 +117,6 @@ func (d *drainHelper) ConsumerDone() {}
 
 // ConsumerClosed implements the RowSource interface.
 func (d *drainHelper) ConsumerClosed() {}
-
-// Release implements the execinfra.Releasable interface.
-func (d *drainHelper) Release() {
-	*d = drainHelper{}
-	drainHelperPool.Put(d)
-}
 
 const materializerProcName = "materializer"
 
@@ -207,7 +192,7 @@ func NewMaterializer(
 	); err != nil {
 		return nil, err
 	}
-	m.AddInputToDrain(m.drainHelper)
+	m.AddInputToDrain(&m.drainHelper)
 	m.ExecStatsForTrace = execStatsForTrace
 	m.cancelFlow = cancelFlow
 	return m, nil
@@ -313,7 +298,6 @@ func (m *Materializer) ConsumerClosed() {
 
 // Release implements the execinfra.Releasable interface.
 func (m *Materializer) Release() {
-	m.drainHelper.Release()
 	m.ProcessorBase.Reset()
 	m.converter.Release()
 	*m = Materializer{
