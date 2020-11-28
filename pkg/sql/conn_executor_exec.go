@@ -287,7 +287,8 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var timeoutTicker *time.Timer
 	queryTimedOut := false
-	doneAfterFunc := make(chan struct{}, 1)
+	// doneAfterFunc will be allocated only when timeoutTicker is non-nil.
+	var doneAfterFunc chan struct{}
 
 	// Early-associate placeholder info with the eval context,
 	// so that we can fill in placeholder values in our call to addActiveQuery, below.
@@ -295,14 +296,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		ex.planner.EvalContext().Placeholders = pinfo
 	}
 
-	// Canceling a query cancels its transaction's context so we take a reference
-	// to the cancelation function here.
-	unregisterFn := ex.addActiveQuery(ast, formatWithPlaceholders(ast, ex.planner.EvalContext()), queryID, ex.state.cancel)
+	ex.addActiveQuery(ast, formatWithPlaceholders(ast, ex.planner.EvalContext()), queryID, ex.state.cancel)
 
-	// queryDone is a cleanup function dealing with unregistering a query.
-	// It also deals with overwriting res.Error to a more user-friendly message in
-	// case of query cancelation. res can be nil to opt out of this.
-	queryDone := func(ctx context.Context, res RestrictedCommandResult) {
+	// Make sure that we always unregister the query. It also deals with
+	// overwriting res.Error to a more user-friendly message in case of query
+	// cancellation.
+	defer func(ctx context.Context, res RestrictedCommandResult) {
 		if timeoutTicker != nil {
 			if !timeoutTicker.Stop() {
 				// Wait for the timer callback to complete to avoid a data race on
@@ -310,7 +309,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				<-doneAfterFunc
 			}
 		}
-		unregisterFn()
+		ex.removeActiveQuery(queryID, ast)
 
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before. The idea is that once the query's context is
@@ -348,15 +347,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			res.SetError(sqlerrors.QueryTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 		}
-	}
-	// Generally we want to unregister after the auto-commit below. However, in
-	// case we'll execute the statement through the parallel execution queue,
-	// we'll pass the responsibility for unregistering to the queue.
-	defer func() {
-		if queryDone != nil {
-			queryDone(ctx, res)
-		}
-	}()
+	}(ctx, res)
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		ev, payload := ex.makeErrEvent(err, ast)
@@ -480,6 +471,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			queryTimedOut = true
 			return makeErrEvent(sqlerrors.QueryTimeoutError)
 		}
+		doneAfterFunc = make(chan struct{}, 1)
 		timeoutTicker = time.AfterFunc(
 			timerDuration,
 			func() {
@@ -1790,13 +1782,9 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 }
 
 // addActiveQuery adds a running query to the list of running queries.
-//
-// It returns a cleanup function that needs to be run when the query is no
-// longer executing. NOTE(andrei): As of Feb 2018, "executing" does not imply
-// that the results have been delivered to the client.
 func (ex *connExecutor) addActiveQuery(
 	ast tree.Statement, rawStmt string, queryID ClusterWideID, cancelFun context.CancelFunc,
-) func() {
+) {
 	_, hidden := ast.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
 		txnID:         ex.state.mu.txn.ID(),
@@ -1810,18 +1798,18 @@ func (ex *connExecutor) addActiveQuery(
 	ex.mu.Lock()
 	ex.mu.ActiveQueries[queryID] = qm
 	ex.mu.Unlock()
-	return func() {
-		ex.mu.Lock()
-		_, ok := ex.mu.ActiveQueries[queryID]
-		if !ok {
-			ex.mu.Unlock()
-			panic(errors.AssertionFailedf("query %d missing from ActiveQueries", queryID))
-		}
-		delete(ex.mu.ActiveQueries, queryID)
-		ex.mu.LastActiveQuery = ast
+}
 
+func (ex *connExecutor) removeActiveQuery(queryID ClusterWideID, ast tree.Statement) {
+	ex.mu.Lock()
+	_, ok := ex.mu.ActiveQueries[queryID]
+	if !ok {
 		ex.mu.Unlock()
+		panic(errors.AssertionFailedf("query %d missing from ActiveQueries", queryID))
 	}
+	delete(ex.mu.ActiveQueries, queryID)
+	ex.mu.LastActiveQuery = ast
+	ex.mu.Unlock()
 }
 
 // handleAutoCommit commits the KV transaction if it hasn't been committed
