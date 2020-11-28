@@ -1020,9 +1020,6 @@ func splitTriggerHelper(
 	}
 
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
-	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
-		deltaPostSplitLeft.ContainsEstimates = 0
-	}
 	return deltaPostSplitLeft, pd, nil
 }
 

@@ -13,7 +13,6 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -102,12 +101,6 @@ func RecomputeStats(
 		// stats for timeseries ranges (which go cold and the approximate stats are
 		// wildly overcounting) and this is paced by the consistency checker, but it
 		// means some extra engine churn.
-		if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
-			// We are running with the older version of MVCCStats.ContainsEstimates
-			// which was a boolean, so we should keep it in {0,1} and not reset it
-			// to avoid racing with another command that sets it to true.
-			delta.ContainsEstimates = currentStats.ContainsEstimates
-		}
 		cArgs.Stats.Add(delta)
 	}
 

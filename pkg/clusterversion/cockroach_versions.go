@@ -115,29 +115,8 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 
-	// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch
-	// releases.
-	Version19_1
-
 	// v20.1 versions.
 	//
-	// VersionContainsEstimatesCounter is
-	// https://github.com/cockroachdb/cockroach/pull/37583.
-	//
-	// MVCCStats.ContainsEstimates has been migrated from boolean to a
-	// counter so that the consistency checker and splits can reset it by
-	// returning -ContainsEstimates, avoiding racing with other operations
-	// that want to also change it.
-	//
-	// The migration maintains the invariant that raft commands with
-	// ContainsEstimates zero or one want the bool behavior (i.e. 1+1=1).
-	// Before the cluster version is active, at proposal time we'll refuse
-	// any negative ContainsEstimates plus we clamp all others to {0,1}.
-	// When the version is active, and ContainsEstimates is positive, we
-	// multiply it by 2 (i.e. we avoid 1). Downstream of raft, we use old
-	// behavior for ContainsEstimates=1 and the additive behavior for
-	// anything else.
-	VersionContainsEstimatesCounter
 	// VersionNamespaceTableWithSchemas is
 	// https://github.com/cockroachdb/cockroach/pull/41977
 	//
@@ -145,14 +124,6 @@ const (
 	// added parentSchemaID column. In addition to the new column, the table is
 	// no longer in the system config range -- implying it is no longer gossiped.
 	VersionNamespaceTableWithSchemas
-	// VersionAuthLocalAndTrustRejectMethods introduces the HBA rule
-	// prefix 'local' and auth methods 'trust' and 'reject', for use
-	// in server.host_based_authentication.configuration.
-	//
-	// A separate cluster version ensures the new syntax is not
-	// introduced while previous-version nodes are still running, as
-	// this would block any new SQL client.
-	VersionAuthLocalAndTrustRejectMethods
 
 	// TODO(irfansharif): The versions above can/should all be removed. They
 	// were orinally introduced in v20.1. There are inflight PRs to do so
@@ -258,20 +229,8 @@ const (
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions([]keyedVersion{
 	{
-		Key:     Version19_1,
-		Version: roachpb.Version{Major: 19, Minor: 1},
-	},
-	{
-		Key:     VersionContainsEstimatesCounter,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 2},
-	},
-	{
 		Key:     VersionNamespaceTableWithSchemas,
 		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 5},
-	},
-	{
-		Key:     VersionAuthLocalAndTrustRejectMethods,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 8},
 	},
 
 	// v20.2 versions.
