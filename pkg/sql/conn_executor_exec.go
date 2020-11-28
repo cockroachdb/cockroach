@@ -1463,6 +1463,9 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	return tree.ReadOnly, asOf.Timestamp.GoTime(), &asOf.Timestamp, nil
 }
 
+var eventStartImplicitTxn fsm.Event = eventTxnStart{ImplicitTxn: fsm.True}
+var eventStartExplicitTxn fsm.Event = eventTxnStart{ImplicitTxn: fsm.False}
+
 // execStmtInNoTxnState "executes" a statement when no transaction is in scope.
 // For anything but BEGIN, this method doesn't actually execute the statement;
 // it just returns an Event that will generate a transaction. The statement will
@@ -1488,7 +1491,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			return ex.makeErrEvent(err, s)
 		}
 		ex.sessionDataStack.PushTopClone()
-		return eventTxnStart{ImplicitTxn: fsm.False},
+		return eventStartExplicitTxn,
 			makeEventTxnStartPayload(
 				ex.txnPriorityWithSessionDefault(s.Modes.UserPriority),
 				mode,
@@ -1508,7 +1511,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}
-		return eventTxnStart{ImplicitTxn: fsm.True},
+		return eventStartImplicitTxn,
 			makeEventTxnStartPayload(
 				ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
 				mode,
