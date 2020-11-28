@@ -1389,7 +1389,7 @@ func payloadHasError(payload fsm.EventPayload) bool {
 // recordTransactionStart records the start of the transaction and returns
 // closures to be called once the transaction finishes or if the transaction
 // restarts.
-func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), onTxnRestart func()) {
+func (ex *connExecutor) recordTransactionStart() {
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
@@ -1404,17 +1404,30 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
 
-	onTxnFinish = func(ev txnEvent) {
+	ex.extraTxnState.shouldExecuteTxnFinish = true
+	ex.extraTxnState.txnFinishClosure.txnStartTime = txnStart
+	ex.extraTxnState.txnFinishClosure.implicit = implicit
+	ex.extraTxnState.shouldExecuteTxnRestart = true
+}
+
+func (ex *connExecutor) onTransactionFinish(ev txnEvent) {
+	if ex.extraTxnState.shouldExecuteTxnFinish {
 		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
-		ex.recordTransaction(ev, implicit, txnStart)
+		ex.recordTransaction(ev,
+			ex.extraTxnState.txnFinishClosure.implicit,
+			ex.extraTxnState.txnFinishClosure.txnStartTime,
+		)
+		ex.extraTxnState.shouldExecuteTxnFinish = false
 	}
-	onTxnRestart = func() {
+}
+
+func (ex *connExecutor) onTransactionRestart() {
+	if ex.extraTxnState.shouldExecuteTxnRestart {
 		ex.phaseTimes[sessionMostRecentStartExecTransaction] = timeutil.Now()
 		ex.extraTxnState.transactionStatementIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 		ex.extraTxnState.numRows = 0
 	}
-	return onTxnFinish, onTxnRestart
 }
 
 func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart time.Time) {
