@@ -221,7 +221,7 @@ func (mc *MemRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) e
 func (mc *MemRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
 	cancelChecker := cancelchecker.NewCancelChecker(ctx)
-	sort.Sort(mc, cancelChecker)
+	sort.Sort(mc, &cancelChecker)
 }
 
 // Reorder implements ReorderableRowContainer. We don't need to create a new

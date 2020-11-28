@@ -75,7 +75,7 @@ type aggregatorBase struct {
 	row              rowenc.EncDatumRow
 	scratch          []byte
 
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 }
 
 // init initializes the aggregatorBase.

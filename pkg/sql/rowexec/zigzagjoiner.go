@@ -228,7 +228,7 @@ import (
 type zigzagJoiner struct {
 	joinerBase
 
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 
 	// numTables stores the number of tables involved in the join.
 	numTables int

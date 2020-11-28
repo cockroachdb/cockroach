@@ -83,7 +83,7 @@ type hashJoiner struct {
 	}
 
 	// Context cancellation checker.
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 }
 
 var _ execinfra.Processor = &hashJoiner{}

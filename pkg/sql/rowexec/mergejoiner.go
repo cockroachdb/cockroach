@@ -31,7 +31,7 @@ import (
 type mergeJoiner struct {
 	joinerBase
 
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 
 	leftSource, rightSource execinfra.RowSource
 	leftRows, rightRows     []rowenc.EncDatumRow
