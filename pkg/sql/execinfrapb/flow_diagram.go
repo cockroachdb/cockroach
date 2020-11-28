@@ -811,17 +811,19 @@ func extractStatsFromSpans(
 			continue
 		}
 
-		var da types.DynamicAny
-		if err := types.UnmarshalAny(span.Stats, &da); err != nil {
+		if span.Stats == nil {
 			continue
 		}
-		if dss, ok := da.Message.(DistSQLSpanStats); ok {
-			i, err := strconv.Atoi(id)
-			if err != nil {
-				continue
-			}
-			stats[i] = append(stats[i], dss.StatsForQueryPlan()...)
+
+		var compStats ComponentStats
+		if err := types.UnmarshalAny(span.Stats, &compStats); err != nil {
+			continue
 		}
+		i, err := strconv.Atoi(id)
+		if err != nil {
+			continue
+		}
+		stats[i] = append(stats[i], compStats.StatsForQueryPlan()...)
 	}
 	return processorStats, streamStats
 }
