@@ -1370,36 +1370,31 @@ CR_GEOS_Status CR_GEOS_Node(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* nodeE
   return toGEOSString(error.data(), error.length());
 }
 
-// Voronoi Diagram
-// See: https://en.wikipedia.org/wiki/Voronoi_diagram
-CR_GEOS_Status CR_GEOS_VoronoiDiagram(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice env,
+CR_GEOS_Status CR_GEOS_VoronoiDiagram(CR_GEOS* lib, CR_GEOS_Slice g, CR_GEOS_Slice env,
                                       double tolerance, int onlyEdges, CR_GEOS_String* ret) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
 
-  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
-  auto geomA = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  auto geomG = CR_GEOS_GeometryFromSlice(lib, handle, g);
   CR_GEOS_Geometry geomEnv = nullptr;
   if (env.data != nullptr) {
-   geomEnv = lib->GEOSWKBReader_read_r(handle, wkbReader, env.data, env.len);
+   geomEnv = CR_GEOS_GeometryFromSlice(lib, handle, env);
   }
-  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
   *ret = {.data = NULL, .len = 0};
 
-  if (geomA != nullptr) {
-    auto r = lib->GEOSVoronoiDiagram_r(handle, geomA, geomEnv, tolerance, onlyEdges);
+  if (geomG != nullptr) {
+    auto r = lib->GEOSVoronoiDiagram_r(handle, geomG, geomEnv, tolerance, onlyEdges);
     if (r != NULL) {
       auto srid = lib->GEOSGetSRID_r(handle, r);
       CR_GEOS_writeGeomToEWKB(lib, handle, r, ret, srid);
       lib->GEOSGeom_destroy_r(handle, r);
     }
-  }
-  if (geomA != nullptr) {
-    lib->GEOSGeom_destroy_r(handle, geomA);
+    lib->GEOSGeom_destroy_r(handle, geomG);
   }
   if (geomEnv != nullptr) {
     lib->GEOSGeom_destroy_r(handle, geomEnv);
   }
+
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
 }
@@ -1414,7 +1409,11 @@ CR_GEOS_Status CR_GEOS_EqualsExact(CR_GEOS* lib, CR_GEOS_Slice lhs, CR_GEOS_Slic
   if (lhsGeom != nullptr && rhsGeom != nullptr) {
     auto r = lib->GEOSEqualsExact_r(handle, lhsGeom, rhsGeom, tolerance);
     *ret = r;
+  }
+  if (lhsGeom != nullptr) {
     lib->GEOSGeom_destroy_r(handle, lhsGeom);
+  }
+  if (rhsGeom != nullptr) {
     lib->GEOSGeom_destroy_r(handle, rhsGeom);
   }
   lib->GEOS_finish_r(handle);
