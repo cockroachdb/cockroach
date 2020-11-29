@@ -142,6 +142,8 @@ CR_GEOS_Status CR_GEOS_HausdorffDistance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_
                                          double* ret);
 CR_GEOS_Status CR_GEOS_HausdorffDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
                                                 double densifyFrac, double* ret);
+CR_GEOS_Status CR_GEOS_EqualsExact(CR_GEOS* lib, CR_GEOS_Slice lhs, CR_GEOS_Slice rhs,
+                                      double tolerance, char* ret);
 
 //
 // Binary predicates.
@@ -170,9 +172,6 @@ CR_GEOS_Status CR_GEOS_RelatePattern(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slic
 
 CR_GEOS_Status CR_GEOS_VoronoiDiagram(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice env,
                                       double tolerance, int onlyEdges, CR_GEOS_String* ret);
-
-CR_GEOS_Status CR_GEOS_EqualsExact(CR_GEOS* lib, CR_GEOS_Slice lhs, CR_GEOS_Slice rhs,
-                                      double tolerance, char* ret);
 
 #ifdef __cplusplus
 }  // extern "C"

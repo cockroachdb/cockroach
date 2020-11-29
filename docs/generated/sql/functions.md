@@ -2192,6 +2192,12 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="st_unaryunion"></a><code>st_unaryunion(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a union of the components for any geometry or geometry collection provided. Dissolves boundaries of a multipolygon.</p>
 </span></td></tr>
+<tr><td><a name="st_voronoilines"></a><code>st_voronoilines(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry asthe boundaries between cells in that diagram as a MultiLineString.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoilines"></a><code>st_voronoilines(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry asthe boundaries between cells in that diagram as a MultiLineString.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoilines"></a><code>st_voronoilines(geometry: geometry, tolerance: <a href="float.html">float</a>, extend_to: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry asthe boundaries between cells in that diagram as a MultiLineString.</p>
+</span></td></tr>
 <tr><td><a name="st_voronoipolygons"></a><code>st_voronoipolygons(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_voronoipolygons"></a><code>st_voronoipolygons(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.</p>
