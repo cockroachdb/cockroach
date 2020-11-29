@@ -825,6 +825,21 @@ func HausdorffDistanceDensify(a, b geopb.EWKB, densifyFrac float64) (float64, er
 	return float64(distance), nil
 }
 
+// EqualsExact returns whether two geometry objects are equal with some epsilon
+func EqualsExact(lhs, rhs geopb.EWKB, epsilon float64) (bool, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(
+		C.CR_GEOS_EqualsExact(g, goToCSlice(lhs), goToCSlice(rhs), C.double(epsilon), &ret),
+	); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
 //
 // DE-9IM related
 //
@@ -984,45 +999,21 @@ func Node(a geopb.EWKB) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
-// VoronoiPolygons Computes the Voronoi Polygons from the vertices of the supplied EWKBs.
-func VoronoiPolygonsWithEnv(a geopb.EWKB, env geopb.EWKB, tolerance float64, onlyEdges int) (geopb.EWKB, error) {
+// VoronoiDiagram Computes the Voronoi Diagram from the vertices of the supplied EWKBs.
+func VoronoiDiagram(a, env geopb.EWKB, tolerance float64, onlyEdges bool) (geopb.EWKB, error) {
 	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
 	}
 	var cEWKB C.CR_GEOS_String
-	if err := statusToError(
-		C.CR_GEOS_VoronoiDiagram(g, goToCSlice(a), goToCSlice(env), C.double(tolerance), C.int(onlyEdges), &cEWKB),
-		); err != nil {
-		return nil, err
+	flag := 0
+	if onlyEdges == true {
+		flag = 1
 	}
-	return cStringToSafeGoBytes(cEWKB), nil
-}
-
-func VoronoiPolygons(a geopb.EWKB, tolerance float64, onlyEdges int) (geopb.EWKB, error) {
-	g, err := ensureInitInternal()
-	if err != nil {
-		return nil, err
-	}
-	var cEWKB C.CR_GEOS_String
 	if err := statusToError(
-		C.CR_GEOS_VoronoiDiagram(g, goToCSlice(a), C.CR_GEOS_Slice{nil, 0}, C.double(tolerance), C.int(onlyEdges), &cEWKB),
+		C.CR_GEOS_VoronoiDiagram(g, goToCSlice(a), goToCSlice(env), C.double(tolerance), C.int(flag), &cEWKB),
 	); err != nil {
 		return nil, err
 	}
 	return cStringToSafeGoBytes(cEWKB), nil
-}
-
-func EqualsExact(lhs, rhs geopb.EWKB, tolerance float64) (bool, error) {
-	g, err := ensureInitInternal()
-	if err != nil {
-		return false, err
-	}
-	var ret C.char
-	if err := statusToError(
-		C.CR_GEOS_EqualsExact(g, goToCSlice(lhs), goToCSlice(rhs), C.double(tolerance), &ret),
-	); err != nil {
-		return false, err
-	}
-	return ret == 1, nil
 }

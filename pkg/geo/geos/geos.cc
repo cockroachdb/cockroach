@@ -1377,13 +1377,11 @@ CR_GEOS_Status CR_GEOS_VoronoiDiagram(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Sli
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
 
-  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
-  auto geomA = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  auto geomA = CR_GEOS_GeometryFromSlice(lib, handle, a);
   CR_GEOS_Geometry geomEnv = nullptr;
   if (env.data != nullptr) {
-   geomEnv = lib->GEOSWKBReader_read_r(handle, wkbReader, env.data, env.len);
+   geomEnv = CR_GEOS_GeometryFromSlice(lib, handle, env);
   }
-  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
   *ret = {.data = NULL, .len = 0};
 
   if (geomA != nullptr) {
@@ -1393,13 +1391,12 @@ CR_GEOS_Status CR_GEOS_VoronoiDiagram(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Sli
       CR_GEOS_writeGeomToEWKB(lib, handle, r, ret, srid);
       lib->GEOSGeom_destroy_r(handle, r);
     }
-  }
-  if (geomA != nullptr) {
     lib->GEOSGeom_destroy_r(handle, geomA);
+    if (geomEnv != nullptr) {
+      lib->GEOSGeom_destroy_r(handle, geomEnv);
+    }
   }
-  if (geomEnv != nullptr) {
-    lib->GEOSGeom_destroy_r(handle, geomEnv);
-  }
+
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
 }

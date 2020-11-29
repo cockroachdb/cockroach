@@ -12,28 +12,22 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 )
 
-// Computes the Voronoi Polygons from the vertices of the supplied geometry.
-func VoronoiPolygons(
-	a geo.Geometry, tolerance float64, onlyEdges int,
+// VoronoiDiagram Computes the Voronoi Diagram from the vertices of the supplied geometry.
+func VoronoiDiagram(
+	a, env geo.Geometry, tolerance float64, onlyEdges bool,
 ) (geo.Geometry, error) {
-	paths, err := geos.VoronoiPolygons(a.EWKB(), tolerance, onlyEdges)
-	gm, err := geo.ParseGeometryFromEWKB(paths)
-	if err != nil {
-		return geo.Geometry{}, err
+	var envEWKB geopb.EWKB
+	if !env.Empty() {
+		if a.SRID() != env.SRID() {
+			return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), env.SpatialObject())
+		}
+		envEWKB = env.EWKB()
 	}
-	return gm, nil
-}
-
-func VoronoiPolygonsWithEnv(
-	a, b geo.Geometry, tolerance float64, onlyEdges int,
-) (geo.Geometry, error) {
-	if a.SRID() != b.SRID() {
-		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
-	}
-	paths, err := geos.VoronoiPolygonsWithEnv(a.EWKB(), b.EWKB(), tolerance, onlyEdges)
+	paths, err := geos.VoronoiDiagram(a.EWKB(), envEWKB, tolerance, onlyEdges)
 	gm, err := geo.ParseGeometryFromEWKB(paths)
 	if err != nil {
 		return geo.Geometry{}, err
