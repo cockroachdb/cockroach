@@ -11,30 +11,16 @@
 package delegate
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // delegateShowRanges implements the SHOW REGIONS statement.
 func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, error) {
-
-	if n.Database != "" {
-		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromDatabase)
-		return nil, unimplemented.New(
-			"show regions from database",
-			"SHOW REGIONS FROM DATABASE not yet implemented",
-		)
-	}
-	sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromCluster)
-
-	// TODO (storm): Change this so that it doesn't use hard-coded strings and is
-	// more flexible for custom named sub-regions.
-	query := `
-SELECT
-	region, zones
-FROM
-	(
+	zonesClause := `
 		SELECT
 			substring(locality, 'region=([^,]*)') AS region,
 			array_remove(
@@ -57,11 +43,56 @@ FROM
 			crdb_internal.kv_node_status
 		GROUP BY
 			region
-	)
+	`
+
+	if n.FromDatabase {
+		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromDatabase)
+		dbName := string(n.DatabaseName)
+		if dbName == "" {
+			dbName = d.evalCtx.SessionData.Database
+		}
+		// Note the LEFT JOIN here -- in the case where regions no longer exist on the cluster
+		// but still exist on the database config, we want to still see this database region
+		// with no zones attached in this query.
+		query := fmt.Sprintf(
+			`
+WITH zones_table(region, zones) AS (%s)
+SELECT
+	r.region as "region",
+	r.region = r.primary_region AS "primary",
+	zones_table.region IS NOT NULL AS is_region_active,
+	COALESCE(zones_table.zones, '{}'::string[])
+AS
+	zones
+FROM [
+	SELECT
+		unnest(dbs.regions) AS region,
+		dbs.primary_region AS primary_region
+	FROM crdb_internal.databases dbs
+	WHERE dbs.name = %s
+] r
+LEFT JOIN zones_table ON (r.region = zones_table.region)
+ORDER BY region`,
+			zonesClause,
+			lex.EscapeSQLString(dbName),
+		)
+		return parse(query)
+	}
+
+	sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromCluster)
+
+	query := fmt.Sprintf(
+		`
+SELECT
+	region, zones
+FROM
+	(%s)
 WHERE
 	region IS NOT NULL
 ORDER BY
-	region`
+	region`,
+		zonesClause,
+	)
 
 	return parse(query)
 }

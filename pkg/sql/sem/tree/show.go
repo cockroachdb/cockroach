@@ -280,15 +280,19 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 
 // ShowRegions represents a SHOW REGIONS statement
 type ShowRegions struct {
-	Database Name
+	FromDatabase bool
+	DatabaseName Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRegions) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW REGIONS ")
-	if node.Database != "" {
-		ctx.WriteString("FROM DATABASE ")
-		node.Database.Format(ctx)
+	if node.FromDatabase {
+		ctx.WriteString("FROM DATABASE")
+		if node.DatabaseName != "" {
+			ctx.WriteString(" ")
+			node.DatabaseName.Format(ctx)
+		}
 	} else {
 		ctx.WriteString("FROM CLUSTER")
 	}
