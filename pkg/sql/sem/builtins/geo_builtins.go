@@ -5651,8 +5651,9 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				a := tree.MustBeDGeometry(args[0])
-				ret, err := geomfn.VoronoiPolygons(a.Geometry, 0.0, 1)
+				g := tree.MustBeDGeometry(args[0])
+				var env *geo.Geometry
+				ret, err := geomfn.VoronoiDiagram(g.Geometry, env, 0.0, false /* onlyEdges */)
 				if err != nil {
 					return nil, err
 				}
@@ -5670,9 +5671,10 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				a := tree.MustBeDGeometry(args[0])
+				g := tree.MustBeDGeometry(args[0])
 				tolerance := tree.MustBeDFloat(args[1])
-				ret, err := geomfn.VoronoiPolygons(a.Geometry, float64(tolerance), 1)
+				var env *geo.Geometry
+				ret, err := geomfn.VoronoiDiagram(g.Geometry, env, float64(tolerance), false /* onlyEdges */)
 				if err != nil {
 					return nil, err
 				}
@@ -5691,10 +5693,10 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				a := tree.MustBeDGeometry(args[0])
+				g := tree.MustBeDGeometry(args[0])
 				tolerance := tree.MustBeDFloat(args[1])
-				b := tree.MustBeDGeometry(args[2])
-				ret, err := geomfn.VoronoiPolygonsWithEnv(a.Geometry, b.Geometry, float64(tolerance), 1)
+				env := tree.MustBeDGeometry(args[2])
+				ret, err := geomfn.VoronoiDiagram(g.Geometry, &env.Geometry, float64(tolerance), false /* onlyEdges */)
 				if err != nil {
 					return nil, err
 				}
@@ -5702,6 +5704,74 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			},
 			Info: infoBuilder{
 				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_voronoilines": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				var env *geo.Geometry
+				ret, err := geomfn.VoronoiDiagram(g.Geometry, env, 0.0, true /* onlyEdges */)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry as` +
+					`the boundaries between cells in that diagram as a MultiLineString.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"tolerance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				tolerance := tree.MustBeDFloat(args[1])
+				var env *geo.Geometry
+				ret, err := geomfn.VoronoiDiagram(g.Geometry, env, float64(tolerance), true /* onlyEdges */)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry as` +
+					`the boundaries between cells in that diagram as a MultiLineString.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"tolerance", types.Float},
+				{"extend_to", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				tolerance := tree.MustBeDFloat(args[1])
+				env := tree.MustBeDGeometry(args[2])
+				ret, err := geomfn.VoronoiDiagram(g.Geometry, &env.Geometry, float64(tolerance), true /* onlyEdges */)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry as` +
+					`the boundaries between cells in that diagram as a MultiLineString.`,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -5746,7 +5816,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_split":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
 	"st_subdivide":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49048}),
 	"st_tileenvelope":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
-	"st_voronoilines":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49065}),
 	"st_wrapx":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
 	"st_bdpolyfromtext":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
 	"st_geomfromgml":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
