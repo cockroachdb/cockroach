@@ -64,6 +64,20 @@ region_test_db                                root   test1           {test1}    
 system                                        node   NULL            {}                   NULL
 test                                          root   NULL            {}                   NULL
 
+query TBBT colnames
+USE multi_region_test_db; SHOW REGIONS FROM DATABASE
+----
+region  primary  is_region_active  zones
+test1   false    true              {test1-az1,test1-az2,test1-az3}
+test2   true     true              {test2-az1,test2-az2,test2-az3}
+test3   false    true              {test3-az1,test3-az2,test3-az3}
+
+query TBBT colnames
+SHOW REGIONS FROM DATABASE region_test_db
+----
+region  primary  is_region_active  zones
+test1   true     true              {test1-az1,test1-az2,test1-az3}
+
 statement error PRIMARY REGION must be specified if REGIONS are specified
 CREATE DATABASE no_primary_region_db REGIONS "test1"
 
