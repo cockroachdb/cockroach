@@ -273,7 +273,13 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	// not eliminate the event.
 	someSinkActive := false
 	for i, s := range l.sinkInfos {
-		if entry.Severity < s.threshold || !s.sink.active() {
+		// Note: we need to use the .Get() method instead of reading the
+		// severity threshold directly, because some tests are unruly and
+		// let goroutines live and perform log calls beyond their
+		// Stopper's Stop() call (e.g. the pgwire async processing
+		// goroutine). These asynchronous log calls are concurrent with
+		// the stderrSinkInfo update in (*TestLogScope).Close().
+		if entry.Severity < s.threshold.Get() || !s.sink.active() {
 			continue
 		}
 		editedEntry := maybeRedactEntry(entry, s.editor)
