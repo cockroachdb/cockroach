@@ -431,6 +431,31 @@ func constraintIsPrimary(
 	`, tableName.String(), constraintName))
 }
 
+// Checks if a column has a single unique constraint.
+func columnHasSingleUniqueConstraint(
+	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return scanBool(tx, `
+	SELECT EXISTS(
+	        SELECT column_name
+	          FROM (
+	                SELECT table_schema, table_name, column_name, ordinal_position,
+	                       concat(table_schema,'.',table_name)::REGCLASS::INT8 AS tableid
+	                  FROM information_schema.columns
+	               ) AS cols
+	          JOIN (
+	                SELECT contype, conkey, conrelid
+	                  FROM pg_catalog.pg_constraint
+	               ) AS cons ON cons.conrelid = cols.tableid
+	         WHERE table_schema = $1
+	           AND table_name = $2
+	           AND column_name = $3
+	           AND (contype = 'u' OR contype = 'p')
+	           AND array_length(conkey, 1) = 1
+					   AND conkey[1] = ordinal_position
+	       )
+	`, tableName.Schema(), tableName.Object(), columnName)
+}
 func constraintIsUnique(
 	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
 ) (bool, error) {
@@ -456,4 +481,121 @@ func columnIsComputed(tx *pgx.Tx, tableName *tree.TableName, columnName string) 
             )
 	         = 'YES'
 `, tableName.Schema(), tableName.Object(), columnName)
+}
+
+func constraintExists(tx *pgx.Tx, constraintName string) (bool, error) {
+	return scanBool(tx, fmt.Sprintf(`
+	SELECT EXISTS(
+	        SELECT *
+	          FROM pg_catalog.pg_constraint
+	           WHERE conname = '%s'
+	       );
+	`, constraintName))
+}
+
+func rowsSatisfyFkConstraint(
+	tx *pgx.Tx,
+	parentTable *tree.TableName,
+	parentColumn *column,
+	childTable *tree.TableName,
+	childColumn *column,
+) (bool, error) {
+	return scanBool(tx, fmt.Sprintf(`
+	SELECT NOT EXISTS(
+	  SELECT count(*)
+	    FROM %s as t1
+		  LEFT JOIN %s as t2
+				     ON t1.%s = t2.%s
+	   WHERE t2.%s IS NULL
+  )`, childTable.String(), parentTable.String(), childColumn.name, parentColumn.name, parentColumn.name))
+}
+
+// violatesFkConstraints checks if the rows to be inserted will result in a foreign key violation.
+func violatesFkConstraints(
+	tx *pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
+) (bool, error) {
+	fkConstraints, err := scanStringArrayRows(tx, fmt.Sprintf(`
+		SELECT array[parent.table_schema, parent.table_name, parent.column_name, child.column_name]
+		  FROM (
+		        SELECT conkey, confkey, conrelid, confrelid
+		          FROM pg_constraint
+		         WHERE contype = 'f'
+		           AND conrelid = '%s'::REGCLASS::INT8
+		       ) AS con
+		  JOIN (
+		        SELECT column_name, ordinal_position, column_default
+		          FROM information_schema.columns
+		         WHERE table_schema = '%s'
+		           AND table_name = '%s'
+		       ) AS child ON conkey[1] = child.ordinal_position
+		  JOIN (
+		        SELECT pc.oid,
+		               cols.table_schema,
+		               cols.table_name,
+		               cols.column_name,
+		               cols.ordinal_position
+		          FROM pg_class AS pc
+		          JOIN pg_namespace AS pn ON pc.relnamespace = pn.oid
+		          JOIN information_schema.columns AS cols ON (pc.relname = cols.table_name AND pn.nspname = cols.table_schema)
+		       ) AS parent ON (
+		                       con.confkey[1] = parent.ordinal_position
+		                       AND con.confrelid = parent.oid
+		                      )
+		 WHERE child.column_name != 'rowid';
+`, tableName.String(), tableName.Schema(), tableName.Object()))
+	if err != nil {
+		return false, err
+	}
+
+	// Maps a column name to its index. This way, the value of a column in a row can be looked up
+	// using row[colToIndexMap["columnName"]] = "valueForColumn"
+	columnNameToIndexMap := map[string]int{}
+	for i, name := range columns {
+		columnNameToIndexMap[name] = i
+	}
+	for _, row := range rows {
+		for _, constraint := range fkConstraints {
+			parentTableSchema := constraint[0]
+			parentTableName := constraint[1]
+			parentColumnName := constraint[2]
+			childColumnName := constraint[3]
+
+			// If self referential, there cannot be a violation.
+			if parentTableSchema == tableName.Schema() && parentTableName == tableName.Object() && parentColumnName == childColumnName {
+				continue
+			}
+
+			violation, err := violatesFkConstraintsHelper(tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, childColumnName, row)
+			if err != nil {
+				return false, err
+			}
+
+			if violation {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
+}
+
+func violatesFkConstraintsHelper(
+	tx *pgx.Tx,
+	columnNameToIndexMap map[string]int,
+	parentTableSchema, parentTableName, parentColumn, childColumnName string,
+	row []string,
+) (bool, error) {
+
+	// If the value to insert in the child column is NULL and the column default is NULL, then it is not possible to have a fk violation.
+	childValue := row[columnNameToIndexMap[childColumnName]]
+	if childValue == "NULL" {
+		return false, nil
+	}
+
+	return scanBool(tx, fmt.Sprintf(`
+	SELECT NOT EXISTS (
+	    SELECT * from %s.%s
+	    WHERE %s = %s
+	)
+	`, parentTableSchema, parentTableName, parentColumn, childValue))
 }
