@@ -98,10 +98,23 @@ type MVCCIterator interface {
 	Prev()
 	// Key returns the current key.
 	Key() MVCCKey
-	// UnsafeRawKey returns the current raw key (i.e. the encoded MVCC key).
-	// TODO(sumeer): this is a dangerous method since it may expose the
-	// raw key of a separated intent. Audit all callers and fix.
+	// UnsafeRawKey returns the current raw key which could be an encoded
+	// MVCCKey, or the more general EngineKey (for a lock table key).
+	// This is a low-level and dangerous method since it will expose the
+	// raw key of the lock table, i.e., the intentInterleavingIter will not
+	// hide the difference between interleaved and separated intents.
+	// Callers should be very careful when using this. This is currently
+	// only used by callers who are iterating and deleting all data in a
+	// range.
 	UnsafeRawKey() []byte
+	// UnsafeRawMVCCKey returns a serialized MVCCKey. The memory is invalidated
+	// on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}. If the
+	// iterator is currently positioned at a separated intent (when
+	// intentInterleavingIter is used), it makes that intent look like an
+	// interleaved intent key, i.e., an MVCCKey with an empty timestamp. This is
+	// currently used by callers who pass around key information as a []byte --
+	// this seems avoidable, and we should consider cleaning up the callers.
+	UnsafeRawMVCCKey() []byte
 	// Value returns the current value as a byte slice.
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently
@@ -168,17 +181,22 @@ type EngineIterator interface {
 	// the iteration. After this call, valid will be true if the iterator was
 	// not originally positioned at the first key.
 	PrevEngineKey() (valid bool, err error)
-	// UnsafeEngineKey returns the same value as Key, but the memory is
+	// UnsafeEngineKey returns the same value as EngineKey, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
 	UnsafeEngineKey() (EngineKey, error)
+	// EngineKey returns the current key.
+	// REQUIRES: latest positioning function returned valid=true.
+	EngineKey() (EngineKey, error)
+	// UnsafeRawEngineKey returns the current raw (encoded) key corresponding to
+	// EngineKey. This is a low-level method and callers should avoid using
+	// it. This is currently only used by intentInterleavingIter to implement
+	// UnsafeRawKey.
+	UnsafeRawEngineKey() []byte
 	// UnsafeValue returns the same value as Value, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
 	UnsafeValue() []byte
-	// EngineKey returns the current key.
-	// REQUIRES: latest positioning function returned valid=true.
-	EngineKey() (EngineKey, error)
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
 	Value() []byte

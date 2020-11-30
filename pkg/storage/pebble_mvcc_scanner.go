@@ -668,7 +668,7 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 		return false
 	}
 
-	p.curRawKey = p.parent.UnsafeRawKey()
+	p.curRawKey = p.parent.UnsafeRawMVCCKey()
 
 	var err error
 	p.curKey, err = DecodeMVCCKey(p.curRawKey)

@@ -179,7 +179,7 @@ func (rs *replicaStats) perLocalityDecayingQPS() (perLocalityCounts, time.Durati
 // avgQPS returns the average requests-per-second and the amount of time
 // over which the stat was accumulated. Note that these averages are exact,
 // not exponentially decayed (there isn't a ton of justification for going
-// one way or the the other, but not decaying makes the average more stable,
+// one way or the other, but not decaying makes the average more stable,
 // which is probably better for avoiding rebalance thrashing).
 func (rs *replicaStats) avgQPS() (float64, time.Duration) {
 	now := timeutil.Unix(0, rs.clock.PhysicalNow())

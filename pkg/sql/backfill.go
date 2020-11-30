@@ -955,7 +955,7 @@ func (sc *SchemaChanger) distBackfill(
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			updatedTodoSpans = todoSpans
 			// Report schema change progress. We define progress at this point
-			// as the the fraction of fully-backfilled ranges of the primary index of
+			// as the fraction of fully-backfilled ranges of the primary index of
 			// the table being scanned. Since we may have already modified the
 			// fraction completed of our job from the 10% allocated to completing the
 			// schema change state machine or from a previous backfill attempt,

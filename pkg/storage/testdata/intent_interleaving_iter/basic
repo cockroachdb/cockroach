@@ -426,3 +426,61 @@ next: output: .
 seek-ge "Lb"/0.000000025,0: output: value k=Lb ts=20 v=b20
 next: output: .
 seek-ge "Lc"/0.000000025,0: output: .
+
+# Keys with \x00 byte. To exercise the slow-path in UnsafeRawMVCCKey. The keys
+# that are length 8, 16 will exercise the slow-path. The len(key) < 8 does
+# not. DecodeLockTableSingleKey allocates a new slice for all these keys, due
+# to the escaping. However the starting capacity is 8, and the next growth
+# step is 16, which means that when len(key) < 8, the len of the allocated
+# slice is smaller than cap and the first byte beyond len is 0.
+define
+locks
+meta k=abcdefg\0 ts=20 txn=1
+meta k=b\0c\0d ts=20 txn=1
+meta k=bcdefgh\0 ts=20 txn=1
+meta k=cdefghijklmnopq\0 ts=20 txn=1
+mvcc
+value k=abcdefg\0 ts=20 v=a
+value k=b\0c\0d ts=20 v=b1
+value k=bcdefgh\0 ts=20 v=b2
+value k=cdefghijklmnopq\0 ts=20 v=c
+----
+
+iter lower=a upper=d
+seek-ge k=a
+next
+next
+next
+next
+next
+next
+next
+next
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+----
+seek-ge "a"/0,0: output: meta k=abcdefg\0 ts=20 txn=1
+next: output: value k=abcdefg\0 ts=20 v=a
+next: output: meta k=b\0c\0d ts=20 txn=1
+next: output: value k=b\0c\0d ts=20 v=b1
+next: output: meta k=bcdefgh\0 ts=20 txn=1
+next: output: value k=bcdefgh\0 ts=20 v=b2
+next: output: meta k=cdefghijklmnopq\0 ts=20 txn=1
+next: output: value k=cdefghijklmnopq\0 ts=20 v=c
+next: output: .
+prev: output: value k=cdefghijklmnopq\0 ts=20 v=c
+prev: output: meta k=cdefghijklmnopq\0 ts=20 txn=1
+prev: output: value k=bcdefgh\0 ts=20 v=b2
+prev: output: meta k=bcdefgh\0 ts=20 txn=1
+prev: output: value k=b\0c\0d ts=20 v=b1
+prev: output: meta k=b\0c\0d ts=20 txn=1
+prev: output: value k=abcdefg\0 ts=20 v=a
+prev: output: meta k=abcdefg\0 ts=20 txn=1
+prev: output: .

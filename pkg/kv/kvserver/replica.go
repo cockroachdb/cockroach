@@ -911,7 +911,7 @@ func (r *Replica) getFreezeStartRLocked() hlc.Timestamp {
 	return r.mu.freezeStart
 }
 
-// setLastReplicaDescriptors sets the the most recently seen replica
+// setLastReplicaDescriptors sets the most recently seen replica
 // descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
 // to do so.
 func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
