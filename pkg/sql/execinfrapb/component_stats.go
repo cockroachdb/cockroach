@@ -43,14 +43,14 @@ func (s *ComponentStats) StatsForQueryPlan() []string {
 // formatStats calls fn for each statistic that is set.
 func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) {
 	// Network Rx stats.
-	if s.NetRx.Latency != 0 {
-		fn("network latency", s.NetRx.Latency.Round(time.Microsecond))
+	if s.NetRx.Latency.HasValue() {
+		fn("network latency", s.NetRx.Latency.Value().Round(time.Microsecond))
 	}
-	if s.NetRx.WaitTime != 0 {
-		fn("network wait time", s.NetRx.WaitTime.Round(time.Microsecond))
+	if s.NetRx.WaitTime.HasValue() {
+		fn("network wait time", s.NetRx.WaitTime.Value().Round(time.Microsecond))
 	}
-	if s.NetRx.DeserializationTime != 0 {
-		fn("deserialization time", s.NetRx.DeserializationTime.Round(time.Microsecond))
+	if s.NetRx.DeserializationTime.HasValue() {
+		fn("deserialization time", s.NetRx.DeserializationTime.Value().Round(time.Microsecond))
 	}
 	if s.NetRx.TuplesReceived.HasValue() {
 		fn("network tuples received", s.NetRx.TuplesReceived.Value())
@@ -73,28 +73,28 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		if s.Inputs[0].NumTuples.HasValue() {
 			fn("input tuples", s.Inputs[0].NumTuples.Value())
 		}
-		if s.Inputs[0].WaitTime != 0 {
-			fn("input stall time", s.Inputs[0].WaitTime.Round(time.Microsecond))
+		if s.Inputs[0].WaitTime.HasValue() {
+			fn("input stall time", s.Inputs[0].WaitTime.Value().Round(time.Microsecond))
 		}
 
 	case 2:
 		if s.Inputs[0].NumTuples.HasValue() {
 			fn("left tuples", s.Inputs[0].NumTuples.Value())
 		}
-		if s.Inputs[0].WaitTime != 0 {
-			fn("left stall time", s.Inputs[0].WaitTime.Round(time.Microsecond))
+		if s.Inputs[0].WaitTime.HasValue() {
+			fn("left stall time", s.Inputs[0].WaitTime.Value().Round(time.Microsecond))
 		}
 		if s.Inputs[1].NumTuples.HasValue() {
 			fn("right tuples", s.Inputs[1].NumTuples.Value())
 		}
-		if s.Inputs[1].WaitTime != 0 {
-			fn("right stall time", s.Inputs[1].WaitTime.Round(time.Microsecond))
+		if s.Inputs[1].WaitTime.HasValue() {
+			fn("right stall time", s.Inputs[1].WaitTime.Value().Round(time.Microsecond))
 		}
 	}
 
 	// KV stats.
-	if s.KV.KVTime != 0 {
-		fn("KV time", s.KV.KVTime.Round(time.Microsecond))
+	if s.KV.KVTime.HasValue() {
+		fn("KV time", s.KV.KVTime.Value().Round(time.Microsecond))
 	}
 	if s.KV.TuplesRead.HasValue() {
 		fn("KV tuples read", s.KV.TuplesRead.Value())
@@ -104,8 +104,8 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	}
 
 	// Exec stats.
-	if s.Exec.ExecTime != 0 {
-		fn("execution time", s.Exec.ExecTime.Round(time.Microsecond))
+	if s.Exec.ExecTime.HasValue() {
+		fn("execution time", s.Exec.ExecTime.Value().Round(time.Microsecond))
 	}
 	if s.Exec.MaxAllocatedMem.HasValue() {
 		fn("max memory allocated", humanize.IBytes(s.Exec.MaxAllocatedMem.Value()))
@@ -139,9 +139,9 @@ func (s *ComponentStats) MakeDeterministic() {
 		}
 	}
 	// timeVal resets a duration to 1ns, if it was set.
-	timeVal := func(v *time.Duration) {
-		if *v != 0 {
-			*v = 1
+	timeVal := func(v *optional.Duration) {
+		if v.HasValue() {
+			v.Set(0)
 		}
 	}
 

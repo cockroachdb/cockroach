@@ -13,7 +13,6 @@ package cockroach.sql.distsqlrun;
 option go_package = "execinfrapb";
 
 import "gogoproto/gogo.proto";
-import "google/protobuf/duration.proto";
 
 import "util/optional/optional.proto";
 
@@ -42,24 +41,20 @@ message ComponentStats {
 message InputStats {
   optional util.optional.Uint num_tuples = 1 [(gogoproto.nullable) = false];
   // Cumulated time spent waiting for rows from the input operator.
-  optional google.protobuf.Duration wait_time = 2 [(gogoproto.nullable) = false,
-                                                   (gogoproto.stdduration) = true];
+  optional util.optional.Duration wait_time = 2 [(gogoproto.nullable) = false];
 }
 
 // NetworkRxStats contains statistics for components that receive row data
 // over the network. Note: Rx is shorthand for Receive.
 message NetworkRxStats {
   // Observed network latency (round-trip time between the two nodes).
-  optional google.protobuf.Duration latency = 1 [(gogoproto.nullable) = false,
-                                                 (gogoproto.stdduration) = true];
+  optional util.optional.Duration latency = 1 [(gogoproto.nullable) = false];
 
   // Cumulated time spent waiting to receive or transmit tuple data.
-  optional google.protobuf.Duration wait_time = 2 [(gogoproto.nullable) = false,
-                                                   (gogoproto.stdduration) = true];
+  optional util.optional.Duration wait_time = 2 [(gogoproto.nullable) = false];
 
   // Time spent deserializing network data.
-  optional google.protobuf.Duration deserialization_time = 3 [(gogoproto.nullable) = false,
-                                                              (gogoproto.stdduration) = true];
+  optional util.optional.Duration deserialization_time = 3 [(gogoproto.nullable) = false];
 
   optional util.optional.Uint tuples_received = 4 [(gogoproto.nullable) = false];
   optional util.optional.Uint bytes_received = 5 [(gogoproto.nullable) = false];
@@ -79,16 +74,14 @@ message KVStats {
 
   // Cumulated time spent waiting for a KV request. This includes disk IO time
   // and potentially network time (if any of the keys are not local).
-  optional google.protobuf.Duration kv_time = 3 [(gogoproto.customname) = "KVTime",
-                                                 (gogoproto.nullable) = false,
-                                                 (gogoproto.stdduration) = true];
+  optional util.optional.Duration kv_time = 3 [(gogoproto.customname) = "KVTime",
+                                  (gogoproto.nullable) = false];
 }
 
 // ExecStats contains statistics about the execution of an components.
 message ExecStats {
   // Time spent executing the component.
-  optional google.protobuf.Duration exec_time = 1 [(gogoproto.nullable) = false,
-                                                   (gogoproto.stdduration) = true];
+  optional util.optional.Duration exec_time = 1 [(gogoproto.nullable) = false];
   // Maximum memory allocated by the component.
   optional util.optional.Uint max_allocated_mem = 2 [(gogoproto.nullable) = false];
 
