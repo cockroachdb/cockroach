@@ -1832,7 +1832,7 @@ func (og *operationGenerator) randTable(
 		q := fmt.Sprintf(`
 		  SELECT table_name
 		    FROM [SHOW TABLES]
-		   WHERE table_name LIKE 'table%%'
+		   WHERE table_name ~ 'table[0-9]+'
 				 AND schema_name = '%s'
 		ORDER BY random()
 		   LIMIT 1;
@@ -1870,7 +1870,7 @@ func (og *operationGenerator) randTable(
 	const q = `
   SELECT schema_name, table_name
     FROM [SHOW TABLES]
-   WHERE table_name LIKE 'table%'
+   WHERE table_name ~ 'table[0-9]+'
 ORDER BY random()
    LIMIT 1;
 `
