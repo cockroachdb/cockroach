@@ -91,6 +91,7 @@ func registerTests(r *testRegistry) {
 	registerSysbench(r)
 	registerTPCC(r)
 	registerTPCDSVec(r)
+	registerTPCE(r)
 	registerTPCHVec(r)
 	registerKVBench(r)
 	registerTypeORM(r)
