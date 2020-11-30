@@ -108,14 +108,14 @@ OR
 		c.Wipe(ctx, c.Range(7, 8))
 	}
 
-	// Should not be able to read from it even (generously) after a lease timeout.
-	_, err = db.QueryContext(ctx, `SET statement_timeout = '15s'; SELECT * FROM lostrange;`)
+	// Should not be able to write to it even (generously) after a lease timeout.
+	_, err = db.QueryContext(ctx, `SET statement_timeout = '15s'; INSERT INTO lostrange VALUES(2, 'bar');`)
 	require.Error(t, err)
 	c.l.Printf("table is now unavailable, as planned")
 
 	const nodeID = 1 // where to put the replica, matches node number in roachtest
 	for rangeID := range lostRangeIDs {
-		c.Run(ctx, c.Node(nodeID), "./cockroach", "debug", "unsafe-heal-missing-range", "--insecure",
+		c.Run(ctx, c.Node(nodeID), "./cockroach", "debug", "reset-quorum", "--insecure",
 			fmt.Sprint(rangeID),
 		)
 	}
