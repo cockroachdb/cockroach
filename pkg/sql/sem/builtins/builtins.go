@@ -551,21 +551,8 @@ var builtins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityImmutable,
 		}),
 
-	"gen_random_uuid": makeBuiltin(
-		tree.FunctionProperties{
-			Category: categoryIDGeneration,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.Uuid),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				uv := uuid.MakeV4()
-				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
-			},
-			Info:       "Generates a random UUID and returns it as a value of UUID type.",
-			Volatility: tree.VolatilityVolatile,
-		},
-	),
+	"gen_random_uuid":  generateRandomUUIDImpl,
+	"uuid_generate_v4": generateRandomUUIDImpl,
 
 	"to_uuid": makeBuiltin(defProps(),
 		tree.Overload{
@@ -4737,6 +4724,22 @@ func getSubstringFromIndexOfLength(str, errMsg string, start, length int) (strin
 	}
 	return string(runes[start:end]), nil
 }
+
+var generateRandomUUIDImpl = makeBuiltin(
+	tree.FunctionProperties{
+		Category: categoryIDGeneration,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{},
+		ReturnType: tree.FixedReturnType(types.Uuid),
+		Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+			uv := uuid.MakeV4()
+			return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+		},
+		Info:       "Generates a random UUID and returns it as a value of UUID type.",
+		Volatility: tree.VolatilityVolatile,
+	},
+)
 
 var uuidV4Impl = makeBuiltin(
 	tree.FunctionProperties{
