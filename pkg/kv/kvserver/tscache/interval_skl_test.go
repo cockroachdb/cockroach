@@ -1381,3 +1381,44 @@ func randRange(rng *rand.Rand, slots int) (from, middle, to []byte) {
 func randRangeOpt(rng *rand.Rand) rangeOptions {
 	return rangeOptions(rng.Intn(int(excludeFrom|excludeTo) + 1))
 }
+
+func BenchmarkIntervalSklDecodeValue(b *testing.B) {
+	runBenchWithVals(b, func(b *testing.B, val cacheValue) {
+		var arr [encodedValSize]byte
+		enc := encodeValue(arr[:0], val)
+		for i := 0; i < b.N; i++ {
+			_, _ = decodeValue(enc)
+		}
+	})
+}
+
+func BenchmarkIntervalSklEncodeValue(b *testing.B) {
+	runBenchWithVals(b, func(b *testing.B, val cacheValue) {
+		var arr [encodedValSize]byte
+		for i := 0; i < b.N; i++ {
+			_ = encodeValue(arr[:0], val)
+		}
+	})
+}
+
+func runBenchWithVals(b *testing.B, fn func(*testing.B, cacheValue)) {
+	for _, withLogical := range []bool{false, true} {
+		for _, withSynthetic := range []bool{false, true} {
+			for _, withTxnID := range []bool{false, true} {
+				var val cacheValue
+				val.ts.WallTime = 15
+				if withLogical {
+					val.ts.Logical = 10
+				}
+				if withSynthetic {
+					val.ts.Synthetic = true
+				}
+				if withTxnID {
+					val.txnID = uuid.MakeV4()
+				}
+				name := fmt.Sprintf("logical=%t,synthetic=%t,txnID=%t", withLogical, withSynthetic, withTxnID)
+				b.Run(name, func(b *testing.B) { fn(b, val) })
+			}
+		}
+	}
+}
