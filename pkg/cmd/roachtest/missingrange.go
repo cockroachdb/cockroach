@@ -108,45 +108,50 @@ OR
 		c.Wipe(ctx, c.Range(7, 8))
 	}
 
+	_, err = db.Exec(`ALTER TABLE lostrange CONFIGURE ZONE USING constraints = '{}'`)
+	require.NoError(t, err)
+
 	// Should not be able to write to it even (generously) after a lease timeout.
-	_, err = db.QueryContext(ctx, `SET statement_timeout = '15s'; INSERT INTO lostrange VALUES(2, 'bar');`)
-	require.Error(t, err)
+	{
+		// NB: this never returns, not sure what goes wrong on the SQL side here.
+		ch := make(chan struct{})
+		go func() {
+			_, err = db.QueryContext(ctx, `SET statement_timeout = '15s'; INSERT INTO lostrange VALUES(2, 'bar');`)
+			require.Error(t, err) // fatal on goroutine but whatever
+			close(ch)
+		}()
+		select {
+		case <-ch:
+			t.Fatal("unexpectedly returned")
+		case <-time.After(15 * time.Second):
+		}
+	}
 	c.l.Printf("table is now unavailable, as planned")
 
-	const nodeID = 1 // where to put the replica, matches node number in roachtest
+	const nodeID = 6 // where to put the replica, matches node number in roachtest
 	for rangeID := range lostRangeIDs {
 		c.Run(ctx, c.Node(nodeID), "./cockroach", "debug", "reset-quorum", "--insecure",
+			"--port", fmt.Sprint(26257+(nodeID-1)*2),
 			fmt.Sprint(rangeID),
 		)
 	}
 
 	// Table should come back to life (though empty).
+	done := make(chan struct{})
+	go func() {
+		time.Sleep(20 * time.Second)
+		select {
+		case <-done:
+		default:
+			c.Stop(ctx, c.Node(6))
+			// Stop the straggler - this simulates it getting put through replicaGC queue.
+			// If we don't do this, the select below can get stuck on that replica.
+		}
+	}()
 	var n int
 	err = db.QueryRowContext(
 		ctx, `SET statement_timeout = '120s'; SELECT COUNT(*) FROM lostrange;`,
 	).Scan(&n)
 	require.NoError(t, err)
 	require.Zero(t, n)
-
-	// Replica should be on the right node (according to meta2).
-	for rangeID := range lostRangeIDs {
-		var actNodeID int32
-		// NB: this errors if there is more than one row.
-		err = db.QueryRowContext(ctx,
-			`
-SELECT
-	r
-FROM
-	[
-		SELECT
-			range_id, unnest(replicas) AS r
-		FROM
-			crdb_internal.ranges_no_leases
-	]
-WHERE
-	range_id = $1
-`, rangeID).Scan(&actNodeID)
-		require.NoError(t, err)
-		require.EqualValues(t, nodeID, actNodeID)
-	}
 }

@@ -2218,7 +2218,6 @@ message RangeFeedEvent {
 // node vs a missing store.
 message ResetQuorumRequest {
   int32 range_id = 1 [(gogoproto.customname) = "RangeID"];
-  int32 store_id = 2 [(gogoproto.customname) = "StoreID"];
 }
 
 message ResetQuorumResponse {}

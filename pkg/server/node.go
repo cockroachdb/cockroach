@@ -1079,7 +1079,19 @@ func (n *Node) ResetQuorum(
 		desc.RemoveReplica(rd.NodeID, rd.StoreID)
 	}
 	// Add current node as new replica.
-	toReplicaDescriptor := desc.AddReplica(n.Descriptor.NodeID, roachpb.StoreID(req.StoreID), roachpb.VOTER_FULL)
+	var storeID roachpb.StoreID
+	if err := n.stores.VisitStores(func(s *kvserver.Store) error {
+		if storeID == 0 {
+			storeID = s.StoreID()
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if storeID == 0 {
+		return nil, errors.New("no store found")
+	}
+	toReplicaDescriptor := desc.AddReplica(n.Descriptor.NodeID, storeID, roachpb.VOTER_FULL)
 	// We should increment the generation so that the various
 	// caches will recognize this descriptor as newer. This
 	// may not be necessary, but it can't hurt.
@@ -1096,7 +1108,7 @@ func (n *Node) ResetQuorum(
 	}
 
 	// Call UnsafeHealRange to send a snapshot to the designated survivor.
-	if err := n.unsafeHealRange(ctx, n.Descriptor.NodeID, roachpb.StoreID(req.StoreID), desc, toReplicaDescriptor); err != nil {
+	if err := n.unsafeHealRange(ctx, n.Descriptor.NodeID, storeID, desc, toReplicaDescriptor); err != nil {
 		return nil, err
 	}
 
@@ -1111,7 +1123,11 @@ func (n *Node) ResetQuorum(
 // By removing all unhealthy replicas and adding a designated survivor, we make
 // this range healthy again.
 func (n *Node) unsafeHealRange(
-	ctx context.Context, nodeID roachpb.NodeID, storeID roachpb.StoreID, desc roachpb.RangeDescriptor, to roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	storeID roachpb.StoreID,
+	desc roachpb.RangeDescriptor,
+	to roachpb.ReplicaDescriptor,
 ) error {
 	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
 	conn, err := n.storeCfg.NodeDialer.Dial(ctx, nodeID, rpc.SystemClass)

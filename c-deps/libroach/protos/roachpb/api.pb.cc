@@ -39337,7 +39337,6 @@ void ResetQuorumRequest::InitAsDefaultInstance() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResetQuorumRequest::kRangeIdFieldNumber;
-const int ResetQuorumRequest::kStoreIdFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResetQuorumRequest::ResetQuorumRequest()
@@ -39351,16 +39350,12 @@ ResetQuorumRequest::ResetQuorumRequest(const ResetQuorumRequest& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  ::memcpy(&range_id_, &from.range_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&store_id_) -
-    reinterpret_cast<char*>(&range_id_)) + sizeof(store_id_));
+  range_id_ = from.range_id_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ResetQuorumRequest)
 }
 
 void ResetQuorumRequest::SharedCtor() {
-  ::memset(&range_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&store_id_) -
-      reinterpret_cast<char*>(&range_id_)) + sizeof(store_id_));
+  range_id_ = 0;
 }
 
 ResetQuorumRequest::~ResetQuorumRequest() {
@@ -39386,9 +39381,7 @@ void ResetQuorumRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  ::memset(&range_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&store_id_) -
-      reinterpret_cast<char*>(&range_id_)) + sizeof(store_id_));
+  range_id_ = 0;
   _internal_metadata_.Clear();
 }
 
@@ -39415,19 +39408,6 @@ bool ResetQuorumRequest::MergePartialFromCodedStream(
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
                  input, &range_id_)));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
-
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &store_id_)));
         } else {
           goto handle_unusual;
         }
@@ -39464,10 +39444,6 @@ void ResetQuorumRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->range_id(), output);
   }
 
-  if (this->store_id() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->store_id(), output);
-  }
-
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ResetQuorumRequest)
@@ -39483,12 +39459,6 @@ size_t ResetQuorumRequest::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int32Size(
         this->range_id());
-  }
-
-  if (this->store_id() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int32Size(
-        this->store_id());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -39511,9 +39481,6 @@ void ResetQuorumRequest::MergeFrom(const ResetQuorumRequest& from) {
   if (from.range_id() != 0) {
     set_range_id(from.range_id());
   }
-  if (from.store_id() != 0) {
-    set_store_id(from.store_id());
-  }
 }
 
 void ResetQuorumRequest::CopyFrom(const ResetQuorumRequest& from) {
@@ -39534,7 +39501,6 @@ void ResetQuorumRequest::Swap(ResetQuorumRequest* other) {
 void ResetQuorumRequest::InternalSwap(ResetQuorumRequest* other) {
   using std::swap;
   swap(range_id_, other->range_id_);
-  swap(store_id_, other->store_id_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

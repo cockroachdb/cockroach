@@ -5,11 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -121,10 +120,10 @@ func TestResetQuorum(t *testing.T) {
 
 	// Set up a scratch range isolated to n2.
 	k := tc.ScratchRange(t)
-	desc, err := tc.AddVoters(k, tc.Target(1))
+	desc, err := tc.AddReplicas(k, tc.Target(1))
 	require.NoError(t, err)
 	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
-	desc, err = tc.RemoveVoters(k, tc.Target(0))
+	desc, err = tc.RemoveReplicas(k, tc.Target(0))
 	require.NoError(t, err)
 	require.Len(t, desc.Replicas().All(), 1)
 
@@ -165,12 +164,11 @@ func TestResetQuorum(t *testing.T) {
 	}
 
 	// Call ResetQuorum to reset quorum on the unhealthy range.
-	t.Logf("resetting quorum on node id: %v, store id: %v", store.NodeID(), store.StoreID())
+	t.Logf("resetting quorum")
 	_, err = srv.Node().(*server.Node).ResetQuorum(
 		ctx,
 		&roachpb.ResetQuorumRequest{
 			RangeID: int32(desc.RangeID),
-			StoreID: int32(store.StoreID()),
 		},
 	)
 	require.NoError(t, err)

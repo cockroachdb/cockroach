@@ -17433,17 +17433,11 @@ class ResetQuorumRequest : public ::google::protobuf::MessageLite /* @@protoc_in
   ::google::protobuf::int32 range_id() const;
   void set_range_id(::google::protobuf::int32 value);
 
-  void clear_store_id();
-  static const int kStoreIdFieldNumber = 2;
-  ::google::protobuf::int32 store_id() const;
-  void set_store_id(::google::protobuf::int32 value);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ResetQuorumRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::int32 range_id_;
-  ::google::protobuf::int32 store_id_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -36348,19 +36342,6 @@ inline void ResetQuorumRequest::set_range_id(::google::protobuf::int32 value) {
   
   range_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ResetQuorumRequest.range_id)
-}
-
-inline void ResetQuorumRequest::clear_store_id() {
-  store_id_ = 0;
-}
-inline ::google::protobuf::int32 ResetQuorumRequest::store_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResetQuorumRequest.store_id)
-  return store_id_;
-}
-inline void ResetQuorumRequest::set_store_id(::google::protobuf::int32 value) {
-  
-  store_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ResetQuorumRequest.store_id)
 }
 
 // -------------------------------------------------------------------
