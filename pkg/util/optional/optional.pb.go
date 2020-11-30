@@ -7,12 +7,17 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
+import time "time"
+
+import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -20,9 +25,9 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-// IntValue stores an optional unsigned integer value. Optional means that it
-// may not be set, and one can differentiate between being unset and having a
-// value of zero.
+// Uint stores an optional unsigned integer value. Optional means that it may
+// not be set, and one can differentiate between being unset and having a value
+// of zero.
 type Uint struct {
 	// The underlying value is the logical value plus 1, so that zero remains the
 	// special case of having no value.
@@ -32,7 +37,7 @@ type Uint struct {
 func (m *Uint) Reset()      { *m = Uint{} }
 func (*Uint) ProtoMessage() {}
 func (*Uint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_optional_0943d19487185fd7, []int{0}
+	return fileDescriptor_optional_f4a12db9d9a11104, []int{0}
 }
 func (m *Uint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -57,8 +62,47 @@ func (m *Uint) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Uint proto.InternalMessageInfo
 
+// Duration stores an optional time.Duration. Optional means that it may not be
+// set, and one can differentiate between being unset and having a value of
+// zero.
+type Duration struct {
+	// ValuePlusOne is the logical value plus 1, so that zero remains the special
+	// case of having no value.
+	// DO NOT ACCESS THIS DIRECTLY. Use HasValue and Value instead.
+	ValuePlusOne time.Duration `protobuf:"bytes,1,opt,name=value_plus_one,json=valuePlusOne,proto3,stdduration" json:"value_plus_one"`
+}
+
+func (m *Duration) Reset()      { *m = Duration{} }
+func (*Duration) ProtoMessage() {}
+func (*Duration) Descriptor() ([]byte, []int) {
+	return fileDescriptor_optional_f4a12db9d9a11104, []int{1}
+}
+func (m *Duration) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Duration) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Duration) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Duration.Merge(dst, src)
+}
+func (m *Duration) XXX_Size() int {
+	return m.Size()
+}
+func (m *Duration) XXX_DiscardUnknown() {
+	xxx_messageInfo_Duration.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Duration proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*Uint)(nil), "cockroach.util.optional.Uint")
+	proto.RegisterType((*Duration)(nil), "cockroach.util.optional.Duration")
 }
 func (m *Uint) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -83,6 +127,32 @@ func (m *Uint) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *Duration) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Duration) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintOptional(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.ValuePlusOne)))
+	n1, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.ValuePlusOne, dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	return i, nil
+}
+
 func encodeVarintOptional(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -101,6 +171,17 @@ func (m *Uint) Size() (n int) {
 	if m.ValuePlusOne != 0 {
 		n += 1 + sovOptional(uint64(m.ValuePlusOne))
 	}
+	return n
+}
+
+func (m *Duration) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.ValuePlusOne)
+	n += 1 + l + sovOptional(uint64(l))
 	return n
 }
 
@@ -165,6 +246,86 @@ func (m *Uint) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipOptional(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthOptional
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Duration) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowOptional
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Duration: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Duration: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ValuePlusOne", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOptional
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthOptional
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.ValuePlusOne, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipOptional(dAtA[iNdEx:])
@@ -292,20 +453,24 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/optional/optional.proto", fileDescriptor_optional_0943d19487185fd7)
+	proto.RegisterFile("util/optional/optional.proto", fileDescriptor_optional_f4a12db9d9a11104)
 }
 
-var fileDescriptor_optional_0943d19487185fd7 = []byte{
-	// 170 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_optional_f4a12db9d9a11104 = []byte{
+	// 229 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x29, 0x2d, 0xc9, 0xcc,
 	0xd1, 0xcf, 0x2f, 0x28, 0xc9, 0xcc, 0xcf, 0x4b, 0x44, 0x30, 0xf4, 0x0a, 0x8a, 0xf2, 0x4b, 0xf2,
 	0x85, 0xc4, 0x93, 0xf3, 0x93, 0xb3, 0x8b, 0xf2, 0x13, 0x93, 0x33, 0xf4, 0x40, 0xea, 0xf4, 0x60,
-	0xd2, 0x52, 0x22, 0xe9, 0xf9, 0xe9, 0xf9, 0x60, 0x35, 0xfa, 0x20, 0x16, 0x44, 0xb9, 0x92, 0x11,
-	0x17, 0x4b, 0x68, 0x66, 0x5e, 0x89, 0x90, 0x0a, 0x17, 0x5f, 0x59, 0x62, 0x4e, 0x69, 0x6a, 0x7c,
-	0x41, 0x4e, 0x69, 0x71, 0x7c, 0x7e, 0x5e, 0xaa, 0x04, 0xa3, 0x02, 0xa3, 0x06, 0x4b, 0x10, 0x0f,
-	0x58, 0x34, 0x20, 0xa7, 0xb4, 0xd8, 0x3f, 0x2f, 0xd5, 0x8a, 0x65, 0xc6, 0x02, 0x79, 0x06, 0x27,
-	0xad, 0x13, 0x0f, 0xe5, 0x18, 0x4e, 0x3c, 0x92, 0x63, 0xbc, 0xf0, 0x48, 0x8e, 0xf1, 0xc6, 0x23,
-	0x39, 0xc6, 0x07, 0x8f, 0xe4, 0x18, 0x27, 0x3c, 0x96, 0x63, 0xb8, 0xf0, 0x58, 0x8e, 0xe1, 0xc6,
-	0x63, 0x39, 0x86, 0x28, 0x0e, 0x98, 0xad, 0x49, 0x6c, 0x60, 0x6b, 0x8c, 0x01, 0x01, 0x00, 0x00,
-	0xff, 0xff, 0xa5, 0xb7, 0xf3, 0x67, 0xb5, 0x00, 0x00, 0x00,
+	0xd2, 0x52, 0x22, 0xe9, 0xf9, 0xe9, 0xf9, 0x60, 0x35, 0xfa, 0x20, 0x16, 0x44, 0xb9, 0x94, 0x5c,
+	0x7a, 0x7e, 0x7e, 0x7a, 0x4e, 0xaa, 0x3e, 0x98, 0x97, 0x54, 0x9a, 0xa6, 0x9f, 0x52, 0x5a, 0x94,
+	0x08, 0xd2, 0x01, 0x91, 0x57, 0x32, 0xe2, 0x62, 0x09, 0xcd, 0xcc, 0x2b, 0x11, 0x52, 0xe1, 0xe2,
+	0x2b, 0x4b, 0xcc, 0x29, 0x4d, 0x8d, 0x2f, 0xc8, 0x29, 0x2d, 0x8e, 0xcf, 0xcf, 0x4b, 0x95, 0x60,
+	0x54, 0x60, 0xd4, 0x60, 0x09, 0xe2, 0x01, 0x8b, 0x06, 0xe4, 0x94, 0x16, 0xfb, 0xe7, 0xa5, 0x5a,
+	0xb1, 0xcc, 0x58, 0x20, 0xcf, 0xa0, 0x14, 0xcd, 0xc5, 0xe1, 0x02, 0x35, 0x45, 0xc8, 0x13, 0xab,
+	0x3e, 0x6e, 0x23, 0x49, 0x3d, 0x88, 0xc5, 0x7a, 0x30, 0x8b, 0xf5, 0x60, 0x5a, 0x9c, 0x38, 0x4e,
+	0xdc, 0x93, 0x67, 0x98, 0x71, 0x5f, 0x9e, 0x11, 0x9b, 0xe1, 0x4e, 0x5a, 0x27, 0x1e, 0xca, 0x31,
+	0x9c, 0x78, 0x24, 0xc7, 0x78, 0xe1, 0x91, 0x1c, 0xe3, 0x8d, 0x47, 0x72, 0x8c, 0x0f, 0x1e, 0xc9,
+	0x31, 0x4e, 0x78, 0x2c, 0xc7, 0x70, 0xe1, 0xb1, 0x1c, 0xc3, 0x8d, 0xc7, 0x72, 0x0c, 0x51, 0x1c,
+	0x30, 0x2f, 0x27, 0xb1, 0x81, 0x0d, 0x37, 0x06, 0x04, 0x00, 0x00, 0xff, 0xff, 0x72, 0x3d, 0x4b,
+	0xc8, 0x32, 0x01, 0x00, 0x00,
 }
