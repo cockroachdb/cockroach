@@ -587,6 +587,11 @@ SELECT regr_sxx(y, x), regr_sxy(y, x), regr_syy(y, x) FROM statistics_agg_test
 ----
 825 375 83325
 
+query I
+SELECT regr_count(y, x) FROM statistics_agg_test
+----
+100
+
 # Regression test for #37211 (incorrect ordering between aggregator stages).
 statement ok
 CREATE TABLE uv (u INT PRIMARY KEY, v INT);

@@ -821,6 +821,8 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructRegressionSXY(args[0], args[1])
 	case "regr_syy":
 		return b.factory.ConstructRegressionSYY(args[0], args[1])
+	case "regr_count":
+		return b.factory.ConstructRegressionCount(args[0], args[1])
 	case "max":
 		return b.factory.ConstructMax(args[0])
 	case "min":

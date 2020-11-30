@@ -100,15 +100,16 @@ SELECT
     variance(DISTINCT f),
     xor_agg(DISTINCT s::BYTES),
     array_agg(DISTINCT i),
-    json_agg(DISTINCT j)
+    json_agg(DISTINCT j),
+    regr_count(DISTINCT i, f)
 FROM a
 ----
 scalar-group-by
- ├── columns: count:8!null sum:10 sum_int:11 avg:12 stddev:13 variance:14 xor_agg:16 array_agg:17 json_agg:18
+ ├── columns: count:8!null sum:10 sum_int:11 avg:12 stddev:13 variance:14 xor_agg:16 array_agg:17 json_agg:18 regr_count:19!null
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(8,10-14,16-18)
+ ├── fd: ()-->(8,10-14,16-19)
  ├── project
  │    ├── columns: column9:9 column15:15 i:2 f:3 j:5
  │    ├── immutable
@@ -145,6 +146,10 @@ scalar-group-by
       ├── agg-distinct [as=array_agg:17, outer=(2)]
       │    └── array-agg
       │         └── i:2
-      └── agg-distinct [as=json_agg:18, outer=(5)]
-           └── json-agg
-                └── j:5
+      ├── agg-distinct [as=json_agg:18, outer=(5)]
+      │    └── json-agg
+      │         └── j:5
+      └── agg-distinct [as=regr_count:19, outer=(2,3)]
+           └── regression-count
+                ├── i:2
+                └── f:3

@@ -2743,7 +2743,6 @@ scalar-group-by
            ├── k:1
            └── v:2
 
-
 build
 SELECT covar_pop(k) FROM kv
 ----
@@ -2769,7 +2768,6 @@ scalar-group-by
                 ├── k:1
                 └── v:2
 
-
 build
 SELECT max(s), covar_pop(k, v), min(s) FROM kv
 ----
@@ -2787,7 +2785,6 @@ scalar-group-by
       │    └── v:2
       └── min [as=min:8]
            └── s:4
-
 
 build
 SELECT covar_pop(k, NULL) FROM kv
@@ -2818,7 +2815,6 @@ scalar-group-by
            ├── k:1
            └── v:2
 
-
 build
 SELECT regr_intercept(k) FROM kv
 ----
@@ -2844,7 +2840,6 @@ scalar-group-by
                 ├── k:1
                 └── v:2
 
-
 build
 SELECT max(s), regr_intercept(k, v), min(s) FROM kv
 ----
@@ -2862,7 +2857,6 @@ scalar-group-by
       │    └── v:2
       └── min [as=min:8]
            └── s:4
-
 
 build
 SELECT regr_intercept(k, NULL) FROM kv
@@ -2893,7 +2887,6 @@ scalar-group-by
            ├── k:1
            └── v:2
 
-
 build
 SELECT regr_r2(k) FROM kv
 ----
@@ -2919,7 +2912,6 @@ scalar-group-by
                 ├── k:1
                 └── v:2
 
-
 build
 SELECT max(s), regr_r2(k, v), min(s) FROM kv
 ----
@@ -2937,7 +2929,6 @@ scalar-group-by
       │    └── v:2
       └── min [as=min:8]
            └── s:4
-
 
 build
 SELECT regr_r2(k, NULL) FROM kv
@@ -2968,7 +2959,6 @@ scalar-group-by
            ├── k:1
            └── v:2
 
-
 build
 SELECT regr_slope(k) FROM kv
 ----
@@ -2994,7 +2984,6 @@ scalar-group-by
                 ├── k:1
                 └── v:2
 
-
 build
 SELECT max(s), regr_slope(k, v), min(s) FROM kv
 ----
@@ -3012,7 +3001,6 @@ scalar-group-by
       │    └── v:2
       └── min [as=min:8]
            └── s:4
-
 
 build
 SELECT regr_slope(k, NULL) FROM kv
@@ -3043,7 +3031,6 @@ scalar-group-by
            ├── k:1
            └── v:2
 
-
 build
 SELECT regr_sxx(k) FROM kv
 ----
@@ -3054,7 +3041,6 @@ build
 SELECT regr_sxx(k, 'x', 'y') FROM kv
 ----
 error (42883): unknown signature: regr_sxx(int, string, string)
-
 
 build
 SELECT regr_sxx(DISTINCT k, v) FROM kv
@@ -3070,7 +3056,6 @@ scalar-group-by
            └── regression-s-x-x
                 ├── k:1
                 └── v:2
-
 
 build
 SELECT max(s), regr_sxx(k, v), min(s) FROM kv
@@ -3090,7 +3075,6 @@ scalar-group-by
       └── min [as=min:8]
            └── s:4
 
-
 build
 SELECT regr_sxx(k, NULL) FROM kv
 ----
@@ -3103,7 +3087,6 @@ build
 SELECT regr_sxx('foo', v) FROM kv
 ----
 error (22P02): regr_sxx(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
-
 
 # Tests for regr_sxy.
 
@@ -3121,18 +3104,15 @@ scalar-group-by
            ├── k:1
            └── v:2
 
-
 build
 SELECT regr_sxy(k) FROM kv
 ----
 error (42883): unknown signature: regr_sxy(int)
 
-
 build
 SELECT regr_sxy(k, 'x', 'y') FROM kv
 ----
 error (42883): unknown signature: regr_sxy(int, string, string)
-
 
 build
 SELECT regr_sxy(DISTINCT k, v) FROM kv
@@ -3148,7 +3128,6 @@ scalar-group-by
            └── regression-s-x-y
                 ├── k:1
                 └── v:2
-
 
 build
 SELECT max(s), regr_sxy(k, v), min(s) FROM kv
@@ -3167,7 +3146,6 @@ scalar-group-by
       │    └── v:2
       └── min [as=min:8]
            └── s:4
-
 
 build
 SELECT regr_sxy(k, NULL) FROM kv
@@ -3198,18 +3176,15 @@ scalar-group-by
            ├── k:1
            └── v:2
 
-
 build
 SELECT regr_syy(k) FROM kv
 ----
 error (42883): unknown signature: regr_syy(int)
 
-
 build
 SELECT regr_syy(k, 'x', 'y') FROM kv
 ----
 error (42883): unknown signature: regr_syy(int, string, string)
-
 
 build
 SELECT regr_syy(DISTINCT k, v) FROM kv
@@ -3225,7 +3200,6 @@ scalar-group-by
            └── regression-s-y-y
                 ├── k:1
                 └── v:2
-
 
 build
 SELECT max(s), regr_syy(k, v), min(s) FROM kv
@@ -3245,7 +3219,6 @@ scalar-group-by
       └── min [as=min:8]
            └── s:4
 
-
 build
 SELECT regr_syy(k, NULL) FROM kv
 ----
@@ -3258,6 +3231,78 @@ build
 SELECT regr_syy('foo', v) FROM kv
 ----
 error (22P02): regr_syy(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+# Tests for regr_count.
+
+build
+SELECT regr_count(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_count:6!null
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── regression-count [as=regr_count:6]
+           ├── k:1
+           └── v:2
+
+build
+SELECT regr_count(k) FROM kv
+----
+error (42883): unknown signature: regr_count(int)
+
+build
+SELECT regr_count(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: regr_count(int, string, string)
+
+build
+SELECT regr_count(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_count:6!null
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=regr_count:6]
+           └── regression-count
+                ├── k:1
+                └── v:2
+
+build
+SELECT max(s), regr_count(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 regr_count:7!null min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── regression-count [as=regr_count:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+build
+SELECT regr_count(k, NULL) FROM kv
+----
+error (42725): ambiguous call: regr_count(int, unknown), candidates are:
+regr_count(int, int) -> int
+regr_count(int, float) -> int
+regr_count(int, decimal) -> int
+
+build
+SELECT regr_count('foo', v) FROM kv
+----
+error (22P02): regr_count(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
 
 # Tests for string_agg.
 
