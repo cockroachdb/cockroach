@@ -156,11 +156,11 @@ JOIN json_arr2 AS t2
 ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1(int!null) j:2(jsonb) a:3(string[]!null) k:7(int!null) j:8(jsonb) a:9(string[])
+ ├── columns: k:1(int!null) j:2(jsonb) a:3(string[]) k:7(int!null) j:8(jsonb) a:9(string[])
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=3.66666667]
+ ├── stats: [rows=3.7037037]
  ├── key: (1,7)
  ├── fd: (1)-->(2,3), (7)-->(8,9)
  ├── inner-join (inverted json_arr1@a_idx [as=t1])
@@ -179,7 +179,7 @@ inner-join (lookup json_arr1 [as=t1])
  │    └── filters (true)
  └── filters
       ├── t1.a:3 @> t2.a:9 [type=bool, outer=(3,9), immutable]
-      └── t1.a:3 @> ARRAY['foo'] [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+      └── t1.a:3 @> ARRAY['foo'] [type=bool, outer=(3), immutable]
 
 opt
 SELECT t2.k

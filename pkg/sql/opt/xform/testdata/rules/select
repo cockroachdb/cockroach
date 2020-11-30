@@ -2102,7 +2102,7 @@ opt expect-not=GenerateInvertedIndexScans
 SELECT * FROM c WHERE a @> '{}'
 ----
 select
- ├── columns: k:1!null a:2!null u:3
+ ├── columns: k:1!null a:2 u:3
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3)
@@ -2111,7 +2111,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters
-      └── a:2 @> ARRAY[] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── a:2 @> ARRAY[] [outer=(2), immutable]
 
 # We should still plan an inverted index scan with a non-empty array even
 # if the index version is SecondaryIndexFamilyFormatVersion.
@@ -2119,7 +2119,7 @@ opt expect=GenerateInvertedIndexScans
 SELECT * FROM c WHERE a @> '{1}'
 ----
 index-join c
- ├── columns: k:1!null a:2!null u:3
+ ├── columns: k:1!null a:2 u:3
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3)
@@ -4689,7 +4689,7 @@ project
  ├── immutable
  ├── key: (1)
  └── inner-join (lookup c)
-      ├── columns: k:1!null a:2!null
+      ├── columns: k:1!null a:2
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── immutable
@@ -4702,7 +4702,7 @@ project
       │    ├── right fixed columns: [2] = [ARRAY[3]]
       │    └── filters (true)
       └── filters
-           └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable]
 
 # GenerateInvertedIndexZigzagJoins is disabled in the presence of a row-level
 # locking clause.
@@ -5164,7 +5164,7 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(1,2)
       │    └── index-join c
-      │         ├── columns: k:8!null a:9!null
+      │         ├── columns: k:8!null a:9
       │         ├── immutable
       │         ├── key: (8)
       │         ├── fd: (8)-->(9)
@@ -6201,7 +6201,7 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(3)
       │    └── index-join c
-      │         ├── columns: k:8!null a:9!null u:10
+      │         ├── columns: k:8!null a:9 u:10
       │         ├── immutable
       │         ├── key: (8)
       │         ├── fd: (8)-->(9,10)

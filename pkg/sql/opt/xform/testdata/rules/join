@@ -4579,7 +4579,7 @@ JOIN json_arr2 AS t2
 ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null j:2 a:3!null k:7!null j:8 a:9
+ ├── columns: k:1!null j:2 a:3 k:7!null j:8 a:9
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
@@ -4599,7 +4599,7 @@ inner-join (lookup json_arr1 [as=t1])
  │    └── filters (true)
  └── filters
       ├── t1.a:3 @> t2.a:9 [outer=(3,9), immutable]
-      └── t1.a:3 @> ARRAY['foo'] [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+      └── t1.a:3 @> ARRAY['foo'] [outer=(3), immutable]
 
 # Left join with additional filter.
 opt expect=GenerateInvertedJoinsFromSelect
@@ -4629,7 +4629,7 @@ left-join (lookup json_arr1 [as=t1])
  │         └── t2.k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
  └── filters
       ├── t1.a:7 @> t2.a:3 [outer=(3,7), immutable]
-      └── t1.a:7 @> ARRAY['foo'] [outer=(7), immutable, constraints=(/7: (/NULL - ])]
+      └── t1.a:7 @> ARRAY['foo'] [outer=(7), immutable]
 
 # Semi-join.
 opt expect=(GenerateInvertedJoins,ConvertSemiToInnerJoin)

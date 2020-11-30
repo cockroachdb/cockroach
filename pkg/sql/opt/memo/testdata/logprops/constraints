@@ -1433,13 +1433,13 @@ project
  ├── fd: ()-->(5)
  ├── prune: (5)
  ├── select
- │    ├── columns: a:3(int[]!null)
+ │    ├── columns: a:3(int[])
  │    ├── immutable
  │    ├── scan f
  │    │    ├── columns: a:3(int[])
  │    │    └── prune: (3)
  │    └── filters
- │         └── contains [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+ │         └── contains [type=bool, outer=(3), immutable]
  │              ├── variable: a:3 [type=int[]]
  │              └── const: ARRAY[1] [type=int[]]
  └── projections

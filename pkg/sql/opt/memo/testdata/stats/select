@@ -931,18 +931,18 @@ opt
 SELECT * FROM t_json_arr WHERE d @> ARRAY[1]
 ----
 select
- ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[]!null)
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
  ├── immutable
  ├── stats: [rows=555.555556]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan t_json_arr
  │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=2500, null(4)=0]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
-      └── d:4 @> ARRAY[1] [type=bool, outer=(4), immutable, constraints=(/4: (/NULL - ])]
+      └── d:4 @> ARRAY[1] [type=bool, outer=(4), immutable]
 
 # Should have a lower row count than the above case, due to a containment query
 # on 2 array elements.
@@ -950,18 +950,18 @@ opt
 SELECT * FROM t_json_arr WHERE d @> ARRAY[1,2]
 ----
 select
- ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[]!null)
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
  ├── immutable
  ├── stats: [rows=61.7283951]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan t_json_arr
  │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=2500, null(4)=0]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
-      └── d:4 @> ARRAY[1,2] [type=bool, outer=(4), immutable, constraints=(/4: (/NULL - ])]
+      └── d:4 @> ARRAY[1,2] [type=bool, outer=(4), immutable]
 
 
 # Bump up null counts.

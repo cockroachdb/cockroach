@@ -204,10 +204,16 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 				return cb.makeStringPrefixSpan(col, prefix), false
 			}
 		}
-
 	case opt.ContainsOp:
-		// NULL cannot contain anything, so a non-tight, not-null span is built.
-		return cb.notNullSpan(col), false
+		switch t := datum.(type) {
+		case *tree.DArray:
+			if t.HasNulls {
+				return contradiction, true
+			}
+		default:
+			// NULL cannot contain anything, so a non-tight, not-null span is built.
+			return cb.notNullSpan(col), false
+		}
 	}
 	return unconstrained, false
 }
