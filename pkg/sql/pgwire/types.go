@@ -530,7 +530,7 @@ const (
 	pgTimeTZFormat            = pgTimeFormat + "-07:00"
 	pgDateFormat              = "2006-01-02"
 	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
-	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00:00"
+	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00"
 	pgTime2400Format          = "24:00:00"
 )
 
@@ -551,7 +551,11 @@ func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 // Note it does not understand the "second" component of the offset as lib/pq
 // cannot parse it.
 func formatTimeTZ(t timetz.TimeTZ, tmp []byte) []byte {
-	ret := t.ToTime().AppendFormat(tmp, pgTimeTZFormat)
+	format := pgTimeTZFormat
+	if t.OffsetSecs%60 != 0 {
+		format += ":00"
+	}
+	ret := t.ToTime().AppendFormat(tmp, format)
 	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
 	if t.TimeOfDay == timeofday.Time2400 {
 		// It instead reads 00:00:00. Replace that text.
@@ -567,6 +571,9 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	var format string
 	if offset != nil {
 		format = pgTimeStampFormat
+		if _, offset := t.In(offset).Zone(); offset%60 != 0 {
+			format += ":00"
+		}
 	} else {
 		format = pgTimeStampFormatNoOffset
 	}
