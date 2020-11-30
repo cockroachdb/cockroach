@@ -389,7 +389,8 @@ func (p *pebbleBatch) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) 
 		} else if !valid {
 			break
 		}
-
+		// NB: UnsafeRawKey could be a serialized lock table key, and not just an
+		// MVCCKey.
 		err = p.batch.Delete(iter.UnsafeRawKey(), nil)
 		if err != nil {
 			return err

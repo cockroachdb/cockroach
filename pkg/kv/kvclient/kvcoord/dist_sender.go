@@ -1049,7 +1049,7 @@ func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 		// finalized as committed and already had its transaction record GCed. Both
 		// these cases return an ABORTED txn; in the GC case the record has been
 		// synthesized.
-		// If the the record has been GC'ed, then we can't distinguish between the
+		// If the record has been GC'ed, then we can't distinguish between the
 		// two cases, and so we're forced to return an ambiguous error. On the other
 		// hand, if the record exists, then we know that the transaction did not
 		// commit because a committed record cannot be GC'ed and the recreated as

@@ -38,15 +38,16 @@ func scanRoachKey(t *testing.T, td *datadriven.TestData, field string) roachpb.K
 	td.ScanArgs(t, field, &k)
 	rk := roachpb.Key(k)
 	if strings.HasPrefix(k, "L") {
-		return append(keys.LocalRangePrefix, rk[1:]...)
+		rk = append(keys.LocalRangePrefix, rk[1:]...)
 	}
-	return rk
+	return bytes.ReplaceAll(rk, []byte("\\0"), []byte{0})
 }
 
 func makePrintableKey(k MVCCKey) MVCCKey {
 	if bytes.HasPrefix(k.Key, keys.LocalRangePrefix) {
 		k.Key = append([]byte("L"), k.Key[len(keys.LocalRangePrefix):]...)
 	}
+	k.Key = bytes.ReplaceAll(k.Key, []byte{0}, []byte("\\0"))
 	return k
 }
 
@@ -75,6 +76,48 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 	if !k1.Equal(k2) {
 		fmt.Fprintf(b, "output: key: %s != %s\n", k1, k2)
 		return
+	}
+	engineKey, ok := DecodeEngineKey(iter.UnsafeRawKey())
+	if !ok {
+		fmt.Fprintf(b, "output: could not DecodeEngineKey: %x\n", iter.UnsafeRawKey())
+		return
+	}
+	rawMVCCKey := iter.UnsafeRawMVCCKey()
+	if iter.IsCurIntentSeparated() {
+		if !engineKey.IsLockTableKey() {
+			fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", engineKey)
+			return
+		}
+		ltKey, err := engineKey.ToLockTableKey()
+		if err != nil {
+			fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", err.Error())
+			return
+		}
+		// Strip off the sentinel byte.
+		rawMVCCKey = rawMVCCKey[:len(rawMVCCKey)-1]
+		if !bytes.Equal(ltKey.Key, rawMVCCKey) {
+			fmt.Fprintf(b, "output: rawMVCCKey %x != ltKey.Key %x\n", rawMVCCKey, ltKey.Key)
+			return
+		}
+	} else {
+		if !engineKey.IsMVCCKey() {
+			fmt.Fprintf(b, "output: engineKey should be a MVCC key: %s\n", engineKey)
+			return
+		}
+		mvccKey, err := engineKey.ToMVCCKey()
+		if err != nil {
+			fmt.Fprintf(b, "output: engineKey should be a MVCC key: %s\n", err.Error())
+			return
+		}
+		if !bytes.Equal(iter.UnsafeRawKey(), iter.UnsafeRawMVCCKey()) {
+			fmt.Fprintf(b, "output: UnsafeRawKey %x != UnsafeRawMVCCKey %x\n",
+				iter.UnsafeRawKey(), iter.UnsafeRawMVCCKey())
+			return
+		}
+		if !mvccKey.Equal(iter.UnsafeKey()) {
+			fmt.Fprintf(b, "output: mvccKey %s != UnsafeKey %s\n", mvccKey, iter.UnsafeKey())
+			return
+		}
 	}
 	v1 := iter.UnsafeValue()
 	v2 := iter.Value()

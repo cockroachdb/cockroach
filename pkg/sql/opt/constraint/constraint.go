@@ -273,7 +273,7 @@ func (c *Constraint) Contains(evalCtx *tree.EvalContext, other *Constraint) bool
 			rightIndex++
 		}
 
-		// If the current left span ends after the the current right span, then
+		// If the current left span ends after the current right span, then
 		// the left span contains the right span. The current left span could
 		// also contain other right spans, so only increment rightIndex.
 		if cmpEnd > 0 {

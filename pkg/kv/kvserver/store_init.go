@@ -106,7 +106,7 @@ func WriteInitialClusterData(
 	// The last range has id = len(splits) + 1
 	rangeIDVal.SetInt(int64(len(splits) + 1))
 
-	// We're the the first node in the cluster, let's seed our liveness record.
+	// We're the first node in the cluster, let's seed our liveness record.
 	// It's crucial that we do to maintain the invariant that there's always a
 	// liveness record for a given node. We'll do something similar through the
 	// join RPC when adding new nodes to an already bootstrapped cluster [1].

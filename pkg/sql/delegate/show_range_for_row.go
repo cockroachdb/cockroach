@@ -42,7 +42,7 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 
 	// Format the expressions into a string to be passed into the
 	// crdb_internal.encode_key function. We have to be sneaky here and special
-	// case when exprs has length 1 and place a comma after the the single tuple
+	// case when exprs has length 1 and place a comma after the single tuple
 	// element so that we can deduce the expression actually has a tuple type for
 	// the crdb_internal.encode_key function.
 	// Example: exprs = (1)

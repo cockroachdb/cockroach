@@ -1488,7 +1488,7 @@ func (og *operationGenerator) dropSchema(tx *pgx.Tx) (string, error) {
 }
 
 // pctExisting is used to specify the probability that a name exists when getting a random name. It
-// is a function of the configured error rate and the the parameter `shouldAlreadyExist`, which specifies
+// is a function of the configured error rate and the parameter `shouldAlreadyExist`, which specifies
 // if the name should exist in the non error case.
 //
 // Ex. When adding a column to a table, a table name needs to be fetched first. In cases where

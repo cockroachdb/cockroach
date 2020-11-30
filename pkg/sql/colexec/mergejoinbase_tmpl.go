@@ -47,7 +47,7 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 const _TYPE_WIDTH = 0
 
 // _ASSIGN_EQ is the template equality function for assigning the first input
-// to the result of the the second input == the third input.
+// to the result of the second input == the third input.
 func _ASSIGN_EQ(_, _, _, _, _, _ interface{}) int {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }

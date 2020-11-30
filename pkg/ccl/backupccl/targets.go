@@ -485,7 +485,7 @@ func descriptorsMatchingTargets(
 // descriptor revision matches if it is an earlier revision of a descriptor in
 // descs (same ID) or has parentID in `expanded`. Deleted descriptors are
 // represented as nil. Fills in the `priorIDs` map in the process, which maps
-// a descriptor the the ID by which it was previously known (e.g pre-TRUNCATE).
+// a descriptor the ID by which it was previously known (e.g pre-TRUNCATE).
 func getRelevantDescChanges(
 	ctx context.Context,
 	codec keys.SQLCodec,

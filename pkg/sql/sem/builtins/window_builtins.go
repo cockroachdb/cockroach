@@ -248,7 +248,7 @@ var _ tree.WindowFunc = &firstValueWindow{}
 var _ tree.WindowFunc = &lastValueWindow{}
 var _ tree.WindowFunc = &nthValueWindow{}
 
-// aggregateWindowFunc aggregates over the the current row's window frame, using
+// aggregateWindowFunc aggregates over the current row's window frame, using
 // the internal tree.AggregateFunc to perform the aggregation.
 type aggregateWindowFunc struct {
 	agg     tree.AggregateFunc

@@ -2189,7 +2189,7 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 
 // TestRandomConcurrentAdminChangeReplicasRequests ensures that when multiple
 // AdminChangeReplicasRequests are issued concurrently, so long as requests
-// provide the the value of the RangeDescriptor they will not accidentally
+// provide the value of the RangeDescriptor they will not accidentally
 // perform replication changes. In particular this test runs a number of
 // concurrent actors which all use the same expectations of the RangeDescriptor
 // and verifies that at most one actor succeeds in making all of its changes.

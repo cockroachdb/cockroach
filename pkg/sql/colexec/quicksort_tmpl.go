@@ -20,7 +20,7 @@ package colexec
 
 import "context"
 
-// This file is copied from the the Go standard library's sort
+// This file is copied from the Go standard library's sort
 // implementation, found in https://golang.org/src/sort/sort.go. The only
 // modifications are to template each function into each sort_* struct, so
 // that the sort methods can be called without incurring any interface overhead

@@ -625,7 +625,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		return nil, nil
 	})
 
-	// Skip the the first node which is where we generated the key.
+	// Skip the first node which is where we generated the key.
 	nodes := c.Nodes[1:]
 	c.Parallel("distributing ssh key", len(nodes), 0, func(i int) ([]byte, error) {
 		sess, err := c.newSession(nodes[i])
@@ -915,7 +915,7 @@ tar cvf certs.tar certs
 		os.Exit(1)
 	}
 
-	// Skip the the first node which is where we generated the certs.
+	// Skip the first node which is where we generated the certs.
 	display = c.Name + ": distributing certs"
 	nodes = nodes[1:]
 	c.Parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
