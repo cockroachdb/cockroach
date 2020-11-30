@@ -533,7 +533,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		arr := right.(*tree.DArray).Array
 		expectUnique := len(arr) > 0
 		for i := range arr {
-			if i > 0 && !reflect.DeepEqual(arr[i], arr[0]) {
+			if i > 0 && arr[i].Compare(&evalCtx, arr[0]) != 0 {
 				expectUnique = false
 				break
 			}
