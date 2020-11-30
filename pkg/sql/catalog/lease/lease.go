@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -1846,7 +1847,7 @@ func (m *Manager) watchForRangefeedUpdates(
 		}
 		var descriptor descpb.Descriptor
 		if err := ev.Value.GetProto(&descriptor); err != nil {
-			log.ReportOrPanic(ctx, &m.storage.settings.SV,
+			logcrash.ReportOrPanic(ctx, &m.storage.settings.SV,
 				"%s: unable to unmarshal descriptor %v", ev.Key, ev.Value)
 			return
 		}

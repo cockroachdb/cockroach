@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -628,7 +629,7 @@ func NewColOperator(
 			result.OpMonitors = result.OpMonitors[:0]
 		}
 		if panicErr != nil {
-			colexecerror.InternalError(log.PanicAsError(0, panicErr))
+			colexecerror.InternalError(logcrash.PanicAsError(0, panicErr))
 		}
 	}()
 	spec := args.Spec

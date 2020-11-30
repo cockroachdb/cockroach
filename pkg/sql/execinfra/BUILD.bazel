@@ -50,6 +50,7 @@ go_library(
         "//pkg/storage/fs",
         "//pkg/util",
         "//pkg/util/log",
+        "//pkg/util/log/logcrash",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/optional",
