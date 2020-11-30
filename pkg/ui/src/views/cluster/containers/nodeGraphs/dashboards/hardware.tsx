@@ -58,10 +58,10 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Disk Read Bytes"
+      title="Disk Read MB/s"
       sources={nodeSources}
     >
-      <Axis units={AxisUnits.Bytes} label="bytes">
+      <Axis units={AxisUnits.Bytes} label="MB/s">
         {nodeIDs.map((nid) => (
           <Metric
             name="cr.node.sys.host.disk.read.bytes"
@@ -74,10 +74,10 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Disk Write Bytes"
+      title="Disk Write MB/s"
       sources={nodeSources}
     >
-      <Axis units={AxisUnits.Bytes} label="bytes">
+      <Axis units={AxisUnits.Bytes} label="MB/s">
         {nodeIDs.map((nid) => (
           <Metric
             name="cr.node.sys.host.disk.write.bytes"
@@ -90,10 +90,10 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Disk Read Ops"
+      title="Disk Read IOPS"
       sources={nodeSources}
     >
-      <Axis units={AxisUnits.Count} label="Read Ops">
+      <Axis units={AxisUnits.Count} label="IOPS">
         {nodeIDs.map((nid) => (
           <Metric
             name="cr.node.sys.host.disk.read.count"
@@ -106,10 +106,10 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Disk Write Ops"
+      title="Disk Write IOPS"
       sources={nodeSources}
     >
-      <Axis units={AxisUnits.Count} label="Write Ops">
+      <Axis units={AxisUnits.Count} label="IOPS">
         {nodeIDs.map((nid) => (
           <Metric
             name="cr.node.sys.host.disk.write.count"
@@ -122,10 +122,10 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Disk IOPS In Progress"
+      title="Disk Ops In Progress"
       sources={nodeSources}
     >
-      <Axis units={AxisUnits.Count} label="IOPS">
+      <Axis units={AxisUnits.Count} label="Ops">
         {nodeIDs.map((nid) => (
           <Metric
             name="cr.node.sys.host.disk.iopsinprogress"
