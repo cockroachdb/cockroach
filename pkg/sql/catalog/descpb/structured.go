@@ -330,3 +330,8 @@ func (ConstraintType) SafeValue() {}
 func (desc *DatabaseDescriptor) IsMultiRegion() bool {
 	return desc.RegionConfig != nil
 }
+
+// Regions returns the multi-region regions that have been added to a database.
+func (desc *DatabaseDescriptor) Regions() Regions {
+	return desc.RegionConfig.Regions
+}

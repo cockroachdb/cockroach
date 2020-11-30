@@ -452,6 +452,44 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		return nil
 	})
 
+	// Validate regions on the parent database and the type descriptor are
+	// consistent.
+	switch desc.Kind {
+	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		reqs = append(reqs, desc.ParentID)
+		checks = append(checks, func(got catalog.Descriptor) error {
+			dbDesc, isDB := got.(catalog.DatabaseDescriptor)
+
+			// Parent database must be a multi-region database if it includes a
+			// multi-region type enum.
+			if !dbDesc.IsMultiRegion() {
+				return errors.AssertionFailedf("parent database is not a multi-region database")
+			}
+			if !isDB {
+				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+			}
+
+			if len(desc.EnumMembers) != len(dbDesc.Regions()) {
+				return errors.AssertionFailedf(
+					"unexpected number of regions on db desc: %d expected %d",
+					len(dbDesc.Regions()), len(desc.EnumMembers))
+			}
+
+			regions := make(map[descpb.Region]struct{}, len(dbDesc.Regions()))
+			for _, region := range dbDesc.Regions() {
+				regions[region] = struct{}{}
+			}
+
+			for i := range desc.EnumMembers {
+				enumRegion := descpb.Region(desc.EnumMembers[i].LogicalRepresentation)
+				if _, ok := regions[enumRegion]; !ok {
+					return errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion)
+				}
+			}
+			return nil
+		})
+	}
+
 	// Validate the parentSchemaID.
 	if desc.ParentSchemaID != keys.PublicSchemaID {
 		reqs = append(reqs, desc.ParentSchemaID)

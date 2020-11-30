@@ -12,3 +12,6 @@ package descpb
 
 // Region is an alias for a region stored on the database.
 type Region string
+
+// Regions is an alias for a slice of regions.
+type Regions []Region
