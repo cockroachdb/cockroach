@@ -139,7 +139,7 @@ OR
 	// Table should come back to life (though empty).
 	done := make(chan struct{})
 	go func() {
-		time.Sleep(20 * time.Second)
+		time.Sleep(200 * time.Second) // disabled when we hit n6
 		select {
 		case <-done:
 		default:
