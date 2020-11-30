@@ -63,6 +63,48 @@ CREATE TABLE public.s (
    FAMILY fam_2_geom (geom)
 )
 
+# Dropping the inverted column of the index drops the index.
+statement ok
+CREATE TABLE drop_j (
+  a INT,
+  b INT,
+  j JSON,
+  INVERTED INDEX (a, j),
+  INVERTED INDEX (b, a, j),
+  FAMILY (a, b, j)
+);
+ALTER TABLE drop_j DROP COLUMN j;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE drop_j]
+----
+CREATE TABLE public.drop_j (
+   a INT8 NULL,
+   b INT8 NULL,
+   FAMILY fam_0_a_b_j_rowid (a, b, rowid)
+)
+
+# Dropping the non-inverted column of the index drops the index.
+statement ok
+CREATE TABLE drop_a (
+  a INT,
+  b INT,
+  j JSON,
+  INVERTED INDEX (a, j),
+  INVERTED INDEX (b, a, j),
+  FAMILY (a, b, j)
+);
+ALTER TABLE drop_a DROP COLUMN a;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE drop_a]
+----
+CREATE TABLE public.drop_a (
+   b INT8 NULL,
+   j JSONB NULL,
+   FAMILY fam_0_a_b_j_rowid (b, j, rowid)
+)
+
 # Backfill a multi-column inverted index.
 
 statement ok
