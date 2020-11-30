@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -234,11 +235,17 @@ func (ex *connExecutor) populatePrepared(
 	}
 	p.extendedEvalCtx.PrepareOnly = true
 
-	protoTS, err := p.isAsOf(ctx, stmt.AST)
+	protoTS, timestampType, err := p.isAsOf(ctx, stmt.AST)
 	if err != nil {
 		return 0, err
 	}
 	if protoTS != nil {
+		if timestampType != transactionTimestamp {
+			// Can't handle this: we don't know how to do a CTAS with a historical
+			// read timestamp and a present write timestamp.
+			return 0, unimplemented.NewWithIssueDetailf(35712, "historical prepared backfill",
+				"historical CREATE TABLE AS unsupported in explicit transaction")
+		}
 		p.semaCtx.AsOfTimestamp = protoTS
 		txn.SetFixedTimestamp(ctx, *protoTS)
 	}
