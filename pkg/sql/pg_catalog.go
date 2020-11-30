@@ -1153,6 +1153,31 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 					depTypeAuto,          // deptype
 				)
 			}
+
+			reportViewDependency := func(dep *descpb.TableDescriptor_Reference) error {
+				for _, colID := range dep.ColumnIDs {
+					if err := addRow(
+						pgClassTableOid,                //classid
+						tableOid(dep.ID),               //objid
+						zeroVal,                        //objsubid
+						pgClassTableOid,                //refclassid
+						tableOid(table.GetID()),        //refobjid
+						tree.NewDInt(tree.DInt(colID)), //refobjsubid
+						depTypeNormal,                  //deptype
+					); err != nil {
+						return err
+					}
+				}
+
+				return nil
+			}
+
+			if table.IsTable() || table.IsView() {
+				if err := table.ForeachDependedOnBy(reportViewDependency); err != nil {
+					return err
+				}
+			}
+
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
