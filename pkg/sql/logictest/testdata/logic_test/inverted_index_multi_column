@@ -105,6 +105,23 @@ CREATE TABLE public.drop_a (
    FAMILY fam_0_a_b_j_rowid (b, j, rowid)
 )
 
+# CREATE TABLE LIKE ... INCLUDING INDEXES copies multi-column inverted indexes.
+statement ok
+CREATE TABLE src (a INT, b INT, j JSON, INVERTED INDEX (a, j), INVERTED INDEX (a, b, j));
+CREATE TABLE dst (LIKE src INCLUDING INDEXES);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE dst]
+----
+CREATE TABLE public.dst (
+   a INT8 NULL,
+   b INT8 NULL,
+   j JSONB NULL,
+   INVERTED INDEX src_a_j_idx (a, j),
+   INVERTED INDEX src_a_b_j_idx (a, b, j),
+   FAMILY "primary" (a, b, j, rowid)
+)
+
 # Backfill a multi-column inverted index.
 
 statement ok
