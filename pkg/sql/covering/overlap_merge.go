@@ -83,7 +83,7 @@ func OverlapCoveringMerge(coverings []Covering) []Range {
 
 	// TODO(dan): Verify that the ranges in each covering are non-overlapping.
 
-	// We would like to flatten all coverings on the the single line. Assume that total
+	// We would like to flatten all coverings on the single line. Assume that total
 	// amount of coverings is N, then overall there are 2*N endpoints. Flatten coverings
 	// on single line and sort them will take O(NlogN) time. Later we pass over endpoints
 	// one by one and append payloads.

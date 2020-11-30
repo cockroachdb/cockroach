@@ -275,7 +275,7 @@ rangeLoop:
 	return requestEntries, maxEndTime, nil
 }
 
-// WriteDescriptors writes all the the new descriptors: First the ID ->
+// WriteDescriptors writes all the new descriptors: First the ID ->
 // TableDescriptor for the new table, then flip (or initialize) the name -> ID
 // entry so any new queries will use the new one. The tables are assigned the
 // permissions of their parent database and the user must have CREATE permission

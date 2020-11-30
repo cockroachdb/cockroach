@@ -112,7 +112,7 @@ func RequestLease(
 		// same store.
 		//
 		// Note also that leasePostApply makes sure to update the timestamp cache in
-		// this case: even though the lease holder does not change, the the sequence
+		// this case: even though the lease holder does not change, the sequence
 		// number does and this triggers a low water mark bump.
 		//
 		// The bug prevented with this is unlikely to occur in practice

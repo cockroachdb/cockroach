@@ -368,7 +368,7 @@ func (o *routerOutputOp) forwardErr(err error) {
 // an empty selection slice will add no elements. Note that the selection vector
 // on the batch is ignored. This is so that callers of addBatch can push the
 // same batch with different selection vectors to many different outputs.
-// True is returned if the the output changes state to blocked (note: if the
+// True is returned if the output changes state to blocked (note: if the
 // output is already blocked, false is returned).
 // TODO(asubiotto): We should explore pipelining addBatch if disk-spilling
 //  performance becomes a concern. The main router goroutine will be writing to

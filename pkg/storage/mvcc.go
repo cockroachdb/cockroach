@@ -3366,7 +3366,7 @@ func MVCCFindSplitKey(
 	// the key C++ returns will rewind to the start key of the range.
 	//
 	// On a related note, we find the first row by actually looking at the first
-	// key in the the range. A previous version of this code attempted to derive
+	// key in the range. A previous version of this code attempted to derive
 	// the first row only by looking at `key`, the start key of the range; this
 	// was dangerous because partitioning can split off ranges that do not start
 	// at valid row keys. The keys that are present in the range, by contrast, are

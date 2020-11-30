@@ -2773,7 +2773,7 @@ func WriteClusterVersion(
 	return storage.MVCCPutProto(ctx, writer, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
 }
 
-// ReadClusterVersion reads the the cluster version from the store-local version
+// ReadClusterVersion reads the cluster version from the store-local version
 // key. Returns an empty version if the key is not found.
 func ReadClusterVersion(
 	ctx context.Context, reader storage.Reader,

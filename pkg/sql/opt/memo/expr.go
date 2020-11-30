@@ -677,7 +677,7 @@ func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 	return *p.(*FiltersExpr)
 }
 
-// UsesPartialIndex returns true if the the LookupJoinPrivate looks-up via a
+// UsesPartialIndex returns true if the LookupJoinPrivate looks-up via a
 // partial index.
 func (lj *LookupJoinPrivate) UsesPartialIndex(md *opt.Metadata) bool {
 	_, isPartialIndex := md.Table(lj.Table).Index(lj.Index).Predicate()
