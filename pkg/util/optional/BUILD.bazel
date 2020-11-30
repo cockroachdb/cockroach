@@ -3,17 +3,26 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "optional",
     srcs = [
+        "duration.go",
         "optional.pb.go",
         "uint.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/optional",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/gogo/protobuf/proto"],
+    deps = [
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/types",
+    ],
 )
 
 go_test(
     name = "optional_test",
-    srcs = ["uint_test.go"],
-    embed = [":optional"],
-    deps = ["//vendor/github.com/stretchr/testify/require"],
+    srcs = [
+        "duration_test.go",
+        "uint_test.go",
+    ],
+    deps = [
+        ":optional",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
 )

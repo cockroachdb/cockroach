@@ -144,7 +144,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		// advances, but these do not count towards merge joiner execution time.
 		// Merge joiner advances the time on its every non-empty batch totaling
 		// batchCount advances that should be accounted for in stats.
-		require.Equal(t, time.Duration(batchCount), s.Exec.ExecTime)
+		require.Equal(t, time.Duration(batchCount), s.Exec.ExecTime.Value())
 	}
 }
 
