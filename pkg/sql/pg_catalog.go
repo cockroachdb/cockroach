@@ -1170,6 +1170,36 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 					depTypeAuto,          // deptype
 				)
 			}
+
+			// In the case of table/view relationship, In PostgreSQL pg_depend.objid refers to
+			// pg_rewrite.oid, then pg_rewrite ev_class refers to the dependent object, but
+			// cockroach db does not implements pg_rewrite yet
+			//
+			// Issue #57417: https://github.com/cockroachdb/cockroach/issues/57417
+			reportViewDependency := func(dep *descpb.TableDescriptor_Reference) error {
+				for _, colID := range dep.ColumnIDs {
+					if err := addRow(
+						pgClassTableOid,                //classid
+						tableOid(dep.ID),               //objid
+						zeroVal,                        //objsubid
+						pgClassTableOid,                //refclassid
+						tableOid(table.GetID()),        //refobjid
+						tree.NewDInt(tree.DInt(colID)), //refobjsubid
+						depTypeNormal,                  //deptype
+					); err != nil {
+						return err
+					}
+				}
+
+				return nil
+			}
+
+			if table.IsTable() || table.IsView() {
+				if err := table.ForeachDependedOnBy(reportViewDependency); err != nil {
+					return err
+				}
+			}
+
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
