@@ -1974,15 +1974,6 @@ func TestLint(t *testing.T) {
 			// that function to a different file to limit the scope
 			// of the exception.
 			stream.GrepNot(`pkg/sql/pgwire/pgerror/pgcode\.go:.*invalid direct cast on error object`),
-			// The crash reporting code uses its own custom cause recursion
-			// algorithm and thus cannot use errors.Is.  However, it's also
-			// due an overhaul - it's really redundant with the error
-			// redaction code already present in the errors library.
-			//
-			// TODO(knz): remove the code in log and replace by the errors'
-			// own redact code.
-			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct cast on error object`),
-			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct comparison of error object`),
 			// The logging package translates log.Fatal calls into errors.
 			// We can't use the regular exception mechanism via functions.go
 			// because addStructured takes its positional argument as []interface{},
