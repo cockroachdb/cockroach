@@ -1122,7 +1122,7 @@ func backupPlanHook(
 			EncryptionInfo:    encryptionInfo,
 			CollectionURI:     collectionURI,
 		}
-		if len(spans) > 0 {
+		if len(spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
 			protectedtsID := uuid.MakeV4()
 			backupDetails.ProtectedTimestampRecord = &protectedtsID
 		}
@@ -1310,6 +1310,9 @@ func protectTimestampForBackup(
 	startTime, endTime hlc.Timestamp,
 	backupDetails jobspb.BackupDetails,
 ) error {
+	if backupDetails.ProtectedTimestampRecord == nil {
+		return nil
+	}
 	if len(spans) > 0 {
 		tsToProtect := endTime
 		if !startTime.IsEmpty() {
