@@ -55,7 +55,7 @@ func (d *delayedNode) startExec(params runParams) error {
 
 	// Recursively invoke startExec on new plan. Normally, startExec doesn't
 	// recurse - calling children is handled by the planNode walker. The reason
-	// this won't suffice here is that the the child of this node doesn't exist
+	// this won't suffice here is that the child of this node doesn't exist
 	// until after startExec is invoked.
 	return startExec(params, plan)
 }

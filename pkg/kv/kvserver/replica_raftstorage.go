@@ -467,7 +467,7 @@ type OutgoingSnapshot struct {
 	Iter *rditer.ReplicaEngineDataIterator
 	// The replica state within the snapshot.
 	State kvserverpb.ReplicaState
-	// Allows access the the original Replica's sideloaded storage. Note that
+	// Allows access the original Replica's sideloaded storage. Note that
 	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
 	// or RaftSnap -- a log truncation could have removed files from the
 	// sideloaded storage in the meantime.

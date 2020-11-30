@@ -76,7 +76,7 @@ func (c *scopeColumn) clearName() {
 	c.table = tree.TableName{}
 }
 
-// getExpr returns the the expression that this column refers to, or the column
+// getExpr returns the expression that this column refers to, or the column
 // itself if the column does not refer to an expression.
 func (c *scopeColumn) getExpr() tree.TypedExpr {
 	if c.expr == nil {

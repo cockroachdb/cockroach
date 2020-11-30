@@ -536,7 +536,7 @@ func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) ca
 		val, _ = ratchetValue(val, val2)
 	}
 
-	// Return the higher value from the the page lookups and the floor
+	// Return the higher value from the page lookups and the floor
 	// timestamp.
 	floorVal := cacheValue{ts: s.floorTS, txnID: noTxnID}
 	val, _ = ratchetValue(val, floorVal)

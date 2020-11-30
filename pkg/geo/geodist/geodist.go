@@ -370,7 +370,7 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	bFirstPoint := b.LinearRing(0).Vertex(0)
 
 	// MinDistance:
-	// If there is at least one point on the the exterior ring of B that is outside the exterior ring
+	// If there is at least one point on the exterior ring of B that is outside the exterior ring
 	// of A, then we have one of these two cases:
 	// * The exterior rings of A and B intersect. The distance can always be found by comparing
 	//   the exterior rings.

@@ -23,7 +23,7 @@ import (
 //      expression tree, with no transformations applied to it.
 //
 //   2. Each optSteps.next() call after that will perform N+1 transformations,
-//      where N is the the number of steps performed during the previous call
+//      where N is the number of steps performed during the previous call
 //      (starting at 0 with the first call).
 //
 //   3. Each optSteps.next() call will build the expression tree from scratch

@@ -113,7 +113,7 @@ type loggerT struct {
 	logCounter EntryCounter
 
 	// outputMu is used to coordinate output to the sinks, to guarantee
-	// that the ordering of events the the same on all sinks.
+	// that the ordering of events the same on all sinks.
 	outputMu syncutil.Mutex
 }
 

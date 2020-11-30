@@ -193,7 +193,7 @@ func checkDemoConfiguration(
 	}
 
 	demoCtx.disableTelemetry = cluster.TelemetryOptOut()
-	// disableLicenseAcquisition can also be set by the the user as an
+	// disableLicenseAcquisition can also be set by the user as an
 	// input flag, so make sure it include it when considering the final
 	// value of disableLicenseAcquisition.
 	demoCtx.disableLicenseAcquisition =
