@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -76,7 +77,7 @@ func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 	// TODO(knz,tbg): The caller of initCPUProfile() also defines a stopper;
 	// arguably this code would be better served by stopper.RunAsyncTask().
 	go func() {
-		defer log.RecoverAndReportPanic(ctx, &serverCfg.Settings.SV)
+		defer logcrash.RecoverAndReportPanic(ctx, &serverCfg.Settings.SV)
 
 		ctx := context.Background()
 

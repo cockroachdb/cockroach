@@ -74,11 +74,12 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/util/log.FatalfDepth":            true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.VEventfDepth":           true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.VErrEventfDepth":        true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.ReportOrPanic":          true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.MakeEntry":              true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.FormatWithContextTags":  true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.renderArgsAsRedactable": true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.formatArgs":             true,
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash.ReportOrPanic": true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/util/log.loggerT).makeStartLine":     true,
 	"(*github.com/cockroachdb/cockroach/pkg/util/log.SecondaryLogger).output":    true,

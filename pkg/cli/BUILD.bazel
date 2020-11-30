@@ -144,6 +144,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/keysutil",
         "//pkg/util/log",
+        "//pkg/util/log/logcrash",
         "//pkg/util/log/logflags",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",

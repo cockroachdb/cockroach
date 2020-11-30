@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,9 +42,9 @@ func UnexpectedWithIssueErrorf(issue int, format string, args ...interface{}) er
 // The format string will be reproduced ad litteram in the report; the arguments
 // will be sanitized.
 func SendReport(ctx context.Context, sv *settings.Values, err error) {
-	if !log.ShouldSendReport(sv) {
+	if !logcrash.ShouldSendReport(sv) {
 		return
 	}
 	event, extraDetails := errors.BuildSentryReport(err)
-	log.SendReport(ctx, log.ReportTypeError, event, extraDetails)
+	logcrash.SendReport(ctx, logcrash.ReportTypeError, event, extraDetails)
 }

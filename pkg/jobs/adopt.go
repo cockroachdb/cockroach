@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -259,7 +260,7 @@ func (r *Registry) runJob(
 		// assertion errors, which shouldn't cause the test to panic. For now,
 		// comment this out.
 		// if errors.HasAssertionFailure(err) {
-		// 	log.ReportOrPanic(ctx, nil, err.Error())
+		// 	logcrash.ReportOrPanic(ctx, nil, err.Error())
 		// }
 		log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 	}
@@ -308,7 +309,7 @@ RETURNING id, status`,
 				log.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
 					id, s.ID())
 			default:
-				log.ReportOrPanic(ctx, nil, "unexpected job status")
+				logcrash.ReportOrPanic(ctx, nil, "unexpected job status")
 			}
 		}
 		return nil
