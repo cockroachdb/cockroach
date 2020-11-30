@@ -460,6 +460,10 @@ func (cb *onUpdateCascadeBuilder) Build(
 		updateExprs[i] = &tree.UpdateExpr{}
 		switch cb.action {
 		case tree.Cascade:
+			// TODO(radu): This requires special code in addUpdateCols to
+			// prevent this scopeColumn from being duplicated in mb.outScope
+			// (see the addCol anonymous function in addUpdateCols). Find a
+			// cleaner way to handle this.
 			updateExprs[i].Expr = &newValScopeCols[i]
 		case tree.SetNull:
 			updateExprs[i].Expr = tree.DNull
