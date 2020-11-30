@@ -667,6 +667,7 @@ func initAndSendSnapshot(
 
 	return sendSnapshot(
 		ctx,
+		nil, // raftCfg unused
 		st,
 		stream,
 		storePool,

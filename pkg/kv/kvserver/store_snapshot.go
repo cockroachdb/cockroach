@@ -97,8 +97,7 @@ func assertStrategy(
 // kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
 // batches of KV pairs in the BatchRepr format.
 type kvBatchSnapshotStrategy struct {
-	raftCfg *base.RaftConfig
-	status  string
+	status string
 
 	// The size of the batches of PUT operations to send to the receiver of the
 	// snapshot. Only used on the sender side.
@@ -786,7 +785,6 @@ func (s *Store) receiveSnapshot(
 		}
 
 		ss = &kvBatchSnapshotStrategy{
-			raftCfg:      &s.cfg.RaftConfig,
 			scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
 			sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
 		}
@@ -1093,7 +1091,6 @@ func sendSnapshot(
 	switch header.Strategy {
 	case SnapshotRequest_KV_BATCH:
 		ss = &kvBatchSnapshotStrategy{
-			raftCfg:   raftCfg,
 			batchSize: batchSize,
 			limiter:   limiter,
 			newBatch:  newBatch,
