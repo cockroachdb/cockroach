@@ -782,7 +782,6 @@ vectorized: true
       spans: FULL SCAN
 
 # Test that searching for a NULL element using the inverted index.
-# TODO(rytaft): This filter should be normalized to false (see #56799).
 query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
 ----
@@ -791,7 +790,7 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b)
-│ estimated row count: 110 (missing stats)
+│ estimated row count: 0
 │ filter: b @> ARRAY[NULL]
 │
 └── • scan

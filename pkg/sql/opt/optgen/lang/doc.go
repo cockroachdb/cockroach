@@ -102,7 +102,13 @@ rule has a unique name and consists of a match pattern and a corresponding
 replace pattern. A rule's match pattern is tested against every node in the
 target expression tree, bottom-up. Each matching node is replaced by a node
 constructed according to the replace pattern. The replacement node is itself
-tested against every rule, and so on, until no further rules match.
+tested against every rule, and so on, until no further rules match. The order
+that rules are applied depends on the order of the rules in each file, the
+lexicographical ordering of files, and whether or not a rule is marked as high
+or low priority as it is depicted below:
+
+[InlineConstVar, Normalize, HighPriority]
+
 
 Note that this is just a conceptual description. Optgen does not actually do
 any of this matching or replacing itself. Other components use the Optgen

@@ -206,6 +206,11 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 		}
 
 	case opt.ContainsOp:
+		if arr, ok := datum.(*tree.DArray); ok {
+			if arr.HasNulls {
+				return contradiction, true
+			}
+		}
 		// NULL cannot contain anything, so a non-tight, not-null span is built.
 		return cb.notNullSpan(col), false
 	}
