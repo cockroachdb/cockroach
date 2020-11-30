@@ -361,6 +361,11 @@ func TestRegressionSYY(t *testing.T) {
 	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionSYYAggregate)
 }
 
+func TestRegressionCount(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testRegressionAggregateFunctionResultDeepCopy(t, newRegressionCountAggregate)
+}
+
 // testRegressionAggregateFunctionResultDeepCopy is a helper function
 // for testing regression aggregate functions.
 func testRegressionAggregateFunctionResultDeepCopy(
@@ -813,6 +818,10 @@ func BenchmarkRegressionSXYAggregate(b *testing.B) {
 
 func BenchmarkRegressionSYYAggregate(b *testing.B) {
 	runRegressionAggregateBenchmarks(b, newRegressionSYYAggregate)
+}
+
+func BenchmarkRegressionCountAggregate(b *testing.B) {
+	runRegressionAggregateBenchmarks(b, newRegressionCountAggregate)
 }
 
 // runRegressionAggregateBenchmarks is a helper function for running

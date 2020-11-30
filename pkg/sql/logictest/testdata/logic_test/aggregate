@@ -10,14 +10,14 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRRRRRBBTIIRRRRRRRRRR
+query IIIIRRRRRRRRBBTIIRRRRRRRRRRI
 SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1),
 var_samp(1), variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1),
 corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1), regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1),
-regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1)
+regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1), regr_count(1, 1)
 FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL 0
 
 # Regression test for #29695
 query T
@@ -46,13 +46,13 @@ SELECT min(i), avg(i), max(i), sum(i) FROM kv
 ----
 NULL NULL NULL NULL
 
-query IIIIRRRRRRRBBTRRRRRRRRRR
+query IIIIRRRRRRRBBTRRRRRRRRRRI
 SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), stddev_pop(v), variance(v), var_pop(v), var_samp(v),
 bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes), corr(v,k), sqrdiff(v), covar_pop(v, k), covar_samp(v, k),
-regr_intercept(v, k), regr_r2(v, k), regr_slope(v, k), regr_sxx(v, k), regr_sxy(v, k), regr_syy(v, k)
+regr_intercept(v, k), regr_r2(v, k), regr_slope(v, k), regr_sxx(v, k), regr_sxy(v, k), regr_syy(v, k), regr_count(v, k)
 FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL 0
 
 query T
 SELECT array_agg(v) FROM kv
@@ -70,12 +70,13 @@ SELECT jsonb_agg(v) FROM kv
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIIRRRRRRRBBTRRRRRRRRRR
+query IIIIRRRRRRRBBTRRRRRRRRRRI
 SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), stddev_pop(1), variance(1),
 var_pop(1), var_samp(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 2), sqrdiff(1),
-covar_pop(1, 2), covar_samp(1, 2), regr_intercept(1, 2), regr_r2(1, 2), regr_slope(1, 2), regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1)
+covar_pop(1, 2), covar_samp(1, 2), regr_intercept(1, 2), regr_r2(1, 2), regr_slope(1, 2), regr_sxx(1, 1), regr_sxy(1, 1),
+regr_syy(1, 1), regr_count(1, 1)
 ----
-1  1  1  1  1  1  NULL  0  NULL  0  NULL true  true  01  NULL 0 0 NULL NULL NULL NULL 0 0 0
+1  1  1  1  1  1  NULL  0  NULL  0  NULL true  true  01  NULL 0 0 NULL NULL NULL NULL 0 0 0 1
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
@@ -2124,6 +2125,80 @@ SELECT regr_syy(y, x), regr_syy(int_y, int_x), regr_syy(dy, dx)
 FROM statistics_agg_test
 ----
 0 0 0
+
+statement OK
+TRUNCATE statistics_agg_test
+
+subtest regr_count
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
+VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (NULL,     NULL, NULL, NULL,  NULL,    NULL);
+
+query IIIII
+SELECT regr_count(y, x), regr_count(int_y, int_x), regr_count(y, int_x), regr_count(int_y, x), regr_count(dy, dx)
+FROM statistics_agg_test
+----
+10 10 10 10 10
+
+query IIII
+SELECT regr_count(y, dx), regr_count(int_y, dx), regr_count(dy, int_x), regr_count(dy, x)
+FROM statistics_agg_test
+----
+10 10 10 10
+
+query I
+SELECT regr_count(DISTINCT y, x)
+FROM statistics_agg_test
+----
+4
+
+query I
+SELECT regr_count(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100)
+FROM statistics_agg_test
+----
+2
+
+query error pq: unknown signature: regr_count\(string, string\)
+SELECT regr_count(y::string, x::string) FROM statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+
+query III
+SELECT regr_count(y, x), regr_count(int_y, int_x), regr_count(dy, dx) FROM statistics_agg_test
+----
+11 11 10
+
+statement OK
+TRUNCATE statistics_agg_test
+
+query I
+SELECT regr_count(y, x) FROM statistics_agg_test
+----
+0
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (NULL, NULL, NULL, NULL, NULL, NULL),
+  (NULL, NULL, NULL, NULL, NULL, NULL)
+
+query I
+SELECT regr_count(y, x)
+FROM statistics_agg_test
+----
+0
 
 statement OK
 TRUNCATE statistics_agg_test

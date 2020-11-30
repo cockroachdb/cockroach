@@ -401,6 +401,36 @@
     $groupingPrivate
 )
 
+# ConvertRegressionCountToCount replaces a RegressionCount operator
+# performed on a non-null expression with a Count operator. Count can be
+# normalized again to CountRows which is significantly faster to execute
+# than RegressionCount.
+[ConvertRegressionCountToCount, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:*
+    $aggregations:[
+        ...
+        $item:(AggregationsItem
+                (RegressionCount $arg1:* $arg2:*)
+            ) &
+            (Succeeded
+                $newArg:(SingleRegressionCountArgument
+                    $arg1
+                    $arg2
+                    $input
+                )
+            )
+        ...
+    ]
+    $groupingPrivate:*
+)
+=>
+((OpName)
+    $input
+    (ReplaceAggregationsItem $aggregations $item (Count $newArg))
+    $groupingPrivate
+)
+
 # FoldGroupingOperators folds two grouping operators into one equivalent
 # operator. As an example, the following pairs of queries are equivalent:
 #
