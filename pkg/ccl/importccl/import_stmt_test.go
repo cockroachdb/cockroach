@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -5839,4 +5840,75 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 				})
 		}
 	}
+}
+
+func TestImportInTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	//defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Setup a few tenants, each with a different table.
+	conn10 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	defer conn10.Close()
+	t10 := sqlutils.MakeSQLRunner(conn10)
+
+	// Setup a few tenants, each with a different table.
+	conn11 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11)})
+	defer conn11.Close()
+	t11 := sqlutils.MakeSQLRunner(conn11)
+
+	const userfileURI = "userfile://defaultdb.public.root/test.csv"
+	const importStmt = "IMPORT TABLE foo (k INT PRIMARY KEY, v INT) CSV DATA ($1)"
+
+	// Upload different files to same userfile name on each of host and tenants.
+	require.NoError(t, putUserfile(ctx, conn, security.RootUserName(), userfileURI, []byte("1,2\n3,4")))
+	require.NoError(t, putUserfile(ctx, conn10, security.RootUserName(), userfileURI, []byte("10,2")))
+	require.NoError(t, putUserfile(ctx, conn11, security.RootUserName(), userfileURI, []byte("11,22\n33,44\n55,66")))
+
+	sqlDB.Exec(t, importStmt, userfileURI)
+	sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1", "2"}, {"3", "4"}})
+
+	t10.Exec(t, importStmt, userfileURI)
+	t10.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"10", "2"}})
+
+	t11.Exec(t, importStmt, userfileURI)
+	t11.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"11", "22"}, {"33", "44"}, {"55", "66"}})
+}
+
+func putUserfile(
+	ctx context.Context, conn *gosql.DB, user security.SQLUsername, uri string, content []byte,
+) error {
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(sql.CopyInFileStmt(uri, sql.CrdbInternalName, sql.UserFileUploadTable))
+	if err != nil {
+		return err
+	}
+
+	var sent int
+	for sent < len(content) {
+		chunk := 1024
+		if sent+chunk >= len(content) {
+			chunk = len(content) - sent
+		}
+		_, err = stmt.Exec(string(content[sent : sent+chunk]))
+		if err != nil {
+			return err
+		}
+		sent += chunk
+	}
+	if err := stmt.Close(); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
