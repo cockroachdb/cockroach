@@ -262,7 +262,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 			_ = r.store.engine.MkdirAll(auxDir)
 			path := base.PreventedStartupFile(auxDir)
 
-			preventStartupMsg := fmt.Sprintf(`ATTENTION:
+			const attentionFmt = `ATTENTION:
 
 this node is terminating because a replica inconsistency was detected between %s
 and its other replicas. Please check your cluster-wide log files for more
@@ -274,8 +274,8 @@ A checkpoints directory to aid (expert) debugging should be present in:
 
 A file preventing this node from restarting was placed at:
 %s
-`, r, auxDir, path)
-
+`
+			preventStartupMsg := fmt.Sprintf(attentionFmt, r, auxDir, path)
 			if err := fs.WriteFile(r.store.engine, path, []byte(preventStartupMsg)); err != nil {
 				log.Warningf(ctx, "%v", err)
 			}
@@ -284,7 +284,7 @@ A file preventing this node from restarting was placed at:
 				p(*r.store.Ident)
 			} else {
 				time.Sleep(10 * time.Second)
-				log.Fatalf(r.AnnotateCtx(context.Background()), preventStartupMsg)
+				log.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, r, auxDir, path)
 			}
 		}
 
