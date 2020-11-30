@@ -67,7 +67,7 @@ const IPv6size = net.IPv6len + 2
 const IPv4mappedIPv6prefix = uint64(0xFFFF) << 32
 
 // IPv4mask is used to select only the lower 32 bits of uint128.
-// IPv4 addresses may not have the the upper 96 bits of Addr set to 0.
+// IPv4 addresses may not have the upper 96 bits of Addr set to 0.
 // IPv4 addresses mapped to IPv6 have prefix bits that should not change.
 const IPv4mask = uint64(0xFFFFFFFF)
 

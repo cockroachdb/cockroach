@@ -578,7 +578,7 @@ message InvertedJoinerSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
   // The ID of the inverted index. The first column in the index is the
-  // inverted column, and the the remaining columns are the primary key.
+  // inverted column, and the remaining columns are the primary key.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
   reserved 3;
