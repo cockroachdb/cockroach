@@ -13,7 +13,7 @@ go_library(
     deps = [
         "//pkg/settings",
         "//pkg/util/errorutil/unimplemented",
-        "//pkg/util/log",
+        "//pkg/util/log/logcrash",
         "//vendor/github.com/cockroachdb/errors",
     ],
 )
