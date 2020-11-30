@@ -125,6 +125,7 @@ var informationSchema = virtualSchema{
 	tableDefs: map[descpb.ID]virtualSchemaDef{
 		catconstants.InformationSchemaAdministrableRoleAuthorizationsID: informationSchemaAdministrableRoleAuthorizations,
 		catconstants.InformationSchemaApplicableRolesID:                 informationSchemaApplicableRoles,
+		catconstants.InformationSchemaCharacterSets:                     informationSchemaCharacterSets,
 		catconstants.InformationSchemaCheckConstraints:                  informationSchemaCheckConstraints,
 		catconstants.InformationSchemaColumnPrivilegesID:                informationSchemaColumnPrivileges,
 		catconstants.InformationSchemaColumnsTableID:                    informationSchemaColumnsTable,
@@ -259,6 +260,28 @@ https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 		}
 
 		return nil
+	},
+}
+
+var informationSchemaCharacterSets = virtualSchemaTable{
+	comment: `character sets available in the current database
+` + docs.URL("information-schema.html#character_sets") + `
+https://www.postgresql.org/docs/9.5/infoschema-character-sets.html`,
+	schema: vtable.InformationSchemaCharacterSets,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
+			func(db *dbdesc.Immutable) error {
+				return addRow(
+					tree.DNull,                    // character_set_catalog
+					tree.DNull,                    // character_set_schema
+					tree.NewDString("UTF8"),       // character_set_name: UTF8 is the only available encoding
+					tree.NewDString("UCS"),        // character_repertoire: UCS for UTF8 encoding
+					tree.NewDString("UTF8"),       // form_of_use: same as the database encoding
+					tree.NewDString(db.GetName()), // default_collate_catalog
+					tree.DNull,                    // default_collate_schema
+					tree.DNull,                    // default_collate_name
+				)
+			})
 	},
 }
 
