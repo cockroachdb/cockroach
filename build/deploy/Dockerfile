@@ -4,9 +4,10 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal
 # tzdata - for time zone functions; reinstalled to replace the missing
 #          files in /usr/share/zoneinfo/
 # hostname - used in cockroach k8s manifests
+# tar - used by kubectl cp
 RUN microdnf update -y \
     && rpm --erase --nodeps tzdata \
-    && microdnf install tzdata hostname -y \
+    && microdnf install tzdata hostname tar -y \
     && rm -rf /var/cache/yum
 
 # Install GEOS libraries.
