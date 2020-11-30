@@ -69,6 +69,7 @@ back to this document and perform these steps:
 
 * [ ] Adjust the Pebble tests to run in new version.
 * [ ] Adjust version in Docker image ([source](./builder/Dockerfile#L199-L200)).
+* [ ] Update `zipdata` in `pkg/util/timeutil/generate_lowercase_timezones.go` to correspond with `time/tzdata/zipdata.go` in the new Go version.
 * [ ] Rebuild and push the Docker image (following [Basic Process](#basic-process))
 * [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).
 * [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
