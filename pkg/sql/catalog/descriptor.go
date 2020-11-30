@@ -82,6 +82,9 @@ type DatabaseDescriptor interface {
 	// schemas.
 	tree.SchemaMeta
 	DatabaseDesc() *descpb.DatabaseDescriptor
+
+	Regions() descpb.Regions
+	IsMultiRegion() bool
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.

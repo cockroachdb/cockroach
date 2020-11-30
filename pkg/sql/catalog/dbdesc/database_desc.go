@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -219,6 +220,26 @@ func (desc *Immutable) Validate() error {
 	}
 	if desc.GetID() == 0 {
 		return fmt.Errorf("invalid database ID %d", desc.GetID())
+	}
+
+	if desc.IsMultiRegion() {
+		// Ensure no regions are duplicated.
+		regions := make(map[descpb.Region]struct{})
+		for _, region := range desc.Regions() {
+			if _, seen := regions[region]; seen {
+				return errors.AssertionFailedf("region %q seen twice on db %d", region, desc.GetID())
+			}
+			regions[region] = struct{}{}
+		}
+
+		if desc.RegionConfig.PrimaryRegion == "" {
+			return errors.AssertionFailedf("primary region unset on a multi-region db %d", desc.GetID())
+		}
+
+		if _, found := regions[desc.RegionConfig.PrimaryRegion]; !found {
+			return errors.AssertionFailedf(
+				"primary region not found in list of regions on db %d", desc.GetID())
+		}
 	}
 
 	// Fill in any incorrect privileges that may have been missed due to mixed-versions.

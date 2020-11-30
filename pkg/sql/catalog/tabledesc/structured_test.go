@@ -136,6 +136,66 @@ func TestAllocateIDs(t *testing.T) {
 		t.Fatalf("expected %s, but found %s", a, b)
 	}
 }
+func TestValidateDatabaseDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		err  string
+		desc *dbdesc.Immutable
+	}{
+		{`invalid database ID 0`,
+			dbdesc.NewImmutable(descpb.DatabaseDescriptor{
+				Name:       "db",
+				ID:         0,
+				Privileges: &descpb.PrivilegeDescriptor{},
+			}),
+		},
+		{
+			`region "us-east-1" seen twice on db 200`,
+			dbdesc.NewImmutable(descpb.DatabaseDescriptor{
+				Name: "multi-region-db",
+				ID:   200,
+				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
+					Regions:       descpb.Regions{"us-east-1", "us-east-1"},
+					PrimaryRegion: "us-east-1",
+				},
+				Privileges: &descpb.PrivilegeDescriptor{},
+			}),
+		},
+		{
+			`primary region unset on a multi-region db 200`,
+			dbdesc.NewImmutable(descpb.DatabaseDescriptor{
+				Name: "multi-region-db",
+				ID:   200,
+				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
+					Regions: descpb.Regions{"us-east-1"},
+				},
+				Privileges: &descpb.PrivilegeDescriptor{},
+			}),
+		},
+		{
+			`primary region not found in list of regions on db 200`,
+			dbdesc.NewImmutable(descpb.DatabaseDescriptor{
+				Name: "multi-region-db",
+				ID:   200,
+				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
+					Regions:       descpb.Regions{"us-east-1"},
+					PrimaryRegion: "us-east-2",
+				},
+				Privileges: &descpb.PrivilegeDescriptor{},
+			}),
+		},
+	}
+	for i, d := range testData {
+		t.Run(d.err, func(t *testing.T) {
+			if err := d.desc.Validate(); err == nil {
+				t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
+			} else if d.err != err.Error() && "internal error: "+d.err != err.Error() {
+				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)
+			}
+		})
+	}
+}
 
 func TestValidateTableDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
