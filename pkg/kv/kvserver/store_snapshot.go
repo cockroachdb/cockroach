@@ -904,7 +904,7 @@ func SendEmptySnapshot(
 	to roachpb.ReplicaDescriptor,
 ) error {
 	// Create an engine to use as a buffer for the empty snapshot.
-	eng := storage.NewInMem(ctx, roachpb.Attributes{}, 1<<20 /* cacheSize */)
+	eng := storage.NewDefaultInMem()
 	defer eng.Close()
 
 	var ms enginepb.MVCCStats
@@ -953,7 +953,7 @@ func SendEmptySnapshot(
 		// so they cannot be declined. We don't want our operation to be held
 		// up behind a long running snapshot. We want this to go through
 		// quickly.
-		SnapshotRequest_VIA_SNAPSHOT_QUEUE,
+		SnapshotRequest_RAFT,
 		eng,
 		desc.RangeID,
 		raftentry.NewCache(1), // Cache is not used.
@@ -990,7 +990,7 @@ func SendEmptySnapshot(
 		CanDecline:                 false,
 		Priority:                   SnapshotRequest_RECOVERY,
 		Strategy:                   SnapshotRequest_KV_BATCH,
-		Type:                       SnapshotRequest_VIA_SNAPSHOT_QUEUE,
+		Type:                       SnapshotRequest_RAFT,
 		UnreplicatedTruncatedState: true,
 	}
 

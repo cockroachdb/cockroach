@@ -22,7 +22,9 @@ func registerAcceptance(r *testRegistry) {
 		skip       string
 		minVersion string
 		timeout    time.Duration
+		nodes      int
 	}{
+		{name: "resetquorum", fn: runMissingRange, nodes: 8},
 		// Sorted. Please keep it that way.
 		{name: "bank/cluster-recovery", fn: runBankClusterRecovery},
 		{name: "bank/node-restart", fn: runBankNodeRestart},
@@ -66,23 +68,27 @@ func registerAcceptance(r *testRegistry) {
 			timeout:    30 * time.Minute,
 		},
 	}
-	tags := []string{"default", "quick"}
-	const numNodes = 4
-	specTemplate := testSpec{
-		// NB: teamcity-post-failures.py relies on the acceptance tests
-		// being named acceptance/<testname> and will avoid posting a
-		// blank issue for the "acceptance" parent test. Make sure to
-		// teach that script (if it's still used at that point) should
-		// this naming scheme ever change (or issues such as #33519)
-		// will be posted.
-		Name:    "acceptance",
-		Owner:   OwnerKV,
-		Timeout: 10 * time.Minute,
-		Tags:    tags,
-		Cluster: makeClusterSpec(numNodes),
-	}
 
 	for _, tc := range testCases {
+		tags := []string{"default", "quick"}
+		numNodes := 4
+		if tc.nodes != 0 {
+			numNodes = tc.nodes
+		}
+		specTemplate := testSpec{
+			// NB: teamcity-post-failures.py relies on the acceptance tests
+			// being named acceptance/<testname> and will avoid posting a
+			// blank issue for the "acceptance" parent test. Make sure to
+			// teach that script (if it's still used at that point) should
+			// this naming scheme ever change (or issues such as #33519)
+			// will be posted.
+			Name:    "acceptance",
+			Owner:   OwnerKV,
+			Timeout: 10 * time.Minute,
+			Tags:    tags,
+			Cluster: makeClusterSpec(numNodes),
+		}
+
 		tc := tc // copy for closure
 		spec := specTemplate
 		spec.Skip = tc.skip

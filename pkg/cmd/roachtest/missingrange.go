@@ -97,8 +97,16 @@ OR
 	// Now 'lostrange' is on n6-n8 and nothing else is. The nodes go down
 	// permanently (the wiping prevents the test runner from failing the
 	// test after it has passed - we cannot restart those nodes).
-	c.Stop(ctx, c.Range(6, 8))
-	c.Wipe(ctx, c.Range(6, 8))
+	const withSurvivor = true
+	if !withSurvivor {
+		// Wipe last three nodes.
+		c.Stop(ctx, c.Range(6, 8))
+		c.Wipe(ctx, c.Range(6, 8))
+	} else {
+		// Leave n6 alive.
+		c.Stop(ctx, c.Range(7, 8))
+		c.Wipe(ctx, c.Range(7, 8))
+	}
 
 	// Should not be able to read from it even (generously) after a lease timeout.
 	_, err = db.QueryContext(ctx, `SET statement_timeout = '15s'; SELECT * FROM lostrange;`)
