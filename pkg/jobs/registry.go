@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -699,7 +700,13 @@ UPDATE system.jobs
 		}
 		timer := timeutil.NewTimer()
 		lastGC := timeutil.Now()
-		timer.Reset(gcInterval())
+		// We'll jitter the first cleanup run to avoid contention in case multiple
+		// nodes restart at once.
+
+		const jitter = 1 / 6
+		jitterFraction := 1 + (2*rand.Float64()-1)*jitter // 1 + [-1/6, +1/6)
+		jitterredDuration := float64(gcInterval()) * jitterFraction
+		timer.Reset(time.Duration(jitterredDuration))
 		defer cancel()
 		for {
 			select {
@@ -843,13 +850,44 @@ func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (boo
 	return true, nil
 }
 
+const cleanupPageSize = 100
+
 func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) error {
-	const stmt = `SELECT id, payload, status, created FROM system.jobs WHERE created < $1
-		      ORDER BY created LIMIT 1000`
-	rows, err := r.ex.Query(ctx, "gc-jobs", nil /* txn */, stmt, olderThan)
-	if err != nil {
-		return err
+	var maxID int64
+	for {
+		var done bool
+		var err error
+		done, maxID, err = r.cleanupOldJobsPage(ctx, olderThan, maxID, cleanupPageSize)
+		if err != nil || done {
+			return err
+		}
 	}
+}
+
+// cleanupOldJobsPage deletes up to cleanupPageSize job rows with ID > minID.
+// minID is supposed to be the maximum ID returned by the previous page (0 if no
+// previous page).
+func (r *Registry) cleanupOldJobsPage(
+	ctx context.Context, olderThan time.Time, minID int64, pageSize int,
+) (done bool, maxID int64, _ error) {
+	const stmt = "SELECT id, payload, status, created FROM system.jobs " +
+		"WHERE created < $1 AND id > $2 " +
+		"ORDER BY id " + // the ordering is important as we keep track of the maximum ID we've seen
+		"LIMIT $3"
+	rows, err := r.ex.Query(ctx, "gc-jobs", nil /* txn */, stmt, olderThan, minID, pageSize)
+	if err != nil {
+		return false, 0, err
+	}
+	log.VEventf(ctx, 2, "read potentially expired jobs: %d", len(rows))
+
+	if len(rows) == 0 {
+		return true, 0, nil
+	}
+	// Track the highest ID we encounter, so it can serve as the bottom of the
+	// next page.
+	maxID = int64(*(rows[len(rows)-1][0].(*tree.DInt)))
+	// If we got as many rows as we asked for, there might be more.
+	morePages := len(rows) == pageSize
 
 	toDelete := tree.NewDArray(types.Int)
 	toDelete.Array = make(tree.Datums, 0, len(rows))
@@ -857,14 +895,14 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 	for _, row := range rows {
 		payload, err := UnmarshalPayload(row[1])
 		if err != nil {
-			return err
+			return false, 0, err
 		}
 		remove := false
 		switch Status(*row[2].(*tree.DString)) {
 		case StatusRunning, StatusPending:
 			done, err := r.isOrphaned(ctx, payload)
 			if err != nil {
-				return err
+				return false, 0, err
 			}
 			remove = done && row[3].(*tree.DTimestamp).Time.Before(olderThan)
 		case StatusSucceeded, StatusCanceled, StatusFailed:
@@ -875,20 +913,20 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 		}
 	}
 	if len(toDelete.Array) > 0 {
-		log.Infof(ctx, "cleaning up %d expired job records", len(toDelete.Array))
+		log.Infof(ctx, "cleaning up expired job records: %d", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
 		var nDeleted int
 		if nDeleted, err = r.ex.Exec(
 			ctx, "gc-jobs", nil /* txn */, stmt, toDelete,
 		); err != nil {
-			return errors.Wrap(err, "deleting old jobs")
+			return false, 0, errors.Wrap(err, "deleting old jobs")
 		}
 		if nDeleted != len(toDelete.Array) {
-			return errors.Errorf("asked to delete %d rows but %d were actually deleted",
+			return false, 0, errors.AssertionFailedf("asked to delete %d rows but %d were actually deleted",
 				len(toDelete.Array), nDeleted)
 		}
 	}
-	return nil
+	return !morePages, maxID, nil
 }
 
 // getJobFn attempts to get a resumer from the given job id. If the job id
