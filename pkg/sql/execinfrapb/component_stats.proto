@@ -75,7 +75,11 @@ message KVStats {
   // Cumulated time spent waiting for a KV request. This includes disk IO time
   // and potentially network time (if any of the keys are not local).
   optional util.optional.Duration kv_time = 3 [(gogoproto.customname) = "KVTime",
-                                  (gogoproto.nullable) = false];
+                                               (gogoproto.nullable) = false];
+
+  // ContentionTime is the cumulative time a KV request spent contending with
+  // other transactions. This time accounts for a portion of KVTime above.
+  optional util.optional.Duration contention_time = 4 [(gogoproto.nullable) = false];
 }
 
 // ExecStats contains statistics about the execution of an components.

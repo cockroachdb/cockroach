@@ -680,8 +680,9 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
-			TuplesRead: fis.NumTuples,
-			KVTime:     fis.WaitTime,
+			TuplesRead:     fis.NumTuples,
+			KVTime:         fis.WaitTime,
+			ContentionTime: optional.MakeTimeValue(getCumulativeContentionTime(ij.fetcher.GetContentionEvents())),
 		},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes())),

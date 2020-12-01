@@ -59,7 +59,7 @@ var _ execinfra.RowSource = &tableReader{}
 var _ execinfrapb.MetadataSource = &tableReader{}
 var _ execinfra.Releasable = &tableReader{}
 var _ execinfra.OpNode = &tableReader{}
-var _ execinfra.IOReader = &tableReader{}
+var _ execinfra.KVReader = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
@@ -279,22 +279,28 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 	return &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
-			TuplesRead: is.NumTuples,
-			BytesRead:  optional.MakeUint(uint64(tr.GetBytesRead())),
-			KVTime:     is.WaitTime,
+			TuplesRead:     is.NumTuples,
+			BytesRead:      optional.MakeUint(uint64(tr.GetBytesRead())),
+			KVTime:         is.WaitTime,
+			ContentionTime: optional.MakeTimeValue(tr.GetCumulativeContentionTime()),
 		},
 		Output: tr.Out.Stats(),
 	}
 }
 
-// GetBytesRead is part of the execinfra.IOReader interface.
+// GetBytesRead is part of the execinfra.KVReader interface.
 func (tr *tableReader) GetBytesRead() int64 {
 	return tr.fetcher.GetBytesRead()
 }
 
-// GetRowsRead is part of the execinfra.IOReader interface.
+// GetRowsRead is part of the execinfra.KVReader interface.
 func (tr *tableReader) GetRowsRead() int64 {
 	return tr.rowsRead
+}
+
+// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
+func (tr *tableReader) GetCumulativeContentionTime() time.Duration {
+	return getCumulativeContentionTime(tr.fetcher.GetContentionEvents())
 }
 
 func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
