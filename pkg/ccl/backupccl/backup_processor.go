@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -133,7 +133,7 @@ func runBackupProcessor(
 	spec *execinfrapb.BackupDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
-	settings := flowCtx.Cfg.Settings
+	clusterSettings := flowCtx.Cfg.Settings
 
 	todo := make(chan spanAndTime, len(spec.Spans)+len(spec.IntroducedSpans))
 	for _, s := range spec.IntroducedSpans {
@@ -145,8 +145,8 @@ func runBackupProcessor(
 
 	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
 	//  *2). See #49798.
-	numSenders := int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 2
-	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&settings.SV)
+	numSenders := int(kvserver.ExportRequestsLimit.Get(&clusterSettings.SV)) * 2
+	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&clusterSettings.SV)
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
@@ -165,6 +165,9 @@ func runBackupProcessor(
 		storageConfByLocalityKV[kv] = &conf
 
 	}
+
+	exportRequestDefaultConf := defaultConf
+	exportRequestStoreByLocalityKV := storageConfByLocalityKV
 
 	// If this is a tenant backup, we need to write the file from the SQL layer.
 	writeSSTsInProcessor := !flowCtx.Cfg.Codec.ForSystemTenant()
@@ -213,10 +216,10 @@ func runBackupProcessor(
 				header := roachpb.Header{Timestamp: span.end}
 				req := &roachpb.ExportRequest{
 					RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
-					Storage:                             defaultConf,
-					StorageByLocalityKV:                 storageConfByLocalityKV,
+					Storage:                             exportRequestDefaultConf,
+					StorageByLocalityKV:                 exportRequestStoreByLocalityKV,
 					StartTime:                           span.start,
-					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
+					EnableTimeBoundIteratorOptimization: useTBI.Get(&clusterSettings.SV),
 					MVCCFilter:                          spec.MVCCFilter,
 					Encryption:                          spec.Encryption,
 					TargetFileSize:                      targetFileSize,
@@ -230,7 +233,7 @@ func runBackupProcessor(
 					// We're okay with delaying this worker until then since we assume any
 					// other work it could pull off the queue will likely want to delay to
 					// a similar or later time anyway.
-					if delay := delayPerAttmpt.Get(&settings.SV) - timeutil.Since(span.lastTried); delay > 0 {
+					if delay := delayPerAttmpt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
 						timer.Reset(delay)
 						log.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
 						select {
@@ -241,7 +244,7 @@ func runBackupProcessor(
 						}
 					}
 
-					priority = timeutil.Since(readTime) > priorityAfter.Get(&settings.SV)
+					priority = timeutil.Since(readTime) > priorityAfter.Get(&clusterSettings.SV)
 				}
 
 				if priority {
