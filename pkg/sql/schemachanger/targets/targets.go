@@ -63,14 +63,14 @@ type DropColumn struct {
 type AddUniqueConstraint struct {
 	target
 	TableID   descpb.ID
-	IndexID   descpb.ID
+	IndexID   descpb.IndexID
 	ColumnIDs descpb.ColumnIDs
 }
 
 type DropUniqueConstraint struct {
 	target
 	TableID   descpb.ID
-	IndexID   descpb.ID
+	IndexID   descpb.IndexID
 	ColumnIDs descpb.ColumnIDs
 }
 
@@ -89,6 +89,10 @@ type DropCheckConstraint struct {
 }
 
 // TODO: move this to some lower-level package
+// TODO (lucy): I think we will want to make a distinction between internal
+// schema changer states and states written to the descriptor (i.e., relevant
+// for execution, which excludes the backfilled and validated states). Maybe
+// we want different types.
 type State int
 
 //go:generate stringer --type State
