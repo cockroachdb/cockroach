@@ -93,15 +93,9 @@ CockroachDB Community License Agreement
 
   2. Licenses.
 
-    (a) License to CockroachDB Core.  The License for CockroachDB
-        Core is the Apache License, Version 2.0 ("Apache License").
-        The Apache License includes a grant of patent license, as well as
-        redistribution rights that are contingent on several requirements.
-        Please see
-
-            http://www.apache.org/licenses/LICENSE-2.0
-
-        for full terms.  CockroachDB Core is a no-cost, entry-level
+    (a) License to CockroachDB Core.  The License for the applicable version of CockroachDB
+        Core can be found on the CockroachDB Licensing FAQs page and in the applicable
+        license file at the CockroachDB GitHub.  CockroachDB Core is a no-cost, entry-level
         license and as such, contains the following disclaimers: NOTWITHSTANDING
         ANYTHING TO THE CONTRARY HEREIN, COCKROACHDB CORE IS
         PROVIDED "AS IS" AND "AS AVAILABLE", AND ALL EXPRESS OR IMPLIED
