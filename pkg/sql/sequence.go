@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -362,6 +363,55 @@ func readOnlyError(s string) error {
 		"cannot execute %s in a read-only transaction", s)
 }
 
+func setSequenceIntegerBounds(
+	opts *descpb.TableDescriptor_SequenceOpts,
+	integerType *types.T,
+	isAscending bool,
+	lowerIntBound *int64,
+	upperIntBound *int64,
+) error {
+	opts.MinValue = math.MinInt64
+	opts.MaxValue = math.MaxInt64
+
+	if isAscending {
+		opts.MinValue = 1
+
+		switch integerType {
+		case types.Int2:
+			opts.MaxValue = math.MaxInt16
+			*upperIntBound = math.MaxInt16
+			*lowerIntBound = math.MinInt16
+		case types.Int4:
+			opts.MaxValue = math.MaxInt32
+			*upperIntBound = math.MaxInt32
+			*lowerIntBound = math.MinInt32
+		case types.Int:
+			// Do nothing, it's the default.
+		default:
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"CREATE SEQUENCE option AS received type %s, must be integer", integerType)
+		}
+	} else {
+		opts.MaxValue = -1
+		switch integerType {
+		case types.Int2:
+			opts.MinValue = math.MinInt16
+			*upperIntBound = math.MaxInt16
+			*lowerIntBound = math.MinInt16
+		case types.Int4:
+			opts.MinValue = math.MinInt32
+			*upperIntBound = math.MaxInt32
+			*lowerIntBound = math.MinInt32
+		case types.Int:
+			// Do nothing, it's the default.
+		default:
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"CREATE SEQUENCE option AS received type %s, must be integer", integerType)
+		}
+	}
+	return nil
+}
+
 // assignSequenceOptions moves options from the AST node to the sequence options descriptor,
 // starting with defaults and overriding them with user-provided options.
 func assignSequenceOptions(
@@ -372,11 +422,21 @@ func assignSequenceOptions(
 	sequenceID descpb.ID,
 	sequenceParentID descpb.ID,
 ) error {
-	// All other defaults are dependent on the value of increment,
-	// i.e. whether the sequence is ascending or descending.
+
+	// Set the default integer type of a sequence.
+	var integerType = types.Int
+	var upperIntBound = int64(math.MaxInt64)
+	var lowerIntBound = int64(math.MinInt64)
+
+	// All other defaults are dependent on the value of increment
+	// and the AS integerType. (i.e. whether the sequence is ascending
+	// or descending, bigint vs. smallint)
 	for _, option := range optsNode {
 		if option.Name == tree.SeqOptIncrement {
 			opts.Increment = *option.IntVal
+		} else if option.Name == tree.SeqOptAs {
+			integerType = option.AsIntegerType
+			opts.AsIntegerType = integerType.SQLString()
 		}
 	}
 	if opts.Increment == 0 {
@@ -398,6 +458,13 @@ func assignSequenceOptions(
 		}
 		// No Caching
 		opts.CacheSize = 1
+	}
+
+	// Set default MINVALUE and MAXVALUE if AS option value for integer type is specified.
+	if opts.AsIntegerType != "" {
+		if err := setSequenceIntegerBounds(opts, integerType, isAscending, &lowerIntBound, &upperIntBound); err != nil {
+			return err
+		}
 	}
 
 	// Fill in all other options.
@@ -429,11 +496,21 @@ func assignSequenceOptions(
 			// A value of nil represents the user explicitly saying `NO MINVALUE`.
 			if option.IntVal != nil {
 				opts.MinValue = *option.IntVal
+				if *option.IntVal < lowerIntBound {
+					return pgerror.Newf(pgcode.InvalidParameterValue,
+						"MINVALUE (%d) must be greater than (%d) for type %s",
+						*option.IntVal, lowerIntBound, integerType.SQLString())
+				}
 			}
 		case tree.SeqOptMaxValue:
 			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
 			if option.IntVal != nil {
 				opts.MaxValue = *option.IntVal
+				if *option.IntVal > upperIntBound {
+					return pgerror.Newf(pgcode.InvalidParameterValue,
+						"MAXVALUE (%d) must be less than (%d) for type %s",
+						*option.IntVal, upperIntBound, integerType.SQLString())
+				}
 			}
 		case tree.SeqOptStart:
 			opts.Start = *option.IntVal
