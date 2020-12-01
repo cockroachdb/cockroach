@@ -58,9 +58,6 @@ func genMergeJoinOps(inputFileContents string, wr io.Writer, jti joinTypeInfo) e
 		"_SEL_ARG", "$sel",
 		"_JOIN_TYPE_STRING", "{{$.JoinType.String}}",
 		"_JOIN_TYPE", "$.JoinType",
-		"_L_HAS_NULLS", "$.lHasNulls",
-		"_R_HAS_NULLS", "$.rHasNulls",
-		"_HAS_NULLS", "$.HasNulls",
 		"_HAS_SELECTION", "$.HasSelection",
 		"_SEL_PERMUTATION", "$.SelPermutation",
 	)
@@ -78,26 +75,26 @@ func genMergeJoinOps(inputFileContents string, wr io.Writer, jti joinTypeInfo) e
 	nullFromRightSwitch := makeFunctionRegex("_NULL_FROM_RIGHT_SWITCH", 1)
 	s = nullFromRightSwitch.ReplaceAllString(s, `{{template "nullFromRightSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
-	incrementLeftSwitch := makeFunctionRegex("_INCREMENT_LEFT_SWITCH", 3)
-	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" . "JoinType" $1 "SelPermutation" $2 "lHasNulls" $3}}`)
+	incrementLeftSwitch := makeFunctionRegex("_INCREMENT_LEFT_SWITCH", 2)
+	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" . "JoinType" $1 "SelPermutation" $2}}`)
 
-	incrementRightSwitch := makeFunctionRegex("_INCREMENT_RIGHT_SWITCH", 3)
-	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" . "JoinType" $1 "SelPermutation" $2 "rHasNulls" $3}}`)
+	incrementRightSwitch := makeFunctionRegex("_INCREMENT_RIGHT_SWITCH", 2)
+	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" . "JoinType" $1 "SelPermutation" $2}}`)
 
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
-	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 4)
-	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "SelPermutation" $2 "lHasNulls" $3 "rHasNulls" $4}}`)
+	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 2)
+	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "SelPermutation" $2}}`)
 
 	sourceFinishedSwitch := makeFunctionRegex("_SOURCE_FINISHED_SWITCH", 1)
 	s = sourceFinishedSwitch.ReplaceAllString(s, `{{template "sourceFinishedSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
-	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 3)
-	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2 "HasNulls" $3}}`)
+	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 2)
+	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2}}`)
 
-	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 3)
-	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2  "HasNulls" $3}}`)
+	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 2)
+	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2}}`)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 6)
 	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
