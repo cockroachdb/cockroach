@@ -2293,6 +2293,22 @@ func (desc *Immutable) validatePartitioningDescriptor(
 		return fmt.Errorf("only one LIST or RANGE partitioning may used")
 	}
 
+	// Do not validate partitions which use unhydrated user-defined types.
+	// This should only happen at read time and descriptors should not become
+	// invalid at read time, only at write time.
+	{
+		numColumns := int(partDesc.NumColumns)
+		for i := colOffset; i < colOffset+numColumns; i++ {
+			col, err := desc.FindColumnByID(idxDesc.ColumnIDs[i])
+			if err != nil {
+				return err
+			}
+			if col.Type.UserDefined() && !col.Type.IsHydrated() {
+				return nil
+			}
+		}
+	}
+
 	checkName := func(name string) error {
 		if len(name) == 0 {
 			return fmt.Errorf("PARTITION name must be non-empty")
