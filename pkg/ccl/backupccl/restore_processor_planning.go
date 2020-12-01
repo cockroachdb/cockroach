@@ -217,7 +217,7 @@ func distRestore(
 		tree.Rows,
 		nil,   /* rangeCache */
 		noTxn, /* txn - the flow does not read or write the database */
-		func(ts hlc.Timestamp) {},
+		nil,   /* clockUpdater */
 		evalCtx.Tracing,
 	)
 	defer recv.Release()

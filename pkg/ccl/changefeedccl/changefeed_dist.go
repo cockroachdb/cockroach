@@ -176,7 +176,7 @@ func distChangefeedFlow(
 		tree.Rows,
 		execCfg.RangeDescriptorCache,
 		noTxn,
-		func(ts hlc.Timestamp) {},
+		nil, /* clockUpdater */
 		evalCtx.Tracing,
 	)
 	defer recv.Release()

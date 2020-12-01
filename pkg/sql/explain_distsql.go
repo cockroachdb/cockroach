@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -128,9 +127,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			params.p.txn,
-			func(ts hlc.Timestamp) {
-				execCfg.Clock.Update(ts)
-			},
+			execCfg.Clock,
 			params.extendedEvalCtx.Tracing,
 		)
 		if !distSQLPlanner.PlanAndRunSubqueries(
@@ -199,9 +196,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			stmtType,
 			execCfg.RangeDescriptorCache,
 			newParams.p.txn,
-			func(ts hlc.Timestamp) {
-				execCfg.Clock.Update(ts)
-			},
+			execCfg.Clock,
 			newParams.extendedEvalCtx.Tracing,
 		)
 		defer recv.Release()
@@ -256,9 +251,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			params.p.txn,
-			func(ts hlc.Timestamp) {
-				execCfg.Clock.Update(ts)
-			},
+			execCfg.Clock,
 			params.extendedEvalCtx.Tracing,
 		)
 		if !distSQLPlanner.PlanAndRunCascadesAndChecks(

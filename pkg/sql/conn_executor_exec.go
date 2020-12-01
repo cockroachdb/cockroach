@@ -970,9 +970,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache,
 		planner.txn,
-		func(ts hlc.Timestamp) {
-			ex.server.cfg.Clock.Update(ts)
-		},
+		ex.server.cfg.Clock,
 		&ex.sessionTracing,
 	)
 	recv.progressAtomic = progressAtomic
