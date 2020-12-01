@@ -4620,6 +4620,26 @@ show_enums_stmt:
   {
     $$.val = &tree.ShowEnums{}
   }
+| SHOW ENUMS FROM name '.' name
+  {
+    $$.val = &tree.ShowEnums{ObjectNamePrefix:tree.ObjectNamePrefix{
+        CatalogName: tree.Name($4),
+        ExplicitCatalog: true,
+        SchemaName: tree.Name($6),
+        ExplicitSchema: true,
+      },
+    }
+  }
+| SHOW ENUMS FROM name
+{
+    $$.val = &tree.ShowEnums{ObjectNamePrefix:tree.ObjectNamePrefix{
+        // Note: the schema name may be interpreted as database name,
+        // see name_resolution.go.
+        SchemaName: tree.Name($4),
+        ExplicitSchema: true,
+      },
+    }
+}
 | SHOW ENUMS error // SHOW HELP: SHOW ENUMS
 
 // %Help: SHOW TYPES - list user defined types
