@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -365,6 +366,18 @@ func (ds *ServerImpl) setupFlow(
 	return ctx, f, nil
 }
 
+// testingGenerateMockContentionEvents is a testing cluster setting that
+// produces mock contention events. Refer to
+// KVFetcher.TestingEnableMockContentionEventGeneration for a more in-depth
+// description of these contention events. This setting is currently used to
+// test SQL Execution contention observability.
+// TODO(asubiotto): Remove once KV layer produces real contention events.
+var testingGenerateMockContentionEvents = settings.RegisterBoolSetting(
+	"sql.testing.mock_contention.enabled",
+	"whether the KV layer should generate mock contention events",
+	false,
+)
+
 // NewFlowContext creates a new FlowCtx that can be used during execution of
 // a flow.
 func (ds *ServerImpl) NewFlowContext(
@@ -383,6 +396,13 @@ func (ds *ServerImpl) NewFlowContext(
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
 		Local:          localState.IsLocal,
+	}
+
+	if testingGenerateMockContentionEvents.Get(&flowCtx.Cfg.Settings.SV) {
+		// Note: If a race occurs with this line, this setting is being improperly
+		// used. Mock contention events should be generated either using the cluster
+		// setting or programmatically using the testing knob, but not both.
+		ds.ServerConfig.TestingKnobs.GenerateMockContentionEvents = true
 	}
 
 	if localState.IsLocal && localState.Collection != nil {

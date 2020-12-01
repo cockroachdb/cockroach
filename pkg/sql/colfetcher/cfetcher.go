@@ -251,6 +251,12 @@ type cFetcher struct {
 	// are required to produce an MVCC timestamp system column.
 	mvccDecodeStrategy row.MVCCDecodingStrategy
 
+	// testingGenerateMockContentionEvents is a field that specifies whether
+	// a kvFetcher generates mock contention events. See
+	// kvFetcher.TestingEnableMockContentionEventGeneration.
+	// TODO(asubiotto): Remove once KV layer produces real contention events.
+	testingGenerateMockContentionEvents bool
+
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
 
@@ -615,6 +621,9 @@ func (rf *cFetcher) StartScan(
 		return err
 	}
 	rf.fetcher = f
+	if rf.testingGenerateMockContentionEvents {
+		rf.fetcher.TestingEnableMockContentionEventGeneration()
+	}
 	rf.machine.lastRowPrefix = nil
 	rf.machine.state[0] = stateInitFetch
 	return nil

@@ -78,7 +78,7 @@ type NewColOperatorArgs struct {
 // values of NewColOperator call.
 type NewColOperatorResult struct {
 	Op              colexecbase.Operator
-	IOReader        execinfra.IOReader
+	KVReader        execinfra.KVReader
 	ColumnTypes     []*types.T
 	MetadataSources []execinfrapb.MetadataSource
 	// ToClose is a slice of components that need to be Closed.
