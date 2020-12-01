@@ -3616,7 +3616,7 @@ explain_stmt:
 | EXPLAIN ANALYZE preparable_stmt
   {
     var err error
-    $$.val, err = tree.MakeExplain([]string{"DISTSQL", "ANALYZE"}, $3.stmt())
+    $$.val, err = tree.MakeExplain([]string{"ANALYZE"}, $3.stmt())
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -3624,7 +3624,7 @@ explain_stmt:
 | EXPLAIN ANALYSE preparable_stmt
   {
     var err error
-    $$.val, err = tree.MakeExplain([]string{"DISTSQL", "ANALYZE"}, $3.stmt())
+    $$.val, err = tree.MakeExplain([]string{"ANALYZE"}, $3.stmt())
     if err != nil {
       return setErr(sqllex, err)
     }

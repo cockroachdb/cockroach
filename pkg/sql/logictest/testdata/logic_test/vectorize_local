@@ -39,17 +39,17 @@ statement ok
 SET vectorize_row_count_threshold = 0
 
 query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT a FROM a]
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT a FROM a]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkEFr4zAQhe_7K8Q77YKWtffQg05JWxdM3CSNQ2kbfFDsITU4kiuNoSH4vxdbbqGFQo_zzXtv9HSGf2mgkCdZcrUVnWvEzWZ1K3bJwzqbp0sxX86zx6dE_L5O821-l_0Rk1QHoS4gYWxFS30kD7VDjEKidbYk760b0HkUpNUrVCRRm7bjARcSpXUEdQbX3BAUtnrf0IZ0Re5fBImKWNfNGKtnrauP2p0gkbfaeCX-QmLVsRKzGBKLe8H1kZSIfJhKa5gM19Z8WXDXNuSFI10p8T-KJvf-xB80vhCL-hISe83lM3lhO26HU8OrJv87GhOKXiKAqZpnfSCouJc_r78h31rj6VPz75KjvpCg6kDhi73tXElrZ8vxTBhXo28EFXkO2zgMqQmrvuh_vQUAAP__tz2kEQ==
 
 query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c JOIN d ON d.b = c.b]
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJyckkGP0zAQhe_8itE7gWRK0wMHS0gtUKQuIVnaCgGrHBx7tARSO9iOtKuq_x0lDogtLAKO82aeZ74nHxG-tpDYrfP1iz31vqVX2_INXa3fX-arTUGrYpV_-Limhy83u_3ubf6IplE9U2lU00W5KchQWZCZ1fSM9KyuIGCd4UIdOEBeIUMl0HmnOQTnB-k4DmzMDeRcoLFdHwe5EtDOM-QRsYktQ2Kv6pa3rAz7J3MIGI6qacdn9TKwhsCuUzZIegyBso-SlplYLiDw-h3F5sCS5iFV2tnINjbOnjVi37UcyLMykiZrfRt_SNlTeg6BWkX9iQO5PnbDouGeyfpdWqA6CaRqIgpRXTNkdhJ_T33hGjtBZ3ehzbLzzUH5Wwjkzn3pO_rsGkvOShqppwgwLZjYElZSQlRte57AfwSV_Q5fgG9Y9-feX6O7L6fFv-S05dA5G_hORve9PD9VAmyuOf3A4Hqv-dI7Pa5JZTn6RsFwiKmbpWJjU2s48Gdz9kfz4sxcnR58CwAA__9RAhsP
 
 query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b]
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzMUl1v0zAUfedXXN2nTZgtySQeLE1qgYAy2mSkFQKmPLj2pYtI7GA7Uquq_x0lKR8pY2jwsrfc82HnHN8duq8VclzEs_jlElpbwes8m8NN_OF6Nk1SmKbT2cdPMZy8ShbLxbvZKRyk8kwMUglJmsY5zOP8TQxXWZKCgiztBZegzlYFMtRGUSpqcshvMMSCYWONJOeM7aBdL0jUBnnAsNRN6zu4YCiNJeQ79KWvCDkuxaqinIQiex4gQ0VelFV_rJw0tqyF3SLDRSO04_AMGWat5zAJkeHb9-DLmjgEbpik0Z60L40-InzbVOTAklAcogFbbf0PKHwOL5DhSnh5Sw5M65vulu6HDtbvUITFnuEwHSI5L9aEPNyzf4sdjmOr-2JHjy529MfYP9O22lhFltQoadE5_ya5o7s52TVdmVKTPY_G3VX02Z9Mwqenl7Zc3w6fo5WhDcn2uKlabKCm2tgtiKoyUnhSHIK-m45z0nYNgSrdl98V_9XexUOWJifXGO3ouMU7Tw666kitaXgKZ1or6doa2V8zjFnv6wFFzg9sNAyJ7ql-q381hw8wR8fm6F7zxcgc7Iv9k28BAAD__-x5iuI=
 
