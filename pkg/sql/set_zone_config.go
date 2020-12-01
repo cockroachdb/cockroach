@@ -104,6 +104,7 @@ func loadYAML(dst interface{}, yamlString string) {
 
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"CONFIGURE ZONE",
 	); err != nil {
@@ -123,7 +124,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		// We have a CONFIGURE ZONE = <expr> assignment.
 		// This can be either a literal NULL (deletion), or a string containing YAML.
 		// We also support byte arrays for backward compatibility with
-		// previous versions of CockroachDB.
+		// previous versions of CockrofachDB.
 
 		var err error
 		yamlConfig, err = p.analyzeExpr(

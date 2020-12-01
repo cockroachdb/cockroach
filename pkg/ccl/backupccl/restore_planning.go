@@ -1289,7 +1289,9 @@ func restorePlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	if err := featureflag.CheckEnabled(featureRestoreEnabled,
+	if err := featureflag.CheckEnabled(
+		ctx,
+		featureRestoreEnabled,
 		&p.ExecCfg().Settings.SV,
 		"RESTORE",
 	); err != nil {
