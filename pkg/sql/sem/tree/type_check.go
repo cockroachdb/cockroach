@@ -49,8 +49,6 @@ type SemaContext struct {
 	// TypeResolver manages resolving type names into *types.T's.
 	TypeResolver TypeReferenceResolver
 
-	// Only one of the following two AOST-related fields can be set at a time.
-
 	// AsOfTimestamp denotes the explicit AS OF SYSTEM TIME timestamp for the
 	// query, if any. If the query is not an AS OF SYSTEM TIME query,
 	// AsOfTimestamp is nil.
@@ -59,12 +57,6 @@ type SemaContext struct {
 	// timestamp. In that case, the timestamp would not be set
 	// globally for the entire txn and this field would not be needed.
 	AsOfTimestamp *hlc.Timestamp
-
-	// AsOfTimestampForBackfill is set to non-nil if the query contains a backfill
-	// operation that is expected to perform at a user-defined timestamp. It's
-	// distinct from AsOfTimestamp above, which is used to denote a user-defined
-	// *transaction* timestamp.
-	AsOfTimestampForBackfill *hlc.Timestamp
 
 	Properties SemaProperties
 }
@@ -575,6 +567,15 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 func (expr *CollateExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
+	if strings.ToLower(expr.Locale) == DefaultCollationTag {
+		return nil, errors.WithHint(
+			unimplemented.NewWithIssuef(
+				57255,
+				"DEFAULT collations are not supported",
+			),
+			`omit the 'COLLATE "default"' clause in your statement`,
+		)
+	}
 	_, err := language.Parse(expr.Locale)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
