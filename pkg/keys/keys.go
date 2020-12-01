@@ -408,6 +408,14 @@ func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 	return MakeRangeKey(key, LocalQueueLastProcessedSuffix, roachpb.RKey(queue))
 }
 
+// LockTableSingleKeyStart is the inclusive start key of the key range
+// containing single key locks.
+var LockTableSingleKeyStart = roachpb.Key(makeKey(LocalRangeLockTablePrefix, LockTableSingleKeyInfix))
+
+// LockTableSingleKeyEnd is the exclusive end key of the key range
+// containing single key locks.
+var LockTableSingleKeyEnd = roachpb.Key(makeKey(LocalRangeLockTablePrefix, roachpb.Key(LockTableSingleKeyInfix).PrefixEnd()))
+
 // LockTableSingleKey creates a key under which all single-key locks for the
 // given key can be found. buf is used as scratch-space to avoid allocations
 // -- its contents will be overwritten and not appended to.
