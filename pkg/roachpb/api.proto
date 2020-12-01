@@ -21,6 +21,7 @@ import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -2140,4 +2141,19 @@ service Internal {
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
   rpc Join(JoinNodeRequest) returns (JoinNodeResponse) { }
+}
+
+// ContentionEvent is a message that will be attached to BatchResponses
+// indicating any conflicts with another transaction during replica evaluation.
+// This message is currently not emitted and only exists for SQL Execution to
+// have a protobuf to work with to build the higher-level infrastructure around
+// contention observability while the work to emit these events is ongoing.
+message ContentionEvent {
+  // Key is the key that this and the other transaction conflicted on.
+  bytes key = 1 [(gogoproto.casttype) = "Key"];
+  // Txn is the other transaction.
+  Transaction txn = 2 [(gogoproto.nullable) = false];
+  // Duration spent contending against the other transaction.
+  google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
+                                         (gogoproto.stdduration) = true];
 }
