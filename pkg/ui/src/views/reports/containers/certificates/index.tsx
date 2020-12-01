@@ -19,7 +19,7 @@ import { certificatesRequestKey, refreshCertificates } from "src/redux/apiReduce
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { LongToMoment } from "src/util/convert";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import { getMatchParamByName } from "src/util/query";
 
 interface CertificatesOwnProps {

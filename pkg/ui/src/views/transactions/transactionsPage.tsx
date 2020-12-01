@@ -45,12 +45,18 @@ export const selectLastReset = createSelector(
   },
 );
 
+const selectLastError = createSelector(
+  (state: AdminUIState) => state.cachedData.statements,
+  (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
+);
+
 // tslint:disable-next-line:variable-name
 const TransactionsPageConnected = withRouter(connect(
   (state: AdminUIState) => ({
     data: selectData(state),
     statementsError: state.cachedData.statements.lastError,
     lastReset: selectLastReset(state),
+    error: selectLastError(state),
   }),
   {
     refreshData: refreshStatements,
