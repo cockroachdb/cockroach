@@ -10,39 +10,41 @@
 
 package tree
 
-// RegionalAffinityLevel is a defined regional affinity.
-type RegionalAffinityLevel int
+import "fmt"
+
+// LocalityLevel is a defined locality.
+type LocalityLevel int
 
 const (
-	// RegionalAffinityLevelGlobal distributes a table across
+	// LocalityLevelGlobal distributes a table across
 	// a global cluster.
-	RegionalAffinityLevelGlobal RegionalAffinityLevel = iota
-	// RegionalAffinityLevelTable implies a table is homed
+	LocalityLevelGlobal LocalityLevel = iota
+	// LocalityLevelTable implies a table is homed
 	// in a fixed region.
-	RegionalAffinityLevelTable
-	// RegionalAffinityLevelRowLevel implies a table's rows are
+	LocalityLevelTable
+	// LocalityLevelRow implies a table's rows are
 	// homed depending on values within the row.
-	RegionalAffinityLevelRowLevel
+	LocalityLevelRow
 )
 
-// RegionalAffinity defines the locality for a given table.
-type RegionalAffinity struct {
-	RegionalAffinityLevel RegionalAffinityLevel
-	// TableRegion is set if is RegionalAffinityTable.
+// Locality defines the locality for a given table.
+type Locality struct {
+	LocalityLevel LocalityLevel
+	// TableRegion is set if is LocalityLevelTable.
 	TableRegion Name
 }
 
 // Format implements the NodeFormatter interface.
-func (node *RegionalAffinity) Format(ctx *FmtCtx) {
-	switch node.RegionalAffinityLevel {
-	case RegionalAffinityLevelGlobal:
-		ctx.WriteString("REGIONAL AFFINITY NONE")
-	case RegionalAffinityLevelTable:
-		ctx.WriteString("REGIONAL AFFINITY ")
+func (node *Locality) Format(ctx *FmtCtx) {
+	switch node.LocalityLevel {
+	case LocalityLevelGlobal:
+		ctx.WriteString("GLOBAL")
+	case LocalityLevelTable:
+		ctx.WriteString("REGIONAL BY TABLE IN ")
 		node.TableRegion.Format(ctx)
-	case RegionalAffinityLevelRowLevel:
-		ctx.WriteString("REGIONAL AFFINITY ROW LEVEL")
+	case LocalityLevelRow:
+		ctx.WriteString("REGIONAL BY ROW")
 	default:
-		ctx.WriteString("REGIONAL AFFINITY ???")
+		panic(fmt.Sprintf("unknown regional affinity: %#v", node.LocalityLevel))
 	}
 }
