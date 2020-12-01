@@ -612,6 +612,8 @@ show_databases_stmt ::=
 
 show_enums_stmt ::=
 	'SHOW' 'ENUMS'
+	| 'SHOW' 'ENUMS' 'FROM' name '.' name
+	| 'SHOW' 'ENUMS' 'FROM' name
 
 show_types_stmt ::=
 	'SHOW' 'TYPES'

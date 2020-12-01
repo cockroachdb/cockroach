@@ -27,6 +27,24 @@ parentID  parentSchemaID  name    id
 55        29              region  56
 57        29              region  58
 
+query TTTT colnames
+SHOW ENUMS FROM region_test_db.public
+----
+schema  name    values   owner
+public  region  {test1}  root
+
+query TTTT colnames
+SHOW ENUMS FROM multi_region_test_db.public
+----
+schema  name    values               owner
+public  region  {test1,test2,test3}  root
+
+query TTTT colnames
+SHOW ENUMS FROM multi_region_test_explicit_primary_region_db.public
+----
+schema  name    values               owner
+public  region  {test1,test2,test3}  root
+
 statement ok
 SELECT 'test1'::region_test_db.public.region
 

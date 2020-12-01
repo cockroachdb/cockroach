@@ -1299,10 +1299,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 		h := makeOidHasher()
 
 		return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.Immutable, _ string, typDesc *typedesc.Immutable) error {
-			// We only want to iterate over ENUM types.
-			// TODO(#multiregion): We're missing multi region enum introspection
-			// currently. See https://github.com/cockroachdb/cockroach/issues/56905
-			if typDesc.Kind != descpb.TypeDescriptor_ENUM {
+			switch typDesc.Kind {
+			case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
+			// We only want to iterate over ENUM types and multi-region enums.
+			default:
 				return nil
 			}
 			// Generate a row for each member of the enum. We don't represent enums
