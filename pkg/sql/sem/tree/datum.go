@@ -1070,13 +1070,13 @@ func (d *DDecimal) Format(ctx *FmtCtx) {
 const shallowDecimalSize = unsafe.Sizeof(apd.Decimal{})
 
 // SizeOfDecimal returns the size in bytes of an apd.Decimal.
-func SizeOfDecimal(d apd.Decimal) uintptr {
+func SizeOfDecimal(d *apd.Decimal) uintptr {
 	return shallowDecimalSize + uintptr(cap(d.Coeff.Bits()))*unsafe.Sizeof(big.Word(0))
 }
 
 // Size implements the Datum interface.
 func (d *DDecimal) Size() uintptr {
-	return SizeOfDecimal(d.Decimal)
+	return SizeOfDecimal(&d.Decimal)
 }
 
 var (

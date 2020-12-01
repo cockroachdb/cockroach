@@ -2158,7 +2158,7 @@ func (a *intSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.D
 			if err != nil {
 				return err
 			}
-			if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(a.decSum))); err != nil {
+			if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(&a.decSum))); err != nil {
 				return err
 			}
 		}
@@ -2226,7 +2226,7 @@ func (a *decimalSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tr
 		return err
 	}
 
-	if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(a.sum))); err != nil {
+	if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(&a.sum))); err != nil {
 		return err
 	}
 
@@ -2526,11 +2526,11 @@ func (a *decimalSqrDiffAggregate) Add(
 	a.ed.Sub(&a.tmp, d, &a.mean)
 	a.ed.Add(&a.sqrDiff, &a.sqrDiff, a.ed.Mul(&a.delta, &a.delta, &a.tmp))
 
-	size := int64(tree.SizeOfDecimal(a.count) +
-		tree.SizeOfDecimal(a.mean) +
-		tree.SizeOfDecimal(a.sqrDiff) +
-		tree.SizeOfDecimal(a.delta) +
-		tree.SizeOfDecimal(a.tmp))
+	size := int64(tree.SizeOfDecimal(&a.count) +
+		tree.SizeOfDecimal(&a.mean) +
+		tree.SizeOfDecimal(&a.sqrDiff) +
+		tree.SizeOfDecimal(&a.delta) +
+		tree.SizeOfDecimal(&a.tmp))
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}
@@ -2725,13 +2725,13 @@ func (a *decimalSumSqrDiffsAggregate) Add(
 	// Update running mean.
 	a.ed.Add(&a.mean, &a.mean, &a.tmp)
 
-	size := int64(tree.SizeOfDecimal(a.count) +
-		tree.SizeOfDecimal(a.mean) +
-		tree.SizeOfDecimal(a.sqrDiff) +
-		tree.SizeOfDecimal(a.tmpCount) +
-		tree.SizeOfDecimal(a.tmpMean) +
-		tree.SizeOfDecimal(a.delta) +
-		tree.SizeOfDecimal(a.tmp))
+	size := int64(tree.SizeOfDecimal(&a.count) +
+		tree.SizeOfDecimal(&a.mean) +
+		tree.SizeOfDecimal(&a.sqrDiff) +
+		tree.SizeOfDecimal(&a.tmpCount) +
+		tree.SizeOfDecimal(&a.tmpMean) +
+		tree.SizeOfDecimal(&a.delta) +
+		tree.SizeOfDecimal(&a.tmp))
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}
