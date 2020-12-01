@@ -62,3 +62,110 @@ CREATE TABLE public.s (
    FAMILY fam_1_a (a),
    FAMILY fam_2_geom (geom)
 )
+
+# Backfill a multi-column inverted index.
+
+statement ok
+CREATE TABLE backfill_a (i INT, s STRING, j JSON)
+
+statement ok
+INSERT INTO backfill_a VALUES
+    (1, 'foo', '[7]'),
+    (2, 'bar', '[7, 0, 7]'),
+    (3, 'baz', '{"a": "b"}'),
+    (4, 'baz', '["a", "b"]')
+
+statement ok
+CREATE INVERTED INDEX idx ON backfill_a (i, s, j)
+
+query ITT
+SELECT * FROM backfill_a@idx WHERE i = 1 AND s = 'foo' AND j @> '7'::JSON
+----
+1  foo  [7]
+
+query ITT
+SELECT * FROM backfill_a@idx WHERE i IN (1, 2, 3, 4) AND s IN ('foo', 'bar', 'baz') AND j @> '7'::JSON ORDER BY i
+----
+1  foo  [7]
+2  bar  [7, 0, 7]
+
+query ITT
+SELECT * FROM backfill_a@idx WHERE i IN (3, 4) AND s = 'baz' AND j @> '{"a": "b"}'::JSON
+----
+3  baz  {"a": "b"}
+
+# Backfill a partial index when a new table is created in the same transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE backfill_b (i INT, s STRING, j JSON)
+
+statement ok
+INSERT INTO backfill_b VALUES
+    (1, 'foo', '[7]'),
+    (2, 'bar', '[7, 0, 7]'),
+    (3, 'baz', '{"a": "b"}')
+
+statement ok
+CREATE INVERTED INDEX idx ON backfill_b (i, s, j)
+
+statement ok
+COMMIT
+
+query ITT
+SELECT * FROM backfill_b@idx WHERE i IN (1, 2, 3, 4) AND s = 'bar' AND j @> '7'::JSON
+----
+2  bar  [7, 0, 7]
+
+# Backfill a partial index with a reference to a new column in the predicate.
+
+statement ok
+CREATE TABLE backfill_c (i INT, j JSON)
+
+statement ok
+INSERT INTO backfill_c VALUES
+    (1, '[7]'),
+    (2, '[7, 0, 7]'),
+    (3, '{"a": "b"}')
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE backfill_c ADD COLUMN s STRING
+
+statement ok
+CREATE INVERTED INDEX idx ON backfill_c (i, s, j)
+
+statement ok
+COMMIT
+
+query ITT
+SELECT * FROM backfill_c@idx WHERE i IN (1, 2, 3, 4) AND s IS NULL AND j @> '7'::JSON ORDER BY i
+----
+1  [7]        NULL
+2  [7, 0, 7]  NULL
+
+# Backfill a partial index with a user defined type.
+
+statement ok
+CREATE TYPE enum AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
+CREATE TABLE backfill_d (i INT, s enum, j JSON)
+
+statement ok
+INSERT INTO backfill_d VALUES
+    (1, 'foo', '[7]'),
+    (2, 'bar', '[7, 0, 7]'),
+    (3, 'baz', '{"a": "b"}')
+
+statement ok
+CREATE INVERTED INDEX idx ON backfill_d (i, s, j)
+
+query ITT
+SELECT * FROM backfill_d@idx WHERE i IN (1, 2, 3, 4) AND s = 'bar' AND j @> '7'::JSON
+----
+2  bar  [7, 0, 7]
