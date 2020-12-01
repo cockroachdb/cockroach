@@ -173,24 +173,6 @@ func (ih *instrumentationHelper) Finish(
 	ctx := ih.origCtx
 
 	trace := ih.sp.GetRecording()
-	ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
-	placeholders := p.extendedEvalCtx.Placeholders
-	if ih.collectBundle {
-		bundle := buildStatementBundle(
-			ih.origCtx, cfg.DB, ie, &p.curPlan, ih.planStringForBundle(), trace, placeholders,
-		)
-		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
-		if ih.finishCollectionDiagnostics != nil {
-			ih.finishCollectionDiagnostics()
-			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
-		}
-
-		// Handle EXPLAIN ANALYZE (DEBUG). If there was a communication error
-		// already, no point in setting any results.
-		if ih.outputMode == explainAnalyzeDebugOutput && retErr == nil {
-			retErr = setExplainBundleResult(ctx, res, bundle, cfg)
-		}
-	}
 
 	if ih.withStatementTrace != nil {
 		ih.withStatementTrace(trace, stmtRawSQL)
@@ -199,11 +181,6 @@ func (ih *instrumentationHelper) Finish(
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.traceMetadata.addSpans(trace)
 		ih.traceMetadata.annotateExplain(ih.explainPlan)
-	}
-
-	if ih.outputMode == explainAnalyzePlanOutput && retErr == nil {
-		phaseTimes := &statsCollector.phaseTimes
-		retErr = ih.setExplainAnalyzePlanResult(ctx, res, phaseTimes)
 	}
 
 	// TODO(radu): this should be unified with other stmt stats accesses.
@@ -234,6 +211,31 @@ func (ih *instrumentationHelper) Finish(
 		//  once this statistic is always collected.
 		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(networkBytesSent))
 		stmtStats.mu.Unlock()
+	}
+
+	if ih.collectBundle {
+		ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
+		placeholders := p.extendedEvalCtx.Placeholders
+		planStr := ih.planStringForBundle(&statsCollector.phaseTimes)
+		bundle := buildStatementBundle(
+			ih.origCtx, cfg.DB, ie, &p.curPlan, planStr, trace, placeholders,
+		)
+		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
+		if ih.finishCollectionDiagnostics != nil {
+			ih.finishCollectionDiagnostics()
+			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
+		}
+
+		// Handle EXPLAIN ANALYZE (DEBUG). If there was a communication error
+		// already, no point in setting any results.
+		if ih.outputMode == explainAnalyzeDebugOutput && retErr == nil {
+			retErr = setExplainBundleResult(ctx, res, bundle, cfg)
+		}
+	}
+
+	if ih.outputMode == explainAnalyzePlanOutput && retErr == nil {
+		phaseTimes := &statsCollector.phaseTimes
+		retErr = ih.setExplainAnalyzePlanResult(ctx, res, phaseTimes)
 	}
 
 	return retErr
@@ -294,7 +296,7 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 }
 
 // planStringForBundle generates the plan tree as a string; used internally for bundles.
-func (ih *instrumentationHelper) planStringForBundle() string {
+func (ih *instrumentationHelper) planStringForBundle(phaseTimes *phaseTimes) string {
 	if ih.explainPlan == nil {
 		return ""
 	}
@@ -302,6 +304,8 @@ func (ih *instrumentationHelper) planStringForBundle() string {
 		Verbose:   true,
 		ShowTypes: true,
 	})
+	ob.AddPlanningTime(phaseTimes.getPlanningLatency())
+	ob.AddExecutionTime(phaseTimes.getRunLatency())
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
 		return fmt.Sprintf("error emitting plan: %v", err)
 	}

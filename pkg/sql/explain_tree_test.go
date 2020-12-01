@@ -78,7 +78,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			p.curPlan.flags.Set(planFlagExecDone)
 			p.curPlan.close(ctx)
 			if d.Cmd == "plan-string" {
-				return ih.planStringForBundle()
+				return ih.planStringForBundle(&phaseTimes{})
 			}
 			treeYaml, err := yaml.Marshal(ih.PlanForStats(ctx))
 			if err != nil {
