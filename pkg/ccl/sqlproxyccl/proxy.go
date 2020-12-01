@@ -72,6 +72,10 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	}
 
 	var conn net.Conn = proxyConn
+	// `conn` could be replaced by `conn` embedded in a `tls.Conn` connection,
+	// hence it's important to close `conn` rather than `proxyConn` since closing
+	// the latter will not call `Close` method of `tls.Conn`.
+	defer func() { _ = conn.Close() }()
 	// If we have an incoming TLS Config, require that the client initiates
 	// with a TLS connection.
 	if s.opts.IncomingTLSConfig != nil {
@@ -155,6 +159,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		sendErrToClient(conn, code, "unable to reach backend SQL server")
 		return NewErrorf(code, "dialing backend server: %v", err)
 	}
+	defer func() { _ = crdbConn.Close() }()
 
 	if backendConfig.TLSConf != nil {
 		// Send SSLRequest.
