@@ -31,8 +31,8 @@ func newBoolAndOrderedAggAlloc(
 
 type boolAndOrderedAgg struct {
 	orderedAggregateFuncBase
+	col        []bool
 	sawNonNull bool
-	vec        []bool
 	curAgg     bool
 }
 
@@ -40,7 +40,7 @@ var _ AggregateFunc = &boolAndOrderedAgg{}
 
 func (a *boolAndOrderedAgg) SetOutput(vec coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	a.vec = vec.Bool()
+	a.col = vec.Bool()
 }
 
 func (a *boolAndOrderedAgg) Compute(
@@ -48,99 +48,102 @@ func (a *boolAndOrderedAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
-				if groups[i] {
-					if !a.sawNonNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.vec[a.curIdx] = a.curAgg
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
+					if groups[i] {
+						if !a.sawNonNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col[a.curIdx] = a.curAgg
+						}
+						a.curIdx++
+						a.curAgg = true
+						a.sawNonNull = false
 					}
-					a.curIdx++
-					a.curAgg = true
-					a.sawNonNull = false
-				}
 
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.curAgg = a.curAgg && col[i]
-					a.sawNonNull = true
-				}
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg && col[i]
+						a.sawNonNull = true
+					}
 
+				}
+			} else {
+				for i := range col {
+					if groups[i] {
+						if !a.sawNonNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col[a.curIdx] = a.curAgg
+						}
+						a.curIdx++
+						a.curAgg = true
+						a.sawNonNull = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg && col[i]
+						a.sawNonNull = true
+					}
+
+				}
 			}
 		} else {
-			for i := range col {
-				if groups[i] {
-					if !a.sawNonNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.vec[a.curIdx] = a.curAgg
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					if groups[i] {
+						if !a.sawNonNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col[a.curIdx] = a.curAgg
+						}
+						a.curIdx++
+						a.curAgg = true
+						a.sawNonNull = false
 					}
-					a.curIdx++
-					a.curAgg = true
-					a.sawNonNull = false
-				}
 
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.curAgg = a.curAgg && col[i]
-					a.sawNonNull = true
-				}
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg && col[i]
+						a.sawNonNull = true
+					}
 
+				}
+			} else {
+				for _, i := range sel {
+					if groups[i] {
+						if !a.sawNonNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col[a.curIdx] = a.curAgg
+						}
+						a.curIdx++
+						a.curAgg = true
+						a.sawNonNull = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg && col[i]
+						a.sawNonNull = true
+					}
+
+				}
 			}
 		}
-	} else {
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-				if groups[i] {
-					if !a.sawNonNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.vec[a.curIdx] = a.curAgg
-					}
-					a.curIdx++
-					a.curAgg = true
-					a.sawNonNull = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.curAgg = a.curAgg && col[i]
-					a.sawNonNull = true
-				}
-
-			}
-		} else {
-			for _, i := range sel {
-				if groups[i] {
-					if !a.sawNonNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.vec[a.curIdx] = a.curAgg
-					}
-					a.curIdx++
-					a.curAgg = true
-					a.sawNonNull = false
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.curAgg = a.curAgg && col[i]
-					a.sawNonNull = true
-				}
-
-			}
-		}
-	}
+	},
+	)
 }
 
 func (a *boolAndOrderedAgg) Flush(outputIdx int) {
@@ -151,7 +154,7 @@ func (a *boolAndOrderedAgg) Flush(outputIdx int) {
 	if !a.sawNonNull {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.vec[outputIdx] = a.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -171,6 +174,7 @@ func (a *boolAndOrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]boolAndOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	f.curAgg = true
 	return f
@@ -187,8 +191,8 @@ func newBoolOrOrderedAggAlloc(
 
 type boolOrOrderedAgg struct {
 	orderedAggregateFuncBase
+	col        []bool
 	sawNonNull bool
-	vec        []bool
 	curAgg     bool
 }
 
@@ -196,7 +200,7 @@ var _ AggregateFunc = &boolOrOrderedAgg{}
 
 func (a *boolOrOrderedAgg) SetOutput(vec coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	a.vec = vec.Bool()
+	a.col = vec.Bool()
 }
 
 func (a *boolOrOrderedAgg) Compute(
@@ -204,99 +208,102 @@ func (a *boolOrOrderedAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
-				if groups[i] {
-					if !a.sawNonNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.vec[a.curIdx] = a.curAgg
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
+					if groups[i] {
+						if !a.sawNonNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col[a.curIdx] = a.curAgg
+						}
+						a.curIdx++
+						a.curAgg = false
+						a.sawNonNull = false
 					}
-					a.curIdx++
-					a.curAgg = false
-					a.sawNonNull = false
-				}
 
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.curAgg = a.curAgg || col[i]
-					a.sawNonNull = true
-				}
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg || col[i]
+						a.sawNonNull = true
+					}
 
+				}
+			} else {
+				for i := range col {
+					if groups[i] {
+						if !a.sawNonNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col[a.curIdx] = a.curAgg
+						}
+						a.curIdx++
+						a.curAgg = false
+						a.sawNonNull = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg || col[i]
+						a.sawNonNull = true
+					}
+
+				}
 			}
 		} else {
-			for i := range col {
-				if groups[i] {
-					if !a.sawNonNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.vec[a.curIdx] = a.curAgg
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					if groups[i] {
+						if !a.sawNonNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col[a.curIdx] = a.curAgg
+						}
+						a.curIdx++
+						a.curAgg = false
+						a.sawNonNull = false
 					}
-					a.curIdx++
-					a.curAgg = false
-					a.sawNonNull = false
-				}
 
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.curAgg = a.curAgg || col[i]
-					a.sawNonNull = true
-				}
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg || col[i]
+						a.sawNonNull = true
+					}
 
+				}
+			} else {
+				for _, i := range sel {
+					if groups[i] {
+						if !a.sawNonNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col[a.curIdx] = a.curAgg
+						}
+						a.curIdx++
+						a.curAgg = false
+						a.sawNonNull = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg || col[i]
+						a.sawNonNull = true
+					}
+
+				}
 			}
 		}
-	} else {
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-				if groups[i] {
-					if !a.sawNonNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.vec[a.curIdx] = a.curAgg
-					}
-					a.curIdx++
-					a.curAgg = false
-					a.sawNonNull = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.curAgg = a.curAgg || col[i]
-					a.sawNonNull = true
-				}
-
-			}
-		} else {
-			for _, i := range sel {
-				if groups[i] {
-					if !a.sawNonNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.vec[a.curIdx] = a.curAgg
-					}
-					a.curIdx++
-					a.curAgg = false
-					a.sawNonNull = false
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.curAgg = a.curAgg || col[i]
-					a.sawNonNull = true
-				}
-
-			}
-		}
-	}
+	},
+	)
 }
 
 func (a *boolOrOrderedAgg) Flush(outputIdx int) {
@@ -307,7 +314,7 @@ func (a *boolOrOrderedAgg) Flush(outputIdx int) {
 	if !a.sawNonNull {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.vec[outputIdx] = a.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -327,6 +334,7 @@ func (a *boolOrOrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]boolOrOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	f.curAgg = false
 	return f

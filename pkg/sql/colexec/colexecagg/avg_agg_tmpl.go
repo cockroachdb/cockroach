@@ -81,20 +81,18 @@ type avg_TYPE_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
-	scratch struct {
-		// curSum keeps track of the sum of elements belonging to the current group,
-		// so we can index into the slice once per group, instead of on each
-		// iteration.
-		curSum _RET_GOTYPE
-		// curCount keeps track of the number of elements that we've seen
-		// belonging to the current group.
-		curCount int64
-		// vec points to the output vector.
-		vec []_RET_GOTYPE
-		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-		// for the group that is currently being aggregated.
-		foundNonNullForCurrentGroup bool
-	}
+	// curSum keeps track of the sum of elements belonging to the current group,
+	// so we can index into the slice once per group, instead of on each
+	// iteration.
+	curSum _RET_GOTYPE
+	// curCount keeps track of the number of elements that we've seen
+	// belonging to the current group.
+	curCount int64
+	// col points to the statically-typed output vector.
+	col []_RET_GOTYPE
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
 	// {{if .NeedsHelper}}
 	// {{/*
 	// overloadHelper is used only when we perform the summation of integers
@@ -113,7 +111,7 @@ func (a *avg_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{else}}
 	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.scratch.vec = vec._RET_TYPE()
+	a.col = vec._RET_TYPE()
 }
 
 func (a *avg_TYPE_AGGKINDAgg) Compute(
@@ -131,39 +129,45 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 	// {{end}}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
-	// {{if eq "_AGGKIND" "Ordered"}}
-	groups := a.groups
-	// {{/*
-	// We don't need to check whether sel is non-nil when performing
-	// hash aggregation because the hash aggregator always uses non-nil
-	// sel to specify the tuples to be aggregated.
-	// */}}
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
-				_ACCUMULATE_AVG(a, nulls, i, true)
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		// {{if eq "_AGGKIND" "Ordered"}}
+		groups := a.groups
+		// {{/*
+		// We don't need to check whether sel is non-nil when performing
+		// hash aggregation because the hash aggregator always uses non-nil
+		// sel to specify the tuples to be aggregated.
+		// */}}
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
+					_ACCUMULATE_AVG(a, nulls, i, true)
+				}
+			} else {
+				for i := range col {
+					_ACCUMULATE_AVG(a, nulls, i, false)
+				}
 			}
-		} else {
-			for i := range col {
-				_ACCUMULATE_AVG(a, nulls, i, false)
+		} else
+		// {{end}}
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					_ACCUMULATE_AVG(a, nulls, i, true)
+				}
+			} else {
+				for _, i := range sel {
+					_ACCUMULATE_AVG(a, nulls, i, false)
+				}
 			}
 		}
-	} else
-	// {{end}}
-	{
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-				_ACCUMULATE_AVG(a, nulls, i, true)
-			}
-		} else {
-			for _, i := range sel {
-				_ACCUMULATE_AVG(a, nulls, i, false)
-			}
-		}
-	}
+	},
+	)
 }
 
 func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
@@ -176,10 +180,10 @@ func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	if !a.scratch.foundNonNullForCurrentGroup {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		_ASSIGN_DIV_INT64(a.scratch.vec[outputIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
+		_ASSIGN_DIV_INT64(a.col[outputIdx], a.curSum, a.curCount, a.col, _, _)
 	}
 }
 
@@ -199,6 +203,7 @@ func (a *avg_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]avg_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
@@ -217,25 +222,25 @@ func _ACCUMULATE_AVG(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 	if groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
 		// current group, the output for this group should be null.
-		if !a.scratch.foundNonNullForCurrentGroup {
+		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(a.curIdx)
 		} else {
 			// {{with .Global}}
-			_ASSIGN_DIV_INT64(a.scratch.vec[a.curIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
+			_ASSIGN_DIV_INT64(a.col[a.curIdx], a.curSum, a.curCount, a.col, _, _)
 			// {{end}}
 		}
 		a.curIdx++
 		// {{with .Global}}
-		a.scratch.curSum = zero_RET_TYPEValue
+		a.curSum = zero_RET_TYPEValue
 		// {{end}}
-		a.scratch.curCount = 0
+		a.curCount = 0
 
 		// {{/*
 		// We only need to reset this flag if there are nulls. If there are no
 		// nulls, this will be updated unconditionally below.
 		// */}}
 		// {{if .HasNulls}}
-		a.scratch.foundNonNullForCurrentGroup = false
+		a.foundNonNullForCurrentGroup = false
 		// {{end}}
 	}
 	// {{end}}
@@ -247,9 +252,9 @@ func _ACCUMULATE_AVG(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 	isNull = false
 	// {{end}}
 	if !isNull {
-		_ASSIGN_ADD(a.scratch.curSum, a.scratch.curSum, col[i], _, _, col)
-		a.scratch.curCount++
-		a.scratch.foundNonNullForCurrentGroup = true
+		_ASSIGN_ADD(a.curSum, a.curSum, col[i], _, _, col)
+		a.curCount++
+		a.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}
 

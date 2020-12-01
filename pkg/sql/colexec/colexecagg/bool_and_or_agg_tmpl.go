@@ -59,8 +59,8 @@ type bool_OP_TYPE_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
+	col        []bool
 	sawNonNull bool
-	vec        []bool
 	curAgg     bool
 }
 
@@ -72,7 +72,7 @@ func (a *bool_OP_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{else}}
 	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.vec = vec.Bool()
+	a.col = vec.Bool()
 }
 
 func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
@@ -80,39 +80,42 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	// {{if eq "_AGGKIND" "Ordered"}}
-	groups := a.groups
-	// {{/*
-	// We don't need to check whether sel is non-nil when performing
-	// hash aggregation because the hash aggregator always uses non-nil
-	// sel to specify the tuples to be aggregated.
-	// */}}
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
-				_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// {{if eq "_AGGKIND" "Ordered"}}
+		groups := a.groups
+		// {{/*
+		// We don't need to check whether sel is non-nil when performing
+		// hash aggregation because the hash aggregator always uses non-nil
+		// sel to specify the tuples to be aggregated.
+		// */}}
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+				}
+			} else {
+				for i := range col {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+				}
 			}
-		} else {
-			for i := range col {
-				_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+		} else
+		// {{end}}
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+				}
+			} else {
+				for _, i := range sel {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+				}
 			}
 		}
-	} else
-	// {{end}}
-	{
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-				_ACCUMULATE_BOOLEAN(a, nulls, i, true)
-			}
-		} else {
-			for _, i := range sel {
-				_ACCUMULATE_BOOLEAN(a, nulls, i, false)
-			}
-		}
-	}
+	},
+	)
 }
 
 func (a *bool_OP_TYPE_AGGKINDAgg) Flush(outputIdx int) {
@@ -125,7 +128,7 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.sawNonNull {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.vec[outputIdx] = a.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -145,6 +148,7 @@ func (a *bool_OP_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]bool_OP_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	// {{/*
 	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR
@@ -167,7 +171,7 @@ func _ACCUMULATE_BOOLEAN(a *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 		if !a.sawNonNull {
 			a.nulls.SetNull(a.curIdx)
 		} else {
-			a.vec[a.curIdx] = a.curAgg
+			a.col[a.curIdx] = a.curAgg
 		}
 		a.curIdx++
 		// {{with .Global}}
