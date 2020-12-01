@@ -836,9 +836,6 @@ type ExecutorTestingKnobs struct {
 
 	// DeterministicExplainAnalyze, if set, will result in overriding fields in
 	// EXPLAIN ANALYZE (PLAN) that can vary between runs (like elapsed times).
-	//
-	// Should be set together with execinfra.TestingKnobs.DeterministicStats.
-	// TODO(radu): figure out how to unify these two.
 	DeterministicExplainAnalyze bool
 }
 

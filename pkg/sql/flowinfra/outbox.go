@@ -129,6 +129,9 @@ func (m *Outbox) addRow(
 			m.encoder.AddMetadata(ctx, execinfrapb.ProducerMetadata{Err: encodingErr})
 			mustFlush = true
 		}
+		if m.statsCollectionEnabled {
+			m.stats.NetTx.TuplesSent.Add(1)
+		}
 	}
 	m.numRows++
 	var flushErr error
@@ -151,14 +154,7 @@ func (m *Outbox) flush(ctx context.Context) error {
 	}
 	msg := m.encoder.FormMessage(ctx)
 	if m.statsCollectionEnabled {
-		if m.flowCtx.Cfg.TestingKnobs.DeterministicStats {
-			// Some fields in the msg have variable sizes across different runs (e.g.
-			// metadata). To keep a useful bytes value for tests, we only count the
-			// encoded row message size.
-			m.stats.NetTx.BytesSent.Add(int64(len(msg.Data.RawBytes)))
-		} else {
-			m.stats.NetTx.BytesSent.Add(int64(msg.Size()))
-		}
+		m.stats.NetTx.BytesSent.Add(int64(msg.Size()))
 	}
 
 	if log.V(3) {

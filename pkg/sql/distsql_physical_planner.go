@@ -611,8 +611,8 @@ type PlanningCtx struct {
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
 	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
-	// If set, the result of flowSpecsToDiagram will show the types of each stream.
-	saveDiagramShowInputTypes bool
+	// Flags used if we generate the diagram (in flowSpecsToDiagram).
+	saveDiagramFlags execinfrapb.DiagramFlags
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
@@ -682,7 +682,7 @@ func (p *PlanningCtx) flowSpecsToDiagram(
 		stmtStr = p.planner.stmt.String()
 	}
 	diagram, err := execinfrapb.GeneratePlanDiagram(
-		stmtStr, flows, p.saveDiagramShowInputTypes,
+		stmtStr, flows, p.saveDiagramFlags,
 	)
 	if err != nil {
 		return nil, err

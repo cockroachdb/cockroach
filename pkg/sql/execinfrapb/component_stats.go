@@ -155,13 +155,17 @@ func (s *ComponentStats) MakeDeterministic() {
 	timeVal(&s.NetRx.WaitTime)
 	timeVal(&s.NetRx.DeserializationTime)
 	if s.NetRx.BytesReceived.HasValue() {
-		// Override to a useful value for tests.
+		// BytesReceived can be non-deterministic because some message fields have
+		// varying sizes across different runs (e.g. metadata). Override to a useful
+		// value for tests.
 		s.NetRx.BytesReceived.Set(8 * s.NetRx.TuplesReceived.Value())
 	}
 
 	// NetTx.
 	if s.NetTx.BytesSent.HasValue() {
-		// Override to a useful value for tests.
+		// BytesSent can be non-deterministic because some message fields have
+		// varying sizes across different runs (e.g. metadata). Override to a useful
+		// value for tests.
 		s.NetTx.BytesSent.Set(8 * s.NetTx.TuplesSent.Value())
 	}
 

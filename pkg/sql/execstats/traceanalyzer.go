@@ -35,7 +35,7 @@ type streamStats struct {
 // collection of flows and an accompanying trace of the flows' execution.
 // Example usage:
 //     analyzer := NewTraceAnalyzer(flows)
-//     analyzer.AddTrace(trace)
+//     analyzer.AddTrace(trace, false /* makeDeterministic */)
 //     bytesGroupedByNode, err := analyzer.GetNetworkBytesSent()
 type TraceAnalyzer struct {
 	// processorIDMap maps a processor ID to stats associated with this processor
@@ -79,7 +79,10 @@ func NewTraceAnalyzer(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *TraceAnal
 }
 
 // AddTrace adds the stats from the given trace to the TraceAnalyzer.
-func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan) error {
+//
+// If makeDeterministic is set, statistics that can vary from run to run are set
+// to fixed values; see ComponentStats.MakeDeterministic.
+func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterministic bool) error {
 	// Annotate the maps with stats extracted from the trace.
 	for _, span := range trace {
 		if span.Stats == nil {
@@ -87,13 +90,12 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan) error {
 			continue
 		}
 
-		var da types.DynamicAny
-		if err := types.UnmarshalAny(span.Stats, &da); err != nil {
+		var stats execinfrapb.ComponentStats
+		if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
 			return errors.Wrap(err, "unable to unmarshal in TraceAnalyzer")
 		}
-		stats, ok := da.Message.(*execinfrapb.ComponentStats)
-		if !ok {
-			continue
+		if makeDeterministic {
+			stats.MakeDeterministic()
 		}
 
 		// Get the processor or stream id for this span. If neither exists, this
@@ -108,7 +110,7 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan) error {
 			if processorStats == nil {
 				return errors.Errorf("trace has span for processor %d but the processor does not exist in the physical plan", id)
 			}
-			processorStats.stats = stats
+			processorStats.stats = &stats
 		} else if sid, ok := span.Tags[execinfrapb.StreamIDTagKey]; ok {
 			stringID := sid
 			id, err := strconv.Atoi(stringID)
@@ -119,7 +121,7 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan) error {
 			if streamStats == nil {
 				return errors.Errorf("trace has span for stream %d but the stream does not exist in the physical plan", id)
 			}
-			streamStats.stats = stats
+			streamStats.stats = &stats
 		}
 	}
 
@@ -128,6 +130,10 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan) error {
 
 func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) (int64, error) {
 	// We expect exactly one of BytesReceived and BytesSent to be set.
+	// It may seem like we are double-counting everything (from both the send and
+	// the receive side) but in practice only one side of each stream presents
+	// statistics (specifically the sending side in the row engine, and the
+	// receiving side in the vectorized engine).
 	if v.NetRx.BytesReceived.HasValue() {
 		if v.NetTx.BytesSent.HasValue() {
 			return 0, errors.Errorf("could not get network bytes; both BytesReceived and BytesSent are set")
