@@ -80,6 +80,10 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if err != nil {
 		return nil, err
 	}
+	var colIdxMap catalog.TableColMap
+	for i, c := range scan.cols {
+		colIdxMap.Set(c.ID, i)
+	}
 	sb := span.MakeBuilder(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
@@ -112,7 +116,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			StatName:            s.name,
 		}
 		for i, colID := range s.columns {
-			colIdx, ok := scan.colIdxMap.Get(colID)
+			colIdx, ok := colIdxMap.Get(colID)
 			if !ok {
 				panic("necessary column not scanned")
 			}
