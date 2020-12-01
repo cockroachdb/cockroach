@@ -9,6 +9,7 @@ go_library(
         "enum.go",
         "exec.go",
         "extension.go",
+        "feature_flags.go",
         "follower_reads.go",
         "iam.go",
         "partitioning.go",

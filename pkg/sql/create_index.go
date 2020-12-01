@@ -45,6 +45,7 @@ type createIndexNode struct {
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"CREATE INDEX",
 	); err != nil {

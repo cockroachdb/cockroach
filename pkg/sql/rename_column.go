@@ -38,6 +38,7 @@ type renameColumnNode struct {
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"RENAME COLUMN",
 	); err != nil {

@@ -37,6 +37,7 @@ var _ planNode = &dropTypeNode{n: nil}
 
 func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"DROP TYPE",
 	); err != nil {
