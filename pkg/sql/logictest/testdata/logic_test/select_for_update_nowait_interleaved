@@ -29,6 +29,9 @@ CREATE TABLE p1_1 (
 ) INTERLEAVE IN PARENT p2 (i)
 
 statement ok
+GRANT SELECT ON p2   TO testuser;
+GRANT SELECT ON p1_0 TO testuser;
+GRANT SELECT ON p1_1 TO testuser;
 GRANT UPDATE ON p2   TO testuser;
 GRANT UPDATE ON p1_0 TO testuser;
 GRANT UPDATE ON p1_1 TO testuser;

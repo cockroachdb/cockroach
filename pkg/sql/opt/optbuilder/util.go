@@ -549,7 +549,7 @@ func (b *Builder) resolveTableForMutation(
 func (b *Builder) resolveTable(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.Table, tree.TableName) {
-	ds, resName := b.resolveDataSource(tn, priv)
+	ds, _, resName := b.resolveDataSource(tn, priv)
 	tab, ok := ds.(cat.Table)
 	if !ok {
 		panic(sqlerrors.NewWrongObjectTypeError(tn, "table"))
@@ -561,7 +561,7 @@ func (b *Builder) resolveTable(
 // TableRef spec. If the name does not resolve to a table, or if the current
 // user does not have the given privilege, then resolveTableRef raises an error.
 func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.Table {
-	ds := b.resolveDataSourceRef(ref, priv)
+	ds, _ := b.resolveDataSourceRef(ref, priv)
 	tab, ok := ds.(cat.Table)
 	if !ok {
 		panic(sqlerrors.NewWrongObjectTypeError(ref, "table"))
@@ -569,15 +569,16 @@ func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.T
 	return tab
 }
 
-// resolveDataSource returns the data source in the catalog with the given name.
-// If the name does not resolve to a table, or if the current user does not have
-// the given privilege, then resolveDataSource raises an error.
+// resolveDataSource returns the data source in the catalog with the given name,
+// along with the table's MDDepName and data source name. If the name does not
+// resolve to a table, or if the current user does not have the given privilege,
+// then resolveDataSource raises an error.
 //
 // If the b.qualifyDataSourceNamesInAST flag is set, tn is updated to contain
 // the fully qualified name.
 func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
-) (cat.DataSource, cat.DataSourceName) {
+) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
 	var flags cat.Flags
 	if b.insideViewDef {
 		// Avoid taking table leases when we're creating a view.
@@ -587,21 +588,24 @@ func (b *Builder) resolveDataSource(
 	if err != nil {
 		panic(err)
 	}
-	b.checkPrivilege(opt.DepByName(tn), ds, priv)
+	depName := opt.DepByName(tn)
+	b.checkPrivilege(depName, ds, priv)
 
 	if b.qualifyDataSourceNamesInAST {
 		*tn = resName
 		tn.ExplicitCatalog = true
 		tn.ExplicitSchema = true
 	}
-	return ds, resName
+	return ds, depName, resName
 }
 
 // resolveDataSourceFromRef returns the data source in the catalog that matches
-// the given TableRef spec. If no data source matches, or if the current user
-// does not have the given privilege, then resolveDataSourceFromRef raises an
-// error.
-func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
+// the given TableRef spec, along with the table's MDDepName. If no data source
+// matches, or if the current user does not have the given privilege, then
+// resolveDataSourceFromRef raises an error.
+func (b *Builder) resolveDataSourceRef(
+	ref *tree.TableRef, priv privilege.Kind,
+) (cat.DataSource, opt.MDDepName) {
 	var flags cat.Flags
 	if b.insideViewDef {
 		// Avoid taking table leases when we're creating a view.
@@ -611,8 +615,9 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 	if err != nil {
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}
-	b.checkPrivilege(opt.DepByID(cat.StableID(ref.TableID)), ds, priv)
-	return ds
+	depName := opt.DepByID(cat.StableID(ref.TableID))
+	b.checkPrivilege(depName, ds, priv)
+	return ds, depName
 }
 
 // checkPrivilege ensures that the current user has the privilege needed to
