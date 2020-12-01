@@ -100,14 +100,14 @@ func (b *Builder) buildDataSource(
 			return outScope
 		}
 
-		priv := privilege.SELECT
+		ds, depName, resName := b.resolveDataSource(tn, privilege.SELECT)
+
 		locking = locking.filter(tn.ObjectName)
 		if locking.isSet() {
-			// SELECT ... FOR [KEY] UPDATE/SHARE requires UPDATE privileges.
-			priv = privilege.UPDATE
+			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
+			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
 
-		ds, resName := b.resolveDataSource(tn, priv)
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
@@ -206,14 +206,14 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.TableRef:
-		priv := privilege.SELECT
+		ds, depName := b.resolveDataSourceRef(source, privilege.SELECT)
+
 		locking = locking.filter(source.As.Alias)
 		if locking.isSet() {
-			// SELECT ... FOR [KEY] UPDATE/SHARE requires UPDATE privileges.
-			priv = privilege.UPDATE
+			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
+			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
 
-		ds := b.resolveDataSourceRef(source, priv)
 		switch t := ds.(type) {
 		case cat.Table:
 			outScope = b.buildScanFromTableRef(t, source, indexFlags, locking, inScope)
