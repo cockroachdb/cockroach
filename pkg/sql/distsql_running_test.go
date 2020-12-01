@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -142,9 +141,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			stmt.AST.StatementType(),
 			execCfg.RangeDescriptorCache,
 			txn,
-			func(ts hlc.Timestamp) {
-				execCfg.Clock.Update(ts)
-			},
+			execCfg.Clock,
 			p.ExtendedEvalContext().Tracing,
 		)
 
@@ -204,7 +201,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		tree.Rows, /* StatementType */
 		nil,       /* rangeCache */
 		txn,
-		func(hlc.Timestamp) {}, /* updateClock */
+		nil, /* clockUpdater */
 		&SessionTracing{},
 	)
 
