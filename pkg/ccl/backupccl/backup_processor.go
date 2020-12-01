@@ -9,7 +9,10 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -23,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -150,13 +154,43 @@ func runBackupProcessor(
 	if err != nil {
 		return err
 	}
-	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
+
+	storageConfByLocalityKV := make(map[string]*roachpb.ExternalStorage)
+	storeByLocalityKV := make(map[string]cloud.ExternalStorage)
 	for kv, uri := range spec.URIsByLocalityKV {
 		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, spec.User())
 		if err != nil {
 			return err
 		}
-		storageByLocalityKV[kv] = &conf
+		storageConfByLocalityKV[kv] = &conf
+
+	}
+
+	// If this is a tenant backup, we need to write the file from the SQL layer.
+	writeSSTsInProcessor := !flowCtx.Cfg.Codec.ForSystemTenant()
+
+	var defaultStore cloud.ExternalStorage
+	if writeSSTsInProcessor {
+		// Nil out stores so that the export request does attempt to write to the
+		// backup destination.
+		exportRequestDefaultConf = roachpb.ExternalStorage{}
+		exportRequestStoreByLocalityKV = nil
+
+		defaultStore, err = flowCtx.Cfg.ExternalStorage(ctx, defaultConf)
+		if err != nil {
+			return err
+		}
+		defer defaultStore.Close()
+
+		for localityKV, conf := range storageConfByLocalityKV {
+			localityStore, err := flowCtx.Cfg.ExternalStorage(ctx, *conf)
+			if err != nil {
+				return err
+			}
+			defer localityStore.Close()
+
+			storeByLocalityKV[localityKV] = localityStore
+		}
 	}
 
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
@@ -180,12 +214,13 @@ func runBackupProcessor(
 				req := &roachpb.ExportRequest{
 					RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
 					Storage:                             defaultConf,
-					StorageByLocalityKV:                 storageByLocalityKV,
+					StorageByLocalityKV:                 storageConfByLocalityKV,
 					StartTime:                           span.start,
 					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
 					MVCCFilter:                          spec.MVCCFilter,
 					Encryption:                          spec.Encryption,
 					TargetFileSize:                      targetFileSize,
+					ReturnSST:                           writeSSTsInProcessor,
 				}
 
 				// If we're doing re-attempts but are not yet in the priority regime,
@@ -245,11 +280,19 @@ func runBackupProcessor(
 					}
 				}
 
-				files := make([]BackupManifest_File, 0)
 				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 				progDetails := BackupManifest_Progress{}
 				progDetails.RevStartTime = res.StartTime
+
+				files := make([]BackupManifest_File, 0)
 				for _, file := range res.Files {
+					if writeSSTsInProcessor {
+						file.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(flowCtx.EvalCtx.NodeID.SQLInstanceID()))
+						if err := writeFile(ctx, file, defaultStore, storeByLocalityKV); err != nil {
+							return err
+						}
+					}
+
 					f := BackupManifest_File{
 						Span:        file.Span,
 						Path:        file.Path,
@@ -263,6 +306,7 @@ func runBackupProcessor(
 					}
 					files = append(files, f)
 				}
+
 				progDetails.Files = files
 				details, err := gogotypes.MarshalAny(&progDetails)
 				if err != nil {
@@ -279,6 +323,42 @@ func runBackupProcessor(
 			}
 		}
 	})
+}
+
+// writeFile writes the data specified in the export response file to the backup
+// destination. The ExportRequest will do this if its ReturnSST argument is set
+// to false. In that case, we want to write the file from the processor.
+//
+// We want to be able to control when this writing happens since it is beneficial to
+// do it at the processor level when inside a multi-tenant cluster since we can control
+// connections to external resources on a per-tenant level rather than at the shared
+// KV level. It also enables tenant access to `userfile` destinations, which store the
+// data in SQL. However, this does come at a cost since we need to incur an extra copy
+// of the data and therefore increase network and memory utilization in the cluster.
+func writeFile(
+	ctx context.Context,
+	file roachpb.ExportResponse_File,
+	defaultStore cloud.ExternalStorage,
+	storeByLocalityKV map[string]cloud.ExternalStorage,
+) error {
+	if defaultStore == nil {
+		return errors.New("no default store created when writing SST")
+	}
+
+	data := file.SST
+	locality := file.LocalityKV
+
+	exportStore := defaultStore
+	if localitySpecificStore, ok := storeByLocalityKV[locality]; ok {
+		exportStore = localitySpecificStore
+	}
+
+	log.Infof(ctx, "delme writing file %s", file.Path)
+	if err := exportStore.WriteFile(ctx, file.Path, bytes.NewReader(data)); err != nil {
+		log.VEventf(ctx, 1, "failed to put file: %+v", err)
+		return errors.Wrap(err, "writing SST")
+	}
+	return nil
 }
 
 func init() {
