@@ -78,7 +78,9 @@ func changefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	if err := featureflag.CheckEnabled(featureChangefeedEnabled,
+	if err := featureflag.CheckEnabled(
+		ctx,
+		featureChangefeedEnabled,
 		&p.ExecCfg().Settings.SV,
 		"CHANGEFEED",
 	); err != nil {

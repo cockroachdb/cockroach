@@ -32,6 +32,7 @@ type alterIndexNode struct {
 // Privileges: CREATE on table.
 func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"ALTER INDEX",
 	); err != nil {

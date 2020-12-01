@@ -31,6 +31,7 @@ type createDatabaseNode struct {
 // Privileges: superuser or CREATEDB
 func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"CREATE DATABASE",
 	); err != nil {

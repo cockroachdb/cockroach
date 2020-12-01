@@ -36,6 +36,7 @@ type dropViewNode struct {
 //          mysql requires the DROP privilege on the view.
 func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"DROP VIEW",
 	); err != nil {
