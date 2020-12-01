@@ -10,6 +10,7 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/colflow",
