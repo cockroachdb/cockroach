@@ -21,5 +21,5 @@ func init() {
 	// TODO(irfansharif): We'll want to register individual migrations with
 	// specific internal cluster versions here.
 	//
-	//  Registry[clusterversion.VersionByKey(clusterversion.VersionWhatever)] = WhateverMigration
+	//  Registry[clusterversion.ByKey(clusterversion.VersionWhatever)] = WhateverMigration
 }
