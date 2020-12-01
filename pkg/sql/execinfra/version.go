@@ -39,17 +39,21 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 42
+const Version execinfrapb.DistSQLVersion = 43
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 42
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 43
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 43 (MinAcceptedVersion: 43)
+	- Filter was removed from PostProcessSpec and a new Filterer processor was
+	  added.
 
 - Version: 42 (MinAcceptedVersion: 42)
   - A new field NeededColumns is added to TableReaderSpec which is now required

@@ -6349,14 +6349,12 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
 				<-canProceed
-				log.Infof(context.Background(), "went")
 				return nil
 			},
 		},
 		JobsTestingKnobs: &jobs.TestingKnobs{
 			BeforeUpdate: func(orig, updated jobs.JobMetadata) (err error) {
 				withJobsToFail(func(m map[int64]struct{}) {
-					log.Infof(context.Background(), "here %v %v", orig, m)
 					if _, ok := m[orig.ID]; ok && updated.Status == jobs.StatusCanceled {
 						delete(m, orig.ID)
 						err = errors.Errorf("boom")

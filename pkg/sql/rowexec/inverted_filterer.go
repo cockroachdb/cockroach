@@ -286,8 +286,7 @@ func (ifr *invertedFilterer) close() {
 	}
 }
 
-// execStatsForTrace outputs the collected invertedFilterer stats to the
-// trace. Will fail silently if the invertedFilterer is not collecting stats.
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (ifr *invertedFilterer) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(ifr.input)
 	if !ok {

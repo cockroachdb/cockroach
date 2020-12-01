@@ -145,6 +145,14 @@ message TableReaderSpec {
   repeated uint32 needed_columns = 15;
 }
 
+// FiltererSpec is the specification for a processor that filters input rows
+// according to a boolean expression.
+message FiltererSpec {
+  // A filtering expression which references the internal columns of the
+  // processor via ordinal references (@1, @2, etc).
+  optional Expression filter = 1 [(gogoproto.nullable) = false];
+}
+
 // IndexSkipTableReaderSpec is the specification for a table reader that
 // is performing a loose index scan over rows in the table. This means that
 // this reader will return distinct rows from the table while using the index

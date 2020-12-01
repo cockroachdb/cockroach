@@ -114,8 +114,7 @@ func (o *ordinalityProcessor) ConsumerClosed() {
 	o.InternalClose()
 }
 
-// execStatsForTrace outputs the collected distinct stats to the trace. Will
-// fail silently if the Distinct processor is not collecting stats.
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (o *ordinalityProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(o.input)
 	if !ok {

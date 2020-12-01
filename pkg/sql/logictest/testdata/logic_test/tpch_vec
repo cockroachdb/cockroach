@@ -631,8 +631,12 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice * l_discount) AS revenue FROM lineitem 
 └ Node 1
   └ *colexec.orderedAggregator
     └ *colexec.distinctChainOps
-      └ *rowexec.joinReader
-        └ *colfetcher.ColBatchScan
+      └ *colexec.projMultFloat64Float64Op
+        └ *colexec.selLTFloat64Float64ConstOp
+          └ *colexec.selLEFloat64Float64ConstOp
+            └ *colexec.selGEFloat64Float64ConstOp
+              └ *rowexec.joinReader
+                └ *colfetcher.ColBatchScan
 
 # Query 7
 query T
@@ -775,8 +779,11 @@ EXPLAIN (VEC) SELECT l_shipmode, sum(CASE WHEN o_orderpriority = '1-URGENT' or o
   └ *colexec.sortOp
     └ *colexec.hashAggregator
       └ *rowexec.joinReader
-        └ *rowexec.joinReader
-          └ *colfetcher.ColBatchScan
+        └ *colexec.selLTInt64Int64Op
+          └ *colexec.selLTInt64Int64Op
+            └ *colexec.selectInOpBytes
+              └ *rowexec.joinReader
+                └ *colfetcher.ColBatchScan
 
 # Query 13
 query T

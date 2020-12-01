@@ -138,34 +138,6 @@ func TestSorter(t *testing.T) {
 				{v[3], v[3], v[0]},
 			},
 		}, {
-			name: "SortFilterExpr",
-			// No specified input ordering but specified postprocess filter expression.
-			spec: execinfrapb.SorterSpec{
-				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
-					colinfo.ColumnOrdering{
-						{ColIdx: 0, Direction: asc},
-						{ColIdx: 1, Direction: asc},
-						{ColIdx: 2, Direction: asc},
-					}),
-			},
-			post:  execinfrapb.PostProcessSpec{Filter: execinfrapb.Expression{Expr: "@1 + @2 < 7"}},
-			types: rowenc.ThreeIntCols,
-			input: rowenc.EncDatumRows{
-				{v[3], v[3], v[0]},
-				{v[3], v[4], v[1]},
-				{v[1], v[0], v[4]},
-				{v[0], v[0], v[0]},
-				{v[4], v[4], v[4]},
-				{v[4], v[4], v[5]},
-				{v[3], v[2], v[0]},
-			},
-			expected: rowenc.EncDatumRows{
-				{v[0], v[0], v[0]},
-				{v[1], v[0], v[4]},
-				{v[3], v[2], v[0]},
-				{v[3], v[3], v[0]},
-			},
-		}, {
 			name: "SortMatchOrderingNoLimit",
 			// Specified match ordering length but no specified limit.
 			spec: execinfrapb.SorterSpec{
