@@ -1,11 +1,13 @@
 
-# Enums are not supported as the values for partitioning as of 20.2 because of
-# unfortunate interactions during validation. Assert that that is true.
+# Enums are supported for partitioning both by list and range.
+# In 20.2 alphas, partitioning by enums was permitted but led to
+# subsequent validation errors upon reading due to the type not
+# being hydrated, hence the reading of crdb_internal.tables.
 
 statement ok
-CREATE TYPE places AS ENUM ('us', 'eu');
+CREATE TYPE places AS ENUM ('us', 'eu', 'ap');
 
-statement error partitioning by enum values is not supported
+statement ok
 CREATE TABLE partitioned_table (
     place places, id INT8,
     PRIMARY KEY (place, id)
@@ -20,15 +22,37 @@ statement ok
 SELECT * FROM crdb_internal.tables
 
 statement ok
-CREATE TABLE partitioned_table (
+CREATE TABLE partitioned_table_2 (
     place places, id INT8,
     PRIMARY KEY (place, id)
 );
 
-statement error partitioning by enum values is not supported
-ALTER TABLE partitioned_table PARTITION BY LIST (place)
+statement ok
+ALTER TABLE partitioned_table_2 PARTITION BY LIST (place)
         (
             PARTITION us VALUES IN ('us'),
             PARTITION eu VALUES IN ('eu')
         );
+
+statement ok
+SELECT * FROM crdb_internal.tables
+
+
+statement ok
+CREATE TABLE partitioned_table_3 (
+    place places, id INT8,
+    PRIMARY KEY (place, id)
+);
+
+# Ensure that partition validation occurs at write time.
+
+statement error partitions eu and us overlap
+ALTER TABLE partitioned_table_3 PARTITION BY RANGE (place)
+        (
+            PARTITION eu VALUES FROM (MINVALUE) TO ('eu'),
+            PARTITION us VALUES FROM ('us') TO (MAXVALUE)
+        );
+
+statement ok
+SELECT * FROM crdb_internal.tables
 
