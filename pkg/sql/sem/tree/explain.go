@@ -171,7 +171,9 @@ func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
 func (node *ExplainAnalyze) Format(ctx *FmtCtx) {
 	ctx.WriteString("EXPLAIN ANALYZE ")
 	b := util.MakeStringListBuilder("(", ", ", ") ")
-	b.Add(ctx, node.Mode.String())
+	if node.Mode != ExplainPlan {
+		b.Add(ctx, node.Mode.String())
+	}
 
 	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
 		if node.Flags[f] {
@@ -186,7 +188,9 @@ func (node *ExplainAnalyze) Format(ctx *FmtCtx) {
 func (node *ExplainAnalyze) doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Keyword("EXPLAIN ANALYZE")
 	var opts []pretty.Doc
-	opts = append(opts, pretty.Keyword(node.Mode.String()))
+	if node.Mode != ExplainPlan {
+		opts = append(opts, pretty.Keyword(node.Mode.String()))
+	}
 	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
 		if node.Flags[f] {
 			opts = append(opts, pretty.Keyword(f.String()))
@@ -229,13 +233,8 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		opts.Flags[flag] = true
 	}
 	if opts.Mode == 0 {
-		if analyze {
-			// ANALYZE implies DISTSQL.
-			opts.Mode = ExplainDistSQL
-		} else {
-			// Default mode is ExplainPlan.
-			opts.Mode = ExplainPlan
-		}
+		// Default mode is ExplainPlan.
+		opts.Mode = ExplainPlan
 	}
 
 	if analyze {
