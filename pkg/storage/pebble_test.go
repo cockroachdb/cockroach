@@ -152,6 +152,7 @@ func TestPebbleIterReuse(t *testing.T) {
 		t.Fatalf("expected 10 values, got %d", valuesCount)
 	}
 	iter1.Close()
+	iter1 = nil
 
 	// Create another iterator, with no lower bound but an upper bound that
 	// is lower than the previous iterator's lower bound. This should still result
@@ -159,9 +160,9 @@ func TestPebbleIterReuse(t *testing.T) {
 	// previous iterator should get zeroed.
 	iter2 := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: []byte{10}})
 	valuesCount = 0
-	iter1.SeekGE(MVCCKey{Key: []byte{0}})
+	iter2.SeekGE(MVCCKey{Key: []byte{0}})
 	for ; ; iter2.Next() {
-		ok, err := iter1.Valid()
+		ok, err := iter2.Valid()
 		if err != nil {
 			t.Fatal(err)
 		} else if !ok {
