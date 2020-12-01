@@ -184,13 +184,11 @@ func NewColBatchScan(
 		}
 	}
 
-	semaCtx := tree.MakeSemaContext()
 	// Before we can safely use types from the table descriptor, we need to
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
 	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
-	semaCtx.TypeResolver = resolver
 	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
 		return nil, err
 	}

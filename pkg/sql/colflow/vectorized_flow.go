@@ -480,7 +480,7 @@ type vectorizedFlowCreator struct {
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
 	exprHelper                     *colexec.ExprHelper
-	typeResolver                   *descs.DistSQLTypeResolver
+	typeResolver                   descs.DistSQLTypeResolver
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
 	// It must be accessed atomically.
@@ -538,7 +538,7 @@ func newVectorizedFlowCreator(
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	typeResolver *descs.DistSQLTypeResolver,
+	typeResolver descs.DistSQLTypeResolver,
 ) *vectorizedFlowCreator {
 	creator := vectorizedFlowCreatorPool.Get().(*vectorizedFlowCreator)
 	*creator = vectorizedFlowCreator{

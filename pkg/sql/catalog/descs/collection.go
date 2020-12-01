@@ -212,7 +212,9 @@ func (tc *Collection) getLeasedDescriptorByName(
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	if desc = tc.leasedDescriptors.getByName(parentID, parentSchemaID, name); desc != nil {
-		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
+		if log.V(2) {
+			log.Eventf(ctx, "found descriptor in collection for '%s'", name)
+		}
 		return desc, false, nil
 	}
 
@@ -236,7 +238,9 @@ func (tc *Collection) getLeasedDescriptorByName(
 	}
 
 	tc.leasedDescriptors.add(desc)
-	log.VEventf(ctx, 2, "added descriptor '%s' to collection: %+v", name, desc)
+	if log.V(2) {
+		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", name, desc)
+	}
 
 	// If the descriptor we just acquired expires before the txn's deadline,
 	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
@@ -290,7 +294,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 func (tc *Collection) GetMutableTableDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*tabledesc.Mutable, error) {
-	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
+	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn.Catalog(), tn.Schema(), tn.Object(), flags)
 	if err != nil {
 		return nil, err
 	}
@@ -306,14 +310,17 @@ func (tc *Collection) GetMutableTableDescriptor(
 }
 
 func (tc *Collection) getMutableObjectDescriptor(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *kv.Txn,
+	catalogName, schemaName, objectName string,
+	flags tree.ObjectLookupFlags,
 ) (catalog.MutableDescriptor, error) {
 	if log.V(2) {
-		log.Infof(ctx, "reading mutable descriptor on '%s'", name)
+		log.Infof(ctx, "reading mutable descriptor on '%s.%s.%s'", catalogName, schemaName, objectName)
 	}
 
 	// Resolve the database.
-	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
+	db, err := tc.GetDatabaseVersion(ctx, txn, catalogName,
 		tree.DatabaseLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -326,7 +333,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, schemaName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -340,7 +347,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
 		dbID,
 		resolvedSchema.ID,
-		name.Object(),
+		objectName,
 		flags.CommonLookupFlags,
 	); refuseFurtherLookup || err != nil {
 		return nil, err
@@ -354,9 +361,9 @@ func (tc *Collection) getMutableObjectDescriptor(
 		txn,
 		tc.settings,
 		tc.codec(),
-		name.Catalog(),
-		name.Schema(),
-		name.Object(),
+		catalogName,
+		schemaName,
+		objectName,
 		flags,
 	)
 	if err != nil || obj == nil {
@@ -621,14 +628,19 @@ func (tc *Collection) GetDatabaseVersion(
 func (tc *Collection) GetTableVersion(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*tabledesc.Immutable, error) {
-	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
+	desc, err := tc.getObjectVersion(ctx, txn, tn.Catalog(), tn.Schema(), tn.Object(), flags)
 	if err != nil {
 		return nil, err
 	}
 	table, ok := desc.(*tabledesc.Immutable)
 	if !ok {
 		if flags.Required {
-			return nil, sqlerrors.NewUndefinedRelationError(tn)
+			// Copy the input TableName to avoid allocations:
+			// NewUndefinedRelationError requires that we promote TableName to a
+			// NodeFormatter, which causes the input TableName to get heap allocated
+			// even in cases where it wouldn't otherwise.
+			errorTn := *tn
+			return nil, sqlerrors.NewUndefinedRelationError(&errorTn)
 		}
 		return nil, nil
 	}
@@ -640,7 +652,10 @@ func (tc *Collection) GetTableVersion(
 }
 
 func (tc *Collection) getObjectVersion(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *kv.Txn,
+	catalogName, schemaName, objectName string,
+	flags tree.ObjectLookupFlags,
 ) (catalog.Descriptor, error) {
 	readObjectFromStore := func() (catalog.Descriptor, error) {
 		return getObjectDesc(
@@ -648,15 +663,15 @@ func (tc *Collection) getObjectVersion(
 			txn,
 			tc.settings,
 			tc.codec(),
-			name.Catalog(),
-			name.Schema(),
-			name.Object(),
+			catalogName,
+			schemaName,
+			objectName,
 			flags,
 		)
 	}
 
 	// Resolve the database.
-	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
+	db, err := tc.GetDatabaseVersion(ctx, txn, catalogName,
 		tree.DatabaseLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -669,7 +684,7 @@ func (tc *Collection) getObjectVersion(
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, schemaName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    flags.AvoidCached,
@@ -689,12 +704,12 @@ func (tc *Collection) getObjectVersion(
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-desc.
 	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
-		(name.Catalog() == systemschema.SystemDatabaseName && name.Object() != systemschema.RoleMembersTable.Name)
+		(catalogName == systemschema.SystemDatabaseName && objectName != systemschema.RoleMembersTable.Name)
 
 	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
 		dbID,
 		schemaID,
-		name.Object(),
+		objectName,
 		flags.CommonLookupFlags,
 	); refuseFurtherLookup || err != nil {
 		return nil, err
@@ -715,7 +730,7 @@ func (tc *Collection) getObjectVersion(
 		return readObjectFromStore()
 	}
 
-	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(ctx, txn, dbID, schemaID, name.Object())
+	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(ctx, txn, dbID, schemaID, objectName)
 	if err != nil {
 		return nil, err
 	}
@@ -1171,7 +1186,7 @@ func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.Immutable) {
 func (tc *Collection) GetMutableTypeDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
 ) (*typedesc.Mutable, error) {
-	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
+	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn.Catalog(), tn.Schema(), tn.Object(), flags)
 	if err != nil {
 		return nil, err
 	}
@@ -1201,7 +1216,7 @@ func (tc *Collection) GetMutableTypeVersionByID(
 func (tc *Collection) GetTypeVersion(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
 ) (*typedesc.Immutable, error) {
-	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
+	desc, err := tc.getObjectVersion(ctx, txn, tn.Catalog(), tn.Schema(), tn.Object(), flags)
 	if err != nil {
 		return nil, err
 	}
@@ -1503,9 +1518,9 @@ type DistSQLTypeResolverFactory struct {
 
 // NewTypeResolver creates a new TypeResolver that is bound under the input
 // transaction. It returns a nil resolver if the factory itself is nil.
-func (df *DistSQLTypeResolverFactory) NewTypeResolver(txn *kv.Txn) *DistSQLTypeResolver {
+func (df *DistSQLTypeResolverFactory) NewTypeResolver(txn *kv.Txn) DistSQLTypeResolver {
 	if df == nil {
-		return nil
+		return DistSQLTypeResolver{}
 	}
 	return NewDistSQLTypeResolver(df.Descriptors, txn)
 }
@@ -1526,24 +1541,22 @@ type DistSQLTypeResolver struct {
 }
 
 // NewDistSQLTypeResolver creates a new DistSQLTypeResolver.
-func NewDistSQLTypeResolver(descs *Collection, txn *kv.Txn) *DistSQLTypeResolver {
-	return &DistSQLTypeResolver{
+func NewDistSQLTypeResolver(descs *Collection, txn *kv.Txn) DistSQLTypeResolver {
+	return DistSQLTypeResolver{
 		descriptors: descs,
 		txn:         txn,
 	}
 }
 
 // ResolveType implements the tree.TypeReferenceResolver interface.
-func (dt *DistSQLTypeResolver) ResolveType(
+func (dt DistSQLTypeResolver) ResolveType(
 	context.Context, *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
-func (dt *DistSQLTypeResolver) ResolveTypeByOID(
-	ctx context.Context, oid oid.Oid,
-) (*types.T, error) {
+func (dt DistSQLTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
 	name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.UserDefinedTypeOIDToID(oid))
 	if err != nil {
 		return nil, err
@@ -1552,7 +1565,7 @@ func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 }
 
 // GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
-func (dt *DistSQLTypeResolver) GetTypeDescriptor(
+func (dt DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
 	desc, err := dt.descriptors.getDescriptorVersionByID(
@@ -1570,7 +1583,7 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.
-func (dt *DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
+func (dt DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
 	for _, t := range typs {
 		if t.UserDefined() {
 			name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.GetTypeDescID(t))
