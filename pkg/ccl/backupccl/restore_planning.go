@@ -1663,7 +1663,7 @@ func doRestorePlan(
 	//
 	// TODO(ajwerner): Remove this version check in 21.1.
 	canResetModTime := p.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
+		ctx, clusterversion.LeasedDatabaseDescriptors)
 	if err := RewriteTableDescs(
 		tables, descriptorRewrites, intoDB, canResetModTime,
 	); err != nil {

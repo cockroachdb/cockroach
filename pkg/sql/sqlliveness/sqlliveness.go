@@ -87,7 +87,7 @@ type Reader interface {
 func IsActive(ctx context.Context, settings *cluster.Settings) bool {
 	return settings.Version.IsActive(
 		ctx,
-		clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
+		clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
 	)
 }
 

@@ -261,7 +261,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// upgraded to the 20.1 betas with the problem.
 		name:                "create new system.namespace table v2",
 		workFn:              createNewSystemNamespaceDescriptor,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.NamespaceTableWithSchemas),
 		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
 	},
 	{
@@ -269,7 +269,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// StartSystemNamespaceMigration post-finalization-style migration.
 		name: "migrate system.namespace_deprecated entries into system.namespace",
 		// workFn:              migrateSystemNamespace,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.NamespaceTableWithSchemas),
 	},
 	{
 		// Introduced in v20.1, baked into v20.2.
@@ -289,22 +289,22 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v20.2.
 		name:   "add created_by columns to system.jobs",
 		workFn: alterSystemJobsAddCreatedByColumns,
-		includedInBootstrap: clusterversion.VersionByKey(
-			clusterversion.VersionAlterSystemJobsAddCreatedByColumns),
+		includedInBootstrap: clusterversion.ByKey(
+			clusterversion.AlterSystemJobsAddCreatedByColumns),
 	},
 	{
 		// Introduced in v20.2.
 		name:                "create new system.scheduled_jobs table",
 		workFn:              createScheduledJobsTable,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAddScheduledJobsTable),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.AddScheduledJobsTable),
 		newDescriptorIDs:    staticIDs(keys.ScheduledJobsTableID),
 	},
 	{
 		// Introduced in v20.2.
 		name:   "add new sqlliveness table and claim columns to system.jobs",
 		workFn: alterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-		includedInBootstrap: clusterversion.VersionByKey(
-			clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable),
+		includedInBootstrap: clusterversion.ByKey(
+			clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable),
 	},
 	{
 		// Introduced in v20.2.
@@ -313,14 +313,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// NB: no dedicated cluster version was introduced for this table at the
 		// time (4272248e573cbaa4fac436b0ea07195fcd648845). The below is the first
 		// cluster version that was added after the system.tenants table.
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAlterColumnTypeGeneral),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.AlterColumnTypeGeneral),
 		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
 	{
 		// Introduced in v20.2.
 		name:                "alter scheduled jobs",
 		workFn:              alterSystemScheduledJobsFixTableSchema,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionUpdateScheduledJobsSchema),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.UpdateScheduledJobsSchema),
 	},
 	{
 		// Introduced in v20.2.
@@ -331,7 +331,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v20.2.
 		name:                "mark non-terminal schema change jobs with a pre-20.1 format version as failed",
 		workFn:              markDeprecatedSchemaChangeJobsFailed,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionLeasedDatabaseDescriptors),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.LeasedDatabaseDescriptors),
 	},
 }
 
@@ -719,7 +719,7 @@ var systemNamespaceMigrationEnabled = settings.RegisterBoolSetting(
 func (m *Manager) StartSystemNamespaceMigration(
 	ctx context.Context, bootstrapVersion roachpb.Version,
 ) error {
-	if !bootstrapVersion.Less(clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas)) {
+	if !bootstrapVersion.Less(clusterversion.ByKey(clusterversion.NamespaceTableWithSchemas)) {
 		// Our bootstrap version is equal to or greater than 20.1, where no old
 		// namespace table is created: we can skip this migration.
 		return nil
@@ -738,7 +738,7 @@ func (m *Manager) StartSystemNamespaceMigration(
 			if !systemNamespaceMigrationEnabled.Get(&m.settings.SV) {
 				continue
 			}
-			if m.settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
+			if m.settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) {
 				break
 			}
 		}
@@ -792,7 +792,7 @@ func (m *Manager) StartSystemNamespaceMigration(
 // Only entries that do not exist in the new table are copied.
 //
 // New database and table entries continue to be written to the deprecated
-// namespace table until VersionNamespaceTableWithSchemas is active. This means
+// namespace table until NamespaceTableWithSchemas is active. This means
 // that an additional migration will be necessary in 20.2 to catch any new
 // entries which may have been missed by this one. In the meantime, namespace
 // lookups fall back to the deprecated table if a name is not found in the new

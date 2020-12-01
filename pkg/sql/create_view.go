@@ -180,7 +180,7 @@ func (n *createViewNode) startExec(params runParams) error {
 
 		if n.materialized {
 			// Ensure all nodes are the correct version.
-			if !params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionMaterializedViews) {
+			if !params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.MaterializedViews) {
 				return pgerror.New(pgcode.FeatureNotSupported,
 					"all nodes are not the correct version to use materialized views")
 			}

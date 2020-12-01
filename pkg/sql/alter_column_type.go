@@ -162,11 +162,11 @@ func alterColumnTypeGeneral(
 	// general alter column type conversions.
 	if !params.p.ExecCfg().Settings.Version.IsActive(
 		params.ctx,
-		clusterversion.VersionAlterColumnTypeGeneral,
+		clusterversion.AlterColumnTypeGeneral,
 	) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"version %v must be finalized to run this alter column type",
-			clusterversion.VersionAlterColumnTypeGeneral)
+			clusterversion.AlterColumnTypeGeneral)
 	}
 	if !params.SessionData().AlterColumnTypeGeneralEnabled {
 		return pgerror.WithCandidateCode(

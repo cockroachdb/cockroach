@@ -716,7 +716,7 @@ func (j *Job) load(ctx context.Context) error {
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		const newStmt = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
 		const oldStmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
-		hasCreatedBy := j.registry.settings.Version.IsActive(ctx, clusterversion.VersionAlterSystemJobsAddCreatedByColumns)
+		hasCreatedBy := j.registry.settings.Version.IsActive(ctx, clusterversion.AlterSystemJobsAddCreatedByColumns)
 		stmt := oldStmt
 		if hasCreatedBy {
 			stmt = newStmt

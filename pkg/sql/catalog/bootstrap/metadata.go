@@ -269,7 +269,7 @@ func LookupSystemTableDescriptorID(
 	}
 
 	if settings != nil &&
-		!settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) &&
+		!settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) &&
 		tableName == systemschema.NamespaceTableName {
 		return systemschema.DeprecatedNamespaceTable.ID
 	}

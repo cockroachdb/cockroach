@@ -99,7 +99,7 @@ type Handle interface {
 	// outbound requests. When receiving these "new" inbound requests, despite
 	// not seeing the latest active version, node2 is aware that the sending
 	// node has, and it will too, eventually.
-	IsActive(context.Context, VersionKey) bool
+	IsActive(context.Context, Key) bool
 
 	// BinaryVersion returns the build version of this binary.
 	BinaryVersion() roachpb.Version
@@ -206,7 +206,7 @@ func (v *handleImpl) SetActiveVersion(ctx context.Context, cv ClusterVersion) er
 }
 
 // IsActive implements the Handle interface.
-func (v *handleImpl) IsActive(ctx context.Context, key VersionKey) bool {
+func (v *handleImpl) IsActive(ctx context.Context, key Key) bool {
 	return version.isActive(ctx, v.sv, key)
 }
 
@@ -228,8 +228,8 @@ func (cv ClusterVersion) IsActiveVersion(v roachpb.Version) bool {
 
 // IsActive returns true if the features of the supplied version are active at
 // the running version.
-func (cv ClusterVersion) IsActive(versionKey VersionKey) bool {
-	v := VersionByKey(versionKey)
+func (cv ClusterVersion) IsActive(versionKey Key) bool {
+	v := ByKey(versionKey)
 	return cv.IsActiveVersion(v)
 }
 
