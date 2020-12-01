@@ -28,6 +28,8 @@ const (
 	RegionsFromCluster
 	// RegionsFromDatabase represents the SHOW REGIONS FROM DATABASE command.
 	RegionsFromDatabase
+	// SurvivalGoal represents the SHOW SURVIVAL GOAL command.
+	SurvivalGoal
 	// Partitions represents the SHOW PARTITIONS command.
 	Partitions
 	// Locality represents the SHOW LOCALITY command.
@@ -58,6 +60,7 @@ var showTelemetryNameMap = map[ShowTelemetryType]string{
 	RangeForRow:         "rangeforrow",
 	RegionsFromCluster:  "regions_from_cluster",
 	RegionsFromDatabase: "regions_from_database",
+	SurvivalGoal:        "survival_goal",
 	Queries:             "queries",
 	Indexes:             "indexes",
 	Constraints:         "constraints",
