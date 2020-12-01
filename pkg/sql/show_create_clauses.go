@@ -344,6 +344,9 @@ func ShowCreateSequence(
 	f.WriteString("SEQUENCE ")
 	f.FormatNode(tn)
 	opts := desc.GetSequenceOpts()
+	if opts.AsIntegerType != "" {
+		f.Printf(" AS %s", opts.AsIntegerType)
+	}
 	f.Printf(" MINVALUE %d", opts.MinValue)
 	f.Printf(" MAXVALUE %d", opts.MaxValue)
 	f.Printf(" INCREMENT %d", opts.Increment)
