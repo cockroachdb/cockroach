@@ -63,6 +63,162 @@ CREATE TABLE public.s (
    FAMILY fam_2_geom (geom)
 )
 
+# Dropping the inverted column of the index drops the index.
+statement ok
+CREATE TABLE drop_j (
+  a INT,
+  b INT,
+  j JSON,
+  INVERTED INDEX (a, j),
+  INVERTED INDEX (b, a, j),
+  FAMILY (a, b, j)
+);
+ALTER TABLE drop_j DROP COLUMN j;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE drop_j]
+----
+CREATE TABLE public.drop_j (
+   a INT8 NULL,
+   b INT8 NULL,
+   FAMILY fam_0_a_b_j_rowid (a, b, rowid)
+)
+
+# Dropping the non-inverted column of the index drops the index.
+statement ok
+CREATE TABLE drop_a (
+  a INT,
+  b INT,
+  j JSON,
+  INVERTED INDEX (a, j),
+  INVERTED INDEX (b, a, j),
+  FAMILY (a, b, j)
+);
+ALTER TABLE drop_a DROP COLUMN a;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE drop_a]
+----
+CREATE TABLE public.drop_a (
+   b INT8 NULL,
+   j JSONB NULL,
+   FAMILY fam_0_a_b_j_rowid (b, j, rowid)
+)
+
+# CREATE TABLE LIKE ... INCLUDING INDEXES copies multi-column inverted indexes.
+statement ok
+CREATE TABLE src (a INT, b INT, j JSON, INVERTED INDEX (a, j), INVERTED INDEX (a, b, j));
+CREATE TABLE dst (LIKE src INCLUDING INDEXES);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE dst]
+----
+CREATE TABLE public.dst (
+   a INT8 NULL,
+   b INT8 NULL,
+   j JSONB NULL,
+   INVERTED INDEX src_a_j_idx (a, j),
+   INVERTED INDEX src_a_b_j_idx (a, b, j),
+   FAMILY "primary" (a, b, j, rowid)
+)
+
+# Test dropping a table with a multi-column inverted index.
+statement ok
+CREATE TABLE t (i INT, s STRING, j JSON, INVERTED INDEX (i, s, j));
+DROP TABLE t;
+
+# Test selecting, inserting, updating, and deleting on a table with a
+# multi-column inverted index.
+statement ok
+CREATE TABLE t (
+  i INT,
+  s STRING,
+  j JSON,
+  INVERTED INDEX idx (i, s, j)
+)
+
+statement ok
+INSERT INTO t VALUES
+    (1, 'foo', '{"x": "y", "num": 1}'),
+    (2, 'bar', '{"x": "y", "num": 2}'),
+    (3, 'baz', '{"x": "y", "num": 3}')
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s = 'foo' AND j @> '{"x": "y"}'
+----
+1  foo  {"num": 1, "x": "y"}
+
+query ITT
+SELECT * FROM t@idx WHERE i = 1 AND s IN ('foo', 'bar') AND j @> '{"x": "y"}'
+----
+1  foo  {"num": 1, "x": "y"}
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s IN ('foo', 'bar') AND j @> '{"num": 1}'
+----
+1  foo  {"num": 1, "x": "y"}
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s IN ('foo', 'baz') AND j @> '{"x": "y"}' ORDER BY i
+----
+1  foo  {"num": 1, "x": "y"}
+3  baz  {"num": 3, "x": "y"}
+
+# Delete a row.
+statement ok
+DELETE FROM t WHERE i = 3
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s IN ('foo', 'baz') AND j @> '{"x": "y"}'
+----
+1  foo  {"num": 1, "x": "y"}
+
+# Update the JSON column of a row.
+statement ok
+UPDATE t SET j = '{"x": "y", "num": 10}' WHERE i = 1
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s = 'foo' AND j @> '{"num": 10}'
+----
+1  foo  {"num": 10, "x": "y"}
+
+# Update the non-inverted prefix columns of rows.
+statement ok
+UPDATE t SET i = 10 WHERE i = 1;
+UPDATE t SET s = 'bar' WHERE i = 2;
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (2, 10) AND s IN ('foo', 'bar') AND j @> '{"x": "y"}' ORDER BY i
+----
+2   bar  {"num": 2, "x": "y"}
+10  foo  {"num": 10, "x": "y"}
+
+# Upsert a non-conflicting row.
+statement ok
+UPSERT INTO t VALUES (3, 'bar', '{"x": "y", "num": 3}')
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s = 'bar' AND j @> '{"x": "y"}' ORDER BY i
+----
+2  bar  {"num": 2, "x": "y"}
+3  bar  {"num": 3, "x": "y"}
+
+# Upsert a conflicting row with a different JSON value.
+statement ok
+UPSERT INTO t VALUES (3, 'bar', '{"x": "y", "num": 4}')
+
+query ITT
+SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s = 'bar' AND j @> '{"num": 4}'
+----
+3  bar  {"num": 4, "x": "y"}
+
+# The non-inverted prefix columns must be constrained in order to use the index.
+statement error index "idx" is inverted and cannot be used for this query
+SELECT * FROM t@idx WHERE i = 1 AND j @> '{"num": 2}'
+
+statement error index "idx" is inverted and cannot be used for this query
+SELECT * FROM t@idx WHERE s = 'foo' AND j @> '{"num": 2}'
+
 # Backfill a multi-column inverted index.
 
 statement ok
