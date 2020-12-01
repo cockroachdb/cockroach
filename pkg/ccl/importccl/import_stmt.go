@@ -160,9 +160,9 @@ var mysqlOutAllowedOptions = makeStringSet(
 	mysqlOutfileRowSep, mysqlOutfileFieldSep, mysqlOutfileEnclose,
 	mysqlOutfileEscape, csvNullIf, csvSkip, csvRowLimit,
 )
-var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs)
+var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
-var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs)
+var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit)
 
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
@@ -546,6 +546,16 @@ func importPlanHook(
 				return err
 			}
 			format.Format = roachpb.IOFileFormat_Mysqldump
+			if override, ok := opts[csvRowLimit]; ok {
+				rowLimit, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
+				}
+				if rowLimit <= 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+				}
+				format.MysqlDump.RowLimit = int64(rowLimit)
+			}
 		case "PGCOPY":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, pgCopyAllowedOptions); err != nil {
 				return err
@@ -594,6 +604,17 @@ func importPlanHook(
 				maxRowSize = int32(sz)
 			}
 			format.PgDump.MaxRowSize = maxRowSize
+
+			if override, ok := opts[csvRowLimit]; ok {
+				rowLimit, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
+				}
+				if rowLimit <= 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+				}
+				format.PgDump.RowLimit = int64(rowLimit)
+			}
 		case "AVRO":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, avroAllowedOptions); err != nil {
 				return err
