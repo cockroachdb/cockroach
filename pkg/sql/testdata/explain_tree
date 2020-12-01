@@ -7,6 +7,8 @@ plan-string
 SELECT oid FROM t.orders WHERE oid = 123
 ----
 ----
+planning time: 0s
+execution time: 0s
 distribution: local
 vectorized: false
 
@@ -35,6 +37,8 @@ plan-string
 SELECT cid, date, value FROM t.orders
 ----
 ----
+planning time: 0s
+execution time: 0s
 distribution: local
 vectorized: false
 
@@ -63,6 +67,8 @@ plan-string
 SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
 ----
 ----
+planning time: 0s
+execution time: 0s
 distribution: local
 vectorized: false
 
@@ -139,6 +145,8 @@ plan-string
 SELECT value FROM (SELECT cid, date, value FROM t.orders)
 ----
 ----
+planning time: 0s
+execution time: 0s
 distribution: local
 vectorized: false
 
@@ -167,6 +175,8 @@ plan-string
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
 ----
 ----
+planning time: 0s
+execution time: 0s
 distribution: local
 vectorized: false
 
@@ -253,6 +263,8 @@ plan-string
 SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FROM t.movies
 ----
 ----
+planning time: 0s
+execution time: 0s
 distribution: local
 vectorized: false
 

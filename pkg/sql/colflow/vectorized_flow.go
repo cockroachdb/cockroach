@@ -393,12 +393,11 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 func finishVectorizedStatsCollectors(
 	ctx context.Context,
 	flowID execinfrapb.FlowID,
-	deterministicStats bool,
 	vectorizedStatsCollectors []colexec.VectorizedStatsCollector,
 ) {
 	flowIDString := flowID.String()
 	for _, vsc := range vectorizedStatsCollectors {
-		vsc.OutputStats(ctx, flowIDString, deterministicStats)
+		vsc.OutputStats(ctx, flowIDString)
 	}
 }
 
@@ -976,9 +975,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanRemote(ctx, "")
-						finishVectorizedStatsCollectors(
-							ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs,
-						)
+						finishVectorizedStatsCollectors(ctx, flowCtx.ID, vscs)
 						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
 					},
 				},
@@ -1004,9 +1001,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				// TODO(radu): this is a sketchy way to use this infrastructure. We
 				// aren't actually returning any stats, but we are creating and closing
 				// child spans with stats.
-				finishVectorizedStatsCollectors(
-					ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq,
-				)
+				finishVectorizedStatsCollectors(ctx, flowCtx.ID, vscq)
 				return nil
 			}
 		}
