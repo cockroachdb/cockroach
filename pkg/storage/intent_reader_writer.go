@@ -219,8 +219,11 @@ func (imr intentInterleavingReader) MVCCGetProto(
 func (imr intentInterleavingReader) NewMVCCIterator(
 	iterKind MVCCIterKind, opts IterOptions,
 ) MVCCIterator {
-	if iterKind != MVCCKeyAndIntentsIterKind {
-		panic("intentInterleavingReader should only be used with MVCCKeyAndIntentsIterKing")
+	if iterKind == MVCCKeyIterKind || !opts.MinTimestampHint.IsEmpty() ||
+		!opts.MaxTimestampHint.IsEmpty() {
+		// This iterator does not need to see separated intents (see the interface
+		// comment).
+		return imr.wrappableReader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	}
 	return newIntentInterleavingIterator(imr.wrappableReader, opts)
 }
