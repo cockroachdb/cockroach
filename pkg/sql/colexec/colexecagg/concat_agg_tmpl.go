@@ -39,13 +39,10 @@ type concat_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
-	allocator *colmem.Allocator
 	// curAgg holds the running total.
 	curAgg []byte
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -57,7 +54,6 @@ func (a *concat_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{else}}
 	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.vec = vec
 	a.col = vec.Bytes()
 }
 
@@ -67,42 +63,40 @@ func (a *concat_AGGKINDAgg) Compute(
 	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
-	a.allocator.PerformOperation(
-		[]coldata.Vec{a.vec},
-		func() {
-			// {{if eq "_AGGKIND" "Ordered"}}
-			groups := a.groups
-			// {{/*
-			// We don't need to check whether sel is non-nil when performing
-			// hash aggregation because the hash aggregator always uses non-nil
-			// sel to specify the tuples to be aggregated.
-			// */}}
-			if sel == nil {
-				_ = groups[inputLen-1]
-				if nulls.MaybeHasNulls() {
-					for i := 0; i < inputLen; i++ {
-						_ACCUMULATE_CONCAT(a, nulls, i, true)
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
-						_ACCUMULATE_CONCAT(a, nulls, i, false)
-					}
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// {{if eq "_AGGKIND" "Ordered"}}
+		groups := a.groups
+		// {{/*
+		// We don't need to check whether sel is non-nil when performing
+		// hash aggregation because the hash aggregator always uses non-nil
+		// sel to specify the tuples to be aggregated.
+		// */}}
+		if sel == nil {
+			_ = groups[inputLen-1]
+			if nulls.MaybeHasNulls() {
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_CONCAT(a, nulls, i, true)
 				}
-			} else
-			// {{end}}
-			{
-				sel = sel[:inputLen]
-				if nulls.MaybeHasNulls() {
-					for _, i := range sel {
-						_ACCUMULATE_CONCAT(a, nulls, i, true)
-					}
-				} else {
-					for _, i := range sel {
-						_ACCUMULATE_CONCAT(a, nulls, i, false)
-					}
+			} else {
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_CONCAT(a, nulls, i, false)
 				}
 			}
-		},
+		} else
+		// {{end}}
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					_ACCUMULATE_CONCAT(a, nulls, i, true)
+				}
+			} else {
+				for _, i := range sel {
+					_ACCUMULATE_CONCAT(a, nulls, i, false)
+				}
+			}
+		}
+	},
 	)
 	newCurAggSize := len(a.curAgg)
 	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
