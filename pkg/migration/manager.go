@@ -208,7 +208,7 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 	// TODO(irfansharif): We'll need to create a system table to store
 	// in-progress state of long running migrations, for introspection.
 
-	clusterVersions := clusterversion.GetVersionsBetween(from, to)
+	clusterVersions := clusterversion.ListBetween(from, to)
 	if len(clusterVersions) == 0 {
 		// We're attempt to migrate to something that's not defined in cluster
 		// versions. This only happens in tests, when we're exercising version

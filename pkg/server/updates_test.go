@@ -147,13 +147,13 @@ func TestUsageQuantization(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Between 10 and 100 queries is quantized to 10.
+	// ListBetween 10 and 100 queries is quantized to 10.
 	for i := 0; i < 30; i++ {
 		if _, err := db.Exec(`SELECT 1,2`); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// Between 100 and 10000 gets quantized to 100.
+	// ListBetween 100 and 10000 gets quantized to 100.
 	for i := 0; i < 200; i++ {
 		if _, err := db.Exec(`SELECT 1,2,3`); err != nil {
 			t.Fatal(err)

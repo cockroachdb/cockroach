@@ -322,7 +322,7 @@ func (p *planner) checkPasswordAndGetHash(
 	}
 
 	st := p.ExecCfg().Settings
-	if st.Version.IsActive(ctx, clusterversion.VersionMinPasswordLength) {
+	if st.Version.IsActive(ctx, clusterversion.MinPasswordLength) {
 		if minLength := security.MinPasswordLength.Get(&st.SV); minLength >= 1 && int64(len(password)) < minLength {
 			return hashedPassword, errors.WithHintf(security.ErrPasswordTooShort,
 				"Passwords must be %d characters or longer.", minLength)

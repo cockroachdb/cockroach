@@ -35,13 +35,13 @@ func _() {
 	_ = x[EmptyArraysInInvertedIndexes-24]
 }
 
-const _VersionKey_name = "VersionNamespaceTableWithSchemasVersionStart20_2VersionGeospatialTypeVersionEnumsVersionRangefeedLeasesVersionAlterColumnTypeGeneralVersionAlterSystemJobsAddCreatedByColumnsVersionAddScheduledJobsTableVersionUserDefinedSchemasVersionNoOriginFKIndexesVersionClientRangeInfosOnBatchResponseVersionNodeMembershipStatusVersionRangeStatsRespHasDescVersionMinPasswordLengthVersionAbortSpanBytesVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableVersionMaterializedViewsVersionBox2DTypeVersionLeasedDatabaseDescriptorsVersionUpdateScheduledJobsSchemaVersionCreateLoginPrivilegeVersionHBAForNonTLSVersion20_2VersionStart21_1VersionEmptyArraysInInvertedIndexes"
+const _Key_name = "NamespaceTableWithSchemasStart20_2GeospatialTypeEnumsRangefeedLeasesAlterColumnTypeGeneralAlterSystemJobsAddCreatedByColumnsAddScheduledJobsTableUserDefinedSchemasNoOriginFKIndexesClientRangeInfosOnBatchResponseNodeMembershipStatusRangeStatsRespHasDescMinPasswordLengthAbortSpanBytesAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableMaterializedViewsBox2DTypeLeasedDatabaseDescriptorsUpdateScheduledJobsSchemaCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1EmptyArraysInInvertedIndexes"
 
-var _VersionKey_index = [...]uint16{0, 32, 48, 69, 81, 103, 132, 173, 201, 226, 250, 288, 315, 343, 367, 388, 459, 483, 499, 531, 563, 590, 609, 620, 636, 671}
+var _Key_index = [...]uint16{0, 25, 34, 48, 53, 68, 90, 124, 145, 163, 180, 211, 231, 252, 269, 283, 347, 364, 373, 398, 423, 443, 455, 460, 469, 497}
 
 func (i Key) String() string {
-	if i < 0 || i >= Key(len(_VersionKey_index)-1) {
+	if i < 0 || i >= Key(len(_Key_index)-1) {
 		return "Key(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _VersionKey_name[_VersionKey_index[i]:_VersionKey_index[i+1]]
+	return _Key_name[_Key_index[i]:_Key_index[i+1]]
 }

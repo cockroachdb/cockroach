@@ -233,10 +233,10 @@ func (r *Replica) CheckConsistency(
 			// are consistent. Verify this only for clusters that started out on 19.1 or
 			// higher.
 			if !v.Less(roachpb.Version{Major: 19, Minor: 1}) {
-				// If version >= 19.1 but < VersionAbortSpanBytes, we want to ignore any delta
+				// If version >= 19.1 but < AbortSpanBytes, we want to ignore any delta
 				// in AbortSpanBytes when comparing stats since older versions will not be
 				// tracking abort span bytes.
-				if v.Less(clusterversion.VersionByKey(clusterversion.VersionAbortSpanBytes)) {
+				if v.Less(clusterversion.ByKey(clusterversion.AbortSpanBytes)) {
 					delta.AbortSpanBytes = 0
 					haveDelta = delta != enginepb.MVCCStats{}
 				}

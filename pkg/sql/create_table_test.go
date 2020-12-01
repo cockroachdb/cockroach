@@ -26,18 +26,18 @@ func TestIsTypeSupportedInVersion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
-		v clusterversion.VersionKey
+		v clusterversion.Key
 		t *types.T
 
 		ok bool
 	}{
-		{clusterversion.VersionGeospatialType, types.Geometry, true},
+		{clusterversion.GeospatialType, types.Geometry, true},
 	}
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s:%s", tc.v, tc.t.SQLString()), func(t *testing.T) {
 			ok, err := isTypeSupportedInVersion(
-				clusterversion.ClusterVersion{Version: clusterversion.VersionByKey(tc.v)},
+				clusterversion.ClusterVersion{Version: clusterversion.ByKey(tc.v)},
 				tc.t,
 			)
 			require.NoError(t, err)
