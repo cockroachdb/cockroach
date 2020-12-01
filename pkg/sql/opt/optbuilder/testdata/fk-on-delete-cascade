@@ -828,3 +828,134 @@ root
                      ├── m2.a:16 IS NULL
                      ├── m2.a:16 IS DISTINCT FROM CAST(NULL AS INT8)
                      └── m2.c:18 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# Test cascades to a child with a partial index.
+exec-ddl
+CREATE TABLE parent_partial (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_partial (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_partial(p) ON DELETE CASCADE,
+  i INT,
+  INDEX (p) WHERE i > 0,
+  INDEX (i) WHERE p > 0
+)
+----
+
+# Test a cascade to a child with a partial index; fast path.
+build-cascades
+DELETE FROM parent_partial WHERE p > 1
+----
+root
+ ├── delete parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent_partial
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent_partial
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── p:3 > 1
+ └── cascade
+      └── delete child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:9 child_partial.p:10 i:11
+           ├── partial index del columns: partial_index_del1:13 partial_index_del2:14
+           └── project
+                ├── columns: partial_index_del1:13 partial_index_del2:14!null c:9!null child_partial.p:10!null i:11
+                ├── select
+                │    ├── columns: c:9!null child_partial.p:10!null i:11
+                │    ├── scan child_partial
+                │    │    ├── columns: c:9!null child_partial.p:10 i:11
+                │    │    └── partial index predicates
+                │    │         ├── secondary: filters
+                │    │         │    └── i:11 > 0
+                │    │         └── secondary: filters
+                │    │              └── child_partial.p:10 > 0
+                │    └── filters
+                │         ├── child_partial.p:10 > 1
+                │         └── child_partial.p:10 IS DISTINCT FROM CAST(NULL AS INT8)
+                └── projections
+                     ├── i:11 > 0 [as=partial_index_del1:13]
+                     └── child_partial.p:10 > 0 [as=partial_index_del2:14]
+
+# Test a cascade to a child with a partial index; no fast path.
+build-cascades
+DELETE FROM parent_partial WHERE p > 1 AND random() < 0.5
+----
+root
+ ├── delete parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent_partial
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent_partial
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── (p:3 > 1) AND (random() < 0.5)
+ └── cascade
+      └── delete child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:9 child_partial.p:10 i:11
+           ├── partial index del columns: partial_index_del1:14 partial_index_del2:15
+           └── project
+                ├── columns: partial_index_del1:14 partial_index_del2:15 c:9!null child_partial.p:10 i:11
+                ├── semi-join (hash)
+                │    ├── columns: c:9!null child_partial.p:10 i:11
+                │    ├── scan child_partial
+                │    │    ├── columns: c:9!null child_partial.p:10 i:11
+                │    │    └── partial index predicates
+                │    │         ├── secondary: filters
+                │    │         │    └── i:11 > 0
+                │    │         └── secondary: filters
+                │    │              └── child_partial.p:10 > 0
+                │    ├── with-scan &1
+                │    │    ├── columns: p:13!null
+                │    │    └── mapping:
+                │    │         └──  parent_partial.p:3 => p:13
+                │    └── filters
+                │         └── child_partial.p:10 = p:13
+                └── projections
+                     ├── i:11 > 0 [as=partial_index_del1:14]
+                     └── child_partial.p:10 > 0 [as=partial_index_del2:15]
+
+# Test a cascade to a child with a partial index; delete everything.
+build-cascades
+DELETE FROM parent_partial
+----
+root
+ ├── delete parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent_partial
+ │    └── scan parent_partial
+ │         └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ └── cascade
+      └── delete child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:9 child_partial.p:10 i:11
+           ├── partial index del columns: partial_index_del1:13 partial_index_del2:14
+           └── project
+                ├── columns: partial_index_del1:13 partial_index_del2:14!null c:9!null child_partial.p:10!null i:11
+                ├── select
+                │    ├── columns: c:9!null child_partial.p:10!null i:11
+                │    ├── scan child_partial
+                │    │    ├── columns: c:9!null child_partial.p:10 i:11
+                │    │    └── partial index predicates
+                │    │         ├── secondary: filters
+                │    │         │    └── i:11 > 0
+                │    │         └── secondary: filters
+                │    │              └── child_partial.p:10 > 0
+                │    └── filters
+                │         └── child_partial.p:10 IS DISTINCT FROM CAST(NULL AS INT8)
+                └── projections
+                     ├── i:11 > 0 [as=partial_index_del1:13]
+                     └── child_partial.p:10 > 0 [as=partial_index_del2:14]

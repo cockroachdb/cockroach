@@ -118,3 +118,68 @@ root
                 │         └── (p_new:24 + p_new:24) + p_new:24 [as=column25:25]
                 └── projections
                      └── (c:15 > 100) OR (p_new:24 IS NOT NULL) [as=check1:26]
+
+# Test a cascade to a child with a partial index.
+exec-ddl
+CREATE TABLE parent_partial (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_partial (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_partial(p) ON DELETE SET NULL,
+  i INT,
+  INDEX (p) WHERE i > 0,
+  INDEX (i) WHERE p > 0
+)
+----
+
+build-cascades
+DELETE FROM parent_partial WHERE p > 1
+----
+root
+ ├── delete parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent_partial
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent_partial
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── p:3 > 1
+ └── cascade
+      └── update child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:9 child_partial.p:10 i:11
+           ├── update-mapping:
+           │    └── p_new:14 => child_partial.p:6
+           ├── partial index put columns: partial_index_put1:15 partial_index_put2:16
+           ├── partial index del columns: partial_index_put1:15 partial_index_del2:17
+           └── project
+                ├── columns: partial_index_put1:15 partial_index_put2:16 partial_index_del2:17 c:9!null child_partial.p:10 i:11 p_new:14
+                ├── project
+                │    ├── columns: p_new:14 c:9!null child_partial.p:10 i:11
+                │    ├── semi-join (hash)
+                │    │    ├── columns: c:9!null child_partial.p:10 i:11
+                │    │    ├── scan child_partial
+                │    │    │    ├── columns: c:9!null child_partial.p:10 i:11
+                │    │    │    └── partial index predicates
+                │    │    │         ├── secondary: filters
+                │    │    │         │    └── i:11 > 0
+                │    │    │         └── secondary: filters
+                │    │    │              └── child_partial.p:10 > 0
+                │    │    ├── with-scan &1
+                │    │    │    ├── columns: p:13!null
+                │    │    │    └── mapping:
+                │    │    │         └──  parent_partial.p:3 => p:13
+                │    │    └── filters
+                │    │         └── child_partial.p:10 = p:13
+                │    └── projections
+                │         └── NULL::INT8 [as=p_new:14]
+                └── projections
+                     ├── i:11 > 0 [as=partial_index_put1:15]
+                     ├── p_new:14 > 0 [as=partial_index_put2:16]
+                     └── child_partial.p:10 > 0 [as=partial_index_del2:17]

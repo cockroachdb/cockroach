@@ -731,6 +731,298 @@ root
                                     ├── c:43 = child_multi.c:45
                                     └── column3:44 = child_multi.q:47
 
+# Test a cascade to a child with a partial index.
+exec-ddl
+CREATE TABLE parent_partial (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_partial (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_partial(p) ON UPDATE CASCADE,
+  i INT,
+  INDEX (p) WHERE i > 0,
+  INDEX (i) WHERE p > 0
+)
+----
+
+build-cascades
+UPDATE parent_partial SET p = p * 10 WHERE p > 1
+----
+root
+ ├── update parent_partial
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── update-mapping:
+ │    │    └── p_new:5 => p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent_partial
+ │    └── project
+ │         ├── columns: p_new:5!null p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── select
+ │         │    ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    ├── scan parent_partial
+ │         │    │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    └── filters
+ │         │         └── p:3 > 1
+ │         └── projections
+ │              └── p:3 * 10 [as=p_new:5]
+ └── cascade
+      └── update child_partial
+           ├── columns: <none>
+           ├── fetch columns: c:10 child_partial.p:11 i:12
+           ├── update-mapping:
+           │    └── p_new:15 => child_partial.p:7
+           ├── partial index put columns: partial_index_put1:16 partial_index_put2:17
+           ├── partial index del columns: partial_index_put1:16 partial_index_del2:18
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: partial_index_put1:16 partial_index_put2:17!null partial_index_del2:18!null c:10!null child_partial.p:11!null i:12 p:14!null p_new:15!null
+           │    ├── inner-join (hash)
+           │    │    ├── columns: c:10!null child_partial.p:11!null i:12 p:14!null p_new:15!null
+           │    │    ├── scan child_partial
+           │    │    │    ├── columns: c:10!null child_partial.p:11 i:12
+           │    │    │    └── partial index predicates
+           │    │    │         ├── secondary: filters
+           │    │    │         │    └── i:12 > 0
+           │    │    │         └── secondary: filters
+           │    │    │              └── child_partial.p:11 > 0
+           │    │    ├── select
+           │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  parent_partial.p:3 => p:14
+           │    │    │    │         └──  p_new:5 => p_new:15
+           │    │    │    └── filters
+           │    │    │         └── p:14 IS DISTINCT FROM p_new:15
+           │    │    └── filters
+           │    │         └── child_partial.p:11 = p:14
+           │    └── projections
+           │         ├── i:12 > 0 [as=partial_index_put1:16]
+           │         ├── p_new:15 > 0 [as=partial_index_put2:17]
+           │         └── child_partial.p:11 > 0 [as=partial_index_del2:18]
+           └── f-k-checks
+                └── f-k-checks-item: child_partial(p) -> parent_partial(p)
+                     └── anti-join (hash)
+                          ├── columns: p_new:19!null
+                          ├── with-scan &2
+                          │    ├── columns: p_new:19!null
+                          │    └── mapping:
+                          │         └──  p_new:15 => p_new:19
+                          ├── scan parent_partial
+                          │    └── columns: parent_partial.p:20!null
+                          └── filters
+                               └── p_new:19 = parent_partial.p:20
+
+# Test a cascade to a child with a partial index with an ambiguous name.
+exec-ddl
+CREATE TABLE parent_partial_ambig (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_partial_ambig (
+  c INT PRIMARY KEY,
+  p_new INT REFERENCES parent_partial_ambig(p) ON UPDATE CASCADE,
+  i INT,
+  INDEX (i) WHERE p_new > 0
+)
+----
+
+build-cascades
+UPDATE parent_partial_ambig SET p = p * 10 WHERE p > 1
+----
+root
+ ├── update parent_partial_ambig
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── update-mapping:
+ │    │    └── p_new:5 => p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_new_ref_parent_partial_ambig
+ │    └── project
+ │         ├── columns: p_new:5!null p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── select
+ │         │    ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    ├── scan parent_partial_ambig
+ │         │    │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    └── filters
+ │         │         └── p:3 > 1
+ │         └── projections
+ │              └── p:3 * 10 [as=p_new:5]
+ └── cascade
+      └── update child_partial_ambig
+           ├── columns: <none>
+           ├── fetch columns: c:10 child_partial_ambig.p_new:11 i:12
+           ├── update-mapping:
+           │    └── p_new:15 => child_partial_ambig.p_new:7
+           ├── partial index put columns: partial_index_put1:16
+           ├── partial index del columns: partial_index_del1:17
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: partial_index_put1:16!null partial_index_del1:17!null c:10!null child_partial_ambig.p_new:11!null i:12 p:14!null p_new:15!null
+           │    ├── inner-join (hash)
+           │    │    ├── columns: c:10!null child_partial_ambig.p_new:11!null i:12 p:14!null p_new:15!null
+           │    │    ├── scan child_partial_ambig
+           │    │    │    ├── columns: c:10!null child_partial_ambig.p_new:11 i:12
+           │    │    │    └── partial index predicates
+           │    │    │         └── secondary: filters
+           │    │    │              └── child_partial_ambig.p_new:11 > 0
+           │    │    ├── select
+           │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  parent_partial_ambig.p:3 => p:14
+           │    │    │    │         └──  p_new:5 => p_new:15
+           │    │    │    └── filters
+           │    │    │         └── p:14 IS DISTINCT FROM p_new:15
+           │    │    └── filters
+           │    │         └── child_partial_ambig.p_new:11 = p:14
+           │    └── projections
+           │         ├── p_new:15 > 0 [as=partial_index_put1:16]
+           │         └── child_partial_ambig.p_new:11 > 0 [as=partial_index_del1:17]
+           └── f-k-checks
+                └── f-k-checks-item: child_partial_ambig(p_new) -> parent_partial_ambig(p)
+                     └── anti-join (hash)
+                          ├── columns: p_new:18!null
+                          ├── with-scan &2
+                          │    ├── columns: p_new:18!null
+                          │    └── mapping:
+                          │         └──  p_new:15 => p_new:18
+                          ├── scan parent_partial_ambig
+                          │    └── columns: parent_partial_ambig.p:19!null
+                          └── filters
+                               └── p_new:18 = parent_partial_ambig.p:19
+
+# Test an UPSERT that cascades to a child with a partial index.
+exec-ddl
+CREATE TABLE parent_multi_partial (
+  pk INT PRIMARY KEY,
+  p INT, q INT,
+  UNIQUE (p, q),
+  FAMILY (pk),
+  FAMILY (p),
+  FAMILY (q)
+)
+----
+
+exec-ddl
+CREATE TABLE child_multi_partial (
+  c INT PRIMARY KEY,
+  p INT, q INT,
+  i INT,
+  UNIQUE (c, q),
+  INDEX (p, q) WHERE i > 0,
+  INDEX (i) WHERE p > 0 AND q > 0,
+  CONSTRAINT fk FOREIGN KEY (p, q) REFERENCES parent_multi_partial(p, q) ON UPDATE CASCADE
+)
+----
+
+build-cascades
+UPSERT INTO parent_multi_partial VALUES (1), (2)
+----
+root
+ ├── upsert parent_multi_partial
+ │    ├── columns: <none>
+ │    ├── arbiter indexes: primary
+ │    ├── canary column: pk:7
+ │    ├── fetch columns: pk:7 p:8 q:9
+ │    ├── insert-mapping:
+ │    │    ├── column1:5 => pk:1
+ │    │    ├── column6:6 => p:2
+ │    │    └── column6:6 => q:3
+ │    ├── update-mapping:
+ │    │    ├── column6:6 => p:2
+ │    │    └── column6:6 => q:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk
+ │    └── project
+ │         ├── columns: upsert_pk:11 column1:5!null column6:6 pk:7 p:8 q:9 crdb_internal_mvcc_timestamp:10
+ │         ├── left-join (hash)
+ │         │    ├── columns: column1:5!null column6:6 pk:7 p:8 q:9 crdb_internal_mvcc_timestamp:10
+ │         │    ├── ensure-upsert-distinct-on
+ │         │    │    ├── columns: column1:5!null column6:6
+ │         │    │    ├── grouping columns: column1:5!null
+ │         │    │    ├── project
+ │         │    │    │    ├── columns: column6:6 column1:5!null
+ │         │    │    │    ├── values
+ │         │    │    │    │    ├── columns: column1:5!null
+ │         │    │    │    │    ├── (1,)
+ │         │    │    │    │    └── (2,)
+ │         │    │    │    └── projections
+ │         │    │    │         └── NULL::INT8 [as=column6:6]
+ │         │    │    └── aggregations
+ │         │    │         └── first-agg [as=column6:6]
+ │         │    │              └── column6:6
+ │         │    ├── scan parent_multi_partial
+ │         │    │    └── columns: pk:7!null p:8 q:9 crdb_internal_mvcc_timestamp:10
+ │         │    └── filters
+ │         │         └── column1:5 = pk:7
+ │         └── projections
+ │              └── CASE WHEN pk:7 IS NULL THEN column1:5 ELSE pk:7 END [as=upsert_pk:11]
+ └── cascade
+      └── update child_multi_partial
+           ├── columns: <none>
+           ├── fetch columns: c:17 child_multi_partial.p:18 child_multi_partial.q:19 i:20
+           ├── update-mapping:
+           │    ├── column6:24 => child_multi_partial.p:13
+           │    └── column6:25 => child_multi_partial.q:14
+           ├── partial index put columns: partial_index_put1:26 partial_index_put2:27
+           ├── partial index del columns: partial_index_put1:26 partial_index_del2:28
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: partial_index_put1:26 partial_index_put2:27 partial_index_del2:28!null c:17!null child_multi_partial.p:18!null child_multi_partial.q:19!null i:20 p:22!null q:23!null column6:24 column6:25
+           │    ├── inner-join (hash)
+           │    │    ├── columns: c:17!null child_multi_partial.p:18!null child_multi_partial.q:19!null i:20 p:22!null q:23!null column6:24 column6:25
+           │    │    ├── scan child_multi_partial
+           │    │    │    ├── columns: c:17!null child_multi_partial.p:18 child_multi_partial.q:19 i:20
+           │    │    │    └── partial index predicates
+           │    │    │         ├── secondary: filters
+           │    │    │         │    └── i:20 > 0
+           │    │    │         └── secondary: filters
+           │    │    │              └── (child_multi_partial.p:18 > 0) AND (child_multi_partial.q:19 > 0)
+           │    │    ├── select
+           │    │    │    ├── columns: p:22 q:23 column6:24 column6:25
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: p:22 q:23 column6:24 column6:25
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  parent_multi_partial.p:8 => p:22
+           │    │    │    │         ├──  parent_multi_partial.q:9 => q:23
+           │    │    │    │         ├──  column6:6 => column6:24
+           │    │    │    │         └──  column6:6 => column6:25
+           │    │    │    └── filters
+           │    │    │         └── (p:22 IS DISTINCT FROM column6:24) OR (q:23 IS DISTINCT FROM column6:25)
+           │    │    └── filters
+           │    │         ├── child_multi_partial.p:18 = p:22
+           │    │         └── child_multi_partial.q:19 = q:23
+           │    └── projections
+           │         ├── i:20 > 0 [as=partial_index_put1:26]
+           │         ├── (column6:24 > 0) AND (column6:25 > 0) [as=partial_index_put2:27]
+           │         └── (child_multi_partial.p:18 > 0) AND (child_multi_partial.q:19 > 0) [as=partial_index_del2:28]
+           └── f-k-checks
+                └── f-k-checks-item: child_multi_partial(p,q) -> parent_multi_partial(p,q)
+                     └── anti-join (hash)
+                          ├── columns: column6:29!null column6:30!null
+                          ├── select
+                          │    ├── columns: column6:29!null column6:30!null
+                          │    ├── with-scan &2
+                          │    │    ├── columns: column6:29 column6:30
+                          │    │    └── mapping:
+                          │    │         ├──  column6:24 => column6:29
+                          │    │         └──  column6:25 => column6:30
+                          │    └── filters
+                          │         ├── column6:29 IS NOT NULL
+                          │         └── column6:30 IS NOT NULL
+                          ├── scan parent_multi_partial
+                          │    └── columns: parent_multi_partial.p:32 parent_multi_partial.q:33
+                          └── filters
+                               ├── column6:29 = parent_multi_partial.p:32
+                               └── column6:30 = parent_multi_partial.q:33
+
 # Regression test for #57148. A check constraint or computed column in a child
 # table that references a column with the same name as the parent's synthesized
 # update column should not result in an ambiguous column reference error. In
