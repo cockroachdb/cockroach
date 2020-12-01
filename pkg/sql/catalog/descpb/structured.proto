@@ -958,6 +958,9 @@ message TableDescriptor {
     }
 
     optional SequenceOwner sequence_owner = 6 [(gogoproto.nullable) = false];
+    
+    optional string as_integer_type = 7 [(gogoproto.nullable) = false];
+
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.

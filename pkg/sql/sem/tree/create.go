@@ -1409,6 +1409,10 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 		option := &(*node)[i]
 		ctx.WriteByte(' ')
 		switch option.Name {
+		case SeqOptAs:
+			ctx.WriteString(option.Name)
+			ctx.WriteByte(' ')
+			ctx.WriteString(option.AsIntegerType.Name())
 		case SeqOptCycle, SeqOptNoCycle:
 			ctx.WriteString(option.Name)
 		case SeqOptCache:
@@ -1455,9 +1459,36 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 	}
 }
 
+// SequenceOptAs represents possible values (integer types)
+// the AS option of a CREATE SEQUENCE statement can have.
+type SequenceOptAs int
+
+// Possible AS option values (integer types).
+const (
+	SequenceOptAsInteger SequenceOptAs = iota
+	SequenceOptAsBigInt
+	SequenceOptAsSmallInt
+)
+
+func (o SequenceOptAs) String() string {
+	switch o {
+	case SequenceOptAsInteger:
+		return "integer"
+	case SequenceOptAsBigInt:
+		return "bigint"
+	case SequenceOptAsSmallInt:
+		return "smallint"
+	default:
+		panic("unknown sequence opt as value %s" + strconv.Itoa(int(o)))
+	}
+}
+
 // SequenceOption represents an option on a CREATE SEQUENCE statement.
 type SequenceOption struct {
 	Name string
+
+	// AsIntegerType specifies default min and max values of a sequence.
+	AsIntegerType *types.T
 
 	IntVal *int64
 

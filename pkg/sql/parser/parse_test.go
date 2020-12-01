@@ -392,6 +392,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TEMPORARY SEQUENCE a`},
 		{`CREATE SEQUENCE a OWNED BY b`},
 		{`CREATE SEQUENCE a OWNED BY NONE`},
+		{`CREATE SEQUENCE a AS int`},
 
 		{`CREATE EXTENSION bob`},
 		{`CREATE EXTENSION IF NOT EXISTS bob`},
@@ -1862,6 +1863,10 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b INT8, CHECK (b > 0))`},
 		{`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other (b) NOT VALID)`,
 			`CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other (b))`},
+
+		// `int` and `integer` parse to nakedIntTyoe which by default is Int/int64.
+		{`CREATE SEQUENCE a AS integer`, `CREATE SEQUENCE a AS int`},
+		{`CREATE SEQUENCE a AS bigint`, `CREATE SEQUENCE a AS int`},
 
 		{`CREATE STATISTICS a ON col1 FROM t AS OF SYSTEM TIME '2016-01-01'`,
 			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},

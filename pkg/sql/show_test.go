@@ -461,6 +461,24 @@ func TestShowCreateSequence(t *testing.T) {
 			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0`,
 			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10`,
 		},
+		// TODO: add a smallint test case - but int2 token is not supported.
+		{
+			`CREATE SEQUENCE %s AS smallint`,
+			`CREATE SEQUENCE public.%s AS int2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1`,
+		},
+		{
+			`CREATE SEQUENCE %s AS int`,
+			`CREATE SEQUENCE public.%s AS int MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+		},
+		{
+			`CREATE SEQUENCE %s AS bigint`,
+			`CREATE SEQUENCE public.%s AS int MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+		},
+		// Override int/bigint's max value with user configured max value.
+		{
+			`CREATE SEQUENCE %s AS integer MINVALUE -5 MAXVALUE 9001`,
+			`CREATE SEQUENCE public.%s AS int MINVALUE -5 MAXVALUE 9001 INCREMENT 1 START -5`,
+		},
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {

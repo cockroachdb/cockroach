@@ -2502,7 +2502,8 @@ alter_index_cmd ::=
 	partition_by
 
 sequence_option_elem ::=
-	'NO' 'CYCLE'
+	'AS' seq_opt_as_int
+	| 'NO' 'CYCLE'
 	| 'OWNED' 'BY' 'NONE'
 	| 'OWNED' 'BY' column_path
 	| 'INCREMENT' signed_iconst64
@@ -2772,6 +2773,12 @@ opt_alter_column_using ::=
 audit_mode ::=
 	'READ' 'WRITE'
 	| 'OFF'
+
+seq_opt_as_int ::=
+	'INT'
+	| 'INTEGER'
+	| 'BIGINT'
+	| 'SMALLINT'
 
 signed_iconst64 ::=
 	signed_iconst

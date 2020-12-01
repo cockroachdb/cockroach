@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
@@ -238,11 +239,20 @@ func assignSequenceOptions(
 	sequenceID descpb.ID,
 	sequenceParentID descpb.ID,
 ) error {
+
+	// Set the default integer type of a sequence.
+	var integerType = types.Int
+	var upperIntBound = int64(math.MaxInt64)
+	var lowerIntBound = int64(math.MinInt64)
+
 	// All other defaults are dependent on the value of increment,
 	// i.e. whether the sequence is ascending or descending.
 	for _, option := range optsNode {
 		if option.Name == tree.SeqOptIncrement {
 			opts.Increment = *option.IntVal
+		} else if option.Name == tree.SeqOptAs {
+			integerType = option.AsIntegerType
+			opts.AsIntegerType = integerType.Name()
 		}
 	}
 	if opts.Increment == 0 {
@@ -253,14 +263,48 @@ func assignSequenceOptions(
 
 	// Set increment-dependent defaults.
 	if setDefaults {
+
+		// TODO: Move this to a setDefaults helper function
+		opts.MinValue = math.MinInt64
+		opts.MaxValue = math.MaxInt64
+
 		if isAscending {
+			opts.Start = 1
 			opts.MinValue = 1
-			opts.MaxValue = math.MaxInt64
-			opts.Start = opts.MinValue
+
+			switch integerType {
+			case types.Int2:
+				opts.MaxValue = math.MaxInt16
+				upperIntBound = math.MaxInt16
+				lowerIntBound = math.MinInt16
+			case types.Int4:
+				opts.MaxValue = math.MaxInt32
+				upperIntBound = math.MaxInt32
+				lowerIntBound = math.MinInt32
+			case types.Int:
+				// Do nothing, it's the default.
+			default:
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"CREATE SEQUENCE option AS received type %s, must be integer", integerType)
+			}
 		} else {
-			opts.MinValue = math.MinInt64
+			opts.Start = -1
 			opts.MaxValue = -1
-			opts.Start = opts.MaxValue
+			switch integerType {
+			case types.Int2:
+				opts.MinValue = math.MinInt16
+				upperIntBound = math.MaxInt16
+				lowerIntBound = math.MinInt16
+			case types.Int4:
+				opts.MinValue = math.MinInt32
+				upperIntBound = math.MaxInt32
+				lowerIntBound = math.MinInt32
+			case types.Int:
+				// Do nothing, it's the default.
+			default:
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"CREATE SEQUENCE option AS received type %s, must be integer", integerType)
+			}
 		}
 	}
 
@@ -295,11 +339,24 @@ func assignSequenceOptions(
 		case tree.SeqOptIncrement:
 			// Do nothing; this has already been set.
 		case tree.SeqOptMinValue:
+			minValueToSet := *option.IntVal
+			if minValueToSet < lowerIntBound {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"MINVALUE (%d) must be greater than (%d) for type %s",
+					minValueToSet, lowerIntBound, integerType.Name())
+			}
 			// A value of nil represents the user explicitly saying `NO MINVALUE`.
 			if option.IntVal != nil {
 				opts.MinValue = *option.IntVal
 			}
 		case tree.SeqOptMaxValue:
+			maxValueToSet := *option.IntVal
+			if maxValueToSet > upperIntBound {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"MAXVALUE (%d) must be less than (%d) for type %s",
+					maxValueToSet, upperIntBound, integerType.Name())
+			}
+
 			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
 			if option.IntVal != nil {
 				opts.MaxValue = *option.IntVal

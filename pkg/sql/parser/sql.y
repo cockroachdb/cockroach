@@ -197,6 +197,16 @@ func (u *sqlSymUnion) arraySubscripts() tree.ArraySubscripts {
     }
     return nil
 }
+
+
+func (u *sqlSymUnion) colType2() *types.T {
+    if colType, ok := u.val.(*types.T); ok && colType != nil {
+        if colType.Family() == types.IntFamily {
+          return colType
+        }
+    }
+    return nil
+}
 func (u *sqlSymUnion) stmt() tree.Statement {
     if stmt, ok := u.val.(tree.Statement); ok {
         return stmt
@@ -241,6 +251,9 @@ func (u *sqlSymUnion) likeTableOption() tree.LikeTableOption {
 }
 func (u *sqlSymUnion) likeTableOptionList() []tree.LikeTableOption {
     return u.val.([]tree.LikeTableOption)
+}
+func (u *sqlSymUnion) sequenceOptAs() tree.SequenceOptAs {
+    return u.val.(tree.SequenceOptAs)
 }
 func (u *sqlSymUnion) colQual() tree.NamedColumnQualification {
     return u.val.(tree.NamedColumnQualification)
@@ -1119,6 +1132,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <*tree.AlterTypeAddValuePlacement> opt_add_val_placement
 %type <bool> opt_timezone
 %type <*types.T> numeric opt_numeric_modifiers
+%type <tree.SequenceOptAs> seq_opt_as_int
 %type <*types.T> opt_float
 %type <*types.T> character_with_length character_without_length
 %type <*types.T> const_datetime interval_type
@@ -6516,6 +6530,7 @@ reference_action:
 // %Category: DDL
 // %Text:
 // CREATE [TEMPORARY | TEMP] SEQUENCE <seqname>
+//   [AS <typename>]
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
 //   [MAXVALUE <maxvalue> | NO MAXVALUE]
@@ -6555,7 +6570,7 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  AS typename                  { return unimplementedWithIssueDetail(sqllex, 25110, $2.typeReference().SQLString()) }
+  AS seq_opt_as_int                  { $$.val = tree.SequenceOption{Name: tree.SeqOptAs, AsIntegerType: $2.colType()}}
 | CYCLE                        { /* SKIP DOC */
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCycle} }
 | NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptNoCycle} }
@@ -9469,6 +9484,7 @@ opt_numeric_modifiers:
     $$.val = nil
   }
 
+
 // SQL numeric data types
 numeric:
   INT
@@ -10379,6 +10395,25 @@ c_expr:
 | EXISTS select_with_parens
   {
     $$.val = &tree.Subquery{Select: $2.selectStmt(), Exists: true}
+  }
+
+// Possible option values for CREATE SEQUENCE, AS 
+seq_opt_as_int:
+  INT
+  {
+    $$.val = sqllex.(*lexer).nakedIntType
+  }
+| INTEGER
+  {
+    $$.val = sqllex.(*lexer).nakedIntType
+  }
+| BIGINT
+  {
+    $$.val = types.Int
+  }
+| SMALLINT
+  {
+    $$.val = types.Int2
   }
 
 // Productions that can be followed by a postfix operator.
