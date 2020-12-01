@@ -93,6 +93,7 @@ const (
 	addColumn               opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
 	addConstraint                         // ALTER TABLE <table> ADD CONSTRAINT <constraint> <def>
 	addForeignKeyConstraint               // ALTER TABLE <table> ADD CONSTRAINT <constraint> FOREIGN KEY (<column>) REFERENCES <table> (<column>)
+	addUniqueConstraint                   // ALTER TABLE <table> ADD CONSTRAINT <constraint> UNIQUE (<column>)
 
 	createIndex    // CREATE INDEX <index> ON <table> <def>
 	createSequence // CREATE SEQUENCE <sequence> <def>
@@ -134,6 +135,7 @@ var opFuncs = map[opType]func(*operationGenerator, *pgx.Tx) (string, error){
 	addColumn:               (*operationGenerator).addColumn,
 	addConstraint:           (*operationGenerator).addConstraint,
 	addForeignKeyConstraint: (*operationGenerator).addForeignKeyConstraint,
+	addUniqueConstraint:     (*operationGenerator).addUniqueConstraint,
 	createIndex:             (*operationGenerator).createIndex,
 	createSequence:          (*operationGenerator).createSequence,
 	createTable:             (*operationGenerator).createTable,
@@ -174,6 +176,7 @@ var opWeights = []int{
 	addColumn:               1,
 	addConstraint:           0, // TODO(spaskob): unimplemented
 	addForeignKeyConstraint: 1,
+	addUniqueConstraint:     1,
 	createIndex:             1,
 	createSequence:          1,
 	createTable:             1,
@@ -314,6 +317,57 @@ func (og *operationGenerator) addConstraint(tx *pgx.Tx) (string, error) {
 	// TODO(peter): unimplemented
 	// - Export sqlbase.randColumnTableDef.
 	return "", nil
+}
+
+func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
+	tableName, err := og.randTable(tx, og.pctExisting(true), "")
+	if err != nil {
+		return "", err
+	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT IrrelevantConstraintName UNIQUE (IrrelevantColumnName)`, tableName), nil
+	}
+
+	columnForConstraint, err := og.randColumnWithMeta(tx, *tableName, og.pctExisting(true))
+	if err != nil {
+		return "", err
+	}
+
+	constaintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
+
+	columnExistsOnTable, err := columnExistsOnTable(tx, tableName, columnForConstraint.name)
+	if err != nil {
+		return "", err
+	}
+	constraintExists, err := constraintExists(tx, constaintName)
+	if err != nil {
+		return "", err
+	}
+
+	canApplyConstraint := true
+	if columnExistsOnTable {
+		canApplyConstraint, err = canApplyUniqueConstraint(tx, tableName, []string{columnForConstraint.name})
+		if err != nil {
+			return "", err
+		}
+	}
+
+	codesWithConditions{
+		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
+		{code: pgcode.DuplicateObject, condition: constraintExists},
+		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
+	}.add(og.expectedExecErrors)
+
+	if !canApplyConstraint {
+		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
+	}
+
+	return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constaintName, columnForConstraint.name), nil
 }
 
 func (og *operationGenerator) addForeignKeyConstraint(tx *pgx.Tx) (string, error) {
