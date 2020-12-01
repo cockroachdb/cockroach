@@ -111,10 +111,10 @@ func (cb *onDeleteCascadeBuilder) Build(
 	})
 }
 
-// onDeleteCascadeBuilder is a memo.CascadeBuilder implementation for certain
-// cases of ON DELETE CASCADE where we are deleting the entire table or where we
-// can transfer a filter from the original statement instead of buffering the
-// deleted rows.
+// onDeleteFastCascadeBuilder is a memo.CascadeBuilder implementation for
+// certain cases of ON DELETE CASCADE where we are deleting the entire table or
+// where we can transfer a filter from the original statement instead of
+// buffering the deleted rows.
 //
 // It provides a method to build the cascading delete in the child table,
 // equivalent to a query like:
