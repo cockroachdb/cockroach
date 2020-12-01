@@ -22,6 +22,7 @@ func (p *planner) AlterTableRegionalAffinity(
 	ctx context.Context, n *tree.AlterTableRegionalAffinity,
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"ALTER TABLE",
 	); err != nil {

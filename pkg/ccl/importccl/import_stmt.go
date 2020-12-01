@@ -268,7 +268,9 @@ func importPlanHook(
 
 	addToFileFormatTelemetry(importStmt.FileFormat, "attempted")
 
-	if err := featureflag.CheckEnabled(featureImportEnabled,
+	if err := featureflag.CheckEnabled(
+		ctx,
+		featureImportEnabled,
 		&p.ExecCfg().Settings.SV,
 		"IMPORT",
 	); err != nil {

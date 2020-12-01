@@ -43,6 +43,7 @@ type dropIndexNode struct {
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"DROP INDEX",
 	); err != nil {

@@ -30,6 +30,7 @@ type commentOnColumnNode struct {
 // Privileges: CREATE on table.
 func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"COMMENT ON COLUMN",
 	); err != nil {

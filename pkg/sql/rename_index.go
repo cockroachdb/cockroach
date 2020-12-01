@@ -36,6 +36,7 @@ type renameIndexNode struct {
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"RENAME INDEX",
 	); err != nil {

@@ -58,6 +58,7 @@ var featureStatsEnabled = settings.RegisterPublicBoolSetting(
 
 func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
 	if err := featureflag.CheckEnabled(
+		ctx,
 		featureStatsEnabled,
 		&p.ExecCfg().Settings.SV,
 		"ANALYZE/CREATE STATISTICS",
@@ -74,6 +75,7 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 // Analyze is syntactic sugar for CreateStatistics.
 func (p *planner) Analyze(ctx context.Context, n *tree.Analyze) (planNode, error) {
 	if err := featureflag.CheckEnabled(
+		ctx,
 		featureStatsEnabled,
 		&p.ExecCfg().Settings.SV,
 		"ANALYZE/CREATE STATISTICS",
