@@ -2507,7 +2507,7 @@ func (m *TableDescriptor_Reference) Reset()         { *m = TableDescriptor_Refer
 func (m *TableDescriptor_Reference) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_Reference) ProtoMessage()    {}
 func (*TableDescriptor_Reference) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{15, 2}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{14, 2}
 }
 func (m *TableDescriptor_Reference) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2544,7 +2544,7 @@ func (m *TableDescriptor_MutationJob) Reset()         { *m = TableDescriptor_Mut
 func (m *TableDescriptor_MutationJob) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_MutationJob) ProtoMessage()    {}
 func (*TableDescriptor_MutationJob) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{15, 3}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{14, 3}
 }
 func (m *TableDescriptor_MutationJob) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2581,13 +2581,14 @@ type TableDescriptor_SequenceOpts struct {
 	// Whether the sequence is virtual.
 	Virtual       bool                                       `protobuf:"varint,5,opt,name=virtual" json:"virtual"`
 	SequenceOwner TableDescriptor_SequenceOpts_SequenceOwner `protobuf:"bytes,6,opt,name=sequence_owner,json=sequenceOwner" json:"sequence_owner"`
+	AsIntegerType string                                     `protobuf:"bytes,7,opt,name=as_integer_type,json=asIntegerType" json:"as_integer_type"`
 }
 
 func (m *TableDescriptor_SequenceOpts) Reset()         { *m = TableDescriptor_SequenceOpts{} }
 func (m *TableDescriptor_SequenceOpts) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_SequenceOpts) ProtoMessage()    {}
 func (*TableDescriptor_SequenceOpts) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{15, 4}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{14, 4}
 }
 func (m *TableDescriptor_SequenceOpts) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2627,7 +2628,7 @@ func (m *TableDescriptor_SequenceOpts_SequenceOwner) String() string {
 }
 func (*TableDescriptor_SequenceOpts_SequenceOwner) ProtoMessage() {}
 func (*TableDescriptor_SequenceOpts_SequenceOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{15, 4, 0}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{14, 4, 0}
 }
 func (m *TableDescriptor_SequenceOpts_SequenceOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2667,7 +2668,7 @@ func (m *TableDescriptor_Replacement) Reset()         { *m = TableDescriptor_Rep
 func (m *TableDescriptor_Replacement) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_Replacement) ProtoMessage()    {}
 func (*TableDescriptor_Replacement) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{15, 5}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{14, 5}
 }
 func (m *TableDescriptor_Replacement) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2704,7 +2705,7 @@ func (m *TableDescriptor_GCDescriptorMutation) Reset()         { *m = TableDescr
 func (m *TableDescriptor_GCDescriptorMutation) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_GCDescriptorMutation) ProtoMessage()    {}
 func (*TableDescriptor_GCDescriptorMutation) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{15, 6}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{14, 6}
 }
 func (m *TableDescriptor_GCDescriptorMutation) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3040,7 +3041,7 @@ func (m *DatabaseDescriptor) Reset()         { *m = DatabaseDescriptor{} }
 func (m *DatabaseDescriptor) String() string { return proto.CompactTextString(m) }
 func (*DatabaseDescriptor) ProtoMessage()    {}
 func (*DatabaseDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{16}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{15}
 }
 func (m *DatabaseDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3148,7 +3149,7 @@ func (m *DatabaseDescriptor_SchemaInfo) Reset()         { *m = DatabaseDescripto
 func (m *DatabaseDescriptor_SchemaInfo) String() string { return proto.CompactTextString(m) }
 func (*DatabaseDescriptor_SchemaInfo) ProtoMessage()    {}
 func (*DatabaseDescriptor_SchemaInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{16, 0}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{15, 0}
 }
 func (m *DatabaseDescriptor_SchemaInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3188,7 +3189,7 @@ func (m *DatabaseDescriptor_RegionConfig) Reset()         { *m = DatabaseDescrip
 func (m *DatabaseDescriptor_RegionConfig) String() string { return proto.CompactTextString(m) }
 func (*DatabaseDescriptor_RegionConfig) ProtoMessage()    {}
 func (*DatabaseDescriptor_RegionConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{16, 2}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{15, 2}
 }
 func (m *DatabaseDescriptor_RegionConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3251,7 +3252,7 @@ func (m *TypeDescriptor) Reset()         { *m = TypeDescriptor{} }
 func (m *TypeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*TypeDescriptor) ProtoMessage()    {}
 func (*TypeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{17}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{16}
 }
 func (m *TypeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3399,7 +3400,7 @@ func (m *TypeDescriptor_EnumMember) Reset()         { *m = TypeDescriptor_EnumMe
 func (m *TypeDescriptor_EnumMember) String() string { return proto.CompactTextString(m) }
 func (*TypeDescriptor_EnumMember) ProtoMessage()    {}
 func (*TypeDescriptor_EnumMember) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{17, 0}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{16, 0}
 }
 func (m *TypeDescriptor_EnumMember) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3483,7 +3484,7 @@ func (m *SchemaDescriptor) Reset()         { *m = SchemaDescriptor{} }
 func (m *SchemaDescriptor) String() string { return proto.CompactTextString(m) }
 func (*SchemaDescriptor) ProtoMessage()    {}
 func (*SchemaDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{18}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{17}
 }
 func (m *SchemaDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3586,7 +3587,7 @@ func (m *Descriptor) Reset()         { *m = Descriptor{} }
 func (m *Descriptor) String() string { return proto.CompactTextString(m) }
 func (*Descriptor) ProtoMessage()    {}
 func (*Descriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_c6d9278eb5f43f16, []int{19}
+	return fileDescriptor_structured_c6d9278eb5f43f16, []int{18}
 }
 func (m *Descriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -5188,6 +5189,9 @@ func (this *TableDescriptor_SequenceOpts) Equal(that interface{}) bool {
 		return false
 	}
 	if !this.SequenceOwner.Equal(&that1.SequenceOwner) {
+		return false
+	}
+	if this.AsIntegerType != that1.AsIntegerType {
 		return false
 	}
 	return true
@@ -8886,6 +8890,8 @@ func (m *TableDescriptor_SequenceOpts) Size() (n int) {
 	n += 1 + sovStructured(uint64(m.Start))
 	n += 2
 	l = m.SequenceOwner.Size()
+	n += 1 + l + sovStructured(uint64(l))
+	l = len(m.AsIntegerType)
 	n += 1 + l + sovStructured(uint64(l))
 	return n
 }
@@ -15362,6 +15368,35 @@ func (m *TableDescriptor_SequenceOpts) Unmarshal(dAtA []byte) error {
 			if err := m.SequenceOwner.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AsIntegerType", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.AsIntegerType = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

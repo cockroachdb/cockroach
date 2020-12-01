@@ -1278,3 +1278,10 @@ ALTER SEQUENCE db2.seq OWNED BY db1.t.a
 
 statement ok
 CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a
+
+# Verify CREATE SEQUENCE ... AS 
+statement ok
+CREATE SEQUENCE a_seq AS smallint
+
+#statement error pgcode 22023 MINVALUE \(-1000000\) must be greater than \(-32768\) for type int2
+#CREATE SEQUENCE public.a_seq AS smallint START WITH 1 INCREMENT BY 1 MINVALUE -1000000
