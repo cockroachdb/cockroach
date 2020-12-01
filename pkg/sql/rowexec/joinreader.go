@@ -674,8 +674,7 @@ func (jr *joinReader) close() {
 	}
 }
 
-// execStatsForTrace outputs the collected joinReader stats to the trace. Will
-// fail silently if the joinReader is not collecting stats.
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(jr.input)
 	if !ok {

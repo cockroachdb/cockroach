@@ -187,6 +187,9 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		}
 		return nil
 
+	case spec.Core.Filterer != nil:
+		return nil
+
 	case spec.Core.Aggregator != nil:
 		aggSpec := spec.Core.Aggregator
 		needHash, err := needHashAggregator(aggSpec)
@@ -290,6 +293,7 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	switch {
 	case spec.Core.Noop != nil:
 	case spec.Core.TableReader != nil:
+	case spec.Core.Filterer != nil:
 	case spec.Core.JoinReader != nil:
 	case spec.Core.Sorter != nil:
 	case spec.Core.Aggregator != nil:
@@ -411,10 +415,10 @@ func (r opResult) createDiskBackedSort(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen),
 		)
-	} else if post.Limit != 0 && post.Filter.Empty() && post.Limit < math.MaxUint64-post.Offset {
-		// There is a limit specified with no post-process filter, so we know
-		// exactly how many rows the sorter should output. The last part of the
-		// condition is making sure there is no overflow.
+	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
+		// There is a limit specified, so we know exactly how many rows the sorter
+		// should output. The last part of the condition is making sure there is no
+		// overflow.
 		//
 		// Choose a top K sorter, which uses a heap to avoid storing more rows
 		// than necessary.
@@ -726,6 +730,19 @@ func NewColOperator(
 			// performing long operations.
 			result.Op = colexec.NewCancelChecker(result.Op)
 			result.ColumnTypes = scanOp.ResultTypes
+
+		case core.Filterer != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return r, err
+			}
+
+			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
+			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
+			result.Op = inputs[0]
+			if err := result.planAndMaybeWrapFilter(ctx, flowCtx, evalCtx, args, core.Filterer.Filter, factory); err != nil {
+				return r, err
+			}
+
 		case core.Aggregator != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
 				return r, err
@@ -935,10 +952,9 @@ func NewColOperator(
 			}
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
-				if err =
-					result.planAndMaybeWrapOnExprAsFilter(
-						ctx, flowCtx, evalCtx, args, core.HashJoiner.OnExpr, factory,
-					); err != nil {
+				if err = result.planAndMaybeWrapFilter(
+					ctx, flowCtx, evalCtx, args, core.HashJoiner.OnExpr, factory,
+				); err != nil {
 					return r, err
 				}
 			}
@@ -996,7 +1012,7 @@ func NewColOperator(
 			}
 
 			if onExpr != nil {
-				if err = result.planAndMaybeWrapOnExprAsFilter(
+				if err = result.planAndMaybeWrapFilter(
 					ctx, flowCtx, evalCtx, args, *onExpr, factory,
 				); err != nil {
 					return r, err
@@ -1227,36 +1243,44 @@ func NewColOperator(
 	return r, err
 }
 
-// planAndMaybeWrapOnExprAsFilter plans a joiner ON expression as a filter. If
-// the filter is unsupported, it is planned as a wrapped noop processor with
-// the filter as a post-processing stage.
-func (r opResult) planAndMaybeWrapOnExprAsFilter(
+// planAndMaybeWrapFilter plans a filter. If the filter is unsupported, it is
+// planned as a wrapped filterer processor.
+func (r opResult) planAndMaybeWrapFilter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
 	args *colexec.NewColOperatorArgs,
-	onExpr execinfrapb.Expression,
+	filter execinfrapb.Expression,
 	factory coldata.ColumnFactory,
 ) error {
-	ppr := postProcessResult{
-		Op:          r.Op,
-		ColumnTypes: r.ColumnTypes,
-	}
-	if err := ppr.planFilterExpr(ctx, flowCtx, evalCtx, onExpr, args.StreamingMemAccount, factory, args.ExprHelper); err != nil {
+	op, err := planFilterExpr(
+		ctx, flowCtx, evalCtx, r.Op, r.ColumnTypes, filter, args.StreamingMemAccount, factory, args.ExprHelper,
+	)
+	if err != nil {
 		// ON expression planning failed. Fall back to planning the filter
 		// using row execution.
 		if log.V(2) {
 			log.Infof(
 				ctx,
 				"vectorized join ON expr planning failed with error %v ON expr is %s, attempting to wrap as a row source",
-				err, onExpr.String(),
+				err, filter.String(),
 			)
 		}
 
-		onExprAsFilter := &execinfrapb.PostProcessSpec{Filter: onExpr}
-		return r.wrapPostProcessSpec(ctx, flowCtx, args, onExprAsFilter, args.Spec.ResultTypes, factory, err)
+		filtererSpec := &execinfrapb.ProcessorSpec{
+			Core: execinfrapb.ProcessorCoreUnion{
+				Filterer: &execinfrapb.FiltererSpec{
+					Filter: filter,
+				},
+			},
+			ResultTypes: args.Spec.ResultTypes,
+		}
+		return r.createAndWrapRowSource(
+			ctx, flowCtx, args, []colexecbase.Operator{r.Op}, [][]*types.T{r.ColumnTypes},
+			filtererSpec, factory, err,
+		)
 	}
-	r.updateWithPostProcessResult(ppr)
+	r.Op = op
 	return nil
 }
 
@@ -1297,12 +1321,6 @@ func (r *postProcessResult) planPostProcessSpec(
 	post *execinfrapb.PostProcessSpec,
 	factory coldata.ColumnFactory,
 ) error {
-	if !post.Filter.Empty() {
-		if err := r.planFilterExpr(ctx, flowCtx, evalCtx, post.Filter, args.StreamingMemAccount, factory, args.ExprHelper); err != nil {
-			return err
-		}
-	}
-
 	if post.Projection {
 		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, post.OutputColumns)
 	} else if post.RenderExprs != nil {
@@ -1439,43 +1457,43 @@ func (r opResult) updateWithPostProcessResult(ppr postProcessResult) {
 }
 
 // planFilterExpr creates all operators to implement filter expression.
-func (r *postProcessResult) planFilterExpr(
+func planFilterExpr(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
+	input colexecbase.Operator,
+	columnTypes []*types.T,
 	filter execinfrapb.Expression,
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
 	helper *colexec.ExprHelper,
-) error {
+) (colexecbase.Operator, error) {
 	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
-	expr, err := helper.ProcessExpr(filter, semaCtx, evalCtx, r.ColumnTypes)
+	expr, err := helper.ProcessExpr(filter, semaCtx, evalCtx, columnTypes)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if expr == tree.DNull {
 		// The filter expression is tree.DNull meaning that it is always false, so
 		// we put a zero operator.
-		r.Op = colexec.NewZeroOp(r.Op)
-		return nil
+		return colexec.NewZeroOp(input), nil
 	}
-	var filterColumnTypes []*types.T
-	r.Op, _, filterColumnTypes, err = planSelectionOperators(
-		ctx, evalCtx, expr, r.ColumnTypes, r.Op, acc, factory,
+	op, _, filterColumnTypes, err := planSelectionOperators(
+		ctx, evalCtx, expr, columnTypes, input, acc, factory,
 	)
 	if err != nil {
-		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
+		return nil, errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
 	}
-	if len(filterColumnTypes) > len(r.ColumnTypes) {
+	if len(filterColumnTypes) > len(columnTypes) {
 		// Additional columns were appended to store projections while evaluating
 		// the filter. Project them away.
 		var outputColumns []uint32
-		for i := range r.ColumnTypes {
+		for i := range columnTypes {
 			outputColumns = append(outputColumns, uint32(i))
 		}
-		r.Op = colexec.NewSimpleProjectOp(r.Op, len(filterColumnTypes), outputColumns)
+		op = colexec.NewSimpleProjectOp(op, len(filterColumnTypes), outputColumns)
 	}
-	return nil
+	return op, nil
 }
 
 // addProjection adds a simple projection on top of op according to projection

@@ -618,127 +618,117 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 			for _, testSpec := range testSpecs {
 				for nCols := 1; nCols <= maxCols; nCols++ {
 					for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
-						for _, addFilter := range getAddFilterOptions(testSpec.joinType, nEqCols < nCols) {
-							triedWithoutOnExpr, triedWithOnExpr := false, false
-							if !testSpec.onExprSupported {
-								triedWithOnExpr = true
+						triedWithoutOnExpr, triedWithOnExpr := false, false
+						if !testSpec.onExprSupported {
+							triedWithOnExpr = true
+						}
+						for !triedWithoutOnExpr || !triedWithOnExpr {
+							var (
+								lRows, rRows             rowenc.EncDatumRows
+								lEqCols, rEqCols         []uint32
+								lInputTypes, rInputTypes []*types.T
+								usingRandomTypes         bool
+							)
+							if rng.Float64() < randTypesProbability {
+								lInputTypes = generateRandomSupportedTypes(rng, nCols)
+								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+								rInputTypes = append(rInputTypes[:0], lInputTypes...)
+								rEqCols = append(rEqCols[:0], lEqCols...)
+								rng.Shuffle(nEqCols, func(i, j int) {
+									iColIdx, jColIdx := rEqCols[i], rEqCols[j]
+									rInputTypes[iColIdx], rInputTypes[jColIdx] = rInputTypes[jColIdx], rInputTypes[iColIdx]
+									rEqCols[i], rEqCols[j] = rEqCols[j], rEqCols[i]
+								})
+								rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
+								lRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
+								rRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
+								usingRandomTypes = true
+							} else {
+								lInputTypes = intTyps[:nCols]
+								rInputTypes = lInputTypes
+								lRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								rRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+								rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 							}
-							for !triedWithoutOnExpr || !triedWithOnExpr {
-								var (
-									lRows, rRows             rowenc.EncDatumRows
-									lEqCols, rEqCols         []uint32
-									lInputTypes, rInputTypes []*types.T
-									usingRandomTypes         bool
+
+							var outputTypes []*types.T
+							if testSpec.joinType.ShouldIncludeLeftColsInOutput() {
+								outputTypes = append(outputTypes, lInputTypes...)
+							}
+							if testSpec.joinType.ShouldIncludeRightColsInOutput() {
+								outputTypes = append(outputTypes, rInputTypes...)
+							}
+							outputColumns := make([]uint32, len(outputTypes))
+							for i := range outputColumns {
+								outputColumns[i] = uint32(i)
+							}
+
+							var onExpr execinfrapb.Expression
+							if triedWithoutOnExpr {
+								colTypes := append(lInputTypes, rInputTypes...)
+								onExpr = generateFilterExpr(
+									rng, nCols, nEqCols, colTypes, usingRandomTypes, false, /* forceSingleSide */
 								)
-								if rng.Float64() < randTypesProbability {
-									lInputTypes = generateRandomSupportedTypes(rng, nCols)
-									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-									rInputTypes = append(rInputTypes[:0], lInputTypes...)
-									rEqCols = append(rEqCols[:0], lEqCols...)
-									rng.Shuffle(nEqCols, func(i, j int) {
-										iColIdx, jColIdx := rEqCols[i], rEqCols[j]
-										rInputTypes[iColIdx], rInputTypes[jColIdx] = rInputTypes[jColIdx], rInputTypes[iColIdx]
-										rEqCols[i], rEqCols[j] = rEqCols[j], rEqCols[i]
-									})
-									rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
-									lRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
-									rRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
-									usingRandomTypes = true
-								} else {
-									lInputTypes = intTyps[:nCols]
-									rInputTypes = lInputTypes
-									lRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-									rRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-									rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+							}
+							hjSpec := &execinfrapb.HashJoinerSpec{
+								LeftEqColumns:  lEqCols,
+								RightEqColumns: rEqCols,
+								OnExpr:         onExpr,
+								Type:           testSpec.joinType,
+							}
+							pspec := &execinfrapb.ProcessorSpec{
+								Input: []execinfrapb.InputSyncSpec{
+									{ColumnTypes: lInputTypes},
+									{ColumnTypes: rInputTypes},
+								},
+								Core: execinfrapb.ProcessorCoreUnion{HashJoiner: hjSpec},
+								Post: execinfrapb.PostProcessSpec{
+									Projection:    true,
+									OutputColumns: outputColumns,
+								},
+								ResultTypes: outputTypes,
+							}
+							args := verifyColOperatorArgs{
+								anyOrder:       true,
+								inputTypes:     [][]*types.T{lInputTypes, rInputTypes},
+								inputs:         []rowenc.EncDatumRows{lRows, rRows},
+								pspec:          pspec,
+								forceDiskSpill: spillForced,
+								// It is possible that we have a filter that is always false, and this
+								// will allow us to plan a zero operator which always returns a zero
+								// batch. In such case, the spilling might not occur and that's ok.
+								forcedDiskSpillMightNotOccur: !onExpr.Empty(),
+								numForcedRepartitions:        2,
+								rng:                          rng,
+							}
+							if testSpec.joinType.IsSetOpJoin() && nEqCols < nCols {
+								// The output of set operation joins is not fully
+								// deterministic when there are non-equality
+								// columns, however, the rows must match on the
+								// equality columns between vectorized and row
+								// executions.
+								args.colIdxsToCheckForEquality = make([]int, nEqCols)
+								for i := range args.colIdxsToCheckForEquality {
+									args.colIdxsToCheckForEquality[i] = int(lEqCols[i])
 								}
+							}
 
-								var outputTypes []*types.T
-								if testSpec.joinType.ShouldIncludeLeftColsInOutput() {
-									outputTypes = append(outputTypes, lInputTypes...)
-								}
-								if testSpec.joinType.ShouldIncludeRightColsInOutput() {
-									outputTypes = append(outputTypes, rInputTypes...)
-								}
-								outputColumns := make([]uint32, len(outputTypes))
-								for i := range outputColumns {
-									outputColumns[i] = uint32(i)
-								}
-
-								var filter, onExpr execinfrapb.Expression
-								if addFilter {
-									forceSingleSide := !testSpec.joinType.ShouldIncludeLeftColsInOutput() ||
-										!testSpec.joinType.ShouldIncludeRightColsInOutput()
-									filter = generateFilterExpr(
-										rng, nCols, nEqCols, outputTypes, usingRandomTypes, forceSingleSide,
-									)
-								}
-								if triedWithoutOnExpr {
-									colTypes := append(lInputTypes, rInputTypes...)
-									onExpr = generateFilterExpr(
-										rng, nCols, nEqCols, colTypes, usingRandomTypes, false, /* forceSingleSide */
-									)
-								}
-								hjSpec := &execinfrapb.HashJoinerSpec{
-									LeftEqColumns:  lEqCols,
-									RightEqColumns: rEqCols,
-									OnExpr:         onExpr,
-									Type:           testSpec.joinType,
-								}
-								pspec := &execinfrapb.ProcessorSpec{
-									Input: []execinfrapb.InputSyncSpec{
-										{ColumnTypes: lInputTypes},
-										{ColumnTypes: rInputTypes},
-									},
-									Core: execinfrapb.ProcessorCoreUnion{HashJoiner: hjSpec},
-									Post: execinfrapb.PostProcessSpec{
-										Projection:    true,
-										OutputColumns: outputColumns,
-										Filter:        filter,
-									},
-									ResultTypes: outputTypes,
-								}
-								args := verifyColOperatorArgs{
-									anyOrder:       true,
-									inputTypes:     [][]*types.T{lInputTypes, rInputTypes},
-									inputs:         []rowenc.EncDatumRows{lRows, rRows},
-									pspec:          pspec,
-									forceDiskSpill: spillForced,
-									// It is possible that we have a filter that is always false, and this
-									// will allow us to plan a zero operator which always returns a zero
-									// batch. In such case, the spilling might not occur and that's ok.
-									forcedDiskSpillMightNotOccur: !filter.Empty() || !onExpr.Empty(),
-									numForcedRepartitions:        2,
-									rng:                          rng,
-								}
-								if testSpec.joinType.IsSetOpJoin() && nEqCols < nCols {
-									// The output of set operation joins is not fully
-									// deterministic when there are non-equality
-									// columns, however, the rows must match on the
-									// equality columns between vectorized and row
-									// executions.
-									args.colIdxsToCheckForEquality = make([]int, nEqCols)
-									for i := range args.colIdxsToCheckForEquality {
-										args.colIdxsToCheckForEquality[i] = int(lEqCols[i])
-									}
-								}
-
-								if err := verifyColOperator(t, args); err != nil {
-									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+
-										" filter = %q seed = %d run = %d ---\n",
-										spillForced, testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
-									fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
-									prettyPrintTypes(lInputTypes, "left_table" /* tableName */)
-									prettyPrintTypes(rInputTypes, "right_table" /* tableName */)
-									prettyPrintInput(lRows, lInputTypes, "left_table" /* tableName */)
-									prettyPrintInput(rRows, rInputTypes, "right_table" /* tableName */)
-									t.Fatal(err)
-								}
-								if onExpr.Expr == "" {
-									triedWithoutOnExpr = true
-								} else {
-									triedWithOnExpr = true
-								}
+							if err := verifyColOperator(t, args); err != nil {
+								fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+
+									" q seed = %d run = %d ---\n",
+									spillForced, testSpec.joinType.String(), onExpr.Expr, seed, run)
+								fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
+								prettyPrintTypes(lInputTypes, "left_table" /* tableName */)
+								prettyPrintTypes(rInputTypes, "right_table" /* tableName */)
+								prettyPrintInput(lRows, lInputTypes, "left_table" /* tableName */)
+								prettyPrintInput(rRows, rInputTypes, "right_table" /* tableName */)
+								t.Fatal(err)
+							}
+							if onExpr.Expr == "" {
+								triedWithoutOnExpr = true
+							} else {
+								triedWithOnExpr = true
 							}
 						}
 					}
@@ -824,133 +814,124 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-					for _, addFilter := range getAddFilterOptions(testSpec.joinType, nOrderingCols < nCols) {
-						triedWithoutOnExpr, triedWithOnExpr := false, false
-						if !testSpec.onExprSupported {
-							triedWithOnExpr = true
+					triedWithoutOnExpr, triedWithOnExpr := false, false
+					if !testSpec.onExprSupported {
+						triedWithOnExpr = true
+					}
+					for !triedWithoutOnExpr || !triedWithOnExpr {
+						var (
+							lRows, rRows                 rowenc.EncDatumRows
+							lInputTypes, rInputTypes     []*types.T
+							lOrderingCols, rOrderingCols []execinfrapb.Ordering_Column
+							usingRandomTypes             bool
+						)
+						if rng.Float64() < randTypesProbability {
+							lInputTypes = generateRandomSupportedTypes(rng, nCols)
+							lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+							rInputTypes = append(rInputTypes[:0], lInputTypes...)
+							rOrderingCols = append(rOrderingCols[:0], lOrderingCols...)
+							rng.Shuffle(nOrderingCols, func(i, j int) {
+								iColIdx, jColIdx := rOrderingCols[i].ColIdx, rOrderingCols[j].ColIdx
+								rInputTypes[iColIdx], rInputTypes[jColIdx] = rInputTypes[jColIdx], rInputTypes[iColIdx]
+								rOrderingCols[i], rOrderingCols[j] = rOrderingCols[j], rOrderingCols[i]
+							})
+							rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
+							lRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
+							rRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
+							usingRandomTypes = true
+						} else {
+							lInputTypes = intTyps[:nCols]
+							rInputTypes = lInputTypes
+							lRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+							rRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+							lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+							rOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
 						}
-						for !triedWithoutOnExpr || !triedWithOnExpr {
-							var (
-								lRows, rRows                 rowenc.EncDatumRows
-								lInputTypes, rInputTypes     []*types.T
-								lOrderingCols, rOrderingCols []execinfrapb.Ordering_Column
-								usingRandomTypes             bool
-							)
-							if rng.Float64() < randTypesProbability {
-								lInputTypes = generateRandomSupportedTypes(rng, nCols)
-								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
-								rInputTypes = append(rInputTypes[:0], lInputTypes...)
-								rOrderingCols = append(rOrderingCols[:0], lOrderingCols...)
-								rng.Shuffle(nOrderingCols, func(i, j int) {
-									iColIdx, jColIdx := rOrderingCols[i].ColIdx, rOrderingCols[j].ColIdx
-									rInputTypes[iColIdx], rInputTypes[jColIdx] = rInputTypes[jColIdx], rInputTypes[iColIdx]
-									rOrderingCols[i], rOrderingCols[j] = rOrderingCols[j], rOrderingCols[i]
-								})
-								rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
-								lRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
-								rRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
-								usingRandomTypes = true
-							} else {
-								lInputTypes = intTyps[:nCols]
-								rInputTypes = lInputTypes
-								lRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-								rRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
-								rOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
-							}
-							// Set the directions of both columns to be the same.
-							for i, lCol := range lOrderingCols {
-								rOrderingCols[i].Direction = lCol.Direction
-							}
+						// Set the directions of both columns to be the same.
+						for i, lCol := range lOrderingCols {
+							rOrderingCols[i].Direction = lCol.Direction
+						}
 
-							lMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: lOrderingCols})
-							rMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: rOrderingCols})
-							sort.Slice(lRows, func(i, j int) bool {
-								cmp, err := lRows[i].Compare(lInputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
-								if err != nil {
-									t.Fatal(err)
-								}
-								return cmp < 0
-							})
-							sort.Slice(rRows, func(i, j int) bool {
-								cmp, err := rRows[i].Compare(rInputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
-								if err != nil {
-									t.Fatal(err)
-								}
-								return cmp < 0
-							})
-							var outputTypes []*types.T
-							if testSpec.joinType.ShouldIncludeLeftColsInOutput() {
-								outputTypes = append(outputTypes, lInputTypes...)
-							}
-							if testSpec.joinType.ShouldIncludeRightColsInOutput() {
-								outputTypes = append(outputTypes, rInputTypes...)
-							}
-							outputColumns := make([]uint32, len(outputTypes))
-							for i := range outputColumns {
-								outputColumns[i] = uint32(i)
-							}
-
-							var filter, onExpr execinfrapb.Expression
-							if addFilter {
-								forceSingleSide := !testSpec.joinType.ShouldIncludeLeftColsInOutput() ||
-									!testSpec.joinType.ShouldIncludeRightColsInOutput()
-								filter = generateFilterExpr(
-									rng, nCols, nOrderingCols, outputTypes, usingRandomTypes, forceSingleSide,
-								)
-							}
-							if triedWithoutOnExpr {
-								colTypes := append(lInputTypes, rInputTypes...)
-								onExpr = generateFilterExpr(
-									rng, nCols, nOrderingCols, colTypes, usingRandomTypes, false, /* forceSingleSide */
-								)
-							}
-							mjSpec := &execinfrapb.MergeJoinerSpec{
-								OnExpr:        onExpr,
-								LeftOrdering:  execinfrapb.Ordering{Columns: lOrderingCols},
-								RightOrdering: execinfrapb.Ordering{Columns: rOrderingCols},
-								Type:          testSpec.joinType,
-								NullEquality:  testSpec.joinType.IsSetOpJoin(),
-							}
-							pspec := &execinfrapb.ProcessorSpec{
-								Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: lInputTypes}, {ColumnTypes: rInputTypes}},
-								Core:        execinfrapb.ProcessorCoreUnion{MergeJoiner: mjSpec},
-								Post:        execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns, Filter: filter},
-								ResultTypes: outputTypes,
-							}
-							args := verifyColOperatorArgs{
-								anyOrder:   testSpec.anyOrder,
-								inputTypes: [][]*types.T{lInputTypes, rInputTypes},
-								inputs:     []rowenc.EncDatumRows{lRows, rRows},
-								pspec:      pspec,
-								rng:        rng,
-							}
-							if testSpec.joinType.IsSetOpJoin() && nOrderingCols < nCols {
-								// The output of set operation joins is not fully
-								// deterministic when there are non-equality
-								// columns, however, the rows must match on the
-								// equality columns between vectorized and row
-								// executions.
-								args.colIdxsToCheckForEquality = make([]int, nOrderingCols)
-								for i := range args.colIdxsToCheckForEquality {
-									args.colIdxsToCheckForEquality[i] = int(lOrderingCols[i].ColIdx)
-								}
-							}
-							if err := verifyColOperator(t, args); err != nil {
-								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
-									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
-								fmt.Printf("--- left ordering = %v right ordering = %v ---\n", lOrderingCols, rOrderingCols)
-								prettyPrintTypes(lInputTypes, "left_table" /* tableName */)
-								prettyPrintTypes(rInputTypes, "right_table" /* tableName */)
-								prettyPrintInput(lRows, lInputTypes, "left_table" /* tableName */)
-								prettyPrintInput(rRows, rInputTypes, "right_table" /* tableName */)
+						lMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: lOrderingCols})
+						rMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: rOrderingCols})
+						sort.Slice(lRows, func(i, j int) bool {
+							cmp, err := lRows[i].Compare(lInputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
+							if err != nil {
 								t.Fatal(err)
 							}
-							if onExpr.Expr == "" {
-								triedWithoutOnExpr = true
-							} else {
-								triedWithOnExpr = true
+							return cmp < 0
+						})
+						sort.Slice(rRows, func(i, j int) bool {
+							cmp, err := rRows[i].Compare(rInputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
+							if err != nil {
+								t.Fatal(err)
 							}
+							return cmp < 0
+						})
+						var outputTypes []*types.T
+						if testSpec.joinType.ShouldIncludeLeftColsInOutput() {
+							outputTypes = append(outputTypes, lInputTypes...)
+						}
+						if testSpec.joinType.ShouldIncludeRightColsInOutput() {
+							outputTypes = append(outputTypes, rInputTypes...)
+						}
+						outputColumns := make([]uint32, len(outputTypes))
+						for i := range outputColumns {
+							outputColumns[i] = uint32(i)
+						}
+
+						var onExpr execinfrapb.Expression
+						if triedWithoutOnExpr {
+							colTypes := append(lInputTypes, rInputTypes...)
+							onExpr = generateFilterExpr(
+								rng, nCols, nOrderingCols, colTypes, usingRandomTypes, false, /* forceSingleSide */
+							)
+						}
+						mjSpec := &execinfrapb.MergeJoinerSpec{
+							OnExpr:        onExpr,
+							LeftOrdering:  execinfrapb.Ordering{Columns: lOrderingCols},
+							RightOrdering: execinfrapb.Ordering{Columns: rOrderingCols},
+							Type:          testSpec.joinType,
+							NullEquality:  testSpec.joinType.IsSetOpJoin(),
+						}
+						pspec := &execinfrapb.ProcessorSpec{
+							Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: lInputTypes}, {ColumnTypes: rInputTypes}},
+							Core:        execinfrapb.ProcessorCoreUnion{MergeJoiner: mjSpec},
+							Post:        execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
+							ResultTypes: outputTypes,
+						}
+						args := verifyColOperatorArgs{
+							anyOrder:   testSpec.anyOrder,
+							inputTypes: [][]*types.T{lInputTypes, rInputTypes},
+							inputs:     []rowenc.EncDatumRows{lRows, rRows},
+							pspec:      pspec,
+							rng:        rng,
+						}
+						if testSpec.joinType.IsSetOpJoin() && nOrderingCols < nCols {
+							// The output of set operation joins is not fully
+							// deterministic when there are non-equality
+							// columns, however, the rows must match on the
+							// equality columns between vectorized and row
+							// executions.
+							args.colIdxsToCheckForEquality = make([]int, nOrderingCols)
+							for i := range args.colIdxsToCheckForEquality {
+								args.colIdxsToCheckForEquality[i] = int(lOrderingCols[i].ColIdx)
+							}
+						}
+						if err := verifyColOperator(t, args); err != nil {
+							fmt.Printf("--- join type = %s onExpr = %q seed = %d run = %d ---\n",
+								testSpec.joinType.String(), onExpr.Expr, seed, run)
+							fmt.Printf("--- left ordering = %v right ordering = %v ---\n", lOrderingCols, rOrderingCols)
+							prettyPrintTypes(lInputTypes, "left_table" /* tableName */)
+							prettyPrintTypes(rInputTypes, "right_table" /* tableName */)
+							prettyPrintInput(lRows, lInputTypes, "left_table" /* tableName */)
+							prettyPrintInput(rRows, rInputTypes, "right_table" /* tableName */)
+							t.Fatal(err)
+						}
+						if onExpr.Expr == "" {
+							triedWithoutOnExpr = true
+						} else {
+							triedWithOnExpr = true
 						}
 					}
 				}
@@ -977,16 +958,6 @@ func generateColumnOrdering(
 		}
 	}
 	return orderingCols
-}
-
-func getAddFilterOptions(joinType descpb.JoinType, nonEqualityColsPresent bool) []bool {
-	if joinType.IsSetOpJoin() && nonEqualityColsPresent {
-		// Output of set operation join when rows have non equality columns is
-		// not deterministic, so applying a filter on top of it can produce
-		// arbitrary results, and we skip such configuration.
-		return []bool{false}
-	}
-	return []bool{false, true}
 }
 
 // generateFilterExpr populates an execinfrapb.Expression that contains a
