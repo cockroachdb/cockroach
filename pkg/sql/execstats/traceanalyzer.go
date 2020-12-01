@@ -22,13 +22,13 @@ import (
 
 type processorStats struct {
 	nodeID roachpb.NodeID
-	stats  execinfrapb.DistSQLSpanStats
+	stats  *execinfrapb.ComponentStats
 }
 
 type streamStats struct {
 	originNodeID      roachpb.NodeID
 	destinationNodeID roachpb.NodeID
-	stats             execinfrapb.DistSQLSpanStats
+	stats             *execinfrapb.ComponentStats
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -91,7 +91,7 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan) error {
 		if err := types.UnmarshalAny(span.Stats, &da); err != nil {
 			return errors.Wrap(err, "unable to unmarshal in TraceAnalyzer")
 		}
-		stats, ok := da.Message.(execinfrapb.DistSQLSpanStats)
+		stats, ok := da.Message.(*execinfrapb.ComponentStats)
 		if !ok {
 			continue
 		}
@@ -126,11 +126,7 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan) error {
 	return nil
 }
 
-func getNetworkBytesFromDistSQLSpanStats(dss execinfrapb.DistSQLSpanStats) (int64, error) {
-	v, ok := dss.(*execinfrapb.ComponentStats)
-	if !ok {
-		return 0, errors.Errorf("could not get network bytes from %T", dss)
-	}
+func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) (int64, error) {
 	// We expect exactly one of BytesReceived and BytesSent to be set.
 	if v.NetRx.BytesReceived.HasValue() {
 		if v.NetTx.BytesSent.HasValue() {
@@ -152,7 +148,7 @@ func (a *TraceAnalyzer) GetNetworkBytesSent() (map[roachpb.NodeID]int64, error) 
 		if stats.stats == nil {
 			continue
 		}
-		bytes, err := getNetworkBytesFromDistSQLSpanStats(stats.stats)
+		bytes, err := getNetworkBytesFromComponentStats(stats.stats)
 		if err != nil {
 			return nil, err
 		}

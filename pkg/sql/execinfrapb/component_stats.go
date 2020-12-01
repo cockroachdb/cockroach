@@ -31,7 +31,8 @@ func (s *ComponentStats) Stats() map[string]string {
 	return result
 }
 
-// StatsForQueryPlan is part of DistSQLSpanStats interface.
+// StatsForQueryPlan returns the statistics as a list of strings that can be
+// displayed in query plans and diagrams.
 func (s *ComponentStats) StatsForQueryPlan() []string {
 	result := make([]string, 0, 4)
 	s.formatStats(func(key string, value interface{}) {
