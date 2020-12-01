@@ -280,6 +280,20 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowSurvivalGoal represents a SHOW REGIONS statement
+type ShowSurvivalGoal struct {
+	DatabaseName Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowSurvivalGoal) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW SURVIVAL GOAL FROM DATABASE")
+	if node.DatabaseName != "" {
+		ctx.WriteString(" ")
+		node.DatabaseName.Format(ctx)
+	}
+}
+
 // ShowRegions represents a SHOW REGIONS statement
 type ShowRegions struct {
 	FromDatabase bool

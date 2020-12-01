@@ -217,6 +217,7 @@ show_stmt ::=
 	| show_ranges_stmt
 	| show_range_for_row_stmt
 	| show_regions_stmt
+	| show_survival_goal_stmt
 	| show_roles_stmt
 	| show_savepoint_stmt
 	| show_schemas_stmt
@@ -670,6 +671,10 @@ show_regions_stmt ::=
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE'
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE' database_name
 
+show_survival_goal_stmt ::=
+	'SHOW' 'SURVIVAL' 'GOAL' 'FROM' 'DATABASE'
+	| 'SHOW' 'SURVIVAL' 'GOAL' 'FROM' 'DATABASE' database_name
+
 show_roles_stmt ::=
 	'SHOW' 'ROLES'
 
@@ -866,6 +871,7 @@ unreserved_keyword ::=
 	| 'GEOMETRYCOLLECTIONZ'
 	| 'GEOMETRYCOLLECTIONZM'
 	| 'GLOBAL'
+	| 'GOAL'
 	| 'GRANTS'
 	| 'GROUPS'
 	| 'HASH'
@@ -1058,6 +1064,7 @@ unreserved_keyword ::=
 	| 'STRICT'
 	| 'SUBSCRIPTION'
 	| 'SURVIVE'
+	| 'SURVIVAL'
 	| 'SYNTAX'
 	| 'SYSTEM'
 	| 'TABLES'

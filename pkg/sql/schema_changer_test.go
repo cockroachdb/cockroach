@@ -1756,7 +1756,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		// eventually not get added. The column aa will also be dropped as
 		// a result.
 		{`ALTER TABLE t.public.test ADD COLUMN aa INT8, ADD CONSTRAINT foo UNIQUE (a)`,
-			"contains unknown column"},
+			"column \"a\" does not exist"},
 
 		// The purge of column 'a' doesn't influence these schema changes.
 
@@ -1778,10 +1778,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		// eventually not get added. The column bb will also be dropped as
 		// a result.
 		{`ALTER TABLE t.public.test ADD COLUMN bb INT8, ADD CONSTRAINT bar UNIQUE (never_existed)`,
-			"contains unknown column"},
+			"column \"never_existed\" does not exist"},
 		// Cascading of purges. column 'c' -> column 'bb' -> constraint 'idx_bb'.
 		{`ALTER TABLE t.public.test ADD CONSTRAINT idx_bb UNIQUE (bb)`,
-			"contains unknown column"},
+			"column \"bb\" does not exist"},
 	}
 
 	for _, tc := range testCases {
