@@ -95,6 +95,7 @@ go_library(
 go_test(
     name = "execinfrapb_test",
     srcs = [
+        "component_stats_test.go",
         "expr_test.go",
         "flow_diagram_test.go",
     ],
@@ -106,5 +107,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
+        "//pkg/util/optional",
     ],
 )
