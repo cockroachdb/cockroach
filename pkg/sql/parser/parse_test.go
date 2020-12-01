@@ -392,6 +392,9 @@ func TestParse(t *testing.T) {
 		{`CREATE TEMPORARY SEQUENCE a`},
 		{`CREATE SEQUENCE a OWNED BY b`},
 		{`CREATE SEQUENCE a OWNED BY NONE`},
+		{`CREATE SEQUENCE a AS INT2`},
+		{`CREATE SEQUENCE a AS INT4`},
+		{`CREATE SEQUENCE a AS INT8`},
 
 		{`CREATE EXTENSION bob`},
 		{`CREATE EXTENSION IF NOT EXISTS bob`},
@@ -1865,6 +1868,12 @@ func TestParse2(t *testing.T) {
 		{`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other (b) NOT VALID)`,
 			`CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other (b))`},
 
+		// `int` and `integer` are based on `default_int_size` in cluster settings.
+		{`CREATE SEQUENCE a AS integer`, `CREATE SEQUENCE a AS INT8`},
+		{`CREATE SEQUENCE a AS int`, `CREATE SEQUENCE a AS INT8`},
+		{`CREATE SEQUENCE a AS bigint`, `CREATE SEQUENCE a AS INT8`},
+		{`CREATE SEQUENCE a AS smallint`, `CREATE SEQUENCE a AS INT2`},
+
 		{`CREATE STATISTICS a ON col1 FROM t AS OF SYSTEM TIME '2016-01-01'`,
 			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
 
@@ -3225,8 +3234,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TEMP TABLE b AS SELECT a FROM a ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``},
 		{`CREATE TEMP TABLE IF NOT EXISTS b AS SELECT a FROM a ON COMMIT DROP`, 46556, `drop`, ``},
 		{`CREATE TEMP TABLE IF NOT EXISTS b AS SELECT a FROM a ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``},
-
-		{`CREATE SEQUENCE a AS DOUBLE PRECISION`, 25110, `FLOAT8`, ``},
 
 		{`CREATE RECURSIVE VIEW a AS SELECT b`, 0, `create recursive view`, ``},
 
