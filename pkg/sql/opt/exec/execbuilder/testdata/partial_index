@@ -939,3 +939,31 @@ vectorized: true
       missing stats
       table: inv@i (partial index)
       spans: 1 span
+
+# Regression test for #57085. Cascading DELETEs should not issue DEL operations
+# for partial indexes of a child table when the deleted row was not in the
+# partial index.
+statement ok
+CREATE TABLE t57085_p (
+    p INT PRIMARY KEY
+);
+CREATE TABLE t57085_c (
+    c INT PRIMARY KEY,
+    p INT REFERENCES t57085_p ON DELETE CASCADE,
+    b BOOL,
+    INDEX idx (p) WHERE b,
+    FAMILY (c, p, b)
+);
+
+statement ok
+INSERT INTO t57085_p VALUES (1), (2);
+INSERT INTO t57085_c VALUES (10, 1, true), (20, 1, false), (30, 2, true);
+
+query T kvtrace
+DELETE FROM t57085_p WHERE p = 1;
+----
+DelRange /Table/56/1/1 - /Table/56/1/1/#
+Scan /Table/57/{1-2}
+Del /Table/57/2/1/10/0
+Del /Table/57/1/10/0
+Del /Table/57/1/20/0
