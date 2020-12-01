@@ -1,0 +1,31 @@
+new-server name=s1
+----
+
+exec-sql
+SET CLUSTER SETTING bulkio.backup.experimental_write_in_processor = true;
+CREATE TABLE data AS SELECT * FROM generate_series(1, 500000);
+----
+
+query-sql
+SELECT count(*) FROM data;
+----
+500000
+
+exec-sql
+BACKUP TO 'nodelocal://0/foo';
+CREATE DATABASE restore_db;
+----
+
+query-sql
+SELECT count(*) FROM restore_db.data
+----
+pq: relation "restore_db.data" does not exist
+
+exec-sql
+RESTORE data FROM 'nodelocal://0/foo' WITH into_db='restore_db';
+----
+
+query-sql
+SELECT count(*) FROM restore_db.data
+----
+500000
