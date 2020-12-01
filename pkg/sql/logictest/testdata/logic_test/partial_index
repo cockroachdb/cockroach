@@ -1343,9 +1343,10 @@ SELECT * FROM t52702@t52702_false WHERE 1 = 2;
 SELECT * FROM t52702@t52702_false WHERE 's' = 't';
 SELECT * FROM t52702@t52702_false WHERE false;
 
-# Regression test for #53922. Do not build function dependency keys from partial
-# indexes. This causes incorrect results. For example, the optimizer could
-# incorrectly remove distinct operators if it thinks the column is a strict key.
+# Regression test for #53922. Do not build functional dependency keys from
+# partial indexes. This causes incorrect results. For example, the optimizer
+# could incorrectly remove distinct operators if it thinks the column is a
+# strict key.
 subtest regression_53922
 
 statement ok
