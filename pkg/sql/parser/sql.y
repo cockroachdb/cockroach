@@ -6446,6 +6446,7 @@ reference_action:
 // %Category: DDL
 // %Text:
 // CREATE [TEMPORARY | TEMP] SEQUENCE <seqname>
+//   [AS <typename>]
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
 //   [MAXVALUE <maxvalue> | NO MAXVALUE]
@@ -6485,7 +6486,7 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  AS typename                  { return unimplementedWithIssueDetail(sqllex, 25110, $2.typeReference().SQLString()) }
+  AS typename                  { $$.val = tree.SequenceOption{Name: tree.SeqOptAs, AsTypename: $2.colType()}}
 | CYCLE                        { /* SKIP DOC */
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCycle} }
 | NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptNoCycle} }

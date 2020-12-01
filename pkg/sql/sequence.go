@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
@@ -275,6 +276,23 @@ func assignSequenceOptions(
 		optionsSeen[option.Name] = true
 
 		switch option.Name {
+		case tree.SeqOptAs:
+			typename := option.AsTypename
+			switch typename {
+			case types.Int2:
+				// TODO(monicax): refactor this
+				if isAscending {
+					opts.MinValue = 1
+					opts.MaxValue = math.MaxInt16
+					opts.Start = opts.MinValue
+				} else {
+					opts.MinValue = math.MinInt16
+					opts.MaxValue = -1
+					opts.Start = opts.MaxValue
+				}
+			case types.Int: // this is what integer AND bigint map to
+				// Do nothing; this is the default.
+			}
 		case tree.SeqOptCycle:
 			return unimplemented.NewWithIssue(20961,
 				"CYCLE option is not supported")

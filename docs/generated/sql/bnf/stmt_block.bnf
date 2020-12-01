@@ -2482,7 +2482,8 @@ alter_index_cmd ::=
 	partition_by
 
 sequence_option_elem ::=
-	'NO' 'CYCLE'
+	'AS' typename
+	| 'NO' 'CYCLE'
 	| 'OWNED' 'BY' 'NONE'
 	| 'OWNED' 'BY' column_path
 	| 'INCREMENT' signed_iconst64

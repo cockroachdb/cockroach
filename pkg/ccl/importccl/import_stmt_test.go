@@ -1284,6 +1284,47 @@ func TestImportUserDefinedTypes(t *testing.T) {
 	}
 }
 
+func TestCreateSequenceAs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	t.Run("pgdump sequence as", func(t *testing.T) {
+
+		sqlDB.Exec(t, `DROP SEQUENCE IF EXISTS blah`)
+
+		data = `
+		CREATE SEQUENCE public.blah
+		AS integer
+		START WITH 1
+		INCREMENT BY 1
+		CACHE 1;`
+
+		// Import sequence from dump format.
+		importDumpQuery := fmt.Sprintf(`IMPORT PGDUMP ($1)`)
+		sqlDB.Exec(t, importDumpQuery, srv.URL)
+
+		res := sqlDB.QueryStr(t, `SELECT * FROM blah`)
+
+		sqlDB.Exec(t, `DROP SEQUENCE blah`)
+	})
+}
+
 func TestImportRowLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
