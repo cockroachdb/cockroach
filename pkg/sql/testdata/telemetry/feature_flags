@@ -1,0 +1,22 @@
+# This file contains telemetry tests for the sql.feature_flag.denied counter.
+
+feature-allowlist
+sql.feature_flag.denied.*
+----
+
+exec
+CREATE TABLE data (a INT, b INT, PRIMARY KEY (a), INDEX b_idx (b));
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE;
+----
+
+# Test that a schema change denial is counted.
+feature-usage
+CREATE DATABASE d;
+----
+sql.feature_flag.denied
+
+# Test that a CREATE STATISTICS/ANALYZE denial is counted.
+feature-usage
+ANALYZE data
+----
+sql.feature_flag.denied

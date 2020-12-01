@@ -98,7 +98,9 @@ func (ef *execFactory) ConstructExport(
 		)
 	}
 
-	if err := featureflag.CheckEnabled(featureExportEnabled,
+	if err := featureflag.CheckEnabled(
+		ef.planner.EvalContext().Context,
+		featureExportEnabled,
 		&ef.planner.ExecCfg().Settings.SV,
 		"EXPORT",
 	); err != nil {
