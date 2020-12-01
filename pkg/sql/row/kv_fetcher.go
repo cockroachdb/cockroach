@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,9 +30,17 @@ type KVFetcher struct {
 	kvs []roachpb.KeyValue
 
 	batchResponse []byte
-	bytesRead     int64
 	Span          roachpb.Span
 	newSpan       bool
+
+	// Observability fields.
+	bytesRead int64
+	// testingGenerateMockContentionEvents is a field that specifies whether the
+	// KVFetcher should generate mock contention events. See
+	// TestingEnableMockContentionEventGeneration.
+	// TODO(asubiotto): Remove once KV layer produces real contention events.
+	testingGenerateMockContentionEvents bool
+	contentionEvents                    []roachpb.ContentionEvent
 }
 
 // NewKVFetcher creates a new KVFetcher.
@@ -65,6 +74,23 @@ func (f *KVFetcher) GetBytesRead() int64 {
 		return 0
 	}
 	return f.bytesRead
+}
+
+// TestingEnableMockContentionEventGeneration will enable kv fetcher testing
+// behavior that generates a roachpb.ContentionEvent with a duration of 1ns of
+// contention for each kv pair returned.
+func (f *KVFetcher) TestingEnableMockContentionEventGeneration() {
+	f.testingGenerateMockContentionEvents = true
+}
+
+// GetContentionEvents returns a slice of contention events that occurred during
+// the lifetime of this KVFetcher. A nil slice indicates that no contention
+// events occurred.
+func (f *KVFetcher) GetContentionEvents() []roachpb.ContentionEvent {
+	if f == nil {
+		return nil
+	}
+	return f.contentionEvents
 }
 
 // MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
@@ -105,6 +131,18 @@ func (f *KVFetcher) NextKV(
 			}
 			if err != nil {
 				return false, kv, false, err
+			}
+			if f.testingGenerateMockContentionEvents {
+				// Note: contention events are only generated for the "new" nextBatch
+				// API which only returns batchResponses (i.e. the f.kvs path above is
+				// ignored).
+				f.contentionEvents = append(
+					f.contentionEvents,
+					roachpb.ContentionEvent{
+						Key:      key,
+						Duration: time.Nanosecond,
+					},
+				)
 			}
 			return true, roachpb.KeyValue{
 				Key: key,

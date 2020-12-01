@@ -343,7 +343,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // must have already been wrapped).
 func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	op colexecbase.Operator,
-	ioReader execinfra.IOReader,
+	kvReader execinfra.KVReader,
 	inputs []colexecbase.Operator,
 	id int32,
 	idTagKey string,
@@ -368,7 +368,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 		inputStatsCollectors[i] = sc
 	}
 	vsc := colexec.NewVectorizedStatsCollector(
-		op, ioReader, id, idTagKey, omitNumTuples, inputWatch,
+		op, kvReader, id, idTagKey, omitNumTuples, inputWatch,
 		memMonitors, diskMonitors, inputStatsCollectors,
 	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
@@ -774,7 +774,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				// information (e.g. output stall time).
 				var err error
 				localOp, err = s.wrapWithVectorizedStatsCollectorBase(
-					op, nil /* ioReader */, nil, /* inputs */
+					op, nil /* kvReader */, nil, /* inputs */
 					int32(stream.StreamID), execinfrapb.StreamIDTagKey, false /* omitNumTuples */, mons,
 				)
 				if err != nil {
@@ -913,7 +913,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// this stats collector to display stats.
 			var err error
 			op, err = s.wrapWithVectorizedStatsCollectorBase(
-				op, nil /* ioReader */, statsInputsAsOps, -1, /* id */
+				op, nil /* kvReader */, statsInputsAsOps, -1, /* id */
 				"" /* idTagKey */, false /* omitNumTuples */, nil, /* monitors */
 			)
 			if err != nil {
@@ -1155,7 +1155,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				// wrapped processor already emits the same stat.
 				_, isColumnarizer := originalOp.(*colexec.Columnarizer)
 				op, err = s.wrapWithVectorizedStatsCollectorBase(
-					op, result.IOReader, inputs, pspec.ProcessorID,
+					op, result.KVReader, inputs, pspec.ProcessorID,
 					execinfrapb.ProcessorIDTagKey, isColumnarizer, result.OpMonitors,
 				)
 				if err != nil {
