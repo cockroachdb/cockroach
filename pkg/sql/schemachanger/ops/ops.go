@@ -5,16 +5,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 )
 
+type Type int
+
+const (
+	_ Type = iota
+	DescriptorMutationType
+	BackfillType
+	ValidationType
+)
+
 type Op interface {
 	op()
+	Type() Type
 }
 
 type baseOp struct{}
 
 func (baseOp) op() {}
 
+type descriptorMutationOp struct{ baseOp }
+
+func (descriptorMutationOp) Type() Type { return DescriptorMutationType }
+
+type backfillOp struct{ baseOp }
+
+func (backfillOp) Type() Type { return BackfillType }
+
+type validationOp struct{ baseOp }
+
+func (validationOp) Type() Type { return ValidationType }
+
 type AddIndexDescriptor struct {
-	baseOp
+	descriptorMutationOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
 
@@ -27,27 +49,27 @@ type AddIndexDescriptor struct {
 }
 
 type IndexDescriptorStateChange struct {
-	baseOp
+	descriptorMutationOp
 	TableID   descpb.ID
 	IndexID   descpb.IndexID
 	NextState targets.State
 }
 
 type IndexBackfill struct {
-	baseOp
+	backfillOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
 
 type UniqueIndexValidation struct {
-	baseOp
+	validationOp
 	TableID        descpb.ID
 	PrimaryIndexID descpb.IndexID
 	IndexID        descpb.IndexID
 }
 
 type AddColumnDescriptor struct {
-	baseOp
+	descriptorMutationOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 
@@ -55,14 +77,14 @@ type AddColumnDescriptor struct {
 }
 
 type ColumnDescriptorStateChange struct {
-	baseOp
+	descriptorMutationOp
 	TableID   descpb.ID
 	ColumnID  descpb.ColumnID
 	NextState targets.State
 }
 
 type AddCheckConstraint struct {
-	baseOp
+	descriptorMutationOp
 	TableID   descpb.ID
 	Name      string
 	Expr      string
@@ -70,13 +92,13 @@ type AddCheckConstraint struct {
 }
 
 type ValidateCheckConstraint struct {
-	baseOp
+	validationOp
 	TableID descpb.ID
 	Name    string
 }
 
 type CheckConstraintStateChange struct {
-	baseOp
+	descriptorMutationOp
 	TableID descpb.ID
 	Name    string
 

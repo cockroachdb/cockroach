@@ -51,7 +51,9 @@ func TestCompiler(t *testing.T) {
 		func() {
 			g, err := buildGraph(tc.ts, tc.flags)
 			require.NoError(t, err)
-			t.Log("\n" + g.String())
+			dg, err := g.drawStages()
+			require.NoError(t, err)
+			t.Log("\n" + dg.String())
 		}()
 	}
 }
