@@ -77,6 +77,8 @@ var (
 				ppFunc: localRangeIDKeyPrint, PSFunc: localRangeIDKeyParse},
 			{Name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint,
 				PSFunc: parseUnsupported},
+			{Name: "/Lock", prefix: LocalRangeLockTablePrefix, ppFunc: localRangeLockTablePrint,
+				PSFunc: parseUnsupported},
 		}},
 		{Name: "/Meta1", start: Meta1Prefix, end: Meta1KeyMax, Entries: []DictEntry{
 			{Name: "", prefix: Meta1Prefix, ppFunc: print,
@@ -523,6 +525,27 @@ func localRangeKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	return buf.String()
 }
 
+// lockTablePrintLockedKey is initialized to prettyPrintInternal in init() to break an
+// initialization loop.
+var lockTablePrintLockedKey func(valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys bool) string
+
+func localRangeLockTablePrint(valDirs []encoding.Direction, key roachpb.Key) string {
+	var buf bytes.Buffer
+	if !bytes.HasPrefix(key, LockTableSingleKeyInfix) {
+		fmt.Fprintf(&buf, "/\"%x\"", key)
+		return buf.String()
+	}
+	buf.WriteString("/Intent")
+	key = key[len(LockTableSingleKeyInfix):]
+	b, lockedKey, err := encoding.DecodeBytesAscending(key, nil)
+	if err != nil || len(b) != 0 {
+		fmt.Fprintf(&buf, "/\"%x\"", key)
+		return buf.String()
+	}
+	buf.WriteString(lockTablePrintLockedKey(valDirs, lockedKey, true))
+	return buf.String()
+}
+
 // ErrUglifyUnsupported is returned when UglyPrint doesn't know how to process a
 // key.
 type ErrUglifyUnsupported struct {
@@ -675,6 +698,7 @@ func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 func init() {
 	roachpb.PrettyPrintKey = PrettyPrint
 	roachpb.PrettyPrintRange = PrettyPrintRange
+	lockTablePrintLockedKey = prettyPrintInternal
 }
 
 // PrettyPrintRange pretty prints a compact representation of a key range. The

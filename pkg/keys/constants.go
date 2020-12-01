@@ -161,6 +161,13 @@ var (
 	// other strengths, or range locks.
 	LocalRangeLockTablePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("l")))
 	LockTableSingleKeyInfix   = []byte("k")
+	// LockTableSingleKeyStart is the inclusive start key of the key range
+	// containing single key locks.
+	LockTableSingleKeyStart = roachpb.Key(makeKey(LocalRangeLockTablePrefix, LockTableSingleKeyInfix))
+	// LockTableSingleKeyEnd is the exclusive end key of the key range
+	// containing single key locks.
+	LockTableSingleKeyEnd = roachpb.Key(
+		makeKey(LocalRangeLockTablePrefix, roachpb.Key(LockTableSingleKeyInfix).PrefixEnd()))
 
 	// 5. Store local keys
 	//

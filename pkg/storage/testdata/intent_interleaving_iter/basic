@@ -75,6 +75,19 @@ prev: output: meta k=a ts=20 txn=1
 prev: output: .
 next: output: meta k=a ts=20 txn=1
 
+# Some callers iterate forward without explicitly setting an upper bound.
+# Confirm that the underlying iterator over the lock table key space does not
+# step out the lock table keys.
+iter lower=a
+seek-ge k=a
+next
+next
+next
+----
+seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
+next: output: value k=a ts=20 v=a20
+next: output: value k=a ts=10 v=a10
+next: output: meta k=b ts=30 txn=2
 
 # More forward and reverse iteration.
 iter upper=b
