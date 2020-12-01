@@ -26,11 +26,13 @@ import (
 func NewUnorderedDistinct(
 	allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
 ) colexecbase.Operator {
-	// This number was chosen after running the micro-benchmarks.
+	// These numbers were chosen after running the micro-benchmarks.
 	const hashTableLoadFactor = 2.0
+	const hashTableNumBuckets = 128
 	ht := newHashTable(
 		allocator,
 		hashTableLoadFactor,
+		hashTableNumBuckets,
 		typs,
 		distinctCols,
 		// Store all columns from the source since the unordered distinct

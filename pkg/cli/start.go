@@ -1122,6 +1122,20 @@ func setupAndInitializeLoggingAndProfiling(
 		)
 	}
 
+	// The new multi-region abstractions require that nodes be labeled in "regions"
+	// (and optionally, "zones").  To push users in that direction, we warn them here
+	// if they've provided a --locality value which doesn't include a "region" tier.
+	if len(serverCfg.Locality.Tiers) > 0 {
+		if _, containsRegion := serverCfg.Locality.Find("region"); !containsRegion {
+			const warningString string = "The --locality flag does not contain a \"region\" tier. To add regions\n" +
+				"to databases, the --locality flag must contain a \"region\" tier.\n" +
+				"For more information, see:\n\n" +
+				"- %s"
+			log.Shoutf(context.Background(), severity.WARNING, warningString,
+				log.Safe(docs.URL("cockroach-start.html#locality")))
+		}
+	}
+
 	maybeWarnMemorySizes(ctx)
 
 	// We log build information to stdout (for the short summary), but also

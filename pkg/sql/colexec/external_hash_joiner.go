@@ -374,6 +374,9 @@ func NewExternalHashJoiner(
 		// buildSideAllocator and outputUnlimitedAllocator arguments.
 		inMemHashJoiner: NewHashJoiner(
 			unlimitedAllocator, unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput,
+			// We start with relatively large initial number of buckets since we
+			// expect each partition to be of significant size.
+			uint64(coldata.BatchSize()),
 		).(*hashJoiner),
 		diskBackedSortMerge: diskBackedSortMerge,
 	}
