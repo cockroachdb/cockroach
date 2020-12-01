@@ -1116,29 +1116,12 @@ func ParseHLC(s string) (hlc.Timestamp, error) {
 	return tree.DecimalToHLC(dec)
 }
 
-// asOfTimestampType is used during processing of AOST clauses: depending on the
-// context of an AOST clause, we should either set the main user's transaction
-// timestamp or use the timestamp for a historical backfill (in the case of
-// CREATE TABLE AS and other such statements).
-type asOfTimestampType int
-
-const (
-	// transactionTimestamp indicates that the AOST clause should apply to the
-	// user's transaction.
-	transactionTimestamp asOfTimestampType = iota + 1
-	// backfillTimestamp indicates that the AOST clause should apply to a backfill
-	// operation.
-	backfillTimestamp
-)
-
 // isAsOf analyzes a statement to bypass the logic in newPlan(), since
 // that requires the transaction to be started already. If the returned
 // timestamp is not nil, it is the timestamp to which a transaction
 // should be set. The statements that will be checked are Select,
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
-func (p *planner) isAsOf(
-	ctx context.Context, stmt tree.Statement,
-) (*hlc.Timestamp, asOfTimestampType, error) {
+func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*hlc.Timestamp, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -1151,38 +1134,32 @@ func (p *planner) isAsOf(
 
 		sc, ok := selStmt.(*tree.SelectClause)
 		if !ok {
-			return nil, 0, nil
+			return nil, nil
 		}
 		if sc.From.AsOf.Expr == nil {
-			return nil, 0, nil
+			return nil, nil
 		}
 
 		asOf = sc.From.AsOf
 	case *tree.Scrub:
 		if s.AsOf.Expr == nil {
-			return nil, 0, nil
+			return nil, nil
 		}
 		asOf = s.AsOf
 	case *tree.Export:
 		return p.isAsOf(ctx, s.Query)
 	case *tree.CreateStats:
 		if s.Options.AsOf.Expr == nil {
-			return nil, 0, nil
+			return nil, nil
 		}
 		asOf = s.Options.AsOf
 	case *tree.Explain:
 		return p.isAsOf(ctx, s.Statement)
-	case *tree.CreateTable:
-		if !s.As() {
-			return nil, 0, nil
-		}
-		ts, _, err := p.isAsOf(ctx, s.AsSource)
-		return ts, backfillTimestamp, err
 	default:
-		return nil, 0, nil
+		return nil, nil
 	}
 	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
-	return &ts, transactionTimestamp, err
+	return &ts, err
 }
 
 // isSavepoint returns true if ast is a SAVEPOINT statement.

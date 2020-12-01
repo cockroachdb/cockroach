@@ -474,3 +474,6 @@ SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-l""evel2")
 
 statement error at or near "evel2": syntax error
 SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-l"evel2")
+
+statement error DEFAULT collations are not supported
+SELECT 'default collate'::text collate "default"

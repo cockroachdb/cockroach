@@ -454,7 +454,7 @@ statement ok
 CREATE VIEW v AS SELECT d, t FROM t
 
 statement error pq: AS OF SYSTEM TIME must be provided on a top-level statement
-INSERT INTO t SELECT d, t FROM t AS OF SYSTEM TIME '2017-02-13 21:30:00'
+CREATE TABLE t2 AS SELECT d, t FROM t AS OF SYSTEM TIME '2017-02-13 21:30:00'
 
 statement ok
 DROP TABLE t CASCADE
