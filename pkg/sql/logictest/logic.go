@@ -1302,7 +1302,9 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	}
 
 	distSQLKnobs := &execinfra.TestingKnobs{
-		MetadataTestLevel: execinfra.Off, DeterministicStats: true, GenerateMockContentionEvents: true, CheckVectorizedFlowIsClosedCorrectly: true,
+		MetadataTestLevel:                    execinfra.Off,
+		GenerateMockContentionEvents:         true,
+		CheckVectorizedFlowIsClosedCorrectly: true,
 	}
 	if cfg.sqlExecUseDisk {
 		distSQLKnobs.ForceDiskSpill = true

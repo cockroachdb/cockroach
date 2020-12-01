@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -64,13 +63,6 @@ func TestTraceAnalyzer(t *testing.T) {
 							return nil
 						}
 					},
-				},
-				DistSQL: &execinfra.TestingKnobs{
-					// DeterministicStats are set to eliminate variability when
-					// calculating expected results. Note that this sets some fields to 0
-					// (such as execution time), so a more dynamic approach might be
-					// needed for those kinds of tests.
-					DeterministicStats: true,
 				},
 			},
 		}})
@@ -128,7 +120,7 @@ func TestTraceAnalyzer(t *testing.T) {
 		require.NoError(t, err)
 		trace := sp.GetRecording()
 		analyzer := <-analyzerChan
-		require.NoError(t, analyzer.AddTrace(trace))
+		require.NoError(t, analyzer.AddTrace(trace, true /* makeDeterministic */))
 		switch vectorizeMode {
 		case sessiondatapb.VectorizeOff:
 			rowexecTraceAnalyzer = analyzer
@@ -140,27 +132,10 @@ func TestTraceAnalyzer(t *testing.T) {
 	}
 
 	t.Run("NetworkBytesSent", func(t *testing.T) {
-		for _, tc := range []struct {
-			analyzer *execstats.TraceAnalyzer
-			// expectedBytes are defined as a range in order to not have to change
-			// this test too often if the wire format changes.
-			expectedBytesRange [2]int64
-		}{
-			{
-				analyzer:           rowexecTraceAnalyzer,
-				expectedBytesRange: [2]int64{32, 128},
-			},
-			{
-				analyzer: colexecTraceAnalyzer,
-				// Note that the expectedBytes in the colexec case is larger than the
-				// rowexec case because the DeterministicStats flag behaves differently
-				// in each case. In rowexec, the outbox row bytes are returned. In
-				// colexec, an artificial number proportional to the number of tuples is
-				// returned.
-				expectedBytesRange: [2]int64{128, 256},
-			},
+		for _, analyzer := range []*execstats.TraceAnalyzer{
+			rowexecTraceAnalyzer, colexecTraceAnalyzer,
 		} {
-			networkBytesGroupedByNode, err := tc.analyzer.GetNetworkBytesSent()
+			networkBytesGroupedByNode, err := analyzer.GetNetworkBytesSent()
 			require.NoError(t, err)
 			require.Equal(
 				t, numNodes-1, len(networkBytesGroupedByNode), "expected all nodes minus the gateway node to have sent bytes",
@@ -170,8 +145,10 @@ func TestTraceAnalyzer(t *testing.T) {
 			for _, bytes := range networkBytesGroupedByNode {
 				actualBytes += bytes
 			}
-			require.GreaterOrEqual(t, actualBytes, tc.expectedBytesRange[0])
-			require.LessOrEqual(t, actualBytes, tc.expectedBytesRange[1])
+			// The stats don't count the actual bytes, but they are a synthetic value
+			// based on the number of tuples. In this test 21 tuples flow over the
+			// network.
+			require.Equal(t, actualBytes, int64(21*8))
 		}
 	})
 }
