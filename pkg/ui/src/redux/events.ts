@@ -23,3 +23,7 @@ export function eventsSelector (state: AdminUIState) {
 export function eventsValidSelector (state: AdminUIState) {
   return state.cachedData.events.valid;
 }
+
+export function eventsLastErrorSelector (state: AdminUIState) {
+  return state.cachedData.events.lastError;
+}

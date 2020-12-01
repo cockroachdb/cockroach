@@ -24,7 +24,7 @@ import { LongToMoment, NanoToMilli } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
 import { trackFilter, trackCollapseNodes } from "src/util/analytics";
 import { getFilters, localityToString, NodeFilterList, NodeFilterListProps } from "src/views/reports/components/nodeFilterList";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import { Latency } from "./latency";
 import { Legend } from "./legend";
 import Sort from "./sort";

@@ -15,7 +15,7 @@ import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import { TimestampToMoment } from "src/util/convert";
 
 interface LogTableProps {

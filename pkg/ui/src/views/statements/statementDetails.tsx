@@ -32,7 +32,7 @@ import { FixLong } from "src/util/fixLong";
 import {Bytes, Duration} from "src/util/format";
 import { intersperse } from "src/util/intersperse";
 import { Pick } from "src/util/pick";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import SqlBox from "src/views/shared/components/sql/box";
 import { formatNumberForDisplay } from "src/views/shared/components/summaryBar";
