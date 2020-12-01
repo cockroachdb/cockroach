@@ -67,6 +67,9 @@ INSERT INTO t VALUES (2, 9, 1, 1), (3, 9, 2, 1)
 statement error pgcode 23505 violates unique constraint "bar"
 ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
+statement error pgcode 42703 column "dne" does not exist
+ALTER TABLE t ADD CONSTRAINT dne_unique UNIQUE (dne)
+
 # Test that rollback was successful
 query TTTTTR
 SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2)

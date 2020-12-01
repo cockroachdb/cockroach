@@ -195,6 +195,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 					continue
 				}
+
+				// Check if the columns exist on the table.
+				for _, column := range d.Columns {
+					if _, _, err := n.tableDesc.FindColumnByName(column.Column); err != nil {
+						return err
+					}
+				}
+
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
