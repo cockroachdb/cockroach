@@ -2650,7 +2650,8 @@ alter_index_cmd ::=
 	partition_by_index
 
 sequence_option_elem ::=
-	'NO' 'CYCLE'
+	'AS' typename
+	| 'NO' 'CYCLE'
 	| 'OWNED' 'BY' 'NONE'
 	| 'OWNED' 'BY' column_path
 	| 'CACHE' signed_iconst64
