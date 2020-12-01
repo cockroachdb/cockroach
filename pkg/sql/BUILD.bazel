@@ -426,6 +426,7 @@ go_test(
         "planner_test.go",
         "privileged_accessor_test.go",
         "rand_test.go",
+        "region_util_test.go",
         "rename_test.go",
         "revert_test.go",
         "run_control_test.go",
