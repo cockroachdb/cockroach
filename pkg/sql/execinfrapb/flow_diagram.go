@@ -31,6 +31,16 @@ import (
 	"github.com/gogo/protobuf/types"
 )
 
+// DiagramFlags contains diagram settings.
+type DiagramFlags struct {
+	// ShowInputTypes adds input type information.
+	ShowInputTypes bool
+
+	// MakeDeterministic resets all stats that can vary from run to run (like
+	// execution time), suitable for tests. See CompositeStats.MakeDeterministic.
+	MakeDeterministic bool
+}
+
 type diagramCellType interface {
 	// summary produces a title and an arbitrary number of lines that describe a
 	// "cell" in a diagram node (input sync, processor core, or output router).
@@ -567,6 +577,7 @@ type diagramData struct {
 	Processors []diagramProcessor `json:"processors"`
 	Edges      []diagramEdge      `json:"edges"`
 
+	flags  DiagramFlags
 	flowID FlowID
 }
 
@@ -583,7 +594,7 @@ func (d diagramData) ToURL() (string, url.URL, error) {
 
 // AddSpans implements the FlowDiagram interface.
 func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
-	processorStats, streamStats := extractStatsFromSpans(d.flowID, spans)
+	processorStats, streamStats := extractStatsFromSpans(d.flowID, spans, d.flags)
 	for i := range d.Processors {
 		if statDetails, ok := processorStats[int(d.Processors[i].processorID)]; ok {
 			d.Processors[i].Core.Details = append(d.Processors[i].Core.Details, statDetails...)
@@ -595,11 +606,12 @@ func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
 }
 
 func generateDiagramData(
-	sql string, flows []FlowSpec, nodeNames []string, showInputTypes bool,
+	sql string, flows []FlowSpec, nodeNames []string, flags DiagramFlags,
 ) (FlowDiagram, error) {
 	d := &diagramData{
 		SQL:       sql,
 		NodeNames: nodeNames,
+		flags:     flags,
 	}
 	if len(flows) > 0 {
 		d.flowID = flows[0].FlowID
@@ -629,7 +641,7 @@ func generateDiagramData(
 			if len(p.Input) > 1 || (len(p.Input) == 1 && len(p.Input[0].Streams) > 1) {
 				proc.Inputs = make([]diagramCell, len(p.Input))
 				for i, s := range p.Input {
-					proc.Inputs[i].Title, proc.Inputs[i].Details = s.summary(showInputTypes)
+					proc.Inputs[i].Title, proc.Inputs[i].Details = s.summary(flags.ShowInputTypes)
 				}
 			} else {
 				proc.Inputs = []diagramCell{}
@@ -727,7 +739,7 @@ func generateDiagramData(
 // one FlowSpec per node. The function assumes that StreamIDs are unique across
 // all flows.
 func GeneratePlanDiagram(
-	sql string, flows map[roachpb.NodeID]*FlowSpec, showInputTypes bool,
+	sql string, flows map[roachpb.NodeID]*FlowSpec, flags DiagramFlags,
 ) (FlowDiagram, error) {
 	// We sort the flows by node because we want the diagram data to be
 	// deterministic.
@@ -745,16 +757,16 @@ func GeneratePlanDiagram(
 		nodeNames[i] = n.String()
 	}
 
-	return generateDiagramData(sql, flowSlice, nodeNames, showInputTypes)
+	return generateDiagramData(sql, flowSlice, nodeNames, flags)
 }
 
 // GeneratePlanDiagramURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
 func GeneratePlanDiagramURL(
-	sql string, flows map[roachpb.NodeID]*FlowSpec, showInputTypes bool,
+	sql string, flows map[roachpb.NodeID]*FlowSpec, flags DiagramFlags,
 ) (string, url.URL, error) {
-	d, err := GeneratePlanDiagram(sql, flows, showInputTypes)
+	d, err := GeneratePlanDiagram(sql, flows, flags)
 	if err != nil {
 		return "", url.URL{}, err
 	}
@@ -789,7 +801,7 @@ func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
 // and returns a map from that processor id to a slice of stat descriptions
 // that can be added to a plan.
 func extractStatsFromSpans(
-	flowID FlowID, spans []tracingpb.RecordedSpan,
+	flowID FlowID, spans []tracingpb.RecordedSpan, flags DiagramFlags,
 ) (processorStats, streamStats map[int][]string) {
 	processorStats = make(map[int][]string)
 	streamStats = make(map[int][]string)
@@ -814,18 +826,23 @@ func extractStatsFromSpans(
 		} else {
 			continue
 		}
-
-		var da types.DynamicAny
-		if err := types.UnmarshalAny(span.Stats, &da); err != nil {
+		i, err := strconv.Atoi(id)
+		if err != nil {
 			continue
 		}
-		if dss, ok := da.Message.(DistSQLSpanStats); ok {
-			i, err := strconv.Atoi(id)
-			if err != nil {
-				continue
-			}
-			stats[i] = append(stats[i], dss.StatsForQueryPlan()...)
+
+		if span.Stats == nil {
+			continue
 		}
+
+		var compStats ComponentStats
+		if err := types.UnmarshalAny(span.Stats, &compStats); err != nil {
+			continue
+		}
+		if flags.MakeDeterministic {
+			compStats.MakeDeterministic()
+		}
+		stats[i] = append(stats[i], compStats.StatsForQueryPlan()...)
 	}
 	return processorStats, streamStats
 }

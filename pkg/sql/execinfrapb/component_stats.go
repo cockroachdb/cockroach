@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	optional "github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/dustin/go-humanize"
 )
 
@@ -31,7 +31,8 @@ func (s *ComponentStats) Stats() map[string]string {
 	return result
 }
 
-// StatsForQueryPlan is part of DistSQLSpanStats interface.
+// StatsForQueryPlan returns the statistics as a list of strings that can be
+// displayed in query plans and diagrams.
 func (s *ComponentStats) StatsForQueryPlan() []string {
 	result := make([]string, 0, 4)
 	s.formatStats(func(key string, value interface{}) {
@@ -154,12 +155,19 @@ func (s *ComponentStats) MakeDeterministic() {
 	timeVal(&s.NetRx.WaitTime)
 	timeVal(&s.NetRx.DeserializationTime)
 	if s.NetRx.BytesReceived.HasValue() {
-		// BytesReceived is overridden to a useful value for tests.
-		s.NetRx.BytesReceived.Set(8 * s.Output.NumTuples.Value())
+		// BytesReceived can be non-deterministic because some message fields have
+		// varying sizes across different runs (e.g. metadata). Override to a useful
+		// value for tests.
+		s.NetRx.BytesReceived.Set(8 * s.NetRx.TuplesReceived.Value())
 	}
 
 	// NetTx.
-	resetUint(&s.NetTx.BytesSent)
+	if s.NetTx.BytesSent.HasValue() {
+		// BytesSent can be non-deterministic because some message fields have
+		// varying sizes across different runs (e.g. metadata). Override to a useful
+		// value for tests.
+		s.NetTx.BytesSent.Set(8 * s.NetTx.TuplesSent.Value())
+	}
 
 	// KV.
 	timeVal(&s.KV.KVTime)

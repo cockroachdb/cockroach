@@ -20,10 +20,3 @@ const StreamIDTagKey = tracing.TagPrefix + "streamid"
 
 // ProcessorIDTagKey is the key used for processor id tags in tracing spans.
 const ProcessorIDTagKey = tracing.TagPrefix + "processorid"
-
-// DistSQLSpanStats is a tracing.SpanStats that returns a list of stats to
-// output on a query plan.
-type DistSQLSpanStats interface {
-	tracing.SpanStats
-	StatsForQueryPlan() []string
-}

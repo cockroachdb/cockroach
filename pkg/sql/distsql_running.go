@@ -331,7 +331,7 @@ func (dsp *DistSQLPlanner) Run(
 		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
 			stmtStr = planCtx.planner.stmt.String()
 		}
-		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, false /* showInputTypes */)
+		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, execinfrapb.DiagramFlags{})
 		if err != nil {
 			log.Infof(ctx, "error generating diagram: %s", err)
 		} else {

@@ -197,10 +197,6 @@ type TestingKnobs struct {
 	// checked by a test receiver on the gateway.
 	MetadataTestLevel MetadataTestLevel
 
-	// DeterministicStats overrides stats which don't have reliable values, like
-	// stall time and bytes sent. It replaces them with a zero value.
-	DeterministicStats bool
-
 	// GenerateMockContentionEvents causes any kv fetcher used in the flow to
 	// generate mock contention events. See
 	// TestingEnableMockContentionEventGeneration for more details. This testing
