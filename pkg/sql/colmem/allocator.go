@@ -339,8 +339,8 @@ const (
 
 func sizeOfDecimals(decimals coldata.Decimals) uintptr {
 	var size uintptr
-	for _, d := range decimals {
-		size += tree.SizeOfDecimal(d)
+	for i := range decimals {
+		size += tree.SizeOfDecimal(&decimals[i])
 	}
 	size += uintptr(cap(decimals)-len(decimals)) * sizeOfDecimal
 	return size

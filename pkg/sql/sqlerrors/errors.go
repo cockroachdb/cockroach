@@ -56,6 +56,7 @@ func NewInvalidSchemaDefinitionError(err error) error {
 }
 
 // NewUndefinedSchemaError creates an error for an undefined schema.
+// TODO (lucy): Have this take a database name.
 func NewUndefinedSchemaError(name string) error {
 	return pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", name)
 }
