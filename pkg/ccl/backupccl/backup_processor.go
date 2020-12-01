@@ -143,10 +143,10 @@ func runBackupProcessor(
 	spec *execinfrapb.BackupDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
-	settings := flowCtx.Cfg.Settings
+	clusterSettings := flowCtx.Cfg.Settings
 	// If this is a tenant backup, we need to write the file from the SQL layer We
 	// might also do this if the relevant cluster setting is enabled.
-	writeSSTsInProcessor := !flowCtx.Cfg.Codec.ForSystemTenant() || writeInProcessor.Get(&settings.SV)
+	writeSSTsInProcessor := !flowCtx.Cfg.Codec.ForSystemTenant() || writeInProcessor.Get(&clusterSettings.SV)
 
 	todo := make(chan spanAndTime, len(spec.Spans)+len(spec.IntroducedSpans))
 	for _, s := range spec.IntroducedSpans {
@@ -158,8 +158,8 @@ func runBackupProcessor(
 
 	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
 	//  *2). See #49798.
-	numSenders := int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 2
-	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&settings.SV)
+	numSenders := int(kvserver.ExportRequestsLimit.Get(&clusterSettings.SV)) * 2
+	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&clusterSettings.SV)
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
@@ -214,7 +214,7 @@ func runBackupProcessor(
 					Storage:                             defaultConf,
 					StorageByLocalityKV:                 storageConfByLocalityKV,
 					StartTime:                           span.start,
-					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
+					EnableTimeBoundIteratorOptimization: useTBI.Get(&clusterSettings.SV),
 					MVCCFilter:                          spec.MVCCFilter,
 					Encryption:                          spec.Encryption,
 					TargetFileSize:                      targetFileSize,
@@ -228,7 +228,7 @@ func runBackupProcessor(
 					// We're okay with delaying this worker until then since we assume any
 					// other work it could pull off the queue will likely want to delay to
 					// a similar or later time anyway.
-					if delay := delayPerAttmpt.Get(&settings.SV) - timeutil.Since(span.lastTried); delay > 0 {
+					if delay := delayPerAttmpt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
 						timer.Reset(delay)
 						log.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
 						select {
@@ -239,7 +239,7 @@ func runBackupProcessor(
 						}
 					}
 
-					priority = timeutil.Since(readTime) > priorityAfter.Get(&settings.SV)
+					priority = timeutil.Since(readTime) > priorityAfter.Get(&clusterSettings.SV)
 				}
 
 				if priority {
