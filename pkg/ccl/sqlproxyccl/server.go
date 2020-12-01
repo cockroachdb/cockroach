@@ -143,7 +143,6 @@ func (s *Server) Serve(ln net.Listener) error {
 		conn := &Conn{
 			Conn: origConn,
 		}
-		conn.mu.closedCh = make(chan struct{})
 
 		go func() {
 			s.metrics.CurConnCount.Inc(1)
@@ -173,6 +172,14 @@ type Conn struct {
 
 // Done returns a channel that's closed when the connection is closed.
 func (c *Conn) Done() <-chan struct{} {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.mu.closedCh == nil {
+		c.mu.closedCh = make(chan struct{})
+		if c.mu.closed {
+			close(c.mu.closedCh)
+		}
+	}
 	return c.mu.closedCh
 }
 
@@ -185,7 +192,9 @@ func (c *Conn) Close() error {
 	if c.mu.closed {
 		return nil
 	}
-	close(c.mu.closedCh)
+	if c.mu.closedCh != nil {
+		close(c.mu.closedCh)
+	}
 	c.mu.closed = true
 	return c.Conn.Close()
 }
