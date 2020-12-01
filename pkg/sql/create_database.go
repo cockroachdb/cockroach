@@ -131,5 +131,6 @@ func (*createDatabaseNode) Close(context.Context)        {}
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites Interface. This is
 // required because we create a type descriptor for multi-region databases,
-// which must be read during validation.
+// which must be read during validation. We also call CONFIGURE ZONE which
+// perms multiple KV operations on descriptors and expects to see its own writes.
 func (*createDatabaseNode) ReadingOwnWrites() {}
