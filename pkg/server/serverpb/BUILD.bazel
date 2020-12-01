@@ -34,6 +34,7 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/log/logpb",
         "//pkg/util/metric",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "//vendor/github.com/gogo/protobuf/proto",
@@ -53,7 +54,14 @@ go_library(
 
 go_test(
     name = "serverpb_test",
-    srcs = ["admin_test.go"],
+    srcs = [
+        "admin_test.go",
+        "status_test.go",
+    ],
     embed = [":serverpb"],
-    deps = ["//vendor/github.com/stretchr/testify/assert"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/stretchr/testify/assert",
+    ],
 )

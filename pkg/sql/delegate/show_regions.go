@@ -58,6 +58,7 @@ func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, er
 			`
 WITH zones_table(region, zones) AS (%s)
 SELECT
+	r.name AS "database",
 	r.region as "region",
 	r.region = r.primary_region AS "primary",
 	zones_table.region IS NOT NULL AS is_region_active,
@@ -66,6 +67,7 @@ AS
 	zones
 FROM [
 	SELECT
+		name,
 		unnest(dbs.regions) AS region,
 		dbs.primary_region AS primary_region
 	FROM crdb_internal.databases dbs
