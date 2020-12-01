@@ -429,7 +429,8 @@ func (m execNodeTraceMetadata) annotateExplain(plan *explain.Plan) {
 	walk = func(n *explain.Node) {
 		wrapped := n.WrappedNode()
 		if meta, ok := m[wrapped]; ok {
-			var rowCount uint64
+			var nodeStats exec.ExecutionStats
+
 			incomplete := false
 			for i := range meta.processors {
 				stats := meta.processors[i].stats
@@ -437,15 +438,15 @@ func (m execNodeTraceMetadata) annotateExplain(plan *explain.Plan) {
 					incomplete = true
 					break
 				}
-				rowCount += stats.Output.NumTuples.Value()
+				nodeStats.RowCount.MaybeAdd(stats.Output.NumTuples)
+				nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
+				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
 			}
 			// If we didn't get statistics for all processors, we don't show the
 			// incomplete results. In the future, we may consider an incomplete flag
 			// if we want to show them with a warning.
 			if !incomplete {
-				n.Annotate(exec.ExecutionStatsID, &exec.ExecutionStats{
-					RowCount: rowCount,
-				})
+				n.Annotate(exec.ExecutionStatsID, &nodeStats)
 			}
 		}
 
