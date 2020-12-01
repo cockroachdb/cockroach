@@ -91,8 +91,8 @@ func evalExport(
 	}
 	defer cArgs.EvalCtx.GetLimiters().ConcurrentExportRequests.Finish()
 
-	makeExternalStorage := !args.ReturnSST || args.Storage != roachpb.ExternalStorage{} ||
-		(args.StorageByLocalityKV != nil && len(args.StorageByLocalityKV) > 0)
+	makeExternalStorage := !args.ReturnSST //|| args.Storage != roachpb.ExternalStorage{} ||
+		//(args.StorageByLocalityKV != nil && len(args.StorageByLocalityKV) > 0)
 	if makeExternalStorage || log.V(1) {
 		log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
 	} else {
