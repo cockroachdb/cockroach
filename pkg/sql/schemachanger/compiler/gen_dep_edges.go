@@ -63,3 +63,11 @@ func generateDropColumnDepEdges(g *targetStateGraph, t *targets.DropColumn, s ta
 		}
 	}
 }
+
+/*
+
+- DropColumn:
+  - StateDeleteAndWriteOnly
+    - DropIndex:
+       - <predicate over fields> -> DeleteAndWriteOnly
+*/

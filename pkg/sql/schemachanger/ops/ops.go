@@ -14,6 +14,7 @@ const (
 	ValidationType
 )
 
+// Op represents an action to be taken on a single descriptor.
 type Op interface {
 	op()
 	Type() Type
@@ -85,10 +86,12 @@ type ColumnDescriptorStateChange struct {
 
 type AddCheckConstraint struct {
 	descriptorMutationOp
-	TableID   descpb.ID
-	Name      string
-	Expr      string
-	ColumnIDs descpb.ColumnIDs
+	TableID     descpb.ID
+	Name        string
+	Expr        string
+	ColumnIDs   descpb.ColumnIDs
+	Unvalidated bool
+	Hidden      bool
 }
 
 type ValidateCheckConstraint struct {
