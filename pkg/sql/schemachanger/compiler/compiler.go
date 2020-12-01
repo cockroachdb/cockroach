@@ -182,6 +182,9 @@ func buildGraph(
 		targetStateOpEdges:  map[*targets.TargetState]*opEdge{},
 		targetStateDepEdges: map[*targets.TargetState][]*depEdge{},
 	}
+
+	// TODO: add validation of targets to ensure no two overlap in their
+	// referenced elements.
 	for _, ts := range initialStates {
 		if existing, ok := g.targetIdxMap[ts.Target]; ok {
 			return nil, errors.Errorf("invalid initial states contains duplicate target: %v and %v", ts, initialStates[existing])

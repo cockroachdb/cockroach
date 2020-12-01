@@ -205,32 +205,32 @@ func generateAddColumnOpEdges(
 				flags.ExecutionPhase == PostStatementPhase {
 				return nil
 			}
-			next := targets.StateDeleteOnly
-			g.addOpEdge(t, s, next, ops.AddColumnDescriptor{
-				TableID:  t.TableID,
-				ColumnID: t.ColumnID,
-			})
-			s = next
+			s = g.addOpEdge(t, s,
+				targets.StateDeleteOnly,
+				ops.AddColumnDescriptor{
+					TableID:  t.TableID,
+					ColumnID: t.ColumnID,
+				})
 		case targets.StateDeleteOnly:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
 				flags.ExecutionPhase == PreCommitPhase {
 				return nil
 			}
-			next := targets.StateDeleteAndWriteOnly
-			g.addOpEdge(t, s, next, ops.ColumnDescriptorStateChange{
-				TableID:   t.TableID,
-				ColumnID:  t.ColumnID,
-				NextState: targets.StateDeleteAndWriteOnly,
-			})
-			s = next
+			s = g.addOpEdge(t, s,
+				targets.StateDeleteAndWriteOnly,
+				ops.ColumnDescriptorStateChange{
+					TableID:   t.TableID,
+					ColumnID:  t.ColumnID,
+					NextState: targets.StateDeleteAndWriteOnly,
+				})
 		case targets.StateDeleteAndWriteOnly:
-			next := targets.StatePublic
-			g.addOpEdge(t, s, next, ops.ColumnDescriptorStateChange{
-				TableID:   t.TableID,
-				ColumnID:  t.ColumnID,
-				NextState: targets.StatePublic,
-			})
-			s = next
+			s = g.addOpEdge(t, s,
+				targets.StatePublic,
+				ops.ColumnDescriptorStateChange{
+					TableID:   t.TableID,
+					ColumnID:  t.ColumnID,
+					NextState: targets.StatePublic,
+				})
 		case targets.StatePublic:
 			return
 		default:

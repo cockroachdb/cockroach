@@ -82,6 +82,14 @@ type AddCheckConstraint struct {
 	ColumnIDs descpb.ColumnIDs
 }
 
+type AddCheckConstraintUnvalidated struct {
+	target
+	TableID   descpb.ID
+	Name      string
+	Expr      string
+	ColumnIDs descpb.ColumnIDs
+}
+
 type DropCheckConstraint struct {
 	target
 	TableID descpb.ID
