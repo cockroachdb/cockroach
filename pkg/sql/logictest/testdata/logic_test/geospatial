@@ -102,7 +102,7 @@ SELECT orphan FROM geo_table
 query TTBTTTB rowsort
 SHOW COLUMNS FROM geo_table
 ----
-id      INT8                      false  NULL  ·  {primary,geo_table_geom_idx,geo_table_geog_idx}  false
+id      INT8                      false  NULL  ·  {geo_table_geog_idx,geo_table_geom_idx,primary}  false
 geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {geo_table_geog_idx}                             false
 geom    GEOMETRY(POINT)           true   NULL  ·  {geo_table_geom_idx}                             false
 orphan  GEOGRAPHY                 true   NULL  ·  {}                                               false
