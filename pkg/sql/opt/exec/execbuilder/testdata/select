@@ -2,8 +2,10 @@
 
 # Prepare a trace to be inspected below.
 
+# TODO(yuzefovich): clean up the tracing in the vectorized engine and remove
+# adjustment of vectorize mode (#55821).
 statement ok
-SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off
+SET vectorize=off; SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off; RESET vectorize
 
 # Inspect the trace: we exclude messages containing newlines as these
 # may contain non-deterministic txn object descriptions.

@@ -637,7 +637,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   columns: (x)
@@ -650,7 +650,7 @@ query T
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • ordinality
 │
@@ -661,7 +661,7 @@ query T
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: -"ordinality"
@@ -675,7 +675,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • ordinality
 │ columns: (x, "ordinality")
@@ -692,7 +692,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • ordinality
 │ columns: (x, "ordinality")
@@ -716,7 +716,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (b)
@@ -736,7 +736,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (b)
@@ -758,7 +758,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (b)
@@ -1099,7 +1099,7 @@ EXPLAIN (VERBOSE)
 SELECT k FROM kv JOIN (VALUES (1,2), (3,4)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (k)

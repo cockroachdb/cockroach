@@ -529,6 +529,7 @@ go_test(
         "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/sqlmigrations",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/diagutils",

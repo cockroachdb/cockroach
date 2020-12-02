@@ -61,7 +61,7 @@ query T
 EXPLAIN DELETE FROM unindexed
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete range
   from: unindexed
@@ -71,7 +71,7 @@ query T
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ from: unindexed
@@ -93,7 +93,7 @@ query T
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ from: unindexed
@@ -115,7 +115,7 @@ query T
 EXPLAIN DELETE FROM unindexed WHERE k > 0
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete range
   from: unindexed
@@ -130,7 +130,7 @@ query T
 EXPLAIN DELETE FROM unindexed WHERE k > 0 LIMIT 1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ from: unindexed
@@ -146,7 +146,7 @@ query T
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ from: indexed
@@ -162,7 +162,7 @@ query T
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ from: indexed
@@ -179,7 +179,7 @@ query T
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ from: indexed
@@ -200,7 +200,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t38799@foo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ columns: ()
@@ -261,7 +261,7 @@ query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete range
   from: parent
@@ -280,7 +280,7 @@ query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete range
   from: parent
@@ -291,7 +291,7 @@ query T
 EXPLAIN DELETE FROM child WHERE id > 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ from: child
@@ -318,7 +318,7 @@ query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete range
   from: parent
@@ -338,7 +338,7 @@ query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete range
   from: parent
@@ -357,7 +357,7 @@ query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │
@@ -393,7 +393,7 @@ query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │
@@ -453,7 +453,7 @@ query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │
@@ -512,7 +512,7 @@ query T
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │
@@ -551,7 +551,7 @@ query T
 EXPLAIN DELETE FROM ab WHERE a = 1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │

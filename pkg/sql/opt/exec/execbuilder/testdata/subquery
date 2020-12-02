@@ -10,7 +10,7 @@ query T
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │
@@ -34,7 +34,7 @@ query T
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │
@@ -160,7 +160,7 @@ query T
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +foo1
@@ -173,7 +173,7 @@ query T
 EXPLAIN VALUES (1), ((SELECT 2))
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │
@@ -353,7 +353,7 @@ query T
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: ("array")
@@ -379,7 +379,7 @@ query T
 EXPLAIN(verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • apply join (semi)
 │ columns: (a, b, c)

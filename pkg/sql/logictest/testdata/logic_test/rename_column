@@ -1,3 +1,5 @@
+# LogicTest: !fakedist-metadata
+
 statement ok
 CREATE TABLE users (
   uid    INT PRIMARY KEY,
@@ -111,27 +113,33 @@ statement ok
 DROP VIEW v2
 
 query T
-SELECT column_name FROM [SHOW COLUMNS FROM users]
+SELECT column_name FROM [SHOW COLUMNS FROM users] ORDER BY column_name
 ----
 id
-username
 species
+username
+
+statement ok
+SET vectorize=on
 
 query T
 EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • alter table
 
+statement ok
+RESET vectorize
+
 # Verify that EXPLAIN did not actually rename the column
 query T
-SELECT column_name FROM [SHOW COLUMNS FROM users]
+SELECT column_name FROM [SHOW COLUMNS FROM users] ORDER BY column_name
 ----
 id
-username
 species
+username
 
 # Check that a column can be added and renamed in the same statement
 statement ok

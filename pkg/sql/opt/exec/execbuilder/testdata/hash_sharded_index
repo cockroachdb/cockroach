@@ -10,7 +10,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO sharded_primary (a) VALUES (1), (2)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ columns: ()
@@ -44,7 +44,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO sharded_secondary (a) VALUES (1), (2)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ columns: ()

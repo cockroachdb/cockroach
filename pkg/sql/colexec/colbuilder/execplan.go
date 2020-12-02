@@ -58,9 +58,8 @@ func wrapRowSources(
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 	factory coldata.ColumnFactory,
-) (*colexec.Columnarizer, []execinfra.Releasable, error) {
+) (*colexec.Columnarizer, error) {
 	var toWrapInputs []execinfra.RowSource
-	var releasables []execinfra.Releasable
 	for i, input := range inputs {
 		// Optimization: if the input is a Columnarizer, its input is necessarily a
 		// execinfra.RowSource, so remove the unnecessary conversion.
@@ -69,6 +68,14 @@ func wrapRowSources(
 			// to this operator (e.g. streamIDToOp).
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
+			// Note that this materializer is *not* added to the set of
+			// releasables because in some cases it could be released before
+			// being closed. Namely, this would occur if we have a subquery
+			// with LocalPlanNode core and a materializer is added in order to
+			// wrap that core - what will happen is that all releasables are put
+			// back into their pools upon the subquery's flow cleanup, yet the
+			// subquery planNode tree isn't closed yet since its closure is down
+			// when the main planNode tree is being closed.
 			toWrapInput, err := colexec.NewMaterializer(
 				flowCtx,
 				processorID,
@@ -81,29 +88,25 @@ func wrapRowSources(
 				nil, /* cancelFlow */
 			)
 			if err != nil {
-				return nil, releasables, err
+				return nil, err
 			}
-			releasables = append(releasables, toWrapInput)
 			toWrapInputs = append(toWrapInputs, toWrapInput)
 		}
 	}
 
 	toWrap, err := newToWrap(toWrapInputs)
 	if err != nil {
-		return nil, releasables, err
+		return nil, err
 	}
 
-	var op *colexec.Columnarizer
 	if _, mustBeStreaming := toWrap.(execinfra.StreamingProcessor); mustBeStreaming {
-		op, err = colexec.NewStreamingColumnarizer(
-			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
-		)
-	} else {
-		op, err = colexec.NewBufferingColumnarizer(
+		return colexec.NewStreamingColumnarizer(
 			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
 		)
 	}
-	return op, releasables, err
+	return colexec.NewBufferingColumnarizer(
+		ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+	)
 }
 
 type opResult struct {
@@ -277,7 +280,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 
 var (
 	errCoreUnsupportedNatively        = errors.New("unsupported processor core")
-	errLocalPlanNodeWrap              = errors.New("core.LocalPlanNode is not supported")
 	errMetadataTestSenderWrap         = errors.New("core.MetadataTestSender is not supported")
 	errMetadataTestReceiverWrap       = errors.New("core.MetadataTestReceiver is not supported")
 	errChangeAggregatorWrap           = errors.New("core.ChangeAggregator is not supported")
@@ -290,11 +292,11 @@ var (
 	errSampleAggregatorWrap           = errors.New("core.SampleAggregator is not supported (not an execinfra.RowSource)")
 	errBackupDataWrap                 = errors.New("core.BackupData is not supported (not an execinfra.RowSource)")
 	errSplitAndScatterWrap            = errors.New("core.SplitAndScatter is not supported (not an execinfra.RowSource)")
-	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader core is prohibited in vectorize=experimental_always")
+	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=experimental_always")
 )
 
 func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
-	if spec.Core.JoinReader == nil && mode == sessiondatapb.VectorizeExperimentalAlways {
+	if mode == sessiondatapb.VectorizeExperimentalAlways && spec.Core.JoinReader == nil && spec.Core.LocalPlanNode == nil {
 		return errExperimentalWrappingProhibited
 	}
 	switch {
@@ -332,10 +334,6 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	case spec.Core.ProjectSet != nil:
 	case spec.Core.Windower != nil:
 	case spec.Core.LocalPlanNode != nil:
-		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
-		// around a planNode) because it creates complications, and a flow with
-		// such processor probably will not benefit from the vectorization.
-		return errLocalPlanNodeWrap
 	case spec.Core.ChangeAggregator != nil:
 		// Currently, there is an issue with cleaning up the changefeed flows
 		// (#55408), so we fallback to the row-by-row engine.
@@ -574,13 +572,10 @@ func (r opResult) createAndWrapRowSource(
 	if args.ProcessorConstructor == nil {
 		return errors.New("processorConstructor is nil")
 	}
-	if spec.Core.JoinReader == nil {
-		switch flowCtx.EvalCtx.SessionData.VectorizeMode {
-		case sessiondatapb.VectorizeExperimentalAlways:
-			return causeToWrap
-		}
+	if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
+		return causeToWrap
 	}
-	c, releasables, err := wrapRowSources(
+	c, err := wrapRowSources(
 		ctx,
 		flowCtx,
 		inputs,
@@ -594,8 +589,7 @@ func (r opResult) createAndWrapRowSource(
 			// output, and it will be set up in wrapRowSources.
 			proc, err := args.ProcessorConstructor(
 				ctx, flowCtx, spec.ProcessorID, &spec.Core, &spec.Post, inputs,
-				[]execinfra.RowReceiver{nil}, /* outputs */
-				nil,                          /* localProcessors */
+				[]execinfra.RowReceiver{nil} /* outputs */, args.LocalProcessors,
 			)
 			if err != nil {
 				return nil, err
@@ -617,7 +611,6 @@ func (r opResult) createAndWrapRowSource(
 		},
 		factory,
 	)
-	r.Releasables = append(r.Releasables, releasables...)
 	if err != nil {
 		return err
 	}

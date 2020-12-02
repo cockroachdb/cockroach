@@ -306,7 +306,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 10
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ columns: ()
@@ -343,7 +343,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ columns: ()
@@ -370,7 +370,7 @@ query T
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ into: insert_t(x, v, rowid)
@@ -388,7 +388,7 @@ query T
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ into: insert_t(x, v, rowid)
@@ -409,7 +409,7 @@ query T
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ into: insert_t(x, v, rowid)
@@ -430,7 +430,7 @@ query T
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ into: insert_t(x, v, rowid)
@@ -453,7 +453,7 @@ EXPLAIN (VERBOSE)
 INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • render
 │ columns: ("?column?")
@@ -511,7 +511,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (x)
@@ -537,7 +537,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert fast path
   columns: ()
@@ -564,7 +564,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (z)

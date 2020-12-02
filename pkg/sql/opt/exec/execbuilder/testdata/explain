@@ -33,7 +33,7 @@ query T
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   columns: (a)
@@ -44,7 +44,7 @@ query T
 EXPLAIN (VERBOSE,PLAN) SELECT 1 a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   columns: (a)
@@ -56,7 +56,7 @@ query T
 EXPLAIN (TYPES) SELECT 1 a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   columns: (a int)
@@ -90,7 +90,7 @@ query T
 EXPLAIN CREATE DATABASE foo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • create database
 
@@ -98,7 +98,7 @@ query T
 EXPLAIN CREATE TABLE foo (x INT)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • create table
 
@@ -109,7 +109,7 @@ query T
 EXPLAIN CREATE INDEX a ON foo(x)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • create index
 
@@ -120,7 +120,7 @@ query T
 EXPLAIN DROP DATABASE foo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • drop database
 
@@ -131,7 +131,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW JOBS] WHERE info NOT LIKE '%size%' AND info NOT LIKE '%filter%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: -column18,-started
@@ -149,7 +149,7 @@ query T
 EXPLAIN DROP INDEX foo@a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • drop index
 
@@ -157,7 +157,7 @@ query T
 EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • alter table
 
@@ -165,7 +165,7 @@ query T
 EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • split
 │ columns: (key, pretty, split_enforced_until)
@@ -180,7 +180,7 @@ query T
 EXPLAIN DROP TABLE foo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • drop table
 
@@ -188,7 +188,7 @@ query T
 EXPLAIN SHOW DATABASES
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +name
@@ -200,7 +200,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +nspname,+relname
@@ -249,7 +249,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +nspname,+relname
@@ -306,7 +306,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • filter
 │ filter: variable = 'database'
@@ -318,7 +318,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW SCHEMAS] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +nspname
@@ -345,7 +345,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • filter
 │ filter: variable = 'timezone'
@@ -357,7 +357,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • filter
 │ filter: variable = 'default_transaction_isolation'
@@ -369,7 +369,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_PRIORITY] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • filter
 │ filter: variable = 'default_transaction_priority'
@@ -381,7 +381,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • filter
 │ filter: variable = 'default_transaction_use_follower_reads'
@@ -393,7 +393,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • filter
 │ filter: variable = 'transaction_isolation'
@@ -405,7 +405,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • filter
 │ filter: variable = 'transaction_priority'
@@ -417,7 +417,7 @@ query T
 EXPLAIN SHOW COLUMNS FROM foo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +ordinal_position,+column_name,+crdb_sql_type,+is_nullable,+column_default,+generation_expression,+indices,+is_hidden
@@ -448,7 +448,7 @@ query T
 SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +grantee,+privilege_type
@@ -463,7 +463,7 @@ query T
 EXPLAIN SHOW INDEX FROM foo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +index_name,+non_unique,+seq_in_index,+column_name,+direction,+storing,+implicit
@@ -480,7 +480,7 @@ query T
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +conname,+constraint_type,+condef,+convalidated
@@ -561,7 +561,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM select_test
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sequence select
   columns: (last_value, log_cnt, is_called)
@@ -571,7 +571,7 @@ query T
 EXPLAIN (VERBOSE) SELECT @1 FROM select_test
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • render
 │ columns: ("?column?")
@@ -593,7 +593,7 @@ query T
 EXPLAIN INSERT INTO t VALUES (1, 2)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert fast path
   into: t(k, v)
@@ -677,7 +677,7 @@ query T
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   size: 3 columns, 2 rows
@@ -686,7 +686,7 @@ query T
 EXPLAIN VALUES (1)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   size: 1 column, 1 row
@@ -785,7 +785,7 @@ query T
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert fast path
   columns: ()
@@ -800,7 +800,7 @@ query T
 EXPLAIN (TYPES) SELECT 42 AS a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   columns: (a int)
@@ -852,7 +852,7 @@ query T
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   columns: (column1 int, column2 int, column3 int)
@@ -883,7 +883,7 @@ query T
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ columns: ()
@@ -909,7 +909,7 @@ query T
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • update
 │ columns: ()
@@ -940,7 +940,7 @@ query T
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • union
 │ columns: (column1 int)
@@ -1031,7 +1031,7 @@ query T
 EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   columns: (a int)
@@ -1043,7 +1043,7 @@ query T
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   columns: (x int)
@@ -1307,7 +1307,7 @@ query T
 EXPLAIN SELECT string_agg(x, y) FROM (VALUES ('foo', 'foo'), ('bar', 'bar')) t(x, y)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • group (scalar)
 │
@@ -1348,7 +1348,7 @@ query T
 EXPLAIN EXPLAIN SELECT 1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • explain
 
@@ -1382,7 +1382,7 @@ query T
 EXPLAIN UPSERT INTO u VALUES (1, 1)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • upsert
 │ into: u(k, v)
@@ -1404,7 +1404,7 @@ query T
 EXPLAIN INSERT INTO u VALUES (1, 1) ON CONFLICT DO NOTHING
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ into: u(k, v)

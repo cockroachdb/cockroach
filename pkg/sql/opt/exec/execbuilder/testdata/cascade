@@ -827,7 +827,7 @@ query T
 EXPLAIN DELETE FROM delrng1 WHERE p = 1
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │
