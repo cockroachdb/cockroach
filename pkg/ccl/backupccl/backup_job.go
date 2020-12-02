@@ -203,15 +203,22 @@ func backup(
 	var lastCheckpoint time.Time
 
 	var ranges []roachpb.RangeDescriptor
-	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		// TODO(benesch): limit the range descriptors we fetch to the ranges that
-		// are actually relevant in the backup to speed up small backups on large
-		// clusters.
-		ranges, err = allRangeDescriptors(ctx, txn)
-		return err
-	}); err != nil {
-		return RowCount{}, err
+
+	// TODO(dt): we should really get a RangeDescriptor iterator and do this the
+	// right way, just iterate the spans we need, in a tenant or not. For now
+	// though tenants aren't allowed to just go read all ranges so we'll skip this
+	// and let distsender just split our ExportRequest for us.
+	if execCtx.ExecCfg().Codec.ForSystemTenant() {
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			var err error
+			// TODO(benesch): limit the range descriptors we fetch to the ranges that
+			// are actually relevant in the backup to speed up small backups on large
+			// clusters.
+			ranges, err = allRangeDescriptors(ctx, txn)
+			return err
+		}); err != nil {
+			return RowCount{}, err
+		}
 	}
 
 	var completedSpans, completedIntroducedSpans []roachpb.Span
@@ -499,7 +506,7 @@ func (b *backupResumer) Resume(
 
 	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
 	if err != nil {
-		if !build.IsRelease() {
+		if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
 			return err
 		}
 		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
