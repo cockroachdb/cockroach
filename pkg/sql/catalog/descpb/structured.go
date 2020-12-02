@@ -332,6 +332,28 @@ func (desc *DatabaseDescriptor) IsMultiRegion() bool {
 }
 
 // Regions returns the multi-region regions that have been added to a database.
-func (desc *DatabaseDescriptor) Regions() Regions {
-	return desc.RegionConfig.Regions
+func (desc *DatabaseDescriptor) Regions() (Regions, error) {
+	if !desc.IsMultiRegion() {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region database")
+	}
+	return desc.RegionConfig.Regions, nil
+}
+
+// PrimaryRegion returns the primary region for a multi-region database.
+func (desc *DatabaseDescriptor) PrimaryRegion() (Region, error) {
+	if !desc.IsMultiRegion() {
+		return "", errors.AssertionFailedf(
+			"can not get the primary region of a non multi-region database")
+	}
+	return desc.RegionConfig.PrimaryRegion, nil
+}
+
+// PrimaryRegion returns the primary region for a multi-region type descriptor.
+func (desc *TypeDescriptor) PrimaryRegion() (Region, error) {
+	if desc.Kind != TypeDescriptor_MULTIREGION_ENUM {
+		return "", errors.AssertionFailedf(
+			"can not get primary region of a non multi-region type desc")
+	}
+	return desc.RegionConfig.PrimaryRegion, nil
 }

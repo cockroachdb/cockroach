@@ -1176,7 +1176,8 @@ message TypeDescriptor {
   repeated uint32 referencing_descriptor_ids = 12
     [(gogoproto.casttype) = "ID", (gogoproto.customname) = "ReferencingDescriptorIDs"];
 
-  // The fields below are used only when this type is an ENUM type.
+  // The fields below are used only when this type is an ENUM or a
+  // MULTIREGION_ENUM.
 
   // EnumMember represents a value in an enum.
   message EnumMember {
@@ -1198,10 +1199,24 @@ message TypeDescriptor {
   // enum_members is the set of values in an enum.
   repeated EnumMember enum_members = 6 [(gogoproto.nullable) = false];
 
-  // The fields below are used only when this type is an ALIAS type.
+  // The fields below are used only when this type is an ALIAS.
 
   // alias is the types.T that this descriptor is an alias for.
   optional sql.sem.types.T alias = 7;
+
+
+  // The fields below are used only when this type is a MULTIREGION_ENUM.
+
+  // RegionConfig stores the multi-region configuration for a type descriptor of
+  // MULTIREGION_ENUM kind.
+  message RegionConfig {
+    option (gogoproto.equal) = true;
+
+    // PrimaryRegion represents the PrimaryRegion for a multi-region enum.
+    optional string primary_region = 1 [(gogoproto.nullable) = false, (gogoproto.casttype)="Region"];
+  }
+
+  optional RegionConfig region_config = 16;
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured
