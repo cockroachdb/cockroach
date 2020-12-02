@@ -293,7 +293,7 @@ func TestInternalErrorReporting(t *testing.T) {
 	assert.Regexp(t, `.*/builtins.go`, fr[len(fr)-1].Filename)
 	assert.Regexp(t, `.*/eval.go`, fr[len(fr)-2].Filename)
 
-	assert.Regexp(t, `^\(3\) eval.go:\d+ \(Eval\)$`, p.Exception[0].Type)
+	assert.Regexp(t, `^\(3\) eval.go:\d+ \(MaybeWrapError\)$`, p.Exception[0].Type)
 	assert.Regexp(t, `^\*withstack\.withStack$`, p.Exception[0].Value)
 	fr = p.Exception[0].Stacktrace.Frames
 	assert.Regexp(t, `.*/eval.go`, fr[len(fr)-1].Filename)
