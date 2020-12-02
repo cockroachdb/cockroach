@@ -331,12 +331,30 @@ func (s *Store) processRaftSnapshotRequest(
 				}
 			}()
 		}
+
+		if snapHeader.RaftMessageRequest.Message.From == snapHeader.RaftMessageRequest.Message.To {
+			// This is a special case exercised during recovery from loss of quorum.
+			// In this case, a forged snapshot will be sent to the replica and will
+			// hit this code path (if we make up a non-existent follower, Raft will
+			// drop the message, hence we are forced to make the receiver the sender).
+			//
+			// Unfortunately, at the time of writing, Raft assumes that a snapshot
+			// is always received from the leader (of the given term), which plays
+			// poorly with these forged snapshots. However, a zero sender works just
+			// fine as the value zero represents "no known leader".
+			//
+			// We prefer not to introduce a zero origin of the message as throughout
+			// our code we rely on it being present. Instead, we reset the origin
+			// that raft looks at just before handing the message off.
+			snapHeader.RaftMessageRequest.Message.From = 0
+		}
 		// NB: we cannot get errRemoved here because we're promised by
 		// withReplicaForRequest that this replica is not currently being removed
 		// and we've been holding the raftMu the entire time.
 		if err := r.stepRaftGroup(&snapHeader.RaftMessageRequest); err != nil {
 			return roachpb.NewError(err)
 		}
+
 		_, expl, err := r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 		maybeFatalOnRaftReadyErr(ctx, expl, err)
 		removePlaceholder = false

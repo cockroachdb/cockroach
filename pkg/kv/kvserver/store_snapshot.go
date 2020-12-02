@@ -16,12 +16,17 @@ import (
 	"io"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -30,6 +35,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -897,6 +903,136 @@ func (e *errMustRetrySnapshotDueToTruncation) Error() string {
 		e.index, e.term,
 	)
 }
+
+// SendEmptySnapshot creates an OutgoingSnapshot for the input range
+// descriptor and seeds it with an empty range. Then, it sends this
+// snapshot to the replica specified in the input.
+func SendEmptySnapshot(
+	ctx context.Context,
+	st *cluster.Settings,
+	cc *grpc.ClientConn,
+	now hlc.Timestamp,
+	desc roachpb.RangeDescriptor,
+	to roachpb.ReplicaDescriptor,
+) error {
+	// Create an engine to use as a buffer for the empty snapshot.
+	eng := storage.NewDefaultInMem()
+	defer eng.Close()
+
+	var ms enginepb.MVCCStats
+	// Seed an empty range into the new engine.
+	if err := storage.MVCCPutProto(
+		ctx, eng, &ms, keys.RangeDescriptorKey(desc.StartKey), now, nil /* txn */, &desc,
+	); err != nil {
+		return err
+	}
+	ms, err := stateloader.WriteInitialReplicaState(
+		ctx,
+		eng,
+		ms,
+		desc,
+		roachpb.Lease{},
+		hlc.Timestamp{}, // gcThreshold
+		stateloader.TruncatedStateUnreplicated,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Use stateloader to load state out of memory from the previously created engine.
+	sl := stateloader.Make(desc.RangeID)
+	state, err := sl.Load(ctx, eng, &desc)
+	if err != nil {
+		return err
+	}
+	hs, err := sl.LoadHardState(ctx, eng)
+	if err != nil {
+		return err
+	}
+
+	snapUUID, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+
+	// Create an OutgoingSnapshot to send.
+	outgoingSnap, err := snapshot(
+		ctx,
+		snapUUID,
+		sl,
+		// TODO(tbg): We may want a separate SnapshotRequest type
+		// for recovery that always goes through by bypassing all throttling
+		// so they cannot be declined. We don't want our operation to be held
+		// up behind a long running snapshot. We want this to go through
+		// quickly.
+		SnapshotRequest_VIA_SNAPSHOT_QUEUE,
+		eng,
+		desc.RangeID,
+		raftentry.NewCache(1), // cache is not used
+		func(func(SideloadStorage) error) error { return nil }, // this is used for sstables, not needed here as there are no logs
+		desc.StartKey,
+	)
+	if err != nil {
+		return err
+	}
+	defer outgoingSnap.Close()
+
+	// From and to replica descriptors are the same because we have
+	// to send the snapshot from a member of the range descriptor.
+	// Sending it from the current replica ensures that. Otherwise,
+	// it would be a malformed request if it came from a non-member.
+	from := to
+	req := RaftMessageRequest{
+		RangeID:     desc.RangeID,
+		FromReplica: from,
+		ToReplica:   to,
+		Message: raftpb.Message{
+			Type:     raftpb.MsgSnap,
+			To:       uint64(to.ReplicaID),
+			From:     uint64(from.ReplicaID),
+			Term:     hs.Term,
+			Snapshot: outgoingSnap.RaftSnap,
+		},
+	}
+
+	header := SnapshotRequest_Header{
+		State:                      state,
+		RaftMessageRequest:         req,
+		RangeSize:                  ms.Total(),
+		CanDecline:                 false,
+		Priority:                   SnapshotRequest_RECOVERY,
+		Strategy:                   SnapshotRequest_KV_BATCH,
+		Type:                       SnapshotRequest_VIA_SNAPSHOT_QUEUE,
+		UnreplicatedTruncatedState: true,
+	}
+
+	stream, err := NewMultiRaftClient(cc).RaftSnapshot(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := stream.CloseSend(); err != nil {
+			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
+		}
+	}()
+
+	return sendSnapshot(
+		ctx,
+		st,
+		stream,
+		noopStorePool{},
+		header,
+		&outgoingSnap,
+		eng.NewBatch,
+		func() {},
+	)
+}
+
+// noopStorePool is a hollowed out StorePool that does not throttle. It's used in recovery scenarios.
+type noopStorePool struct{}
+
+func (n noopStorePool) throttle(throttleReason, string, roachpb.StoreID) {}
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
