@@ -549,7 +549,8 @@ func (b *Builder) buildScan(
 			dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
 			// We will track the ColumnID to Ord mapping so Ords can be added
 			// when a column is referenced.
-			for i, col := range outScope.cols {
+			for i := range outScope.cols {
+				col := &outScope.cols[i]
 				dep.ColumnIDToOrd[col.id] = ordinals[i]
 			}
 			if private.Flags.ForceIndex {
@@ -1393,7 +1394,8 @@ func (b *Builder) validateLockingInFrom(
 			// to improve the time complexity here, but we expect the number of
 			// columns to be small enough that doing so is likely not worth it.
 			found := false
-			for _, col := range fromScope.cols {
+			for i := range fromScope.cols {
+				col := &fromScope.cols[i]
 				if target.ObjectName == col.table.ObjectName {
 					found = true
 					break

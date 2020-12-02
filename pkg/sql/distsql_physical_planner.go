@@ -3590,7 +3590,8 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 	// Find all MetadataTestSenders in the plan, so that the MetadataTestReceiver
 	// knows how many sender IDs it should expect.
 	var metadataSenders []string
-	for _, proc := range plan.Processors {
+	for i := range plan.Processors {
+		proc := &plan.Processors[i]
 		if proc.Spec.Core.MetadataTestSender != nil {
 			metadataSenders = append(metadataSenders, proc.Spec.Core.MetadataTestSender.ID)
 		}

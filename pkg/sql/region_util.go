@@ -47,7 +47,8 @@ func (p *planner) getLiveClusterRegions() (liveClusterRegions, error) {
 		return nil, err
 	}
 	var ret liveClusterRegions = make(map[descpb.Region]struct{})
-	for _, node := range nodes {
+	for i := range nodes {
+		node := &nodes[i]
 		for _, tier := range node.Locality.Tiers {
 			if tier.Key == "region" {
 				ret[descpb.Region(tier.Value)] = struct{}{}

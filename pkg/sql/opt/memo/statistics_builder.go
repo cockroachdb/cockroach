@@ -2174,7 +2174,8 @@ func (sb *statisticsBuilder) colStatWindow(
 	colStat, _ := s.ColStats.Add(colSet)
 
 	var windowCols opt.ColSet
-	for _, w := range window.Windows {
+	for i := range window.Windows {
+		w := &window.Windows[i]
 		windowCols.Add(w.Col)
 	}
 

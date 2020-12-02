@@ -3197,7 +3197,8 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 		case *descpb.DescriptorMutation_PrimaryKeySwap:
 			args := t.PrimaryKeySwap
 			getIndexIdxByID := func(id descpb.IndexID) (int, error) {
-				for i, idx := range desc.Indexes {
+				for i := range desc.Indexes {
+					idx := &desc.Indexes[i]
 					if idx.ID == id {
 						return i, nil
 					}

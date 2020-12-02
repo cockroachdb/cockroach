@@ -90,7 +90,8 @@ func GenerateSubzoneSpans(
 
 	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
 	subzoneIndexByPartition := make(map[string]int32)
-	for i, subzone := range subzones {
+	for i := range subzones {
+		subzone := &subzones[i]
 		if len(subzone.PartitionName) > 0 {
 			subzoneIndexByPartition[subzone.PartitionName] = int32(i)
 		} else {

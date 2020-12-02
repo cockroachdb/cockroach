@@ -106,7 +106,7 @@ func MakeUpdater(
 
 	// needsUpdate returns true if the given index may need to be updated for
 	// the current UPDATE mutation.
-	needsUpdate := func(index descpb.IndexDescriptor) bool {
+	needsUpdate := func(index *descpb.IndexDescriptor) bool {
 		// If the UPDATE is set to only update columns and not secondary
 		// indexes, return false.
 		if updateType == UpdaterOnlyColumns {
@@ -137,9 +137,10 @@ func MakeUpdater(
 
 	writableIndexes := tableDesc.WritableIndexes()
 	includeIndexes := make([]descpb.IndexDescriptor, 0, len(writableIndexes))
-	for _, index := range writableIndexes {
+	for i := range writableIndexes {
+		index := &writableIndexes[i]
 		if needsUpdate(index) {
-			includeIndexes = append(includeIndexes, index)
+			includeIndexes = append(includeIndexes, *index)
 		}
 	}
 
@@ -147,13 +148,15 @@ func MakeUpdater(
 	tableCols := tableDesc.DeletableColumns()
 
 	var deleteOnlyIndexes []descpb.IndexDescriptor
-	for _, idx := range tableDesc.DeleteOnlyIndexes() {
+	indexes := tableDesc.DeleteOnlyIndexes()
+	for i := range indexes {
+		idx := &indexes[i]
 		if needsUpdate(idx) {
 			if deleteOnlyIndexes == nil {
 				// Allocate at most once.
-				deleteOnlyIndexes = make([]descpb.IndexDescriptor, 0, len(tableDesc.DeleteOnlyIndexes()))
+				deleteOnlyIndexes = make([]descpb.IndexDescriptor, 0, len(indexes))
 			}
-			deleteOnlyIndexes = append(deleteOnlyIndexes, idx)
+			deleteOnlyIndexes = append(deleteOnlyIndexes, *idx)
 		}
 	}
 
@@ -236,12 +239,14 @@ func MakeUpdater(
 
 		// Fetch all columns from indices that are being update so that they can
 		// be used to create the new kv pairs for those indices.
-		for _, index := range includeIndexes {
+		for i := range includeIndexes {
+			index := &includeIndexes[i]
 			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
 				return Updater{}, err
 			}
 		}
-		for _, index := range deleteOnlyIndexes {
+		for i := range deleteOnlyIndexes {
+			index := &deleteOnlyIndexes[i]
 			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
 				return Updater{}, err
 			}

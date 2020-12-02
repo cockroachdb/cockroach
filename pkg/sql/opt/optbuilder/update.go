@@ -351,7 +351,8 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.buildFKChecksForUpdate()
 
 	private := mb.makeMutationPrivate(returning != nil)
-	for _, col := range mb.extraAccessibleCols {
+	for i := range mb.extraAccessibleCols {
+		col := &mb.extraAccessibleCols[i]
 		if col.id != 0 {
 			private.PassthroughCols = append(private.PassthroughCols, col.id)
 		}

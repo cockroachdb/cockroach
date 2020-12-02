@@ -446,7 +446,8 @@ func (c *CustomFuncs) NeededWindowCols(windows memo.WindowsExpr, p *memo.WindowP
 // CanPruneWindows is true if the list of window functions contains a column
 // which is not included in needed, meaning that it can be pruned.
 func (c *CustomFuncs) CanPruneWindows(needed opt.ColSet, windows memo.WindowsExpr) bool {
-	for _, w := range windows {
+	for i := range windows {
+		w := &windows[i]
 		if !needed.Contains(w.Col) {
 			return true
 		}
@@ -459,9 +460,10 @@ func (c *CustomFuncs) CanPruneWindows(needed opt.ColSet, windows memo.WindowsExp
 // remove the expression entirely.
 func (c *CustomFuncs) PruneWindows(needed opt.ColSet, windows memo.WindowsExpr) memo.WindowsExpr {
 	result := make(memo.WindowsExpr, 0, len(windows))
-	for _, w := range windows {
+	for i := range windows {
+		w := &windows[i]
 		if needed.Contains(w.Col) {
-			result = append(result, w)
+			result = append(result, *w)
 		}
 	}
 	return result
