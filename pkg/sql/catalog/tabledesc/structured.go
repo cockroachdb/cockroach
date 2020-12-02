@@ -1479,14 +1479,52 @@ func (desc *Immutable) validateCrossReferencesIfTesting(
 // validateCrossReferences validates that each reference to another table is
 // resolvable and that the necessary back references exist.
 func (desc *Immutable) validateCrossReferences(ctx context.Context, dg catalog.DescGetter) error {
-	// Check that parent DB exists.
 	{
-		db, err := dg.GetDesc(ctx, desc.ParentID)
+		// Check that parent DB exists.
+		dbDesc, err := dg.GetDesc(ctx, desc.ParentID)
 		if err != nil {
 			return err
 		}
-		if _, isDB := db.(catalog.DatabaseDescriptor); !isDB {
+		db, isDB := dbDesc.(catalog.DatabaseDescriptor)
+
+		if !isDB {
 			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+		}
+
+		if desc.LocalityConfig != nil {
+			// Check locality configuration is only set if MultiRegion is enabled.
+			if !db.IsMultiRegion() {
+				return errors.AssertionFailedf(
+					"database %s is not multi-region enabled, but table %s has multi-region features",
+					db.DatabaseDesc().Name,
+					desc.TableDescriptor.Name,
+				)
+			}
+
+			switch lc := desc.LocalityConfig.Locality.(type) {
+			case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+				if lc.RegionalByTable.Region != nil {
+					contains := false
+					regions, err := db.DatabaseDesc().Regions()
+					if err != nil {
+						return err
+					}
+					for _, r := range regions {
+						if r == *lc.RegionalByTable.Region {
+							contains = true
+							break
+						}
+					}
+					if !contains {
+						return errors.AssertionFailedf(
+							"expected database %s to contain region %s as defined by REGIONAL BY TABLE on table %s",
+							db.DatabaseDesc().Name,
+							*lc.RegionalByTable.Region,
+							desc.TableDescriptor.Name,
+						)
+					}
+				}
+			}
 		}
 	}
 
