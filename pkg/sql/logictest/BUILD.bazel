@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
-        "//pkg/col/coldata",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security",
