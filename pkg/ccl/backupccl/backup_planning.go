@@ -657,7 +657,7 @@ func checkPrivilegesForBackup(
 	}
 	// Check that none of the destinations require an admin role.
 	for _, uri := range to {
-		hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(uri)
+		hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
 		if err != nil {
 			return err
 		}
