@@ -21,15 +21,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/require"
 )
 
 // Test that we don't attempt to create flows in an aborted transaction.
@@ -256,4 +260,53 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 			t.Fatalf("%d: expected %s, got %s", i, tc.expErr, rw.Err())
 		}
 	}
+}
+
+// TestDistSQLReceiverReportsContention verifies that the distsql receiver
+// reports contentions event via an observable metric if they occur. This test
+// additionally verifies that the metric stays at zero if there is no
+// contention.
+func TestDistSQLReceiverReportsContention(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testutils.RunTrueAndFalse(t, "contention", func(t *testing.T, contention bool) {
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					GenerateMockContentionEvents: contention,
+				},
+			},
+		})
+		defer s.Stopper().Stop(ctx)
+
+		sqlutils.CreateTable(
+			t, db, "test", "x INT", 10, sqlutils.ToRowFn(sqlutils.RowIdxFn),
+		)
+
+		metrics := s.DistSQLServer().(*distsql.ServerImpl).Metrics
+		for _, query := range []string{
+			"SELECT * FROM test.test",
+			// TODO(asubiotto): Uncomment once contention metadata is propagated back
+			//  from planNodes (#56916).
+			// "INSERT INTO test.test VALUES (11)",
+		} {
+			metrics.ContendedQueriesCount.Clear()
+			_, err := db.ExecContext(ctx, query)
+			require.NoError(t, err)
+
+			if contention {
+				// Soft check to protect against flakiness where an internal query
+				// causes the contention metric to increment.
+				require.GreaterOrEqual(t, metrics.ContendedQueriesCount.Count(), int64(1))
+			} else {
+				require.Zero(
+					t,
+					metrics.ContendedQueriesCount.Count(),
+					"contention metric unexpectedly non-zero when no contention events are produced",
+				)
+			}
+		}
+	})
 }

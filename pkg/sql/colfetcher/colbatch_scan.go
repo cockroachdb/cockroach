@@ -117,6 +117,10 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
+
+	if contentionEvents := s.rf.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
+	}
 	return trailingMeta
 }
 

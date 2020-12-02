@@ -1610,6 +1610,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"sql.distsql.queries.total"},
 			},
 			{
+				Title:   "Contended Queries",
+				Metrics: []string{"sql.distsql.contended_queries.count"},
+			},
+			{
 				Title:   "Vectorized Temporary Storage Open File Descriptors",
 				Metrics: []string{"sql.distsql.vec.openfds"},
 			},

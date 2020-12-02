@@ -723,6 +723,10 @@ func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMe
 			execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs},
 		)
 	}
+
+	if contentionEvents := jr.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
+	}
 	return trailingMeta
 }
 
