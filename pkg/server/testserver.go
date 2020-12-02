@@ -526,6 +526,18 @@ func makeSQLServerArgs(
 	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
 	registry.AddMetricStruct(runtime)
 
+	esb := &externalStorageBuilder{}
+	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.
+		ExternalStorage, error) {
+		return esb.makeExternalStorage(ctx, dest)
+	}
+	externalStorageFromURI := func(ctx context.Context, uri string,
+		user security.SQLUsername) (cloud.ExternalStorage, error) {
+		return esb.makeExternalStorageFromURI(ctx, uri, user)
+	}
+
+	esb.init(base.ExternalIODirConfig{}, baseCfg.Settings, nil, circularInternalExecutor, db)
+
 	// We don't need this for anything except some services that want a gRPC
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
@@ -540,14 +552,9 @@ func makeSQLServerArgs(
 			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
-			nodeIDContainer: idContainer,
-			externalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-				return nil, errors.New("external storage is not available to secondary tenants")
-			},
-			externalStorageFromURI: func(ctx context.Context,
-				uri string, user security.SQLUsername) (cloud.ExternalStorage, error) {
-				return nil, errors.New("external uri storage is not available to secondary tenants")
-			},
+			nodeIDContainer:        idContainer,
+			externalStorage:        externalStorage,
+			externalStorageFromURI: externalStorageFromURI,
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			tenantConnect: tenantConnect,
@@ -713,6 +720,8 @@ func StartTenant(
 		return "", "", err
 	}
 
+	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(args.nodeIDContainer.SQLInstanceID())})
+
 	if err := s.preStart(ctx,
 		args.stopper,
 		args.TestingKnobs,
@@ -723,6 +732,7 @@ func StartTenant(
 	); err != nil {
 		return "", "", err
 	}
+
 	if err := s.startServeSQL(ctx,
 		args.stopper,
 		s.connManager,
