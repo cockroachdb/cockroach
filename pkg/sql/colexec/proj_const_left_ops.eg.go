@@ -10131,7 +10131,7 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DBytes(arg)
+						_convertedNativeElem := tree.DString(arg)
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
@@ -10156,7 +10156,7 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DBytes(arg)
+						_convertedNativeElem := tree.DString(arg)
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
@@ -10184,7 +10184,7 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 				for _, i := range sel {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DBytes(arg)
+					_convertedNativeElem := tree.DString(arg)
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
@@ -10206,7 +10206,7 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DBytes(arg)
+					_convertedNativeElem := tree.DString(arg)
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
