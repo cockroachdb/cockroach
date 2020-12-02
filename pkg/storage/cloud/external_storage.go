@@ -91,3 +91,7 @@ type SQLConnI interface {
 	driver.QueryerContext
 	driver.ExecerContext
 }
+
+// AccessIsWithExplicitAuth is used to check if the provided path has explicit
+// authentication.
+var AccessIsWithExplicitAuth func(path string) (bool, string, error)
