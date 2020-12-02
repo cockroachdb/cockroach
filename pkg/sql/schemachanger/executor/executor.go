@@ -12,17 +12,21 @@ import (
 
 type Executor struct {
 	txn             *kv.Txn
-	descsCollection descs.Collection
+	descsCollection *descs.Collection
 
 	// ...
 }
 
-func New(txn *kv.Txn, descsCollection descs.Collection) *Executor {
+func New(txn *kv.Txn, descsCollection *descs.Collection) *Executor {
 	return &Executor{
 		txn:             txn,
 		descsCollection: descsCollection,
 	}
 }
+
+// TODO(ajwerner): Stop writing descriptors during execution at all.
+// This constant is for writing descriptors through the descs.Collection.
+const kvTrace = false
 
 // ExecuteOps executes the provided ops. The ops must all be of the same type.
 func (ex *Executor) ExecuteOps(ctx context.Context, toExecute []ops.Op) error {
@@ -51,12 +55,23 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, execute []
 		switch op := op.(type) {
 		case ops.AddCheckConstraint:
 			err = ex.executeAddCheckConstraint(ctx, op)
+		case ops.AddIndexDescriptor:
+			err = ex.executeAddIndexDescriptor(ctx, op)
+		case ops.IndexDescriptorStateChange:
+			err = ex.executeIndexDescriptorStateChange(ctx, op)
+		default:
+			err = errors.AssertionFailedf("descriptor mutation op not implemented for %T", op)
 		}
 		if err != nil {
 			return err
 		}
-
 	}
+	return nil
+}
+
+func (ex *Executor) executeIndexDescriptorStateChange(
+	ctx context.Context, op ops.IndexDescriptorStateChange,
+) error {
 	panic("not implemented")
 }
 
@@ -79,7 +94,7 @@ func (ex *Executor) executeAddCheckConstraint(
 		ck.Validity = descpb.ConstraintValidity_Validating
 	}
 	table.Checks = append(table.Checks)
-	return ex.descsCollection.AddUncommittedDescriptor(table)
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
 
 func (ex *Executor) executeDescriptorMutationOp(ctx context.Context, op ops.Op) {
@@ -92,6 +107,18 @@ func (ex *Executor) executeBackfillOps(ctx context.Context, execute []ops.Op) er
 
 func (ex *Executor) executeValidationOps(ctx context.Context, execute []ops.Op) error {
 	panic("not implemented")
+}
+
+func (ex *Executor) executeAddIndexDescriptor(
+	ctx context.Context, op ops.AddIndexDescriptor,
+) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+	table.MaybeIncrementVersion()
+	table.AddIndexMutation(&op.Index, descpb.DescriptorMutation_ADD)
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
 
 func getOpsType(execute []ops.Op) (ops.Type, error) {

@@ -12,7 +12,10 @@ import descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+<<<<<<< HEAD
 import github_com_cockroachdb_cockroach_pkg_ccl_streamingccl_streamclient "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+=======
+>>>>>>> WIP
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 import github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 import github_com_cockroachdb_cockroach_pkg_sql_sem_tree "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
