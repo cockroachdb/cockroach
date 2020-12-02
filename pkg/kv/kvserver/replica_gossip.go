@@ -177,7 +177,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 				continue
 			}
 		}
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
+		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.NodeMembershipStatus) {
 			// We can't transmit liveness records with a backwards incompatible
 			// representation unless we're told by the user that there are no
 			// pre-v20.1 nodes around. We should never get here.

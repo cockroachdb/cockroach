@@ -42,6 +42,7 @@ func (p *planner) ReparentDatabase(
 	ctx context.Context, n *tree.ReparentDatabase,
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"REPARENT DATABASE",
 	); err != nil {
@@ -54,10 +55,10 @@ func (p *planner) ReparentDatabase(
 	}
 
 	// Ensure that the cluster version is high enough to create the schema.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionUserDefinedSchemas) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.UserDefinedSchemas) {
 		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			`creating schemas requires all nodes to be upgraded to %s`,
-			clusterversion.VersionByKey(clusterversion.VersionUserDefinedSchemas))
+			clusterversion.ByKey(clusterversion.UserDefinedSchemas))
 	}
 
 	if string(n.Name) == p.CurrentDatabase() {

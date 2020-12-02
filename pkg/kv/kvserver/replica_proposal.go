@@ -757,7 +757,7 @@ func (r *Replica) evaluateProposal(
 		// If the cluster version doesn't track abort span size in MVCCStats, we
 		// zero it out to prevent inconsistencies in MVCCStats across nodes in a
 		// possibly mixed-version cluster.
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionAbortSpanBytes) {
+		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.AbortSpanBytes) {
 			res.Replicated.Delta.AbortSpanBytes = 0
 		}
 
