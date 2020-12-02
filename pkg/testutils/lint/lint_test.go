@@ -446,6 +446,7 @@ func TestLint(t *testing.T) {
 					":!ccl/workloadccl/fixture_test.go",
 					":!internal/gopath/gopath.go",
 					":!cmd",
+					":!util/cgroups/cgroups.go",
 					":!nightly",
 					":!testutils/lint",
 					":!util/envutil/env.go",

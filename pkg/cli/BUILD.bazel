@@ -133,6 +133,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/ts/tspb",
         "//pkg/util",
+        "//pkg/util/cgroups",
         "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/encoding/csv",
