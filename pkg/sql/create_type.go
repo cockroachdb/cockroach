@@ -323,8 +323,16 @@ func (p *planner) createEnumWithID(
 	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
 
 	enumKind := descpb.TypeDescriptor_ENUM
+	var regionConfig *descpb.TypeDescriptor_RegionConfig
 	if enumType == enumTypeMultiRegion {
 		enumKind = descpb.TypeDescriptor_MULTIREGION_ENUM
+		primaryRegion, err := dbDesc.PrimaryRegion()
+		if err != nil {
+			return err
+		}
+		regionConfig = &descpb.TypeDescriptor_RegionConfig{
+			PrimaryRegion: primaryRegion,
+		}
 	}
 
 	// TODO (rohany): OID's are computed using an offset of
@@ -342,6 +350,7 @@ func (p *planner) createEnumWithID(
 			EnumMembers:    members,
 			Version:        1,
 			Privileges:     privs,
+			RegionConfig:   regionConfig,
 		})
 
 	// Create the implicit array type for this type before finishing the type.
