@@ -39,7 +39,7 @@ CREATE TABLE xy (x INT, y INT)
 statement ok
 INSERT INTO xy VALUES (4, 4), (5, 5), (6, 6)
 
-statement error insert on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(4\) is not present in table "parent"\.
+statement error insert on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\([4-6]\) is not present in table "parent"\.
 INSERT INTO child SELECT x,y FROM xy
 
 statement ok

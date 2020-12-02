@@ -22,7 +22,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t9 SET b = b + 1 WHERE a = 5
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • update
 │ columns: ()
@@ -56,7 +56,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t9 SET a = 2 WHERE a = 5
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • update
 │ columns: ()

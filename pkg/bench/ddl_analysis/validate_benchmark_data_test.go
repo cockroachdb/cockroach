@@ -63,6 +63,9 @@ func TestBenchmarkExpectation(t *testing.T) {
 	skip.UnderStress(t)
 	skip.UnderRace(t)
 	skip.UnderShort(t)
+	// We also skip the test under the metamorphic build because with randomized
+	// magic constants (namely, mutations.MaxBatchSize) the number of round
+	// trips will change.
 	skip.UnderMetamorphic(t)
 
 	expecations := readExpectationsFile(t)

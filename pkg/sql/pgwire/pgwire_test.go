@@ -736,7 +736,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"EXPLAIN SELECT 1", []preparedQueryTest{
 			baseTest.SetArgs().
 				Results("distribution: local").
-				Results("vectorized: false").
+				Results("vectorized: true").
 				Results("").
 				Results("• values").
 				Results("  size: 1 column, 1 row"),
