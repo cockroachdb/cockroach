@@ -17,7 +17,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
-	"math/rand"
 	"regexp"
 	"runtime"
 	"sort"
@@ -145,11 +144,6 @@ func (b tpchVecTestCaseBase) getRunConfig(
 				vectorizeOptionToSetting(true, version)),
 		}},
 		setupNames: []string{"default"},
-	}
-	if version != tpchVecVersion19_2 {
-		runConfig.clusterSetups[0] = append(runConfig.clusterSetups[0],
-			"RESET CLUSTER SETTING sql.testing.vectorize.batch_size",
-		)
 	}
 	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
 		if _, shouldSkip := queriesToSkip[queryNum]; !shouldSkip {
@@ -517,33 +511,6 @@ func (d tpchVecDiskTest) preTestRunHook(
 	}
 }
 
-// setSmallBatchSize sets a cluster setting to override the batch size to be in
-// [1, 5) range.
-func setSmallBatchSize(t *test, conn *gosql.DB, rng *rand.Rand) {
-	batchSize := 1 + rng.Intn(4)
-	t.Status(fmt.Sprintf("setting sql.testing.vectorize.batch_size to %d", batchSize))
-	if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size=%d", batchSize)); err != nil {
-		t.Fatal(err)
-	}
-}
-
-type tpchVecSmallBatchSizeTest struct {
-	tpchVecTestCaseBase
-}
-
-func (b tpchVecSmallBatchSizeTest) preTestRunHook(
-	ctx context.Context,
-	t *test,
-	c *cluster,
-	conn *gosql.DB,
-	version crdbVersion,
-	clusterSetup []string,
-) {
-	b.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
-	rng, _ := randutil.NewPseudoRand()
-	setSmallBatchSize(t, conn, rng)
-}
-
 func baseTestRun(
 	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion, tc tpchVecTestCase,
 ) {
@@ -607,12 +574,6 @@ func (s tpchVecSmithcmpTest) preTestRunHook(
 		t.Fatal(err)
 	}
 	c.Put(ctx, smithcmp, "./"+tpchVecSmithcmp, node)
-	// To increase test coverage, we will be randomizing the batch size in 50%
-	// of the runs.
-	rng, _ := randutil.NewPseudoRand()
-	if rng.Float64() < 0.5 {
-		setSmallBatchSize(t, conn, rng)
-	}
 }
 
 func smithcmpTestRun(
@@ -699,18 +660,6 @@ func registerTPCHVec(r *testRegistry) {
 	})
 
 	r.Add(testSpec{
-		Name:    "tpchvec/smallbatchsize",
-		Owner:   OwnerSQLExec,
-		Cluster: makeClusterSpec(tpchVecNodeCount),
-		// 19.2 version doesn't have the testing cluster setting to change the batch
-		// size, so only run on versions >= 20.1.0.
-		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCHVec(ctx, t, c, tpchVecSmallBatchSizeTest{}, baseTestRun)
-		},
-	})
-
-	r.Add(testSpec{
 		Name:       "tpchvec/smithcmp",
 		Owner:      OwnerSQLExec,
 		Cluster:    makeClusterSpec(tpchVecNodeCount),
@@ -742,6 +691,8 @@ func registerTPCHVec(r *testRegistry) {
 			// that modify the cluster settings for all configs to benchmark
 			// like in the example below. The example benchmarks three values
 			// of coldata.BatchSize() variable against each other.
+			// NOTE: the setting has been removed since the example was written,
+			// but it still serves the purpose of showing how to use the config.
 			var clusterSetups [][]string
 			var setupNames []string
 			for _, batchSize := range []int{512, 1024, 1536} {
