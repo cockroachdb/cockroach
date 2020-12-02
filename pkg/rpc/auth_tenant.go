@@ -99,6 +99,7 @@ var reqMethodAllowlist = [...]bool{
 	roachpb.QueryIntent:    true,
 	roachpb.InitPut:        true,
 	roachpb.AddSSTable:     true,
+	roachpb.Export:         true,
 	roachpb.Refresh:        true,
 	roachpb.RefreshRange:   true,
 }
