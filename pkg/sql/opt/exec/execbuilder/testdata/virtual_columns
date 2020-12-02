@@ -129,7 +129,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert fast path
   columns: ()
@@ -145,7 +145,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1) RETURNING v
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (v)
@@ -165,7 +165,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (1, 1)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert fast path
   columns: ()

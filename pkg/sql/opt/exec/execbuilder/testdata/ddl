@@ -96,7 +96,7 @@ query T
 EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • split
 │ columns: (key, pretty, split_enforced_until)
