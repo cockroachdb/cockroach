@@ -136,11 +136,6 @@ var (
 	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
 	// LocalQueueLastProcessedSuffix is the suffix for replica queue state keys.
 	LocalQueueLastProcessedSuffix = roachpb.RKey("qlpt")
-	// LocalRangeDescriptorJointSuffix is the suffix for keys storing
-	// range descriptors. The value is a struct of type RangeDescriptor.
-	//
-	// TODO(tbg): decide what to actually store here. This is still unused.
-	LocalRangeDescriptorJointSuffix = roachpb.RKey("rdjt")
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")

@@ -205,10 +205,9 @@ var _ = [...]interface{}{
 	//   as a whole. They are replicated and addressable. Typical examples are
 	//   the range descriptor and transaction records. They all share
 	//   `LocalRangePrefix`.
-	QueueLastProcessedKey,   // "qlpt"
-	RangeDescriptorJointKey, // "rdjt"
-	RangeDescriptorKey,      // "rdsc"
-	TransactionKey,          // "txn-"
+	QueueLastProcessedKey, // "qlpt"
+	RangeDescriptorKey,    // "rdsc"
+	TransactionKey,        // "txn-"
 
 	//   4. Range lock keys for all replicated locks. All range locks share
 	//   LocalRangeLockTablePrefix. Locks can be acquired on global keys and on

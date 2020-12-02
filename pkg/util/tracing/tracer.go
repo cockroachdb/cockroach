@@ -159,27 +159,6 @@ func (t *Tracer) getShadowTracer() *shadowTracer {
 
 // StartSpan starts a Span. See SpanOption for details.
 func (t *Tracer) StartSpan(operationName string, os ...SpanOption) *Span {
-	// Fast paths to avoid the allocation of StartSpanOptions below when tracing
-	// is disabled: if we have no options or a single SpanReference (the common
-	// case) with a black hole span, return a noop Span now.
-	if !t.AlwaysTrace() {
-		if len(os) == 1 {
-			switch o := os[0].(type) {
-			case *parentAndAutoCollectionOption:
-				if (*Span)(o).IsBlackHole() {
-					return t.noopSpan
-				}
-			case *parentAndManualCollectionOption:
-				if (*SpanMeta)(o).isNilOrNoop() {
-					return t.noopSpan
-				}
-			}
-		}
-		if len(os) == 0 {
-			return t.noopSpan
-		}
-	}
-
 	// NB: apply takes and returns a value to avoid forcing
 	// `opts` on the heap here.
 	var opts spanOptions

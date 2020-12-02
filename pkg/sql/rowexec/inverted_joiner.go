@@ -693,10 +693,14 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 }
 
 func (ij *invertedJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	var trailingMeta []execinfrapb.ProducerMetadata
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, ij.FlowCtx.Txn); tfs != nil {
-		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
-	return nil
+	if contentionEvents := ij.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
+	}
+	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.

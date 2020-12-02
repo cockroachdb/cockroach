@@ -322,6 +322,10 @@ func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.GetBytesRead(), tr.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
+
+	if contentionEvents := tr.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
+	}
 	return trailingMeta
 }
 
