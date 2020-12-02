@@ -227,12 +227,12 @@ func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
 func (*AlterTable) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
-func (*AlterTableRegionalAffinity) StatementType() StatementType { return DDL }
+func (*AlterTableLocality) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTableRegionalAffinity) StatementTag() string { return "ALTER TABLE REGIONAL AFFINITY" }
+func (*AlterTableLocality) StatementTag() string { return "ALTER TABLE REGIONAL AFFINITY" }
 
-func (*AlterTableRegionalAffinity) hiddenFromShowQueries() {}
+func (*AlterTableLocality) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*AlterTableSetSchema) StatementType() StatementType { return DDL }
@@ -1088,7 +1088,7 @@ func (n *AlterTableDropColumn) String() string           { return AsString(n) }
 func (n *AlterTableDropConstraint) String() string       { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string          { return AsString(n) }
 func (n *AlterTableDropStored) String() string           { return AsString(n) }
-func (n *AlterTableRegionalAffinity) String() string     { return AsString(n) }
+func (n *AlterTableLocality) String() string             { return AsString(n) }
 func (n *AlterTableSetDefault) String() string           { return AsString(n) }
 func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
 func (n *AlterTableSetSchema) String() string            { return AsString(n) }

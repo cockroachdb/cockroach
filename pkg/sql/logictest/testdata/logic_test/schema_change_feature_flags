@@ -122,9 +122,9 @@ ALTER TABLE t RENAME TO r
 statement error pq: feature ALTER TABLE/VIEW/SEQUENCE SET SCHEMA is part of the schema change category, which was disabled by the database administrator
 ALTER TABLE t SET SCHEMA s
 
-# Test ALTER TABLE SET REGIONAL AFFINITY.
+# Test ALTER TABLE SET LOCALITY REGIONAL BY ROW.
 statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
-ALTER TABLE t SET REGIONAL AFFINITY TO NONE
+ALTER TABLE t SET LOCALITY REGIONAL BY ROW
 
 # Test ALTER TABLE SPLIT AT.
 statement error pq: feature ALTER TABLE/INDEX SPLIT AT is part of the schema change category, which was disabled by the database administrator
