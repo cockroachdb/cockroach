@@ -133,8 +133,9 @@ func (s *ColBatchScan) GetRowsRead() int64 {
 // GetCumulativeContentionTime is part of the execinfra.KVReader interface.
 func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
 	var totalContentionTime time.Duration
-	for _, e := range s.rf.fetcher.GetContentionEvents() {
-		totalContentionTime += e.Duration
+	events := s.rf.fetcher.GetContentionEvents()
+	for i := range events {
+		totalContentionTime += events[i].Duration
 	}
 	return totalContentionTime
 }

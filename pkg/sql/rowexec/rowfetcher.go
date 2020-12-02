@@ -121,7 +121,8 @@ func initRowFetcher(
 // contention time from a slice of roachpb.ContentionEvents.
 func getCumulativeContentionTime(events []roachpb.ContentionEvent) time.Duration {
 	var cumulativeContentionTime time.Duration
-	for _, e := range events {
+	for i := range events {
+		e := &events[i]
 		cumulativeContentionTime += e.Duration
 	}
 	return cumulativeContentionTime

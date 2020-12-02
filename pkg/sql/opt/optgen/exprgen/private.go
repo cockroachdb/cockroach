@@ -128,7 +128,9 @@ func (eg *exprGen) findIndex(str string) int {
 	}
 	table, index := a[0], a[1]
 	var tab cat.Table
-	for _, meta := range eg.mem.Metadata().AllTables() {
+	allTables := eg.mem.Metadata().AllTables()
+	for i := range allTables {
+		meta := &allTables[i]
 		if meta.Alias.Table() == table {
 			if tab != nil {
 				panic(errorf("ambiguous table name %s", table))

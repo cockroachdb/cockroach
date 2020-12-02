@@ -274,7 +274,8 @@ func (p *planner) dropIndexByName(
 			return err
 		}
 
-		for _, s := range zone.Subzones {
+		for i := range zone.Subzones {
+			s := &zone.Subzones[i]
 			if s.IndexID != uint32(idx.ID) {
 				_, err = GenerateSubzoneSpans(
 					p.ExecCfg().Settings,
@@ -458,7 +459,8 @@ func (p *planner) dropIndexByName(
 	}
 
 	found := false
-	for i, idxEntry := range tableDesc.Indexes {
+	for i := range tableDesc.Indexes {
+		idxEntry := &tableDesc.Indexes[i]
 		if idxEntry.ID == idx.ID {
 			// Unsplit all manually split ranges in the index so they can be
 			// automatically merged by the merge queue. Gate this on being the
@@ -493,7 +495,7 @@ func (p *planner) dropIndexByName(
 			// contain the same field any more due to other schema changes
 			// intervening since the initial lookup. So we send the recent
 			// copy idxEntry for drop instead.
-			if err := tableDesc.AddIndexMutation(&idxEntry, descpb.DescriptorMutation_DROP); err != nil {
+			if err := tableDesc.AddIndexMutation(idxEntry, descpb.DescriptorMutation_DROP); err != nil {
 				return err
 			}
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)

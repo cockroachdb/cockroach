@@ -822,7 +822,8 @@ func validateZoneAttrsAndLocalities(
 		}
 		var found bool
 	node:
-		for _, node := range nodes.Nodes {
+		for i := range nodes.Nodes {
+			node := &nodes.Nodes[i]
 			for _, store := range node.StoreStatuses {
 				// We could alternatively use zonepb.StoreMatchesConstraint here to
 				// catch typos in prohibited constraints as well, but as noted in the

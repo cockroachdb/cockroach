@@ -251,7 +251,8 @@ func (n *FiltersExpr) RemoveCommonFilters(other FiltersExpr) {
 	common := (*n)[:0]
 	for _, filter := range *n {
 		found := false
-		for _, otherFilter := range other {
+		for i := range other {
+			otherFilter := &other[i]
 			if filter.Condition == otherFilter.Condition {
 				found = true
 				break

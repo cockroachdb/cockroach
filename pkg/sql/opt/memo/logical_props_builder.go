@@ -1195,7 +1195,8 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 	// Output columns are all the passthrough columns with the addition of the
 	// window function column.
 	rel.OutputCols = inputProps.OutputCols.Copy()
-	for _, w := range window.Windows {
+	for i := range window.Windows {
+		w := &window.Windows[i]
 		rel.OutputCols.Add(w.Col)
 	}
 
