@@ -26,11 +26,13 @@ func TestCompiler(t *testing.T) {
 				},
 				{
 					&targets.AddIndex{
-						TableID:        1,
-						IndexID:        2,
+						TableID: 1,
+						Index: descpb.IndexDescriptor{
+							ID:        2,
+							ColumnIDs: []descpb.ColumnID{1},
+						},
 						PrimaryIndex:   1,
 						ReplacementFor: 1,
-						ColumnIDs:      []descpb.ColumnID{1},
 						Primary:        true,
 					},
 					targets.StateAbsent,
@@ -85,8 +87,10 @@ func TestCompile(t *testing.T) {
 			newColID = descpb.ColumnID(2)
 		)
 		addColTarget := targets.AddColumn{
-			TableID:  tableID,
-			ColumnID: newColID,
+			TableID: tableID,
+			Column: descpb.ColumnDescriptor{
+				ID: newColID,
+			},
 			// More column metadata
 		}
 
@@ -110,9 +114,10 @@ func TestCompile(t *testing.T) {
 						{
 							[]ops.Op{
 								ops.AddColumnDescriptor{
-									TableID:  tableID,
-									ColumnID: newColID,
-									// More column metadata
+									TableID: tableID,
+									Column: descpb.ColumnDescriptor{
+										ID: newColID,
+									},
 								},
 							},
 							[]targets.TargetState{
@@ -163,10 +168,12 @@ func TestCompile(t *testing.T) {
 			newIdxID = descpb.IndexID(3)
 		)
 		addIdxTarget := targets.AddIndex{
-			TableID:        tableID,
-			IndexID:        newIdxID,
-			ColumnIDs:      []descpb.ColumnID{2},
-			ExtraColumnIDs: []descpb.ColumnID{1},
+			TableID: tableID,
+			Index: descpb.IndexDescriptor{
+				ID:             newIdxID,
+				ColumnIDs:      []descpb.ColumnID{2},
+				ExtraColumnIDs: []descpb.ColumnID{1},
+			},
 		}
 
 		testCases = append(testCases, testCase{
@@ -189,10 +196,12 @@ func TestCompile(t *testing.T) {
 						{
 							[]ops.Op{
 								ops.AddIndexDescriptor{
-									TableID:        tableID,
-									IndexID:        newIdxID,
-									ColumnIDs:      []descpb.ColumnID{2},
-									ExtraColumnIDs: []descpb.ColumnID{1},
+									TableID: tableID,
+									Index: descpb.IndexDescriptor{
+										ID:             newIdxID,
+										ColumnIDs:      []descpb.ColumnID{2},
+										ExtraColumnIDs: []descpb.ColumnID{1},
+									},
 								},
 							},
 							[]targets.TargetState{
@@ -256,17 +265,20 @@ func TestCompile(t *testing.T) {
 			oldPrimaryIdxID = descpb.IndexID(1)
 		)
 		addColTarget := targets.AddColumn{
-			TableID:  tableID,
-			ColumnID: newColID,
-			// More column metadata
+			TableID: tableID,
+			Column: descpb.ColumnDescriptor{
+				ID: newColID,
+			},
 		}
 		addIdxTarget := targets.AddIndex{
-			TableID:        tableID,
-			IndexID:        newPrimaryIdxID,
-			ReplacementFor: oldPrimaryIdxID,
-			ColumnIDs:      []descpb.ColumnID{newColID},
+			TableID: tableID,
+			Index: descpb.IndexDescriptor{
+				ID:        newPrimaryIdxID,
+				ColumnIDs: []descpb.ColumnID{newColID},
+				Unique:    true,
+			},
 			Primary:        true,
-			Unique:         true,
+			ReplacementFor: oldPrimaryIdxID,
 		}
 		dropIdxTarget := targets.DropIndex{
 			TableID:    tableID,
@@ -296,16 +308,19 @@ func TestCompile(t *testing.T) {
 						{
 							[]ops.Op{
 								ops.AddColumnDescriptor{
-									TableID:  tableID,
-									ColumnID: newColID,
-									// More column metadata
+									TableID: tableID,
+									Column: descpb.ColumnDescriptor{
+										ID: newColID,
+									},
 								},
 								ops.AddIndexDescriptor{
-									TableID:   tableID,
-									IndexID:   newPrimaryIdxID,
-									ColumnIDs: []descpb.ColumnID{newColID},
-									Primary:   true,
-									Unique:    true,
+									TableID: tableID,
+									Index: descpb.IndexDescriptor{
+										ID:        newPrimaryIdxID,
+										ColumnIDs: []descpb.ColumnID{newColID},
+										Unique:    true,
+									},
+									Primary: true,
 								},
 							},
 							[]targets.TargetState{
@@ -443,17 +458,20 @@ func TestCompile(t *testing.T) {
 			newUniqueIdxID  = descpb.IndexID(4)
 		)
 		dropColTarget := targets.AddColumn{
-			TableID:  tableID,
-			ColumnID: newColID,
-			// More column metadata
+			TableID: tableID,
+			Column: descpb.ColumnDescriptor{
+				ID: newColID,
+			},
 		}
 		addPrimaryIdxTargetStmt1 := targets.AddIndex{
-			TableID:        tableID,
-			IndexID:        newPrimaryIdxID,
+			TableID: tableID,
+			Index: descpb.IndexDescriptor{
+				ID:     newPrimaryIdxID,
+				Unique: true,
+				// TODO: ColumnIDs....
+			},
 			ReplacementFor: oldPrimaryIdxID,
-			// TODO: ColumnIDs....
-			Primary: true,
-			Unique:  true,
+			Primary:        true,
 		}
 		dropPrimaryIdxTargetStmt1 := targets.DropIndex{
 			TableID:    tableID,
@@ -461,12 +479,14 @@ func TestCompile(t *testing.T) {
 			ReplacedBy: newPrimaryIdxID,
 		}
 		addPrimaryIdxTarget := targets.AddIndex{
-			TableID:        tableID,
-			IndexID:        newPrimaryIdxID,
+			TableID: tableID,
+			Index: descpb.IndexDescriptor{
+				ID:     newPrimaryIdxID,
+				Unique: true,
+				// TODO: ColumnIDs....
+			},
 			ReplacementFor: oldPrimaryIdxID,
-			// TODO: ColumnIDs....
-			Primary: true,
-			Unique:  true,
+			Primary:        true,
 		}
 		dropPrimaryIdxTarget := targets.DropIndex{
 			TableID:    tableID,
@@ -474,9 +494,10 @@ func TestCompile(t *testing.T) {
 			ReplacedBy: newPrimaryIdxID,
 		}
 		addColTarget := targets.AddColumn{
-			TableID:  tableID,
-			ColumnID: newColID,
-			// More column metadata
+			TableID: tableID,
+			Column: descpb.ColumnDescriptor{
+				ID: newColID,
+			},
 		}
 		addUniqueIdxTarget := targets.DropIndex{
 			TableID:   tableID,
@@ -540,16 +561,19 @@ func TestCompile(t *testing.T) {
 						{
 							[]ops.Op{
 								ops.AddColumnDescriptor{
-									TableID:  tableID,
-									ColumnID: newColID,
-									// More column metadata
+									TableID: tableID,
+									Column: descpb.ColumnDescriptor{
+										ID: newColID,
+									},
 								},
 								ops.AddIndexDescriptor{
 									TableID: tableID,
-									IndexID: newPrimaryIdxID,
-									// ColumnIDs....
+									Index: descpb.IndexDescriptor{
+										ID:     newPrimaryIdxID,
+										Unique: true,
+										// TODO: ColumnIDs....
+									},
 									Primary: true,
-									Unique:  true,
 								},
 							},
 							[]targets.TargetState{

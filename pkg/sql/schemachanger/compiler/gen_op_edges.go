@@ -86,13 +86,9 @@ func generateAddIndexOpEdges(
 			s = g.addOpEdge(t, s,
 				targets.StateDeleteOnly,
 				ops.AddIndexDescriptor{
-					TableID:         t.TableID,
-					IndexID:         t.IndexID,
-					ColumnIDs:       t.ColumnIDs,
-					ExtraColumnIDs:  t.ExtraColumnIDs,
-					StoredColumnIDs: t.StoredColumnIDs,
-					Primary:         t.Primary,
-					Unique:          t.Unique,
+					TableID: t.TableID,
+					Index:   t.Index,
+					Primary: t.Primary,
 				})
 		case targets.StateDeleteOnly:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
@@ -103,7 +99,7 @@ func generateAddIndexOpEdges(
 				targets.StateDeleteAndWriteOnly,
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
-					IndexID:   t.IndexID,
+					IndexID:   t.Index.ID,
 					NextState: targets.StateDeleteAndWriteOnly,
 				})
 		case targets.StateDeleteAndWriteOnly:
@@ -111,14 +107,14 @@ func generateAddIndexOpEdges(
 			// validate if the columns being used did not previously contain a unique
 			// and NOT NULL constraints.
 			var next targets.State
-			if !t.Unique {
+			if !t.Index.Unique {
 				next = targets.StateValidated
 			} else {
 				next = targets.StateBackfilled
 			}
 			s = g.addOpEdge(t, s, next, ops.IndexBackfill{
 				TableID: t.TableID,
-				IndexID: t.IndexID,
+				IndexID: t.Index.ID,
 			})
 		case targets.StateBackfilled:
 			s = g.addOpEdge(t, s,
@@ -126,14 +122,14 @@ func generateAddIndexOpEdges(
 				ops.UniqueIndexValidation{
 					TableID:        t.TableID,
 					PrimaryIndexID: t.PrimaryIndex,
-					IndexID:        t.IndexID,
+					IndexID:        t.Index.ID,
 				})
 		case targets.StateValidated:
 			s = g.addOpEdge(t, s,
 				targets.StatePublic,
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
-					IndexID:   t.IndexID,
+					IndexID:   t.Index.ID,
 					NextState: targets.StatePublic,
 				})
 		case targets.StatePublic:
@@ -208,8 +204,8 @@ func generateAddColumnOpEdges(
 			s = g.addOpEdge(t, s,
 				targets.StateDeleteOnly,
 				ops.AddColumnDescriptor{
-					TableID:  t.TableID,
-					ColumnID: t.ColumnID,
+					TableID: t.TableID,
+					Column:  t.Column,
 				})
 		case targets.StateDeleteOnly:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
@@ -220,7 +216,7 @@ func generateAddColumnOpEdges(
 				targets.StateDeleteAndWriteOnly,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
-					ColumnID:  t.ColumnID,
+					ColumnID:  t.Column.ID,
 					NextState: targets.StateDeleteAndWriteOnly,
 				})
 		case targets.StateDeleteAndWriteOnly:
@@ -228,7 +224,7 @@ func generateAddColumnOpEdges(
 				targets.StatePublic,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
-					ColumnID:  t.ColumnID,
+					ColumnID:  t.Column.ID,
 					NextState: targets.StatePublic,
 				})
 		case targets.StatePublic:
