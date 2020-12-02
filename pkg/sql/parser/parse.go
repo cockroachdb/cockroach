@@ -274,8 +274,13 @@ func HasMultipleStatements(sql string) bool {
 	return false
 }
 
-// ParseQualifiedTableName parses a SQL string of the form
-// `[ database_name . ] [ schema_name . ] table_name`.
+// ParseQualifiedTableName parses a possibly qualified table name. The
+// table name must contain one or more name parts, using the full
+// input SQL syntax: each name part containing special characters, or
+// non-lowercase characters, must be enclosed in double quote. The
+// name may not be an invalid table name (the caller is responsible
+// for guaranteeing that only valid table names are provided as
+// input).
 func ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	name, err := ParseTableName(sql)
 	if err != nil {
@@ -285,7 +290,12 @@ func ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return &tn, nil
 }
 
-// ParseTableName parses a table name.
+// ParseTableName parses a table name. The table name must contain one
+// or more name parts, using the full input SQL syntax: each name
+// part containing special characters, or non-lowercase characters,
+// must be enclosed in double quote. The name may not be an invalid
+// table name (the caller is responsible for guaranteeing that only
+// valid table names are provided as input).
 func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	// We wrap the name we want to parse into a dummy statement since our parser
 	// can only parse full statements.
@@ -298,30 +308,6 @@ func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 		return nil, errors.AssertionFailedf("expected an ALTER TABLE statement, but found %T", stmt)
 	}
 	return rename.Name, nil
-}
-
-// ParseTableNameWithQualifiedNames can be used to parse an input table name that
-// might be prefixed with an unquoted qualified name. The standard ParseTableName
-// cannot do this due to limitations with our parser. In particular, the parser
-// can't parse different productions individually -- it must parse them as part
-// of a top level statement. This causes qualified names that contain keywords
-// to require quotes, which are not required in some cases due to Postgres
-// compatibility (in particular, as arguments to pg_dump). This function gets
-// around this limitation by parsing the input table name as a column name
-// with a fake non-keyword prefix, and then shifting the result down into an
-// UnresolvedObjectName.
-func ParseTableNameWithQualifiedNames(sql string) (*tree.UnresolvedObjectName, error) {
-	stmt, err := ParseOne(fmt.Sprintf("SELECT fakeprefix.%s", sql))
-	if err != nil {
-		return nil, err
-	}
-	un := stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.UnresolvedName)
-	var nameParts [3]string
-	numParts := un.NumParts - 1
-	for i := 0; i < numParts; i++ {
-		nameParts[i] = un.Parts[i]
-	}
-	return tree.NewUnresolvedObjectName(numParts, nameParts, 0 /* annotationIdx */)
 }
 
 // parseExprsWithInt parses one or more sql expressions.
@@ -337,7 +323,11 @@ func parseExprsWithInt(exprs []string, nakedIntType *types.T) (tree.Exprs, error
 	return set.Values, nil
 }
 
-// ParseExprs is a short-hand for parseExprsWithInt(sql, defaultNakedIntType).
+// ParseExprs parses a comma-delimited sequence of SQL scalar
+// expressions. The caller is responsible for ensuring that the input
+// is, in fact, a comma-delimited sequence of SQL scalar expressions —
+// the results are undefined if the string contains invalid SQL
+// syntax.
 func ParseExprs(sql []string) (tree.Exprs, error) {
 	if len(sql) == 0 {
 		return tree.Exprs{}, nil
@@ -345,14 +335,19 @@ func ParseExprs(sql []string) (tree.Exprs, error) {
 	return parseExprsWithInt(sql, defaultNakedIntType)
 }
 
-// ParseExpr is a short-hand for parseExprsWithInt([]string{sql},
-// defaultNakedIntType).
+// ParseExpr parses a SQL scalar expression. The caller is responsible
+// for ensuring that the input is, in fact, a valid SQL scalar
+// expression — the results are undefined if the string contains
+// invalid SQL syntax.
 func ParseExpr(sql string) (tree.Expr, error) {
 	return ParseExprWithInt(sql, defaultNakedIntType)
 }
 
-// ParseExprWithInt is a short-hand for parseExprsWithInt([]string{sql},
-// nakedIntType).'
+// ParseExprWithInt parses a SQL scalar expression, using the given
+// type when INT is used as type name in the SQL syntax. The caller is
+// responsible for ensuring that the input is, in fact, a valid SQL
+// scalar expression — the results are undefined if the string
+// contains invalid SQL syntax.
 func ParseExprWithInt(sql string, nakedIntType *types.T) (tree.Expr, error) {
 	exprs, err := parseExprsWithInt([]string{sql}, nakedIntType)
 	if err != nil {
@@ -364,8 +359,29 @@ func ParseExprWithInt(sql string, nakedIntType *types.T) (tree.Expr, error) {
 	return exprs[0], nil
 }
 
-// ParseType parses a column type.
-func ParseType(sql string) (tree.ResolvableTypeReference, error) {
+// GetTypeReferenceFromName turns a type name into a type
+// reference. This supports only “simple” (single-identifier)
+// references to built-in types, when the identifer has already been
+// parsed away from the input SQL syntax.
+func GetTypeReferenceFromName(typeName tree.Name) (tree.ResolvableTypeReference, error) {
+	expr, err := ParseExpr(fmt.Sprintf("1::%s", typeName.String()))
+	if err != nil {
+		return nil, err
+	}
+
+	cast, ok := expr.(*tree.CastExpr)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected a tree.CastExpr, but found %T", expr)
+	}
+
+	return cast.Type, nil
+}
+
+// GetTypeFromValidSQLSyntax retrieves a type from its SQL syntax. The caller is
+// responsible for guaranteeing that the type expression is valid
+// SQL. This includes verifying that complex identifiers are enclosed
+// in double quotes, etc.
+func GetTypeFromValidSQLSyntax(sql string) (tree.ResolvableTypeReference, error) {
 	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
 	if err != nil {
 		return nil, err

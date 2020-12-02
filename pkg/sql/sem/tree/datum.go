@@ -4258,7 +4258,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 		}
 		return queryOid(ctx, t, NewDString(funcDef.Name))
 	case oid.T_regtype:
-		parsedTyp, err := ctx.Planner.ParseType(s)
+		parsedTyp, err := ctx.Planner.GetTypeFromValidSQLSyntax(s)
 		if err == nil {
 			return &DOid{
 				semanticType: t,
