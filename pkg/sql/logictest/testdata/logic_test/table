@@ -67,31 +67,31 @@ query TTBITTBB colnames
 SHOW INDEXES FROM c
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit
-c           primary        false       1             id           ASC        false    false
+c           c_bar_key      false       1             bar          ASC        false    false
+c           c_bar_key      false       2             id           ASC        false    true
+c           c_foo_bar_idx  true        1             foo          ASC        false    false
+c           c_foo_bar_idx  true        2             bar          DESC       false    false
+c           c_foo_bar_idx  true        3             id           ASC        false    true
 c           c_foo_idx      true        1             foo          ASC        false    false
 c           c_foo_idx      true        2             id           ASC        false    true
 c           c_foo_idx1     true        1             foo          ASC        false    false
 c           c_foo_idx1     true        2             id           ASC        false    true
-c           c_foo_bar_idx  true        1             foo          ASC        false    false
-c           c_foo_bar_idx  true        2             bar          DESC       false    false
-c           c_foo_bar_idx  true        3             id           ASC        false    true
-c           c_bar_key      false       1             bar          ASC        false    false
-c           c_bar_key      false       2             id           ASC        false    true
+c           primary        false       1             id           ASC        false    false
 
 query TTBITTBBT colnames
 SHOW INDEXES FROM c WITH COMMENT
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  comment
-c           primary        false       1             id           ASC        false    false     NULL
+c           c_bar_key      false       1             bar          ASC        false    false     NULL
+c           c_bar_key      false       2             id           ASC        false    true      NULL
+c           c_foo_bar_idx  true        1             foo          ASC        false    false     NULL
+c           c_foo_bar_idx  true        2             bar          DESC       false    false     NULL
+c           c_foo_bar_idx  true        3             id           ASC        false    true      NULL
 c           c_foo_idx      true        1             foo          ASC        false    false     index_comment
 c           c_foo_idx      true        2             id           ASC        false    true      index_comment
 c           c_foo_idx1     true        1             foo          ASC        false    false     NULL
 c           c_foo_idx1     true        2             id           ASC        false    true      NULL
-c           c_foo_bar_idx  true        1             foo          ASC        false    false     NULL
-c           c_foo_bar_idx  true        2             bar          DESC       false    false     NULL
-c           c_foo_bar_idx  true        3             id           ASC        false    true      NULL
-c           c_bar_key      false       1             bar          ASC        false    false     NULL
-c           c_bar_key      false       2             id           ASC        false    true      NULL
+c           primary        false       1             id           ASC        false    false     NULL
 
 # primary keys can never be null
 
@@ -179,8 +179,8 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM test.users
 ----
 column_name  data_type     is_nullable  column_default  generation_expression  indices            is_hidden
-id           INT8          false        NULL            ·                      {primary,foo,bar}  false
-name         VARCHAR       false        NULL            ·                      {foo,bar}          false
+id           INT8          false        NULL            ·                      {bar,foo,primary}  false
+name         VARCHAR       false        NULL            ·                      {bar,foo}          false
 title        VARCHAR       true         NULL            ·                      {}                 false
 nickname     STRING        true         NULL            ·                      {}                 false
 username     STRING(10)    true         NULL            ·                      {}                 false
@@ -190,11 +190,11 @@ query TTBITTBB colnames
 SHOW INDEXES FROM test.users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
+users       foo         true        1             name         ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       primary     false       1             id           ASC        false    false
 
 statement error precision for type float must be at least 1 bit
 CREATE TABLE test.precision (x FLOAT(0))

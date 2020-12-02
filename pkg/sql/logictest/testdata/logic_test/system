@@ -142,8 +142,8 @@ lastUpdated  TIMESTAMP  false  NULL  ·  {}         false
 query TTBTTTB
 SHOW COLUMNS FROM system.jobs
 ----
-id                 INT8       false  unique_rowid()     ·  {primary,jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}  false
-status             STRING     false  NULL               ·  {jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}          false
+id                 INT8       false  unique_rowid()     ·  {jobs_created_by_type_created_by_id_idx,jobs_status_created_idx,primary}  false
+status             STRING     false  NULL               ·  {jobs_created_by_type_created_by_id_idx,jobs_status_created_idx}          false
 created            TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx}                                                 false
 payload            BYTES      false  NULL               ·  {}                                                                        false
 progress           BYTES      true   NULL               ·  {}                                                                        false
@@ -163,8 +163,8 @@ valueType    STRING     true   NULL               ·  {}         false
 query TTBTTTB
 SHOW COLUMNS FROM system.role_members
 ----
-role     STRING  false  NULL  ·  {primary,role_members_role_idx,role_members_member_idx}  false
-member   STRING  false  NULL  ·  {primary,role_members_role_idx,role_members_member_idx}  false
+role     STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_role_idx}  false
+member   STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_role_idx}  false
 isAdmin  BOOL    false  NULL  ·  {}                                                       false
 
 
