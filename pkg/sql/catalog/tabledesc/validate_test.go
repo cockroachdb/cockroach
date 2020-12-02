@@ -109,6 +109,7 @@ var validationMap = []struct {
 			"OutboundFKs":    {status: iSolemnlySwearThisFieldIsValidated},
 			"InboundFKs":     {status: iSolemnlySwearThisFieldIsValidated},
 			"Temporary":      {status: thisFieldReferencesNoObjects},
+			"LocalityConfig": {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{

@@ -1048,6 +1048,27 @@ message TableDescriptor {
   // before 20.1 refer to persistent tables, so lack of the flag being set implies
   // the table is persistent.
   optional bool temporary = 39 [(gogoproto.nullable) = false];
+
+  message LocalityConfig {
+    option (gogoproto.equal) = true;
+    message RegionalByTable {
+      option (gogoproto.equal) = true;
+      // Region is set if the table has an affinity with a non-primary region.
+      optional string region = 1 [(gogoproto.casttype)="Region"];
+    }
+    message RegionalByRow {
+      option (gogoproto.equal) = true;
+    }
+    message Global {
+      option (gogoproto.equal) = true;
+    }
+    oneof locality {
+      Global global = 1;
+      RegionalByTable regional_by_table = 2;
+      RegionalByRow regional_by_row = 3;
+    }
+  }
+  optional LocalityConfig locality_config = 42;
 }
 
 // SurvivalGoal is the survival goal for a database.

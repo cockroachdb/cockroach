@@ -1479,14 +1479,22 @@ func (desc *Immutable) validateCrossReferencesIfTesting(
 // validateCrossReferences validates that each reference to another table is
 // resolvable and that the necessary back references exist.
 func (desc *Immutable) validateCrossReferences(ctx context.Context, dg catalog.DescGetter) error {
-	// Check that parent DB exists.
 	{
-		db, err := dg.GetDesc(ctx, desc.ParentID)
+		// Check that parent DB exists.
+		dbDesc, err := dg.GetDesc(ctx, desc.ParentID)
 		if err != nil {
 			return err
 		}
-		if _, isDB := db.(catalog.DatabaseDescriptor); !isDB {
+		db, isDB := dbDesc.(catalog.DatabaseDescriptor)
+
+		if !isDB {
 			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+		}
+
+		if desc.LocalityConfig != nil {
+			if err := ValidateTableLocalityConfig(desc.Name, desc.LocalityConfig, db); err != nil {
+				return errors.AssertionFailedf("invalid locality config: %v", errors.Safe(err))
+			}
 		}
 	}
 
@@ -1760,6 +1768,89 @@ func (desc *Immutable) validateCrossReferences(ctx context.Context, dg catalog.D
 	}
 
 	return desc.validateCrossReferencesIfTesting(ctx, dg)
+}
+
+// FormatTableLocalityConfig formats the table locality.
+func FormatTableLocalityConfig(c *descpb.TableDescriptor_LocalityConfig, f *tree.FmtCtx) error {
+	switch v := c.Locality.(type) {
+	case *descpb.TableDescriptor_LocalityConfig_Global_:
+		f.WriteString("GLOBAL")
+	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+		f.WriteString("REGIONAL BY TABLE IN ")
+		if v.RegionalByTable.Region != nil {
+			region := tree.Name(*v.RegionalByTable.Region)
+			f.FormatNode(&region)
+		} else {
+			f.WriteString("PRIMARY REGION")
+		}
+	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+		f.WriteString("REGIONAL BY ROW")
+	default:
+		return errors.Newf("unknown locality: %T", v)
+	}
+	return nil
+}
+
+// ValidateTableLocalityConfig validates whether a given locality config is valid
+// under the given database.
+func ValidateTableLocalityConfig(
+	tblName string,
+	localityConfig *descpb.TableDescriptor_LocalityConfig,
+	db catalog.DatabaseDescriptor,
+) error {
+	if !db.IsMultiRegion() {
+		s := tree.NewFmtCtx(tree.FmtSimple)
+		var locality string
+		// This should never happen; if so, the error message is more clear if we
+		// return a dummy locality here.
+		if err := FormatTableLocalityConfig(localityConfig, s); err != nil {
+			locality = "INVALID LOCALITY"
+		}
+		locality = s.String()
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"database %s is not multi-region enabled, but table %s has locality %s set",
+			db.DatabaseDesc().Name,
+			tblName,
+			locality,
+		)
+	}
+	switch lc := localityConfig.Locality.(type) {
+	case *descpb.TableDescriptor_LocalityConfig_Global_, *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+		if lc.RegionalByTable.Region != nil {
+			foundRegion := false
+			regions, err := db.Regions()
+			if err != nil {
+				return err
+			}
+			for _, r := range regions {
+				if *lc.RegionalByTable.Region == r {
+					foundRegion = true
+					break
+				}
+			}
+			if !foundRegion {
+				return errors.WithHintf(
+					pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						`region "%s" has not been added to database "%s"`,
+						*lc.RegionalByTable.Region,
+						db.DatabaseDesc().Name,
+					),
+					"available regions: %s",
+					strings.Join(regions.ToStrings(), ", "),
+				)
+			}
+		}
+	default:
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"unknown locality level: %T",
+			lc,
+		)
+	}
+	return nil
 }
 
 // ValidateIndexNameIsUnique validates that the index name does not exist.
