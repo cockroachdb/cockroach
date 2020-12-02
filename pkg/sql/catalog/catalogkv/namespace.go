@@ -129,7 +129,7 @@ func MakeObjectNameKey(
 	name string,
 ) catalogkeys.DescriptorKey {
 	// TODO(solon): This if condition can be removed in 20.2
-	if !settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
+	if !settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) {
 		return catalogkeys.NewDeprecatedTableKey(parentID, name)
 	}
 	var key catalogkeys.DescriptorKey

@@ -39,14 +39,12 @@ type default_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
-	allocator *colmem.Allocator
-	fn        tree.AggregateFunc
-	ctx       context.Context
+	fn  tree.AggregateFunc
+	ctx context.Context
 	// inputArgsConverter is managed by the aggregator, and this function can
 	// simply call GetDatumColumn.
 	inputArgsConverter *colconv.VecToDatumConverter
 	resultConverter    func(tree.Datum) interface{}
-	vec                coldata.Vec
 	scratch            struct {
 		// Note that this scratch space is shared among all aggregate function
 		// instances created by the same alloc object.
@@ -62,7 +60,6 @@ func (a *default_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{else}}
 	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.vec = vec
 }
 
 func (a *default_AGGKINDAgg) Compute(
@@ -186,12 +183,12 @@ func (a *default_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	*f = default_AGGKINDAgg{
-		allocator:          a.allocator,
 		fn:                 a.constructor(a.evalCtx, a.arguments),
 		ctx:                a.evalCtx.Context,
 		inputArgsConverter: a.inputArgsConverter,
 		resultConverter:    a.resultConverter,
 	}
+	f.allocator = a.allocator
 	f.scratch.otherArgs = a.otherArgsScratch
 	a.allocator.AdjustMemoryUsage(f.fn.Size())
 	a.aggFuncs = a.aggFuncs[1:]

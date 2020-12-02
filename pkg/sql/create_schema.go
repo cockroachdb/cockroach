@@ -38,6 +38,7 @@ func (n *createSchemaNode) startExec(params runParams) error {
 
 func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema) error {
 	if err := checkSchemaChangeEnabled(
+		p.EvalContext().Context,
 		&p.ExecCfg().Settings.SV,
 		"CREATE SCHEMA",
 	); err != nil {
@@ -96,10 +97,10 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	// Ensure that the cluster version is high enough to create the schema.
-	if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionUserDefinedSchemas) {
+	if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.UserDefinedSchemas) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			`creating schemas requires all nodes to be upgraded to %s`,
-			clusterversion.VersionByKey(clusterversion.VersionUserDefinedSchemas))
+			clusterversion.ByKey(clusterversion.UserDefinedSchemas))
 	}
 
 	// Create the ID.
@@ -185,6 +186,7 @@ func (n *createSchemaNode) Close(ctx context.Context)  {}
 // CreateSchema creates a schema.
 func (p *planner) CreateSchema(ctx context.Context, n *tree.CreateSchema) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"CREATE SCHEMA",
 	); err != nil {

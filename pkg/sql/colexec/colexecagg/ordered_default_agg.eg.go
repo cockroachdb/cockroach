@@ -25,14 +25,12 @@ import (
 
 type defaultOrderedAgg struct {
 	orderedAggregateFuncBase
-	allocator *colmem.Allocator
-	fn        tree.AggregateFunc
-	ctx       context.Context
+	fn  tree.AggregateFunc
+	ctx context.Context
 	// inputArgsConverter is managed by the aggregator, and this function can
 	// simply call GetDatumColumn.
 	inputArgsConverter *colconv.VecToDatumConverter
 	resultConverter    func(tree.Datum) interface{}
-	vec                coldata.Vec
 	scratch            struct {
 		// Note that this scratch space is shared among all aggregate function
 		// instances created by the same alloc object.
@@ -44,7 +42,6 @@ var _ AggregateFunc = &defaultOrderedAgg{}
 
 func (a *defaultOrderedAgg) SetOutput(vec coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	a.vec = vec
 }
 
 func (a *defaultOrderedAgg) Compute(
@@ -215,12 +212,12 @@ func (a *defaultOrderedAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	*f = defaultOrderedAgg{
-		allocator:          a.allocator,
 		fn:                 a.constructor(a.evalCtx, a.arguments),
 		ctx:                a.evalCtx.Context,
 		inputArgsConverter: a.inputArgsConverter,
 		resultConverter:    a.resultConverter,
 	}
+	f.allocator = a.allocator
 	f.scratch.otherArgs = a.otherArgsScratch
 	a.allocator.AdjustMemoryUsage(f.fn.Size())
 	a.aggFuncs = a.aggFuncs[1:]

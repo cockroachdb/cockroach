@@ -31,8 +31,8 @@ func newBoolAndHashAggAlloc(
 
 type boolAndHashAgg struct {
 	hashAggregateFuncBase
+	col        []bool
 	sawNonNull bool
-	vec        []bool
 	curAgg     bool
 }
 
@@ -40,7 +40,7 @@ var _ AggregateFunc = &boolAndHashAgg{}
 
 func (a *boolAndHashAgg) SetOutput(vec coldata.Vec) {
 	a.hashAggregateFuncBase.SetOutput(vec)
-	a.vec = vec.Bool()
+	a.col = vec.Bool()
 }
 
 func (a *boolAndHashAgg) Compute(
@@ -48,39 +48,42 @@ func (a *boolAndHashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	{
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.curAgg = a.curAgg && col[i]
-					a.sawNonNull = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg && col[i]
+						a.sawNonNull = true
+					}
+
 				}
+			} else {
+				for _, i := range sel {
 
-			}
-		} else {
-			for _, i := range sel {
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg && col[i]
+						a.sawNonNull = true
+					}
 
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.curAgg = a.curAgg && col[i]
-					a.sawNonNull = true
 				}
-
 			}
 		}
-	}
+	},
+	)
 }
 
 func (a *boolAndHashAgg) Flush(outputIdx int) {
 	if !a.sawNonNull {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.vec[outputIdx] = a.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -100,6 +103,7 @@ func (a *boolAndHashAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]boolAndHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	f.curAgg = true
 	return f
@@ -116,8 +120,8 @@ func newBoolOrHashAggAlloc(
 
 type boolOrHashAgg struct {
 	hashAggregateFuncBase
+	col        []bool
 	sawNonNull bool
-	vec        []bool
 	curAgg     bool
 }
 
@@ -125,7 +129,7 @@ var _ AggregateFunc = &boolOrHashAgg{}
 
 func (a *boolOrHashAgg) SetOutput(vec coldata.Vec) {
 	a.hashAggregateFuncBase.SetOutput(vec)
-	a.vec = vec.Bool()
+	a.col = vec.Bool()
 }
 
 func (a *boolOrHashAgg) Compute(
@@ -133,39 +137,42 @@ func (a *boolOrHashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	{
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.curAgg = a.curAgg || col[i]
-					a.sawNonNull = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg || col[i]
+						a.sawNonNull = true
+					}
+
 				}
+			} else {
+				for _, i := range sel {
 
-			}
-		} else {
-			for _, i := range sel {
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg || col[i]
+						a.sawNonNull = true
+					}
 
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.curAgg = a.curAgg || col[i]
-					a.sawNonNull = true
 				}
-
 			}
 		}
-	}
+	},
+	)
 }
 
 func (a *boolOrHashAgg) Flush(outputIdx int) {
 	if !a.sawNonNull {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.vec[outputIdx] = a.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -185,6 +192,7 @@ func (a *boolOrHashAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]boolOrHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	f.curAgg = false
 	return f

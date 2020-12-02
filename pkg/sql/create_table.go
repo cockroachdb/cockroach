@@ -80,10 +80,10 @@ type createTableRun struct {
 
 // minimumTypeUsageVersions defines the minimum version needed for a new
 // data type.
-var minimumTypeUsageVersions = map[types.Family]clusterversion.VersionKey{
-	types.GeographyFamily: clusterversion.VersionGeospatialType,
-	types.GeometryFamily:  clusterversion.VersionGeospatialType,
-	types.Box2DFamily:     clusterversion.VersionBox2DType,
+var minimumTypeUsageVersions = map[types.Family]clusterversion.Key{
+	types.GeographyFamily: clusterversion.GeospatialType,
+	types.GeometryFamily:  clusterversion.GeospatialType,
+	types.Box2DFamily:     clusterversion.Box2DType,
 }
 
 // isTypeSupportedInVersion returns whether a given type is supported in the given version.
@@ -774,7 +774,7 @@ func ResolveFK(
 
 	// Check if the version is high enough to stop creating origin indexes.
 	if evalCtx.Settings != nil &&
-		!evalCtx.Settings.Version.IsActive(ctx, clusterversion.VersionNoOriginFKIndexes) {
+		!evalCtx.Settings.Version.IsActive(ctx, clusterversion.NoOriginFKIndexes) {
 		// Search for an index on the origin table that matches. If one doesn't exist,
 		// we create one automatically if the table to alter is new or empty. We also
 		// search if an index for the set of columns was created in this transaction.
@@ -1235,7 +1235,7 @@ func NewTableDesc(
 	// server setup before the cluster version has been initialized.
 	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if version != (clusterversion.ClusterVersion{}) {
-		if version.IsActive(clusterversion.VersionEmptyArraysInInvertedIndexes) {
+		if version.IsActive(clusterversion.EmptyArraysInInvertedIndexes) {
 			indexEncodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
 		}
 	}

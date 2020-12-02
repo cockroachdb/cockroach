@@ -145,10 +145,10 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		case hba.ConnLocal:
 		case hba.ConnHostSSL, hba.ConnHostNoSSL:
 			if vh != nil &&
-				!vh.IsActive(context.TODO(), clusterversion.VersionHBAForNonTLS) {
+				!vh.IsActive(context.TODO(), clusterversion.HBAForNonTLS) {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					`authentication rule type 'hostssl'/'hostnossl' requires all nodes to be upgraded to %s`,
-					clusterversion.VersionByKey(clusterversion.VersionHBAForNonTLS),
+					clusterversion.ByKey(clusterversion.HBAForNonTLS),
 				)
 			}
 

@@ -2633,7 +2633,7 @@ func getAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
 ) (map[descpb.ID]NamespaceKey, error) {
 	namespace := map[descpb.ID]NamespaceKey{}
-	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
+	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) {
 		rows, err := executor.Query(
 			ctx, "get-all-names", txn,
 			`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,

@@ -1608,6 +1608,7 @@ func (ef *execFactory) ConstructCreateTable(
 	schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
+		ef.planner.EvalContext().Context,
 		&ef.planner.ExecCfg().Settings.SV,
 		"CREATE TABLE",
 	); err != nil {
@@ -1624,6 +1625,7 @@ func (ef *execFactory) ConstructCreateTableAs(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
+		ef.planner.EvalContext().Context,
 		&ef.planner.ExecCfg().Settings.SV,
 		"CREATE TABLE",
 	); err != nil {
@@ -1651,6 +1653,7 @@ func (ef *execFactory) ConstructCreateView(
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
+		ef.planner.EvalContext().Context,
 		&ef.planner.ExecCfg().Settings.SV,
 		"CREATE VIEW",
 	); err != nil {
@@ -1725,6 +1728,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
+		ef.planner.EvalContext().Context,
 		&ef.planner.ExecCfg().Settings.SV,
 		"ALTER TABLE/INDEX SPLIT AT",
 	); err != nil {
@@ -1753,6 +1757,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
+		ef.planner.EvalContext().Context,
 		&ef.planner.ExecCfg().Settings.SV,
 		"ALTER TABLE/INDEX UNSPLIT AT",
 	); err != nil {
@@ -1773,6 +1778,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
+		ef.planner.EvalContext().Context,
 		&ef.planner.ExecCfg().Settings.SV,
 		"ALTER TABLE/INDEX UNSPLIT ALL",
 	); err != nil {

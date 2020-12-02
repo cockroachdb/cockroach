@@ -32,6 +32,7 @@ type commentOnIndexNode struct {
 // Privileges: CREATE on table.
 func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"COMMENT ON INDEX",
 	); err != nil {

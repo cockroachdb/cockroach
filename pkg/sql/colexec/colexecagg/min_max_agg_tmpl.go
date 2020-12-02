@@ -120,12 +120,9 @@ type _AGG_TYPE_AGGKINDAgg struct {
 	// {{end}}
 	// col points to the output vector we are updating.
 	col _GOTYPESLICE
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// {{if eq "_AGGKIND" "Hash"}}
 	hashAggregateFuncBase
 	// {{end}}
-	allocator *colmem.Allocator
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -143,7 +140,6 @@ func (a *_AGG_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{else}}
 	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.vec = vec
 	a.col = vec._TYPE()
 }
 
@@ -161,43 +157,44 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 	// {{end}}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec._TYPE(), vec.Nulls()
-	a.allocator.PerformOperation(
-		[]coldata.Vec{a.vec},
-		func() {
-			// {{if eq "_AGGKIND" "Ordered"}}
-			groups := a.groups
-			// {{/*
-			// We don't need to check whether sel is non-nil when performing
-			// hash aggregation because the hash aggregator always uses non-nil
-			// sel to specify the tuples to be aggregated.
-			// */}}
-			if sel == nil {
-				_ = groups[inputLen-1]
-				col = execgen.SLICE(col, 0, inputLen)
-				if nulls.MaybeHasNulls() {
-					for i := 0; i < inputLen; i++ {
-						_ACCUMULATE_MINMAX(a, nulls, i, true)
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
-						_ACCUMULATE_MINMAX(a, nulls, i, false)
-					}
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		// {{if eq "_AGGKIND" "Ordered"}}
+		groups := a.groups
+		// {{/*
+		// We don't need to check whether sel is non-nil when performing
+		// hash aggregation because the hash aggregator always uses non-nil
+		// sel to specify the tuples to be aggregated.
+		// */}}
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = execgen.SLICE(col, 0, inputLen)
+			if nulls.MaybeHasNulls() {
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_MINMAX(a, nulls, i, true)
 				}
-			} else
-			// {{end}}
-			{
-				sel = sel[:inputLen]
-				if nulls.MaybeHasNulls() {
-					for _, i := range sel {
-						_ACCUMULATE_MINMAX(a, nulls, i, true)
-					}
-				} else {
-					for _, i := range sel {
-						_ACCUMULATE_MINMAX(a, nulls, i, false)
-					}
+			} else {
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_MINMAX(a, nulls, i, false)
 				}
 			}
-		},
+		} else
+		// {{end}}
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					_ACCUMULATE_MINMAX(a, nulls, i, true)
+				}
+			} else {
+				for _, i := range sel {
+					_ACCUMULATE_MINMAX(a, nulls, i, false)
+				}
+			}
+		}
+	},
 	)
 	// {{if eq .VecMethod "Bytes"}}
 	newCurAggSize := len(a.curAgg)

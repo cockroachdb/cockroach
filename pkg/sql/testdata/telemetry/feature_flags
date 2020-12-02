@@ -1,0 +1,34 @@
+# This file contains telemetry tests for the sql.feature_flag.denied counter.
+
+feature-allowlist
+sql.feature_flag_denied.*
+----
+
+exec
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE;
+----
+
+# Test that a schema change denial is counted.
+feature-usage
+CREATE DATABASE d;
+----
+error: pq: feature CREATE DATABASE is part of the schema change category, which was disabled by the database administrator
+sql.feature_flag_denied
+
+# Reset schema change feature flag to enabled.
+exec
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+----
+
+# Test that a CREATE STATISTICS/ANALYZE denial is counted.
+exec
+CREATE TABLE t(a int, b int);
+INSERT INTO t (a, b) VALUES (0, 1);
+SET CLUSTER SETTING feature.stats.enabled = FALSE;
+----
+
+feature-usage
+CREATE STATISTICS s FROM t;
+----
+error: pq: feature ANALYZE/CREATE STATISTICS was disabled by the database administrator
+sql.feature_flag_denied

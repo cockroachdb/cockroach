@@ -28,7 +28,7 @@ func newCountRowsHashAggAlloc(
 // countRowsHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsHashAgg struct {
 	hashAggregateFuncBase
-	vec    []int64
+	col    []int64
 	curAgg int64
 }
 
@@ -36,25 +36,28 @@ var _ AggregateFunc = &countRowsHashAgg{}
 
 func (a *countRowsHashAgg) SetOutput(vec coldata.Vec) {
 	a.hashAggregateFuncBase.SetOutput(vec)
-	a.vec = vec.Int64()
+	a.col = vec.Int64()
 }
 
 func (a *countRowsHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
-	{
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
-			// We don't need to pay attention to nulls (either because it's a
-			// COUNT_ROWS aggregate or because there are no nulls), and we're
-			// performing a hash aggregation (meaning there is a single group),
-			// so all inputLen tuples contribute to the count.
-			a.curAgg += int64(inputLen)
+			{
+				// We don't need to pay attention to nulls (either because it's a
+				// COUNT_ROWS aggregate or because there are no nulls), and we're
+				// performing a hash aggregation (meaning there is a single group),
+				// so all inputLen tuples contribute to the count.
+				a.curAgg += int64(inputLen)
+			}
 		}
-	}
+	},
+	)
 }
 
 func (a *countRowsHashAgg) Flush(outputIdx int) {
-	a.vec[outputIdx] = a.curAgg
+	a.col[outputIdx] = a.curAgg
 }
 
 type countRowsHashAggAlloc struct {
@@ -73,6 +76,7 @@ func (a *countRowsHashAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]countRowsHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
@@ -89,7 +93,7 @@ func newCountHashAggAlloc(
 // countHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countHashAgg struct {
 	hashAggregateFuncBase
-	vec    []int64
+	col    []int64
 	curAgg int64
 }
 
@@ -97,7 +101,7 @@ var _ AggregateFunc = &countHashAgg{}
 
 func (a *countHashAgg) SetOutput(vec coldata.Vec) {
 	a.hashAggregateFuncBase.SetOutput(vec)
-	a.vec = vec.Int64()
+	a.col = vec.Int64()
 }
 
 func (a *countHashAgg) Compute(
@@ -107,29 +111,32 @@ func (a *countHashAgg) Compute(
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
-	{
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel[:inputLen] {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel[:inputLen] {
 
-				var y int64
-				y = int64(0)
-				if !nulls.NullAt(i) {
-					y = 1
+					var y int64
+					y = int64(0)
+					if !nulls.NullAt(i) {
+						y = 1
+					}
+					a.curAgg += y
 				}
-				a.curAgg += y
+			} else {
+				// We don't need to pay attention to nulls (either because it's a
+				// COUNT_ROWS aggregate or because there are no nulls), and we're
+				// performing a hash aggregation (meaning there is a single group),
+				// so all inputLen tuples contribute to the count.
+				a.curAgg += int64(inputLen)
 			}
-		} else {
-			// We don't need to pay attention to nulls (either because it's a
-			// COUNT_ROWS aggregate or because there are no nulls), and we're
-			// performing a hash aggregation (meaning there is a single group),
-			// so all inputLen tuples contribute to the count.
-			a.curAgg += int64(inputLen)
 		}
-	}
+	},
+	)
 }
 
 func (a *countHashAgg) Flush(outputIdx int) {
-	a.vec[outputIdx] = a.curAgg
+	a.col[outputIdx] = a.curAgg
 }
 
 type countHashAggAlloc struct {
@@ -148,6 +155,7 @@ func (a *countHashAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]countHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }

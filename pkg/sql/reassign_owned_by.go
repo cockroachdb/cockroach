@@ -32,6 +32,7 @@ type reassignOwnedByNode struct {
 
 func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"REASSIGN OWNED BY",
 	); err != nil {

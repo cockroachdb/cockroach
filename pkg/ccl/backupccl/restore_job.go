@@ -1154,7 +1154,7 @@ func (r *restoreResumer) Resume(
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := execCtx.(sql.JobExecContext)
 	r.versionAtLeast20_2 = p.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
+		ctx, clusterversion.LeasedDatabaseDescriptors)
 
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,

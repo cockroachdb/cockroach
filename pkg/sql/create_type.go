@@ -53,6 +53,7 @@ var _ planNode = &createTypeNode{n: nil}
 
 func (p *planner) CreateType(ctx context.Context, n *tree.CreateType) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"CREATE TYPE",
 	); err != nil {
@@ -275,7 +276,7 @@ func (p *planner) createEnumWithID(
 	enumType enumType,
 ) error {
 	// Make sure that all nodes in the cluster are able to recognize ENUM types.
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionEnums) {
+	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.Enums) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"not all nodes are the correct version for ENUM type creation")
 	}

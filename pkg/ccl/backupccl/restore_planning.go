@@ -1287,7 +1287,9 @@ func restorePlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	if err := featureflag.CheckEnabled(featureRestoreEnabled,
+	if err := featureflag.CheckEnabled(
+		ctx,
+		featureRestoreEnabled,
 		&p.ExecCfg().Settings.SV,
 		"RESTORE",
 	); err != nil {
@@ -1661,7 +1663,7 @@ func doRestorePlan(
 	//
 	// TODO(ajwerner): Remove this version check in 21.1.
 	canResetModTime := p.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
+		ctx, clusterversion.LeasedDatabaseDescriptors)
 	if err := RewriteTableDescs(
 		tables, descriptorRewrites, intoDB, canResetModTime,
 	); err != nil {

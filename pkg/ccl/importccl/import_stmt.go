@@ -268,7 +268,9 @@ func importPlanHook(
 
 	addToFileFormatTelemetry(importStmt.FileFormat, "attempted")
 
-	if err := featureflag.CheckEnabled(featureImportEnabled,
+	if err := featureflag.CheckEnabled(
+		ctx,
+		featureImportEnabled,
 		&p.ExecCfg().Settings.SV,
 		"IMPORT",
 	); err != nil {
@@ -1048,7 +1050,7 @@ func prepareNewTableDescsForIngestion(
 	}
 	// TODO(ajwerner): Remove this in 21.1.
 	canResetModTime := p.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
+		ctx, clusterversion.LeasedDatabaseDescriptors)
 	if err := backupccl.RewriteTableDescs(
 		newMutableTableDescriptors, tableRewrites, "", canResetModTime,
 	); err != nil {

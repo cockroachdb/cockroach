@@ -89,7 +89,7 @@ func TestGetVersionsBetween(t *testing.T) {
 	var vs keyedVersions
 	for i := 3; i < 10; i++ {
 		vs = append(vs, keyedVersion{
-			Key:     VersionKey(42),
+			Key:     Key(42),
 			Version: roachpb.Version{Major: int32(i)},
 		})
 	}
@@ -117,7 +117,7 @@ func TestGetVersionsBetween(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		actual := getVersionBetweenInternal(test.from, test.to, vs)
+		actual := listBetweenInternal(test.from, test.to, vs)
 		if len(actual) != len(test.exp) {
 			t.Errorf("expected %d versions, got %d", len(test.exp), len(actual))
 		}

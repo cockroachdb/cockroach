@@ -23,7 +23,7 @@ import (
 
 // keyedVersion associates a key to a version.
 type keyedVersion struct {
-	Key VersionKey
+	Key Key
 	roachpb.Version
 }
 
@@ -31,7 +31,7 @@ type keyedVersion struct {
 type keyedVersions []keyedVersion
 
 // MustByKey asserts that the version specified by this key exists, and returns it.
-func (kv keyedVersions) MustByKey(k VersionKey) roachpb.Version {
+func (kv keyedVersions) MustByKey(k Key) roachpb.Version {
 	key := int(k)
 	if key >= len(kv) || key < 0 {
 		log.Fatalf(context.Background(), "version with key %d does not exist, have:\n%s",

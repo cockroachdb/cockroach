@@ -96,7 +96,10 @@ type AggregateFunc interface {
 type orderedAggregateFuncBase struct {
 	groups []bool
 	// curIdx tracks the current output index of this function.
-	curIdx int
+	curIdx    int
+	allocator *colmem.Allocator
+	// vec is the output vector of this function.
+	vec coldata.Vec
 	// nulls is the nulls vector of the output vector of this function.
 	nulls *coldata.Nulls
 }
@@ -106,6 +109,7 @@ func (o *orderedAggregateFuncBase) Init(groups []bool) {
 }
 
 func (o *orderedAggregateFuncBase) SetOutput(vec coldata.Vec) {
+	o.vec = vec
 	o.nulls = vec.Nulls()
 }
 
@@ -125,6 +129,9 @@ func (o *orderedAggregateFuncBase) HandleEmptyInputScalar() {
 }
 
 type hashAggregateFuncBase struct {
+	allocator *colmem.Allocator
+	// vec is the output vector of this function.
+	vec coldata.Vec
 	// nulls is the nulls vector of the output vector of this function.
 	nulls *coldata.Nulls
 }
@@ -132,6 +139,7 @@ type hashAggregateFuncBase struct {
 func (h *hashAggregateFuncBase) Init(_ []bool) {}
 
 func (h *hashAggregateFuncBase) SetOutput(vec coldata.Vec) {
+	h.vec = vec
 	h.nulls = vec.Nulls()
 }
 

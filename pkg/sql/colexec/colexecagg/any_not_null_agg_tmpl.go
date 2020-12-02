@@ -75,8 +75,6 @@ type anyNotNull_TYPE_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
-	allocator                   *colmem.Allocator
-	vec                         coldata.Vec
 	col                         _GOTYPESLICE
 	curAgg                      _GOTYPE
 	foundNonNullForCurrentGroup bool
@@ -90,7 +88,6 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{else}}
 	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.vec = vec
 	a.col = vec.TemplateType()
 }
 
@@ -117,47 +114,44 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 	// {{end}}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
-
-	a.allocator.PerformOperation(
-		[]coldata.Vec{a.vec},
-		func() {
-			// Capture col to force bounds check to work. See
-			// https://github.com/golang/go/issues/39756
-			col := col
-			_ = col.Get(inputLen - 1)
-			// {{if eq "_AGGKIND" "Ordered"}}
-			groups := a.groups
-			// {{/*
-			// We don't need to check whether sel is non-nil when performing
-			// hash aggregation because the hash aggregator always uses non-nil
-			// sel to specify the tuples to be aggregated.
-			// */}}
-			if sel == nil {
-				_ = groups[inputLen-1]
-				if nulls.MaybeHasNulls() {
-					for i := 0; i < inputLen; i++ {
-						_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
-						_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
-					}
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		_ = col.Get(inputLen - 1)
+		// {{if eq "_AGGKIND" "Ordered"}}
+		groups := a.groups
+		// {{/*
+		// We don't need to check whether sel is non-nil when performing
+		// hash aggregation because the hash aggregator always uses non-nil
+		// sel to specify the tuples to be aggregated.
+		// */}}
+		if sel == nil {
+			_ = groups[inputLen-1]
+			if nulls.MaybeHasNulls() {
+				for i := 0; i < inputLen; i++ {
+					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
 				}
-			} else
-			// {{end}}
-			{
-				sel = sel[:inputLen]
-				if nulls.MaybeHasNulls() {
-					for _, i := range sel {
-						_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
-					}
-				} else {
-					for _, i := range sel {
-						_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
-					}
+			} else {
+				for i := 0; i < inputLen; i++ {
+					_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
 				}
 			}
-		},
+		} else
+		// {{end}}
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
+				}
+			} else {
+				for _, i := range sel {
+					_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
+				}
+			}
+		}
+	},
 	)
 	// {{if eq .VecMethod "Bytes"}}
 	newCurAggSize := len(a.curAgg)

@@ -11091,7 +11091,7 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_convertedNativeElem := tree.DBytes(arg2)
+						_convertedNativeElem := tree.DString(arg2)
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
@@ -11118,7 +11118,7 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 						arg1 := col1.Get(i)
 						arg2 := col2.Get(i)
 
-						_convertedNativeElem := tree.DBytes(arg2)
+						_convertedNativeElem := tree.DString(arg2)
 						var _nonDatumArgAsDatum tree.Datum
 						_nonDatumArgAsDatum = &_convertedNativeElem
 
@@ -11147,7 +11147,7 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_convertedNativeElem := tree.DBytes(arg2)
+					_convertedNativeElem := tree.DString(arg2)
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 
@@ -11170,7 +11170,7 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
 
-					_convertedNativeElem := tree.DBytes(arg2)
+					_convertedNativeElem := tree.DString(arg2)
 					var _nonDatumArgAsDatum tree.Datum
 					_nonDatumArgAsDatum = &_convertedNativeElem
 

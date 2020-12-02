@@ -25,13 +25,10 @@ func newConcatOrderedAggAlloc(allocator *colmem.Allocator, allocSize int64) aggr
 
 type concatOrderedAgg struct {
 	orderedAggregateFuncBase
-	allocator *colmem.Allocator
 	// curAgg holds the running total.
 	curAgg []byte
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -39,7 +36,6 @@ type concatOrderedAgg struct {
 
 func (a *concatOrderedAgg) SetOutput(vec coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	a.vec = vec
 	a.col = vec.Bytes()
 }
 
@@ -49,112 +45,110 @@ func (a *concatOrderedAgg) Compute(
 	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
-	a.allocator.PerformOperation(
-		[]coldata.Vec{a.vec},
-		func() {
-			groups := a.groups
-			if sel == nil {
-				_ = groups[inputLen-1]
-				if nulls.MaybeHasNulls() {
-					for i := 0; i < inputLen; i++ {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			if nulls.MaybeHasNulls() {
+				for i := 0; i < inputLen; i++ {
 
-						if groups[i] {
-							// If we encounter a new group, and we haven't found any non-nulls for the
-							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
-								a.nulls.SetNull(a.curIdx)
-							} else {
-								a.col.Set(a.curIdx, a.curAgg)
-							}
-							a.curIdx++
-							a.curAgg = zeroBytesValue
-
-							a.foundNonNullForCurrentGroup = false
+					if groups[i] {
+						// If we encounter a new group, and we haven't found any non-nulls for the
+						// current group, the output for this group should be null.
+						if !a.foundNonNullForCurrentGroup {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col.Set(a.curIdx, a.curAgg)
 						}
+						a.curIdx++
+						a.curAgg = zeroBytesValue
 
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							a.curAgg = append(a.curAgg, col.Get(i)...)
-							a.foundNonNullForCurrentGroup = true
-						}
+						a.foundNonNullForCurrentGroup = false
 					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
-						if groups[i] {
-							// If we encounter a new group, and we haven't found any non-nulls for the
-							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
-								a.nulls.SetNull(a.curIdx)
-							} else {
-								a.col.Set(a.curIdx, a.curAgg)
-							}
-							a.curIdx++
-							a.curAgg = zeroBytesValue
-
-						}
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							a.curAgg = append(a.curAgg, col.Get(i)...)
-							a.foundNonNullForCurrentGroup = true
-						}
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = append(a.curAgg, col.Get(i)...)
+						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
-				sel = sel[:inputLen]
-				if nulls.MaybeHasNulls() {
-					for _, i := range sel {
+				for i := 0; i < inputLen; i++ {
 
-						if groups[i] {
-							// If we encounter a new group, and we haven't found any non-nulls for the
-							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
-								a.nulls.SetNull(a.curIdx)
-							} else {
-								a.col.Set(a.curIdx, a.curAgg)
-							}
-							a.curIdx++
-							a.curAgg = zeroBytesValue
-
-							a.foundNonNullForCurrentGroup = false
+					if groups[i] {
+						// If we encounter a new group, and we haven't found any non-nulls for the
+						// current group, the output for this group should be null.
+						if !a.foundNonNullForCurrentGroup {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col.Set(a.curIdx, a.curAgg)
 						}
+						a.curIdx++
+						a.curAgg = zeroBytesValue
 
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							a.curAgg = append(a.curAgg, col.Get(i)...)
-							a.foundNonNullForCurrentGroup = true
-						}
 					}
-				} else {
-					for _, i := range sel {
 
-						if groups[i] {
-							// If we encounter a new group, and we haven't found any non-nulls for the
-							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
-								a.nulls.SetNull(a.curIdx)
-							} else {
-								a.col.Set(a.curIdx, a.curAgg)
-							}
-							a.curIdx++
-							a.curAgg = zeroBytesValue
-
-						}
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							a.curAgg = append(a.curAgg, col.Get(i)...)
-							a.foundNonNullForCurrentGroup = true
-						}
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = append(a.curAgg, col.Get(i)...)
+						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
-		},
+		} else {
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					if groups[i] {
+						// If we encounter a new group, and we haven't found any non-nulls for the
+						// current group, the output for this group should be null.
+						if !a.foundNonNullForCurrentGroup {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col.Set(a.curIdx, a.curAgg)
+						}
+						a.curIdx++
+						a.curAgg = zeroBytesValue
+
+						a.foundNonNullForCurrentGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = append(a.curAgg, col.Get(i)...)
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					if groups[i] {
+						// If we encounter a new group, and we haven't found any non-nulls for the
+						// current group, the output for this group should be null.
+						if !a.foundNonNullForCurrentGroup {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							a.col.Set(a.curIdx, a.curAgg)
+						}
+						a.curIdx++
+						a.curAgg = zeroBytesValue
+
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = append(a.curAgg, col.Get(i)...)
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			}
+		}
+	},
 	)
 	newCurAggSize := len(a.curAgg)
 	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))

@@ -135,7 +135,7 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 		desc, lease := r.GetDescAndLease(ctx)
 		br.RangeInfos = []roachpb.RangeInfo{{Desc: desc, Lease: lease}}
 
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionClientRangeInfosOnBatchResponse) {
+		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.ClientRangeInfosOnBatchResponse) {
 			// Also set the RangeInfo on the individual responses, for compatibility
 			// with 20.1.
 			for _, r := range br.Responses {

@@ -28,7 +28,7 @@ func newCountRowsOrderedAggAlloc(
 // countRowsOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsOrderedAgg struct {
 	orderedAggregateFuncBase
-	vec    []int64
+	col    []int64
 	curAgg int64
 }
 
@@ -36,43 +36,46 @@ var _ AggregateFunc = &countRowsOrderedAgg{}
 
 func (a *countRowsOrderedAgg) SetOutput(vec coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	a.vec = vec.Int64()
+	a.col = vec.Int64()
 }
 
 func (a *countRowsOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		{
-			for i := 0; i < inputLen; i++ {
-				if groups[i] {
-					a.vec[a.curIdx] = a.curAgg
-					a.curIdx++
-					a.curAgg = int64(0)
-				}
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			{
+				for i := 0; i < inputLen; i++ {
+					if groups[i] {
+						a.col[a.curIdx] = a.curAgg
+						a.curIdx++
+						a.curAgg = int64(0)
+					}
 
-				var y int64
-				y = int64(1)
-				a.curAgg += y
+					var y int64
+					y = int64(1)
+					a.curAgg += y
+				}
+			}
+		} else {
+			{
+				for _, i := range sel[:inputLen] {
+					if groups[i] {
+						a.col[a.curIdx] = a.curAgg
+						a.curIdx++
+						a.curAgg = int64(0)
+					}
+
+					var y int64
+					y = int64(1)
+					a.curAgg += y
+				}
 			}
 		}
-	} else {
-		{
-			for _, i := range sel[:inputLen] {
-				if groups[i] {
-					a.vec[a.curIdx] = a.curAgg
-					a.curIdx++
-					a.curAgg = int64(0)
-				}
-
-				var y int64
-				y = int64(1)
-				a.curAgg += y
-			}
-		}
-	}
+	},
+	)
 }
 
 func (a *countRowsOrderedAgg) Flush(outputIdx int) {
@@ -80,13 +83,13 @@ func (a *countRowsOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	a.vec[outputIdx] = a.curAgg
+	a.col[outputIdx] = a.curAgg
 }
 
 func (a *countRowsOrderedAgg) HandleEmptyInputScalar() {
 	// COUNT aggregates are special because they return zero in case of an
 	// empty input in the scalar context.
-	a.vec[0] = 0
+	a.col[0] = 0
 }
 
 type countRowsOrderedAggAlloc struct {
@@ -105,6 +108,7 @@ func (a *countRowsOrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]countRowsOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
@@ -121,7 +125,7 @@ func newCountOrderedAggAlloc(
 // countOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countOrderedAgg struct {
 	orderedAggregateFuncBase
-	vec    []int64
+	col    []int64
 	curAgg int64
 }
 
@@ -129,7 +133,7 @@ var _ AggregateFunc = &countOrderedAgg{}
 
 func (a *countOrderedAgg) SetOutput(vec coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	a.vec = vec.Int64()
+	a.col = vec.Int64()
 }
 
 func (a *countOrderedAgg) Compute(
@@ -139,67 +143,70 @@ func (a *countOrderedAgg) Compute(
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		if nulls.MaybeHasNulls() {
-			for i := 0; i < inputLen; i++ {
-				if groups[i] {
-					a.vec[a.curIdx] = a.curAgg
-					a.curIdx++
-					a.curAgg = int64(0)
-				}
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			if nulls.MaybeHasNulls() {
+				for i := 0; i < inputLen; i++ {
+					if groups[i] {
+						a.col[a.curIdx] = a.curAgg
+						a.curIdx++
+						a.curAgg = int64(0)
+					}
 
-				var y int64
-				y = int64(0)
-				if !nulls.NullAt(i) {
-					y = 1
+					var y int64
+					y = int64(0)
+					if !nulls.NullAt(i) {
+						y = 1
+					}
+					a.curAgg += y
 				}
-				a.curAgg += y
+			} else {
+				for i := 0; i < inputLen; i++ {
+					if groups[i] {
+						a.col[a.curIdx] = a.curAgg
+						a.curIdx++
+						a.curAgg = int64(0)
+					}
+
+					var y int64
+					y = int64(1)
+					a.curAgg += y
+				}
 			}
 		} else {
-			for i := 0; i < inputLen; i++ {
-				if groups[i] {
-					a.vec[a.curIdx] = a.curAgg
-					a.curIdx++
-					a.curAgg = int64(0)
-				}
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel[:inputLen] {
+					if groups[i] {
+						a.col[a.curIdx] = a.curAgg
+						a.curIdx++
+						a.curAgg = int64(0)
+					}
 
-				var y int64
-				y = int64(1)
-				a.curAgg += y
+					var y int64
+					y = int64(0)
+					if !nulls.NullAt(i) {
+						y = 1
+					}
+					a.curAgg += y
+				}
+			} else {
+				for _, i := range sel[:inputLen] {
+					if groups[i] {
+						a.col[a.curIdx] = a.curAgg
+						a.curIdx++
+						a.curAgg = int64(0)
+					}
+
+					var y int64
+					y = int64(1)
+					a.curAgg += y
+				}
 			}
 		}
-	} else {
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel[:inputLen] {
-				if groups[i] {
-					a.vec[a.curIdx] = a.curAgg
-					a.curIdx++
-					a.curAgg = int64(0)
-				}
-
-				var y int64
-				y = int64(0)
-				if !nulls.NullAt(i) {
-					y = 1
-				}
-				a.curAgg += y
-			}
-		} else {
-			for _, i := range sel[:inputLen] {
-				if groups[i] {
-					a.vec[a.curIdx] = a.curAgg
-					a.curIdx++
-					a.curAgg = int64(0)
-				}
-
-				var y int64
-				y = int64(1)
-				a.curAgg += y
-			}
-		}
-	}
+	},
+	)
 }
 
 func (a *countOrderedAgg) Flush(outputIdx int) {
@@ -207,13 +214,13 @@ func (a *countOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	a.vec[outputIdx] = a.curAgg
+	a.col[outputIdx] = a.curAgg
 }
 
 func (a *countOrderedAgg) HandleEmptyInputScalar() {
 	// COUNT aggregates are special because they return zero in case of an
 	// empty input in the scalar context.
-	a.vec[0] = 0
+	a.col[0] = 0
 }
 
 type countOrderedAggAlloc struct {
@@ -232,6 +239,7 @@ func (a *countOrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]countOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }

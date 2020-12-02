@@ -54,6 +54,7 @@ type alterTableNode struct {
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"ALTER TABLE",
 	); err != nil {
@@ -542,7 +543,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Since we are able to drop indexes used by foreign keys on the origin side,
 			// the drop index codepaths aren't going to remove dependent FKs, so we
 			// need to do that here.
-			if params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionNoOriginFKIndexes) {
+			if params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.NoOriginFKIndexes) {
 				// We update the FK's slice in place here.
 				sliceIdx := 0
 				for i := range n.tableDesc.OutboundFKs {

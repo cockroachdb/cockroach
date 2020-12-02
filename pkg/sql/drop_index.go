@@ -43,6 +43,7 @@ type dropIndexNode struct {
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"DROP INDEX",
 	); err != nil {
@@ -356,7 +357,7 @@ func (p *planner) dropIndexByName(
 
 	// If the we aren't at a high enough version to drop indexes on the origin
 	// side then we have to attempt to delete them.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionNoOriginFKIndexes) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.NoOriginFKIndexes) {
 		// Index for updating the FK slices in place when removing FKs.
 		sliceIdx := 0
 		for i := range tableDesc.OutboundFKs {

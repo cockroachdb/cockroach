@@ -1549,7 +1549,7 @@ func (ds *DistSender) sendPartialBatch(
 			// the br.
 			if ba.ReturnRangeInfo &&
 				len(reply.RangeInfos) == 0 &&
-				!ds.st.Version.IsActive(ctx, clusterversion.VersionClientRangeInfosOnBatchResponse) {
+				!ds.st.Version.IsActive(ctx, clusterversion.ClientRangeInfosOnBatchResponse) {
 				// All the responses have the same RangeInfos in them, so just look at the
 				// first one.
 				firstRes := reply.Responses[0].GetInner()

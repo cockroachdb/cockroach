@@ -45,6 +45,7 @@ type createIndexNode struct {
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"CREATE INDEX",
 	); err != nil {
@@ -420,7 +421,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	encodingVersion := descpb.SecondaryIndexFamilyFormatVersion
-	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionEmptyArraysInInvertedIndexes) {
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.EmptyArraysInInvertedIndexes) {
 		encodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
 	}
 	indexDesc.Version = encodingVersion
