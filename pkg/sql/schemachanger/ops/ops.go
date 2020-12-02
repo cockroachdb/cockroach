@@ -39,14 +39,8 @@ func (validationOp) Type() Type { return ValidationType }
 type AddIndexDescriptor struct {
 	descriptorMutationOp
 	TableID descpb.ID
-	IndexID descpb.IndexID
-
-	ColumnIDs       descpb.ColumnIDs
-	ExtraColumnIDs  descpb.ColumnIDs
-	StoredColumnIDs descpb.ColumnIDs
-
+	Index   descpb.IndexDescriptor
 	Primary bool
-	Unique  bool
 }
 
 type IndexDescriptorStateChange struct {
@@ -71,10 +65,8 @@ type UniqueIndexValidation struct {
 
 type AddColumnDescriptor struct {
 	descriptorMutationOp
-	TableID  descpb.ID
-	ColumnID descpb.ColumnID
-
-	// more metadata
+	TableID descpb.ID
+	Column  descpb.ColumnDescriptor
 }
 
 type ColumnDescriptorStateChange struct {

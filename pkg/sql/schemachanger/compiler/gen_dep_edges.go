@@ -20,7 +20,7 @@ func generateDropIndexDepEdges(g *targetStateGraph, t *targets.DropIndex, s targ
 		for _, ot := range g.targets {
 			switch ot := ot.(type) {
 			case *targets.AddIndex:
-				if ot.IndexID == t.ReplacedBy {
+				if ot.Index.ID == t.ReplacedBy {
 					g.addDepEdge(t, s, ot, targets.StatePublic)
 				}
 			case *targets.DropColumn:

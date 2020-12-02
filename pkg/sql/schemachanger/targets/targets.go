@@ -25,18 +25,12 @@ func (t target) ID() ID { return t.id }
 
 type AddIndex struct {
 	target
-	TableID      descpb.ID
-	IndexID      descpb.IndexID
-	PrimaryIndex descpb.IndexID // primary index from which to backfill this index
+	TableID descpb.ID
+	Index   descpb.IndexDescriptor
 
+	PrimaryIndex   descpb.IndexID // primary index from which to backfill this index
 	ReplacementFor descpb.IndexID
-
-	ColumnIDs       descpb.ColumnIDs
-	ExtraColumnIDs  descpb.ColumnIDs
-	StoredColumnIDs descpb.ColumnIDs
-
-	Primary bool
-	Unique  bool
+	Primary        bool
 }
 
 type DropIndex struct {
@@ -50,8 +44,8 @@ type DropIndex struct {
 
 type AddColumn struct {
 	target
-	TableID  descpb.ID
-	ColumnID descpb.ColumnID
+	TableID descpb.ID
+	Column  descpb.ColumnDescriptor
 }
 
 type DropColumn struct {

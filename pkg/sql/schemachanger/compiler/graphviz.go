@@ -182,7 +182,19 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 		if err := json.Unmarshal(marshaled, &m); err != nil {
 			return nil, err
 		}
-		return m, nil
+		// Flatten objects up to one level to deal with embedded index/column
+		// descriptors for now.
+		flattenedMap := make(map[string]interface{})
+		for k, v := range m {
+			if obj, ok := v.(map[string]interface{}); ok {
+				for objk, objv := range obj {
+					flattenedMap[k+"."+objk] = objv
+				}
+			} else {
+				flattenedMap[k] = v
+			}
+		}
+		return flattenedMap, nil
 	},
 }).Parse(`
 <table CELLSPACING="0" CELLBORDER="1" CELLPADDING="0" WIDTH="0">
