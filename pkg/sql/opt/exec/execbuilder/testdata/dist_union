@@ -47,7 +47,7 @@ query T
 EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • union
 │

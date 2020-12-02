@@ -226,7 +226,7 @@ FROM (
 )
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • values
   columns: (e int, f string, g bool)

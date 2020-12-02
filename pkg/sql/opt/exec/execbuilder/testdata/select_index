@@ -1842,7 +1842,7 @@ query T
 EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • update
 │ table: t4
@@ -1862,7 +1862,7 @@ query T
 EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete range
   from: t4

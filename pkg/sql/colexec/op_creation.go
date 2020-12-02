@@ -37,6 +37,7 @@ type NewColOperatorArgs struct {
 	Inputs               []colexecbase.Operator
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
+	LocalProcessors      []execinfra.LocalProcessor
 	DiskQueueCfg         colcontainer.DiskQueueCfg
 	FDSemaphore          semaphore.Semaphore
 	ExprHelper           *ExprHelper

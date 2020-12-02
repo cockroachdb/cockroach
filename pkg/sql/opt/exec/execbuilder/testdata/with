@@ -11,7 +11,7 @@ EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (a, a)
@@ -68,7 +68,7 @@ EXPLAIN (VERBOSE)
   WITH t AS (INSERT INTO x VALUES (1) RETURNING a) SELECT * FROM t
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (a)
@@ -145,7 +145,7 @@ EXPLAIN (VERBOSE)
   SELECT sum(n) FROM t
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • group (scalar)
 │ columns: (sum)
