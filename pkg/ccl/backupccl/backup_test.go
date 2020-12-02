@@ -6124,6 +6124,11 @@ func TestBackupRestoreTenant(t *testing.T) {
 	systemDB.Exec(t, `BACKUP TENANT 11 TO 'nodelocal://1/t11'`)
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
 
+	t.Run("inside-tenant", func(t *testing.T) {
+		skip.WithIssue(t, 57317)
+		tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
+	})
+
 	t.Run("non-existent", func(t *testing.T) {
 		systemDB.ExpectErr(t, "tenant 123 does not exist", `BACKUP TENANT 123 TO 'nodelocal://1/t1'`)
 		systemDB.ExpectErr(t, "tenant 21 does not exist", `BACKUP TENANT 21 TO 'nodelocal://1/t20'`)
@@ -7087,7 +7092,7 @@ schema_name`
 	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery,
 		[][]string{{"pg_temp_0_0"}, {"pg_temp_0_1"}, {"pg_temp_0_2"}, {"pg_temp_0_3"}})
 
-	checkTempTablesQuery := `SELECT schema_name, 
+	checkTempTablesQuery := `SELECT schema_name,
 table_name FROM [SHOW TABLES] ORDER BY schema_name, table_name`
 	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{{"pg_temp_0_0", "t"},
 		{"pg_temp_0_1", "t"}, {"pg_temp_0_2", "t"}, {"pg_temp_0_3", "t"}})
