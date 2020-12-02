@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 	"unsafe"
 
@@ -36,10 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/time/rate"
@@ -506,64 +503,24 @@ func addSSTablePreApply(
 	if eng.InMem() {
 		path = fmt.Sprintf("%x", checksum)
 		if err := eng.WriteFile(path, sst.Data); err != nil {
-			panic(err)
+			log.Fatalf(ctx, "unable to write sideloaded SSTable at term %d, index %d: %s", term, index, err)
 		}
 	} else {
 		ingestPath := path + ".ingested"
 
-		canLinkToRaftFile := false
-		// The SST may already be on disk, thanks to the sideloading mechanism.  If
-		// so we can try to add that file directly, via a new hardlink if the file-
-		// system support it, rather than writing a new copy of it. However, this is
-		// only safe if we can do so without modifying the file since it is still
-		// part of an immutable raft log message, but in some cases, described in
-		// DBIngestExternalFile, RocksDB would modify the file. Fortunately we can
-		// tell Rocks that it is not allowed to modify the file, in which case it
-		// will return and error if it would have tried to do so, at which point we
-		// can fall back to writing a new copy for Rocks to ingest.
-		if _, links, err := sysutil.StatAndLinkCount(path); err == nil {
-			// HACK: RocksDB does not like ingesting the same file (by inode) twice.
-			// See facebook/rocksdb#5133. We can tell that we have tried to ingest
-			// this file already if it has more than one link – one from the file raft
-			// wrote and one from rocks. In that case, we should not try to give
-			// rocks a link to the same file again.
-			if links == 1 {
-				canLinkToRaftFile = true
-			} else {
-				log.Warningf(ctx, "SSTable at index %d term %d may have already been ingested (link count %d) -- falling back to ingesting a copy",
-					index, term, links)
+		// The SST may already be on disk, thanks to the sideloading
+		// mechanism.  If so we can try to add that file directly, via a new
+		// hardlink if the filesystem supports it, rather than writing a new
+		// copy of it.  We cannot pass it the path in the sideload store as
+		// the engine deletes the passed path on success.
+		if linkErr := eng.Link(path, ingestPath); linkErr == nil {
+			ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
+			if ingestErr != nil {
+				log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
 			}
-		}
-
-		if canLinkToRaftFile {
-			// If the fs supports it, make a hard-link for rocks to ingest. We cannot
-			// pass it the path in the sideload store as it deletes the passed path on
-			// success.
-			if linkErr := eng.Link(path, ingestPath); linkErr == nil {
-				ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
-				if ingestErr == nil {
-					// Adding without modification succeeded, no copy necessary.
-					log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
-					return false
-				}
-				if rmErr := eng.Remove(ingestPath); rmErr != nil {
-					log.Fatalf(ctx, "failed to move ingest sst: %v", rmErr)
-				}
-				const seqNoMsg = "Global seqno is required, but disabled"
-				const seqNoOnReIngest = "external file have non zero sequence number"
-				// Repeated ingestion is still possible even with the link count checked
-				// above, since rocks might have already compacted away the file.
-				// However it does not flush compacted files from its cache, so it can
-				// still react poorly to attempting to ingest again. If we get an error
-				// that indicates we can't ingest, we'll make a copy and try again. That
-				// attempt must succeed or we'll fatal, so any persistent error is still
-				// going to be surfaced.
-				ingestErrMsg := ingestErr.Error()
-				isSeqNoErr := strings.Contains(ingestErrMsg, seqNoMsg) || strings.Contains(ingestErrMsg, seqNoOnReIngest)
-				if ingestErr := (*storage.Error)(nil); !errors.As(err, &ingestErr) || !isSeqNoErr {
-					log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
-				}
-			}
+			// Adding without modification succeeded, no copy necessary.
+			log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
+			return false
 		}
 
 		path = ingestPath
@@ -578,8 +535,8 @@ func addSSTablePreApply(
 		if _, err := eng.Stat(path); err == nil {
 			// The file we want to ingest exists. This can happen since the
 			// ingestion may apply twice (we ingest before we mark the Raft
-			// command as committed). Just unlink the file (RocksDB created a
-			// hard link); after that we're free to write it again.
+			// command as committed). Just unlink the file (the storage engine
+			// created a hard link); after that we're free to write it again.
 			if err := eng.Remove(path); err != nil {
 				log.Fatalf(ctx, "while removing existing file during ingestion of %s: %+v", path, err)
 			}
