@@ -1,0 +1,8805 @@
+{
+  "pgVersion": "13.0",
+  "pgCatalog": {
+    "pg_aggregate": {
+      "aggcombinefn": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggdeserialfn": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggfinalextra": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggfinalfn": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggfinalmodify": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggfnoid": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "agginitval": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggkind": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggmfinalextra": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggmfinalfn": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggmfinalmodify": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggminitval": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggminvtransfn": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggmtransfn": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggmtransspace": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggmtranstype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggnumdirectargs": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggserialfn": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggsortop": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggtransfn": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggtransspace": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "aggtranstype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_aggregate_fnoid_index": {
+      "aggfnoid": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_am": {
+      "amhandler": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amtype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_am_name_index": {
+      "amname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_am_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_amop": {
+      "amopfamily": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amoplefttype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amopmethod": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amopopr": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amoppurpose": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amoprighttype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amopsortfamily": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amopstrategy": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_amop_fam_strat_index": {
+      "amopfamily": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amoplefttype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amoprighttype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amopstrategy": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_amop_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_amop_opr_fam_index": {
+      "amopfamily": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amopopr": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amoppurpose": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_amproc": {
+      "amproc": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amprocfamily": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amproclefttype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amprocnum": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amprocrighttype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_amproc_fam_proc_index": {
+      "amprocfamily": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amproclefttype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amprocnum": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "amprocrighttype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_amproc_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_attrdef": {
+      "adbin": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "adnum": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "adrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_attrdef_adrelid_adnum_index": {
+      "adnum": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "adrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_attrdef_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_attribute": {
+      "attacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attalign": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attbyval": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attcacheoff": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attcollation": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attfdwoptions": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attgenerated": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "atthasdef": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "atthasmissing": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attidentity": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attinhcount": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attisdropped": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attislocal": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attlen": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attmissingval": {
+        "oid": 2277,
+        "dataType": "anyarray",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attndims": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attnotnull": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attnum": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attoptions": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attstattarget": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attstorage": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "atttypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "atttypmod": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_attribute_relid_attnam_index": {
+      "attname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_attribute_relid_attnum_index": {
+      "attnum": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "attrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_auth_members": {
+      "admin_option": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "grantor": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "member": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "roleid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_auth_members_member_role_index": {
+      "member": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "roleid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_auth_members_role_member_index": {
+      "member": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "roleid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_authid": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolbypassrls": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolcanlogin": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolconnlimit": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolcreatedb": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolcreaterole": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolinherit": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolpassword": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolreplication": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolsuper": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolvaliduntil": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_authid_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_authid_rolname_index": {
+      "rolname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_available_extension_versions": {
+      "comment": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "installed": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "name": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relocatable": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "requires": {
+        "oid": 1003,
+        "dataType": "_name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schema": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "superuser": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "trusted": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "version": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_available_extensions": {
+      "comment": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "default_version": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "installed_version": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "name": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_cast": {
+      "castcontext": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "castfunc": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "castmethod": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "castsource": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "casttarget": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_cast_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_cast_source_target_index": {
+      "castsource": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "casttarget": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_class": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relallvisible": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relam": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relchecks": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relfilenode": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relforcerowsecurity": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relfrozenxid": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relhasindex": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relhasrules": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relhassubclass": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relhastriggers": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relispartition": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relispopulated": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relisshared": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relkind": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relminmxid": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relnatts": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "reloftype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "reloptions": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relpages": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relpartbound": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relpersistence": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relreplident": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relrewrite": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relrowsecurity": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "reltablespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "reltoastrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "reltuples": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "reltype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_class_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_class_relname_nsp_index": {
+      "relname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_class_tblspc_relfilenode_index": {
+      "relfilenode": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "reltablespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_collation": {
+      "collcollate": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collctype": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collencoding": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collisdeterministic": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collprovider": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collversion": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_collation_name_enc_nsp_index": {
+      "collencoding": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "collnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_collation_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_config": {
+      "name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "setting": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_constraint": {
+      "conbin": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "condeferrable": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "condeferred": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conexclop": {
+        "oid": 1028,
+        "dataType": "_oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confdeltype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conffeqop": {
+        "oid": 1028,
+        "dataType": "_oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confkey": {
+        "oid": 1005,
+        "dataType": "_int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confmatchtype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confupdtype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conindid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "coninhcount": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conislocal": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conkey": {
+        "oid": 1005,
+        "dataType": "_int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "connamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "connoinherit": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conparentid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conpfeqop": {
+        "oid": 1028,
+        "dataType": "_oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conppeqop": {
+        "oid": 1028,
+        "dataType": "_oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "contype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "contypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "convalidated": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_constraint_conname_nsp_index": {
+      "conname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "connamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_constraint_conparentid_index": {
+      "conparentid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_constraint_conrelid_contypid_conname_index": {
+      "conname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "contypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_constraint_contypid_index": {
+      "contypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_constraint_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_conversion": {
+      "condefault": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conforencoding": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "connamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conproc": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "contoencoding": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_conversion_default_index": {
+      "conforencoding": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "connamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "contoencoding": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_conversion_name_nsp_index": {
+      "conname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "connamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_conversion_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_cursors": {
+      "creation_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "is_binary": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "is_holdable": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "is_scrollable": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "statement": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_database": {
+      "datacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datallowconn": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datcollate": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datconnlimit": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datctype": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datdba": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datfrozenxid": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datistemplate": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datlastsysoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datminmxid": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "dattablespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "encoding": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_database_datname_index": {
+      "datname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_database_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_db_role_setting": {
+      "setconfig": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "setdatabase": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "setrole": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_db_role_setting_databaseid_rol_index": {
+      "setdatabase": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "setrole": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_default_acl": {
+      "defaclacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "defaclnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "defaclobjtype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "defaclrole": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_default_acl_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_default_acl_role_nsp_obj_index": {
+      "defaclnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "defaclobjtype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "defaclrole": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_depend": {
+      "classid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "deptype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "refclassid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "refobjid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "refobjsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_depend_depender_index": {
+      "classid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_depend_reference_index": {
+      "refclassid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "refobjid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "refobjsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_description": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "description": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_description_o_c_o_index": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_enum": {
+      "enumlabel": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "enumsortorder": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "enumtypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_enum_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_enum_typid_label_index": {
+      "enumlabel": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "enumtypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_enum_typid_sortorder_index": {
+      "enumsortorder": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "enumtypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_event_trigger": {
+      "evtenabled": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "evtevent": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "evtfoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "evtname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "evtowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "evttags": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_event_trigger_evtname_index": {
+      "evtname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_event_trigger_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_extension": {
+      "extcondition": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "extconfig": {
+        "oid": 1028,
+        "dataType": "_oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "extname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "extnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "extowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "extrelocatable": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "extversion": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_extension_name_index": {
+      "extname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_extension_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_file_settings": {
+      "applied": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "error": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seqno": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "setting": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sourcefile": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sourceline": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_foreign_data_wrapper": {
+      "fdwacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "fdwhandler": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "fdwname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "fdwoptions": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "fdwowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "fdwvalidator": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_foreign_data_wrapper_name_index": {
+      "fdwname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_foreign_data_wrapper_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_foreign_server": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srvacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srvfdw": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srvname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srvoptions": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srvowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srvtype": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srvversion": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_foreign_server_name_index": {
+      "srvname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_foreign_server_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_foreign_table": {
+      "ftoptions": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ftrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ftserver": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_foreign_table_relid_index": {
+      "ftrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_group": {
+      "grolist": {
+        "oid": 1028,
+        "dataType": "_oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "groname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "grosysid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_hba_file_rules": {
+      "address": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "auth_method": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "database": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "error": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "line_number": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "netmask": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "options": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "type": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "user_name": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_index": {
+      "indcheckxmin": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indclass": {
+        "oid": 30,
+        "dataType": "oidvector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indcollation": {
+        "oid": 30,
+        "dataType": "oidvector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexprs": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indimmediate": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indisclustered": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indisexclusion": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indislive": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indisprimary": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indisready": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indisreplident": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indisunique": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indisvalid": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indkey": {
+        "oid": 22,
+        "dataType": "int2vector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indnatts": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indnkeyatts": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indoption": {
+        "oid": 22,
+        "dataType": "int2vector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indpred": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_index_indexrelid_index": {
+      "indexrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_index_indrelid_index": {
+      "indrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_indexes": {
+      "indexdef": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablespace": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_inherits": {
+      "inhparent": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "inhrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "inhseqno": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_inherits_parent_index": {
+      "inhparent": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_inherits_relid_seqno_index": {
+      "inhrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "inhseqno": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_init_privs": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "initprivs": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "privtype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_init_privs_o_c_o_index": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_language": {
+      "lanacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "laninline": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "lanispl": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "lanname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "lanowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "lanplcallfoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "lanpltrusted": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "lanvalidator": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_language_name_index": {
+      "lanname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_language_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_largeobject": {
+      "data": {
+        "oid": 17,
+        "dataType": "bytea",
+        "expOid": null,
+        "expDataType": null
+      },
+      "loid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pageno": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_largeobject_loid_pn_index": {
+      "loid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pageno": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_largeobject_metadata": {
+      "lomacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "lomowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_largeobject_metadata_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_locks": {
+      "classid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "database": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "fastpath": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "granted": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "locktype": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "mode": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "page": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relation": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "transactionid": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tuple": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "virtualtransaction": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "virtualxid": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_matviews": {
+      "definition": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "hasindexes": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ispopulated": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "matviewname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "matviewowner": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablespace": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_namespace": {
+      "nspacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "nspname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "nspowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_namespace_nspname_index": {
+      "nspname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_namespace_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_opclass": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opcdefault": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opcfamily": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opcintype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opckeytype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opcmethod": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opcname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opcnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opcowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_opclass_am_name_nsp_index": {
+      "opcmethod": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opcname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opcnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_opclass_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_operator": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprcanhash": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprcanmerge": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprcode": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprcom": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprjoin": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprkind": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprleft": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprnegate": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprrest": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprresult": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprright": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_operator_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_operator_oprname_l_r_n_index": {
+      "oprleft": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oprright": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_opfamily": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opfmethod": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opfname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opfnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opfowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_opfamily_am_name_nsp_index": {
+      "opfmethod": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opfname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "opfnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_opfamily_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_partitioned_table": {
+      "partattrs": {
+        "oid": 22,
+        "dataType": "int2vector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "partclass": {
+        "oid": 30,
+        "dataType": "oidvector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "partcollation": {
+        "oid": 30,
+        "dataType": "oidvector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "partdefid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "partexprs": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "partnatts": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "partrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "partstrat": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_partitioned_table_partrelid_index": {
+      "partrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_policies": {
+      "cmd": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "permissive": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "policyname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "qual": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "roles": {
+        "oid": 1003,
+        "dataType": "_name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "with_check": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_policy": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "polcmd": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "polname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "polpermissive": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "polqual": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "polrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "polroles": {
+        "oid": 1028,
+        "dataType": "_oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "polwithcheck": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_policy_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_policy_polrelid_polname_index": {
+      "polname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "polrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_prepared_statements": {
+      "from_sql": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "parameter_types": {
+        "oid": 2211,
+        "dataType": "_regtype",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prepare_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "statement": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_prepared_xacts": {
+      "database": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "gid": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "owner": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prepared": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "transaction": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_proc": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proallargtypes": {
+        "oid": 1028,
+        "dataType": "_oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proargdefaults": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proargmodes": {
+        "oid": 1002,
+        "dataType": "_char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proargnames": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proargtypes": {
+        "oid": 30,
+        "dataType": "oidvector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "probin": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proconfig": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "procost": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proisstrict": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prokind": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prolang": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proleakproof": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pronamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pronargdefaults": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pronargs": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proparallel": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proretset": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prorettype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prorows": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prosecdef": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prosrc": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prosupport": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "protrftypes": {
+        "oid": 1028,
+        "dataType": "_oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "provariadic": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "provolatile": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_proc_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_proc_proname_args_nsp_index": {
+      "proargtypes": {
+        "oid": 30,
+        "dataType": "oidvector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "proname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pronamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_publication": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "puballtables": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pubdelete": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pubinsert": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pubname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pubowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pubtruncate": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pubupdate": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pubviaroot": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_publication_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_publication_pubname_index": {
+      "pubname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_publication_rel": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prpubid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_publication_rel_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_publication_rel_prrelid_prpubid_index": {
+      "prpubid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_publication_tables": {
+      "pubname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_range": {
+      "rngcanonical": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rngcollation": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rngsubdiff": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rngsubopc": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rngsubtype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rngtypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_range_rngtypid_index": {
+      "rngtypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_replication_origin": {
+      "roident": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "roname": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_replication_origin_roiident_index": {
+      "roident": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_replication_origin_roname_index": {
+      "roname": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_replication_origin_status": {
+      "external_id": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "local_id": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "local_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "remote_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_replication_slots": {
+      "active": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "active_pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "catalog_xmin": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confirmed_flush_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "database": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "plugin": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "restart_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "safe_wal_size": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "slot_name": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "slot_type": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "temporary": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "wal_status": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "xmin": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_rewrite": {
+      "ev_action": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ev_class": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ev_enabled": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ev_qual": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ev_type": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "is_instead": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rulename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_rewrite_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_rewrite_rel_rulename_index": {
+      "ev_class": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rulename": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_roles": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolbypassrls": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolcanlogin": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolconfig": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolconnlimit": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolcreatedb": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolcreaterole": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolinherit": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolpassword": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolreplication": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolsuper": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rolvaliduntil": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_rules": {
+      "definition": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rulename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_seclabel": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "label": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "provider": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_seclabel_object_index": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "provider": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_seclabels": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "label": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objname": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objtype": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "provider": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_sequence": {
+      "seqcache": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seqcycle": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seqincrement": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seqmax": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seqmin": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seqrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seqstart": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seqtypid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_sequence_seqrelid_index": {
+      "seqrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_sequences": {
+      "cache_size": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "cycle": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "data_type": {
+        "oid": 2206,
+        "dataType": "regtype",
+        "expOid": null,
+        "expDataType": null
+      },
+      "increment_by": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_value": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "max_value": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "min_value": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sequencename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sequenceowner": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "start_value": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_settings": {
+      "boot_val": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "category": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "context": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "enumvals": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "extra_desc": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "max_val": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "min_val": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pending_restart": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "reset_val": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "setting": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "short_desc": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "source": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sourcefile": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sourceline": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "unit": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "vartype": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_shadow": {
+      "passwd": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usebypassrls": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "useconfig": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usecreatedb": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "userepl": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usesuper": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usesysid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "valuntil": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_shdepend": {
+      "classid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "dbid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "deptype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "refclassid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "refobjid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_shdepend_depender_index": {
+      "classid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "dbid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objsubid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_shdepend_reference_index": {
+      "refclassid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "refobjid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_shdescription": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "description": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_shdescription_o_c_index": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_shmem_allocations": {
+      "allocated_size": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "off": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "size": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_shseclabel": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "label": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "provider": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_shseclabel_object_index": {
+      "classoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "objoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "provider": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_activity": {
+      "application_name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "backend_start": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "backend_type": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "backend_xid": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "backend_xmin": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "client_addr": {
+        "oid": 869,
+        "dataType": "inet",
+        "expOid": null,
+        "expDataType": null
+      },
+      "client_hostname": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "client_port": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "leader_pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "query": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "query_start": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "state": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "state_change": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usesysid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "wait_event": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "wait_event_type": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "xact_start": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_all_indexes": {
+      "idx_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_fetch": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_all_tables": {
+      "analyze_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "autoanalyze_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "autovacuum_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_fetch": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_analyze": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_autoanalyze": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_autovacuum": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_vacuum": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_dead_tup": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_ins_since_vacuum": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_live_tup": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_mod_since_analyze": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_del": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_hot_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_ins": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_tup_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "vacuum_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_archiver": {
+      "archived_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "failed_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_archived_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_archived_wal": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_failed_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_failed_wal": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stats_reset": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_bgwriter": {
+      "buffers_alloc": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "buffers_backend": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "buffers_backend_fsync": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "buffers_checkpoint": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "buffers_clean": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "checkpoint_sync_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "checkpoint_write_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "checkpoints_req": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "checkpoints_timed": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "maxwritten_clean": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stats_reset": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_database": {
+      "blk_read_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blk_write_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "checksum_failures": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "checksum_last_failure": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "conflicts": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "deadlocks": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "numbackends": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stats_reset": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "temp_bytes": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "temp_files": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tup_deleted": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tup_fetched": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tup_inserted": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tup_returned": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tup_updated": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "xact_commit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "xact_rollback": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_database_conflicts": {
+      "confl_bufferpin": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confl_deadlock": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confl_lock": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confl_snapshot": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "confl_tablespace": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_gssapi": {
+      "encrypted": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "gss_authenticated": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "principal": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_progress_analyze": {
+      "child_tables_done": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "child_tables_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "current_child_table_relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ext_stats_computed": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ext_stats_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "phase": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sample_blks_scanned": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sample_blks_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_progress_basebackup": {
+      "backup_streamed": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "backup_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "phase": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablespaces_streamed": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablespaces_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_progress_cluster": {
+      "cluster_index_relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "command": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_blks_scanned": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_blks_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_tuples_scanned": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_tuples_written": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "index_rebuild_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "phase": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_progress_create_index": {
+      "blocks_done": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blocks_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "command": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "current_locker_pid": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "index_relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "lockers_done": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "lockers_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "partitions_done": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "partitions_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "phase": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tuples_done": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tuples_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_progress_vacuum": {
+      "datid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_blks_scanned": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_blks_total": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_blks_vacuumed": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "index_vacuum_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "max_dead_tuples": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "num_dead_tuples": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "phase": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_replication": {
+      "application_name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "backend_start": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "backend_xmin": {
+        "oid": 28,
+        "dataType": "xid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "client_addr": {
+        "oid": 869,
+        "dataType": "inet",
+        "expOid": null,
+        "expDataType": null
+      },
+      "client_hostname": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "client_port": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "flush_lag": {
+        "oid": 1186,
+        "dataType": "interval",
+        "expOid": null,
+        "expDataType": null
+      },
+      "flush_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "replay_lag": {
+        "oid": 1186,
+        "dataType": "interval",
+        "expOid": null,
+        "expDataType": null
+      },
+      "replay_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "reply_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sent_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "state": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sync_priority": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sync_state": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usesysid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "write_lag": {
+        "oid": 1186,
+        "dataType": "interval",
+        "expOid": null,
+        "expDataType": null
+      },
+      "write_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_slru": {
+      "blks_exists": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blks_written": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blks_zeroed": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "flushes": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stats_reset": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "truncates": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_ssl": {
+      "bits": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "cipher": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "client_dn": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "client_serial": {
+        "oid": 1700,
+        "dataType": "numeric",
+        "expOid": null,
+        "expDataType": null
+      },
+      "compression": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "issuer_dn": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "ssl": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "version": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_subscription": {
+      "last_msg_receipt_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_msg_send_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "latest_end_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "latest_end_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "received_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_sys_indexes": {
+      "idx_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_fetch": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_sys_tables": {
+      "analyze_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "autoanalyze_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "autovacuum_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_fetch": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_analyze": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_autoanalyze": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_autovacuum": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_vacuum": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_dead_tup": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_ins_since_vacuum": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_live_tup": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_mod_since_analyze": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_del": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_hot_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_ins": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_tup_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "vacuum_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_user_functions": {
+      "calls": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "funcid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "funcname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "self_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "total_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_user_indexes": {
+      "idx_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_fetch": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_user_tables": {
+      "analyze_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "autoanalyze_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "autovacuum_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_fetch": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_analyze": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_autoanalyze": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_autovacuum": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_vacuum": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_dead_tup": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_ins_since_vacuum": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_live_tup": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_mod_since_analyze": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_del": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_hot_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_ins": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_tup_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "vacuum_count": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_wal_receiver": {
+      "conninfo": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "flushed_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_msg_receipt_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "last_msg_send_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "latest_end_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "latest_end_time": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      },
+      "pid": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "receive_start_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "receive_start_tli": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "received_tli": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sender_host": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "sender_port": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "slot_name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "status": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "written_lsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_xact_all_tables": {
+      "idx_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_fetch": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_del": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_hot_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_ins": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_tup_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_xact_sys_tables": {
+      "idx_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_fetch": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_del": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_hot_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_ins": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_tup_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_xact_user_functions": {
+      "calls": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "funcid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "funcname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "self_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "total_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stat_xact_user_tables": {
+      "idx_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_tup_fetch": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_del": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_hot_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_ins": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_tup_upd": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_scan": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "seq_tup_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statio_all_indexes": {
+      "idx_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statio_all_sequences": {
+      "blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statio_all_tables": {
+      "heap_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tidx_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tidx_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "toast_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "toast_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statio_sys_indexes": {
+      "idx_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statio_sys_sequences": {
+      "blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statio_sys_tables": {
+      "heap_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tidx_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tidx_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "toast_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "toast_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statio_user_indexes": {
+      "idx_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "indexrelname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statio_user_sequences": {
+      "blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statio_user_tables": {
+      "heap_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "heap_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "idx_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "relname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tidx_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tidx_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "toast_blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "toast_blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statistic": {
+      "staattnum": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stacoll1": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stacoll2": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stacoll3": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stacoll4": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stacoll5": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stadistinct": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stainherit": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stakind1": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stakind2": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stakind3": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stakind4": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stakind5": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stanullfrac": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stanumbers1": {
+        "oid": 1021,
+        "dataType": "_float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stanumbers2": {
+        "oid": 1021,
+        "dataType": "_float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stanumbers3": {
+        "oid": 1021,
+        "dataType": "_float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stanumbers4": {
+        "oid": 1021,
+        "dataType": "_float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stanumbers5": {
+        "oid": 1021,
+        "dataType": "_float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "staop1": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "staop2": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "staop3": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "staop4": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "staop5": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "starelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stavalues1": {
+        "oid": 2277,
+        "dataType": "anyarray",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stavalues2": {
+        "oid": 2277,
+        "dataType": "anyarray",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stavalues3": {
+        "oid": 2277,
+        "dataType": "anyarray",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stavalues4": {
+        "oid": 2277,
+        "dataType": "anyarray",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stavalues5": {
+        "oid": 2277,
+        "dataType": "anyarray",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stawidth": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statistic_ext": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxkeys": {
+        "oid": 22,
+        "dataType": "int2vector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxkind": {
+        "oid": 1002,
+        "dataType": "_char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxstattarget": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statistic_ext_data": {
+      "stxddependencies": {
+        "oid": 3402,
+        "dataType": "pg_dependencies",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxdmcv": {
+        "oid": 5017,
+        "dataType": "pg_mcv_list",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxdndistinct": {
+        "oid": 3361,
+        "dataType": "pg_ndistinct",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statistic_ext_data_stxoid_index": {
+      "stxoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statistic_ext_name_index": {
+      "stxname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stxnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statistic_ext_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statistic_ext_relid_index": {
+      "stxrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_statistic_relid_att_inh_index": {
+      "staattnum": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "stainherit": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "starelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stats": {
+      "attname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "avg_width": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "correlation": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "elem_count_histogram": {
+        "oid": 1021,
+        "dataType": "_float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "histogram_bounds": {
+        "oid": 2277,
+        "dataType": "anyarray",
+        "expOid": null,
+        "expDataType": null
+      },
+      "inherited": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "most_common_elem_freqs": {
+        "oid": 1021,
+        "dataType": "_float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "most_common_elems": {
+        "oid": 2277,
+        "dataType": "anyarray",
+        "expOid": null,
+        "expDataType": null
+      },
+      "most_common_freqs": {
+        "oid": 1021,
+        "dataType": "_float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "most_common_vals": {
+        "oid": 2277,
+        "dataType": "anyarray",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_distinct": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "null_frac": {
+        "oid": 700,
+        "dataType": "float4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_stats_ext": {
+      "attnames": {
+        "oid": 1003,
+        "dataType": "_name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "dependencies": {
+        "oid": 3402,
+        "dataType": "pg_dependencies",
+        "expOid": null,
+        "expDataType": null
+      },
+      "kinds": {
+        "oid": 1002,
+        "dataType": "_char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "most_common_base_freqs": {
+        "oid": 1022,
+        "dataType": "_float8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "most_common_freqs": {
+        "oid": 1022,
+        "dataType": "_float8",
+        "expOid": null,
+        "expDataType": null
+      },
+      "most_common_val_nulls": {
+        "oid": 1000,
+        "dataType": "_bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "most_common_vals": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "n_distinct": {
+        "oid": 3361,
+        "dataType": "pg_ndistinct",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "statistics_name": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "statistics_owner": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "statistics_schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_subscription": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subconninfo": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subdbid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subenabled": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subpublications": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subslotname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subsynccommit": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_subscription_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_subscription_rel": {
+      "srrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srsubid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srsublsn": {
+        "oid": 3220,
+        "dataType": "pg_lsn",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srsubstate": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_subscription_rel_srrelid_srsubid_index": {
+      "srrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srsubid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_subscription_subname_index": {
+      "subdbid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "subname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_tables": {
+      "hasindexes": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "hasrules": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "hastriggers": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "rowsecurity": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tableowner": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tablespace": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_tablespace": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "spcacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "spcname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "spcoptions": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "spcowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_tablespace_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_tablespace_spcname_index": {
+      "spcname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_timezone_abbrevs": {
+      "abbrev": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "is_dst": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "utc_offset": {
+        "oid": 1186,
+        "dataType": "interval",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_timezone_names": {
+      "abbrev": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "is_dst": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "name": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "utc_offset": {
+        "oid": 1186,
+        "dataType": "interval",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_transform": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "trffromsql": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "trflang": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "trftosql": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "trftype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_transform_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_transform_type_lang_index": {
+      "trflang": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "trftype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_trigger": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgargs": {
+        "oid": 17,
+        "dataType": "bytea",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgattr": {
+        "oid": 22,
+        "dataType": "int2vector",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgconstraint": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgconstrindid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgconstrrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgdeferrable": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgenabled": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgfoid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tginitdeferred": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgisinternal": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgnargs": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgnewtable": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgoldtable": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgparentid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgqual": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgtype": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_trigger_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_trigger_tgconstraint_index": {
+      "tgconstraint": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_trigger_tgrelid_tgname_index": {
+      "tgname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tgrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_config": {
+      "cfgname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "cfgnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "cfgowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "cfgparser": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_config_cfgname_index": {
+      "cfgname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "cfgnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_config_map": {
+      "mapcfg": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "mapdict": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "mapseqno": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "maptokentype": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_config_map_index": {
+      "mapcfg": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "mapseqno": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "maptokentype": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_config_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_dict": {
+      "dictinitoption": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "dictname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "dictnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "dictowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "dicttemplate": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_dict_dictname_index": {
+      "dictname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "dictnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_dict_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_parser": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prsend": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prsheadline": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prslextype": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prsname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prsnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prsstart": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prstoken": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_parser_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_parser_prsname_index": {
+      "prsname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "prsnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_template": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tmplinit": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tmpllexize": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tmplname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tmplnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_template_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_ts_template_tmplname_index": {
+      "tmplname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "tmplnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_type": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typacl": {
+        "oid": 1034,
+        "dataType": "_aclitem",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typalign": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typanalyze": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typarray": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typbasetype": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typbyval": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typcategory": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typcollation": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typdefault": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typdefaultbin": {
+        "oid": 194,
+        "dataType": "pg_node_tree",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typdelim": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typelem": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typinput": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typisdefined": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typispreferred": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typlen": {
+        "oid": 21,
+        "dataType": "int2",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typmodin": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typmodout": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typndims": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typnotnull": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typoutput": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typowner": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typreceive": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typrelid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typsend": {
+        "oid": 24,
+        "dataType": "regproc",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typstorage": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typtype": {
+        "oid": 18,
+        "dataType": "char",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typtypmod": {
+        "oid": 23,
+        "dataType": "int4",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_type_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_type_typname_nsp_index": {
+      "typname": {
+        "oid": 2275,
+        "dataType": "cstring",
+        "expOid": null,
+        "expDataType": null
+      },
+      "typnamespace": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_user": {
+      "passwd": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usebypassrls": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "useconfig": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usecreatedb": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "userepl": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usesuper": {
+        "oid": 16,
+        "dataType": "bool",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usesysid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "valuntil": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_user_mapping": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "umoptions": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "umserver": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "umuser": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_user_mapping_oid_index": {
+      "oid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_user_mapping_user_server_index": {
+      "umserver": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "umuser": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_user_mappings": {
+      "srvid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "srvname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "umid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "umoptions": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "umuser": {
+        "oid": 26,
+        "dataType": "oid",
+        "expOid": null,
+        "expDataType": null
+      },
+      "usename": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    },
+    "pg_views": {
+      "definition": {
+        "oid": 25,
+        "dataType": "text",
+        "expOid": null,
+        "expDataType": null
+      },
+      "schemaname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "viewname": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      },
+      "viewowner": {
+        "oid": 19,
+        "dataType": "name",
+        "expOid": null,
+        "expDataType": null
+      }
+    }
+  }
+}
