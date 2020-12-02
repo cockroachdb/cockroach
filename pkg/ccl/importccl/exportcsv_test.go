@@ -457,7 +457,7 @@ func TestExportPrivileges(t *testing.T) {
 	assert.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 
-	_, err = conn.Exec(`EXPORT INTO CSV 'nodelocalL://0/privs' FROM TABLE privs`)
+	_, err = conn.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
 
 	// Grant SELECT privilege.
