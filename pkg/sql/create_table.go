@@ -1179,7 +1179,7 @@ func newTableDescIfAs(
 // bootstrap when creating descriptors for virtual tables.
 //
 // parentID refers to the databaseID under which the descriptor is being
-// created,and parentSchemaID refers to the schemaID of the schema under which
+// created and parentSchemaID refers to the schemaID of the schema under which
 // the descriptor is being created.
 //
 // evalCtx can be nil if the table to be created has no default expression for
@@ -1716,7 +1716,55 @@ func NewTableDesc(
 	}
 
 	if n.Locality != nil {
-		return nil, unimplemented.New("create table locality", "implementation pending")
+		db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
+		if err != nil {
+			return nil, errors.Wrap(err, "error fetching database descriptor for locality checks")
+		}
+
+		if !db.IsMultiRegion() {
+			return nil, pgerror.New(
+				pgcode.InvalidTableDefinition,
+				"cannot set locality on table with no multi-region configuration on the database",
+			)
+		}
+
+		desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+		switch n.Locality.LocalityLevel {
+		case tree.LocalityLevelGlobal:
+			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_Global_{
+				Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+			}
+		case tree.LocalityLevelTable:
+			l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+				RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
+			}
+			if n.Locality.TableRegion != "" {
+				region := descpb.Region(n.Locality.TableRegion)
+				foundRegion := false
+				for _, r := range db.RegionConfig.Regions {
+					if region == r {
+						foundRegion = true
+						break
+					}
+				}
+				if !foundRegion {
+					return nil, pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						`region "%s" is not available on database "%s"`,
+						region,
+						db.Name,
+					)
+				}
+				l.RegionalByTable.Region = &region
+			}
+			desc.LocalityConfig.Locality = l
+		case tree.LocalityLevelRow:
+			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+				RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+			}
+		default:
+			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
+		}
 	}
 
 	return &desc, nil
