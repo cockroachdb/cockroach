@@ -105,12 +105,6 @@ func SetBatchSizeForTests(newBatchSize int) error {
 	return nil
 }
 
-// ResetBatchSizeForTests resets the batchSize variable to the default batch
-// size. It should only be used in tests.
-func ResetBatchSizeForTests() {
-	atomic.SwapInt64(&batchSize, defaultBatchSize)
-}
-
 // NewMemBatch allocates a new in-memory Batch.
 // TODO(jordan): pool these allocations.
 func NewMemBatch(typs []*types.T, factory ColumnFactory) Batch {
