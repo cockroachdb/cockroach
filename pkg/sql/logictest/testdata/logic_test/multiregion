@@ -24,8 +24,8 @@ SELECT * FROM system.namespace WHERE name='region'
 ----
 parentID  parentSchemaID  name    id
 53        29              region  54
-55        29              region  56
-57        29              region  58
+56        29              region  57
+59        29              region  60
 
 query TTTT colnames
 SHOW ENUMS FROM region_test_db.public

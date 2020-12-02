@@ -219,7 +219,7 @@ func (p *planner) createArrayType(
 	// ID of the array type in order for the array type to correctly created.
 	var elemTyp *types.T
 	switch t := typDesc.Kind; t {
-	case descpb.TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		elemTyp = types.MakeEnum(typedesc.TypeIDToOID(typDesc.GetID()), typedesc.TypeIDToOID(id))
 	default:
 		return 0, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
@@ -345,12 +345,9 @@ func (p *planner) createEnumWithID(
 		})
 
 	// Create the implicit array type for this type before finishing the type.
-	arrayTypeID := descpb.InvalidID
-	if enumType == enumTypeUserDefined {
-		arrayTypeID, err = p.createArrayType(params, typeName, typeDesc, dbDesc, schemaID)
-		if err != nil {
-			return err
-		}
+	arrayTypeID, err := p.createArrayType(params, typeName, typeDesc, dbDesc, schemaID)
+	if err != nil {
+		return err
 	}
 
 	// Update the typeDesc with the created array type ID.

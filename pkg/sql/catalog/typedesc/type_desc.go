@@ -444,16 +444,47 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	var reqs []descpb.ID
 
 	// Validate the parentID.
-	// TODO(#multiregion): This is hacky and in reality we should be checking the parentID
-	// exists regardless of what the type descriptor kind is. For now, I have this
-	// here because the multi region enum can't read the database descriptor that
-	// was created as part of the same txn.
-	// See https://github.com/cockroachdb/cockroach/issues/57087
-	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+	reqs = append(reqs, desc.ParentID)
+	checks = append(checks, func(got catalog.Descriptor) error {
+		if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
+			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+		}
+		return nil
+	})
+
+	// Validate regions on the parent database and the type descriptor are
+	// consistent.
+	switch desc.Kind {
+	case descpb.TypeDescriptor_MULTIREGION_ENUM:
 		reqs = append(reqs, desc.ParentID)
 		checks = append(checks, func(got catalog.Descriptor) error {
-			if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
+			dbDesc, isDB := got.(catalog.DatabaseDescriptor)
+
+			// Parent database must be a multi-region database if it includes a
+			// multi-region type enum.
+			if !dbDesc.IsMultiRegion() {
+				return errors.AssertionFailedf("parent database is not a multi-region database")
+			}
+			if !isDB {
 				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+			}
+
+			if len(desc.EnumMembers) != len(dbDesc.Regions()) {
+				return errors.AssertionFailedf(
+					"unexpected number of regions on db desc: %d expected %d",
+					len(dbDesc.Regions()), len(desc.EnumMembers))
+			}
+
+			regions := make(map[descpb.Region]struct{}, len(dbDesc.Regions()))
+			for _, region := range dbDesc.Regions() {
+				regions[region] = struct{}{}
+			}
+
+			for i := range desc.EnumMembers {
+				enumRegion := descpb.Region(desc.EnumMembers[i].LogicalRepresentation)
+				if _, ok := regions[enumRegion]; !ok {
+					return errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion)
+				}
 			}
 			return nil
 		})
@@ -471,22 +502,18 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	}
 
 	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		// Ensure that the referenced array type exists.
 		reqs = append(reqs, desc.ArrayTypeID)
 		checks = append(checks, func(got catalog.Descriptor) error {
 			if _, isType := got.(catalog.TypeDescriptor); !isType {
-				return errors.AssertionFailedf("arrayTypeID %d does not exist", errors.Safe(desc.ArrayTypeID))
+				return errors.AssertionFailedf("arrayTypeID %d does not exist for %q", errors.Safe(desc.ArrayTypeID), desc.Kind.String())
 			}
 			return nil
 		})
 	case descpb.TypeDescriptor_ALIAS:
 		if desc.ArrayTypeID != descpb.InvalidID {
 			return errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.ArrayTypeID)
-		}
-	case descpb.TypeDescriptor_MULTIREGION_ENUM:
-		if desc.ArrayTypeID != descpb.InvalidID {
-			return errors.AssertionFailedf("MULTIREGION_ENUM type desc has array type ID %d", desc.ArrayTypeID)
 		}
 	default:
 		return errors.New("unknown type descriptor type")
