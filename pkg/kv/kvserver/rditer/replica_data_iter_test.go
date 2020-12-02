@@ -317,3 +317,26 @@ func TestReplicaDataIterator(t *testing.T) {
 		})
 	}
 }
+
+func checkOrdering(t *testing.T, ranges []KeyRange) {
+	for i := 1; i < len(ranges); i++ {
+		if ranges[i].Start.Less(ranges[i-1].End) {
+			t.Fatalf("ranges need to be ordered and non-overlapping, but %s > %s",
+				ranges[i-1].End, ranges[i].Start)
+		}
+	}
+}
+
+func TestReplicaKeyRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+	}
+	checkOrdering(t, MakeAllKeyRanges(&desc))
+	checkOrdering(t, MakeReplicatedKeyRanges(&desc))
+	checkOrdering(t, MakeReplicatedKeyRangesExceptLockTable(&desc))
+	checkOrdering(t, MakeReplicatedKeyRangesExceptRangeID(&desc))
+}
