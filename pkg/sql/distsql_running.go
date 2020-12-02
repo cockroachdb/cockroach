@@ -162,26 +162,8 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// specs.
 			for _, spec := range flows {
 				if err := colflow.IsSupported(vectorizeMode, spec); err != nil {
-					// Vectorization attempt failed with an error.
-					returnVectorizationSetupError := false
-					if vectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
-						returnVectorizationSetupError = true
-						// If running with VectorizeExperimentalAlways, this check makes sure
-						// that we can still run SET statements (mostly to set vectorize to
-						// off) and the like.
-						if len(spec.Processors) == 1 &&
-							spec.Processors[0].Core.LocalPlanNode != nil {
-							rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
-							lp := localState.LocalProcs[rsidx]
-							if z, ok := lp.(colflow.VectorizeAlwaysException); ok {
-								if z.IsException() {
-									returnVectorizationSetupError = false
-								}
-							}
-						}
-					}
 					log.VEventf(ctx, 1, "failed to vectorize: %s", err)
-					if returnVectorizationSetupError {
+					if vectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
 						return nil, nil, err
 					}
 					// Vectorization is not supported for this flow, so we override the

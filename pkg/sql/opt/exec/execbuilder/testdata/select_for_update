@@ -524,7 +524,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (a)
@@ -553,7 +553,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (a)
@@ -586,7 +586,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (a)
@@ -616,7 +616,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (r)
@@ -645,7 +645,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE) AS r
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (r)
@@ -678,7 +678,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (r)
@@ -867,7 +867,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (a)
@@ -897,7 +897,7 @@ query T
 EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (a)

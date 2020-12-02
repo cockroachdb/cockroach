@@ -292,7 +292,7 @@ SELECT count(*), (SELECT count(*) FROM q) FROM (
 ) GROUP BY lk
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (count, count)

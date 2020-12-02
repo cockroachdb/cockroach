@@ -206,7 +206,7 @@ func (f *vectorizedFlow) Setup(
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(f.creator)
 	}
-	_, err = f.creator.setupFlow(ctx, flowCtx, spec.Processors, opt)
+	_, err = f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
 	if err == nil {
 		f.testingInfo.numClosers = f.creator.numClosers
 		f.testingInfo.numClosed = &f.creator.numClosed
@@ -1017,6 +1017,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
+	localProcessors []execinfra.LocalProcessor,
 	opt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
@@ -1082,6 +1083,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				Inputs:               inputs,
 				StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
 				ProcessorConstructor: rowexec.NewProcessor,
+				LocalProcessors:      localProcessors,
 				DiskQueueCfg:         s.diskQueueCfg,
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,
@@ -1346,8 +1348,15 @@ func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpe
 // execinfra.Releasable objects which can *only* be performed once leaves are
 // no longer needed.
 func ConvertToVecTree(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, flow *execinfrapb.FlowSpec, isPlanLocal bool,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	flow *execinfrapb.FlowSpec,
+	localProcessors []execinfra.LocalProcessor,
+	isPlanLocal bool,
 ) (leaves []execinfra.OpNode, cleanup func(), err error) {
+	if !isPlanLocal && len(localProcessors) > 0 {
+		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
+	}
 	fuseOpt := flowinfra.FuseNormally
 	if isPlanLocal {
 		fuseOpt = flowinfra.FuseAggressively
@@ -1373,21 +1382,6 @@ func ConvertToVecTree(
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
 	defer creator.cleanup(ctx)
-	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, fuseOpt)
+	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
 	return leaves, creator.Release, err
-}
-
-// VectorizeAlwaysException is an object that returns whether or not execution
-// should continue if vectorize=experimental_always and an error occurred when
-// setting up the vectorized flow. Consider the case in which
-// vectorize=experimental_always. The user must be able to unset this session
-// variable without getting an error.
-type VectorizeAlwaysException interface {
-	// IsException returns whether this object should be an exception to the rule
-	// that an inability to run this node in a vectorized flow should produce an
-	// error.
-	// TODO(asubiotto): This is the cleanest way I can think of to not error out
-	// on SET statements when running with vectorize = experimental_always. If
-	// there is a better way, we should get rid of this interface.
-	IsException() bool
 }

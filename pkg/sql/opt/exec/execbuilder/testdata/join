@@ -300,7 +300,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, 
                   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ columns: (k, u, w)
@@ -402,7 +402,7 @@ EXPLAIN (VERBOSE) SELECT
            pos.n
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (pktable_cat, pktable_schem, pktable_name, pkcolumn_name, fktable_cat, fktable_schem, fktable_name, fkcolumn_name, key_seq, update_rule, delete_rule, fk_name, pk_name, deferrability)
