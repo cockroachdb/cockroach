@@ -351,7 +351,6 @@ func TestProjectionAndRendering(t *testing.T) {
 		// expressions, however, we don't do that for the expected results. In
 		// order to be able to use the deep comparison below we manually unset
 		// that unserialized field.
-		post.Filter.LocalExpr = nil
 		for i := range post.RenderExprs {
 			post.RenderExprs[i].LocalExpr = nil
 		}

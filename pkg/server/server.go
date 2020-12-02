@@ -2000,7 +2000,7 @@ func (s *sqlServer) startServeSQL(
 func (s *Server) Decommission(
 	ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID,
 ) error {
-	if !s.st.Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
+	if !s.st.Version.IsActive(ctx, clusterversion.NodeMembershipStatus) {
 		if targetStatus.Decommissioned() {
 			// In mixed-version cluster settings, we need to ensure that we're
 			// on-the-wire compatible with nodes only familiar with the boolean

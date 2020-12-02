@@ -65,6 +65,7 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colbuilder",

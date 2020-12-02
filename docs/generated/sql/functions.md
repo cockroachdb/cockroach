@@ -711,6 +711,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="unique_rowid"></a><code>unique_rowid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a unique ID used by CockroachDB to generate unique row IDs if a Primary Key isn’t defined for the table. The value is a combination of the insert timestamp and the ID of the node executing the statement, which guarantees this combination is globally unique. However, there can be gaps and the order is not completely guaranteed.</p>
 </span></td></tr>
+<tr><td><a name="uuid_generate_v4"></a><code>uuid_generate_v4() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random UUID and returns it as a value of UUID type.</p>
+</span></td></tr>
 <tr><td><a name="uuid_v4"></a><code>uuid_v4() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a UUID.</p>
 </span></td></tr></tbody>
 </table>
@@ -2141,6 +2143,10 @@ The paths themselves are given in the direction of the first geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_startpoint"></a><code>st_startpoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the first point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.</p>
 </span></td></tr>
+<tr><td><a name="st_subdivide"></a><code>st_subdivide(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry divided into parts, where each part contains no more than 256 vertices.</p>
+</span></td></tr>
+<tr><td><a name="st_subdivide"></a><code>st_subdivide(geometry: geometry, max_vertices: int4) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry divided into parts, where each part contains no more than the number of vertices provided.</p>
+</span></td></tr>
 <tr><td><a name="st_summary"></a><code>st_summary(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a text summary of the contents of the geography.</p>
 <p>Flags shown square brackets after the geometry type have the following meaning:</p>
 <ul>
@@ -2191,6 +2197,18 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tr><td><a name="st_transscale"></a><code>st_transscale(geometry: geometry, delta_x: <a href="float.html">float</a>, delta_y: <a href="float.html">float</a>, x_factor: <a href="float.html">float</a>, y_factor: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Translates the geometry using the deltaX and deltaY args, then scales it using the XFactor, YFactor args, working in 2D only.</p>
 </span></td></tr>
 <tr><td><a name="st_unaryunion"></a><code>st_unaryunion(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a union of the components for any geometry or geometry collection provided. Dissolves boundaries of a multipolygon.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoilines"></a><code>st_voronoilines(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry asthe boundaries between cells in that diagram as a MultiLineString.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoilines"></a><code>st_voronoilines(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry asthe boundaries between cells in that diagram as a MultiLineString.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoilines"></a><code>st_voronoilines(geometry: geometry, tolerance: <a href="float.html">float</a>, extend_to: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry asthe boundaries between cells in that diagram as a MultiLineString.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoipolygons"></a><code>st_voronoipolygons(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoipolygons"></a><code>st_voronoipolygons(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoipolygons"></a><code>st_voronoipolygons(geometry: geometry, tolerance: <a href="float.html">float</a>, extend_to: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_within"></a><code>st_within(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is completely inside geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>

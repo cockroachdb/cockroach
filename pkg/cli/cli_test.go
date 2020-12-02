@@ -430,8 +430,8 @@ func Example_demo() {
 		{`demo`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
 		{`demo`, `--echo-sql`, `-e`, `select 1 as "1"`},
 		{`demo`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`},
-		{`demo`, `startrek`, `-e`, `show databases`},
-		{`demo`, `startrek`, `-e`, `show databases`, `--format=table`},
+		{`demo`, `startrek`, `-e`, `SELECT database_name, owner FROM [show databases]`},
+		{`demo`, `startrek`, `-e`, `SELECT database_name, owner FROM [show databases]`, `--format=table`},
 		// Test that if we start with --insecure we cannot perform
 		// commands that require a secure cluster.
 		{`demo`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
@@ -480,13 +480,13 @@ func Example_demo() {
 	// SQLSTATE: 42703
 	// 123
 	// 123
-	// demo startrek -e show databases
+	// demo startrek -e SELECT database_name, owner FROM [show databases]
 	// database_name	owner
 	// defaultdb	root
 	// postgres	root
 	// startrek	demo
 	// system	node
-	// demo startrek -e show databases --format=table
+	// demo startrek -e SELECT database_name, owner FROM [show databases] --format=table
 	//   database_name | owner
 	// ----------------+--------
 	//   defaultdb     | root
@@ -512,7 +512,7 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `-e`, `select 3 as "3"`, `-e`, `select * from t.f`})
 	c.RunWithArgs([]string{`sql`, `-e`, `begin`, `-e`, `select 3 as "3"`, `-e`, `commit`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select * from t.f`})
-	c.RunWithArgs([]string{`sql`, `--execute=show databases`})
+	c.RunWithArgs([]string{`sql`, `--execute=SELECT database_name, owner FROM [show databases]`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "2"`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "@" where false`})
 	// CREATE TABLE AS returns a SELECT tag with a row count, check this.
@@ -552,7 +552,7 @@ func Example_sql() {
 	// sql -e select * from t.f
 	// x	y
 	// 42	69
-	// sql --execute=show databases
+	// sql --execute=SELECT database_name, owner FROM [show databases]
 	// database_name	owner
 	// defaultdb	root
 	// postgres	root

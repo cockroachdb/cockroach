@@ -116,6 +116,7 @@ message ProcessorCoreUnion {
   optional BackupDataSpec backupData = 31;
   optional SplitAndScatterSpec splitAndScatter = 32;
   optional RestoreDataSpec restoreData = 33;
+  optional FiltererSpec filterer = 34;
 
   reserved 6, 12;
 }

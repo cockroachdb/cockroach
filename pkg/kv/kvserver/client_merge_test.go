@@ -1100,7 +1100,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		}
 		rhsKey := roachpb.Key("cc")
 
-		// Set a timeout, and set the the transaction liveness threshold to
+		// Set a timeout, and set the transaction liveness threshold to
 		// something much larger than our timeout. We want transactions to get stuck
 		// in the transaction wait queue and trigger the timeout if we forget to
 		// clear it.
@@ -1484,7 +1484,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// considered live. The automatic heartbeat might not come for a while.
 	require.NoError(t, mtc.heartbeatLiveness(ctx, 0))
 
-	// Send several get and put requests to the the RHS. The first of these to
+	// Send several get and put requests to the RHS. The first of these to
 	// arrive will acquire the lease; the remaining requests will wait for that
 	// lease acquisition to complete. Then all requests should block waiting for
 	// the Subsume request to complete. By sending several of these requests in
@@ -1569,7 +1569,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	}
 }
 
-// TestStoreRangeMergeCheckConsistencyAfterSubsumption verifies the the following:
+// TestStoreRangeMergeCheckConsistencyAfterSubsumption verifies the following:
 // 1. While a range is subsumed, ComputeChecksum requests wait until the merge
 // is complete before proceeding.
 // 2. Once a merge is aborted, pending (and future) requests will be allowed to
@@ -2235,7 +2235,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	// it may require the replica GC queue. In rare cases the LHS will never
 	// hear about the merge and may need to be GC'd on its own.
 	testutils.SucceedsSoon(t, func() error {
-		// Make the the LHS gets destroyed.
+		// Make the LHS gets destroyed.
 		if lhsRepl, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
 			if err := store2.ManualReplicaGC(lhsRepl); err != nil {
 				t.Fatal(err)
@@ -3082,6 +3082,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			inSnap.State.Desc.RangeID != roachpb.RangeID(2) {
 			return nil
 		}
+		// TODO(sumeer): fix this test (and others in this file) when
+		// DisallowSeparatedIntents=false
+
 		// The seven SSTs we are expecting to ingest are in the following order:
 		// 1. Replicated range-id local keys of the range in the snapshot.
 		// 2. Range-local keys of the range in the snapshot.
@@ -3127,14 +3130,14 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				return err
 			}
 
-			// Keep adding kv data to the SST until the the key exceeds the
+			// Keep adding kv data to the SST until the key exceeds the
 			// bounds of the range, then proceed to the next range.
 			for ; ; it.Next() {
 				valid, err := it.Valid()
 				if err != nil {
 					return err
 				}
-				if !valid || r.End.Key.Compare(it.Key().Key) <= 0 {
+				if !valid || r.End.Key.Compare(it.UnsafeKey().Key) <= 0 {
 					if err := sst.Finish(); err != nil {
 						return err
 					}
@@ -3142,7 +3145,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					expectedSSTs = append(expectedSSTs, sstFile.Data())
 					break
 				}
-				if err := sst.PutEngineKey(it.Key(), it.Value()); err != nil {
+				if err := sst.PutEngineKey(it.UnsafeKey(), it.Value()); err != nil {
 					return err
 				}
 			}

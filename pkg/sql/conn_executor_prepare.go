@@ -339,8 +339,6 @@ func (ex *connExecutor) execBind(
 					"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
 		}
 
-		ptCtx := tree.NewParseTimeContext(ex.state.sqlTimestamp.In(ex.sessionData.GetLocation()))
-
 		for i, arg := range bindCmd.Args {
 			k := tree.PlaceholderIdx(i)
 			t := ps.InferredTypes[i]
@@ -348,7 +346,20 @@ func (ex *connExecutor) execBind(
 				// nil indicates a NULL argument value.
 				qargs[k] = tree.DNull
 			} else {
-				d, err := pgwirebase.DecodeOidDatum(ctx, ptCtx, t, qArgFormatCodes[i], arg, &ex.planner)
+				typ, ok := types.OidToType[t]
+				if !ok {
+					var err error
+					typ, err = ex.planner.ResolveTypeByOID(ctx, t)
+					if err != nil {
+						return nil, err
+					}
+				}
+				d, err := pgwirebase.DecodeDatum(
+					ex.planner.EvalContext(),
+					typ,
+					qArgFormatCodes[i],
+					arg,
+				)
 				if err != nil {
 					return retErr(pgerror.Wrapf(err, pgcode.ProtocolViolation,
 						"error in argument for %s", k))

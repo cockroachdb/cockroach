@@ -52,6 +52,7 @@ func backupRestoreTestSetupWithParams(
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.UseDatabase = "data"
+
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
 
@@ -94,9 +95,13 @@ func BackupRestoreTestSetup(
 }
 
 func backupRestoreTestSetupEmpty(
-	t testing.TB, clusterSize int, tempDir string, init func(*testcluster.TestCluster),
+	t testing.TB,
+	clusterSize int,
+	tempDir string,
+	init func(*testcluster.TestCluster),
+	params base.TestClusterArgs,
 ) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
-	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, base.TestClusterArgs{})
+	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
 }
 
 func verifyBackupRestoreStatementResult(

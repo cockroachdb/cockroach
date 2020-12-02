@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/build",
         "//pkg/col/coldata",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
@@ -30,7 +31,6 @@ go_library(
         "//pkg/testutils/sqlutils",
         "//pkg/util",
         "//pkg/util/envutil",
-        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",

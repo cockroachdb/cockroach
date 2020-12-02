@@ -52,7 +52,7 @@ type Span struct {
 	// startBoundary indicates whether the span contains the start key value.
 	startBoundary SpanBoundary
 
-	// endBoundary indicates whether the span contains the the end key value.
+	// endBoundary indicates whether the span contains the end key value.
 	endBoundary SpanBoundary
 }
 

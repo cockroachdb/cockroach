@@ -360,6 +360,12 @@ type SpanExpression struct {
 	// Tight mirrors the definition of IsTight().
 	Tight bool
 
+	// Unique is true if the spans are guaranteed not to produce duplicate
+	// primary keys. Otherwise, Unique is false. Unique may be true for certain
+	// JSON or Array SpanExpressions, but it does not hold when these
+	// SpanExpressions are combined with And or Or.
+	Unique bool
+
 	// SpansToRead are the spans to read from the inverted index
 	// to evaluate this SpanExpression. These are non-overlapping
 	// and sorted. If left or right contains a non-SpanExpression,
@@ -420,6 +426,7 @@ func (s *SpanExpression) SetNotTight() {
 func (s *SpanExpression) Copy() InvertedExpression {
 	res := &SpanExpression{
 		Tight:              s.Tight,
+		Unique:             s.Unique,
 		SpansToRead:        s.SpansToRead,
 		FactoredUnionSpans: s.FactoredUnionSpans,
 		Operator:           s.Operator,
@@ -442,7 +449,7 @@ func (s *SpanExpression) String() string {
 
 // Format pretty-prints the SpanExpression.
 func (s *SpanExpression) Format(tp treeprinter.Node, includeSpansToRead bool) {
-	tp.Childf("tight: %t", s.Tight)
+	tp.Childf("tight: %t, unique: %t", s.Tight, s.Unique)
 	if includeSpansToRead {
 		s.SpansToRead.Format(tp, "to read")
 	}

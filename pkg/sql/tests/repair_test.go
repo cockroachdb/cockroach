@@ -119,7 +119,7 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 	})
 	// This test will inject the table an demonstrate that there are problems. It
 	// will then repair it by injecting a new database descriptor and namespace
-	// entry and then demonstrate the the problem is resolved.
+	// entry and then demonstrate the problem is resolved.
 	t.Run("orphaned table with data - 51782", func(t *testing.T) {
 		_, db, cleanup := setup(t)
 		defer cleanup()

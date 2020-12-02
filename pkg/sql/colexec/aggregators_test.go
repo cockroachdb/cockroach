@@ -951,9 +951,14 @@ func benchmarkAggregateFunction(
 	aggInputTypes []*types.T,
 	groupSize int,
 	distinctProb float64,
-	nullProb float64,
-	numInputBatches int,
+	numInputRows int,
 ) {
+	if groupSize > numInputRows {
+		// In this case all tuples will be part of the same group, and we have
+		// likely already benchmarked such scenario with this value of
+		// numInputRows, so we short-circuit.
+		return
+	}
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -963,20 +968,19 @@ func benchmarkAggregateFunction(
 	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
 	const bytesFixedLength = 8
 	typs := append([]*types.T{types.Int}, aggInputTypes...)
-	nTuples := numInputBatches * coldata.BatchSize()
 	cols := make([]coldata.Vec, len(typs))
 	for i := range typs {
-		cols[i] = testAllocator.NewMemColumn(typs[i], nTuples)
+		cols[i] = testAllocator.NewMemColumn(typs[i], numInputRows)
 	}
 	groups := cols[0].Int64()
 	if agg.name == "hash" {
-		numGroups := nTuples / groupSize
-		for i := 0; i < nTuples; i++ {
+		numGroups := numInputRows / groupSize
+		for i := 0; i < numInputRows; i++ {
 			groups[i] = int64(rng.Intn(numGroups))
 		}
 	} else {
 		curGroup := -1
-		for i := 0; i < nTuples; i++ {
+		for i := 0; i < numInputRows; i++ {
 			if groupSize == 1 || i%groupSize == 0 {
 				curGroup++
 			}
@@ -987,8 +991,8 @@ func benchmarkAggregateFunction(
 		coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
 			Rand:             rng,
 			Vec:              col,
-			N:                nTuples,
-			NullProbability:  nullProb,
+			N:                numInputRows,
+			NullProbability:  0,
 			BytesFixedLength: bytesFixedLength,
 		})
 	}
@@ -1001,7 +1005,7 @@ func benchmarkAggregateFunction(
 			vals[i] = vals[i] % 1024
 		}
 	}
-	source := newChunkingBatchSource(typs, cols, nTuples)
+	source := newChunkingBatchSource(typs, cols, numInputRows)
 
 	aggCols := make([]uint32, len(aggInputTypes))
 	for i := range aggCols {
@@ -1060,10 +1064,10 @@ func benchmarkAggregateFunction(
 		distinctProbString = fmt.Sprintf("/distinctProb=%.2f", distinctProb)
 	}
 	b.Run(fmt.Sprintf(
-		"%s/%s/%s/groupSize=%d%s/hasNulls=%t/numInputBatches=%d",
-		fName, agg.name, inputTypesString, groupSize, distinctProbString, nullProb > 0, numInputBatches),
+		"%s/%s/%s/groupSize=%d%s/numInputRows=%d",
+		fName, agg.name, inputTypesString, groupSize, distinctProbString, numInputRows),
 		func(b *testing.B) {
-			b.SetBytes(int64(argumentsSize * nTuples))
+			b.SetBytes(int64(argumentsSize * numInputRows))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				a, err := agg.new(
@@ -1092,21 +1096,19 @@ func benchmarkAggregateFunction(
 // depending on the parameters of the input.
 func BenchmarkAggregator(b *testing.B) {
 	aggFn := execinfrapb.AggregatorSpec_MIN
-	numBatches := []int{4, 64, 1024}
-	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()}
+	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
+	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
 	if testing.Short() {
-		numBatches = []int{64}
+		numRows = []int{32, 32 * coldata.BatchSize()}
 		groupSizes = []int{1, coldata.BatchSize()}
 	}
 	for _, agg := range aggTypes {
-		for _, numInputBatches := range numBatches {
+		for _, numInputRows := range numRows {
 			for _, groupSize := range groupSizes {
-				for _, nullProb := range []float64{0.0, nullProbability} {
-					benchmarkAggregateFunction(
-						b, agg, aggFn, []*types.T{types.Int}, groupSize,
-						0 /* distinctProb */, nullProb, numInputBatches,
-					)
-				}
+				benchmarkAggregateFunction(
+					b, agg, aggFn, []*types.T{types.Int}, groupSize,
+					0 /* distinctProb */, numInputRows,
+				)
 			}
 		}
 	}
@@ -1118,7 +1120,7 @@ func BenchmarkAggregator(b *testing.B) {
 // enough signal on the speeds of aggregate functions. For more diverse
 // configurations look at BenchmarkAggregator.
 func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
-	const numInputBatches = 64
+	var numInputRows = 32 * coldata.BatchSize()
 	numFnsToRun := len(execinfrapb.AggregatorSpec_Func_name)
 	if testing.Short() {
 		numFnsToRun = 1
@@ -1142,7 +1144,7 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 			for _, groupSize := range []int{1, coldata.BatchSize()} {
 				benchmarkAggregateFunction(
 					b, agg, aggFn, aggInputTypes, groupSize,
-					0 /* distinctProb */, nullProbability, numInputBatches,
+					0 /* distinctProb */, numInputRows,
 				)
 			}
 		}
@@ -1150,24 +1152,22 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 }
 
 func BenchmarkDistinctAggregation(b *testing.B) {
-	const numInputBatches = 64
 	aggFn := execinfrapb.AggregatorSpec_COUNT
 	for _, agg := range aggTypes {
-		for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()} {
-			for _, distinctProb := range []float64{0.01, 0.1, 1.0} {
-				distinctModulo := int(1.0 / distinctProb)
-				if (groupSize == 1 && distinctProb != 1.0) || float64(groupSize)/float64(distinctModulo) < 0.1 {
-					// We have a such combination of groupSize and distinctProb
-					// parameters that we will be very unlikely to satisfy them
-					// (for example, with groupSize=1 and distinctProb=0.01,
-					// every value will be distinct within the group), so we
-					// skip such configuration.
-					continue
-				}
-				for _, nullProb := range []float64{0, nullProbability} {
+		for _, numInputRows := range []int{32, 32 * coldata.BatchSize()} {
+			for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize()} {
+				for _, distinctProb := range []float64{0.01, 0.1, 1.0} {
+					distinctModulo := int(1.0 / distinctProb)
+					if (groupSize == 1 && distinctProb != 1.0) || float64(groupSize)/float64(distinctModulo) < 0.1 {
+						// We have a such combination of groupSize and distinctProb
+						// parameters that we will be very unlikely to satisfy them
+						// (for example, with groupSize=1 and distinctProb=0.01,
+						// every value will be distinct within the group), so we
+						// skip such configuration.
+						continue
+					}
 					benchmarkAggregateFunction(
-						b, agg, aggFn, []*types.T{types.Int}, groupSize,
-						distinctProb, nullProb, numInputBatches,
+						b, agg, aggFn, []*types.T{types.Int}, groupSize, distinctProb, numInputRows,
 					)
 				}
 			}

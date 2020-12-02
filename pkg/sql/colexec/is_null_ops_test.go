@@ -232,10 +232,9 @@ func TestIsNullSelOp(t *testing.T) {
 			spec := &execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},
 				Core: execinfrapb.ProcessorCoreUnion{
-					Noop: &execinfrapb.NoopCoreSpec{},
-				},
-				Post: execinfrapb.PostProcessSpec{
-					Filter: execinfrapb.Expression{Expr: fmt.Sprintf("@1 %s", c.selExpr)},
+					Filterer: &execinfrapb.FiltererSpec{
+						Filter: execinfrapb.Expression{Expr: fmt.Sprintf("@1 %s", c.selExpr)},
+					},
 				},
 				ResultTypes: typs,
 			}

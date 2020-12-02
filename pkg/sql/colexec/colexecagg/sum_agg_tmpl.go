@@ -77,16 +77,14 @@ type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
-	scratch struct {
-		// curAgg holds the running total, so we can index into the slice once per
-		// group, instead of on each iteration.
-		curAgg _RET_GOTYPE
-		// vec points to the output vector we are updating.
-		vec []_RET_GOTYPE
-		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-		// for the group that is currently being aggregated.
-		foundNonNullForCurrentGroup bool
-	}
+	// curAgg holds the running total, so we can index into the slice once per
+	// group, instead of on each iteration.
+	curAgg _RET_GOTYPE
+	// col points to the output vector we are updating.
+	col []_RET_GOTYPE
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
 	// {{if .NeedsHelper}}
 	// {{/*
 	// overloadHelper is used only when we perform the summation of integers
@@ -106,7 +104,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{else}}
 	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.scratch.vec = vec._RET_TYPE()
+	a.col = vec._RET_TYPE()
 }
 
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
@@ -125,39 +123,45 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 	// {{end}}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
-	// {{if eq "_AGGKIND" "Ordered"}}
-	groups := a.groups
-	// {{/*
-	// We don't need to check whether sel is non-nil when performing
-	// hash aggregation because the hash aggregator always uses non-nil
-	// sel to specify the tuples to be aggregated.
-	// */}}
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
-				_ACCUMULATE_SUM(a, nulls, i, true)
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		// {{if eq "_AGGKIND" "Ordered"}}
+		groups := a.groups
+		// {{/*
+		// We don't need to check whether sel is non-nil when performing
+		// hash aggregation because the hash aggregator always uses non-nil
+		// sel to specify the tuples to be aggregated.
+		// */}}
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
+					_ACCUMULATE_SUM(a, nulls, i, true)
+				}
+			} else {
+				for i := range col {
+					_ACCUMULATE_SUM(a, nulls, i, false)
+				}
 			}
-		} else {
-			for i := range col {
-				_ACCUMULATE_SUM(a, nulls, i, false)
+		} else
+		// {{end}}
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					_ACCUMULATE_SUM(a, nulls, i, true)
+				}
+			} else {
+				for _, i := range sel {
+					_ACCUMULATE_SUM(a, nulls, i, false)
+				}
 			}
 		}
-	} else
-	// {{end}}
-	{
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-				_ACCUMULATE_SUM(a, nulls, i, true)
-			}
-		} else {
-			for _, i := range sel {
-				_ACCUMULATE_SUM(a, nulls, i, false)
-			}
-		}
-	}
+	},
+	)
 }
 
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
@@ -170,10 +174,10 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	if !a.scratch.foundNonNullForCurrentGroup {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.scratch.vec[outputIdx] = a.scratch.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -193,6 +197,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]sum_SUMKIND_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
@@ -211,14 +216,14 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 	if groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
 		// current group, the output for this group should be null.
-		if !a.scratch.foundNonNullForCurrentGroup {
+		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(a.curIdx)
 		} else {
-			a.scratch.vec[a.curIdx] = a.scratch.curAgg
+			a.col[a.curIdx] = a.curAgg
 		}
 		a.curIdx++
 		// {{with .Global}}
-		a.scratch.curAgg = zero_RET_TYPEValue
+		a.curAgg = zero_RET_TYPEValue
 		// {{end}}
 
 		// {{/*
@@ -226,7 +231,7 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 		// nulls, this will be updated unconditionally below.
 		// */}}
 		// {{if .HasNulls}}
-		a.scratch.foundNonNullForCurrentGroup = false
+		a.foundNonNullForCurrentGroup = false
 		// {{end}}
 	}
 	// {{end}}
@@ -238,8 +243,8 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 	isNull = false
 	// {{end}}
 	if !isNull {
-		_ASSIGN_ADD(a.scratch.curAgg, a.scratch.curAgg, col[i], _, _, col)
-		a.scratch.foundNonNullForCurrentGroup = true
+		_ASSIGN_ADD(a.curAgg, a.curAgg, col[i], _, _, col)
+		a.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}
 

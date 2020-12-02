@@ -28,7 +28,11 @@ func ParseAndRequireString(
 	case types.ArrayFamily:
 		d, dependsOnContext, err = ParseDArrayFromString(ctx, s, t.ArrayContents())
 	case types.BitFamily:
-		d, err = ParseDBitArray(s)
+		r, err := ParseDBitArray(s)
+		if err != nil {
+			return nil, false, err
+		}
+		d = formatBitArrayToType(r, t)
 	case types.BoolFamily:
 		d, err = ParseDBool(s)
 	case types.BytesFamily:
@@ -86,5 +90,9 @@ func ParseAndRequireString(
 	default:
 		return nil, false, errors.AssertionFailedf("unknown type %s (%T)", t, t)
 	}
+	if err != nil {
+		return d, dependsOnContext, err
+	}
+	d, err = AdjustValueToType(t, d)
 	return d, dependsOnContext, err
 }

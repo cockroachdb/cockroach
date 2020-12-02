@@ -6,8 +6,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/featureflag",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sqltelemetry",
+        "//pkg/util/log",
     ],
 )

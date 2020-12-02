@@ -628,7 +628,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
-%token <str> GLOBAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
+%token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
@@ -679,7 +679,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
-%token <str> SURVIVE SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
+%token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
@@ -890,6 +890,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_ranges_stmt
 %type <tree.Statement> show_range_for_row_stmt
 %type <tree.Statement> show_locality_stmt
+%type <tree.Statement> show_survival_goal_stmt
 %type <tree.Statement> show_regions_stmt
 %type <tree.Statement> show_roles_stmt
 %type <tree.Statement> show_schemas_stmt
@@ -4335,7 +4336,7 @@ zone_value:
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
 // SHOW CREATE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
-// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES, SHOW REGIONS,
+// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
@@ -4361,6 +4362,7 @@ show_stmt:
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
 | show_range_for_row_stmt
 | show_regions_stmt         // EXTEND WITH HELP: SHOW REGIONS
+| show_survival_goal_stmt   // EXTEND_WITH_HELP: SHOW SURVIVAL GOAL
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
 | show_savepoint_stmt       // EXTEND WITH HELP: SHOW SAVEPOINT
 | show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
@@ -4620,6 +4622,26 @@ show_enums_stmt:
   {
     $$.val = &tree.ShowEnums{}
   }
+| SHOW ENUMS FROM name '.' name
+  {
+    $$.val = &tree.ShowEnums{ObjectNamePrefix:tree.ObjectNamePrefix{
+        CatalogName: tree.Name($4),
+        ExplicitCatalog: true,
+        SchemaName: tree.Name($6),
+        ExplicitSchema: true,
+      },
+    }
+  }
+| SHOW ENUMS FROM name
+{
+    $$.val = &tree.ShowEnums{ObjectNamePrefix:tree.ObjectNamePrefix{
+        // Note: the schema name may be interpreted as database name,
+        // see name_resolution.go.
+        SchemaName: tree.Name($4),
+        ExplicitSchema: true,
+      },
+    }
+}
 | SHOW ENUMS error // SHOW HELP: SHOW ENUMS
 
 // %Help: SHOW TYPES - list user defined types
@@ -5134,20 +5156,45 @@ show_ranges_stmt:
   }
 | SHOW RANGES error // SHOW HELP: SHOW RANGES
 
+// %Help: SHOW SURVIVAL GOAL - shows survival goals
+// %Category: DDL
+// %Text:
+// SHOW SURVIVAL GOAL FROM DATABASE
+// SHOW SURVIVAL GOAL FROM DATABASE <database>
+show_survival_goal_stmt:
+  SHOW SURVIVAL GOAL FROM DATABASE
+  {
+    $$.val = &tree.ShowSurvivalGoal{}
+  }
+| SHOW SURVIVAL GOAL FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowSurvivalGoal{
+      DatabaseName: tree.Name($6),
+    }
+  }
+
 // %Help: SHOW REGIONS - shows regions
 // %Category: DDL
 // %Text:
 // SHOW REGIONS FROM CLUSTER
+// SHOW REGIONS FROM DATABASE
 // SHOW REGIONS FROM DATABASE <database>
 show_regions_stmt:
   SHOW REGIONS FROM CLUSTER
   {
     $$.val = &tree.ShowRegions{}
   }
+| SHOW REGIONS FROM DATABASE
+  {
+    $$.val = &tree.ShowRegions{
+      FromDatabase: true,
+    }
+  }
 | SHOW REGIONS FROM DATABASE database_name
   {
     $$.val = &tree.ShowRegions{
-      Database: tree.Name($5),
+      FromDatabase: true,
+      DatabaseName: tree.Name($5),
     }
   }
 | SHOW REGIONS error // SHOW HELP: SHOW REGIONS
@@ -7611,6 +7658,9 @@ opt_regions_list:
 
 region_or_regions:
   REGION
+  {
+    /* SKIP DOC */
+  }
 | REGIONS
 
 survival_goal_clause:
@@ -11972,6 +12022,7 @@ unreserved_keyword:
 | GEOMETRYCOLLECTIONZ
 | GEOMETRYCOLLECTIONZM
 | GLOBAL
+| GOAL
 | GRANTS
 | GROUPS
 | HASH
@@ -12164,6 +12215,7 @@ unreserved_keyword:
 | STRICT
 | SUBSCRIPTION
 | SURVIVE
+| SURVIVAL
 | SYNTAX
 | SYSTEM
 | TABLES

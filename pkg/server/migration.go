@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,22 +39,34 @@ var _ serverpb.MigrationServer = &migrationServer{}
 func (m *migrationServer) ValidateTargetClusterVersion(
 	ctx context.Context, req *serverpb.ValidateTargetClusterVersionRequest,
 ) (*serverpb.ValidateTargetClusterVersionResponse, error) {
-	targetVersion := *req.Version
+	targetCV := req.ClusterVersion
 	versionSetting := m.server.ClusterSettings().Version
 
 	// We're validating the following:
 	//
 	//   node's minimum supported version <= target version <= node's binary version
-	if targetVersion.Less(versionSetting.BinaryMinSupportedVersion()) {
-		msg := fmt.Sprintf("target version %s less than binary's min supported version %s",
-			targetVersion, versionSetting.BinaryMinSupportedVersion())
+	if targetCV.Less(versionSetting.BinaryMinSupportedVersion()) {
+		msg := fmt.Sprintf("target cluster version %s less than binary's min supported version %s",
+			targetCV, versionSetting.BinaryMinSupportedVersion())
 		log.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
 
-	if versionSetting.BinaryVersion().Less(targetVersion) {
-		msg := fmt.Sprintf("binary version %s less than target version %s",
-			versionSetting.BinaryVersion(), targetVersion)
+	// TODO(irfansharif): These errors are propagated all the way back to the
+	// user during improper version upgrades. Given the migrations
+	// infrastructure is stepping through internal versions during major cluster
+	// version upgrades, and given we don't use negative internal versions (as
+	// suggested in #33578), it currently manifests (see
+	// TestClusterVersionMixedVersionTooOld) as errors of the form:
+	//
+	//     "binary version 20.1 less than target cluster version 20.1-1"
+	//
+	// It would be a bit clearer to use negative internal versions, to be able
+	// to surface more obvious errors. Alternatively we could simply construct
+	// a better error message here.
+	if versionSetting.BinaryVersion().Less(targetCV.Version) {
+		msg := fmt.Sprintf("binary version %s less than target cluster version %s",
+			versionSetting.BinaryVersion(), targetCV)
 		log.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
@@ -82,10 +93,10 @@ func (m *migrationServer) BumpClusterVersion(
 		return nil, err
 	}
 
-	newCV := clusterversion.ClusterVersion{Version: *req.Version}
+	newCV := *req.ClusterVersion
 
 	if err := func() error {
-		if !prevCV.Version.Less(*req.Version) {
+		if !prevCV.Less(newCV.Version) {
 			// Nothing to do.
 			return nil
 		}
@@ -113,7 +124,8 @@ func (m *migrationServer) BumpClusterVersion(
 		if err := m.server.ClusterSettings().Version.SetActiveVersion(ctx, newCV); err != nil {
 			return err
 		}
-		log.Infof(ctx, "active cluster version setting is now %s (up from %s)", newCV, prevCV)
+		log.Infof(ctx, "active cluster version setting is now %s (up from %s)",
+			newCV.PrettyPrint(), prevCV.PrettyPrint())
 		return nil
 	}(); err != nil {
 		return nil, err

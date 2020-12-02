@@ -129,7 +129,7 @@ type Producer interface {
 //    resulting entries to all of its subscribers.
 // 3. it accepts notifications from other nodes, passing these updates through
 //    to its local storage, so that
-// 4. the CanServe method determines via the the underlying storage whether a
+// 4. the CanServe method determines via the underlying storage whether a
 //    given read can be satisfied via follower reads.
 // 5. the MaxClosed method determines via the underlying storage what the maximum
 //    closed timestamp is for the specified LAI.

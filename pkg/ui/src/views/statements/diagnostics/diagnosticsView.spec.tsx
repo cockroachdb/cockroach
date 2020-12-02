@@ -14,9 +14,10 @@ import { mount, ReactWrapper } from "enzyme";
 import sinon, { SinonSpy } from "sinon";
 import Long from "long";
 import classNames from "classnames/bind";
+import { MemoryRouter } from "react-router-dom";
 
 import "src/enzymeInit";
-import { DiagnosticsView, EmptyDiagnosticsView } from "./diagnosticsView";
+import { DiagnosticsView } from "./diagnosticsView";
 import { Table } from "src/components";
 import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
@@ -39,17 +40,15 @@ describe("DiagnosticsView", () => {
   describe("With Empty state", () => {
     beforeEach(() => {
       wrapper = mount(
-        <DiagnosticsView
-          statementFingerprint={statementFingerprint}
-          activate={activateFn}
-          hasData={false}
-          diagnosticsReports={[]}
-          dismissAlertMessage={() => {}}
-        />);
-    });
-
-    it("renders EmptyDiagnosticsView component when no diagnostics data provided", () => {
-      assert.isTrue(wrapper.find(EmptyDiagnosticsView).exists());
+        <MemoryRouter>
+          <DiagnosticsView
+            statementFingerprint={statementFingerprint}
+            activate={activateFn}
+            hasData={false}
+            diagnosticsReports={[]}
+            dismissAlertMessage={() => {}}
+          />
+        </MemoryRouter>);
     });
 
     it("calls activate callback with statementId when click on Activate button", () => {

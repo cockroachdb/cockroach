@@ -20,7 +20,7 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting} from "src/views/shared/components/sortabletable";
 import "./index.styl";

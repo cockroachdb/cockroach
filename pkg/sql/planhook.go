@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -43,7 +44,7 @@ type planHookFn func(
 // channel argument is used to return results to the plan's runner. It's
 // a blocking channel, so implementors should be careful to only use blocking
 // sends on it when necessary. Any subplans returned by the hook when initially
-// called are passed back, planned and started, for the the RowFn's use.
+// called are passed back, planned and started, for the RowFn's use.
 //
 //TODO(dt): should this take runParams like a normal planNode.Next?
 type PlanHookRowFn func(context.Context, []planNode, chan<- tree.Datums) error
@@ -101,6 +102,8 @@ type PlanHookState interface {
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc *tabledesc.Immutable, displayOptions ShowCreateDisplayOptions,
 	) (string, error)
+	CreateSchemaNamespaceEntry(ctx context.Context, schemaNameKey roachpb.Key,
+		schemaID descpb.ID) error
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

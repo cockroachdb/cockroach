@@ -44,6 +44,14 @@ type dropDatabaseNode struct {
 //   Notes: postgres allows only the database owner to DROP a database.
 //          mysql requires the DROP privileges on the database.
 func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		&p.ExecCfg().Settings.SV,
+		"DROP DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}

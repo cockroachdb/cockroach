@@ -885,7 +885,7 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
-	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionAbortSpanBytes) {
+	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.AbortSpanBytes) {
 		// Since the stats here is used to seed the initial state for the RHS
 		// replicas, we need to be careful about zero-ing out the abort span
 		// bytes if the cluster version introducing it is not yet active. Not
@@ -1020,9 +1020,6 @@ func splitTriggerHelper(
 	}
 
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
-	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
-		deltaPostSplitLeft.ContainsEstimates = 0
-	}
 	return deltaPostSplitLeft, pd, nil
 }
 

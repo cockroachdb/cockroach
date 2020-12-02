@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "catalogkv",
@@ -30,5 +30,22 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "catalogkv_test",
+    srcs = ["unwrap_validation_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":catalogkv"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/testutils",
+        "//pkg/util/encoding/csv",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
     ],
 )

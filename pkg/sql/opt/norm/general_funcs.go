@@ -162,6 +162,22 @@ func (c *CustomFuncs) NotNullCols(input memo.RelExpr) opt.ColSet {
 	return input.Relational().NotNullCols
 }
 
+// SingleRegressionCountArgument checks if either arg is non-null and returns
+// the other one (or nil if neither is non-null).
+func (c *CustomFuncs) SingleRegressionCountArgument(
+	y, x opt.ScalarExpr, input memo.RelExpr,
+) opt.ScalarExpr {
+	notNullCols := c.NotNullCols(input)
+	if c.ExprIsNeverNull(y, notNullCols) {
+		return x
+	}
+	if c.ExprIsNeverNull(x, notNullCols) {
+		return y
+	}
+
+	return nil
+}
+
 // IsColNotNull returns true if the given input column is never null.
 func (c *CustomFuncs) IsColNotNull(col opt.ColumnID, input memo.RelExpr) bool {
 	return input.Relational().NotNullCols.Contains(col)

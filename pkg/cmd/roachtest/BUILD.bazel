@@ -105,6 +105,7 @@ go_library(
         "tpc_utils.go",
         "tpcc.go",
         "tpcdsvec.go",
+        "tpce.go",
         "tpchbench.go",
         "tpchvec.go",
         "ts_util.go",

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -87,6 +88,12 @@ var (
 	}
 )
 
+// TemporarySchemaNameForRestorePrefix is the prefix name of the schema we
+// synthesize during a full cluster restore. All temporary objects being
+// restored are remapped to belong to this schema allowing the reconciliation
+// job to gracefully clean up these objects when it runs.
+const TemporarySchemaNameForRestorePrefix string = "pg_temp_0_"
+
 func (p *planner) getOrCreateTemporarySchema(
 	ctx context.Context, dbID descpb.ID,
 ) (descpb.ID, error) {
@@ -101,7 +108,7 @@ func (p *planner) getOrCreateTemporarySchema(
 		if err != nil {
 			return descpb.InvalidID, err
 		}
-		if err := p.createSchemaNamespaceEntry(ctx, sKey.Key(p.ExecCfg().Codec), id); err != nil {
+		if err := p.CreateSchemaNamespaceEntry(ctx, sKey.Key(p.ExecCfg().Codec), id); err != nil {
 			return descpb.InvalidID, err
 		}
 		p.sessionDataMutator.SetTemporarySchemaName(sKey.Name())
@@ -111,7 +118,9 @@ func (p *planner) getOrCreateTemporarySchema(
 	return schemaID, nil
 }
 
-func (p *planner) createSchemaNamespaceEntry(
+// CreateSchemaNamespaceEntry creates an entry for the schema in the
+// system.namespace table.
+func (p *planner) CreateSchemaNamespaceEntry(
 	ctx context.Context, schemaNameKey roachpb.Key, schemaID descpb.ID,
 ) error {
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
@@ -149,25 +158,6 @@ func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
 		return false, ClusterWideID{}, err
 	}
 	return true, ClusterWideID{uint128.Uint128{Hi: hi, Lo: lo}}, nil
-}
-
-// getTemporaryObjectNames returns all the temporary objects under the
-// temporary schema of the given dbID.
-func getTemporaryObjectNames(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, tempSchemaName string,
-) (tree.TableNames, error) {
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
-	if err != nil {
-		return nil, err
-	}
-	return descs.GetObjectNames(
-		ctx,
-		txn,
-		codec,
-		dbDesc,
-		tempSchemaName,
-		tree.DatabaseListFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: false}},
-	)
 }
 
 // cleanupSessionTempObjects removes all temporary objects (tables, sequences,
@@ -225,7 +215,17 @@ func cleanupSchemaObjects(
 	dbID descpb.ID,
 	schemaName string,
 ) error {
-	tbNames, err := getTemporaryObjectNames(ctx, txn, codec, dbID, schemaName)
+	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
+	if err != nil {
+		return err
+	}
+	tbNames, err := descsCol.GetObjectNames(
+		ctx,
+		txn,
+		dbDesc,
+		schemaName,
+		tree.DatabaseListFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: false}},
+	)
 	if err != nil {
 		return err
 	}
@@ -245,10 +245,11 @@ func cleanupSchemaObjects(
 	for _, tbName := range tbNames {
 		flags := tree.ObjectLookupFlagsWithRequired()
 		flags.AvoidCached = true
-		desc, err := descsCol.GetTableVersion(ctx, txn, &tbName, flags)
+		d, err := descsCol.GetTableByName(ctx, txn, &tbName, flags)
 		if err != nil {
 			return err
 		}
+		desc := d.(*tabledesc.Immutable)
 
 		tblDescsByID[desc.ID] = desc
 		tblNamesByID[desc.ID] = tbName

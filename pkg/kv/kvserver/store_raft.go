@@ -36,9 +36,31 @@ type raftRequestInfo struct {
 type raftRequestQueue struct {
 	syncutil.Mutex
 	infos []raftRequestInfo
-	// TODO(nvanbenschoten): consider recycling []raftRequestInfo slices. This
-	// could be done without any new mutex locking by storing two slices here
-	// and swapping them under lock in processRequestQueue.
+}
+
+func (q *raftRequestQueue) drain() ([]raftRequestInfo, bool) {
+	q.Lock()
+	defer q.Unlock()
+	if len(q.infos) == 0 {
+		return nil, false
+	}
+	infos := q.infos
+	q.infos = nil
+	return infos, true
+}
+
+func (q *raftRequestQueue) recycle(processed []raftRequestInfo) {
+	if cap(processed) > 4 {
+		return // cap recycled slice lengths
+	}
+	q.Lock()
+	defer q.Unlock()
+	if q.infos == nil {
+		for i := range processed {
+			processed[i] = raftRequestInfo{}
+		}
+		q.infos = processed[:0]
+	}
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
@@ -193,7 +215,6 @@ func (s *Store) withReplicaForRequest(
 		return roachpb.NewError(err)
 	}
 	defer r.raftMu.Unlock()
-	ctx = r.AnnotateCtx(ctx)
 	r.setLastReplicaDescriptors(req)
 	return f(ctx, r)
 }
@@ -259,6 +280,7 @@ func (s *Store) processRaftSnapshotRequest(
 	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
 	) (pErr *roachpb.Error) {
+		ctx = r.AnnotateCtx(ctx)
 		if snapHeader.RaftMessageRequest.Message.Type != raftpb.MsgSnap {
 			log.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
 		}
@@ -309,12 +331,30 @@ func (s *Store) processRaftSnapshotRequest(
 				}
 			}()
 		}
+
+		if snapHeader.RaftMessageRequest.Message.From == snapHeader.RaftMessageRequest.Message.To {
+			// This is a special case exercised during recovery from loss of quorum.
+			// In this case, a forged snapshot will be sent to the replica and will
+			// hit this code path (if we make up a non-existent follower, Raft will
+			// drop the message, hence we are forced to make the receiver the sender).
+			//
+			// Unfortunately, at the time of writing, Raft assumes that a snapshot
+			// is always received from the leader (of the given term), which plays
+			// poorly with these forged snapshots. However, a zero sender works just
+			// fine as the value zero represents "no known leader".
+			//
+			// We prefer not to introduce a zero origin of the message as throughout
+			// our code we rely on it being present. Instead, we reset the origin
+			// that raft looks at just before handing the message off.
+			snapHeader.RaftMessageRequest.Message.From = 0
+		}
 		// NB: we cannot get errRemoved here because we're promised by
 		// withReplicaForRequest that this replica is not currently being removed
 		// and we've been holding the raftMu the entire time.
 		if err := r.stepRaftGroup(&snapHeader.RaftMessageRequest); err != nil {
 			return roachpb.NewError(err)
 		}
+
 		_, expl, err := r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 		maybeFatalOnRaftReadyErr(ctx, expl, err)
 		removePlaceholder = false
@@ -421,19 +461,18 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		return false
 	}
 	q := (*raftRequestQueue)(value)
-	q.Lock()
-	infos := q.infos
-	q.infos = nil
-	q.Unlock()
-	if len(infos) == 0 {
+	infos, ok := q.drain()
+	if !ok {
 		return false
 	}
+	defer q.recycle(infos)
 
 	var hadError bool
 	for i := range infos {
 		info := &infos[i]
 		if pErr := s.withReplicaForRequest(
 			ctx, info.req, func(ctx context.Context, r *Replica) *roachpb.Error {
+				ctx = r.raftSchedulerCtx(ctx)
 				return s.processRaftRequestWithReplica(ctx, r, info.req)
 			},
 		); pErr != nil {
@@ -479,12 +518,13 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	}
 
 	r := (*Replica)(value)
-	ctx = r.AnnotateCtx(ctx)
+	ctx = r.raftSchedulerCtx(ctx)
 	start := timeutil.Now()
 	stats, expl, err := r.handleRaftReady(ctx, noSnap)
 	removed := maybeFatalOnRaftReadyErr(ctx, expl, err)
 	elapsed := timeutil.Since(start)
 	s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
+	s.metrics.RaftHandleReadyLatency.RecordValue(elapsed.Nanoseconds())
 	// Warn if Raft processing took too long. We use the same duration as we
 	// use for warning about excessive raft mutex lock hold times. Long
 	// processing time means we'll have starved local replicas of ticks and
@@ -519,7 +559,8 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 
 	start := timeutil.Now()
 	r := (*Replica)(value)
-	exists, err := r.tick(livenessMap)
+	ctx = r.raftSchedulerCtx(ctx)
+	exists, err := r.tick(ctx, livenessMap)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
 	}

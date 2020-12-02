@@ -13,6 +13,9 @@ CREATE TABLE t2 AS SELECT 18446744073709551616::FLOAT AS f
 statement error pgcode 22003 integer out of range
 SELECT f::int FROM t2
 
+statement error integer out of range
+SELECT 23414123414::int2
+
 # Regression test for #47327. Test that negative intervals are correctly
 # cast to a decimal.
 statement ok

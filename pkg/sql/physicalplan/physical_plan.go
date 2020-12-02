@@ -15,7 +15,6 @@
 package physicalplan
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -441,8 +440,7 @@ func (p *PhysicalPlan) CheckLastStagePost() error {
 	// verify this assumption.
 	for i := 1; i < len(p.ResultRouters); i++ {
 		pi := &p.Processors[p.ResultRouters[i]].Spec.Post
-		if pi.Filter != post.Filter ||
-			pi.Projection != post.Projection ||
+		if pi.Projection != post.Projection ||
 			len(pi.OutputColumns) != len(post.OutputColumns) ||
 			len(pi.RenderExprs) != len(post.RenderExprs) {
 			return errors.Errorf("inconsistent post-processing: %v vs %v", post, pi)
@@ -760,49 +758,18 @@ func (p *PhysicalPlan) AddFilter(
 	if expr == nil {
 		return errors.Errorf("nil filter")
 	}
-	post := p.GetLastStagePost()
-	if len(post.RenderExprs) > 0 || post.Offset != 0 || post.Limit != 0 {
-		// The last stage contains render expressions or a limit. The filter refers
-		// to the output as described by the existing spec, so we need to add
-		// another "no-op" stage to which to attach the filter.
-		//
-		// In general, we might be able to push the filter "through" the rendering;
-		// but the higher level planning code should figure this out when
-		// propagating filters.
-		post = execinfrapb.PostProcessSpec{}
-		p.AddNoGroupingStage(
-			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-			post,
-			p.GetResultTypes(),
-			p.MergeOrdering,
-		)
-	}
-
-	compositeMap := indexVarMap
-	if post.Projection {
-		compositeMap = reverseProjection(post.OutputColumns, indexVarMap)
-	}
-	filter, err := MakeExpression(expr, exprCtx, compositeMap)
+	filter, err := MakeExpression(expr, exprCtx, indexVarMap)
 	if err != nil {
 		return err
 	}
-	if !post.Filter.Empty() {
-		// LocalExpr is usually set, but it can be left nil in tests, so we
-		// need to perform the nil check.
-		if post.Filter.LocalExpr != nil && filter.LocalExpr != nil {
-			filter.LocalExpr = tree.NewTypedAndExpr(
-				post.Filter.LocalExpr,
-				filter.LocalExpr,
-			)
-		}
-		// Expr is set for all distributed plans (as well as in some tests).
-		if post.Filter.Expr != "" && filter.Expr != "" {
-			filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
-		}
-	}
-	for _, pIdx := range p.ResultRouters {
-		p.Processors[pIdx].Spec.Post.Filter = filter
-	}
+	p.AddNoGroupingStage(
+		execinfrapb.ProcessorCoreUnion{Filterer: &execinfrapb.FiltererSpec{
+			Filter: filter,
+		}},
+		execinfrapb.PostProcessSpec{},
+		p.GetResultTypes(),
+		p.MergeOrdering,
+	)
 	return nil
 }
 

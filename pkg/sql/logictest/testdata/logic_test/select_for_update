@@ -190,7 +190,7 @@ SELECT * FROM (SELECT * FROM generate_series(1, 2)) a FOR UPDATE
 1
 2
 
-# Use of SELECT FOR UPDATE/SHARE requires UPDATE privileges, not just SELECT privileges.
+# Use of SELECT FOR UPDATE/SHARE requires SELECT and UPDATE privileges.
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
@@ -199,6 +199,12 @@ user testuser
 
 statement error pgcode 42501 user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
+
+statement error pgcode 42501 user testuser does not have SELECT privilege on relation t
+SELECT * FROM t FOR UPDATE
+
+statement error pgcode 42501 user testuser does not have SELECT privilege on relation t
+SELECT * FROM t FOR SHARE
 
 user root
 
@@ -219,9 +225,31 @@ SELECT * FROM t FOR SHARE
 user root
 
 statement ok
+REVOKE SELECT ON t FROM testuser
+
+statement ok
 GRANT UPDATE ON t TO testuser
 
 user testuser
+
+statement error pgcode 42501 user testuser does not have SELECT privilege on relation t
+SELECT * FROM t
+
+statement error pgcode 42501 user testuser does not have SELECT privilege on relation t
+SELECT * FROM t FOR UPDATE
+
+statement error pgcode 42501 user testuser does not have SELECT privilege on relation t
+SELECT * FROM t FOR SHARE
+
+user root
+
+statement ok
+GRANT SELECT ON t TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM t
 
 statement ok
 SELECT * FROM t FOR UPDATE
@@ -305,6 +333,9 @@ statement ok
 CREATE TABLE t2 (k INT PRIMARY KEY, v2 int)
 
 statement ok
+GRANT SELECT ON t2 TO testuser
+
+statement ok
 GRANT UPDATE ON t2 TO testuser
 
 statement ok
@@ -364,6 +395,9 @@ CREATE TABLE p1_1 (
 ) INTERLEAVE IN PARENT p2 (i)
 
 statement ok
+GRANT SELECT ON p2   TO testuser;
+GRANT SELECT ON p1_0 TO testuser;
+GRANT SELECT ON p1_1 TO testuser;
 GRANT UPDATE ON p2   TO testuser;
 GRANT UPDATE ON p1_0 TO testuser;
 GRANT UPDATE ON p1_1 TO testuser;

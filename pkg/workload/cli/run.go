@@ -483,7 +483,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			})
 
 		// Once the load generator is fully ramped up, we reset the histogram
-		// and the start time to throw away the stats for the the ramp up period.
+		// and the start time to throw away the stats for the ramp up period.
 		case <-rampDone:
 			rampDone = nil
 			start = timeutil.Now()

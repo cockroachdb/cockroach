@@ -187,6 +187,9 @@ func buildOpaque(
 	if err != nil {
 		return nil, err
 	}
+	if plan == nil {
+		return nil, errors.AssertionFailedf("planNode cannot be nil for %T", stmt)
+	}
 	res := &opaqueMetadata{
 		info:    stmt.StatementTag(),
 		plan:    plan,

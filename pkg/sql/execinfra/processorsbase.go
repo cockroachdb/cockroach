@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -58,9 +60,6 @@ type ProcOutputHelper struct {
 	// post-processed row directly.
 	output   RowReceiver
 	RowAlloc rowenc.EncDatumRowAlloc
-	// filter is an optional filter that determines whether a single row is
-	// output or not.
-	filter *execinfrapb.ExprHelper
 	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
 	// and outputCols can be set.
 	renderExprs []execinfrapb.ExprHelper
@@ -118,12 +117,6 @@ func (h *ProcOutputHelper) Init(
 	}
 	h.output = output
 	h.numInternalCols = len(coreOutputTypes)
-	if post.Filter != (execinfrapb.Expression{}) {
-		h.filter = &execinfrapb.ExprHelper{}
-		if err := h.filter.Init(post.Filter, coreOutputTypes, semaCtx, evalCtx); err != nil {
-			return err
-		}
-	}
 	if post.Projection {
 		for _, col := range post.OutputColumns {
 			if int(col) >= h.numInternalCols {
@@ -201,12 +194,6 @@ func (h *ProcOutputHelper) NeededColumns() (colIdxs util.FastIntSet) {
 	}
 
 	for i := 0; i < h.numInternalCols; i++ {
-		// See if filter requires this column.
-		if h.filter != nil && h.filter.Vars.IndexedVarUsed(i) {
-			colIdxs.Add(i)
-			continue
-		}
-
 		// See if render expressions require this column.
 		for j := range h.renderExprs {
 			if h.renderExprs[j].Vars.IndexedVarUsed(i) {
@@ -283,19 +270,6 @@ func (h *ProcOutputHelper) ProcessRow(
 		return nil, false, nil
 	}
 
-	if h.filter != nil {
-		// Filtering.
-		passes, err := h.filter.EvalFilter(row)
-		if err != nil {
-			return nil, false, err
-		}
-		if !passes {
-			if log.V(4) {
-				log.Infof(ctx, "filtered out row %s", row.String(h.filter.Types))
-			}
-			return nil, true, nil
-		}
-	}
 	h.rowIdx++
 	if h.rowIdx <= h.offset {
 		// Suppress row.
@@ -343,7 +317,7 @@ func (h *ProcOutputHelper) consumerClosed() {
 // Stats returns output statistics.
 func (h *ProcOutputHelper) Stats() execinfrapb.OutputStats {
 	return execinfrapb.OutputStats{
-		NumTuples: execinfrapb.MakeIntValue(h.rowIdx),
+		NumTuples: optional.MakeUint(h.rowIdx),
 	}
 }
 
@@ -471,6 +445,9 @@ type ProcessorBase struct {
 
 	// EvalCtx is used for expression evaluation. It overrides the one in flowCtx.
 	EvalCtx *tree.EvalContext
+
+	// SemaCtx is used to avoid allocating a new SemaCtx during processor setup.
+	SemaCtx tree.SemaContext
 
 	// MemMonitor is the processor's memory monitor.
 	MemMonitor *mon.BytesMonitor
@@ -611,7 +588,7 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 		// However, calling it with an error in states other than StateRunning is
 		// not permitted.
 		if err != nil {
-			log.ReportOrPanic(
+			logcrash.ReportOrPanic(
 				pb.Ctx,
 				&pb.FlowCtx.Cfg.Settings.SV,
 				"MoveToDraining called in state %s with err: %+v",
@@ -641,7 +618,7 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 // also moves from StateDraining to StateTrailingMeta when appropriate.
 func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 	if pb.State == StateRunning {
-		log.ReportOrPanic(
+		logcrash.ReportOrPanic(
 			pb.Ctx,
 			&pb.FlowCtx.Cfg.Settings.SV,
 			"drain helper called in StateRunning",
@@ -715,7 +692,7 @@ func (pb *ProcessorBase) popTrailingMeta() *execinfrapb.ProducerMetadata {
 // draining its inputs (if it wants to drain them).
 func (pb *ProcessorBase) moveToTrailingMeta() {
 	if pb.State == StateTrailingMeta || pb.State == StateExhausted {
-		log.ReportOrPanic(
+		logcrash.ReportOrPanic(
 			pb.Ctx,
 			&pb.FlowCtx.Cfg.Settings.SV,
 			"moveToTrailingMeta called in state: %s",
@@ -727,9 +704,6 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	if pb.span != nil {
 		if pb.ExecStatsForTrace != nil {
 			if stats := pb.ExecStatsForTrace(); stats != nil {
-				if pb.FlowCtx.Cfg.TestingKnobs.DeterministicStats {
-					stats.MakeDeterministic()
-				}
 				pb.span.SetSpanStats(stats)
 			}
 		}
@@ -856,10 +830,11 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	if err := resolver.HydrateTypeSlice(evalCtx.Context, coreOutputTypes); err != nil {
 		return err
 	}
-	semaCtx := tree.MakeSemaContext()
-	semaCtx.TypeResolver = resolver
 
-	return pb.Out.Init(post, coreOutputTypes, &semaCtx, pb.EvalCtx, output)
+	pb.SemaCtx = tree.MakeSemaContext()
+	pb.SemaCtx.TypeResolver = resolver
+
+	return pb.Out.Init(post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx, output)
 }
 
 // AddInputToDrain adds an input to drain when moving the processor to a
@@ -877,7 +852,7 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
 // ProcessorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
 func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.Span) {
-	return tracing.ChildSpanSeparateRecording(ctx, name)
+	return tracing.ChildSpanRemote(ctx, name)
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the

@@ -383,6 +383,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
 			bulkMon := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "bulk-adder-monitor")
+			if !codec.ForSystemTenant() {
+				// Tenants aren't allowed to split, so force off the split-after opt.
+				opts.SplitAndScatterAfter = func() int64 { return kvserverbase.DisableExplicitSplits }
+			}
 			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon)
 		},
 
@@ -606,7 +610,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
 	// SessionBoundInternalExecutorFactory. The same applies for setting a
-	// SessionBoundInternalExecutor on the the job registry.
+	// SessionBoundInternalExecutor on the job registry.
 	ieFactory := func(
 		ctx context.Context, sessionData *sessiondata.SessionData,
 	) sqlutil.InternalExecutor {
@@ -649,8 +653,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.circularInternalExecutor,
 			cfg.db,
 		)
-		execCfg.VersionUpgradeHook = func(ctx context.Context, targetV roachpb.Version) error {
-			return migrationMgr.MigrateTo(ctx, targetV)
+		execCfg.VersionUpgradeHook = func(ctx context.Context, from, to clusterversion.ClusterVersion) error {
+			return migrationMgr.Migrate(ctx, from, to)
 		}
 	}
 
@@ -785,11 +789,11 @@ func (s *sqlServer) preStart(
 		// Since we don't record this version anywhere, we do the next-best thing
 		// and pass a lower-bound on the bootstrap version. We know that no tenants
 		// could have been created before the start of the v20.2 dev cycle, so we
-		// pass VersionStart20_2. bootstrapVersion is only used to avoid performing
+		// pass Start20_2. bootstrapVersion is only used to avoid performing
 		// superfluous but necessarily idempotent SQL migrations, so at worst, we're
 		// doing more work than strictly necessary during the first time that the
 		// migrations are run.
-		bootstrapVersion = clusterversion.VersionByKey(clusterversion.VersionStart20_2)
+		bootstrapVersion = clusterversion.ByKey(clusterversion.Start20_2)
 	}
 
 	// Run startup migrations (note: these depend on jobs subsystem running).
@@ -809,8 +813,8 @@ func (s *sqlServer) preStart(
 		// This clause exists to support sqlmigrations tests which intentionally
 		// inject a binary version below the one which includes the relevant
 		// migration. In this case we won't start the sqlliveness subsystem.
-		(!s.execCfg.Settings.Version.BinaryVersion().Less(clusterversion.VersionByKey(
-			clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable))) {
+		(!s.execCfg.Settings.Version.BinaryVersion().Less(clusterversion.ByKey(
+			clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable))) {
 		s.sqlLivenessProvider.Start(ctx)
 	}
 	// Start the async migration to upgrade namespace entries from the old

@@ -8,14 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { storiesOf } from "@storybook/react";
-
-import { SortableTable } from "./";
-
-storiesOf("Sortable table", module)
-  .add("Empty state", () => (
-    <SortableTable
-        empty
-    />
-  ));
+/*
+* rc-calendar package doesn't provide typings to `RangeCalendar` component
+* and locales.
+* */
+declare module "rc-calendar/es/RangeCalendar";
+declare module "rc-calendar/es/locale/en_US";

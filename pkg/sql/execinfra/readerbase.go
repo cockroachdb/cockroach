@@ -53,11 +53,6 @@ func LimitHint(specLimitHint int64, post *execinfrapb.PostProcessSpec) (limitHin
 		limitHint = specLimitHint + RowChannelBufSize + 1
 	}
 
-	if !post.Filter.Empty() {
-		// We have a filter so we will likely need to read more rows.
-		limitHint *= 2
-	}
-
 	return limitHint
 }
 

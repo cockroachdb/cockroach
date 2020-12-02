@@ -39,7 +39,7 @@ type cleanupFunc func()
 // and then suspend until the next row has been requested.
 type rowPusher interface {
 	// pushRow pushes the input row to the receiver of the generator. It doesn't
-	// mutate the input row. It will block until the the data has been received
+	// mutate the input row. It will block until the data has been received
 	// and more data has been requested. Once pushRow returns, the caller is free
 	// to mutate the slice passed as input. The caller is not allowed to perform
 	// operations on a transaction while blocked on a call to pushRow.

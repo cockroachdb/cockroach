@@ -60,6 +60,8 @@ type Smither struct {
 	rnd              *rand.Rand
 	db               *gosql.DB
 	lock             syncutil.RWMutex
+	dbName           string
+	schemas          []*schemaRef
 	tables           []*tableRef
 	columns          map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
 	indexes          map[tree.TableName]map[tree.Name]*tree.CreateIndex
@@ -128,6 +130,10 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s.scalarExprSampler = newWeightedScalarExprSampler(s.scalarExprWeights, rnd.Int63())
 	s.boolExprSampler = newWeightedScalarExprSampler(s.boolExprWeights, rnd.Int63())
 	s.enableBulkIO()
+	row := s.db.QueryRow("SELECT current_database()")
+	if err := row.Scan(&s.dbName); err != nil {
+		return nil, err
+	}
 	return s, s.ReloadSchemas()
 }
 

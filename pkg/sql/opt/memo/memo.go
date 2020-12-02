@@ -383,17 +383,29 @@ func (m *Memo) NextWithID() opt.WithID {
 	return m.curWithID
 }
 
-// ClearColStats clears all column statistics from every relational expression
-// in the memo. This is used to free up the potentially large amount of memory
-// used by histograms.
-func (m *Memo) ClearColStats(parent opt.Expr) {
-	for i, n := 0, parent.ChildCount(); i < n; i++ {
-		child := parent.Child(i)
-		m.ClearColStats(child)
-	}
+// Detach is used when we detach a memo that is to be reused later (either for
+// execbuilding or with AssignPlaceholders). New expressions should no longer be
+// constructed in this memo.
+func (m *Memo) Detach() {
+	m.interner = interner{}
+	// It is important to not hold on to the EvalCtx in the logicalPropsBuilder
+	// (#57059).
+	m.logPropsBuilder = logicalPropsBuilder{}
 
-	switch t := parent.(type) {
-	case RelExpr:
-		t.Relational().Stats.ColStats = props.ColStatsMap{}
+	// Clear all column statistics from every relational expression in the memo.
+	// This is used to free up the potentially large amount of memory used by
+	// histograms.
+	var clearColStats func(parent opt.Expr)
+	clearColStats = func(parent opt.Expr) {
+		for i, n := 0, parent.ChildCount(); i < n; i++ {
+			child := parent.Child(i)
+			clearColStats(child)
+		}
+
+		switch t := parent.(type) {
+		case RelExpr:
+			t.Relational().Stats.ColStats = props.ColStatsMap{}
+		}
 	}
+	clearColStats(m.RootExpr())
 }

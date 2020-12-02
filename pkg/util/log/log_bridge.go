@@ -75,7 +75,7 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 	}
 
 	entry := MakeEntry(context.Background(),
-		Severity(lb), &debugLog.logCounter, 0, /* depth */
+		Severity(lb), 0, /* depth */
 		// Note: because the caller is using the stdLog interface, they are
 		// bypassing all the log marker logic. This means that the entire
 		// log message should be assumed to contain confidential

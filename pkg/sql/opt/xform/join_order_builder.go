@@ -628,7 +628,7 @@ func (jb *JoinOrderBuilder) makeEdge(op *operator, filters memo.FiltersExpr) (e 
 
 // getFreeVars returns the set of columns referenced by the given predicate.
 func (jb *JoinOrderBuilder) getFreeVars(predicate memo.FiltersExpr) opt.ColSet {
-	return predicate.OuterCols(jb.f.Memo())
+	return predicate.OuterCols()
 }
 
 // hasEqEdge returns true if the inner edges include a direct equality between

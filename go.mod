@@ -149,7 +149,7 @@ require (
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
-	golang.org/x/net v0.0.0-20200602114024-627f9648deb9
+	golang.org/x/net v0.0.0-20201021035429-f5854403a974
 	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
@@ -190,3 +190,5 @@ replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.
 //
 // While this is necessary, make sure that the require block above does not diverge.
 replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560
+
+replace golang.org/x/tools => github.com/cockroachdb/tools v0.0.0-20201202174556-f18ddc082e74

@@ -42,11 +42,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
@@ -527,7 +527,7 @@ If problems persist, please see %s.`
 				// actually been started successfully. If there's no server,
 				// we won't know enough to decide whether reporting is
 				// permitted.
-				log.RecoverAndReportPanic(ctx, &s.ClusterSettings().SV)
+				logcrash.RecoverAndReportPanic(ctx, &s.ClusterSettings().SV)
 			}
 		}()
 		// When the start up goroutine completes, so can the start up span
@@ -1117,9 +1117,23 @@ func setupAndInitializeLoggingAndProfiling(
 				"consider --accept-sql-without-tls instead. For other options, see:\n\n"+
 				"- %s\n"+
 				"- %s",
-			unimplemented.MakeURL(53404),
+			build.MakeIssueURL(53404),
 			log.Safe(docs.URL("secure-a-cluster.html")),
 		)
+	}
+
+	// The new multi-region abstractions require that nodes be labeled in "regions"
+	// (and optionally, "zones").  To push users in that direction, we warn them here
+	// if they've provided a --locality value which doesn't include a "region" tier.
+	if len(serverCfg.Locality.Tiers) > 0 {
+		if _, containsRegion := serverCfg.Locality.Find("region"); !containsRegion {
+			const warningString string = "The --locality flag does not contain a \"region\" tier. To add regions\n" +
+				"to databases, the --locality flag must contain a \"region\" tier.\n" +
+				"For more information, see:\n\n" +
+				"- %s"
+			log.Shoutf(context.Background(), severity.WARNING, warningString,
+				log.Safe(docs.URL("cockroach-start.html#locality")))
+		}
 	}
 
 	maybeWarnMemorySizes(ctx)

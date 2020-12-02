@@ -390,16 +390,6 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 	return MakeRangeKey(key, LocalRangeDescriptorSuffix, nil)
 }
 
-// RangeDescriptorJointKey returns a range-local key for the "joint descriptor"
-// for the range with specified key. This key is not versioned and it is set if
-// and only if the range is in a joint configuration that it yet has to transition
-// out of.
-func RangeDescriptorJointKey(key roachpb.RKey) roachpb.Key {
-	return MakeRangeKey(key, LocalRangeDescriptorJointSuffix, nil)
-}
-
-var _ = RangeDescriptorJointKey // silence unused check
-
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
@@ -458,6 +448,10 @@ func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error
 		return nil, errors.Errorf("key %q is not for a single-key lock", key)
 	}
 	b = b[len(LockTableSingleKeyInfix):]
+	// We pass nil as the second parameter instead of trying to reuse a
+	// previously allocated buffer since escaping of \x00 to \x00\xff is not
+	// common. And when there is no such escaping, lockedKey will be a sub-slice
+	// of b.
 	b, lockedKey, err = encoding.DecodeBytesAscending(b, nil)
 	if err != nil {
 		return nil, err

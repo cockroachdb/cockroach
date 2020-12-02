@@ -237,29 +237,7 @@ func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 
 // ClearIterRange implements the Writer interface.
 func (fw *SSTWriter) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
-	if fw.fw == nil {
-		return errors.New("cannot call ClearIterRange on a closed writer")
-	}
-
-	// Set an upper bound on the iterator. This is okay because all calls to
-	// ClearIterRange are with throwaway iterators, so there should be no new
-	// side effects.
-	iter.SetUpperBound(end)
-	iter.SeekGE(MakeMVCCMetadataKey(start))
-
-	valid, err := iter.Valid()
-	for valid && err == nil {
-		key := iter.UnsafeKey()
-		fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
-		fw.DataSize += int64(len(key.Key))
-		if err := fw.fw.Delete(fw.scratch); err != nil {
-			return err
-		}
-
-		iter.Next()
-		valid, err = iter.Valid()
-	}
-	return err
+	panic("ClearIterRange is unsupported")
 }
 
 // Merge implements the Writer interface.

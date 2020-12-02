@@ -225,15 +225,42 @@ var crdbInternalDatabasesTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.databases (
 	id INT NOT NULL,
 	name STRING NOT NULL,
-	owner NAME NOT NULL
+	owner NAME NOT NULL,
+	primary_region STRING,
+	regions STRING[],
+	survival_goal STRING
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
+				var survivalGoal tree.Datum = tree.DNull
+				var primaryRegion tree.Datum = tree.DNull
+				regions := tree.NewDArray(types.String)
+				if db.IsMultiRegion() {
+					switch db.RegionConfig.SurvivalGoal {
+					case descpb.SurvivalGoal_ZONE_FAILURE:
+						survivalGoal = tree.NewDString("zone")
+					case descpb.SurvivalGoal_REGION_FAILURE:
+						survivalGoal = tree.NewDString("region")
+					default:
+						return errors.Newf("unknown survival goal: %d", db.RegionConfig.SurvivalGoal)
+					}
+					primaryRegion = tree.NewDString(string(db.RegionConfig.PrimaryRegion))
+
+					for _, region := range db.RegionConfig.Regions {
+						if err := regions.Append(tree.NewDString(string(region))); err != nil {
+							return err
+						}
+					}
+				}
+
 				return addRow(
 					tree.NewDInt(tree.DInt(db.GetID())),            // id
 					tree.NewDString(db.GetName()),                  // name
 					tree.NewDName(getOwnerOfDesc(db).Normalized()), // owner
+					primaryRegion, // primary_region
+					regions,       // regions
+					survivalGoal,  // survival_goal
 				)
 			})
 	},
@@ -1693,6 +1720,9 @@ CREATE TABLE crdb_internal.create_type_statements (
 				); err != nil {
 					return err
 				}
+			case descpb.TypeDescriptor_MULTIREGION_ENUM:
+				// Multi-region enums are created implicitly, so we don't have create
+				// statements for them.
 			case descpb.TypeDescriptor_ALIAS:
 			// Alias types are created implicitly, so we don't have create
 			// statements for them.
@@ -2603,7 +2633,7 @@ func getAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
 ) (map[descpb.ID]NamespaceKey, error) {
 	namespace := map[descpb.ID]NamespaceKey{}
-	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
+	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) {
 		rows, err := executor.Query(
 			ctx, "get-all-names", txn,
 			`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,

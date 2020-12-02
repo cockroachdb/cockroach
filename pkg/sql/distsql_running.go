@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -331,7 +332,7 @@ func (dsp *DistSQLPlanner) Run(
 		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
 			stmtStr = planCtx.planner.stmt.String()
 		}
-		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, false /* showInputTypes */)
+		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, execinfrapb.DiagramFlags{})
 		if err != nil {
 			log.Infof(ctx, "error generating diagram: %s", err)
 		} else {
@@ -345,6 +346,7 @@ func (dsp *DistSQLPlanner) Run(
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
 
 	recv.outputTypes = plan.GetResultTypes()
+	recv.contendedQueryMetric = dsp.distSQLSrv.Metrics.ContendedQueriesCount
 
 	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
 
@@ -461,12 +463,16 @@ type DistSQLReceiver struct {
 
 	// A handler for clock signals arriving from remote nodes. This should update
 	// this node's clock.
-	updateClock func(observedTs hlc.Timestamp)
+	clockUpdater clockUpdater
 
 	stats topLevelQueryStats
 
 	expectedRowsRead int64
 	progressAtomic   *uint64
+
+	// contendedQueryMetric is a Counter that is incremented at most once if the
+	// query produces at least one contention event.
+	contendedQueryMetric *metric.Counter
 }
 
 // rowResultWriter is a subset of CommandResult to be used with the
@@ -538,6 +544,13 @@ var receiverSyncPool = sync.Pool{
 	},
 }
 
+// ClockUpdater describes an object that can be updated with an observed
+// timestamp. Usually wraps an hlc.Clock.
+type clockUpdater interface {
+	// Update updates this ClockUpdater with the observed hlc.Timestamp.
+	Update(observedTS hlc.Timestamp)
+}
+
 // MakeDistSQLReceiver creates a DistSQLReceiver.
 //
 // ctx is the Context that the receiver will use throughout its
@@ -552,7 +565,7 @@ func MakeDistSQLReceiver(
 	stmtType tree.StatementType,
 	rangeCache *kvcoord.RangeDescriptorCache,
 	txn *kv.Txn,
-	updateClock func(observedTs hlc.Timestamp),
+	clockUpdater clockUpdater,
 	tracing *SessionTracing,
 ) *DistSQLReceiver {
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
@@ -563,7 +576,7 @@ func MakeDistSQLReceiver(
 		resultWriter: resultWriter,
 		rangeCache:   rangeCache,
 		txn:          txn,
-		updateClock:  updateClock,
+		clockUpdater: clockUpdater,
 		stmtType:     stmtType,
 		tracing:      tracing,
 	}
@@ -581,13 +594,13 @@ func (r *DistSQLReceiver) Release() {
 func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 	ret := receiverSyncPool.Get().(*DistSQLReceiver)
 	*ret = DistSQLReceiver{
-		ctx:         r.ctx,
-		cleanup:     func() {},
-		rangeCache:  r.rangeCache,
-		txn:         r.txn,
-		updateClock: r.updateClock,
-		stmtType:    tree.Rows,
-		tracing:     r.tracing,
+		ctx:          r.ctx,
+		cleanup:      func() {},
+		rangeCache:   r.rangeCache,
+		txn:          r.txn,
+		clockUpdater: r.clockUpdater,
+		stmtType:     tree.Rows,
+		tracing:      r.tracing,
 	}
 	return ret
 }
@@ -632,7 +645,9 @@ func (r *DistSQLReceiver) Push(
 						// TODO(andrei): We don't propagate clock signals on success cases
 						// through DistSQL; we should. We also don't propagate them through
 						// non-retryable errors; we also should.
-						r.updateClock(retryErr.PErr.Now)
+						if r.clockUpdater != nil {
+							r.clockUpdater.Update(retryErr.PErr.Now)
+						}
 					}
 				}
 				r.resultWriter.SetError(meta.Err)
@@ -659,6 +674,12 @@ func (r *DistSQLReceiver) Push(
 			}
 			meta.Metrics.Release()
 			meta.Release()
+		}
+		if meta.ContentionEvents != nil && r.contendedQueryMetric != nil {
+			// Increment the contended query metric at most once if the query sees at
+			// least one contention event.
+			r.contendedQueryMetric.Inc(1)
+			r.contendedQueryMetric = nil
 		}
 		if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
 			metaWriter.AddMeta(r.ctx, meta)
@@ -835,6 +856,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if planner.instrumentation.ShouldCollectBundle() {
 		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
+	subqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
 	// Don't close the top-level plan from subqueries - someone else will handle
 	// that.
 	subqueryPlanCtx.ignoreClose = true
@@ -1126,6 +1148,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	if planner.instrumentation.ShouldCollectBundle() {
 		postqueryPlanCtx.saveFlows = postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
+	postqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
 
 	postqueryPhysPlan, err := dsp.createPhysPlan(postqueryPlanCtx, postqueryPlan)
 	if err != nil {

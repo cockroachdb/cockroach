@@ -21,6 +21,7 @@ var (
 	alters               = append(append(altersTableExistence, altersExistingTable...), altersTypeExistence...)
 	altersTableExistence = []statementWeight{
 		{10, makeCreateTable},
+		{2, makeCreateSchema},
 		{1, makeDropTable},
 	}
 	altersExistingTable = []statementWeight{
@@ -62,9 +63,20 @@ func makeAlter(s *Smither) (tree.Statement, bool) {
 	return nil, false
 }
 
+func makeCreateSchema(s *Smither) (tree.Statement, bool) {
+	return &tree.CreateSchema{
+		Schema: tree.ObjectNamePrefix{
+			SchemaName:     s.name("schema"),
+			ExplicitSchema: true,
+		},
+	}, true
+}
+
 func makeCreateTable(s *Smither) (tree.Statement, bool) {
 	table := rowenc.RandCreateTable(s.rnd, "", 0)
-	table.Table = tree.MakeUnqualifiedTableName(s.name("tab"))
+	schemaOrd := s.rnd.Intn(len(s.schemas))
+	schema := s.schemas[schemaOrd]
+	table.Table = tree.MakeTableNameWithSchema(tree.Name(s.dbName), schema.SchemaName, s.name("tab"))
 	return table, true
 }
 

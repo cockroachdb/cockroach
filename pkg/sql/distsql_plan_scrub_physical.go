@@ -11,11 +11,9 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // createScrubPhysicalCheck generates a plan for running a physical
@@ -24,13 +22,9 @@ import (
 // TableReaders will only emit errors encountered during scanning
 // instead of row data. The plan is finalized.
 func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
-	planCtx *PlanningCtx,
-	n *scanNode,
-	desc descpb.TableDescriptor,
-	indexDesc descpb.IndexDescriptor,
-	readAsOf hlc.Timestamp,
+	planCtx *PlanningCtx, n *scanNode,
 ) (*PhysicalPlan, error) {
-	spec, _, err := initTableReaderSpec(n, planCtx, nil /* indexVarMap */)
+	spec, _, err := initTableReaderSpec(n)
 	if err != nil {
 		return nil, err
 	}

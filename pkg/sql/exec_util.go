@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -740,7 +741,7 @@ type ExecutorConfig struct {
 	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
-	VersionUpgradeHook func(ctx context.Context, to roachpb.Version) error
+	VersionUpgradeHook func(ctx context.Context, from, to clusterversion.ClusterVersion) error
 }
 
 // Organization returns the value of cluster.organization.
@@ -835,9 +836,6 @@ type ExecutorTestingKnobs struct {
 
 	// DeterministicExplainAnalyze, if set, will result in overriding fields in
 	// EXPLAIN ANALYZE (PLAN) that can vary between runs (like elapsed times).
-	//
-	// Should be set together with execinfra.TestingKnobs.DeterministicStats.
-	// TODO(radu): figure out how to unify these two.
 	DeterministicExplainAnalyze bool
 }
 
@@ -882,6 +880,11 @@ type BackupRestoreTestingKnobs struct {
 	// AllowImplicitAccess allows implicit access to data sources for non-admin
 	// users. This enables using nodelocal for testing BACKUP/RESTORE permissions.
 	AllowImplicitAccess bool
+
+	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
+	// resolved during backup planning, and will eventually be backed up during
+	// execution.
+	CaptureResolvedTableDescSpans func([]roachpb.Span)
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
@@ -1511,7 +1514,7 @@ func (st *SessionTracing) StartTracing(
 		// Create a child span while recording.
 		sp = parentSp.Tracer().StartSpan(
 			opName,
-			tracing.WithParent(parentSp),
+			tracing.WithParentAndAutoCollection(parentSp),
 			tracing.WithCtxLogTags(connCtx),
 			tracing.WithForceRealSpan(),
 		)

@@ -13,6 +13,7 @@ package colfetcher
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -62,7 +63,7 @@ type ColBatchScan struct {
 	ResultTypes []*types.T
 }
 
-var _ execinfra.IOReader = &ColBatchScan{}
+var _ execinfra.KVReader = &ColBatchScan{}
 var _ execinfra.Releasable = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
@@ -116,17 +117,30 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
+
+	if contentionEvents := s.rf.fetcher.GetContentionEvents(); len(contentionEvents) != 0 {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{ContentionEvents: contentionEvents})
+	}
 	return trailingMeta
 }
 
-// GetBytesRead is part of the execinfra.IOReader interface.
+// GetBytesRead is part of the execinfra.KVReader interface.
 func (s *ColBatchScan) GetBytesRead() int64 {
 	return s.rf.fetcher.GetBytesRead()
 }
 
-// GetRowsRead is part of the execinfra.IOReader interface.
+// GetRowsRead is part of the execinfra.KVReader interface.
 func (s *ColBatchScan) GetRowsRead() int64 {
 	return s.rowsRead
+}
+
+// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
+func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
+	var totalContentionTime time.Duration
+	for _, e := range s.rf.fetcher.GetContentionEvents() {
+		totalContentionTime += e.Duration
+	}
+	return totalContentionTime
 }
 
 var colBatchScanPool = sync.Pool{
@@ -168,19 +182,17 @@ func NewColBatchScan(
 	var sysColDescs []descpb.ColumnDescriptor
 	if spec.HasSystemColumns {
 		sysColDescs = colinfo.AllSystemColumnDescs
-	}
-	for i := range sysColDescs {
-		typs = append(typs, sysColDescs[i].Type)
-		columnIdxMap.Set(sysColDescs[i].ID, columnIdxMap.Len())
+		for i := range sysColDescs {
+			typs = append(typs, sysColDescs[i].Type)
+			columnIdxMap.Set(sysColDescs[i].ID, columnIdxMap.Len())
+		}
 	}
 
-	semaCtx := tree.MakeSemaContext()
 	// Before we can safely use types from the table descriptor, we need to
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
 	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
-	semaCtx.TypeResolver = resolver
 	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
 		return nil, err
 	}
@@ -192,11 +204,13 @@ func NewColBatchScan(
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, fetcher, table, int(spec.IndexIdx), columnIdxMap,
-		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
-		sysColDescs,
+		flowCtx.Codec(), allocator, fetcher, table, columnIdxMap, neededColumns, spec, sysColDescs,
 	); err != nil {
 		return nil, err
+	}
+
+	if flowCtx.Cfg.TestingKnobs.GenerateMockContentionEvents {
+		fetcher.testingGenerateMockContentionEvents = true
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
@@ -224,22 +238,18 @@ func initCRowFetcher(
 	allocator *colmem.Allocator,
 	fetcher *cFetcher,
 	desc *tabledesc.Immutable,
-	indexIdx int,
 	colIdxMap catalog.TableColMap,
-	reverseScan bool,
 	valNeededForCol util.FastIntSet,
-	scanVisibility execinfrapb.ScanVisibility,
-	lockStrength descpb.ScanLockingStrength,
-	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	spec *execinfrapb.TableReaderSpec,
 	systemColumnDescs []descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
-	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
+	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(int(spec.IndexIdx))
 	if err != nil {
 		return nil, false, err
 	}
 
 	cols := desc.Columns
-	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
+	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = desc.ReadableColumns
 	}
 	// Add on any requested system columns. We slice cols to avoid modifying
@@ -254,7 +264,7 @@ func initCRowFetcher(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
-		codec, allocator, reverseScan, lockStrength, lockWaitPolicy, tableArgs,
+		codec, allocator, spec.Reverse, spec.LockingStrength, spec.LockingWaitPolicy, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}

@@ -2279,7 +2279,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	zipCols := projectSet.Zip.OutputCols()
 	reqZipCols := colSet.Difference(inputCols).Intersection(zipCols)
 	if !reqZipCols.Empty() {
-		// Calculate the the distinct count and null count for the zip columns
+		// Calculate the distinct count and null count for the zip columns
 		// after the cross join has been applied.
 		zipColsDistinctCount := float64(1)
 		zipColsNullCount := s.RowCount

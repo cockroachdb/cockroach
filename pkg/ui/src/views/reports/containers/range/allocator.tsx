@@ -15,7 +15,7 @@ import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Print from "src/views/reports/containers/range/print";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 
 interface AllocatorOutputProps {
   allocator: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;

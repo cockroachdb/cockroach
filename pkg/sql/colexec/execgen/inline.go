@@ -316,7 +316,7 @@ func extractReturnValues(decl *dst.FuncDecl) (retValDeclStmt dst.Stmt, retValNam
 //   b string = y
 // )
 //
-// In the case where the formal parameter name is the same as the the input
+// In the case where the formal parameter name is the same as the input
 // parameter name, no extra assignment is created.
 func getFormalParamReassignments(decl *dst.FuncDecl, callExpr *dst.CallExpr) dst.Stmt {
 	formalParams := decl.Type.Params.List
