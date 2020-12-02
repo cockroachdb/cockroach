@@ -11,11 +11,11 @@
 package tree
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
@@ -132,26 +132,17 @@ func (f ExplainFlag) String() string {
 // Format implements the NodeFormatter interface.
 func (node *Explain) Format(ctx *FmtCtx) {
 	ctx.WriteString("EXPLAIN ")
-	wroteFlag := false
+	b := util.MakeStringListBuilder("(", ", ", ") ")
 	if node.Mode != ExplainPlan {
-		fmt.Fprintf(ctx, "(%s", node.Mode)
-		wroteFlag = true
+		b.Add(ctx, node.Mode.String())
 	}
 
 	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
 		if node.Flags[f] {
-			if !wroteFlag {
-				ctx.WriteString("(")
-				wroteFlag = true
-			} else {
-				ctx.WriteString(", ")
-			}
-			ctx.WriteString(f.String())
+			b.Add(ctx, f.String())
 		}
 	}
-	if wroteFlag {
-		ctx.WriteString(") ")
-	}
+	b.Finish(ctx)
 	ctx.FormatNode(node.Statement)
 }
 
@@ -178,14 +169,18 @@ func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
 
 // Format implements the NodeFormatter interface.
 func (node *ExplainAnalyze) Format(ctx *FmtCtx) {
-	fmt.Fprintf(ctx, "EXPLAIN ANALYZE (%s", node.Mode)
+	ctx.WriteString("EXPLAIN ANALYZE ")
+	b := util.MakeStringListBuilder("(", ", ", ") ")
+	if node.Mode != ExplainPlan {
+		b.Add(ctx, node.Mode.String())
+	}
 
 	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
 		if node.Flags[f] {
-			fmt.Fprintf(ctx, ", %s", f.String())
+			b.Add(ctx, f.String())
 		}
 	}
-	ctx.WriteString(") ")
+	b.Finish(ctx)
 	ctx.FormatNode(node.Statement)
 }
 
@@ -193,7 +188,9 @@ func (node *ExplainAnalyze) Format(ctx *FmtCtx) {
 func (node *ExplainAnalyze) doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Keyword("EXPLAIN ANALYZE")
 	var opts []pretty.Doc
-	opts = append(opts, pretty.Keyword(node.Mode.String()))
+	if node.Mode != ExplainPlan {
+		opts = append(opts, pretty.Keyword(node.Mode.String()))
+	}
 	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
 		if node.Flags[f] {
 			opts = append(opts, pretty.Keyword(f.String()))
@@ -236,13 +233,8 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		opts.Flags[flag] = true
 	}
 	if opts.Mode == 0 {
-		if analyze {
-			// ANALYZE implies DISTSQL.
-			opts.Mode = ExplainDistSQL
-		} else {
-			// Default mode is ExplainPlan.
-			opts.Mode = ExplainPlan
-		}
+		// Default mode is ExplainPlan.
+		opts.Mode = ExplainPlan
 	}
 
 	if analyze {
