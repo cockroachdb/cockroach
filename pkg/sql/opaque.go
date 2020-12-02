@@ -65,8 +65,8 @@ func buildOpaque(
 		plan, err = p.AlterSchema(ctx, n)
 	case *tree.AlterTable:
 		plan, err = p.AlterTable(ctx, n)
-	case *tree.AlterTableRegionalAffinity:
-		plan, err = p.AlterTableRegionalAffinity(ctx, n)
+	case *tree.AlterTableLocality:
+		plan, err = p.AlterTableLocality(ctx, n)
 	case *tree.AlterTableSetSchema:
 		plan, err = p.AlterTableSetSchema(ctx, n)
 	case *tree.AlterType:
@@ -208,7 +208,7 @@ func init() {
 		&tree.AlterIndex{},
 		&tree.AlterSchema{},
 		&tree.AlterTable{},
-		&tree.AlterTableRegionalAffinity{},
+		&tree.AlterTableLocality{},
 		&tree.AlterTableSetSchema{},
 		&tree.AlterType{},
 		&tree.AlterSequence{},

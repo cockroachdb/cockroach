@@ -128,7 +128,7 @@ statement error implementation pending
 ALTER DATABASE new_db DROP REGION "us-west-1"
 
 statement error implementation pending
-ALTER TABLE a SET REGIONAL AFFINITY TO NONE
+ALTER TABLE a SET LOCALITY REGIONAL BY ROW
 
 statement error implementation pending
 ALTER DATABASE primary_region_db PRIMARY REGION "test"
