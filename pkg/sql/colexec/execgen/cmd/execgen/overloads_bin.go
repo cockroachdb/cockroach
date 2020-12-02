@@ -806,10 +806,18 @@ func convertNativeToDatum(
 		// TODO(yuzefovich): figure out a better way to perform type resolution
 		// for types that have the same physical representation.
 		switch op {
-		case tree.JSONFetchVal:
+		// We currently support two operations that take in one datum argument
+		// and one argument with Bytes canonical type family (Minus and
+		// JSONFetchVal) and both require the value to be of String type, so we
+		// perform such conversion.
+		// In order to mistakenly not add support for another binary operator in
+		// such mixed representation scenario while forgetting to choose the
+		// correct conversion, we'll panic for all other operators (during the
+		// code generation).
+		case tree.Minus, tree.JSONFetchVal:
 			runtimeConversion = fmt.Sprintf("tree.DString(%s)", nativeElem)
 		default:
-			runtimeConversion = fmt.Sprintf("tree.DBytes(%s)", nativeElem)
+			colexecerror.InternalError(errors.AssertionFailedf("unexpected binary op %s that requires conversion from Bytes canonical type family", op))
 		}
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unexpected canonical type family: %s", canonicalTypeFamily))
