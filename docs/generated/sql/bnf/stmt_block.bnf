@@ -1225,7 +1225,7 @@ alter_table_stmt ::=
 	| alter_zone_table_stmt
 	| alter_rename_table_stmt
 	| alter_table_set_schema_stmt
-	| alter_table_regional_affinity_stmt
+	| alter_table_locality_stmt
 
 alter_index_stmt ::=
 	alter_oneindex_stmt
@@ -1615,9 +1615,9 @@ alter_table_set_schema_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'SET' 'SCHEMA' schema_name
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' 'SCHEMA' schema_name
 
-alter_table_regional_affinity_stmt ::=
-	'ALTER' 'TABLE' relation_expr 'SET' regional_affinity
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' regional_affinity
+alter_table_locality_stmt ::=
+	'ALTER' 'TABLE' relation_expr 'SET' locality
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' locality
 
 alter_oneindex_stmt ::=
 	'ALTER' 'INDEX' table_index_name alter_index_cmds
@@ -2135,18 +2135,23 @@ set_zone_config ::=
 	'CONFIGURE' 'ZONE' 'USING' var_set_list
 	| 'CONFIGURE' 'ZONE' 'DISCARD'
 
-regional_affinity ::=
+locality ::=
 	'LOCALITY' 'GLOBAL'
 	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE' 'IN' region_name
+	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE' 'IN' 'PRIMARY' 'REGION'
+	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE'
 	| 'LOCALITY' 'REGIONAL' 'BY' 'ROW'
 	| 'REGIONAL' 'AFFINITY' 'TO' 'NONE'
 	| 'REGIONAL' 'AFFINITY' 'TO' region_name
+	| 'REGIONAL' 'AFFINITY' 'TO' 'PRIMARY' 'REGION'
 	| 'REGIONAL' 'AFFINITY' 'AT' 'ROW' 'LEVEL'
 	| 'REGIONAL' 'AFFINITY' 'NONE'
 	| 'REGIONAL' 'AFFINITY' region_name
+	| 'REGIONAL' 'AFFINITY' 'PRIMARY' 'REGION'
 	| 'REGIONAL' 'AFFINITY' 'ROW' 'LEVEL'
 	| 'NO' 'REGIONAL' 'AFFINITY'
 	| 'TABLE' 'LEVEL' 'REGIONAL' 'AFFINITY' 'TO' region_name
+	| 'TABLE' 'LEVEL' 'REGIONAL' 'AFFINITY' 'TO' 'PRIMARY' 'REGION'
 	| 'ROW' 'LEVEL' 'REGIONAL' 'AFFINITY'
 
 alter_index_cmds ::=
