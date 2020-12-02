@@ -131,7 +131,6 @@ func newCSVWriterProcessor(
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-
 	c := &csvWriter{
 		flowCtx:     flowCtx,
 		processorID: processorID,

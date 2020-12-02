@@ -12,9 +12,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -431,4 +433,56 @@ func TestExportFeatureFlag(t *testing.T) {
 	// Feature flag is on — test that EXPORT does not error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = TRUE`)
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flags`)
+}
+
+func TestExportPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE USER testuser`)
+	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
+
+	pgURL, cleanup := sqlutils.PGUrl(t, srv.ServingSQLAddr(),
+		"TestExportPrivileges-testuser", url.User("testuser"))
+	defer cleanup()
+	startTestUser := func() *gosql.DB {
+		testuser, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return testuser
+	}
+	testuser := startTestUser()
+	_, err := testuser.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
+	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
+
+	dest := "nodelocal://0/privs_placeholder"
+	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
+	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
+	testuser.Close()
+
+	// Grant SELECT privilege.
+	sqlDB.Exec(t, `GRANT SELECT ON TABLE privs TO testuser`)
+
+	// The above SELECT GRANT hangs if we leave the user conn open. Thus, we need
+	// to reinitialize it here.
+	testuser = startTestUser()
+	defer testuser.Close()
+
+	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
+	require.True(t, testutils.IsError(err,
+		"only users with the admin role are allowed to EXPORT to the specified URI"))
+	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
+	require.True(t, testutils.IsError(err,
+		"only users with the admin role are allowed to EXPORT to the specified URI"))
+
+	sqlDB.Exec(t, `GRANT ADMIN TO testuser`)
+
+	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
+	require.NoError(t, err)
+	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
+	require.NoError(t, err)
 }
