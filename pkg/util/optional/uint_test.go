@@ -43,7 +43,15 @@ func TestUint(t *testing.T) {
 	require.Equal(t, uint64(0), v.Value())
 	require.Equal(t, v.String(), "<unset>")
 
-	v.Add(100)
+	var other optional.Uint
+
+	v.MaybeAdd(other)
+	require.False(t, v.HasValue())
+	require.Equal(t, uint64(0), v.Value())
+	require.Equal(t, v.String(), "<unset>")
+
+	other.Set(100)
+	v.MaybeAdd(other)
 	require.True(t, v.HasValue())
 	require.Equal(t, uint64(100), v.Value())
 	require.Equal(t, v.String(), "100")
