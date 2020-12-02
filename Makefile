@@ -103,6 +103,10 @@ build-with-dep-files := $(or $(if $(MAKECMDGOALS),,implicit-all),$(filter-out he
 ## Which package to run tests against, e.g. "./pkg/foo".
 PKG := ./pkg/...
 
+## Name of a branch to calculate changed files against. Changed files are
+## calculated as `git diff --name-only $LINTTARGETBRANCH...`
+LINTTARGETBRANCH :=
+
 ## Tests to run for use with `make test`
 TESTS := .
 
