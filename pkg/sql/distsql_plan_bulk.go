@@ -52,3 +52,15 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	})
 	return planCtx, nodes, nil
 }
+
+// GetAllCompatibleNodes returns all nodes that are OK to use in the DistSQL
+// plan.
+func GetAllCompatibleNodes(planCtx *PlanningCtx) []roachpb.NodeID {
+	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeStatuses))
+	for node, status := range planCtx.NodeStatuses {
+		if status == NodeOK {
+			nodes = append(nodes, node)
+		}
+	}
+	return nodes
+}
