@@ -235,7 +235,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				var err error
 				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
 					info, infoErr := n.tableDesc.GetConstraintInfo(params.ctx, nil)
-					if err != nil {
+					if infoErr != nil {
 						err = infoErr
 						return
 					}
