@@ -103,6 +103,25 @@ availability and stability in external uses.
 
 Details retrieves details about the nodes in the cluster.
 
+ Reference example:
+ ```
+ curl http://127.0.0.1:51875/_status/details/1
+   ->
+ {
+ "nodeId": 1,
+   "address": {
+   "networkField": "tcp",
+   "addressField": "127.0.0.1:51876"
+   },
+   "buildInfo": {...},
+   "systemInfo": {...},
+   "sqlAddress": {
+   "networkField": "tcp",
+   "addressField": "127.0.0.1:51877"
+   }
+ }
+ ```
+
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
 availability and stability in external uses.
@@ -181,6 +200,142 @@ availability and stability in external uses.
 Nodes retrieves an overview of the nodes in the cluster.
 
 
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/nodes   
+  ->
+ {
+  "nodes": [
+    {
+      "desc": {
+        "nodeId": 1,
+        "address": {
+          "networkField": "tcp",
+          "addressField": "127.0.0.1:51876"
+        },
+        "attrs": {
+          "attrs": []
+        },
+        "locality": {
+          "tiers": [
+            {
+              "key": "region",
+              "value": "us-east1"
+            },
+            {
+              "key": "az",
+              "value": "b"
+            }
+          ]
+        },
+        "ServerVersion": {
+          "majorVal": 20,
+          "minorVal": 2,
+          "patch": 0,
+          "unstable": 1
+        },
+        "buildTag": "v20.2.0-alpha.3-2061-gb4156e4e2c",
+        "startedAt": "1606913361337496000",
+        "localityAddress": [],
+        "clusterName": "",
+        "sqlAddress": {
+          "networkField": "tcp",
+          "addressField": "127.0.0.1:51877"
+        }
+      },
+      "buildInfo": {...},
+      "startedAt": "1606913361337496000",
+      "updatedAt": "1606920801488818000",
+      "metrics": {...},
+      "storeStatuses": [
+        {
+          "desc": {
+            "storeId": 1,
+            "attrs": {
+              "attrs": []
+            },
+            "node": {
+              "nodeId": 1,
+              "address": {
+                "networkField": "tcp",
+                "addressField": "127.0.0.1:51876"
+              },
+              "attrs": {
+                "attrs": []
+              },
+              "locality": {
+                "tiers": [
+                  {
+                    "key": "region",
+                    "value": "us-east1"
+                  },
+                  {
+                    "key": "az",
+                    "value": "b"
+                  }
+                ]
+              },
+              "ServerVersion": {
+                "majorVal": 20,
+                "minorVal": 2,
+                "patch": 0,
+                "unstable": 1
+              },
+              "buildTag": "v20.2.0-alpha.3-2061-gb4156e4e2c",
+              "startedAt": "1606913361337496000",
+              "localityAddress": [],
+              "clusterName": "",
+              "sqlAddress": {
+                "networkField": "tcp",
+                "addressField": "127.0.0.1:51877"
+              }
+            },
+            "capacity": {
+              "capacity": "536870912",
+              "available": "536870912",
+              "used": "0",
+              "logicalBytes": "21518089",
+              "rangeCount": 65,
+              "leaseCount": 65,
+              "queriesPerSecond": 10.326122145577715,
+              "writesPerSecond": 82.90851430132487,
+              "bytesPerReplica": {
+                "p10": 0,
+                "p25": 0,
+                "p50": 460,
+                "p75": 10118,
+                "p90": 40825,
+                "pMax": 20712052
+              },
+              "writesPerReplica": {...}
+            }
+          }
+          "metrics": {...}
+        }
+      ],
+      "args": [
+        "./cockroach",
+        "demo",
+        "--insecure"
+      ],
+      "env": [],
+      "latencies": {},
+      "activity": {
+        "1": {
+          "incoming": "235921",
+          "outgoing": "222073",
+          "latency": "677603"
+        }
+      },
+      "totalSystemMemory": "34359738368",
+      "numCpus": 16
+    }
+  ],
+  "livenessByNodeId": {
+    "1": 3
+  }
+}   
+ ```
 Don't introduce additional usages of this RPC. See #50707 for more details.
 The underlying response type is something we're looking to get rid of.
 
@@ -541,6 +696,7 @@ availability and stability in external uses.
 `GET /_status/raft`
 
 RaftDebug requests internal details about Raft.
+TODO DURING REVIEW: Not sure if this needs a reference example
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -834,6 +990,7 @@ availability and stability in external uses.
 `GET /_status/ranges/{node_id}`
 
 Ranges requests internal details about ranges on a given node.
+TODO DURING REVIEW: Not sure if this needs a reference example
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -1040,6 +1197,7 @@ availability and stability in external uses.
 `GET /_status/gossip/{node_id}`
 
 Gossip retrieves gossip-level details about a given node.
+TODO DURING REVIEW: Not sure if this needs a reference example
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -1076,6 +1234,23 @@ availability and stability in external uses.
 `GET /_status/enginestats/{node_id}`
 
 EngineStats retrieves statistics about a storage engine.
+
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/enginestats/1   
+  ->
+ {
+  "stats": [
+    {
+      "storeId": 1,
+      "tickersAndHistograms": {...},
+      "engineType": 2
+    }
+  ]
+}   
+ ```
+TODO DURING REVIEW: This looks like it was only used by RocksDB and not Pebble. 
+Not sure if we still want to keep the example.
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -1149,6 +1324,51 @@ availability and stability in external uses.
 `GET /_status/allocator/node/{node_id}`
 
 Allocator retrieves statistics about the replica allocator.
+
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/allocator/node/1   
+  ->
+ {
+  "dryRuns": [
+    {
+      "rangeId": "1",
+      "events": [
+        {
+          "time": "2020-12-02T14:53:24.252733Z",
+          "message": "kv/kvserver/replicate_queue.go:343 [n1,status] next replica action: consider rebalance"
+        },
+        {
+          "time": "2020-12-02T14:53:24.252789Z",
+          "message": "kv/kvserver/replicate_queue.go:849 [n1,status] no suitable rebalance target"
+        },
+        {
+          "time": "2020-12-02T14:53:24.252798Z",
+          "message": "kv/kvserver/allocator.go:847 [n1,status] no lease transfer target found"
+        }
+      ]
+    },
+    {
+      "rangeId": "2",
+      "events": [
+        {
+          "time": "2020-12-02T14:53:24.252825Z",
+          "message": "kv/kvserver/replicate_queue.go:343 [n1,status] next replica action: consider rebalance"
+        },
+        {
+          "time": "2020-12-02T14:53:24.252840Z",
+          "message": "kv/kvserver/replicate_queue.go:849 [n1,status] no suitable rebalance target"
+        },
+        {
+          "time": "2020-12-02T14:53:24.252847Z",
+          "message": "kv/kvserver/allocator.go:847 [n1,status] no lease transfer target found"
+        }
+      ]
+    },
+    ...
+  ]
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -1332,6 +1552,31 @@ availability and stability in external uses.
 `GET /_status/sessions`
 
 ListSessions retrieves the SQL sessions across the entire cluster.
+
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/sessions   
+  ->
+ {
+  "sessions": [
+    {
+      "nodeId": 1,
+      "username": "root",
+      "clientAddress": "127.0.0.1:51883",
+      "applicationName": "$ cockroach demo",
+      "activeQueries": [],
+      "start": "2020-12-02T12:49:22.173886Z",
+      "lastActiveQuery": "SHOW database",
+      "id": "FkznMGk07HgAAAAAAAAAAQ==",
+      "allocBytes": "0",
+      "maxAllocBytes": "30720",
+      "activeTxn": null,
+      "lastActiveQueryAnon": "SHOW database"
+    }
+  ],
+  "errors": []
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -1641,6 +1886,16 @@ availability and stability in external uses.
 
 CancelQuery cancels a SQL query given its ID.
 
+ Reference example:
+ ```
+ curl http://127.0.0.1:26258/_status/cancel_query/1 -X POST -d  '{"node_id": "1", "query_id": "164cf86bc40442380000000000000001"}'
+ ->
+ {
+   "canceled": true,
+   "error": ""
+ }
+ ```
+
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
 availability and stability in external uses.
@@ -1697,6 +1952,11 @@ availability and stability in external uses.
 `POST /_status/cancel_session/{node_id}`
 
 CancelSessions forcefully terminates a SQL session given its ID.
+TODO DURING REVIEW: The way we internally seem to be using this is
+by parsing the session ID string (returned by something like
+`SHOW SESSIONS`) into a uint128 and then casting that into a byte array of 
+length 16. Not sure if this is supposed to ever be used externally, since 
+it seems so unergonomic to use.
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -1817,6 +2077,15 @@ availability and stability in external uses.
 
 Stacks retrieves the stack traces of all goroutines on a given node.
 
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/stacks/1   
+  ->
+ {
+  "data": "<payload>"
+}   
+ ```
+
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
 availability and stability in external uses.
@@ -1871,6 +2140,15 @@ availability and stability in external uses.
 `GET /_status/profile/{node_id}`
 
 Profile retrieves a CPU profile on a given node.
+
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/profile/1   
+  ->
+ {
+  "data": "<payload>"
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -1932,6 +2210,15 @@ Note: this is a “reserved” API and should not be relied upon to
 build external tools. No guarantee is made about its
 availability and stability in external uses.
 
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/metrics/1   
+  ->
+ {
+  "data": "<payload>"
+}   
+ ```
+
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
 availability and stability in external uses.
@@ -1985,6 +2272,19 @@ availability and stability in external uses.
 `GET /_status/files/{node_id}`
 
 GetFiles retrieves heap or goroutine dump files from a given node.
+
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/files/1   
+  ->
+ {
+ "files": [{
+  "name": "...",
+  "file_size": ...,
+  "contents": "..."    
+}]
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -2061,6 +2361,19 @@ availability and stability in external uses.
 `GET /_status/logfiles/{node_id}`
 
 LogFilesList retrieves a list of log files on a given node.
+
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/logfiles/1   
+  ->
+ {
+ "files": [{
+  "name": "...",
+  "file_size": ...,
+  "contents": "..."    
+}]
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -2234,6 +2547,28 @@ availability and stability in external uses.
 
 ProblemRanges retrieves the list of “problem ranges”.
 
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/problemranges   
+  ->
+ {
+  "nodeId": 1,
+  "problemsByNodeId": {
+    "1": {
+      "errorMessage": "",
+      "unavailableRangeIds": [],
+      "raftLeaderNotLeaseHolderRangeIds": [],
+      "noRaftLeaderRangeIds": [],
+      "noLeaseRangeIds": [],
+      "underreplicatedRangeIds": [],
+      "overreplicatedRangeIds": [],
+      "quiescentEqualsTickingRangeIds": [],
+      "raftLogTooLargeRangeIds": []
+    }
+  }
+}   
+ ```
+
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
 availability and stability in external uses.
@@ -2328,7 +2663,50 @@ availability and stability in external uses.
 
 `GET /_status/hotranges`
 
+HotRanges retrieves a list of ranges ordered by the amount of traffic being 
+received.
 
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/hotranges   
+  ->
+ {
+  "nodeId": 1,
+  "hotRangesByNodeId": {
+    "1": {
+      "errorMessage": "",
+      "stores": [
+        {
+          "storeId": 1,
+          "hotRanges": [
+            {
+              "desc": {
+                "rangeId": "6",
+                "startKey": "iA==",
+                "endKey": "kw==",
+                "internalReplicas": [
+                  {
+                    "nodeId": 1,
+                    "storeId": 1,
+                    "replicaId": 1,
+                    "type": null
+                  }
+                ],
+                "nextReplicaId": 2,
+                "generation": "0",
+                "deprecatedGenerationComparable": null,
+                "stickyBit": null
+              },
+              "queriesPerSecond": 5.36106511320822
+            },
+            ...
+          ]
+        }
+      ]
+    }
+  }
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -2452,7 +2830,7 @@ advance notice in a subsequent release.
 
 `GET /_status/range/{range_id}`
 
-
+TODO DURING REVIEW: Not sure if this needs a reference example
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -2694,7 +3072,308 @@ availability and stability in external uses.
 
 `GET /_status/diagnostics/{node_id}`
 
-
+TODO DURING REVIEW: Do we want to redact this response even further? 
+ Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/diagnostics/1   
+  ->
+ {
+  "node": {
+    "nodeId": 1,
+    "bytes": "21565824",
+    "keyCount": "5668",
+    "rangeCount": "65",
+    "locality": {
+      "tiers": [
+        {
+          "key": "5d64eba5",
+          "value": "67b07925"
+        },
+        {
+          "key": "d4f35d56",
+          "value": "d5a474fc"
+        }
+      ]
+    },
+    "hardware": {
+      "virtualization": "",
+      "cpu": {...},
+      "mem": {
+        "total": "34359738368",
+        "available": "15584899072"
+      },
+      "loadavg15": 4.7993164,
+      "provider": "",
+      "instanceClass": ""
+    },
+    "os": {
+      "family": "Standalone Workstation",
+      "platform": "darwin",
+      "version": "10.15.7"
+    },
+    "build": {...},
+    "uptime": "7443",
+    "licenseType": "Evaluation",
+    "topology": {
+      "provider": "",
+      "region": ""
+    }
+  },
+  "stores": [
+    {
+      "nodeId": 1,
+      "storeId": 1,
+      "bytes": "21565824",
+      "keyCount": "5668",
+      "rangeCount": "65",
+      "capacity": "536870912",
+      "available": "536870912",
+      "used": "0",
+      "encryptionAlgorithm": "0"
+    }
+  ],
+  "schema": [
+    {
+      "name": "_",
+      "id": 53,
+      "version": 7,
+      "modificationTime": {
+        "wallTime": "1606913362141165000",
+        "logical": 0
+      },
+      "drainingNames": [],
+      "parentId": 52,
+      "unexposedParentSchemaId": 29,
+      "columns": [
+        {
+          "name": "_",
+          "id": 1,
+          "type": {},
+          "nullable": false,
+          "defaultExpr": null,
+          "hidden": false,
+          "usesSequenceIds": [],
+          "ownsSequenceIds": [],
+          "computeExpr": null,
+          "pgAttributeNum": 0,
+          "alterColumnTypeInProgress": false,
+          "systemColumnKind": 0
+        },
+        ...
+      ],
+      "nextColumnId": 6,
+      "families": [
+        {
+          "name": "_",
+          "id": 0,
+          "columnNames": [
+            "_",
+            "_",
+            "_",
+            "_",
+            "_"
+          ],
+          "columnIds": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "defaultColumnId": 0
+        }
+      ],
+      "nextFamilyId": 1,
+      "primaryIndex": {
+        "name": "_",
+        "id": 1,
+        "unique": true,
+        "version": 1,
+        "columnNames": [
+          "_",
+          "_"
+        ],
+        "columnDirections": [
+          0,
+          0
+        ],
+        "storeColumnNames": [],
+        "columnIds": [
+          2,
+          1
+        ],
+        "extraColumnIds": [],
+        "storeColumnIds": [],
+        "compositeColumnIds": [],
+        "foreignKey": {
+          "table": 0,
+          "index": 0,
+          "name": "",
+          "validity": 0,
+          "sharedPrefixLen": 0,
+          "onDelete": "NO_ACTION",
+          "onUpdate": "NO_ACTION",
+          "match": "SIMPLE"
+        },
+        "referencedBy": [],
+        "interleave": {
+          "ancestors": []
+        },
+        "interleavedBy": [],
+        "partitioning": {
+          "numColumns": 0,
+          "list": [],
+          "range": []
+        },
+        "type": 0,
+        "createdExplicitly": false,
+        "encodingType": 0,
+        "sharded": {
+          "isSharded": false,
+          "name": "",
+          "shardBuckets": 0,
+          "columnNames": []
+        },
+        "disabled": false,
+        "geoConfig": {
+          "s2Geography": null,
+          "s2Geometry": null
+        },
+        "predicate": ""
+      },
+      "indexes": [],
+      "nextIndexId": 2,
+      "privileges": {
+        "users": [
+          {
+            "user": "_",
+            "privileges": 2
+          },
+          {
+            "user": "_",
+            "privileges": 2
+          }
+        ],
+        "owner": "_",
+        "version": 1
+      },
+      "mutations": [],
+      "lease": null,
+      "nextMutationId": 1,
+      "formatVersion": 3,
+      "state": 0,
+      "offlineReason": "",
+      "checks": [],
+      "viewQuery": "",
+      "isMaterializedView": false,
+      "dependsOn": [],
+      "dependedOnBy": [],
+      "mutationJobs": [],
+      "sequenceOpts": null,
+      "dropTime": "0",
+      "replacementOf": {
+        "id": 0,
+        "time": {
+          "wallTime": "0",
+          "logical": 0
+        }
+      },
+      "auditMode": 0,
+      "dropJobId": "0",
+      "gcMutations": [],
+      "createQuery": "",
+      "createAsOfTime": {
+        "wallTime": "1606913361488922000",
+        "logical": 0
+      },
+      "outboundFks": [],
+      "inboundFks": [
+        {
+          "originTableId": 54,
+          "originColumnIds": [
+            2,
+            4
+          ],
+          "referencedColumnIds": [
+            2,
+            1
+          ],
+          "referencedTableId": 53,
+          "name": "_",
+          "validity": 2,
+          "onDelete": "NO_ACTION",
+          "onUpdate": "NO_ACTION",
+          "match": "SIMPLE"
+        },
+        {
+          "originTableId": 55,
+          "originColumnIds": [
+            2,
+            4
+          ],
+          "referencedColumnIds": [
+            2,
+            1
+          ],
+          "referencedTableId": 53,
+          "name": "_",
+          "validity": 2,
+          "onDelete": "NO_ACTION",
+          "onUpdate": "NO_ACTION",
+          "match": "SIMPLE"
+        },
+        {
+          "originTableId": 58,
+          "originColumnIds": [
+            1,
+            2
+          ],
+          "referencedColumnIds": [
+            2,
+            1
+          ],
+          "referencedTableId": 53,
+          "name": "_",
+          "validity": 2,
+          "onDelete": "NO_ACTION",
+          "onUpdate": "NO_ACTION",
+          "match": "SIMPLE"
+        }
+      ],
+      "temporary": false
+    },
+    ...
+  ],
+  "sqlStats": [],
+  "alteredSettings": {
+    "cluster.organization": "<redacted>",
+    "cluster.secret": "<redacted>",
+    "diagnostics.reporting.enabled": "true",
+    "enterprise.license": "<redacted>",
+    "version": "20.2-1"
+  },
+  "zoneConfigs": {
+    "0": {
+      "rangeMinBytes": "134217728",
+      "rangeMaxBytes": "536870912",
+      "gc": {
+        "ttlSeconds": 90000
+      },
+      "numReplicas": 1,
+      "constraints": [],
+      "inheritedConstraints": false,
+      "leasePreferences": [],
+      "inheritedLeasePreferences": false,
+      "subzones": [],
+      "subzoneSpans": []
+    },
+    ...
+  },
+  "featureUsage": {...},
+  "legacyUnimplementedErrors": {},
+  "legacyErrorCounts": {}
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -2730,7 +3409,23 @@ availability and stability in external uses.
 
 `GET /_status/stores/{node_id}`
 
-
+Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/stores/1   
+  ->
+ {
+  "stores": [
+    {
+      "storeId": 1,
+      "encryptionStatus": null,
+      "totalFiles": "0",
+      "totalBytes": "0",
+      "activeKeyFiles": "0",
+      "activeKeyBytes": "0"
+    }
+  ]
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -3138,7 +3833,15 @@ availability and stability in external uses.
 
 `GET /_status/job_registry/{node_id}`
 
-
+Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/job_registry/1   
+  ->
+ {
+  "nodeId": 1,
+  "runningJobs": []
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
@@ -3210,7 +3913,48 @@ availability and stability in external uses.
 
 `GET /_status/job/{job_id}`
 
-
+Reference example:
+ ``` 
+ curl http://127.0.0.1:51875/_status/job/612247017297477633   
+  ->
+ {
+  "job": {
+    "id": "612247017297477633",
+    "progress": {
+      "fractionCompleted": 1,
+      "modifiedMicros": "1606913361839096",
+      "runningStatus": "",
+      "schemaChange": {}
+    },
+    "payload": {
+      "description": "ALTER TABLE ...",
+      "statement": "",
+      "username": "root",
+      "startedMicros": "1606913361836868",
+      "finishedMicros": "1606913361839914",
+      "descriptorIds": [
+        53
+      ],
+      "error": "",
+      "resumeErrors": [],
+      "cleanupErrors": [],
+      "finalResumeError": null,
+      "lease": null,
+      "noncancelable": false,
+      "schemaChange": {
+        "resumeSpanList": [],
+        "droppedTables": [],
+        "droppedTypes": [],
+        "droppedSchemas": [],
+        "droppedDatabaseId": 0,
+        "descId": 53,
+        "tableMutationId": 0,
+        "formatVersion": 2
+      }
+    }
+  }
+}   
+ ```
 
 Note: this is a “reserved” API endpoint and should not be relied upon to
 build external tools. No guarantee is made about its
