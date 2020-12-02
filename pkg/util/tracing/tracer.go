@@ -50,7 +50,7 @@ const (
 
 var enableNetTrace = settings.RegisterPublicBoolSetting(
 	"trace.debug.enable",
-	"if set, traces for recent requests can be seen in the /debug page",
+	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
 	false,
 )
 
