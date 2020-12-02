@@ -23,11 +23,12 @@ import (
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []roachpb.NodeID, error) {
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, true /* distribute */)
+	distribute := evalCtx.Codec.ForSystemTenant()
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, distribute)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
 	if err != nil {
-		return nil, nil, err
+		return planCtx, []roachpb.NodeID{dsp.gatewayNodeID}, nil //nolint:returnerrcheck
 	}
 	resp, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {

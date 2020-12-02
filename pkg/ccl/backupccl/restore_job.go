@@ -282,6 +282,7 @@ rangeLoop:
 // on that database at the time this function is called.
 func WriteDescriptors(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	txn *kv.Txn,
 	user security.SQLUsername,
 	descsCol *descs.Collection,
@@ -300,7 +301,7 @@ func WriteDescriptors(
 		wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
 		for i := range databases {
 			desc := databases[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, desc, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, desc, user, wroteDBs, descCoverage)
 			if err != nil {
 				return err
 			}
@@ -322,13 +323,13 @@ func WriteDescriptors(
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
 			dKey := catalogkv.MakeDatabaseNameKey(ctx, settings, desc.GetName())
-			b.CPut(dKey.Key(keys.SystemSQLCodec), desc.GetID(), nil)
+			b.CPut(dKey.Key(codec), desc.GetID(), nil)
 		}
 
 		// Write namespace and descriptor entries for each schema.
 		for i := range schemas {
 			sc := schemas[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, sc, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, sc, user, wroteDBs, descCoverage)
 			if err != nil {
 				return err
 			}
@@ -346,12 +347,12 @@ func WriteDescriptors(
 				return err
 			}
 			skey := catalogkeys.NewSchemaKey(sc.GetParentID(), sc.GetName())
-			b.CPut(skey.Key(keys.SystemSQLCodec), sc.GetID(), nil)
+			b.CPut(skey.Key(codec), sc.GetID(), nil)
 		}
 
 		for i := range tables {
 			table := tables[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, table, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, table, user, wroteDBs, descCoverage)
 			if err != nil {
 				return err
 			}
@@ -378,14 +379,14 @@ func WriteDescriptors(
 				table.GetParentSchemaID(),
 				table.GetName(),
 			)
-			b.CPut(tkey.Key(keys.SystemSQLCodec), table.GetID(), nil)
+			b.CPut(tkey.Key(codec), table.GetID(), nil)
 		}
 
 		// Write all type descriptors -- create namespace entries and write to
 		// the system.descriptor table.
 		for i := range types {
 			typ := types[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, typ, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, typ, user, wroteDBs, descCoverage)
 			if err != nil {
 				return err
 			}
@@ -403,7 +404,7 @@ func WriteDescriptors(
 				return err
 			}
 			tkey := catalogkv.MakeObjectNameKey(ctx, settings, typ.GetParentID(), typ.GetParentSchemaID(), typ.GetName())
-			b.CPut(tkey.Key(keys.SystemSQLCodec), typ.GetID(), nil)
+			b.CPut(tkey.Key(codec), typ.GetID(), nil)
 		}
 
 		for _, kv := range extra {
@@ -417,7 +418,7 @@ func WriteDescriptors(
 		}
 		// TODO(ajwerner): Utilize validation inside of the descs.Collection
 		// rather than reaching into the store.
-		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, keys.SystemSQLCodec)
+		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, codec)
 		for _, table := range tables {
 			if err := table.Validate(ctx, dg); err != nil {
 				return errors.Wrapf(err,
@@ -1033,7 +1034,7 @@ func createImportingDescriptors(
 			) error {
 				// Write the new descriptors which are set in the OFFLINE state.
 				if err := WriteDescriptors(
-					ctx, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
+					ctx, p.ExecCfg().Codec, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
 					details.DescriptorCoverage, r.settings, nil, /* extra */
 				); err != nil {
 					return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
@@ -1549,7 +1550,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 					return err
 				}
 			}
-			return r.dropDescriptors(ctx, execCfg.JobRegistry, txn, descsCol)
+			return r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol)
 		})
 }
 
@@ -1557,7 +1558,11 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 // TODO (lucy): If the descriptors have already been published, we need to queue
 // drop jobs for all the descriptors.
 func (r *restoreResumer) dropDescriptors(
-	ctx context.Context, jr *jobs.Registry, txn *kv.Txn, descsCol *descs.Collection,
+	ctx context.Context,
+	jr *jobs.Registry,
+	codec keys.SQLCodec,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
@@ -1606,7 +1611,7 @@ func (r *restoreResumer) dropDescriptors(
 		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
 			ctx,
 			b,
-			keys.SystemSQLCodec,
+			codec,
 			tableToDrop.ParentID,
 			tableToDrop.GetParentSchemaID(),
 			tableToDrop.Name,
@@ -1625,13 +1630,13 @@ func (r *restoreResumer) dropDescriptors(
 		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
 			ctx,
 			b,
-			keys.SystemSQLCodec,
+			codec,
 			typDesc.ParentID,
 			typDesc.ParentSchemaID,
 			typDesc.Name,
 			false, /* kvTrace */
 		)
-		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
+		b.Del(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
 	}
 
 	// Queue a GC job.
@@ -1693,13 +1698,13 @@ func (r *restoreResumer) dropDescriptors(
 		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
 			ctx,
 			b,
-			keys.SystemSQLCodec,
+			codec,
 			sc.ParentID,
 			keys.RootNamespaceID,
 			sc.Name,
 			false, /* kvTrace */
 		)
-		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
+		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.ID))
 		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc.SchemaDesc())
 	}
 
@@ -1717,9 +1722,9 @@ func (r *restoreResumer) dropDescriptors(
 			log.Warningf(ctx, "preserving database %s on restore failure because it contains new child objects or schemas", db.GetName())
 			continue
 		}
-		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, db.GetID())
+		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
-		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(keys.SystemSQLCodec))
+		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(codec))
 		deletedDBs[db.GetID()] = struct{}{}
 	}
 
@@ -1829,6 +1834,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 
 func getRestoringPrivileges(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	txn *kv.Txn,
 	desc catalog.Descriptor,
 	user security.SQLUsername,
@@ -1854,7 +1860,7 @@ func getRestoringPrivileges(
 				updatedPrivileges = wrote.GetPrivileges()
 			}
 		} else {
-			parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, desc.GetParentID())
+			parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, desc.GetParentID())
 			if err != nil {
 				return nil, errors.Wrapf(err,
 					"failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
