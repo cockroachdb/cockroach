@@ -39,7 +39,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -1113,11 +1112,6 @@ type logicTest struct {
 	curPath   string
 	curLineNo int
 
-	// randomizedVectorizedBatchSize stores the randomized batch size for
-	// vectorized engine if it is not turned off. The batch size will randomly be
-	// set to 1 with 25% probability, {2, 3} with 25% probability or default batch
-	// size with 50% probability.
-	randomizedVectorizedBatchSize int
 	// randomizedMutationsMaxBatchSize stores the randomized max batch size for
 	// the mutation operations. The max batch size will randomly be set to 1
 	// with 25% probability, a random value in [2, 100] range with 25%
@@ -1462,12 +1456,6 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		// queries (relative to the mode) through the vectorized execution engine.
 		if _, err := conn.Exec(
 			"SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold = 0",
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := conn.Exec(
-			"SET CLUSTER SETTING sql.testing.vectorize.batch_size = $1", t.randomizedVectorizedBatchSize,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -3073,12 +3061,7 @@ func RunLogicTestWithDefaultConfig(
 		}
 	}
 
-	// Determining whether or not to randomize vectorized batch size.
 	rng, _ := randutil.NewPseudoRand()
-	randomizedVectorizedBatchSize := randomValue(rng, []int{1, 2, 3}, []float64{0.25, 0.125, 0.125}, coldata.BatchSize())
-	if randomizedVectorizedBatchSize != coldata.BatchSize() {
-		t.Log(fmt.Sprintf("randomize coldata.BatchSize to %d", randomizedVectorizedBatchSize))
-	}
 	randomizedMutationsMaxBatchSize := mutations.MaxBatchSize()
 	// Temporarily disable this randomization because of #54948.
 	// TODO(yuzefovich): re-enable it once the issue is figured out.
@@ -3147,7 +3130,6 @@ func RunLogicTestWithDefaultConfig(
 						verbose:                         verbose,
 						perErrorSummary:                 make(map[string][]string),
 						rng:                             rng,
-						randomizedVectorizedBatchSize:   randomizedVectorizedBatchSize,
 						randomizedMutationsMaxBatchSize: randomizedMutationsMaxBatchSize,
 					}
 					if *printErrorSummary {
