@@ -333,3 +333,16 @@ DROP DATABASE d
 
 query I
 SELECT id FROM system.namespace WHERE name LIKE 'd_t%'
+
+subtest regression_57187
+
+statement ok
+CREATE DATABASE d;
+CREATE TYPE d."a<b" AS ENUM('hello');
+CREATE TYPE d."b+c" AS ENUM('hello')
+
+statement ok
+DROP TYPE d."b+c"
+
+statement ok
+DROP DATABASE d

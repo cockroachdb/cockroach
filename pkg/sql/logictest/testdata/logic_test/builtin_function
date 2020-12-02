@@ -1927,6 +1927,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('bool'::regtype, -1)),
        (format_type('bytea'::regtype, -1)),
        (format_type('char'::regtype, -1)),
+       (format_type('"char"'::regtype, -1)),
        (format_type('date'::regtype, -1)),
        (format_type('decimal'::regtype, -1)),
        (format_type('float'::regtype, -1)),
@@ -1960,12 +1961,15 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('int[]'::regtype, -1)),
        (format_type('int2[]'::regtype, -1)),
        (format_type('string[]'::regtype, -1)),
-       (format_type('varchar[]'::regtype, -1))
+       (format_type('varchar[]'::regtype, -1)),
+       (format_type('pg_catalog.int4'::regtype, -1)),
+       (format_type('pg_catalog.int2'::regtype, -1))
 ----
 anyelement
 bit
 boolean
 bytea
+bpchar
 bpchar
 date
 numeric
@@ -2001,6 +2005,8 @@ bigint[]
 smallint[]
 text[]
 character varying[]
+integer
+smallint
 
 query T
 VALUES (format_type('anyelement'::regtype, NULL)),
