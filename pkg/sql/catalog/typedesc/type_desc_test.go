@@ -360,6 +360,13 @@ func TestValidateTypeDesc(t *testing.T) {
 		ID:   102,
 		Name: "type",
 	})
+	descs[200] = dbdesc.NewImmutable(descpb.DatabaseDescriptor{
+		Name: "multi-region-db",
+		ID:   200,
+		RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
+			Regions: descpb.Regions{"us-east-1"},
+		},
+	})
 
 	defaultPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
 	invalidPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
@@ -435,7 +442,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			descpb.TypeDescriptor{
 				Name:     "t",
 				ID:       typeDescID,
-				ParentID: 1,
+				ParentID: 200,
 				Kind:     descpb.TypeDescriptor_MULTIREGION_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
@@ -524,7 +531,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			"arrayTypeID 500 does not exist",
+			`arrayTypeID 500 does not exist for "ENUM"`,
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,
@@ -533,6 +540,24 @@ func TestValidateTypeDesc(t *testing.T) {
 				Kind:           descpb.TypeDescriptor_ENUM,
 				ArrayTypeID:    500,
 				Privileges:     defaultPrivileges,
+			},
+		},
+		{
+			`arrayTypeID 500 does not exist for "MULTIREGION_ENUM"`,
+			descpb.TypeDescriptor{
+				Name:           "t",
+				ID:             typeDescID,
+				ParentID:       200,
+				ParentSchemaID: 101,
+				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{1},
+					},
+				},
+				ArrayTypeID: 500,
+				Privileges:  defaultPrivileges,
 			},
 		},
 		{
@@ -551,11 +576,18 @@ func TestValidateTypeDesc(t *testing.T) {
 		{
 			"referencing descriptor 500 does not exist",
 			descpb.TypeDescriptor{
-				Name:                     "t",
-				ID:                       typeDescID,
-				ParentID:                 100,
-				ParentSchemaID:           101,
-				Kind:                     descpb.TypeDescriptor_MULTIREGION_ENUM,
+				Name:           "t",
+				ID:             typeDescID,
+				ParentID:       200,
+				ParentSchemaID: 101,
+				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{1},
+					},
+				},
+				ArrayTypeID:              102,
 				ReferencingDescriptorIDs: []descpb.ID{500},
 				Privileges:               defaultPrivileges,
 			},
@@ -570,6 +602,46 @@ func TestValidateTypeDesc(t *testing.T) {
 				Kind:           descpb.TypeDescriptor_ENUM,
 				ArrayTypeID:    102,
 				Privileges:     invalidPrivileges,
+			},
+		},
+		{
+			"unexpected number of regions on db desc: 1 expected 2",
+			descpb.TypeDescriptor{
+				Name:           "t",
+				ID:             typeDescID,
+				ParentID:       200,
+				ParentSchemaID: 101,
+				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-1",
+						PhysicalRepresentation: []byte{1},
+					},
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{2},
+					},
+				},
+				ArrayTypeID: 102,
+				Privileges:  defaultPrivileges,
+			},
+		},
+		{
+			`did not find "us-east-2" region on database descriptor`,
+			descpb.TypeDescriptor{
+				Name:           "t",
+				ID:             typeDescID,
+				ParentID:       200,
+				ParentSchemaID: 101,
+				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{2},
+					},
+				},
+				ArrayTypeID: 102,
+				Privileges:  defaultPrivileges,
 			},
 		},
 	}

@@ -127,3 +127,8 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 func (*createDatabaseNode) Next(runParams) (bool, error) { return false, nil }
 func (*createDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 func (*createDatabaseNode) Close(context.Context)        {}
+
+// ReadingOwnWrites implements the planNodeReadingOwnWrites Interface. This is
+// required because we create a type descriptor for multi-region databases,
+// which must be read during validation.
+func (*createDatabaseNode) ReadingOwnWrites() {}
