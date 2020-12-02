@@ -5,7 +5,10 @@ go_library(
     srcs = ["cgroups.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/cgroups",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = [
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
 )
 
 go_test(
