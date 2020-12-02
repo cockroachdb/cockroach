@@ -62,7 +62,7 @@ func runDebugResetQuorum(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("ok; please verify https://<ui>/#/reports/range/%d", rangeID)
+	fmt.Printf("ok; please verify https://<console>/#/reports/range/%d", rangeID)
 
 	return nil
 }
