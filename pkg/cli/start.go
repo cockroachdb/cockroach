@@ -16,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -353,6 +355,20 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
 	grpcutil.LowerSeverity(severity.WARNING)
+
+	// Tweak GOMAXPROCS if we're in a cgroup / container that has cpu limits set.
+	// The GO default for GOMAXPROCS is runtime.NumCPU(), however this is less
+	// than ideal if the cgruop is limited to a number lower than that.
+	if _, set := os.LookupEnv("GOMAXPROCS"); !set {
+		if cpuInfo, err := cgroups.GetCgroupCPU(); err == nil {
+			numCPUToUse := int(math.Ceil(cpuInfo.CPUShares()))
+			if numCPUToUse > runtime.NumCPU() || numCPUToUse <= 0 {
+				numCPUToUse = runtime.NumCPU()
+			}
+			log.Infof(ctx, "running in a container; setting GOMAXPROCS to %d", numCPUToUse)
+			runtime.GOMAXPROCS(numCPUToUse)
+		}
+	}
 
 	// Check the --join flag.
 	if !flagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
