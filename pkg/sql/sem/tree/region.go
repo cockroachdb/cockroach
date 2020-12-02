@@ -36,6 +36,7 @@ type Locality struct {
 
 // Format implements the NodeFormatter interface.
 func (node *Locality) Format(ctx *FmtCtx) {
+	ctx.WriteString("LOCALITY ")
 	switch node.LocalityLevel {
 	case LocalityLevelGlobal:
 		ctx.WriteString("GLOBAL")
