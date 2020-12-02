@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
-// AlterTableRegionalAffinity transforms a tree.AlterTableRegionalAffinity into a plan node.
-func (p *planner) AlterTableRegionalAffinity(
-	ctx context.Context, n *tree.AlterTableRegionalAffinity,
+// AlterTableLocality transforms a tree.AlterTableLocality into a plan node.
+func (p *planner) AlterTableLocality(
+	ctx context.Context, n *tree.AlterTableLocality,
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
