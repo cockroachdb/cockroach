@@ -85,6 +85,7 @@ type DatabaseDescriptor interface {
 
 	Regions() descpb.Regions
 	IsMultiRegion() bool
+	PrimaryRegion() descpb.Region
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.

@@ -437,6 +437,17 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		return errors.AssertionFailedf("invalid desc kind %s", desc.Kind.String())
 	}
 
+	switch desc.Kind {
+	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		if desc.PrimaryRegion == "" {
+			return errors.AssertionFailedf("no primary region on %s type desc", desc.Kind.String())
+		}
+	default:
+		if desc.PrimaryRegion != "" {
+			return errors.AssertionFailedf("found primary region on %s type desc", desc.Kind.String())
+		}
+	}
+
 	// Validate all cross references on the descriptor.
 
 	// Buffer all the requested requests and error checks together to run at once.
@@ -452,21 +463,21 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		return nil
 	})
 
-	// Validate regions on the parent database and the type descriptor are
-	// consistent.
 	switch desc.Kind {
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		// Validate regions on the parent database and the type descriptor are
+		// consistent.
 		reqs = append(reqs, desc.ParentID)
 		checks = append(checks, func(got catalog.Descriptor) error {
 			dbDesc, isDB := got.(catalog.DatabaseDescriptor)
-
-			// Parent database must be a multi-region database if it includes a
-			// multi-region type enum.
-			if !dbDesc.IsMultiRegion() {
-				return errors.AssertionFailedf("parent database is not a multi-region database")
-			}
 			if !isDB {
 				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+			}
+			// Parent database must be a multi-region database if it includes a
+			// multi-region type enum.
+
+			if !dbDesc.IsMultiRegion() {
+				return errors.AssertionFailedf("parent database is not a multi-region database")
 			}
 
 			if len(desc.EnumMembers) != len(dbDesc.Regions()) {
@@ -485,6 +496,21 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 				if _, ok := regions[enumRegion]; !ok {
 					return errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion)
 				}
+			}
+			return nil
+		})
+
+		// Validate the primary region on the parent database and the type
+		// descriptor is consistent.
+		reqs = append(reqs, desc.ParentID)
+		checks = append(checks, func(got catalog.Descriptor) error {
+			dbDesc, isDB := got.(catalog.DatabaseDescriptor)
+			if !isDB {
+				return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+			}
+			if dbDesc.PrimaryRegion() != desc.PrimaryRegion {
+				return errors.AssertionFailedf("unexpected primary region on db desc: %q expected %q",
+					dbDesc.PrimaryRegion(), desc.PrimaryRegion)
 			}
 			return nil
 		})

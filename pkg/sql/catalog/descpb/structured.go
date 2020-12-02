@@ -335,3 +335,8 @@ func (desc *DatabaseDescriptor) IsMultiRegion() bool {
 func (desc *DatabaseDescriptor) Regions() Regions {
 	return desc.RegionConfig.Regions
 }
+
+// PrimaryRegion returns the primary region for a multi-region database.
+func (desc *DatabaseDescriptor) PrimaryRegion() Region {
+	return desc.RegionConfig.PrimaryRegion
+}
