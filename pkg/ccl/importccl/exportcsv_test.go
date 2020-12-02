@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
+	"github.com/jackc/pgx"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -431,4 +434,42 @@ func TestExportFeatureFlag(t *testing.T) {
 	// Feature flag is on — test that EXPORT does not error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = TRUE`)
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flags`)
+}
+
+func TestExportPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE USER testuser`)
+	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
+
+	pgURL, cleanup := sqlutils.PGUrl(t, srv.ServingSQLAddr(),
+		"TestExportPrivileges-testuser", url.User("testuser"))
+	defer cleanup()
+	connCfg, err := pgx.ParseConnectionString(pgURL.String())
+	assert.NoError(t, err)
+	conn, err := pgx.Connect(connCfg)
+	assert.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	_, err = conn.Exec(`EXPORT INTO CSV 'nodelocalL://0/privs' FROM TABLE privs`)
+	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
+
+	// Grant SELECT privilege.
+	sqlDB.Exec(t, `GRANT SELECT ON TABLE privs TO testuser`)
+
+	_, err = conn.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
+	require.True(t, testutils.IsError(err,
+		"only users with the admin role are allowed to EXPORT to the specified destination"))
+
+	// Grant ADMIN privilege.
+	sqlDB.Exec(t, `GRANT ADMIN TO testuser`)
+
+	_, err = conn.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
+	require.NoError(t, err)
 }

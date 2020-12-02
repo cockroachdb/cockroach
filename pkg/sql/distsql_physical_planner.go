@@ -3536,6 +3536,10 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 	if err != nil {
 		return nil, err
 	}
+	isAdmin, err := planCtx.planner.HasAdminRole(planCtx.ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	core := execinfrapb.ProcessorCoreUnion{CSVWriter: &execinfrapb.CSVWriterSpec{
 		Destination:      n.destination,
@@ -3543,6 +3547,8 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 		Options:          n.csvOpts,
 		ChunkRows:        int64(n.chunkRows),
 		CompressionCodec: n.fileCompression,
+		UserProto:        planCtx.planner.User().EncodeProto(),
+		IsAdmin:          isAdmin,
 	}}
 
 	resTypes := make([]*types.T, len(colinfo.ExportColumns))

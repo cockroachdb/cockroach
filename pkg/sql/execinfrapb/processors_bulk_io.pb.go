@@ -71,7 +71,7 @@ func (x *FileCompression) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (FileCompression) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{0}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{0}
 }
 
 type BackfillerSpec_Type int32
@@ -110,7 +110,7 @@ func (x *BackfillerSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (BackfillerSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{0, 0}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{0, 0}
 }
 
 // BackfillerSpec is the specification for a "schema change backfiller".
@@ -142,7 +142,7 @@ func (m *BackfillerSpec) Reset()         { *m = BackfillerSpec{} }
 func (m *BackfillerSpec) String() string { return proto.CompactTextString(m) }
 func (*BackfillerSpec) ProtoMessage()    {}
 func (*BackfillerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{0}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{0}
 }
 func (m *BackfillerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -182,7 +182,7 @@ func (m *JobProgress) Reset()         { *m = JobProgress{} }
 func (m *JobProgress) String() string { return proto.CompactTextString(m) }
 func (*JobProgress) ProtoMessage()    {}
 func (*JobProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{1}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{1}
 }
 func (m *JobProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -245,7 +245,7 @@ func (m *ReadImportDataSpec) Reset()         { *m = ReadImportDataSpec{} }
 func (m *ReadImportDataSpec) String() string { return proto.CompactTextString(m) }
 func (*ReadImportDataSpec) ProtoMessage()    {}
 func (*ReadImportDataSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{2}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{2}
 }
 func (m *ReadImportDataSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -283,7 +283,7 @@ func (m *ReadImportDataSpec_ImportTable) Reset()         { *m = ReadImportDataSp
 func (m *ReadImportDataSpec_ImportTable) String() string { return proto.CompactTextString(m) }
 func (*ReadImportDataSpec_ImportTable) ProtoMessage()    {}
 func (*ReadImportDataSpec_ImportTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{2, 0}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{2, 0}
 }
 func (m *ReadImportDataSpec_ImportTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -329,7 +329,7 @@ func (m *BackupDataSpec) Reset()         { *m = BackupDataSpec{} }
 func (m *BackupDataSpec) String() string { return proto.CompactTextString(m) }
 func (*BackupDataSpec) ProtoMessage()    {}
 func (*BackupDataSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{3}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{3}
 }
 func (m *BackupDataSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -368,7 +368,7 @@ func (m *RestoreSpanEntry) Reset()         { *m = RestoreSpanEntry{} }
 func (m *RestoreSpanEntry) String() string { return proto.CompactTextString(m) }
 func (*RestoreSpanEntry) ProtoMessage()    {}
 func (*RestoreSpanEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{4}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{4}
 }
 func (m *RestoreSpanEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -406,7 +406,7 @@ func (m *RestoreDataSpec) Reset()         { *m = RestoreDataSpec{} }
 func (m *RestoreDataSpec) String() string { return proto.CompactTextString(m) }
 func (*RestoreDataSpec) ProtoMessage()    {}
 func (*RestoreDataSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{5}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{5}
 }
 func (m *RestoreDataSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -440,7 +440,7 @@ func (m *SplitAndScatterSpec) Reset()         { *m = SplitAndScatterSpec{} }
 func (m *SplitAndScatterSpec) String() string { return proto.CompactTextString(m) }
 func (*SplitAndScatterSpec) ProtoMessage()    {}
 func (*SplitAndScatterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{6}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{6}
 }
 func (m *SplitAndScatterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -473,7 +473,7 @@ func (m *SplitAndScatterSpec_RestoreEntryChunk) Reset()         { *m = SplitAndS
 func (m *SplitAndScatterSpec_RestoreEntryChunk) String() string { return proto.CompactTextString(m) }
 func (*SplitAndScatterSpec_RestoreEntryChunk) ProtoMessage()    {}
 func (*SplitAndScatterSpec_RestoreEntryChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{6, 0}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{6, 0}
 }
 func (m *SplitAndScatterSpec_RestoreEntryChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -514,13 +514,16 @@ type CSVWriterSpec struct {
 	// User who initiated the export. This is used to check access privileges
 	// when using FileTable ExternalStorage.
 	UserProto github_com_cockroachdb_cockroach_pkg_security.SQLUsernameProto `protobuf:"bytes,6,opt,name=user_proto,json=userProto,casttype=github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto" json:"user_proto"`
+	// true if the user has admin privileges. This is required to check external storage
+	// access privileges when setting up the export processor.
+	IsAdmin bool `protobuf:"varint,7,opt,name=is_admin,json=isAdmin" json:"is_admin"`
 }
 
 func (m *CSVWriterSpec) Reset()         { *m = CSVWriterSpec{} }
 func (m *CSVWriterSpec) String() string { return proto.CompactTextString(m) }
 func (*CSVWriterSpec) ProtoMessage()    {}
 func (*CSVWriterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{7}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{7}
 }
 func (m *CSVWriterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -555,7 +558,7 @@ func (m *BulkRowWriterSpec) Reset()         { *m = BulkRowWriterSpec{} }
 func (m *BulkRowWriterSpec) String() string { return proto.CompactTextString(m) }
 func (*BulkRowWriterSpec) ProtoMessage()    {}
 func (*BulkRowWriterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_e62f5714e36bbbd6, []int{8}
+	return fileDescriptor_processors_bulk_io_d345bc44eefe162b, []int{8}
 }
 func (m *BulkRowWriterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1209,6 +1212,14 @@ func (m *CSVWriterSpec) MarshalTo(dAtA []byte) (int, error) {
 	i++
 	i = encodeVarintProcessorsBulkIo(dAtA, i, uint64(len(m.UserProto)))
 	i += copy(dAtA[i:], m.UserProto)
+	dAtA[i] = 0x38
+	i++
+	if m.IsAdmin {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i++
 	return i, nil
 }
 
@@ -1497,6 +1508,7 @@ func (m *CSVWriterSpec) Size() (n int) {
 	n += 1 + sovProcessorsBulkIo(uint64(m.CompressionCodec))
 	l = len(m.UserProto)
 	n += 1 + l + sovProcessorsBulkIo(uint64(l))
+	n += 2
 	return n
 }
 
@@ -3722,6 +3734,26 @@ func (m *CSVWriterSpec) Unmarshal(dAtA []byte) error {
 			}
 			m.UserProto = github_com_cockroachdb_cockroach_pkg_security.SQLUsernameProto(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsAdmin", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessorsBulkIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsAdmin = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipProcessorsBulkIo(dAtA[iNdEx:])
@@ -3929,16 +3961,16 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/processors_bulk_io.proto", fileDescriptor_processors_bulk_io_e62f5714e36bbbd6)
+	proto.RegisterFile("sql/execinfrapb/processors_bulk_io.proto", fileDescriptor_processors_bulk_io_d345bc44eefe162b)
 }
 
-var fileDescriptor_processors_bulk_io_e62f5714e36bbbd6 = []byte{
-	// 1673 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_processors_bulk_io_d345bc44eefe162b = []byte{
+	// 1692 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x58, 0x4f, 0x6f, 0x1b, 0xc7,
 	0x15, 0xd7, 0x92, 0x4b, 0x8a, 0x7c, 0xb4, 0x24, 0x6a, 0xe2, 0xa4, 0x5b, 0x01, 0x95, 0x04, 0x26,
 	0x72, 0x59, 0x17, 0x26, 0x11, 0xbb, 0x2d, 0x8c, 0xb6, 0x89, 0x6b, 0x52, 0x96, 0x43, 0x39, 0xb1,
 	0xd5, 0xa5, 0xa5, 0x00, 0x41, 0x8b, 0xc5, 0x72, 0x77, 0x44, 0x8d, 0xb9, 0xdc, 0x59, 0xcd, 0xcc,
-	0xca, 0xa6, 0x4f, 0x05, 0x7a, 0xea, 0xad, 0x1f, 0xa1, 0xdf, 0xa0, 0xfd, 0x0e, 0xbd, 0xf8, 0x98,
+	0xca, 0xa6, 0x4f, 0x05, 0xfa, 0x05, 0xfa, 0x11, 0x7a, 0xee, 0xa5, 0xfd, 0x0e, 0xbd, 0xf8, 0x98,
 	0x63, 0x4e, 0x46, 0x2b, 0x7f, 0x8b, 0x9e, 0x8a, 0xf9, 0xb3, 0xd4, 0x4a, 0xa6, 0x64, 0x29, 0x86,
 	0x2f, 0xf4, 0x7a, 0xde, 0xfc, 0x7e, 0xf3, 0xe6, 0xcd, 0x7b, 0xbf, 0x37, 0x23, 0x68, 0xf2, 0xc3,
 	0xa8, 0x8d, 0x5f, 0xe0, 0x80, 0xc4, 0xfb, 0xcc, 0x4f, 0x06, 0xed, 0x84, 0xd1, 0x00, 0x73, 0x4e,
@@ -4021,22 +4053,23 @@ var fileDescriptor_processors_bulk_io_e62f5714e36bbbd6 = []byte{
 	0x72, 0xe9, 0x74, 0xcd, 0x14, 0xde, 0xa3, 0x66, 0x7a, 0x50, 0x66, 0x58, 0xf5, 0x7b, 0x7d, 0xeb,
 	0xfd, 0xe5, 0x3b, 0x23, 0x62, 0x2e, 0xbf, 0x23, 0x3c, 0xc9, 0x6e, 0x29, 0x9a, 0x40, 0xde, 0x52,
 	0x4c, 0x82, 0x6b, 0x51, 0xfa, 0xd5, 0x45, 0x2d, 0xe5, 0x54, 0x5c, 0x2e, 0xcc, 0xf0, 0xf7, 0xc8,
-	0x9a, 0x7f, 0x14, 0xe0, 0xa3, 0x7e, 0x12, 0x11, 0x71, 0x3f, 0x0e, 0xfb, 0x81, 0x2f, 0x84, 0x79,
+	0x9a, 0xbf, 0x17, 0xe0, 0xa3, 0x7e, 0x12, 0x11, 0x71, 0x3f, 0x0e, 0xfb, 0x81, 0x2f, 0x84, 0x79,
 	0x76, 0xfc, 0x19, 0xca, 0xea, 0x5e, 0x9d, 0x75, 0x80, 0x7b, 0xe7, 0x7b, 0x3a, 0x03, 0x9e, 0x79,
 	0xaf, 0xfc, 0xe9, 0x4a, 0x9e, 0x2c, 0x10, 0x9a, 0x34, 0x17, 0xd3, 0xc2, 0x7b, 0xc6, 0x74, 0xc5,
 	0x83, 0xe5, 0xb7, 0x56, 0x43, 0xdb, 0x30, 0x8f, 0xe5, 0x35, 0x1a, 0x67, 0xfe, 0xdf, 0x7c, 0x67,
-	0xa4, 0xa7, 0x45, 0x63, 0xf8, 0x33, 0x82, 0xc6, 0xdf, 0x8a, 0xb0, 0xd0, 0xed, 0xef, 0x7d, 0xcb,
+	0xa4, 0xa7, 0x45, 0x63, 0xf8, 0x33, 0x82, 0xc6, 0x3f, 0x8a, 0xb0, 0xd0, 0xed, 0xef, 0x7d, 0xcb,
 	0x48, 0x16, 0x9c, 0x1b, 0xb2, 0x3d, 0x71, 0x41, 0x62, 0xfd, 0x84, 0x51, 0x85, 0x9d, 0xe5, 0x60,
 	0xce, 0x80, 0x7e, 0x0e, 0xd7, 0xa4, 0x52, 0x78, 0x89, 0x0a, 0x8c, 0xce, 0xc2, 0xe9, 0x44, 0xa5,
 	0x21, 0xda, 0x80, 0xbe, 0x80, 0x79, 0xaa, 0x33, 0x4f, 0x15, 0x4b, 0x6d, 0x66, 0xc3, 0xe8, 0xf6,
 	0xf7, 0x4c, 0x7a, 0x66, 0x1e, 0x1a, 0xcc, 0xc9, 0xe3, 0x88, 0xd1, 0xe7, 0xdc, 0xbc, 0xa8, 0xf2,
 	0x8f, 0x23, 0x97, 0x3e, 0xe7, 0xe8, 0x4f, 0xb0, 0x1c, 0xd0, 0x71, 0x22, 0x6b, 0x8f, 0xd0, 0xd8,
 	0x0b, 0x68, 0x88, 0x03, 0xd3, 0x9e, 0x2e, 0x78, 0xc7, 0xc9, 0xf2, 0xe8, 0x9e, 0xc0, 0x0c, 0x6d,
-	0x3d, 0xc7, 0xd4, 0x95, 0x44, 0x67, 0x34, 0xb6, 0xfc, 0x81, 0x34, 0xb6, 0xf1, 0x2d, 0x2c, 0x77,
-	0xd2, 0x48, 0x6e, 0x28, 0x77, 0x1c, 0xd3, 0x97, 0xad, 0xf5, 0xa3, 0x5f, 0xb6, 0x37, 0x37, 0x60,
-	0xe9, 0xcc, 0x56, 0x51, 0x05, 0xec, 0xc7, 0x34, 0xc6, 0xf5, 0x39, 0xf9, 0xf5, 0xf0, 0x25, 0x49,
-	0xea, 0x56, 0xe7, 0xd6, 0xab, 0xff, 0xae, 0xce, 0xbd, 0x3a, 0x5e, 0xb5, 0xbe, 0x3f, 0x5e, 0xb5,
-	0x7e, 0x38, 0x5e, 0xb5, 0xfe, 0x73, 0xbc, 0x6a, 0xfd, 0xfd, 0xcd, 0xea, 0xdc, 0xf7, 0x6f, 0x56,
-	0xe7, 0x7e, 0x78, 0xb3, 0x3a, 0xf7, 0x5d, 0x2d, 0xf7, 0xc7, 0x83, 0xff, 0x07, 0x00, 0x00, 0xff,
-	0xff, 0x3b, 0xa7, 0xba, 0x6f, 0xe9, 0x10, 0x00, 0x00,
+	0x3d, 0xc7, 0xd4, 0x95, 0x44, 0x67, 0x34, 0xb6, 0xfc, 0x81, 0x34, 0x16, 0xad, 0x41, 0x85, 0x70,
+	0xcf, 0x0f, 0xc7, 0x24, 0x56, 0x6d, 0x2b, 0xbb, 0x7d, 0xcf, 0x13, 0x7e, 0x5f, 0x0e, 0x36, 0xbe,
+	0x85, 0xe5, 0x4e, 0x1a, 0xc9, 0x1d, 0xe7, 0xce, 0x6b, 0xfa, 0xf4, 0xb5, 0x7e, 0xf4, 0xd3, 0xf7,
+	0xe6, 0x06, 0x2c, 0x9d, 0x89, 0x05, 0xaa, 0x80, 0xfd, 0x98, 0xc6, 0xb8, 0x3e, 0x27, 0xbf, 0x1e,
+	0xbe, 0x24, 0x49, 0xdd, 0xea, 0xdc, 0x7a, 0xf5, 0xdf, 0xd5, 0xb9, 0x57, 0xc7, 0xab, 0xd6, 0xf7,
+	0xc7, 0xab, 0xd6, 0x0f, 0xc7, 0xab, 0xd6, 0x7f, 0x8e, 0x57, 0xad, 0xbf, 0xbd, 0x59, 0x9d, 0xfb,
+	0xfe, 0xcd, 0xea, 0xdc, 0x0f, 0x6f, 0x56, 0xe7, 0xbe, 0xab, 0xe5, 0xfe, 0xba, 0xf0, 0xff, 0x00,
+	0x00, 0x00, 0xff, 0xff, 0xef, 0xd3, 0x2c, 0x8b, 0x0a, 0x11, 0x00, 0x00,
 }

@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -131,6 +133,20 @@ func newCSVWriterProcessor(
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
+	// Check if the user setting up the processor has sufficient privileges to access the
+	// ExternalStorage destination.
+	if !spec.IsAdmin {
+		hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(spec.Destination)
+		if err != nil {
+			return nil, err
+		}
+		if !hasExplicitAuth {
+			return nil, pgerror.Newf(
+				pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to EXPORT to the specified destination",
+				uriScheme)
+		}
+	}
 
 	c := &csvWriter{
 		flowCtx:     flowCtx,

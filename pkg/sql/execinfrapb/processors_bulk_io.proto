@@ -208,6 +208,10 @@ message CSVWriterSpec {
   // User who initiated the export. This is used to check access privileges
   // when using FileTable ExternalStorage.
   optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+
+  // true if the user has admin privileges. This is required to check external storage
+  // access privileges when setting up the export processor.
+  optional bool is_admin = 7 [(gogoproto.nullable) = false];
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and
