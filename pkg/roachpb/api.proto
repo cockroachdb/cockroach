@@ -2091,6 +2091,24 @@ message RangeFeedEvent {
   RangeFeedError      error      = 3;
 }
 
+
+// ResetQuorumRequest makes a range that is unavailable due to lost quorum
+// available again, at the cost of losing all of the data in the range. Any
+// existing replica, even one residing on the target node, will irrevocably
+// be removed. ResetQuorumRequest first uses meta2 to identify the range
+// descriptor. Then, it removes all replicas from the range descriptor and
+// adds a store from the target node as the one designated survivor replica.
+// This change is then written to meta2 and sent as a snapshot to a store
+// local to the target node.
+//
+// This RPC is called by the user directly and will not work for ranges
+// that have not lost quorum or for a meta range.
+message ResetQuorumRequest {
+  int32 range_id = 1 [(gogoproto.customname) = "RangeID"];
+}
+
+message ResetQuorumResponse {}
+
 // GossipSubscriptionRequest initiates a game of telephone. It establishes an
 // indefinite stream that proxies gossip information overheard by the recipient
 // node back to the caller. Gossip information is filtered down to just those
@@ -2137,6 +2155,7 @@ service Internal {
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+  rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
 
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
