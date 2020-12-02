@@ -314,7 +314,7 @@ ORDER BY
 			currentCols = nil
 		}
 
-		coltyp, err := s.typeFromName(typ)
+		coltyp, err := s.typeFromSQLTypeSyntax(typ)
 		if err != nil {
 			return nil, err
 		}

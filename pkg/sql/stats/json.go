@@ -33,7 +33,7 @@ type JSONStatistic struct {
 	NullCount     uint64   `json:"null_count"`
 	// HistogramColumnType is the string representation of the column type for the
 	// histogram (or unset if there is no histogram). Parsable with
-	// tree.ParseType.
+	// tree.GetTypeFromValidSQLSyntax.
 	HistogramColumnType string            `json:"histo_col_type"`
 	HistogramBuckets    []JSONHistoBucket `json:"histo_buckets,omitempty"`
 }
@@ -106,7 +106,7 @@ func (js *JSONStatistic) GetHistogram(
 		return nil, nil
 	}
 	h := &HistogramData{}
-	colTypeRef, err := parser.ParseType(js.HistogramColumnType)
+	colTypeRef, err := parser.GetTypeFromValidSQLSyntax(js.HistogramColumnType)
 	if err != nil {
 		return nil, err
 	}
