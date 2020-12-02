@@ -1,0 +1,14 @@
+eval
+'{}'::JSON - 'foo'
+----
+'{}'
+
+eval
+'{"foo": "bar"}'::JSON - 'foo'
+----
+'{}'
+
+eval
+'{"foo": "bar"}'::JSON - 'bar'
+----
+'{"foo": "bar"}'

@@ -766,3 +766,28 @@ SELECT j FROM t49143 WHERE NOT (j -> 'b' @> '[1]') ORDER BY k
 {"b": 1}
 {"b": 2}
 {"b": [3, 4]}
+
+# Regression tests for #57165 (wrong type conversion in the vectorized engine).
+subtest regression_57165
+
+statement ok
+CREATE TABLE t57165(j JSON, s STRING);
+INSERT INTO t57165 VALUES ('{"foo": "bar"}', 'foo'), ('{"bar": "foo"}', 'bar')
+
+query TT
+SELECT j - 'foo' AS a, j - 'bar' AS b FROM t57165 ORDER BY rowid
+----
+{}              {"foo": "bar"}
+{"bar": "foo"}  {}
+
+query TT
+SELECT '{"foo": "bar"}' - s AS a, '{"bar": "foo"}' - s AS b FROM t57165 ORDER BY rowid
+----
+{}              {"bar": "foo"}
+{"foo": "bar"}  {}
+
+query T
+SELECT j - s FROM t57165
+----
+{}
+{}
