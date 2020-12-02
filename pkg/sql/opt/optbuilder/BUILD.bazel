@@ -66,6 +66,7 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
+        "//pkg/storage/cloud",
         "//pkg/util",
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
