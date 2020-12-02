@@ -387,7 +387,7 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 					panic(err)
 				}
 				tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
-				ds, _ := b.resolveDataSource(&tn, privilege.SELECT)
+				ds, _, _ := b.resolveDataSource(&tn, privilege.SELECT)
 
 				b.viewDeps = append(b.viewDeps, opt.ViewDep{
 					DataSource: ds,
