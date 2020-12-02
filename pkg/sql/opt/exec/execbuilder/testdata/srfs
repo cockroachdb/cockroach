@@ -469,7 +469,7 @@ EXPLAIN (VERBOSE)
         (SELECT a FROM ((SELECT 1 AS a, 1) EXCEPT ALL (SELECT 0, 0)))
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (generate_series)

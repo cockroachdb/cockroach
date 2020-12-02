@@ -1,3 +1,5 @@
+# LogicTest: !fakedist-metadata
+
 statement ok
 CREATE TABLE users (
   id    INT PRIMARY KEY,
@@ -138,13 +140,19 @@ SELECT * FROM users@pk
 1 tom   cat
 2 jerry rat
 
+statement ok
+SET vectorize=on
+
 query T
 EXPLAIN ALTER INDEX users@bar RENAME TO woo
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • rename index
+
+statement ok
+RESET vectorize
 
 # Verify that EXPLAIN did not actually rename the index (#30543)
 query T rowsort

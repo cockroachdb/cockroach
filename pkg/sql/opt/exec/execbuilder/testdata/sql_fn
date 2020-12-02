@@ -15,7 +15,7 @@ query T
 EXPLAIN (VERBOSE) SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT',2)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • root
 │ columns: (addgeometrycolumn)
