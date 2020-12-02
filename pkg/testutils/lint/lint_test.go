@@ -1247,6 +1247,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^geo/geoprojbase/projections.go$`),
 			stream.GrepNot(`^sql/logictest/testdata/logic_test/pg_extension$`),
 			stream.GrepNot(`^sql/opt/testutils/opttester/testfixtures/.*`),
+			stream.GrepNot(`^util/timeutil/lowercase_timezones.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkgDir, s)
 			}),
