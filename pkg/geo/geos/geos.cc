@@ -161,6 +161,12 @@ typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geomet
 
 typedef CR_GEOS_Geometry (*CR_GEOS_Node_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
+typedef CR_GEOS_Geometry (*CR_GEOS_VoronoiDiagram_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                  CR_GEOS_Geometry, double, int);
+
+typedef char (*CR_GEOS_EqualsExact_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                  CR_GEOS_Geometry, double);
+
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
 }  // namespace
@@ -259,6 +265,8 @@ struct CR_GEOS {
   CR_GEOS_ClipByRect_r GEOSClipByRect_r;
 
   CR_GEOS_SharedPaths_r GEOSSharedPaths_r;
+  CR_GEOS_VoronoiDiagram_r GEOSVoronoiDiagram_r;
+  CR_GEOS_EqualsExact_r GEOSEqualsExact_r;
 
   CR_GEOS_Node_r GEOSNode_r;
 
@@ -341,6 +349,8 @@ struct CR_GEOS {
     INIT(GEOSTouches_r);
     INIT(GEOSWithin_r);
     INIT(GEOSRelate_r);
+    INIT(GEOSVoronoiDiagram_r);
+    INIT(GEOSEqualsExact_r);
     INIT(GEOSRelateBoundaryNodeRule_r);
     INIT(GEOSRelatePattern_r);
     INIT(GEOSSharedPaths_r);
@@ -1356,6 +1366,56 @@ CR_GEOS_Status CR_GEOS_Node(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* nodeE
     lib->GEOSGeom_destroy_r(handle, geom);
   }
 
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_VoronoiDiagram(CR_GEOS* lib, CR_GEOS_Slice g, CR_GEOS_Slice env,
+                                      double tolerance, int onlyEdges, CR_GEOS_String* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto geomG = CR_GEOS_GeometryFromSlice(lib, handle, g);
+  CR_GEOS_Geometry geomEnv = nullptr;
+  if (env.data != nullptr) {
+   geomEnv = CR_GEOS_GeometryFromSlice(lib, handle, env);
+  }
+  *ret = {.data = NULL, .len = 0};
+
+  if (geomG != nullptr) {
+    auto r = lib->GEOSVoronoiDiagram_r(handle, geomG, geomEnv, tolerance, onlyEdges);
+    if (r != NULL) {
+      auto srid = lib->GEOSGetSRID_r(handle, r);
+      CR_GEOS_writeGeomToEWKB(lib, handle, r, ret, srid);
+      lib->GEOSGeom_destroy_r(handle, r);
+    }
+    lib->GEOSGeom_destroy_r(handle, geomG);
+  }
+  if (geomEnv != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomEnv);
+  }
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_EqualsExact(CR_GEOS* lib, CR_GEOS_Slice lhs, CR_GEOS_Slice rhs,
+                                      double tolerance, char* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto lhsGeom = CR_GEOS_GeometryFromSlice(lib, handle, lhs);
+  auto rhsGeom = CR_GEOS_GeometryFromSlice(lib, handle, rhs);
+  *ret = 0;
+  if (lhsGeom != nullptr && rhsGeom != nullptr) {
+    auto r = lib->GEOSEqualsExact_r(handle, lhsGeom, rhsGeom, tolerance);
+    *ret = r;
+  }
+  if (lhsGeom != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, lhsGeom);
+  }
+  if (rhsGeom != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, rhsGeom);
+  }
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
 }
