@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -345,6 +346,7 @@ func (dsp *DistSQLPlanner) Run(
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
 
 	recv.outputTypes = plan.GetResultTypes()
+	recv.contendedQueryMetric = dsp.distSQLSrv.Metrics.ContendedQueriesCount
 
 	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
 
@@ -467,6 +469,10 @@ type DistSQLReceiver struct {
 
 	expectedRowsRead int64
 	progressAtomic   *uint64
+
+	// contendedQueryMetric is a Counter that is incremented at most once if the
+	// query produces at least one contention event.
+	contendedQueryMetric *metric.Counter
 }
 
 // rowResultWriter is a subset of CommandResult to be used with the
@@ -668,6 +674,12 @@ func (r *DistSQLReceiver) Push(
 			}
 			meta.Metrics.Release()
 			meta.Release()
+		}
+		if meta.ContentionEvents != nil && r.contendedQueryMetric != nil {
+			// Increment the contended query metric at most once if the query sees at
+			// least one contention event.
+			r.contendedQueryMetric.Inc(1)
+			r.contendedQueryMetric = nil
 		}
 		if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
 			metaWriter.AddMeta(r.ctx, meta)
