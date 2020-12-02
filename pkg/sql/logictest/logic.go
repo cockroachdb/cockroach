@@ -2659,33 +2659,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		}
 	}
 
-	if *rewriteResultsInTestfiles || *rewriteSQL {
-		if query.expectedHash != "" {
-			if query.expectedValues == 1 {
-				t.emit(fmt.Sprintf("1 value hashing to %s", query.expectedHash))
-			} else {
-				t.emit(fmt.Sprintf("%d values hashing to %s", query.expectedValues, query.expectedHash))
-			}
-		}
-
-		if query.checkResults {
-			// If the results match or we're not rewriting, emit them the way they were originally
-			// formatted/ordered in the testfile. Otherwise, emit the actual results.
-			if !*rewriteResultsInTestfiles || reflect.DeepEqual(query.expectedResults, actualResults) {
-				for _, l := range query.expectedResultsRaw {
-					t.emit(l)
-				}
-			} else {
-				// Emit the actual results.
-				for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
-					t.emit(line)
-				}
-			}
-		}
-		return nil
-	}
-
-	if query.checkResults {
+	resultsMatch := func() error {
 		makeError := func() error {
 			var buf bytes.Buffer
 			fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
@@ -2726,6 +2700,39 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			if !resultMatches {
 				return makeError()
 			}
+		}
+		return nil
+	}
+
+	if *rewriteResultsInTestfiles || *rewriteSQL {
+		if query.expectedHash != "" {
+			if query.expectedValues == 1 {
+				t.emit(fmt.Sprintf("1 value hashing to %s", query.expectedHash))
+			} else {
+				t.emit(fmt.Sprintf("%d values hashing to %s", query.expectedValues, query.expectedHash))
+			}
+		}
+
+		if query.checkResults {
+			// If the results match or we're not rewriting, emit them the way they were originally
+			// formatted/ordered in the testfile. Otherwise, emit the actual results.
+			if !*rewriteResultsInTestfiles || resultsMatch() == nil {
+				for _, l := range query.expectedResultsRaw {
+					t.emit(l)
+				}
+			} else {
+				// Emit the actual results.
+				for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
+					t.emit(line)
+				}
+			}
+		}
+		return nil
+	}
+
+	if query.checkResults {
+		if err := resultsMatch(); err != nil {
+			return err
 		}
 	}
 
