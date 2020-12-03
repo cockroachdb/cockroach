@@ -64,7 +64,10 @@ func init() {
 // random test value in a range.
 func ConstantWithMetamorphicTestRange(defaultValue, min, max int) int {
 	if MetamorphicBuild {
-		ret := int(rng.Int31())%(max-min) + min
+		ret := min
+		if max > min {
+			ret = int(rng.Int31())%(max-min) + min
+		}
 		logMetamorphicValue(ret)
 		return ret
 	}
