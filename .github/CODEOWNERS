@@ -39,3 +39,5 @@
 
 /docs/generated/http         @cockroachdb/http-api-prs
 /pkg/cmd/docgen/http.go      @cockroachdb/http-api-prs
+
+/pkg/ccl/sqlproxyccl/        @cockroachdb/sqlproxy-prs
