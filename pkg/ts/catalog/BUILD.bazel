@@ -6,6 +6,7 @@ go_library(
         "catalog_generator.go",
         "chart_catalog.go",
         "chart_catalog.pb.go",
+        "metrics.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ts/catalog",
     visibility = ["//visibility:public"],
