@@ -20,6 +20,7 @@ type Metrics struct {
 	RoutingErrCount        *metric.Counter
 	RefusedConnCount       *metric.Counter
 	SuccessfulConnCount    *metric.Counter
+	ExpiredClientConnCount *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -70,6 +71,12 @@ var (
 		Measurement: "Successful Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaExpiredClientConnCount = metric.Metadata{
+		Name:        "proxy.sql.expired_client_conns",
+		Help:        "Number of expired client connections",
+		Measurement: "Expired Client Connections",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // MakeProxyMetrics instantiates the metrics holder for proxy monitoring.
@@ -82,5 +89,6 @@ func MakeProxyMetrics() Metrics {
 		RoutingErrCount:        metric.NewCounter(metaRoutingErrCount),
 		RefusedConnCount:       metric.NewCounter(metaRefusedConnCount),
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
+		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
 	}
 }

@@ -9,6 +9,7 @@
 package sqlproxyccl
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"io"
@@ -32,6 +33,17 @@ type BackendConfig struct {
 	TLSConf *tls.Config
 	// Called after successfully connecting to OutgoingAddr.
 	OnConnectionSuccess func()
+	// KeepAliveLoop if provided controls the lifetime of the proxy connection.
+	// It will be run in its own goroutine when the connection is successfully
+	// opened. Returning from `KeepAliveLoop` will close the proxy connection.
+	// Note that non-nil error return values will be forwarded to the user and
+	// hence should explain the reason for terminating the connection.
+	// Most common use of KeepAliveLoop will be as an infinite loop that
+	// periodically checks if the connection should still be kept alive. Hence it
+	// may block indefinitely so it's prudent to use the provided context and
+	// return on context cancellation.
+	// See `TestProxyKeepAlive` for example usage.
+	KeepAliveLoop func(context.Context) error
 }
 
 // Options are the options to the Proxy method.
@@ -201,7 +213,10 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	// These channels are buffered because we'll only consume one of them.
 	errOutgoing := make(chan error, 1)
 	errIncoming := make(chan error, 1)
+	errExpired := make(chan error, 1)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	go func() {
 		_, err := io.Copy(crdbConn, conn)
 		errOutgoing <- err
@@ -210,6 +225,11 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		_, err := io.Copy(conn, crdbConn)
 		errIncoming <- err
 	}()
+	if backendConfig.KeepAliveLoop != nil {
+		go func() {
+			errExpired <- backendConfig.KeepAliveLoop(ctx)
+		}()
+	}
 
 	select {
 	// NB: when using pgx, we see a nil errIncoming first on clean connection
@@ -229,6 +249,15 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		if err != nil {
 			s.metrics.ClientDisconnectCount.Inc(1)
 			return NewErrorf(CodeClientDisconnected, "copying from target server to client: %v", err)
+		}
+		return nil
+	case err := <-errExpired:
+		if err != nil {
+			// The client connection expired.
+			s.metrics.ExpiredClientConnCount.Inc(1)
+			code := CodeExpiredClientConnection
+			sendErrToClient(conn, code, err.Error())
+			return NewErrorf(code, "expired client conn: %v", err)
 		}
 		return nil
 	}

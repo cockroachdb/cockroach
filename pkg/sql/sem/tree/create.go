@@ -1205,6 +1205,7 @@ type CreateTable struct {
 	// these columns.
 	Defs     TableDefs
 	AsSource *Select
+	Locality *Locality
 }
 
 // As returns true if this table represents a CREATE TABLE ... AS statement,
@@ -1268,6 +1269,10 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		}
 		// No storage parameters are implemented, so we never list the storage
 		// parameters in the output format.
+		if node.Locality != nil {
+			ctx.WriteString(" ")
+			node.Locality.Format(ctx)
+		}
 	}
 }
 

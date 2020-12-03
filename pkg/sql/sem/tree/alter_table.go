@@ -554,7 +554,7 @@ func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 type AlterTableLocality struct {
 	Name     *UnresolvedObjectName
 	IfExists bool
-	Locality Locality
+	Locality *Locality
 }
 
 var _ Statement = &AlterTableLocality{}
@@ -566,7 +566,7 @@ func (node *AlterTableLocality) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF EXISTS ")
 	}
 	node.Name.Format(ctx)
-	ctx.WriteString(" SET LOCALITY ")
+	ctx.WriteString(" SET ")
 	node.Locality.Format(ctx)
 }
 

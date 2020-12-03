@@ -563,8 +563,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
   return u.val.(tree.RefreshDataOption)
 }
-func (u *sqlSymUnion) locality() tree.Locality {
-  return u.val.(tree.Locality)
+func (u *sqlSymUnion) locality() *tree.Locality {
+  return u.val.(*tree.Locality)
 }
 func (u *sqlSymUnion) survivalGoal() tree.SurvivalGoal {
   return u.val.(tree.SurvivalGoal)
@@ -960,7 +960,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <str> region_name primary_region_clause opt_primary_region_clause
 %type <tree.NameList> region_name_list
 %type <tree.SurvivalGoal> survival_goal_clause opt_survival_goal_clause
-%type <tree.Locality> locality
+%type <*tree.Locality> locality opt_locality
 %type <int32> opt_connection_limit
 
 %type <tree.IsolationLevel> transaction_iso_level
@@ -5630,7 +5630,7 @@ alter_schema_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
+  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit opt_locality
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -5643,9 +5643,10 @@ create_table_stmt:
       Persistence: $2.persistence(),
       StorageParams: $11.storageParams(),
       OnCommit: $12.createTableOnCommitSetting(),
+      Locality: $13.locality(),
     }
   }
-| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
+| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit opt_locality
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -5658,7 +5659,18 @@ create_table_stmt:
       Persistence: $2.persistence(),
       StorageParams: $14.storageParams(),
       OnCommit: $15.createTableOnCommitSetting(),
+      Locality: $16.locality(),
     }
+  }
+
+opt_locality:
+  locality
+  {
+    $$.val = $1.locality()
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.Locality)(nil)
   }
 
 opt_table_with:
@@ -7120,107 +7132,107 @@ alter_table_locality_stmt:
 locality:
   LOCALITY GLOBAL
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelGlobal,
     }
   }
 | LOCALITY REGIONAL BY TABLE IN region_name
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       TableRegion: tree.Name($6),
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | LOCALITY REGIONAL BY TABLE
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | LOCALITY REGIONAL BY ROW
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
 | REGIONAL AFFINITY TO NONE
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelGlobal,
     }
   }
 | REGIONAL AFFINITY TO region_name
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       TableRegion: tree.Name($4),
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | REGIONAL AFFINITY TO PRIMARY REGION
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | REGIONAL AFFINITY AT ROW LEVEL
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
 | REGIONAL AFFINITY NONE
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelGlobal,
     }
   }
 | REGIONAL AFFINITY region_name
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       TableRegion: tree.Name($3),
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | REGIONAL AFFINITY PRIMARY REGION
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | REGIONAL AFFINITY ROW LEVEL
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
 | NO REGIONAL AFFINITY
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelGlobal,
     }
   }
 | TABLE LEVEL REGIONAL AFFINITY TO region_name
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       TableRegion: tree.Name($6),
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | TABLE LEVEL REGIONAL AFFINITY TO PRIMARY REGION
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | ROW LEVEL REGIONAL AFFINITY
   {
-    $$.val = tree.Locality{
+    $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
