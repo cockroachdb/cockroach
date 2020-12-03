@@ -313,6 +313,7 @@ func makeMetrics(internal bool) Metrics {
 				6*metricsSampleInterval),
 			SQLTxnLatency: metric.NewLatency(getMetricMeta(MetaSQLTxnLatency, internal),
 				6*metricsSampleInterval),
+			SQLTxnsOpen: metric.NewGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
 
 			TxnAbortCount: metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
 			FailureCount:  metric.NewCounter(getMetricMeta(MetaFailure, internal)),
