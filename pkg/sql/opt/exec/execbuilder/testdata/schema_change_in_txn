@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local !metamorphic
 
 statement ok
 CREATE TABLE t (

@@ -135,6 +135,9 @@ import (
 // A link to the issue will be printed out if the -print-blocklist-issues flag
 // is specified.
 //
+// There is a special blocklist directive '!metamorphic' that skips the whole
+// test when metamorphic tag is specified.
+//
 // The Test-Script language is extended here for use with CockroachDB. The
 // supported directives are:
 //
@@ -1613,6 +1616,13 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 	}
 
 	var configs configSet
+	if util.MetamorphicBuild {
+		for c := range blocklist {
+			if c == "metamorphic" {
+				return configs
+			}
+		}
+	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
 		// No configs specified, this blocklist applies to the default configs.
 		return applyBlocklistToConfigs(defaults, blocklist)
