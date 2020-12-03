@@ -1851,6 +1851,13 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Open Transactions",
+				Metrics: []string{
+					"sql.txns.open",
+					"sql.txns.open.internal",
+				},
+			},
+			{
 				Title: "Byte I/O",
 				Metrics: []string{
 					"sql.bytesin",
