@@ -134,6 +134,7 @@ go_library(
         "//pkg/storage/cloud",
         "//pkg/storage/cloudimpl",
         "//pkg/storage/enginepb",
+        "//pkg/ts/catalog",
         "//pkg/ts/tspb",
         "//pkg/util",
         "//pkg/util/contextutil",
