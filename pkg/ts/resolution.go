@@ -13,6 +13,8 @@ package ts
 import (
 	"fmt"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 )
 
 // Resolution is used to enumerate the different resolution values supported by
@@ -126,4 +128,17 @@ func normalizeToPeriod(timestampNanos int64, period int64) int64 {
 
 func (r Resolution) normalizeToSlab(timestampNanos int64) int64 {
 	return normalizeToPeriod(timestampNanos, r.SlabDuration())
+}
+
+// ResolutionFromProto translates the resolution enum value from time series
+// proto to ts.Resolution.
+func ResolutionFromProto(r tspb.TimeSeriesResolution) Resolution {
+	switch r {
+	case tspb.TimeSeriesResolution_RESOLUTION_10S:
+		return Resolution10s
+	case tspb.TimeSeriesResolution_RESOLUTION_30M:
+		return Resolution30m
+	default:
+	}
+	return resolutionInvalid
 }

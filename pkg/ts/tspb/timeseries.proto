@@ -140,7 +140,33 @@ message TimeSeriesQueryResponse {
   repeated Result results = 1 [(gogoproto.nullable) = false];
 }
 
-message DumpRequest {}
+// TimeSeriesResolution is used to enumerate the different resolution values
+// supported by Cockroach.
+enum TimeSeriesResolution {
+  // RESOLUTION_10S stores data with a sample resolution of 10 seconds.
+  RESOLUTION_10S = 0;
+  // RESOLUTION_30M stores roll-up data from a higher resolution at a sample
+  // resolution of 30 minutes.
+  RESOLUTION_30M = 1;
+}
+
+// DumpRequest is the standard time series data dump request accepted from
+// cockroach clients.
+message DumpRequest {
+  // A timestamp in nanoseconds which defines the early bound of the time span
+  // for this query. Will be rounded down to nearest resolution boundary.
+  optional int64 start_nanos = 1 [(gogoproto.nullable) = false];
+  // A timestamp in nanoseconds which defines the late bound of the time span
+  // for this query. Must be greater than start_nanos. Will be rounded up to nearest
+  // resolution boundary. When not provided, defaults to the maximum possible.
+  optional int64 end_nanos = 2 [(gogoproto.nullable) = false];
+  // The timeseries to dump. All sources will be queried. When not provided,
+  // defaults to all the metrics names.
+  repeated string names = 3;
+  // Resolutions of data to be dumped. When not provided, defaults to only
+  // RESOLUTION_10S.
+  repeated TimeSeriesResolution resolutions = 4;
+}
 
 // TimeSeries is the gRPC API for the time series server. Through grpc-gateway,
 // we offer REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
