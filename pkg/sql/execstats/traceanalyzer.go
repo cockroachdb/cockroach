@@ -87,12 +87,16 @@ func NewFlowMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowMetada
 type NodeLevelStats struct {
 	NetworkBytesSentGroupedByNode map[roachpb.NodeID]int64
 	MaxMemoryUsageGroupedByNode   map[roachpb.NodeID]int64
+	KVBytesReadGroupedByNode      map[roachpb.NodeID]int64
+	KVRowsReadGroupedByNode       map[roachpb.NodeID]int64
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the given traces and flow metadata.
 type QueryLevelStats struct {
 	NetworkBytesSent int64
 	MaxMemUsage      int64
+	KVBytesRead      int64
+	KVRowsRead       int64
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -185,8 +189,19 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	a.nodeLevelStats = NodeLevelStats{
 		NetworkBytesSentGroupedByNode: make(map[roachpb.NodeID]int64),
 		MaxMemoryUsageGroupedByNode:   make(map[roachpb.NodeID]int64),
+		KVBytesReadGroupedByNode:      make(map[roachpb.NodeID]int64),
+		KVRowsReadGroupedByNode:       make(map[roachpb.NodeID]int64),
 	}
 	var errs error
+
+	// Process processorStats.
+	for _, stats := range a.processorStats {
+		if stats.stats == nil {
+			continue
+		}
+		a.nodeLevelStats.KVBytesReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.BytesRead.Value())
+		a.nodeLevelStats.KVRowsReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.TuplesRead.Value())
+	}
 
 	// Process streamStats.
 	for _, stats := range a.streamStats {
@@ -238,6 +253,8 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	a.queryLevelStats = QueryLevelStats{
 		NetworkBytesSent: int64(0),
 		MaxMemUsage:      int64(0),
+		KVBytesRead:      int64(0),
+		KVRowsRead:       int64(0),
 	}
 
 	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
@@ -248,6 +265,14 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if maxMemUsage > a.queryLevelStats.MaxMemUsage {
 			a.queryLevelStats.MaxMemUsage = maxMemUsage
 		}
+	}
+
+	for _, kvBytesRead := range a.nodeLevelStats.KVBytesReadGroupedByNode {
+		a.queryLevelStats.KVBytesRead += kvBytesRead
+	}
+
+	for _, kvRowsRead := range a.nodeLevelStats.KVRowsReadGroupedByNode {
+		a.queryLevelStats.KVRowsRead += kvRowsRead
 	}
 	return errs
 }
