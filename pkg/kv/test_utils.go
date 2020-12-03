@@ -38,7 +38,6 @@ func OnlyFollowerReads(rec tracing.Recording) bool {
 // IsExpectedRelocateError maintains an allowlist of errors related to
 // atomic-replication-changes we want to ignore / retry on for tests.
 // See:
-// https://github.com/cockroachdb/cockroach/issues/33732
 // https://github.com/cockroachdb/cockroach/issues/33708
 // https://github.cm/cockroachdb/cockroach/issues/34012
 // https://github.com/cockroachdb/cockroach/issues/33683#issuecomment-454889149
@@ -57,6 +56,7 @@ func IsExpectedRelocateError(err error) bool {
 		"snapshot failed:",
 		"breaker open",
 		"unable to select removal target", // https://github.com/cockroachdb/cockroach/issues/49513
+		"cannot up-replicate to .*; missing gossiped StoreDescriptor",
 	}
 	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)

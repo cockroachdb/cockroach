@@ -62,7 +62,7 @@ func (formatCrdbV1TTY) formatterName() string { return "crdb-v1-tty" }
 
 func (formatCrdbV1TTY) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 	cp := ttycolor.StderrProfile
-	if logging.stderrSink.noColor {
+	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
 	return formatLogEntryInternal(entry, false /*showCounter*/, cp, stacks)
@@ -77,7 +77,7 @@ func (formatCrdbV1TTYWithCounter) formatterName() string { return "crdb-v1-tty-c
 
 func (formatCrdbV1TTYWithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
 	cp := ttycolor.StderrProfile
-	if logging.stderrSink.noColor {
+	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
 	return formatLogEntryInternal(entry, true /*showCounter*/, cp, stacks)

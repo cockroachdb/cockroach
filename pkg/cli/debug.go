@@ -1179,6 +1179,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugEnvCmd,
 	debugZipCmd,
 	debugMergeLogsCommand,
+	debugResetQuorumCmd,
 )
 
 // DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
