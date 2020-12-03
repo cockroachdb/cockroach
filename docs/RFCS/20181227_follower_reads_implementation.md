@@ -13,7 +13,7 @@ historical reads. Historical reads include both `AS OF SYSTEM TIME` queries as
 well as transactions with a read timestamp sufficiently in the past (for example
 long-running analytics queries). Most of the required machinery to safely
 perform these reads was implemented in the [Follower Reads
-RFC](../20180603_follower_reads.md). Follower reads can greatly improve query
+RFC](20180603_follower_reads.md). Follower reads can greatly improve query
 performance by avoiding the need to make wide area RPCs and by reducing traffic
 on lease holders. This document proposes mechanisms to expose follower reads
 through a new SQL function to determine a reasonable read time stamp and the
