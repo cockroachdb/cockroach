@@ -181,11 +181,35 @@ CREATE DATABASE duplicate_region_name_db PRIMARY REGION "test1" REGIONS "test1",
 statement ok
 CREATE TABLE regional_primary_region_table (a int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_primary_region_table]
+----
+CREATE TABLE public.regional_primary_region_table (
+                                                a INT8 NULL,
+                                                FAMILY "primary" (a, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
 statement ok
 CREATE TABLE regional_implicit_primary_region_table (a int) LOCALITY REGIONAL BY TABLE
 
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_implicit_primary_region_table]
+----
+CREATE TABLE public.regional_implicit_primary_region_table (
+                                                a INT8 NULL,
+                                                FAMILY "primary" (a, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
 statement ok
 CREATE TABLE regional_test3_table (a int) LOCALITY REGIONAL BY TABLE IN "test3"
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_test3_table]
+----
+CREATE TABLE public.regional_test3_table (
+                                       a INT8 NULL,
+                                       FAMILY "primary" (a, rowid)
+) LOCALITY REGIONAL BY TABLE IN test3
 
 statement error region "test4" has not been added to database "multi_region_test_db"\nHINT: available regions: test1, test2, test3
 CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
@@ -193,8 +217,24 @@ CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
 statement ok
 CREATE TABLE regional_by_row_table (a int) LOCALITY REGIONAL BY ROW
 
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
+----
+CREATE TABLE public.regional_by_row_table (
+                            a INT8 NULL,
+                            FAMILY "primary" (a, rowid)
+) LOCALITY REGIONAL BY ROW
+
 statement ok
 CREATE TABLE global_table (a int) LOCALITY GLOBAL
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE global_table]
+----
+CREATE TABLE public.global_table (
+                   a INT8 NULL,
+                   FAMILY "primary" (a, rowid)
+) LOCALITY GLOBAL
 
 statement ok
 CREATE DATABASE new_db
