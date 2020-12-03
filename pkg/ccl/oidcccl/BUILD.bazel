@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/utilccl",
+        "//pkg/roachpb",
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/server/telemetry",
@@ -30,7 +31,10 @@ go_library(
 
 go_test(
     name = "oidcccl_test",
-    srcs = ["authentication_oidc_test.go"],
+    srcs = [
+        "authentication_oidc_test.go",
+        "settings_test.go",
+    ],
     embed = [":oidcccl"],
     deps = [
         "//pkg/base",
