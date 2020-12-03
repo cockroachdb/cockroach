@@ -28,7 +28,16 @@ var nulls5 Nulls
 var nulls10 Nulls
 
 // pos is a collection of interesting boundary indices to use in tests.
-var pos = []int{0, 1, 63, 64, 65, BatchSize() - 1, BatchSize()}
+var pos []int
+
+func init() {
+	pos = []int{0, 1, BatchSize() - 1, BatchSize()}
+	for _, possiblePos := range []int{63, 64, 65} {
+		if BatchSize() >= possiblePos {
+			pos = append(pos, possiblePos)
+		}
+	}
+}
 
 func init() {
 	nulls3 = NewNulls(BatchSize())
@@ -86,87 +95,6 @@ func TestUnsetNullRange(t *testing.T) {
 			}
 		}
 	}
-}
-
-func TestSwapNulls(t *testing.T) {
-	n := NewNulls(BatchSize())
-	swapPos := []int{0, 1, 63, 64, 65, BatchSize() - 1}
-	idxInSwapPos := func(idx int) bool {
-		for _, p := range swapPos {
-			if p == idx {
-				return true
-			}
-		}
-		return false
-	}
-
-	t.Run("TestSwapNullWithNull", func(t *testing.T) {
-		// Test that swapping null with null doesn't change anything.
-		for _, p := range swapPos {
-			n.SetNull(p)
-		}
-		for _, i := range swapPos {
-			for _, j := range swapPos {
-				n.swap(i, j)
-				for k := 0; k < BatchSize(); k++ {
-					require.Equal(t, idxInSwapPos(k), n.NullAt(k),
-						"after swapping NULLS (%d, %d), NullAt(%d) saw %t, expected %t", i, j, k, n.NullAt(k), idxInSwapPos(k))
-				}
-			}
-		}
-	})
-
-	t.Run("TestSwapNullWithNotNull", func(t *testing.T) {
-		// Test that swapping null with not null changes things appropriately.
-		n.UnsetNulls()
-		swaps := map[int]int{
-			0:  BatchSize() - 1,
-			1:  62,
-			2:  3,
-			63: 65,
-			68: 120,
-		}
-		idxInSwaps := func(idx int) bool {
-			for k, v := range swaps {
-				if idx == k || idx == v {
-					return true
-				}
-			}
-			return false
-		}
-		for _, j := range swaps {
-			n.SetNull(j)
-		}
-		for i, j := range swaps {
-			n.swap(i, j)
-			require.Truef(t, n.NullAt(i), "after swapping not null and null (%d, %d), found null=%t at %d", i, j, n.NullAt(i), i)
-			require.Truef(t, !n.NullAt(j), "after swapping not null and null (%d, %d), found null=%t at %d", i, j, !n.NullAt(j), j)
-			for k := 0; k < BatchSize(); k++ {
-				if idxInSwaps(k) {
-					continue
-				}
-				require.Falsef(t, n.NullAt(k),
-					"after swapping NULLS (%d, %d), NullAt(%d) saw %t, expected false", i, j, k, n.NullAt(k))
-			}
-		}
-	})
-
-	t.Run("TestSwapNullWithNull", func(t *testing.T) {
-		// Test that swapping not null with not null doesn't do anything.
-		n.SetNulls()
-		for _, p := range swapPos {
-			n.UnsetNull(p)
-		}
-		for _, i := range swapPos {
-			for _, j := range swapPos {
-				n.swap(i, j)
-				for k := 0; k < BatchSize(); k++ {
-					require.Equal(t, idxInSwapPos(k), !n.NullAt(k),
-						"after swapping NULLS (%d, %d), NullAt(%d) saw %t, expected %t", i, j, k, !n.NullAt(k), idxInSwapPos(k))
-				}
-			}
-		}
-	})
 }
 
 func TestNullsTruncate(t *testing.T) {
