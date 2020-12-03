@@ -1526,7 +1526,7 @@ bin/.docgen_http: bin/docgen $(PROTOC)
 	--protoc $(PROTOC) \
 	--gendoc ./bin/protoc-gen-doc \
 	--out docs/generated/http \
-	--protobuf pkg:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(ERRORS_PATH)
+	--protobuf pkg:./vendor/github.com:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(ERRORS_PATH)
 	touch $@
 
 .PHONY: docs/generated/redact_safe.md
