@@ -135,6 +135,10 @@ import (
 // A link to the issue will be printed out if the -print-blocklist-issues flag
 // is specified.
 //
+// There is a special blocklist directive '!metamorphic' that skips the whole
+// test when TAGS=metamorphic is specified for the logic test invocation.
+// NOTE: metamorphic directive takes precedence over all other directives.
+//
 // The Test-Script language is extended here for use with CockroachDB. The
 // supported directives are:
 //
@@ -1613,6 +1617,16 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 	}
 
 	var configs configSet
+	if util.MetamorphicBuild {
+		for c := range blocklist {
+			if c == "metamorphic" {
+				// We have a metamorphic build and the file has !metamorphic
+				// blocklist directive which effectively skips the file, so we
+				// simply return empty configSet.
+				return configs
+			}
+		}
+	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
 		// No configs specified, this blocklist applies to the default configs.
 		return applyBlocklistToConfigs(defaults, blocklist)
