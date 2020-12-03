@@ -551,9 +551,13 @@ func (c *CustomFuncs) ExtractJoinEquality(
 		newFilters,
 		private,
 	)
+	outputCols := leftCols
+	if joinOp != opt.SemiJoinOp && joinOp != opt.AntiJoinOp {
+		outputCols = leftCols.Union(rightCols)
+	}
 
 	// Project away the synthesized columns.
-	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, leftCols.Union(rightCols))
+	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, outputCols)
 }
 
 // CommuteJoinFlags returns a join private for the commuted join (where the left
