@@ -88,8 +88,6 @@ func testLogGC(
 	}(logging.mu.disableDaemons)
 	logging.mu.Unlock()
 
-	const newLogFiles = 20
-
 	// Make an entry in the target logger. This ensures That there is at
 	// least one file in the target directory for the logger being
 	// tested. This serves two
@@ -132,6 +130,8 @@ func testLogGC(
 	// Pick a max total size that's between 2 and 3 log files in size.
 	maxTotalLogFileSize := logFileSize*expectedFilesAfterGC + logFileSize // 2
 
+	t.Logf("new max total log file size: %d", maxTotalLogFileSize)
+
 	// We want to create multiple log files below. For this we need to
 	// override the size/number limits first to the values suitable for
 	// the test.
@@ -143,6 +143,8 @@ func testLogGC(
 	atomic.StoreInt64(&fileSink.logFilesCombinedMaxSize, maxTotalLogFileSize)
 
 	// Create the number of expected log files.
+	const newLogFiles = 20
+
 	for i := 1; i < newLogFiles; i++ {
 		logFn(context.Background(), "%d", i)
 		Flush()
