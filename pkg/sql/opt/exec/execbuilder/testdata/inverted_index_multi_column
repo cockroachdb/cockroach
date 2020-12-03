@@ -36,6 +36,14 @@ CPut /Table/53/1/1/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/
 InitPut /Table/53/2/333/"a"/"b"/1/0 -> /BYTES/
 InitPut /Table/53/3/333/"foo"/"a"/"b"/1/0 -> /BYTES/
 
+# This test shows an inverted index scan followed by a primary index scan to
+# retrieve all the table's columns.
+query T kvtrace
+SELECT * FROM t WHERE i = 333 AND j @> '{"a": "b"}'
+----
+Scan /Table/53/2/333/"a"/"b"{-/PrefixEnd}
+Scan /Table/53/1/1{-/#}
+
 # Don't insert duplicate values.
 query T kvtrace
 INSERT INTO t VALUES (2, 333, 'foo', '[7, 0, 7]'::json)
