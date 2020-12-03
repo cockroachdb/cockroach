@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 )
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
@@ -328,7 +329,15 @@ func (e *emitter) joinNodeName(algo string, joinType descpb.JoinType) string {
 func (e *emitter) emitNodeAttributes(n *Node) error {
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok {
 		s := stats.(*exec.ExecutionStats)
-		e.ob.Attr("actual row count", s.RowCount)
+		if s.RowCount.HasValue() {
+			e.ob.AddField("actual row count", s.RowCount.String())
+		}
+		if s.KVRowsRead.HasValue() {
+			e.ob.AddField("KV rows read", s.KVRowsRead.String())
+		}
+		if s.KVBytesRead.HasValue() {
+			e.ob.AddField("KV bytes read", humanize.IBytes(s.KVBytesRead.Value()))
+		}
 	}
 
 	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok {

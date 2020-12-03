@@ -63,3 +63,11 @@ func (i *Uint) Set(value uint64) {
 func (i *Uint) Add(delta int64) {
 	*i = MakeUint(uint64(int64(i.Value()) + delta))
 }
+
+// MaybeAdd adds the given value, if it is set. Does nothing if other is not
+// set.
+func (i *Uint) MaybeAdd(other Uint) {
+	if other.HasValue() {
+		*i = MakeUint(i.Value() + other.Value())
+	}
+}
