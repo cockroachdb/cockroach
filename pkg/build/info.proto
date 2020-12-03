@@ -16,16 +16,27 @@ import "gogoproto/gogo.proto";
 
 // Info describes build information for this CockroachDB binary.
 message Info {
+  // go_version is the version of the Go toolchain used to compile this executable.
   optional string go_version = 1 [(gogoproto.nullable) = false];
+  // tag is the git tag for the revision of the source code for this executable.
   optional string tag = 2 [(gogoproto.nullable) = false];
+  // time is the time at which the build started.
   optional string time = 3 [(gogoproto.nullable) = false];
+  // revision is the git commit identifier for the source code of this executable.
   optional string revision = 4 [(gogoproto.nullable) = false];
+  // cgo_compiler is the C/C++ compiler used to build non-go dependencies.
   optional string cgo_compiler = 5 [(gogoproto.nullable) = false];
+  // cgo_target_triple is the platform identifier that identifies the cross-compilation target for C/C++ components.
   optional string cgo_target_triple = 10 [(gogoproto.nullable) = false];
+  // platform is the platform identifiers that identifies the cross-compilation target for Go code.
   optional string platform = 6 [(gogoproto.nullable) = false];
+  // distribution indicates which licensing conditions apply (OSS: full open source; CCL: includes CCL code).
   optional string distribution = 7 [(gogoproto.nullable) = false];
+  // type indicates whether this is a development or release build.
   optional string type = 8 [(gogoproto.nullable) = false];
+  // channel identifies through which product channel the executable was released.
   optional string channel = 9 [(gogoproto.nullable) = false];
+  // env_channel identifies the product channel as overridden by the COCKROACH_CHANNEL environment variable.
   optional string env_channel = 11 [(gogoproto.nullable) = false];
 
   // dependencies exists to allow tests that run against old clusters
