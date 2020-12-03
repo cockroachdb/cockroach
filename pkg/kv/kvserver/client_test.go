@@ -790,6 +790,10 @@ func (m *multiTestContext) makeStoreConfig(i int) kvserver.StoreConfig {
 	cfg.TestingKnobs.DisableMergeQueue = true
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
+	// The mtc does not populate the allocator's store pool well and so
+	// the check never sees any live replicas.
+	cfg.TestingKnobs.AllowDangerousReplicationChanges = true
+
 	return cfg
 }
 
@@ -1196,14 +1200,6 @@ func (m *multiTestContext) changeReplicas(
 ) (roachpb.ReplicaID, error) {
 	ctx := context.Background()
 
-	var alreadyDoneErr string
-	switch changeType {
-	case roachpb.ADD_VOTER:
-		alreadyDoneErr = "unable to add replica .* which is already present"
-	case roachpb.REMOVE_VOTER:
-		alreadyDoneErr = "unable to remove replica .* which is not present"
-	}
-
 	retryOpts := retry.Options{
 		InitialBackoff: time.Millisecond,
 		MaxBackoff:     50 * time.Millisecond,
@@ -1216,9 +1212,7 @@ func (m *multiTestContext) changeReplicas(
 		// the effects of any previous ChangeReplicas call. By the time
 		// ChangeReplicas returns the raft leader is guaranteed to have the
 		// updated version, but followers are not.
-		if err := m.dbs[0].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc); err != nil {
-			return 0, err
-		}
+		require.NoError(m.t, m.dbs[0].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc))
 
 		_, err := m.dbs[0].AdminChangeReplicas(
 			ctx, startKey.AsRawKey(),
@@ -1231,8 +1225,22 @@ func (m *multiTestContext) changeReplicas(
 				}),
 		)
 
-		if err == nil || testutils.IsError(err, alreadyDoneErr) {
+		if err == nil {
 			break
+		}
+
+		// There was an error. Refresh the range descriptor and check if we're already done.
+		//
+		// NB: this could get smarter around non-voters. Hasn't been necessary so far.
+		require.NoError(m.t, m.dbs[0].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc))
+		if changeType == roachpb.ADD_VOTER {
+			if _, ok := desc.GetReplicaDescriptor(m.idents[dest].StoreID); ok {
+				break
+			}
+		} else if changeType == roachpb.REMOVE_VOTER {
+			if _, ok := desc.GetReplicaDescriptor(m.idents[dest].StoreID); !ok {
+				break
+			}
 		}
 
 		if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
@@ -1242,13 +1250,11 @@ func (m *multiTestContext) changeReplicas(
 			continue
 		}
 
-		// We can't use storage.IsSnapshotError() because the original error object
-		// is lost. We could make a this into a roachpb.Error but it seems overkill
-		// for this one usage.
-		if testutils.IsError(err, "snapshot failed: .*|descriptor changed") {
+		if kvserver.IsRetriableReplicationChangeError(err) {
 			log.Infof(ctx, "%v", err)
 			continue
 		}
+
 		return 0, err
 	}
 
