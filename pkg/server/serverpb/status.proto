@@ -108,10 +108,18 @@ message DetailsResponse {
   util.UnresolvedAddr sql_address = 5 [ (gogoproto.nullable) = false, (gogoproto.customname) = "SQLAddress" ];
 }
 
+// NodesRequest requests a copy of the node information as known to gossip
+// and the KV layer.
+// API: PUBLIC ALPHA
 message NodesRequest {}
 
+// NodesResponse describe the nodes in the cluster.
+// API: PUBLIC ALPHA
 message NodesResponse {
+  // nodes carries the status payloads for all nodes in the cluster.
+  // API: PUBLIC ALPHA
   repeated server.status.statuspb.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
+  // liveness_by_node_id maps each node ID to a liveness status.
   map<int32, kv.kvserver.liveness.livenesspb.NodeLivenessStatus> liveness_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.nullable) = false,
@@ -717,8 +725,7 @@ message ProblemRangesResponse {
 
 // HotRangesRequest queries one or more cluster nodes for a list
 // of ranges currently considered “hot” by the node(s).
-//
-// The server responds with a HotRangesResponse payload.
+// API: PUBLIC ALPHA
 message HotRangesRequest {
   // NodeID indicates which node to query for a hot range report.
   // It is posssible to populate any node ID; if the node receiving
@@ -727,14 +734,17 @@ message HotRangesRequest {
   //
   // If left empty, the request is forwarded to every node
   // in the cluster.
+  // API: PUBLIC ALPHA
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
 }
 
 // HotRangesResponse is the payload produced in response
 // to a HotRangesRequest.
+// API: PUBLIC ALPHA
 message HotRangesResponse {
   // NodeID is the node that received the HotRangesRequest and
   // forwarded requests to the selected target node(s).
+  // API: PUBLIC ALPHA
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
     (gogoproto.casttype) =
@@ -743,25 +753,28 @@ message HotRangesResponse {
 
   // HotRange is a hot range report for a single store on one of the
   // target node(s) selected in a HotRangesRequest.
+  // API: PUBLIC ALPHA
   message HotRange {
     // Desc is the descriptor of the range for which the report
     // was produced.
     //
-    // Note: this field is generally RESERVED and will likely be removed
-    // or replaced in a later version.
+    // TODO(knz): This field should be removed.
     // See: https://github.com/cockroachdb/cockroach/issues/53212
     cockroach.roachpb.RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
 
     // QueriesPerSecond is the recent number of queries per second
     // on this range.
+    // API: PUBLIC ALPHA
     double queries_per_second = 2;
   }
 
   // StoreResponse contains the part of a hot ranges report that
   // pertains to a single store on a target node.
+  // API: PUBLIC ALPHA
   message StoreResponse {
     // StoreID identifies the store for which the report was
     // produced.
+    // API: PUBLIC ALPHA
     int32 store_id = 1 [
       (gogoproto.customname) = "StoreID",
       (gogoproto.casttype) =
@@ -770,25 +783,30 @@ message HotRangesResponse {
 
     // HotRanges is the hot ranges report for this store
     // on the target node.
+    // API: PUBLIC ALPHA
     repeated HotRange hot_ranges = 2 [(gogoproto.nullable) = false];
   }
 
   // NodeResponse is a hot range report for a single target node.
+  // API: PUBLIC ALPHA
   message NodeResponse {
     // ErrorMessage is set to a non-empty string if this target
     // node was unable to produce a hot range report.
     //
     // The contents of this string indicates the cause of the failure.
+    // API: PUBLIC ALPHA
     string error_message = 1;
 
     // Stores contains the hot ranges report if no error was encountered.
     // There is one part to the report for each store in the
     // target node.
+    // API: PUBLIC ALPHA
     repeated StoreResponse stores = 2;
   }
 
   // HotRangesByNodeID contains a hot range report for each selected
   // target node ID in the HotRangesRequest.
+  // API: PUBLIC ALPHA
   map<int32, NodeResponse> hot_ranges_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.customname) = "HotRangesByNodeID",
@@ -968,11 +986,14 @@ message JobStatusResponse {
 }
 
 service Status {
+  // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
     option (google.api.http) = {
       get : "/_status/certificates/{node_id}"
     };
   }
+
+  // Details retrieves details about the nodes in the cluster.
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {
       get : "/_status/details/{node_id}"
@@ -983,7 +1004,9 @@ service Status {
   // are not included, except in rare cases where the node doing the
   // decommissioning crashed before completing the operation. In these cases,
   // the decommission operation can be rerun to clean up the status entry.
-  // 
+  //
+  // API: PUBLIC ALPHA
+  //
   // Don't introduce additional usages of this RPC. See #50707 for more details.
   // The underlying response type is something we're looking to get rid of.
   rpc Nodes(NodesRequest) returns (NodesResponse) {
@@ -991,57 +1014,82 @@ service Status {
       get : "/_status/nodes"
     };
   }
+
+  // Node retrieves details about a single node.
+  // API: PUBLIC ALPHA
   rpc Node(NodeRequest) returns (server.status.statuspb.NodeStatus) {
     option (google.api.http) = {
       get : "/_status/nodes/{node_id}"
     };
   }
+
+
+  // RaftDebug requests internal details about Raft.
   rpc RaftDebug(RaftDebugRequest) returns (RaftDebugResponse) {
     option (google.api.http) = {
       get : "/_status/raft"
     };
   }
+
+  // Ranges requests internal details about ranges on a given node.
   rpc Ranges(RangesRequest) returns (RangesResponse) {
     option (google.api.http) = {
       get : "/_status/ranges/{node_id}"
     };
   }
+
+  // Gossip retrieves gossip-level details about a given node.
   rpc Gossip(GossipRequest) returns (gossip.InfoStatus) {
     option (google.api.http) = {
       get : "/_status/gossip/{node_id}"
     };
   }
+
+  // EngineStats retrieves statistics about a storage engine.
   rpc EngineStats(EngineStatsRequest) returns (EngineStatsResponse) {
     option (google.api.http) = {
       get : "/_status/enginestats/{node_id}"
     };
   }
+
+  // Allocator retrieves statistics about the replica allocator.
   rpc Allocator(AllocatorRequest) returns (AllocatorResponse) {
     option (google.api.http) = {
       get : "/_status/allocator/node/{node_id}"
     };
   }
+
+  // AllocatorRange retrieves statistics about the replica allocator given
+  // a specific range.
   rpc AllocatorRange(AllocatorRangeRequest) returns (AllocatorRangeResponse) {
     option (google.api.http) = {
       get : "/_status/allocator/range/{range_id}"
     };
   }
+
+  // ListSessions retrieves the SQL sessions across the entire cluster.
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
     option (google.api.http) = {
       get : "/_status/sessions"
     };
   }
+
+  // ListLocalSessions retrieves the SQL sessions on this node.
   rpc ListLocalSessions(ListSessionsRequest) returns (ListSessionsResponse) {
     option (google.api.http) = {
       get : "/_status/local_sessions"
     };
   }
+
+  // CancelQuery cancels a SQL query given its ID.
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {
     option (google.api.http) = {
       post : "/_status/cancel_query/{node_id}"
 			body: "*"
     };
   }
+
+  // CancelSessions forcefully terminates a SQL session given its ID.
   rpc CancelSession(CancelSessionRequest) returns (CancelSessionResponse) {
     option (google.api.http) = {
       post : "/_status/cancel_session/{node_id}"
@@ -1060,46 +1108,67 @@ service Status {
       body : "*"
     };
   }
+
+  // Stacks retrieves the stack traces of all goroutines on a given node.
   rpc Stacks(StacksRequest) returns (JSONResponse) {
     option (google.api.http) = {
       get : "/_status/stacks/{node_id}"
     };
   }
+
+  // Profile retrieves a CPU profile on a given node.
   rpc Profile(ProfileRequest) returns (JSONResponse) {
     option (google.api.http) = {
       get : "/_status/profile/{node_id}"
     };
   }
+
+  // Metrics retrieves the node metrics for a given node.
+  //
+  // Note: this is a “reserved” API and should not be relied upon to
+  // build external tools. No guarantee is made about its
+  // availability and stability in external uses.
   rpc Metrics(MetricsRequest) returns (JSONResponse) {
     option (google.api.http) = {
       get : "/_status/metrics/{node_id}"
     };
   }
+
+  // GetFiles retrieves heap or goroutine dump files from a given node.
   rpc GetFiles(GetFilesRequest) returns (GetFilesResponse) {
     option (google.api.http) = {
       get : "/_status/files/{node_id}"
     };
   }
+
+  // LogFilesList retrieves a list of log files on a given node.
   rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
     option (google.api.http) = {
       get : "/_status/logfiles/{node_id}"
     };
   }
+
+  // LogFile retrieves a given log file.
   rpc LogFile(LogFileRequest) returns (LogEntriesResponse) {
     option (google.api.http) = {
       get : "/_status/logfiles/{node_id}/{file}"
     };
   }
+
+  // Logs retrieves individual log entries.
   rpc Logs(LogsRequest) returns (LogEntriesResponse) {
     option (google.api.http) = {
       get : "/_status/logs/{node_id}"
     };
   }
+
+  // ProblemRanges retrieves the list of “problem ranges”.
   rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {
     option (google.api.http) = {
       get : "/_status/problemranges"
     };
   }
+
   rpc HotRanges(HotRangesRequest) returns (HotRangesResponse) {
     option (google.api.http) = {
       get : "/_status/hotranges"
