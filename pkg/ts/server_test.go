@@ -369,8 +369,14 @@ func TestServerDump(t *testing.T) {
 	// generate data across the target number of hours.
 	valueCount := int(ts.Resolution10s.SlabDuration()/(100*1e9)) * slabCount
 
-	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
+	err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB())
+	if err != nil {
 		t.Fatal(err)
+	}
+
+	names := make([]string, 0, seriesCount)
+	for series := 0; series < seriesCount; series++ {
+		names = append(names, seriesName(series))
 	}
 
 	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
@@ -380,7 +386,9 @@ func TestServerDump(t *testing.T) {
 	}
 	client := tspb.NewTimeSeriesClient(conn)
 
-	dumpClient, err := client.Dump(context.Background(), nil)
+	dumpClient, err := client.Dump(context.Background(), &tspb.DumpRequest{
+		Names: names,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
