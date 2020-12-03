@@ -225,7 +225,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 	}
 
 	// Apply the stderr sink configuration.
-	logging.stderrSink.noColor = config.Sinks.Stderr.NoColor
+	logging.stderrSink.noColor.Set(config.Sinks.Stderr.NoColor)
 	if err := logging.stderrSinkInfoTemplate.applyConfig(config.Sinks.Stderr.CommonSinkConfig); err != nil {
 		cleanupFn()
 		return nil, err
@@ -356,7 +356,7 @@ func DescribeAppliedConfig() string {
 	}
 
 	// Describe the stderr sink.
-	config.Sinks.Stderr.NoColor = logging.stderrSink.noColor
+	config.Sinks.Stderr.NoColor = logging.stderrSink.noColor.Get()
 	config.Sinks.Stderr.CommonSinkConfig = logging.stderrSinkInfoTemplate.describeAppliedConfig()
 
 	describeConnections := func(l *loggerT, ch Channel,
