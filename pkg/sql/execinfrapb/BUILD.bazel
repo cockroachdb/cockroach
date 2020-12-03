@@ -73,6 +73,7 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/netutil",
         "//pkg/util/optional",

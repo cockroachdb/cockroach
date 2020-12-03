@@ -110,14 +110,14 @@ vectorized: false
 ·
 • update
 │ columns: (a, b, c, a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ table: abc
 │ set: b, c
 │ auto commit
 │
 └── • render
     │ columns: (a, b, c, b_new, c_new, a, b, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: b + 1
     │ render 1: c + 2
     │ render 2: a
@@ -129,7 +129,7 @@ vectorized: false
     │
     └── • merge join (inner)
         │ columns: (a, b, c, a, b, c)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ equality: (a) = (a)
         │ left cols are key
         │ right cols are key
@@ -138,14 +138,14 @@ vectorized: false
         ├── • scan
         │     columns: (a, b, c)
         │     ordering: +a
-        │     estimated row count: 1000 (missing stats)
+        │     estimated row count: 1,000 (missing stats)
         │     table: abc@primary
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (a, b, c)
               ordering: +a
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: abc@primary
               spans: FULL SCAN
 

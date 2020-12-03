@@ -46,7 +46,7 @@ vectorized: true
 │
 └── • render
     │ columns: (column7 int, column10 unknown, column17 bool, column19 bool, column21 bytes)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: (1)[int]
     │ render 1: (NULL)[unknown]
     │ render 2: (true)[bool]
@@ -55,7 +55,7 @@ vectorized: true
     │
     └── • scan
           columns: ()
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -97,7 +97,7 @@ vectorized: true
 │
 └── • render
     │ columns: (column10 int, column16 bool, column19 bytes, k int, v int)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: (1)[int]
     │ render 1: ((v)[int] = (1)[int])[bool]
     │ render 2: ((s)[string]::BYTES)[bytes]
@@ -106,7 +106,7 @@ vectorized: true
     │
     └── • scan
           columns: (k int, v int, s string)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -188,7 +188,7 @@ vectorized: true
 ·
 • group
 │ columns: (count int, k int)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ aggregate 0: count_rows()
 │ group by: k
 │ ordered: +k
@@ -196,7 +196,7 @@ vectorized: true
 └── • scan
       columns: (k int)
       ordering: +k
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: kv@primary
       spans: FULL SCAN
 
@@ -209,18 +209,18 @@ vectorized: true
 ·
 • group
 │ columns: (count int, r int)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ aggregate 0: count_rows()
 │ group by: column8
 │
 └── • render
     │ columns: (column8 int)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: ((k)[int] + (v)[int])[int]
     │
     └── • scan
           columns: (k int, v int)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -233,13 +233,13 @@ vectorized: true
 ·
 • render
 │ columns: (count int, r int)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: ((k)[int] + (any_not_null)[int])[int]
 │ render 1: (count_rows)[int]
 │
 └── • group
     │ columns: (k int, count_rows int, any_not_null int)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: count_rows()
     │ aggregate 1: any_not_null(v)
     │ group by: k
@@ -248,7 +248,7 @@ vectorized: true
     └── • scan
           columns: (k int, v int)
           ordering: +k
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -265,7 +265,7 @@ vectorized: true
 │
 └── • scan
       columns: ()
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: kv@primary
       spans: FULL SCAN
 
@@ -284,7 +284,7 @@ vectorized: true
 │
 └── • scan
       columns: (k int)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: kv@primary
       spans: FULL SCAN
 
@@ -306,7 +306,7 @@ vectorized: true
 │
 └── • scan
       columns: (v)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: kv@primary
       spans: FULL SCAN
 
@@ -323,27 +323,27 @@ vectorized: true
 │
 └── • distinct
     │ columns: (column13)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ distinct on: column13
     │
     └── • render
         │ columns: (column13)
-        │ estimated row count: 1000000 (missing stats)
+        │ estimated row count: 1,000,000 (missing stats)
         │ render 0: ((k, v, w, s) AS k, v, w, s)
         │
         └── • cross join (inner)
             │ columns: (k, v, w, s)
-            │ estimated row count: 1000000 (missing stats)
+            │ estimated row count: 1,000,000 (missing stats)
             │
             ├── • scan
             │     columns: (k, v, w, s)
-            │     estimated row count: 1000 (missing stats)
+            │     estimated row count: 1,000 (missing stats)
             │     table: kv@primary
             │     spans: FULL SCAN
             │
             └── • scan
                   columns: ()
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: kv@primary
                   spans: FULL SCAN
 
@@ -355,27 +355,27 @@ vectorized: true
 ·
 • project
 │ columns: (min)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • group
     │ columns: (k, min)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: min(k)
     │ group by: k
     │
     └── • cross join (inner)
         │ columns: (k, k)
-        │ estimated row count: 1000000 (missing stats)
+        │ estimated row count: 1,000,000 (missing stats)
         │
         ├── • scan
         │     columns: (k)
-        │     estimated row count: 1000 (missing stats)
+        │     estimated row count: 1,000 (missing stats)
         │     table: kv@primary
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (k)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -387,27 +387,27 @@ vectorized: true
 ·
 • project
 │ columns: (min)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • group
     │ columns: (k, min)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: min(k)
     │ group by: k
     │
     └── • cross join (inner)
         │ columns: (k, k)
-        │ estimated row count: 1000000 (missing stats)
+        │ estimated row count: 1,000,000 (missing stats)
         │
         ├── • scan
         │     columns: (k)
-        │     estimated row count: 1000 (missing stats)
+        │     estimated row count: 1,000 (missing stats)
         │     table: kv@primary
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (k)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -420,27 +420,27 @@ vectorized: true
 ·
 • project
 │ columns: (min)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • group
     │ columns: (k, min)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: min(k)
     │ group by: k
     │
     └── • cross join (inner)
         │ columns: (k, k)
-        │ estimated row count: 1000000 (missing stats)
+        │ estimated row count: 1,000,000 (missing stats)
         │
         ├── • scan
         │     columns: (k)
-        │     estimated row count: 1000 (missing stats)
+        │     estimated row count: 1,000 (missing stats)
         │     table: kv@primary
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (k)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -453,26 +453,26 @@ vectorized: true
 ·
 • project
 │ columns: (v)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • distinct
     │ columns: (v, w, s)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ distinct on: v, w, s
     │
     └── • cross join (inner)
         │ columns: (v, w, s)
-        │ estimated row count: 1000000 (missing stats)
+        │ estimated row count: 1,000,000 (missing stats)
         │
         ├── • scan
         │     columns: (v, w, s)
-        │     estimated row count: 1000 (missing stats)
+        │     estimated row count: 1,000 (missing stats)
         │     table: kv@primary
         │     spans: FULL SCAN
         │
         └── • scan
               columns: ()
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -820,7 +820,7 @@ vectorized: true
     │
     └── • scan
           columns: (v int)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -844,7 +844,7 @@ vectorized: true
     │
     └── • scan
           columns: (v int)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -872,13 +872,13 @@ vectorized: true
         │
         └── • render
             │ columns: (column7 unknown, v int)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ render 0: (NULL)[unknown]
             │ render 1: (v)[int]
             │
             └── • scan
                   columns: (v int)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: kv@primary
                   spans: FULL SCAN
 
@@ -908,7 +908,7 @@ vectorized: true
         │
         └── • scan
               columns: (v)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -941,14 +941,14 @@ vectorized: true
     │
     └── • render
         │ columns: (column7, column8, v)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: true
         │ render 1: k > 5
         │ render 2: v
         │
         └── • scan
               columns: (k, v)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: filter_test@primary
               spans: FULL SCAN
 
@@ -970,14 +970,14 @@ vectorized: true
     │
     └── • render
         │ columns: (column7, column8, v)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: true
         │ render 1: k > 5
         │ render 2: v
         │
         └── • scan
               columns: (k, v)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: filter_test@primary
               spans: FULL SCAN
 
@@ -990,12 +990,12 @@ vectorized: true
 ·
 • render
 │ columns: (a int)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: (1)[int]
 │
 └── • scan
       columns: ()
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: kv@primary
       spans: FULL SCAN
 
@@ -1007,28 +1007,28 @@ vectorized: true
 ·
 • project
 │ columns: (sum decimal)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • group
     │ columns: (k int, sum decimal)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: sum(d)
     │ group by: k
     │
     └── • cross join (inner)
         │ columns: (k int, d decimal)
-        │ estimated row count: 330000 (missing stats)
+        │ estimated row count: 330,000 (missing stats)
         │ pred: ((k)[int] >= (d)[decimal])[bool]
         │
         ├── • scan
         │     columns: (k int)
-        │     estimated row count: 1000 (missing stats)
+        │     estimated row count: 1,000 (missing stats)
         │     table: kv@primary
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (d decimal)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: abc@primary
               spans: FULL SCAN
 
@@ -1105,12 +1105,12 @@ vectorized: true
 │
 └── • render
     │ columns: (column5 int)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: ((v)[int] + (1)[int])[int]
     │
     └── • scan
           columns: (v int)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: opt_test@primary
           spans: FULL SCAN
 
@@ -1123,11 +1123,11 @@ vectorized: true
 ·
 • project
 │ columns: (min int)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • group
     │ columns: (k int, min int)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: min(v)
     │ group by: k
     │ ordered: +k
@@ -1135,7 +1135,7 @@ vectorized: true
     └── • scan
           columns: (k int, v int)
           ordering: +k
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: opt_test@primary
           spans: FULL SCAN
 
@@ -1150,12 +1150,12 @@ vectorized: true
 ·
 • render
 │ columns: (r tuple{int, int})
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: (((b)[int], (a)[int]))[tuple{int, int}]
 │
 └── • scan
       columns: (a int, b int)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: ab@primary
       spans: FULL SCAN
 
@@ -1167,30 +1167,30 @@ vectorized: true
 ·
 • render
 │ columns: (min string, r tuple{int, int})
-│ estimated row count: 100000 (missing stats)
+│ estimated row count: 100,000 (missing stats)
 │ render 0: (((any_not_null)[int], (a)[int]))[tuple{int, int}]
 │ render 1: (min)[string]
 │
 └── • group
     │ columns: (a int, x string, min string, any_not_null int)
-    │ estimated row count: 100000 (missing stats)
+    │ estimated row count: 100,000 (missing stats)
     │ aggregate 0: min(y)
     │ aggregate 1: any_not_null(b)
     │ group by: a, x
     │
     └── • cross join (inner)
         │ columns: (a int, b int, x string, y string)
-        │ estimated row count: 1000000 (missing stats)
+        │ estimated row count: 1,000,000 (missing stats)
         │
         ├── • scan
         │     columns: (a int, b int)
-        │     estimated row count: 1000 (missing stats)
+        │     estimated row count: 1,000 (missing stats)
         │     table: ab@primary
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (x string, y string)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: xy@primary
               spans: FULL SCAN
 
@@ -1332,13 +1332,13 @@ vectorized: true
         │
         └── • render
             │ columns: (column7 decimal, v int)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ render 0: ((w)[int]::DECIMAL)[decimal]
             │ render 1: (v)[int]
             │
             └── • scan
                   columns: (v int, w int)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: kv@primary
                   spans: FULL SCAN
 
@@ -1364,13 +1364,13 @@ vectorized: true
     │
     └── • render
         │ columns: (column7, a)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: a
         │ render 1: a
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: foo@primary
               spans: FULL SCAN
 
@@ -1392,13 +1392,13 @@ vectorized: true
     │
     └── • render
         │ columns: (column7, a)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: b
         │ render 1: a
         │
         └── • scan
               columns: (a, b)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: foo@primary
               spans: FULL SCAN
 
@@ -1416,12 +1416,12 @@ vectorized: true
 └── • sort
     │ columns: (v)
     │ ordering: +v
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +v
     │
     └── • scan
           columns: (v)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -1437,12 +1437,12 @@ vectorized: true
 └── • sort
     │ columns: (k, s)
     │ ordering: +s
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +s
     │
     └── • scan
           columns: (k, s)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -1460,7 +1460,7 @@ vectorized: true
 └── • scan
       columns: (k, s)
       ordering: +k
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: kv@primary
       spans: FULL SCAN
 
@@ -1478,12 +1478,12 @@ vectorized: true
 └── • sort
     │ columns: (k, s)
     │ ordering: +s
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +s
     │
     └── • scan
           columns: (k, s)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -1501,7 +1501,7 @@ vectorized: true
 └── • render
     │ columns: (column7, k, s)
     │ ordering: +k
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: ','
     │ render 1: k
     │ render 2: s
@@ -1509,7 +1509,7 @@ vectorized: true
     └── • scan
           columns: (k, s)
           ordering: +k
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -1530,18 +1530,18 @@ vectorized: true
     │
     └── • hash join (inner)
         │ columns: (y, v)
-        │ estimated row count: 9801 (missing stats)
+        │ estimated row count: 9,801 (missing stats)
         │ equality: (y) = (v)
         │
         ├── • scan
         │     columns: (y)
-        │     estimated row count: 1000 (missing stats)
+        │     estimated row count: 1,000 (missing stats)
         │     table: xyz@xy
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (v)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: kv@primary
               spans: FULL SCAN
 
@@ -1559,7 +1559,7 @@ vectorized: true
 ·
 • group
 │ columns: (u, v, s)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ aggregate 0: array_agg(w)
 │ group by: u, v
 │ ordered: +u,+v
@@ -1567,7 +1567,7 @@ vectorized: true
 └── • scan
       columns: (u, v, w)
       ordering: +u,+v,+w
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: uvw@uvw
       spans: FULL SCAN
 
@@ -1584,13 +1584,13 @@ vectorized: true
 │
 └── • render
     │ columns: (column7, s)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: ', '
     │ render 1: s
     │
     └── • scan
           columns: (s)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 
@@ -1629,14 +1629,14 @@ vectorized: true
     │
     └── • render
         │ columns: (column6, company_id, employee)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: ','
         │ render 1: company_id
         │ render 2: employee
         │
         └── • scan
               columns: (company_id, employee)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: string_agg_test@primary
               spans: FULL SCAN
 
@@ -1668,14 +1668,14 @@ vectorized: true
     │
     └── • render
         │ columns: (column6, column7, company_id)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: employee::BYTES
         │ render 1: '\x2c'
         │ render 2: company_id
         │
         └── • scan
               columns: (company_id, employee)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: string_agg_test@primary
               spans: FULL SCAN
 
@@ -1707,14 +1707,14 @@ vectorized: true
     │
     └── • render
         │ columns: (column6, company_id, employee)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: NULL
         │ render 1: company_id
         │ render 2: employee
         │
         └── • scan
               columns: (company_id, employee)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: string_agg_test@primary
               spans: FULL SCAN
 
@@ -1746,13 +1746,13 @@ vectorized: true
     │
     └── • render
         │ columns: (column6, column7, company_id)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: employee::BYTES
         │ render 1: NULL
         │ render 2: company_id
         │
         └── • scan
               columns: (company_id, employee)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: string_agg_test@primary
               spans: FULL SCAN

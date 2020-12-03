@@ -16,11 +16,11 @@ vectorized: true
 │
 └── • ordinality
     │ columns: ("ordinality")
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │
     └── • scan
           columns: ()
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: foo@primary
           spans: FULL SCAN
 
@@ -38,11 +38,11 @@ vectorized: true
 │
 └── • ordinality
     │ columns: (x, "ordinality")
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │
     └── • scan
           columns: (x)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: foo@primary
           spans: FULL SCAN
 
@@ -65,11 +65,11 @@ vectorized: true
     │
     └── • ordinality
         │ columns: (x, "ordinality")
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │
         └── • scan
               columns: (x)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: foo@primary
               spans: FULL SCAN
 
@@ -105,10 +105,10 @@ vectorized: true
 │
 └── • ordinality
     │ columns: (x, "ordinality")
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │
     └── • scan
           columns: (x)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: foo@primary
           spans: FULL SCAN

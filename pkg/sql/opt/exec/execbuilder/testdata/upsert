@@ -30,12 +30,12 @@ vectorized: false
         └── • sort
             │ columns: (k, v)
             │ ordering: -v
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ order: -v
             │
             └── • scan
                   columns: (k, v)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: kv@primary
                   spans: FULL SCAN
 
@@ -63,12 +63,12 @@ vectorized: false
         └── • sort
             │ columns: (k, v)
             │ ordering: -v
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ order: -v
             │
             └── • scan
                   columns: (k, v)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: kv@primary
                   spans: FULL SCAN
 
@@ -96,12 +96,12 @@ vectorized: false
         └── • sort
             │ columns: (k, v)
             │ ordering: -v
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ order: -v
             │
             └── • scan
                   columns: (k, v)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: kv@primary
                   spans: FULL SCAN
 
@@ -147,12 +147,12 @@ vectorized: false
                 └── • sort
                     │ columns: (k, v)
                     │ ordering: -v
-                    │ estimated row count: 1000 (missing stats)
+                    │ estimated row count: 1,000 (missing stats)
                     │ order: -v
                     │
                     └── • scan
                           columns: (k, v)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: kv@primary
                           spans: FULL SCAN
 
@@ -443,12 +443,12 @@ vectorized: false
 ├── • sort
 │   │ columns: (z)
 │   │ ordering: +z
-│   │ estimated row count: 1000 (missing stats)
+│   │ estimated row count: 1,000 (missing stats)
 │   │ order: +z
 │   │
 │   └── • scan buffer
 │         columns: (z)
-│         estimated row count: 1000 (missing stats)
+│         estimated row count: 1,000 (missing stats)
 │         label: buffer 1
 │
 └── • subquery
@@ -462,11 +462,11 @@ vectorized: false
         │
         └── • project
             │ columns: (z)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │
             └── • upsert
                 │ columns: (z, rowid)
-                │ estimated row count: 1000 (missing stats)
+                │ estimated row count: 1,000 (missing stats)
                 │ into: xyz(x, y, z, rowid)
                 │
                 └── • project
@@ -474,7 +474,7 @@ vectorized: false
                     │
                     └── • render
                         │ columns: (column13, a, b, c)
-                        │ estimated row count: 1000 (missing stats)
+                        │ estimated row count: 1,000 (missing stats)
                         │ render 0: unique_rowid()
                         │ render 1: a
                         │ render 2: b
@@ -482,7 +482,7 @@ vectorized: false
                         │
                         └── • scan
                               columns: (a, b, c)
-                              estimated row count: 1000 (missing stats)
+                              estimated row count: 1,000 (missing stats)
                               table: abc@primary
                               spans: FULL SCAN
 
@@ -667,7 +667,7 @@ vectorized: false
             ├── • scan
             │     columns: (a, b, c)
             │     ordering: +b,+c
-            │     estimated row count: 1000 (missing stats)
+            │     estimated row count: 1,000 (missing stats)
             │     table: target@target_b_c_key
             │     spans: FULL SCAN
             │

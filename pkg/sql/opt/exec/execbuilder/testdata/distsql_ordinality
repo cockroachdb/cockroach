@@ -38,11 +38,11 @@ vectorized: true
 ·
 • ordinality
 │ columns: (x, y, z, "ordinality")
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • scan
       columns: (x, y, z)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: xyz@primary
       spans: FULL SCAN
 

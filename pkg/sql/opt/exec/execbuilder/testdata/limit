@@ -64,12 +64,12 @@ vectorized: true
         └── • sort
             │ columns: (w)
             │ ordering: +w
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ order: +w
             │
             └── • scan
                   columns: (w)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: t@primary
                   spans: FULL SCAN
 
@@ -101,7 +101,7 @@ vectorized: true
 └── • scan
       columns: (k, v)
       ordering: +k
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: t@primary
       spans: FULL SCAN
 
@@ -165,12 +165,12 @@ vectorized: true
         └── • sort
             │ columns: (k, sum, any_not_null)
             │ ordering: -any_not_null
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ order: -any_not_null
             │
             └── • group
                 │ columns: (k, sum, any_not_null)
-                │ estimated row count: 1000 (missing stats)
+                │ estimated row count: 1,000 (missing stats)
                 │ aggregate 0: sum(w)
                 │ aggregate 1: any_not_null(v)
                 │ group by: k
@@ -179,7 +179,7 @@ vectorized: true
                 └── • scan
                       columns: (k, v, w)
                       ordering: +k
-                      estimated row count: 1000 (missing stats)
+                      estimated row count: 1,000 (missing stats)
                       table: t@primary
                       spans: FULL SCAN
 
@@ -257,7 +257,7 @@ vectorized: true
         │
         └── • scan
               columns: (k, v, w)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
 
@@ -314,7 +314,7 @@ vectorized: true
             └── • scan
                   columns: (k, v, w)
                   ordering: +k
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: t@primary
                   spans: FULL SCAN
 

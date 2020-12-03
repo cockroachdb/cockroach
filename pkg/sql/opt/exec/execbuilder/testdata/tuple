@@ -186,12 +186,12 @@ vectorized: true
 ·
 • render
 │ columns: (x tuple{int AS a, int AS b, int AS c})
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]
 │
 └── • scan
       columns: (v int)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: kv@primary
       spans: FULL SCAN
 
@@ -203,19 +203,19 @@ vectorized: true
 ·
 • render
 │ columns: (a int, b int, c int)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: (((x)[tuple{int AS a, int AS b, int AS c}]).a)[int]
 │ render 1: (((x)[tuple{int AS a, int AS b, int AS c}]).b)[int]
 │ render 2: (((x)[tuple{int AS a, int AS b, int AS c}]).c)[int]
 │
 └── • render
     │ columns: (x tuple{int AS a, int AS b, int AS c})
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]
     │
     └── • scan
           columns: (v int)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: kv@primary
           spans: FULL SCAN
 

@@ -81,7 +81,7 @@ vectorized: true
     │   │
     │   └── • scan
     │         columns: (a, b)
-    │         estimated row count: 1000 (missing stats)
+    │         estimated row count: 1,000 (missing stats)
     │         table: abc@primary
     │         spans: FULL SCAN
     │
@@ -90,7 +90,7 @@ vectorized: true
         │
         └── • scan
               columns: (a, c)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: abc@primary
               spans: FULL SCAN
 
@@ -167,12 +167,12 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1333 (missing stats)
+│ estimated row count: 1,333 (missing stats)
 │ render 0: 1
 │
 └── • union all
     │ columns: ()
-    │ estimated row count: 1333 (missing stats)
+    │ estimated row count: 1,333 (missing stats)
     │
     ├── • project
     │   │ columns: ()
@@ -185,13 +185,13 @@ vectorized: true
     │       │
     │       └── • scan
     │             columns: (k)
-    │             estimated row count: 1000 (missing stats)
+    │             estimated row count: 1,000 (missing stats)
     │             table: uniontest@primary
     │             spans: FULL SCAN
     │
     └── • scan
           columns: ()
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: uniontest@primary
           spans: FULL SCAN
 

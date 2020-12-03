@@ -104,7 +104,7 @@ vectorized: true
     │   └── • scan
     │         columns: (x)
     │         ordering: +x
-    │         estimated row count: 1000 (missing stats)
+    │         estimated row count: 1,000 (missing stats)
     │         table: numtosquare@primary
     │         spans: FULL SCAN
     │
@@ -117,7 +117,7 @@ vectorized: true
         └── • scan
               columns: (y, str)
               ordering: +y
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: numtostr@primary
               spans: FULL SCAN
 
@@ -176,7 +176,7 @@ vectorized: true
 ·
 • scan
   columns: (x)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: numtosquare@primary
   spans: FULL SCAN
 
@@ -196,19 +196,19 @@ vectorized: true
 • sort
 │ columns: (y, str, res)
 │ ordering: +res
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ order: +res
 │
 └── • render
     │ columns: (res, y, str)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: repeat('test', y)
     │ render 1: y
     │ render 2: str
     │
     └── • scan
           columns: (y, str)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: numtostr@primary
           spans: FULL SCAN
 
@@ -226,19 +226,19 @@ vectorized: true
 └── • sort
     │ columns: (res, y, str)
     │ ordering: +res
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +res
     │
     └── • render
         │ columns: (res, y, str)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: repeat('test', y)
         │ render 1: y
         │ render 2: str
         │
         └── • scan
               columns: (y, str)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: numtostr@primary
               spans: FULL SCAN
 

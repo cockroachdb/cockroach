@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 )
@@ -336,7 +337,7 @@ func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
 	if ob.flags.MakeDeterministic {
 		delta = 10 * time.Microsecond
 	}
-	ob.AddTopLevelField("planning time", delta.Round(time.Microsecond).String())
+	ob.AddTopLevelField("planning time", humanizeutil.Duration(delta))
 }
 
 // AddExecutionTime adds a top-level execution time field. Cannot be called
@@ -345,5 +346,5 @@ func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
 	if ob.flags.MakeDeterministic {
 		delta = 100 * time.Microsecond
 	}
-	ob.AddTopLevelField("execution time", delta.Round(time.Microsecond).String())
+	ob.AddTopLevelField("execution time", humanizeutil.Duration(delta))
 }
