@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,6 +33,12 @@ import (
 func TestUpsertFastPath(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	if mutations.MaxBatchSize() == 1 {
+		// The fast path requires that the max batch size is at least 2, so
+		// we'll skip the test.
+		skip.UnderMetamorphic(t)
+	}
 
 	// This filter increments scans and endTxn for every ScanRequest and
 	// EndTxnRequest that hits user table data.
