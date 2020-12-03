@@ -11,9 +11,10 @@ package sqlproxyccl
 import (
 	"context"
 	"crypto/tls"
-	"encoding/binary"
 	"io"
 	"net"
+	"os"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
@@ -44,6 +45,10 @@ type BackendConfig struct {
 	// return on context cancellation.
 	// See `TestProxyKeepAlive` for example usage.
 	KeepAliveLoop func(context.Context) error
+
+	// Idle connection timeout. If set - will cause the idle backend connections
+	// to timeout after waiting to read or write for that duration.
+	IdleTimeout time.Duration
 }
 
 // Options are the options to the Proxy method.
@@ -67,6 +72,10 @@ type Options struct {
 	// If set, consulted to decorate an error message to be sent to the client.
 	// The error passed to this method will contain no internal information.
 	OnSendErrToClient func(code ErrorCode, msg string) string
+
+	// If set, will be used to establish and return connection to the backend.
+	// If not set then sqlproxyccl.BackendDialer will be used for that.
+	BackendDialer func(backendConfig *BackendConfig) (net.Conn, *CodeError)
 }
 
 // Proxy takes an incoming client connection and relays it to a backend SQL
@@ -76,9 +85,16 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		if s.opts.OnSendErrToClient != nil {
 			msg = s.opts.OnSendErrToClient(code, msg)
 		}
+
+		var pgCode string
+		if code == CodeIdleDisconnect {
+			pgCode = "57P01" // admin shutdown
+		} else {
+			pgCode = "08004" // rejected connection
+		}
 		_, _ = conn.Write((&pgproto3.ErrorResponse{
 			Severity: "FATAL",
-			Code:     "08004", // rejected connection
+			Code:     pgCode,
 			Message:  msg,
 		}).Encode(nil))
 	}
@@ -147,9 +163,9 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		var clientErr error
 		backendConfig, clientErr = s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
 		if clientErr != nil {
-			var codeErr *codeError
+			var codeErr *CodeError
 			if !errors.As(clientErr, &codeErr) {
-				codeErr = &codeError{
+				codeErr = &CodeError{
 					code: CodeParamsRoutingFailed,
 					err:  errors.Errorf("rejected by BackendConfigFromParams: %v", clientErr),
 				}
@@ -164,40 +180,24 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		}
 	}
 
-	crdbConn, err := net.Dial("tcp", backendConfig.OutgoingAddress)
-	if err != nil {
-		s.metrics.BackendDownCount.Inc(1)
-		code := CodeBackendDown
-		sendErrToClient(conn, code, "unable to reach backend SQL server")
-		return NewErrorf(code, "dialing backend server: %v", err)
-	}
-	defer func() { _ = crdbConn.Close() }()
-
-	if backendConfig.TLSConf != nil {
-		// Send SSLRequest.
-		if err := binary.Write(crdbConn, binary.BigEndian, pgSSLRequest); err != nil {
-			s.metrics.BackendDownCount.Inc(1)
-			return NewErrorf(CodeBackendDown, "sending SSLRequest to target server: %v", err)
-		}
-
-		response := make([]byte, 1)
-		if _, err = io.ReadFull(crdbConn, response); err != nil {
-			s.metrics.BackendDownCount.Inc(1)
-			return NewErrorf(CodeBackendDown, "reading response to SSLRequest")
-		}
-
-		if response[0] != pgAcceptSSLRequest {
-			s.metrics.BackendDownCount.Inc(1)
-			return NewErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
-		}
-
-		outCfg := backendConfig.TLSConf.Clone()
-		crdbConn = tls.Client(crdbConn, outCfg)
-	}
-
 	if s.opts.ModifyRequestParams != nil {
 		s.opts.ModifyRequestParams(msg.Parameters)
 	}
+
+	backendDialer := BackendDialer
+	if s.opts.BackendDialer != nil {
+		backendDialer = s.opts.BackendDialer
+	}
+	crdbConn, errWithCode := backendDialer(backendConfig)
+	if errWithCode != nil {
+		s.metrics.BackendDownCount.Inc(1)
+		// Not clear why the err is sent back only when the code is CodeBackendDown
+		if errWithCode.code == CodeBackendDown {
+			sendErrToClient(conn, CodeBackendDown, "unable to reach backend SQL server")
+		}
+		return errWithCode
+	}
+	defer func() { _ = crdbConn.Close() }()
 
 	if _, err := crdbConn.Write(msg.Encode(nil)); err != nil {
 		s.metrics.BackendDownCount.Inc(1)
@@ -239,11 +239,16 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	// client gets to close the connection once it's sent that message,
 	// meaning either case is possible.
 	case err := <-errIncoming:
-		if err != nil {
+		if err == nil {
+			return nil
+		} else if errors.Is(err, os.ErrDeadlineExceeded) {
+			s.metrics.IdleDisconnectCount.Inc(1)
+			sendErrToClient(conn, CodeIdleDisconnect, "terminating connection due to idle timeout")
+			return NewErrorf(CodeIdleDisconnect, "terminating connection due to idle timeout: %v", err)
+		} else {
 			s.metrics.BackendDisconnectCount.Inc(1)
 			return NewErrorf(CodeBackendDisconnected, "copying from target server to client: %s", err)
 		}
-		return nil
 	case err := <-errOutgoing:
 		// The incoming connection got closed.
 		if err != nil {

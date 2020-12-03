@@ -66,20 +66,25 @@ const (
 	// CodeExpiredClientConnection indicates that proxy connection to the client
 	// has expired and should be closed.
 	CodeExpiredClientConnection
+
+	// CodeIdleDisconnect indicates that the connection was disconnected for
+	// being idle for longer than the specified timeout.
+	CodeIdleDisconnect
 )
 
-type codeError struct {
+// CodeError bundles an error with an error code
+type CodeError struct {
 	code ErrorCode
 	err  error
 }
 
-func (e *codeError) Error() string {
+func (e *CodeError) Error() string {
 	return fmt.Sprintf("%s: %s", e.code, e.err)
 }
 
-// NewErrorf returns a new codeError out of the supplied args.
-func NewErrorf(code ErrorCode, format string, args ...interface{}) error {
-	return &codeError{
+// NewErrorf returns a new CodeError out of the supplied args.
+func NewErrorf(code ErrorCode, format string, args ...interface{}) *CodeError {
+	return &CodeError{
 		code: code,
 		err:  errors.Errorf(format, args...),
 	}
