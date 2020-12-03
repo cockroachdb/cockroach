@@ -179,8 +179,10 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		allSinkInfos.put(fileSinkInfo)
 
 		if fileSink.logFilesCombinedMaxSize > 0 {
+			// Do a start round of GC, so clear up past accumulated files.
+			fileSink.gcOldFiles()
 			// Start the GC process. This ensures that old capture files get
-			// erased as necessary.
+			// erased as new files get created.
 			go fileSink.gcDaemon(secLoggersCtx)
 		}
 
