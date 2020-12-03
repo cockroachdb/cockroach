@@ -751,7 +751,7 @@ INSERT INTO t values (1), (10), (100);
 		ex, _, err := jobs.GetScheduledJobExecutor(tree.ScheduledBackupExecutor.InternalName())
 		require.NoError(t, err)
 		require.NotNil(t, ex.Metrics())
-		return &ex.Metrics().(*backupMetrics).ExecutorMetrics
+		return ex.Metrics().(*backupMetrics).ExecutorMetrics
 	}()
 
 	t.Run("retry", func(t *testing.T) {
