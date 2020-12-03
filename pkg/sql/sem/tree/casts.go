@@ -577,13 +577,18 @@ func formatBitArrayToType(d *DBitArray, t *types.T) *DBitArray {
 	return &DBitArray{a}
 }
 
-// performCastWithoutPrecisionTruncation performs the cast, but does not do a check on whether
-// the datum fits the type.
+// performCastWithoutPrecisionTruncation performs the cast, but does not do a
+// check on whether the datum fits the type.
 // In an ideal state, components of AdjustValueToType should be embedded into
 // this function, but the code base needs a general refactor of parsing
 // and casting logic before this can happen.
 // See also: #55094.
 func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
+	// If we're casting a DOidWrapper, then we want to cast the wrapped datum.
+	// It is also reasonable to lose the old Oid value too.
+	// Note that we pass in nil as the first argument since we're not interested
+	// in evaluating the placeholders.
+	d = UnwrapDatum(nil /* evalCtx */, d)
 	switch t.Family() {
 	case types.BitFamily:
 		switch v := d.(type) {
