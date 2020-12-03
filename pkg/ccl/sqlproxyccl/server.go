@@ -34,6 +34,7 @@ type Server struct {
 
 	promMu             syncutil.Mutex
 	prometheusExporter metric.PrometheusExporter
+	backendDialer      func(backendConfig *BackendConfig) (net.Conn, *CodeError)
 }
 
 // NewServer constructs a new proxy server and provisions metrics and health
@@ -59,6 +60,12 @@ func NewServer(opts Options) *Server {
 	// endpoints.
 	mux.HandleFunc("/_status/vars/", s.handleVars)
 	mux.HandleFunc("/_status/healthz/", s.handleHealth)
+
+	if opts.BackendDialer != nil {
+		s.backendDialer = opts.BackendDialer
+	} else {
+		s.backendDialer = BackendDialer
+	}
 
 	return s
 }
