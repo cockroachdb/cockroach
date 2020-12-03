@@ -293,7 +293,7 @@ CREATE TABLE crdb_internal.tables (
 	generator: func(ctx context.Context, p *planner, dbDesc *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
 		worker := func(pusher rowPusher) error {
-			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
+			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 			if err != nil {
 				return err
 			}
@@ -476,7 +476,7 @@ CREATE TABLE crdb_internal.schema_changes (
   direction     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
+		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -2211,74 +2211,94 @@ CREATE TABLE crdb_internal.backward_dependencies (
   dependson_details  STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+	populate: func(
+		ctx context.Context, p *planner, dbContext *dbdesc.Immutable,
+		addRow func(...tree.Datum) error,
+	) error {
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
 		interleaveDep := tree.NewDString("interleave")
-		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, true, /* validate */
-			/* virtual tables have no backward/forward dependencies*/
-			func(db *dbdesc.Immutable, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn) error {
-				tableID := tree.NewDInt(tree.DInt(table.GetID()))
-				tableName := tree.NewDString(table.GetName())
+		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, func(
+			db *dbdesc.Immutable, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn,
+		) error {
+			tableID := tree.NewDInt(tree.DInt(table.GetID()))
+			tableName := tree.NewDString(table.GetName())
 
-				reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
-					for _, interleaveParent := range idx.Interleave.Ancestors {
-						if err := addRow(
-							tableID, tableName,
-							tree.NewDInt(tree.DInt(idx.ID)),
-							tree.DNull,
-							tree.NewDInt(tree.DInt(interleaveParent.TableID)),
-							interleaveDep,
-							tree.NewDInt(tree.DInt(interleaveParent.IndexID)),
-							tree.DNull,
-							tree.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
-								interleaveParent.SharedPrefixLen)),
-						); err != nil {
-							return err
-						}
-					}
-					return nil
-				}
-				if err := table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-					refTbl, err := tableLookup.getTableByID(fk.ReferencedTableID)
-					if err != nil {
-						return err
-					}
-					refIdx, err := tabledesc.FindFKReferencedIndex(refTbl, fk.ReferencedColumnIDs)
-					if err != nil {
-						return err
-					}
-					return addRow(
+			reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
+				for _, interleaveParent := range idx.Interleave.Ancestors {
+					if err := addRow(
 						tableID, tableName,
+						tree.NewDInt(tree.DInt(idx.ID)),
 						tree.DNull,
+						tree.NewDInt(tree.DInt(interleaveParent.TableID)),
+						interleaveDep,
+						tree.NewDInt(tree.DInt(interleaveParent.IndexID)),
 						tree.DNull,
-						tree.NewDInt(tree.DInt(fk.ReferencedTableID)),
-						fkDep,
-						tree.NewDInt(tree.DInt(refIdx.ID)),
-						tree.NewDString(fk.Name),
-						tree.DNull,
-					)
+						tree.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
+							interleaveParent.SharedPrefixLen)),
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			if err := table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+				refTbl, err := tableLookup.getTableByID(fk.ReferencedTableID)
+				if err != nil {
+					return err
+				}
+				refIdx, err := tabledesc.FindFKReferencedIndex(refTbl, fk.ReferencedColumnIDs)
+				if err != nil {
+					return err
+				}
+				return addRow(
+					tableID, tableName,
+					tree.DNull,
+					tree.DNull,
+					tree.NewDInt(tree.DInt(fk.ReferencedTableID)),
+					fkDep,
+					tree.NewDInt(tree.DInt(refIdx.ID)),
+					tree.NewDString(fk.Name),
+					tree.DNull,
+				)
+			}); err != nil {
+				return err
+			}
+
+			// Record the backward references of the primary index.
+			if err := table.ForeachIndex(catalog.IndexOpts{},
+				func(idxDesc *descpb.IndexDescriptor, _ bool) error {
+					return reportIdxDeps(idxDesc)
 				}); err != nil {
+				return err
+			}
+
+			// Record the view dependencies.
+			for _, tIdx := range table.GetDependsOn() {
+				if err := addRow(
+					tableID, tableName,
+					tree.DNull,
+					tree.DNull,
+					tree.NewDInt(tree.DInt(tIdx)),
+					viewDep,
+					tree.DNull,
+					tree.DNull,
+					tree.DNull,
+				); err != nil {
 					return err
 				}
+			}
 
-				// Record the backward references of the primary index.
-				if err := table.ForeachIndex(catalog.IndexOpts{},
-					func(idxDesc *descpb.IndexDescriptor, _ bool) error {
-						return reportIdxDeps(idxDesc)
-					}); err != nil {
-					return err
-				}
-
-				// Record the view dependencies.
-				for _, tIdx := range table.GetDependsOn() {
+			// Record sequence dependencies.
+			return table.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
+				for _, sequenceID := range col.UsesSequenceIds {
 					if err := addRow(
 						tableID, tableName,
 						tree.DNull,
-						tree.DNull,
-						tree.NewDInt(tree.DInt(tIdx)),
-						viewDep,
+						tree.NewDInt(tree.DInt(col.ID)),
+						tree.NewDInt(tree.DInt(sequenceID)),
+						sequenceDep,
 						tree.DNull,
 						tree.DNull,
 						tree.DNull,
@@ -2286,26 +2306,9 @@ CREATE TABLE crdb_internal.backward_dependencies (
 						return err
 					}
 				}
-
-				// Record sequence dependencies.
-				return table.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
-					for _, sequenceID := range col.UsesSequenceIds {
-						if err := addRow(
-							tableID, tableName,
-							tree.DNull,
-							tree.NewDInt(tree.DInt(col.ID)),
-							tree.NewDInt(tree.DInt(sequenceID)),
-							sequenceDep,
-							tree.DNull,
-							tree.DNull,
-							tree.DNull,
-						); err != nil {
-							return err
-						}
-					}
-					return nil
-				})
+				return nil
 			})
+		})
 	},
 }
 
@@ -2493,7 +2496,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, nil, err
 		}
-		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
+		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -3727,9 +3730,13 @@ CREATE TABLE crdb_internal.invalid_objects (
 		// database. To deal with this, we fall through.
 		// TODO(spaskob): we can also validate type descriptors. Add a new function
 		// `forEachTypeDescAllWithTableLookup` and the results to this table.
-		return forEachTableDescAllWithTableLookup(
-			ctx, p, dbContext, hideVirtual, false, /* validate */
-			func(
+		descs, err := catalogkv.GetAllDescriptorsUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
+		if err != nil {
+			return err
+		}
+		const allowAdding = true
+		return forEachTableDescWithTableLookupInternalFromDescriptors(
+			ctx, p, dbContext, hideVirtual, allowAdding, descs, func(
 				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, fn tableLookupFn,
 			) error {
 				if descriptor == nil {
