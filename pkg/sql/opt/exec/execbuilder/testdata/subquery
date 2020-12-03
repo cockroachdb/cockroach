@@ -68,7 +68,7 @@ vectorized: true
 │   │
 │   └── • scan
 │         columns: (a, b, c)
-│         estimated row count: 1000 (missing stats)
+│         estimated row count: 1,000 (missing stats)
 │         table: abc@primary
 │         spans: FULL SCAN
 │
@@ -89,7 +89,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 columns: (a, b, c)
-│                 estimated row count: 1000 (missing stats)
+│                 estimated row count: 1,000 (missing stats)
 │                 table: abc@primary
 │                 spans: FULL SCAN
 │
@@ -117,7 +117,7 @@ vectorized: true
                 └── • revscan
                       columns: (a)
                       ordering: -a
-                      estimated row count: 1000 (missing stats)
+                      estimated row count: 1,000 (missing stats)
                       table: abc@primary
                       spans: FULL SCAN
 
@@ -139,7 +139,7 @@ vectorized: true
 ├── • scan
 │     columns: (a)
 │     ordering: +a
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: abc@primary
 │     spans: FULL SCAN
 │
@@ -152,7 +152,7 @@ vectorized: true
     └── • scan
           columns: (a, b)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: abc@primary
           spans: FULL SCAN
 
@@ -224,7 +224,7 @@ vectorized: true
         │
         └── • scan
               columns: (col0, col3, col4, rowid)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: tab4@primary
               spans: FULL SCAN
 
@@ -243,7 +243,7 @@ vectorized: true
 ·
 • merge join (semi)
 │ columns: (x, y)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ equality: (x) = (x)
 │ left cols are key
 │ right cols are key
@@ -252,14 +252,14 @@ vectorized: true
 ├── • scan
 │     columns: (x, y)
 │     ordering: +x
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: a@primary
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (x)
       ordering: +x
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: b@primary
       spans: FULL SCAN
 
@@ -271,24 +271,24 @@ vectorized: true
 ·
 • hash join (semi)
 │ columns: (x, y)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ equality: (x) = (column9)
 │ left cols are key
 │
 ├── • scan
 │     columns: (x, y)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: a@primary
 │     spans: FULL SCAN
 │
 └── • render
     │ columns: (column9)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: x - 1
     │
     └── • scan
           columns: (x)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: b@primary
           spans: FULL SCAN
 
@@ -309,14 +309,14 @@ vectorized: true
 ├── • scan
 │     columns: (x, y)
 │     ordering: +x
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: a@primary
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (x)
       ordering: +x
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: b@primary
       spans: FULL SCAN
 
@@ -334,18 +334,18 @@ vectorized: true
 │
 ├── • scan
 │     columns: (x, z)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: b@primary
 │     spans: FULL SCAN
 │
 └── • render
     │ columns: (column9)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: x - 1
     │
     └── • scan
           columns: (x)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: a@primary
           spans: FULL SCAN
 
@@ -370,7 +370,7 @@ vectorized: false
     │
     └── • scan
           columns: (x)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: b@primary
           spans: FULL SCAN
 
@@ -388,6 +388,6 @@ vectorized: false
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: abc@primary
       spans: FULL SCAN

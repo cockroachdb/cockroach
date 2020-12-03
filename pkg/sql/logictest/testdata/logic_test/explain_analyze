@@ -69,7 +69,7 @@ vectorized: <hidden>
 │     actual row count: 4
 │     KV rows read: 4
 │     KV bytes read: 32 B
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: kv@primary
 │     spans: FULL SCAN
 │
@@ -78,7 +78,7 @@ vectorized: <hidden>
       actual row count: 3
       KV rows read: 3
       KV bytes read: 24 B
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: ab@primary
       spans: FULL SCAN
 ·
