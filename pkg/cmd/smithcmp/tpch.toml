@@ -513,13 +513,6 @@ initsql = """
 set vectorize=off;
 """
 
-[databases.vec-201auto]
-addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
-allowmutations = true
-initsql = """
-set vectorize=201auto;
-"""
-
 [databases.vec-on]
 addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
 allowmutations = true

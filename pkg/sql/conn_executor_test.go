@@ -544,6 +544,12 @@ func TestQueryProgress(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(rawDB)
 
+	// TODO(yuzefovich): the vectorized cfetcher doesn't emit metadata about
+	// the progress nor do we have an infrastructure to emit such metadata at
+	// the runtime (we can only propagate the metadata during the draining of
+	// the flow which defeats the purpose of the progress meta), so we use the
+	// old row-by-row engine in this test. We should fix that (#55758).
+	db.Exec(t, `SET vectorize=off`)
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	db.Exec(t, `CREATE DATABASE t; CREATE TABLE t.test (x INT PRIMARY KEY);`)
 	db.Exec(t, `INSERT INTO t.test SELECT generate_series(1, $1)::INT`, rows)
