@@ -81,7 +81,7 @@ vectorized: true
     │   │
     │   └── • scan
     │         columns: (a, b)
-    │         estimated row count: 1000 (missing stats)
+    │         estimated row count: 1,000 (missing stats)
     │         table: abc@primary
     │         spans: FULL SCAN
     │
@@ -90,7 +90,7 @@ vectorized: true
         │
         └── • scan
               columns: (a, c)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: abc@primary
               spans: FULL SCAN
 

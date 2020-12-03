@@ -130,7 +130,7 @@ vectorized: false
 │
 └── • render
     │ columns: (x, y, z, x_new, y_new)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: 1
     │ render 1: 2
     │ render 2: x
@@ -139,7 +139,7 @@ vectorized: false
     │
     └── • scan
           columns: (x, y, z)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: xyz@primary
           spans: FULL SCAN
           locking strength: for update
@@ -162,7 +162,7 @@ vectorized: false
     │
     └── • scan
           columns: (x, y, z)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: xyz@primary
           spans: FULL SCAN
           locking strength: for update
@@ -185,7 +185,7 @@ vectorized: false
     │
     └── • render
         │ columns: (x_new, x, y, z)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ render 0: 2
         │ render 1: x
         │ render 2: y
@@ -193,7 +193,7 @@ vectorized: false
         │
         └── • scan
               columns: (x, y, z)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: xyz@primary
               spans: FULL SCAN
               locking strength: for update
@@ -309,7 +309,7 @@ vectorized: false
 │
 └── • render
     │ columns: (a, c, d, c_new)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: c + 1
     │ render 1: a
     │ render 2: c
@@ -317,7 +317,7 @@ vectorized: false
     │
     └── • scan
           columns: (a, c, d)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: tu@primary
           spans: FULL SCAN
           locking strength: for update
@@ -371,12 +371,12 @@ vectorized: false
 ├── • sort
 │   │ columns: (a)
 │   │ ordering: +a
-│   │ estimated row count: 1000 (missing stats)
+│   │ estimated row count: 1,000 (missing stats)
 │   │ order: +a
 │   │
 │   └── • scan buffer
 │         columns: (a)
-│         estimated row count: 1000 (missing stats)
+│         estimated row count: 1,000 (missing stats)
 │         label: buffer 1
 │
 └── • subquery
@@ -390,11 +390,11 @@ vectorized: false
         │
         └── • project
             │ columns: (a)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │
             └── • update
                 │ columns: (a, rowid)
-                │ estimated row count: 1000 (missing stats)
+                │ estimated row count: 1,000 (missing stats)
                 │ table: abc
                 │ set: a
                 │
@@ -403,7 +403,7 @@ vectorized: false
                     │
                     └── • scan
                           columns: (a, b, c, rowid)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: abc@primary
                           spans: FULL SCAN
                           locking strength: for update
@@ -464,13 +464,13 @@ vectorized: false
         │
         └── • index join
             │ columns: (a, b, c)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ table: t38799@primary
             │ key columns: a
             │
             └── • scan
                   columns: (a, b)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: t38799@foo
                   spans: FULL SCAN
 
@@ -655,7 +655,7 @@ vectorized: false
 │
 └── • render
     │ columns: (x, y, z, x_new, y_new)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ render 0: 1
     │ render 1: 2
     │ render 2: x
@@ -664,7 +664,7 @@ vectorized: false
     │
     └── • scan
           columns: (x, y, z)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: xyz@primary
           spans: FULL SCAN
 

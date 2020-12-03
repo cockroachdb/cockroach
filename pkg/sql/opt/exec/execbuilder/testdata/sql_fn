@@ -186,14 +186,14 @@ vectorized: true
 │
 ├── • render
 │   │ columns: (k, addgeometrycolumn, addgeometrycolumn)
-│   │ estimated row count: 1000 (missing stats)
+│   │ estimated row count: 1,000 (missing stats)
 │   │ render 0: addgeometrycolumn('my_spatial_table', 'geom7', 4326, 'POINT', 2)
 │   │ render 1: addgeometrycolumn('my_spatial_table', 'geom8', 4326, 'POINT', 2)
 │   │ render 2: k
 │   │
 │   └── • scan
 │         columns: (k)
-│         estimated row count: 1000 (missing stats)
+│         estimated row count: 1,000 (missing stats)
 │         table: other_table@primary
 │         spans: FULL SCAN
 │

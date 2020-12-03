@@ -122,6 +122,10 @@ var ErrListingUnsupported = errors.New("listing is not supported")
 // This error is raised by the ReadFile method.
 var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
+func init() {
+	cloud.AccessIsWithExplicitAuth = AccessIsWithExplicitAuth
+}
+
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
 func ExternalStorageConfFromURI(
 	path string, user security.SQLUsername,

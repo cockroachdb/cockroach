@@ -39,9 +39,9 @@ func TestComponentStatsMakeDeterminstic(t *testing.T) {
 				},
 			},
 			expected: `
-network latency: 0s
-network wait time: 0s
-deserialization time: 0s
+network latency: 0µs
+network wait time: 0µs
+deserialization time: 0µs
 network tuples received: 10
 network bytes received: 80 B`,
 		},
@@ -65,7 +65,7 @@ network bytes sent: 80 B`,
 				},
 			},
 			expected: `
-KV time: 0s
+KV time: 0µs
 KV tuples read: 10
 KV bytes read: 80 B`,
 		},
@@ -78,7 +78,7 @@ KV bytes read: 80 B`,
 				},
 			},
 			expected: `
-execution time: 0s
+execution time: 0µs
 max memory allocated: 0 B
 max scratch disk allocated: 0 B`,
 		},
@@ -102,7 +102,7 @@ tuples output: 100`,
 			},
 			expected: `
 input tuples: 100
-input stall time: 0s`,
+input stall time: 0µs`,
 		},
 	}
 

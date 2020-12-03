@@ -8,7 +8,7 @@ vectorized: false
 ·
 • virtual table
   columns: (catalog_name, schema_name, default_character_set_name, sql_path, crdb_is_user_defined)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: schemata@primary
 
 query T

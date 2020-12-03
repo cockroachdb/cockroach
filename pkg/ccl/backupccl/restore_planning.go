@@ -1454,7 +1454,7 @@ func checkPrivilegesForRestore(
 	for i := range from {
 		for j := range from[i] {
 			uri := from[i][j]
-			hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(uri)
+			hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
 			if err != nil {
 				return err
 			}
