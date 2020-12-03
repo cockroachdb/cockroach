@@ -1211,7 +1211,8 @@ CREATE TABLE t.test (
   k INT PRIMARY KEY,
   v INT CONSTRAINT check_v CHECK (v >= 0),
   a INT DEFAULT 0 CONSTRAINT check_av CHECK (a <= v),
-  b INT DEFAULT 100 CONSTRAINT check_ab CHECK (b > a)
+  b INT DEFAULT 100 CONSTRAINT check_ab CHECK (b > a),
+  CONSTRAINT b_key UNIQUE (b)
 );
 `); err != nil {
 		t.Fatal(err)
@@ -1256,6 +1257,40 @@ CREATE TABLE t.test (
 	}
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
+	}
+
+	// Read table descriptor, and test that the unique index and constraint
+	// exist.
+	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	if _, _, err := tableDesc.FindIndexByName("b_key"); err != nil {
+		t.Fatalf("expected table descriptor to contain index b_key, but it does not")
+	}
+	found := false
+	for i := range tableDesc.UniqueConstraints {
+		uc := &tableDesc.UniqueConstraints[i]
+		if uc.Name == "b_key" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected table descriptor to contain unique constraint b_key, but it does not")
+	}
+
+	// Now drop the column, re-read table descriptor, and test that the unique
+	// index and constraint have both been dropped.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP b`); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	if _, _, err := tableDesc.FindIndexByName("b_key"); err == nil {
+		t.Fatalf("table descriptor still contains index after column is dropped")
+	}
+	for i := range tableDesc.UniqueConstraints {
+		uc := &tableDesc.UniqueConstraints[i]
+		if uc.Name == "b_key" {
+			t.Fatalf("table descriptor still contains unqiue constraint after column is dropped")
+		}
 	}
 }
 

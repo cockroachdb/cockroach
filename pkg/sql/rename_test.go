@@ -428,3 +428,55 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 }
+
+func TestRenameUniqueConstraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sql := `
+CREATE DATABASE test;
+USE test;
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, CONSTRAINT bc UNIQUE (b, c));
+`
+	_, err := db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	checkRename := func(expected string) {
+		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+		constraints := tableDesc.UniqueConstraints
+		if len(constraints) != 1 {
+			t.Fatalf("expected 1 unique constraint but found %d", len(constraints))
+		}
+		if constraints[0].Name != expected {
+			t.Fatalf("constraint name mismatch: expected = %s, current = %s", expected, constraints[0].Name)
+		}
+		indexes := tableDesc.Indexes
+		if len(indexes) != 1 {
+			t.Fatalf("expected 1 secondary index but found %d", len(indexes))
+		}
+		if indexes[0].Name != expected {
+			t.Fatalf("index name mismatch: expected = %s, current = %s", expected, indexes[0].Name)
+		}
+	}
+
+	// Rename the constraint.
+	if _, err := db.Exec("ALTER TABLE t RENAME CONSTRAINT bc TO bc1"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test that both the constraint and unique index were renamed.
+	checkRename("bc1")
+
+	// Rename the index.
+	if _, err := db.Exec("ALTER INDEX bc1 RENAME TO bc2"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test that both the constraint and unique index were renamed.
+	checkRename("bc2")
+}

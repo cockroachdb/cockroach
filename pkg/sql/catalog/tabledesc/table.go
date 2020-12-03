@@ -245,6 +245,8 @@ func (desc *Immutable) collectConstraintInfo(
 			detail.Index = index
 			info[index.Name] = detail
 		} else if index.Unique {
+			// TODO(rytaft): remove this case once indexes are no longer used for
+			// unique constraints.
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
@@ -254,6 +256,35 @@ func (desc *Immutable) collectConstraintInfo(
 			detail.Index = index
 			info[index.Name] = detail
 		}
+	}
+
+	ucs := desc.AllActiveAndInactiveUniqueConstraints()
+	for _, uc := range ucs {
+		if detail, ok := info[uc.Name]; ok {
+			if uc.WithoutIndex || detail.Index == nil || detail.Index.ID != uc.IndexID {
+				return nil, pgerror.Newf(pgcode.DuplicateObject,
+					"duplicate constraint name: %q", uc.Name)
+			}
+			// We already added the unique index associated with this constraint
+			// above, so add the constraint but don't throw an error.
+			detail.UniqueConstraint = uc
+			info[uc.Name] = detail
+			continue
+		}
+		detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeUnique}
+		var err error
+		detail.Columns, err = desc.NamesForColumnIDs(uc.ColumnIDs)
+		if err != nil {
+			return nil, err
+		}
+		detail.UniqueConstraint = uc
+		if !uc.WithoutIndex {
+			detail.Index, err = desc.FindIndexByID(uc.IndexID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		info[uc.Name] = detail
 	}
 
 	fks := desc.AllActiveAndInactiveForeignKeys()

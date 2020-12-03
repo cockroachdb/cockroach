@@ -102,6 +102,29 @@ message ForeignKeyConstraint {
   reserved 10, 11, 12, 13;
 }
 
+// UniqueConstraint is the representation of a unique constraint. It is stored
+// on the TableDescriptor.
+message UniqueConstraint {
+  option (gogoproto.equal) = true;
+  optional uint32 table_id = 1 [(gogoproto.nullable) = false,
+                                      (gogoproto.customname) = "TableID",
+                                      (gogoproto.casttype) = "ID"];
+  repeated uint32 column_ids = 2 [(gogoproto.customname) = "ColumnIDs",
+                                        (gogoproto.casttype) = "ColumnID"];
+  optional string name = 3 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
+
+  // If WithoutIndex is true, this constraint is not enforced by an index. In
+  // this case, the optimizer will plan checks to enforce uniqueness on all
+  // insertions and updates affecting the columns in the constraint.
+  optional bool without_index = 5 [(gogoproto.nullable) = false];
+
+  // IndexID is the ID of the unique index that is used to enforce this unique
+  // constraint. It is only used if WithoutIndex is false.
+  optional uint32 index_id = 6 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
+}
+
 message ColumnDescriptor {
   option (gogoproto.equal) = true;
   optional string name = 1 [(gogoproto.nullable) = false];
@@ -506,6 +529,7 @@ message ConstraintToUpdate {
     // validation step, can occur. The check field contains the dummy
     // constraint.
     NOT_NULL = 2;
+    UNIQUE = 3;
   }
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
@@ -514,6 +538,7 @@ message ConstraintToUpdate {
   optional ForeignKeyConstraint foreign_key = 4 [(gogoproto.nullable) = false];
   reserved 5;
   optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  optional UniqueConstraint unique_constraint = 7 [(gogoproto.nullable) = false];
 }
 
 // PrimaryKeySwap is a mutation corresponding to the atomic swap phase
@@ -1042,6 +1067,10 @@ message TableDescriptor {
   // inbound_fks contains all foreign key constraints that have this table as
   // the referenced table.
   repeated ForeignKeyConstraint inbound_fks = 37 [(gogoproto.nullable) = false, (gogoproto.customname) = "InboundFKs"];
+
+  // UniqueConstraints contains all the unique constraints defined on this
+  // table.
+  repeated UniqueConstraint unique_constraints = 42 [(gogoproto.nullable) = false];
 
   // Temporary table support will be added to CRDB starting from 20.1. The temporary
   // flag is set to true for all temporary tables. All table descriptors created
