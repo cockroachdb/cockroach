@@ -78,8 +78,9 @@ type cTableInfo struct {
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
 	indexColOrdinals []int
-	// allIndexColOrdinals is the same as indexColOrdinals but
-	// does not contain any -1's. It is meant to be used only in logging.
+	// allIndexColOrdinals is the same as indexColOrdinals but includes all
+	// columns except those that cannot be decoded from the index, like inverted
+	// columns. allIndexColOrdinals is meant to be used only in logging.
 	allIndexColOrdinals []int
 
 	// The set of column ordinals which are both composite and part of the index
@@ -459,7 +460,16 @@ func (rf *cFetcher) Init(
 	}
 	for i, id := range indexColumnIDs {
 		colIdx, ok := tableArgs.ColIdxMap.Get(id)
-		table.allIndexColOrdinals[i] = colIdx
+
+		// Do not include inverted columns in allIndexColOrdinals because the
+		// value in the index key does not encode the full column value and it
+		// cannot be decoded.
+		if table.index.Type == descpb.IndexDescriptor_INVERTED && id == table.index.InvertedColumnID() {
+			table.allIndexColOrdinals[i] = -1
+		} else {
+			table.allIndexColOrdinals[i] = colIdx
+		}
+
 		if ok && neededCols.Contains(int(id)) {
 			table.indexColOrdinals[i] = colIdx
 			neededIndexCols++
