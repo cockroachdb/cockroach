@@ -1661,7 +1661,7 @@ func (r *restoreResumer) dropDescriptors(
 	for _, schema := range details.SchemaDescs {
 		ignoredChildDescIDs[schema.ID] = struct{}{}
 	}
-	allDescs, err := descsCol.GetAllDescriptors(ctx, txn, true /* validate */)
+	allDescs, err := descsCol.GetAllDescriptors(ctx, txn)
 	if err != nil {
 		return err
 	}
