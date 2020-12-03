@@ -23,7 +23,7 @@ import (
 // analyzeOrderBy analyzes an Ordering physical property from the ORDER BY
 // clause and adds the resulting typed expressions to orderByScope.
 func (b *Builder) analyzeOrderBy(
-	orderBy tree.OrderBy, inScope, projectionsScope *scope,
+	orderBy tree.OrderBy, inScope, projectionsScope *scope, rejectFlags tree.SemaRejectFlags,
 ) (orderByScope *scope) {
 	if orderBy == nil {
 		return nil
@@ -36,7 +36,7 @@ func (b *Builder) analyzeOrderBy(
 	// semaCtx in case we are recursively called within a subquery
 	// context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require(exprKindOrderBy.String(), tree.RejectGenerators)
+	b.semaCtx.Properties.Require(exprKindOrderBy.String(), rejectFlags)
 	inScope.context = exprKindOrderBy
 
 	for i := range orderBy {
