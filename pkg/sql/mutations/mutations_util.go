@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-var maxBatchSize int64 = defaultMaxBatchSize
+var maxBatchSize = defaultMaxBatchSize
 
 var defaultMaxBatchSize = int64(util.ConstantWithMetamorphicTestRange(
 	10000, /* defaultValue */
