@@ -396,8 +396,8 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 		desc, err := tc.AddVoters(right.StartKey.AsRawKey(), tc.Target(1))
 		if err == nil {
 			right = desc
-		} else if !testutils.IsError(err, "cannot apply snapshot: snapshot intersects existing range") {
-			t.Fatal(err)
+		} else {
+			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 		}
 		return err
 	})

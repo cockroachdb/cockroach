@@ -1998,10 +1998,11 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 
 func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	sc := kvserver.TestStoreConfig(nil)
-	// We're gonna want to validate the state of the store before and after the
-	// replica GC queue does its work, so we disable the replica gc queue here
-	// and run it manually when we're ready.
+	// We're gonna want to validate the state of the store before and
+	// after the replica GC queue does its work, so we disable the
+	// replica gc queue here and run it manually when we're ready.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.TestingKnobs.DisableEagerReplicaRemoval = true
 	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
@@ -2134,14 +2135,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testReplicaAddRemove(t, true /* addFirst */)
-}
-
-func TestReplicateRemoveAndAdd(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testReplicaAddRemove(t, false /* addFirst */)
+	testutils.RunTrueAndFalse(t, "addFirst", testReplicaAddRemove)
 }
 
 // TestQuotaPool verifies that writes get throttled in the case where we have
@@ -2852,7 +2846,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 					StoreID: mtc.stores[1].Ident.StoreID,
 				})
 				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonUnknown, "", chgs); err != nil {
-					if kvserver.IsSnapshotError(err) {
+					if kvserver.IsRetriableReplicationChangeError(err) {
 						continue
 					} else {
 						t.Fatal(err)
@@ -4786,6 +4780,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// Newly-started stores (including the "rogue" one) should not GC
 	// their replicas. We'll turn this back on when needed.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.RaftDelaySplitToSuppressSnapshotTicks = 0
 	// Make the tick interval short so we don't need to wait too long for the
 	// partitioned leader to time out. Also make the
@@ -4959,8 +4954,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
 		err = changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
-		require.True(t,
-			testutils.IsError(err, "snapshot failed.*cannot apply snapshot: snapshot intersects"), err)
+		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 
 		// Without a partitioned RHS we'll end up always writing a tombstone here because
 		// the RHS will be created at the initial replica ID because it will get
@@ -5008,8 +5002,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
 		err = changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
-		require.True(t,
-			testutils.IsError(err, "snapshot failed.*cannot apply snapshot: snapshot intersects"), err)
+		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 
 		// Without a partitioned RHS we'll end up always writing a tombstone here because
 		// the RHS will be created at the initial replica ID because it will get
@@ -5078,8 +5071,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
 		err = changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
-		require.True(t,
-			testutils.IsError(err, "snapshot failed.*cannot apply snapshot: snapshot intersects"), err)
+		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 		// Ensure that the replica exists with the higher replica ID.
 		repl, err := mtc.Store(0).GetReplica(rhsInfo.Desc.RangeID)
 		require.NoError(t, err)
@@ -5135,8 +5127,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
 		err = changeReplicas(t, db, roachpb.ADD_VOTER, keyB, 0)
-		require.True(t,
-			testutils.IsError(err, "snapshot failed.*cannot apply snapshot: snapshot intersects"), err)
+		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 		// Ensure that there's no tombstone.
 		// The RHS on store 0 never should have heard about its original ID.
 		ensureNoTombstone(t, mtc.Store(0), rhsID)

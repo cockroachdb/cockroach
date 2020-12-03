@@ -264,12 +264,12 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 		replID := r.ReplicaID()
 		for _, rDesc := range crt.Removed() {
 			if rDesc.ReplicaID == replID {
-				msg := fmt.Sprintf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
-				log.Errorf(p.ctx, "%v", msg)
-				return 0, roachpb.NewErrorf("%s: %s", r, msg)
+				err := errors.Mark(errors.Newf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt),
+					errMarkInvalidReplicationChange)
+				log.Errorf(p.ctx, "%v", err)
+				return 0, roachpb.NewError(err)
 			}
 		}
-
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
 		version = raftVersionSideloaded

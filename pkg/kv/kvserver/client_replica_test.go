@@ -2240,9 +2240,7 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	var gotSuccess bool
 	for _, err := range errors {
 		if err != nil {
-			const exp = "change replicas of .* failed: descriptor changed" +
-				"|snapshot failed:"
-			assert.True(t, testutils.IsError(err, exp), err)
+			assert.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 		} else if gotSuccess {
 			t.Error("expected only one success")
 		} else {
