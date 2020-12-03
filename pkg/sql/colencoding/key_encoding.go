@@ -211,7 +211,7 @@ func decodeTableKeyToCol(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		vec.Bool()[idx] = i != 0
-	case types.IntFamily, types.DateFamily, types.OidFamily:
+	case types.IntFamily, types.DateFamily:
 		var i int64
 		if dir == descpb.IndexDescriptor_ASC {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -319,7 +319,7 @@ func UnmarshalColumnValueToCol(
 		var v []byte
 		v, err = value.GetBytes()
 		vec.Bytes().Set(idx, v)
-	case types.DateFamily, types.OidFamily:
+	case types.DateFamily:
 		var v int64
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v
