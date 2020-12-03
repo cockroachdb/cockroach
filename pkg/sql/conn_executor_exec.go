@@ -1452,6 +1452,8 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
 
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
+
 	onTxnFinish = func(ev txnEvent) {
 		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
 		ex.recordTransaction(ev, implicit, txnStart)
@@ -1468,6 +1470,7 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart time.Time) {
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
 	txnServiceLat := ex.phaseTimes.getTransactionServiceLatency()
