@@ -1080,14 +1080,18 @@ func markDeprecatedSchemaChangeJobsFailed(ctx context.Context, r runner) error {
 	const batchSize = 100
 	workLeft := true
 	prevBatchSize := 0
+	var lastIDSeen int64
 	for workLeft {
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Get jobs in a non-terminal state.
+			// We use id for pagination. unique_rowid() isn't guaranteed to be
+			// increasing with time, which is fine because it's not possible to create
+			// new 19.2-style jobs.
 			rows, err := r.sqlExecutor.QueryEx(
 				ctx, "get-deprecated-schema-change-jobs", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUser},
-				`SELECT id, status, payload FROM system.jobs WHERE status NOT IN ($1, $2, $3) LIMIT $4`,
-				jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, batchSize,
+				`SELECT id, status, payload FROM system.jobs WHERE status NOT IN ($1, $2, $3) AND id > $4 ORDER BY id LIMIT $5`,
+				jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, lastIDSeen, batchSize,
 			)
 			if err != nil {
 				return err
@@ -1098,6 +1102,7 @@ func markDeprecatedSchemaChangeJobsFailed(ctx context.Context, r runner) error {
 			}
 			for _, row := range rows {
 				id := tree.MustBeDInt(row[0])
+				lastIDSeen = int64(id)
 				status := tree.MustBeDString(row[1])
 				payload, err := jobs.UnmarshalPayload(row[2])
 				if err != nil {

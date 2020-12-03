@@ -993,6 +993,13 @@ func TestMarkDeprecatedSchemaChangeJobsFailed(t *testing.T) {
 	migration := mt.pop(t, "mark non-terminal schema change jobs with a pre-20.1 format version as failed")
 	mt.start(t, base.TestServerArgs{})
 
+	// First, pad the jobs table with 100 GC jobs in the running state to ensure
+	// that the batching works. Regression test for #56859.
+	for i := 0; i < 100; i++ {
+		mt.sqlDB.Exec(t, `CREATE TABLE tbl_to_drop()`)
+		mt.sqlDB.Exec(t, `DROP TABLE tbl_to_drop`)
+	}
+
 	// Write some fake job records for schema changes with a pre-20.1 format
 	// version. Due to their format version, they will never be adopted. We just
 	// verify that the migration marks them as failed if in a non-terminal state,
