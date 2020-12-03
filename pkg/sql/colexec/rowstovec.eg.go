@@ -331,30 +331,6 @@ func EncDatumRowsToColVec(
 						}
 					}
 				}
-			case types.OidFamily:
-				switch t.Width() {
-				case -1:
-				default:
-					col := vec.Int64()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
-							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
-
-							v = int64(datum.(*tree.DOid).DInt)
-							castV := v.(int64)
-							col[i] = castV
-						}
-					}
-				}
 			case types.UuidFamily:
 				switch t.Width() {
 				case -1:

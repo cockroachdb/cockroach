@@ -130,15 +130,6 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
 				return datum.(*tree.DTimestampTZ).Time
 			}
 		}
-	case types.OidFamily:
-		switch ct.Width() {
-		case -1:
-		default:
-			return func(datum tree.Datum) interface{} {
-
-				return int64(datum.(*tree.DOid).DInt)
-			}
-		}
 	case types.UuidFamily:
 		switch ct.Width() {
 		case -1:
