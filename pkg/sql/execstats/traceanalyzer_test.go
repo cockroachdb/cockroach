@@ -170,4 +170,17 @@ func TestTraceAnalyzer(t *testing.T) {
 			require.Equal(t, tc.expectedMaxMemUsage, queryLevelStats.MaxMemUsage)
 		}
 	})
+
+	t.Run("Rows/BytesFromKV", func(t *testing.T) {
+		for _, analyzer := range []*execstats.TraceAnalyzer{
+			rowexecTraceAnalyzer, colexecTraceAnalyzer,
+		} {
+			queryLevelStats := analyzer.GetQueryLevelStats()
+
+			require.Equal(t, int64(30), queryLevelStats.KVRowsRead)
+			// For tests, the bytes read is based on the number of rows read, rather
+			// than actual bytes read.
+			require.Equal(t, int64(30*8), queryLevelStats.KVBytesRead)
+		}
+	})
 }
