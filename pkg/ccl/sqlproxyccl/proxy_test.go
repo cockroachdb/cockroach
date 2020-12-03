@@ -15,6 +15,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -244,6 +245,54 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
+		require.True(t, connSuccess)
+		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+	}()
+
+	var n int
+	err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+}
+
+func TestProxyTLSClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// NB: The leaktest call is an important part of this test. We're
+	// verifying that no goroutines are leaked, despite calling Close an
+	// underlying TCP connection (rather than the TLSConn that wraps it).
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	outgoingTLSConfig, err := tc.Server(0).RPCContext().GetClientTLSConfig()
+	require.NoError(t, err)
+	outgoingTLSConfig.InsecureSkipVerify = true
+
+	var proxyIncomingConn atomic.Value // *Conn
+	var connSuccess bool
+	opts := Options{
+		BackendConfigFromParams: func(params map[string]string, conn *Conn) (*BackendConfig, error) {
+			proxyIncomingConn.Store(conn)
+			return &BackendConfig{
+				OutgoingAddress:     tc.Server(0).ServingSQLAddr(),
+				TLSConf:             outgoingTLSConfig,
+				OnConnectionSuccess: func() { connSuccess = true },
+			}, nil
+		},
+	}
+	s, addr, done := setupTestProxyWithCerts(t, &opts)
+	defer done()
+
+	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require", addr)
+	conn, err := pgx.Connect(context.Background(), url)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+	defer func() {
+		incomingConn := proxyIncomingConn.Load().(*Conn)
+		require.NoError(t, incomingConn.Close())
+		<-incomingConn.Done() // should immediately proceed
+
 		require.True(t, connSuccess)
 		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
 	}()
