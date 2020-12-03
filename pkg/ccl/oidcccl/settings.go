@@ -9,6 +9,7 @@
 package oidcccl
 
 import (
+	"encoding/json"
 	"net/url"
 	"regexp"
 	"strings"
@@ -66,19 +67,73 @@ var OIDCClientSecret = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCRedirectURL is the cluster URL to redirect to after OIDC auth completes
+// multiRegionRedirectURLs is a struct that defines a valid JSON body for the OIDCRedirectURL
+// cluster setting in multi-region environments.
+type multiRegionRedirectURLs struct {
+	RedirectURLs map[string]string `json:"redirect_urls"`
+	DefaultURL   string            `json:"default_url"`
+}
+
+func mustParseOIDCRedirectURL(s string) multiRegionRedirectURLs {
+	var mrru = multiRegionRedirectURLs{}
+	err := json.Unmarshal([]byte(s), &mrru)
+	if err != nil {
+		mrru.DefaultURL = s
+	}
+	return mrru
+}
+
+func validateOIDCRedirectURL(values *settings.Values, s string) error {
+	var mrru = multiRegionRedirectURLs{}
+	err := json.Unmarshal([]byte(s), &mrru)
+	if err != nil {
+		// Fall back to assuming basic URL string for backwards compatibility and to keep the simple
+		// configuration option
+		_, err = url.Parse(s)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	if mrru.DefaultURL == "" {
+		return errors.New("oidc: empty default_url in redirect_url setting JSON")
+	}
+	if _, err := url.Parse(mrru.DefaultURL); err != nil {
+		return err
+	}
+	return nil
+}
+
+// OIDCRedirectURL is the cluster URL to redirect to after OIDC auth completes. This can be set
+// to a simple string that Go can parse as a valid URL (although it's incredibly permissive) or as
+// a string that can be parsed as valid JSON and deserialized into an instance of
+// multiRegionRedirectURLs defined above. In the latter case, it is expected that each node will
+// use a callback URL that matches its own `region` locality tag.
+//
+// Example valid values:
+// - 'https://cluster.example.com:8080/oidc/v1/callback'
+// - '{
+//    "default_url": "https://localhost:8080/oidc/v1/callback",
+//    "redirect_urls": {
+//      "us-east-1": "https://localhost:8080/oidc/v1/callback",
+//      "eu-west-1": "example.com"
+//    }
+//   }'
+// - '{"default_url": "https://localhost:8080/oidc/v1/callback"}'
+//
+// In a multi-region cluster where this setting is set to a URL string, we will use the same
+// callback URL on all auth requests. In a multi-region setting where the cluster's region is not
+// listed in the `redirect_urls` object, we will use the required `default_url` callback URL.
 var OIDCRedirectURL = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		OIDCRedirectURLSettingName,
-		"sets OIDC redirect URL (base HTTP URL, likely your load balancer, must route to the path /oidc/v1/callback) (this feature is experimental)",
+		"sets OIDC redirect URL via a URL string or a JSON string containing a required "+
+			"`default_url` key and a `redirect_urls` key containing an object that maps from region keys "+
+			"to URL strings "+
+			"(URLs should point to your load balancer and must route to the path /oidc/v1/callback) "+
+			"(this feature is experimental)",
 		"https://localhost:8080/oidc/v1/callback",
-		func(values *settings.Values, s string) error {
-			_, err := url.Parse(s)
-			if err != nil {
-				return err
-			}
-			return nil
-		},
+		validateOIDCRedirectURL,
 	)
 	s.SetReportable(true)
 	s.SetVisibility(settings.Public)
