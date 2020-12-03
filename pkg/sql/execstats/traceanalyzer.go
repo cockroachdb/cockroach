@@ -260,10 +260,36 @@ func (a *TraceAnalyzer) GetMaxMemoryUsage() int64 {
 	return getMaxMemoryUsageFromStreamStats(a.streamStats)
 }
 
+// GetBytesReadFromKV returns the total number of bytes read from KV.
+func (a *TraceAnalyzer) GetBytesReadFromKV() int64 {
+	var bytesRead int64
+	for _, stats := range a.processorStats {
+		if stats.stats == nil {
+			continue
+		}
+		bytesRead += int64(stats.stats.KV.BytesRead.Value())
+	}
+	return bytesRead
+}
+
+// GetRowsReadFromKV returns the total number of rows read from KV.
+func (a *TraceAnalyzer) GetRowsReadFromKV() int64 {
+	var rowsRead int64
+	for _, stats := range a.processorStats {
+		if stats.stats == nil {
+			continue
+		}
+		rowsRead += int64(stats.stats.KV.TuplesRead.Value())
+	}
+	return rowsRead
+}
+
 // QueryLevelStats returns all the top level stats that correspond to the given traces and flow metadata.
 type QueryLevelStats struct {
 	NetworkBytesSent int64
 	MaxMemUsage      int64
+	BytesReadFromKV  int64
+	RowsReadFromKV   int64
 }
 
 // GetQueryLevelStats returns all the top-level stats in a QueryLevelStats struct.
@@ -276,6 +302,8 @@ func GetQueryLevelStats(
 ) *QueryLevelStats {
 	networkBytesSent := int64(0)
 	queryMaxMemUsage := int64(0)
+	bytesReadFromKV := int64(0)
+	rowsReadFromKV := int64(0)
 	for _, metadata := range flowMetadata {
 		analyzer := NewTraceAnalyzer(*metadata)
 		if err := analyzer.AddTrace(trace, deterministicExplainAnalyze); err != nil {
@@ -294,9 +322,14 @@ func GetQueryLevelStats(
 		if flowMaxMemUsage := analyzer.GetMaxMemoryUsage(); flowMaxMemUsage > queryMaxMemUsage {
 			queryMaxMemUsage = flowMaxMemUsage
 		}
+
+		bytesReadFromKV += analyzer.GetBytesReadFromKV()
+		rowsReadFromKV += analyzer.GetRowsReadFromKV()
 	}
 	return &QueryLevelStats{
 		NetworkBytesSent: networkBytesSent,
 		MaxMemUsage:      queryMaxMemUsage,
+		BytesReadFromKV:  bytesReadFromKV,
+		RowsReadFromKV:   rowsReadFromKV,
 	}
 }
