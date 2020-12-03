@@ -36,8 +36,10 @@ const ProviderName = "aws"
 // init will inject the AWS provider into vm.Providers, but only
 // if the aws tool is available on the local path.
 func init() {
-	const unimplemented = "please install the AWS CLI utilities " +
+	const unimplemented = "please install the AWS CLI utilities version 1 " +
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
+	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
+
 	var p vm.Provider = &Provider{}
 	if _, err := exec.LookPath("aws"); err == nil {
 		// NB: This is a bit hacky, but using something like `aws iam get-user` is
@@ -54,7 +56,7 @@ func init() {
 		}
 
 		if !haveCredentials() {
-			p = flagstub.New(p, unimplemented)
+			p = flagstub.New(p, noCredentials)
 		}
 	} else {
 		p = flagstub.New(p, unimplemented)
