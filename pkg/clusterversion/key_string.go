@@ -26,18 +26,17 @@ func _() {
 	_ = x[AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable-15]
 	_ = x[MaterializedViews-16]
 	_ = x[Box2DType-17]
-	_ = x[LeasedDatabaseDescriptors-18]
-	_ = x[UpdateScheduledJobsSchema-19]
-	_ = x[CreateLoginPrivilege-20]
-	_ = x[HBAForNonTLS-21]
-	_ = x[V20_2-22]
-	_ = x[Start21_1-23]
-	_ = x[EmptyArraysInInvertedIndexes-24]
+	_ = x[UpdateScheduledJobsSchema-18]
+	_ = x[CreateLoginPrivilege-19]
+	_ = x[HBAForNonTLS-20]
+	_ = x[V20_2-21]
+	_ = x[Start21_1-22]
+	_ = x[EmptyArraysInInvertedIndexes-23]
 }
 
-const _Key_name = "NamespaceTableWithSchemasStart20_2GeospatialTypeEnumsRangefeedLeasesAlterColumnTypeGeneralAlterSystemJobsAddCreatedByColumnsAddScheduledJobsTableUserDefinedSchemasNoOriginFKIndexesClientRangeInfosOnBatchResponseNodeMembershipStatusRangeStatsRespHasDescMinPasswordLengthAbortSpanBytesAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableMaterializedViewsBox2DTypeLeasedDatabaseDescriptorsUpdateScheduledJobsSchemaCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1EmptyArraysInInvertedIndexes"
+const _Key_name = "NamespaceTableWithSchemasStart20_2GeospatialTypeEnumsRangefeedLeasesAlterColumnTypeGeneralAlterSystemJobsAddCreatedByColumnsAddScheduledJobsTableUserDefinedSchemasNoOriginFKIndexesClientRangeInfosOnBatchResponseNodeMembershipStatusRangeStatsRespHasDescMinPasswordLengthAbortSpanBytesAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableMaterializedViewsBox2DTypeUpdateScheduledJobsSchemaCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1EmptyArraysInInvertedIndexes"
 
-var _Key_index = [...]uint16{0, 25, 34, 48, 53, 68, 90, 124, 145, 163, 180, 211, 231, 252, 269, 283, 347, 364, 373, 398, 423, 443, 455, 460, 469, 497}
+var _Key_index = [...]uint16{0, 25, 34, 48, 53, 68, 90, 124, 145, 163, 180, 211, 231, 252, 269, 283, 347, 364, 373, 398, 418, 430, 435, 444, 472}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {

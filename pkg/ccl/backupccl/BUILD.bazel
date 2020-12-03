@@ -29,7 +29,6 @@ go_library(
         "//pkg/build",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
-        "//pkg/clusterversion",
         "//pkg/featureflag",
         "//pkg/gossip",
         "//pkg/jobs",
