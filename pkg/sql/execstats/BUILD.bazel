@@ -37,7 +37,9 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/optional",
         "//pkg/util/tracing",
+        "//vendor/github.com/stretchr/testify/assert",
         "//vendor/github.com/stretchr/testify/require",
     ],
 )

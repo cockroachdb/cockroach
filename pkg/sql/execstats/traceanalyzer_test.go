@@ -13,7 +13,9 @@ package execstats_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -181,6 +185,46 @@ func TestTraceAnalyzer(t *testing.T) {
 			// For tests, the bytes read is based on the number of rows read, rather
 			// than actual bytes read.
 			require.Equal(t, int64(30*8), queryLevelStats.KVBytesRead)
+		}
+	})
+}
+
+func TestTraceAnalyzer_ProcessStats(t *testing.T) {
+	processorStat1 := execstats.SetProcessorStats(
+		1,
+		&execinfrapb.ComponentStats{
+			KV: execinfrapb.KVStats{
+				KVTime: optional.MakeTimeValue(3 * time.Second),
+			},
+		},
+	)
+
+	processorStat2 := execstats.SetProcessorStats(
+		2,
+		&execinfrapb.ComponentStats{
+			KV: execinfrapb.KVStats{
+				KVTime: optional.MakeTimeValue(5 * time.Second),
+			},
+		},
+	)
+
+	processorStats := map[execinfrapb.ProcessorID]*execstats.ProcessorStats{
+		1: processorStat1,
+		2: processorStat2,
+	}
+
+	flowMeta := execstats.SetFlowMetadata(processorStats, nil, nil)
+	expected := execstats.QueryLevelStats{
+		KVTime: 8 * time.Second,
+	}
+
+	t.Run("kvtime", func(t *testing.T) {
+		a := &execstats.TraceAnalyzer{
+			FlowMetadata: flowMeta,
+		}
+		assert.NoError(t, a.ProcessStats())
+		if got := a.GetQueryLevelStats(); !reflect.DeepEqual(got, expected) {
+			t.Errorf("ProcessStats() = %v, want %v", got, expected)
 		}
 	})
 }

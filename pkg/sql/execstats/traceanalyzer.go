@@ -12,6 +12,7 @@ package execstats
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -21,7 +22,8 @@ import (
 	"github.com/gogo/protobuf/types"
 )
 
-type processorStats struct {
+// ProcessorStats contains stats for a specific processor extracted from a trace.
+type ProcessorStats struct {
 	nodeID roachpb.NodeID
 	stats  *execinfrapb.ComponentStats
 }
@@ -37,6 +39,15 @@ type flowStats struct {
 	stats  []*execinfrapb.ComponentStats
 }
 
+// SetProcessorStats creates a ProcessorStats with the given processor information. This is used
+// for testing.
+func SetProcessorStats(nodeID roachpb.NodeID, stats *execinfrapb.ComponentStats) *ProcessorStats {
+	return &ProcessorStats{
+		nodeID: nodeID,
+		stats:  stats,
+	}
+}
+
 // FlowMetadata contains metadata extracted from flows. This information is stored
 // in sql.flowInfo and is analyzed by TraceAnalyzer.
 type FlowMetadata struct {
@@ -44,7 +55,7 @@ type FlowMetadata struct {
 	// extracted from a trace as well as some metadata. Note that it is possible
 	// for the processorStats to have nil stats, which indicates that no stats
 	// were found for the given processor in the trace.
-	processorStats map[execinfrapb.ProcessorID]*processorStats
+	processorStats map[execinfrapb.ProcessorID]*ProcessorStats
 	// streamStats maps a stream ID to stats associated with this stream extracted
 	// from a trace as well as some metadata. Note that is is possible for the
 	// streamStats to have nil stats, which indicates that no stats were found
@@ -54,10 +65,24 @@ type FlowMetadata struct {
 	flowStats map[execinfrapb.FlowID]*flowStats
 }
 
+// SetFlowMetadata creates a FlowMetadata with the given metadata. This is used
+// for testing.
+func SetFlowMetadata(
+	processorStats map[execinfrapb.ProcessorID]*ProcessorStats,
+	streamStats map[execinfrapb.StreamID]*streamStats,
+	flowStats map[execinfrapb.FlowID]*flowStats,
+) *FlowMetadata {
+	return &FlowMetadata{
+		processorStats: processorStats,
+		streamStats:    streamStats,
+		flowStats:      flowStats,
+	}
+}
+
 // NewFlowMetadata creates a FlowMetadata with the given physical plan information.
 func NewFlowMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowMetadata {
 	a := &FlowMetadata{
-		processorStats: make(map[execinfrapb.ProcessorID]*processorStats),
+		processorStats: make(map[execinfrapb.ProcessorID]*ProcessorStats),
 		streamStats:    make(map[execinfrapb.StreamID]*streamStats),
 		flowStats:      make(map[execinfrapb.FlowID]*flowStats),
 	}
@@ -66,7 +91,7 @@ func NewFlowMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowMetada
 	for nodeID, flow := range flows {
 		a.flowStats[flow.FlowID] = &flowStats{nodeID: nodeID}
 		for _, proc := range flow.Processors {
-			a.processorStats[execinfrapb.ProcessorID(proc.ProcessorID)] = &processorStats{nodeID: nodeID}
+			a.processorStats[execinfrapb.ProcessorID(proc.ProcessorID)] = &ProcessorStats{nodeID: nodeID}
 			for _, output := range proc.Output {
 				for _, stream := range output.Streams {
 					if stream.Type == execinfrapb.StreamEndpointSpec_REMOTE {
@@ -89,6 +114,7 @@ type NodeLevelStats struct {
 	MaxMemoryUsageGroupedByNode   map[roachpb.NodeID]int64
 	KVBytesReadGroupedByNode      map[roachpb.NodeID]int64
 	KVRowsReadGroupedByNode       map[roachpb.NodeID]int64
+	KVTimeGroupedByNode           map[roachpb.NodeID]time.Duration
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the given traces and flow metadata.
@@ -97,6 +123,7 @@ type QueryLevelStats struct {
 	MaxMemUsage      int64
 	KVBytesRead      int64
 	KVRowsRead       int64
+	KVTime           time.Duration
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -191,16 +218,18 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		MaxMemoryUsageGroupedByNode:   make(map[roachpb.NodeID]int64),
 		KVBytesReadGroupedByNode:      make(map[roachpb.NodeID]int64),
 		KVRowsReadGroupedByNode:       make(map[roachpb.NodeID]int64),
+		KVTimeGroupedByNode:           make(map[roachpb.NodeID]time.Duration),
 	}
 	var errs error
 
-	// Process processorStats.
+	// Process ProcessorStats.
 	for _, stats := range a.processorStats {
 		if stats.stats == nil {
 			continue
 		}
 		a.nodeLevelStats.KVBytesReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.BytesRead.Value())
 		a.nodeLevelStats.KVRowsReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.TuplesRead.Value())
+		a.nodeLevelStats.KVTimeGroupedByNode[stats.nodeID] += stats.stats.KV.KVTime.Value()
 	}
 
 	// Process streamStats.
@@ -255,6 +284,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		MaxMemUsage:      int64(0),
 		KVBytesRead:      int64(0),
 		KVRowsRead:       int64(0),
+		KVTime:           time.Duration(0),
 	}
 
 	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
@@ -273,6 +303,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	for _, kvRowsRead := range a.nodeLevelStats.KVRowsReadGroupedByNode {
 		a.queryLevelStats.KVRowsRead += kvRowsRead
+	}
+
+	for _, kvTime := range a.nodeLevelStats.KVTimeGroupedByNode {
+		a.queryLevelStats.KVTime += kvTime
 	}
 	return errs
 }
