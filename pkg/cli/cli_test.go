@@ -530,8 +530,12 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`})
 	c.RunWithArgs([]string{`sql`, `--set`, `echo=true`, `-e`, `select 123 as "123"`})
 	c.RunWithArgs([]string{`sql`, `--set`, `unknownoption`, `-e`, `select 123 as "123"`})
-	// Check that partial results + error get reported together.
-	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-3) from generate_series(1,4)`})
+	// Check that partial results + error get reported together. The query will
+	// run via the vectorized execution engine which operates on the batches of
+	// growing capacity starting at 1 (the batch sizes will be 1, 2, 4, ...),
+	// and with the query below the division by zero error will occur after the
+	// first batch consisting of 1 row has been returned to the client.
+	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-2) from generate_series(1,3)`})
 
 	// Output:
 	// sql -e show application_name
@@ -589,9 +593,8 @@ func Example_sql() {
 	// sql --set unknownoption -e select 123 as "123"
 	// invalid syntax: \set unknownoption. Try \? for help.
 	// ERROR: invalid syntax
-	// sql -e select 1/(@1-3) from generate_series(1,4)
+	// sql -e select 1/(@1-2) from generate_series(1,3)
 	// ?column?
-	// -0.5
 	// -1
 	// (error encountered after some results were delivered)
 	// ERROR: division by zero
@@ -1371,7 +1374,7 @@ func Example_misc_table() {
 	//            info
 	// --------------------------
 	//   distribution: full
-	//   vectorized: false
+	//   vectorized: true
 	//
 	//   • render
 	//   │
