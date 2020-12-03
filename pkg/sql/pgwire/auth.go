@@ -263,7 +263,7 @@ type AuthConn interface {
 // two represent the two "ends" of the pipe and we'll pass data between them.
 type authPipe struct {
 	c   *conn // Only used for writing, not for reading.
-	log *log.SecondaryLogger
+	log bool
 
 	ch chan []byte
 	// writerDone is a channel closed by noMorePwdData().
@@ -277,10 +277,10 @@ type authRes struct {
 	err      error
 }
 
-func newAuthPipe(c *conn, log *log.SecondaryLogger) *authPipe {
+func newAuthPipe(c *conn, logAuthn bool) *authPipe {
 	ap := &authPipe{
 		c:          c,
-		log:        log,
+		log:        logAuthn,
 		ch:         make(chan []byte),
 		writerDone: make(chan struct{}),
 		readerDone: make(chan authRes, 1),
@@ -329,10 +329,9 @@ func (p *authPipe) AuthFail(err error) {
 }
 
 func (p *authPipe) Logf(ctx context.Context, format string, args ...interface{}) {
-	if p.log == nil {
-		return
+	if p.log {
+		log.Sessions.Infof(ctx, format, args...)
 	}
-	p.log.Logf(ctx, format, args...)
 }
 
 // authResult is part of the authenticator interface.

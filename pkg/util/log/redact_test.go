@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -33,9 +34,9 @@ const escapeMark = "?"
 // when redactable logs are enabled, and no mark indicator when they
 // are not.
 func TestRedactedLogOutput(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer capture()()
 
 	defer TestingSetRedactable(false)()
@@ -125,6 +126,8 @@ func TestRedactTags(t *testing.T) {
 }
 
 func TestRedactedDecodeFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	testData := []struct {
 		redactMode    EditSensitiveData
 		expRedactable bool
@@ -143,8 +146,6 @@ func TestRedactedDecodeFile(t *testing.T) {
 			// The log file go to a different directory in each sub-test.
 			s := ScopeWithoutShowLogs(t)
 			defer s.Close(t)
-			setFlags()
-			defer TestingSetRedactable(true)()
 
 			// Force file re-initialization.
 			s.Rotate(t)
@@ -194,26 +195,13 @@ func TestRedactedDecodeFile(t *testing.T) {
 	}
 }
 
-// TestRedactableFlag checks that --redactable-logs does its job.
-// TODO(knz): Remove this with
-// https://github.com/cockroachdb/cockroach/pull/51987.
-func TestRedactableFlag(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+// TestDefaultRedactable checks that redaction markers are enabled by
+// default.
+func TestDefaultRedactable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
 
-	TestingResetActive()
-
-	// Request redaction markers in generated files.
-	defer func(p bool) { logging.redactableLogsRequested = p }(logging.redactableLogsRequested)
-	logging.redactableLogsRequested = true
-	// Propagate the flag.
-	cleanup, err := SetupRedactionAndStderrRedirects()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cleanup()
-	// Now we check that they are present.
+	// Check redaction markers in the output.
 	defer capture()()
 	Infof(context.Background(), "safe %s", "unsafe")
 

@@ -28,8 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -152,11 +151,14 @@ func CmdHelper(
 	const crdbDefaultURL = `postgres://root@localhost:26257?sslmode=disable`
 
 	return HandleErrs(func(cmd *cobra.Command, args []string) error {
-		if ls := cmd.Flags().Lookup(logflags.LogToStderrName); ls != nil {
-			if !ls.Changed {
-				// Unless the settings were overridden by the user, default to logging
-				// to stderr.
-				_ = ls.Value.Set(severity.INFO.String())
+		// Apply the logging configuration if none was set already.
+		if active, _ := log.IsActive(); !active {
+			cfg := logconfig.DefaultStderrConfig()
+			if err := cfg.Validate(nil /* no default log directory */); err != nil {
+				return err
+			}
+			if _, err := log.ApplyConfig(cfg); err != nil {
+				return err
 			}
 		}
 

@@ -31,7 +31,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -99,19 +101,11 @@ func contains(str string, t *testing.T) bool {
 	return strings.Contains(c, str)
 }
 
-// setFlags resets the logging flags and exit function to what tests expect.
-func setFlags() {
-	ResetExitFunc()
-	// Make all logged errors go to the external stderr, in addition to
-	// the log file.
-	logging.stderrSinkInfo.threshold = severity.ERROR
-}
-
 // Test that Info works as advertised.
 func TestInfo(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer capture()()
 	Info(context.Background(), "test")
 	if !contains("I", t) {
@@ -124,7 +118,9 @@ func TestInfo(t *testing.T) {
 
 // Test that copyStandardLogTo panics on bad input.
 func TestCopyStandardLogToPanic(t *testing.T) {
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer func() {
 		if s, ok := recover().(string); !ok || !strings.Contains(s, "LOG") {
 			t.Errorf(`copyStandardLogTo("LOG") should have panicked: %v`, s)
@@ -135,9 +131,9 @@ func TestCopyStandardLogToPanic(t *testing.T) {
 
 // Test that using the standard log package logs to INFO.
 func TestStandardLog(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer capture()()
 	stdLog.Print("test")
 	if !contains("I", t) {
@@ -149,9 +145,10 @@ func TestStandardLog(t *testing.T) {
 }
 
 func TestEntryDecoder(t *testing.T) {
-	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, tags, msg string) string {
+	formatEntry := func(s Severity, c Channel, now time.Time, gid int, file string, line int, tags, msg string) string {
 		entry := logpb.Entry{
 			Severity:  s,
+			Channel:   c,
 			Time:      now.UnixNano(),
 			Goroutine: int64(gid),
 			File:      file,
@@ -173,26 +170,29 @@ func TestEntryDecoder(t *testing.T) {
 	t6 := t5.Add(time.Microsecond)
 	t7 := t6.Add(time.Microsecond)
 	t8 := t7.Add(time.Microsecond)
+	t9 := t8.Add(time.Microsecond)
 
 	// Verify the truncation logic for reading logs that are longer than the
 	// default scanner can handle.
-	preambleLength := len(formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, ``, ""))
+	preambleLength := len(formatEntry(severity.INFO, channel.DEV, t1, 0, "clog_test.go", 136, ``, ""))
 	maxMessageLength := bufio.MaxScanTokenSize - preambleLength - 1
 	reallyLongEntry := string(bytes.Repeat([]byte("a"), maxMessageLength))
 	tooLongEntry := reallyLongEntry + "a"
 
-	contents := formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, ``, "info")
-	contents += formatEntry(severity.INFO, t2, 1, "clog_test.go", 137, ``, "multi-\nline")
-	contents += formatEntry(severity.INFO, t3, 2, "clog_test.go", 138, ``, reallyLongEntry)
-	contents += formatEntry(severity.INFO, t4, 3, "clog_test.go", 139, ``, tooLongEntry)
-	contents += formatEntry(severity.WARNING, t5, 4, "clog_test.go", 140, ``, "warning")
-	contents += formatEntry(severity.ERROR, t6, 5, "clog_test.go", 141, ``, "error")
-	contents += formatEntry(severity.FATAL, t7, 6, "clog_test.go", 142, ``, "fatal\nstack\ntrace")
-	contents += formatEntry(severity.INFO, t8, 7, "clog_test.go", 143, ``, tooLongEntry)
+	contents := formatEntry(severity.INFO, channel.DEV, t1, 0, "clog_test.go", 136, ``, "info")
+	contents += formatEntry(severity.INFO, channel.DEV, t2, 1, "clog_test.go", 137, ``, "multi-\nline")
+	contents += formatEntry(severity.INFO, channel.DEV, t3, 2, "clog_test.go", 138, ``, reallyLongEntry)
+	contents += formatEntry(severity.INFO, channel.DEV, t4, 3, "clog_test.go", 139, ``, tooLongEntry)
+	contents += formatEntry(severity.WARNING, channel.DEV, t5, 4, "clog_test.go", 140, ``, "warning")
+	contents += formatEntry(severity.ERROR, channel.DEV, t6, 5, "clog_test.go", 141, ``, "error")
+	contents += formatEntry(severity.FATAL, channel.DEV, t7, 6, "clog_test.go", 142, ``, "fatal\nstack\ntrace")
+	contents += formatEntry(severity.INFO, channel.DEV, t8, 7, "clog_test.go", 143, ``, tooLongEntry)
 
 	// Regression test for #56873.
-	contents += formatEntry(severity.INFO, t8, 8, "clog_test.go", 144, `sometags`, "foo")
-	contents += formatEntry(severity.INFO, t8, 9, "clog_test.go", 145, ``, "bar" /* no tags */)
+	contents += formatEntry(severity.INFO, channel.DEV, t8, 8, "clog_test.go", 144, `sometags`, "foo")
+	contents += formatEntry(severity.INFO, channel.DEV, t8, 9, "clog_test.go", 145, ``, "bar" /* no tags */)
+	// Different channel.
+	contents += formatEntry(severity.INFO, channel.SESSIONS, t9, 10, "clog_test.go", 146, ``, "info")
 
 	readAllEntries := func(contents string) []logpb.Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
@@ -214,6 +214,7 @@ func TestEntryDecoder(t *testing.T) {
 	expected := []logpb.Entry{
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t1.UnixNano(),
 			Goroutine: 0,
 			File:      `clog_test.go`,
@@ -222,6 +223,7 @@ func TestEntryDecoder(t *testing.T) {
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t2.UnixNano(),
 			Goroutine: 1,
 			File:      `clog_test.go`,
@@ -231,6 +233,7 @@ line`,
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t3.UnixNano(),
 			Goroutine: 2,
 			File:      `clog_test.go`,
@@ -239,6 +242,7 @@ line`,
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t4.UnixNano(),
 			Goroutine: 3,
 			File:      `clog_test.go`,
@@ -247,6 +251,7 @@ line`,
 		},
 		{
 			Severity:  severity.WARNING,
+			Channel:   channel.DEV,
 			Time:      t5.UnixNano(),
 			Goroutine: 4,
 			File:      `clog_test.go`,
@@ -255,6 +260,7 @@ line`,
 		},
 		{
 			Severity:  severity.ERROR,
+			Channel:   channel.DEV,
 			Time:      t6.UnixNano(),
 			Goroutine: 5,
 			File:      `clog_test.go`,
@@ -263,6 +269,7 @@ line`,
 		},
 		{
 			Severity:  severity.FATAL,
+			Channel:   channel.DEV,
 			Time:      t7.UnixNano(),
 			Goroutine: 6,
 			File:      `clog_test.go`,
@@ -273,6 +280,7 @@ trace`,
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t8.UnixNano(),
 			Goroutine: 7,
 			File:      `clog_test.go`,
@@ -281,6 +289,7 @@ trace`,
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t8.UnixNano(),
 			Goroutine: 8,
 			File:      `clog_test.go`,
@@ -290,11 +299,21 @@ trace`,
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t8.UnixNano(),
 			Goroutine: 9,
 			File:      `clog_test.go`,
 			Line:      145,
 			Message:   `bar`,
+		},
+		{
+			Severity:  severity.INFO,
+			Channel:   channel.SESSIONS,
+			Time:      t9.UnixNano(),
+			Goroutine: 10,
+			File:      `clog_test.go`,
+			Line:      146,
+			Message:   `info`,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
@@ -311,9 +330,9 @@ trace`,
 // Even in the Info log, the source character will be E, so the data should
 // all be identical.
 func TestError(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer capture()()
 
 	Error(context.Background(), "test")
@@ -329,9 +348,9 @@ func TestError(t *testing.T) {
 // Even in the Info log, the source character will be W, so the data should
 // all be identical.
 func TestWarning(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer capture()()
 
 	Warning(context.Background(), "test")
@@ -345,15 +364,15 @@ func TestWarning(t *testing.T) {
 
 // Test that a V log goes to Info.
 func TestV(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer capture()()
 
 	_ = logging.vmoduleConfig.verbosity.Set("2")
 	defer func() { _ = logging.vmoduleConfig.verbosity.Set("0") }()
 	if V(2) {
-		addStructured(context.Background(), severity.INFO, 1, "", []interface{}{"test"})
+		logfDepth(context.Background(), 1, severity.INFO, channel.DEV, "test")
 	}
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -365,9 +384,9 @@ func TestV(t *testing.T) {
 
 // Test that a vmodule enables a log in this file.
 func TestVmoduleOn(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer capture()()
 
 	_ = SetVModule("clog_test=2")
@@ -382,7 +401,7 @@ func TestVmoduleOn(t *testing.T) {
 		t.Error("V enabled for 3")
 	}
 	if V(2) {
-		addStructured(context.Background(), severity.INFO, 1, "", []interface{}{"test"})
+		logfDepth(context.Background(), 1, severity.INFO, channel.DEV, "test")
 	}
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -394,7 +413,9 @@ func TestVmoduleOn(t *testing.T) {
 
 // Test that a vmodule of another file does not enable a log in this file.
 func TestVmoduleOff(t *testing.T) {
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer capture()()
 
 	_ = SetVModule("notthisfile=2")
@@ -405,7 +426,7 @@ func TestVmoduleOff(t *testing.T) {
 		}
 	}
 	if V(2) {
-		addStructured(context.Background(), severity.INFO, 1, "", []interface{}{"test"})
+		logfDepth(context.Background(), 1, severity.INFO, channel.DEV, "test")
 	}
 	if contents() != "" {
 		t.Error("V logged incorrectly")
@@ -432,9 +453,6 @@ var vGlobs = map[string]bool{
 
 // Test that vmodule globbing works as advertised.
 func testVmoduleGlob(pat string, match bool, t *testing.T) {
-	setFlags()
-	defer capture()()
-
 	defer func() { _ = SetVModule("") }()
 	_ = SetVModule(pat)
 	if V(2) != match {
@@ -450,9 +468,8 @@ func TestVmoduleGlob(t *testing.T) {
 }
 
 func TestListLogFiles(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
 
 	Info(context.Background(), "x")
 
@@ -480,9 +497,9 @@ func TestListLogFiles(t *testing.T) {
 }
 
 func TestGetLogReader(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	Info(context.Background(), "x")
 	info, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
 	if !ok {
@@ -568,10 +585,9 @@ func TestGetLogReader(t *testing.T) {
 }
 
 func TestRollover(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
 
-	setFlags()
 	var err error
 	setExitErrFunc(false /* hideStack */, func(_ exit.Code, e error) {
 		err = e
@@ -618,14 +634,11 @@ func TestRollover(t *testing.T) {
 // in the future clog and this test can be adapted to actually test that;
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
 
-	setFlags()
-	logging.stderrSinkInfo.threshold = severity.NONE
 	SetExitFunc(false /* hideStack */, func(exit.Code) {})
 
-	defer setFlags()
 	defer capture()()
 
 	for _, level := range []int{tracebackNone, tracebackSingle, tracebackAll} {
@@ -655,26 +668,30 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	}
 }
 
-func TestRedirectStderr(t *testing.T) {
+func TestFd2Capture(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
-	setFlags()
-	logging.stderrSinkInfo.threshold = severity.NONE
-
-	Infof(context.Background(), "test")
-
+	// Create a fresh configuration; this automatically sets up fd 2
+	// redirection.
+	cfg := logconfig.DefaultConfig()
+	if err := cfg.Validate(&s.logDir); err != nil {
+		t.Fatal(err)
+	}
 	TestingResetActive()
-	cleanup, err := SetupRedactionAndStderrRedirects()
+	cleanupFn, err := ApplyConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer cleanupFn()
+
+	Infof(context.Background(), "test")
 
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
 
-	contents, err := ioutil.ReadFile(stderrLog.getFileSink().mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(logging.testingFd2CaptureLogger.getFileSink().mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -684,13 +701,16 @@ func TestRedirectStderr(t *testing.T) {
 }
 
 func TestFileSeverityFilter(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
 
-	setFlags()
-	debugFileSinkInfo := debugLog.sinkInfos[debugLogFileSinkIndex]
-	defer func(save Severity) { debugFileSinkInfo.threshold = save }(debugFileSinkInfo.threshold)
-	debugFileSinkInfo.threshold = severity.ERROR
+	var debugFileSinkInfo *sinkInfo
+	for _, si := range debugLog.sinkInfos {
+		si.threshold = severity.ERROR
+		if _, ok := si.sink.(*fileSink); ok {
+			debugFileSinkInfo = si
+		}
+	}
 
 	Infof(context.Background(), "test1")
 	Errorf(context.Background(), "test2")
@@ -717,7 +737,8 @@ func (w *outOfSpaceWriter) Write([]byte) (int, error) {
 }
 
 func TestExitOnFullDisk(t *testing.T) {
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
 
 	var exited sync.WaitGroup
 	exited.Add(1)
@@ -773,20 +794,13 @@ func BenchmarkVDepthWithVModule(b *testing.B) {
 // TestLogEntryPropagation ensures that a log entry is written
 // to file even when stderr is not available.
 func TestLogEntryPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
-	setFlags()
+
 	defer capture()()
 
-	tmpDir, err := ioutil.TempDir("", fileutil.EscapeFilename(t.Name()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if !t.Failed() {
-			_ = os.RemoveAll(tmpDir)
-		}
-	}()
+	tmpDir := s.logDir
 
 	// Make stderr read-only so that writes to it reliably fail.
 	f, err := os.OpenFile(filepath.Join(tmpDir, "test"), os.O_RDONLY|os.O_CREATE, 0600)
@@ -800,7 +814,12 @@ func TestLogEntryPropagation(t *testing.T) {
 	const specialMessage = `CAPTAIN KIRK`
 
 	// Enable output to stderr (the Scope disabled it).
-	logging.stderrSinkInfo.threshold.SetValue(severity.INFO)
+	l := logging.getLogger(channel.DEV)
+	for _, si := range l.sinkInfos {
+		if si.sink == &logging.stderrSink {
+			si.threshold.SetValue(severity.INFO)
+		}
+	}
 
 	// Make stderr non-critical.
 	// We assume that the stderr sink is the first one.

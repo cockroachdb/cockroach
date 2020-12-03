@@ -428,8 +428,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		sqlExecutorTestingKnobs = sql.ExecutorTestingKnobs{}
 	}
 
-	loggerCtx, _ := cfg.stopper.WithCancelOnStop(ctx)
-
 	nodeInfo := sql.NodeInfo{
 		AdminURL:  cfg.AdminURL,
 		PGURL:     cfg.rpcContext.PGURL,
@@ -501,54 +499,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.Settings,
 		),
 
-		// Note: don't forget to add the secondary loggers as closers
-		// on the Stopper, below.
-
-		ExecLogger: log.NewSecondaryLogger(
-			loggerCtx, nil /* dirName */, "sql-exec",
-			true /* enableGc */, false /* forceSyncWrites */, true, /* enableMsgCount */
-		),
-
-		// Note: the auth logger uses sync writes because we don't want an
-		// attacker to easily "erase their traces" after an attack by
-		// crashing the server before it has a chance to write the last
-		// few log lines to disk.
-		//
-		// TODO(knz): We could worry about disk I/O activity incurred by
-		// logging here in case a malicious user spams the server with
-		// (failing) connection attempts to cause a DoS failure; this
-		// would be a good reason to invest into a syslog sink for logs.
-		AuthLogger: log.NewSecondaryLogger(
-			loggerCtx, nil /* dirName */, "auth",
-			true /* enableGc */, true /* forceSyncWrites */, true, /* enableMsgCount */
-		),
-
-		// AuditLogger syncs to disk for the same reason as AuthLogger.
-		AuditLogger: log.NewSecondaryLogger(
-			loggerCtx, cfg.AuditLogDirName, "sql-audit",
-			true /* enableGc */, true /* forceSyncWrites */, true, /* enableMsgCount */
-		),
-
-		SlowQueryLogger: log.NewSecondaryLogger(
-			loggerCtx, nil, "sql-slow",
-			true /* enableGc */, false /* forceSyncWrites */, true, /* enableMsgCount */
-		),
-
-		SlowInternalQueryLogger: log.NewSecondaryLogger(loggerCtx, nil, "sql-slow-internal-only",
-			true /* enableGc */, false /* forceSyncWrites */, true /* enableMsgCount */),
-
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
 		ExternalIODirConfig:        cfg.ExternalIODirConfig,
 		HydratedTables:             hydratedTablesCache,
 		GCJobNotifier:              gcJobNotifier,
 	}
-
-	cfg.stopper.AddCloser(execCfg.ExecLogger)
-	cfg.stopper.AddCloser(execCfg.AuditLogger)
-	cfg.stopper.AddCloser(execCfg.SlowQueryLogger)
-	cfg.stopper.AddCloser(execCfg.SlowInternalQueryLogger)
-	cfg.stopper.AddCloser(execCfg.AuthLogger)
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)

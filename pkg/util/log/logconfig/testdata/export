@@ -1,0 +1,77 @@
+# Default config
+yaml
+----
+@startuml
+left to right direction
+component sources {
+() DEV
+() STORAGE
+() SESSIONS
+() SENSITIVE_ACCESS
+() SQL_EXEC
+() SQL_PERF
+() SQL_INTERNAL_PERF
+cloud stray as "stray\nerrors"
+}
+queue stderr
+card p__1 as "format:crdb-v1"
+artifact files {
+ folder "/default-dir" {
+  file f1 as "cockroach.log"
+  file stderrfile as "cockroach-stderr.log"
+ }
+}
+DEV --> p__1
+STORAGE --> p__1
+SESSIONS --> p__1
+SENSITIVE_ACCESS --> p__1
+SQL_EXEC --> p__1
+SQL_PERF --> p__1
+SQL_INTERNAL_PERF --> p__1
+p__1 --> f1
+stray --> stderrfile
+@enduml
+# http://www.plantuml.com/plantuml/uml/L99FIyD04CNl-oc6dFGGfLSFqjAk4f1Kcr8y267TFsrmcwcp4q6atrsoczBab3VlFRApFtOUM15tHo-yTGoCGCt-m60QifeRR8N6umbRsp84x4ZR07_YvXPMSjT_gkrwitYMKSggAjPbbNHP5TjY9-l5SYchvBszrF9TBY_wLMwUBheejt9JBWPJU-mC12Rr2of05jL7QucGGYREuhkpdON0nX89hSZ0gQvdiUkGZeeVD9dF_6UM2KNSEAKPNEFZxk3G6qkGtHlhLESvDmrbVH0huD9_DEelGgKFTnxtsILCHqOvAUKf6BfdSHOhkOCyVuoBYO7Io1XOZPqfiL4oS9iwFQYfCs5uZIAPVd8paP3sm_KYOcvRqp-0_m000F__
+
+# Capture everything to one file with sync and warnings only to stderr.
+yaml only-channels=DEV,SESSIONS
+sinks:
+  file-groups:
+    everything:
+      sync-writes: true
+      redact: true
+      channels: ALL
+  stderr:
+    filter: WARNING
+----
+@startuml
+left to right direction
+component sources {
+() DEV
+() SESSIONS
+cloud stray as "stray\nerrors"
+}
+queue stderr
+card sync2 as "sync"
+card p__1 as "redact"
+card p__2 as "format:crdb-v1"
+card p__3 as "format:crdb-v1-tty"
+card p__4 as "filter:W"
+artifact files {
+ folder "/default-dir" {
+  file f1 as "cockroach-everything.log"
+  file stderrfile as "cockroach-stderr.log"
+ }
+}
+DEV --> p__2
+SESSIONS --> p__2
+p__1 --> sync2
+p__2 --> p__1
+sync2 --> f1
+stray --> stderrfile
+DEV --> p__4
+SESSIONS --> p__4
+p__3 --> stderr
+p__4 --> p__3
+@enduml
+# http://www.plantuml.com/plantuml/uml/R98nJ_Cm48Rt-nKdJzyt11JQgGFgq0uiC4Gg2r9bx7DhuThbVAaKeVvt5Bib89XYl-yJ9_V8oooQfJy42EG49I7xtLxGUYOZFaKmwN1CaQ9WJZqRolW1__xZQhqP7zswwnwU7Zim8VKMix0UK6TKPVKIYJbnLd26zvvwmYoMcC5ejfY7QEugF4IZQdZSRjkICLbjP4ehwH8Vj2mCszVcr4xjx8-s4HacObu97uHuyQn0itYdZQ3peGo5BWLBZEhMajDzaCPwLcDH47JrlqmoRvoqsJTq8Xvax-Fk9gITkd9rnBByoTVYmfxX3Alr1flclam7LvDJKbICko8AYeDBsKALDsvT2rLxGRy-_ltq-Q_Jvr2aJQz0KNHfPx2aQCTRyHa00F__

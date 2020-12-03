@@ -12,13 +12,8 @@ package log
 
 import (
 	"context"
-	"fmt"
-	"strings"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -38,42 +33,6 @@ func FatalOnPanic() {
 	if r := recover(); r != nil {
 		Fatalf(context.Background(), "unexpected panic: %s", r)
 	}
-}
-
-// logDepth format the output string and
-// formulate the context information into the machine-readable
-// dictionary for separate binary-log output.
-func logDepth(ctx context.Context, depth int, sev Severity, format string, args ...interface{}) {
-	// TODO(tschottdorf): logging hooks should have their entry point here.
-	addStructured(ctx, sev, depth+1, format, args...)
-}
-
-// Shout logs to the specified severity's log, and also to the real
-// stderr if logging is currently redirected to a file.
-func Shout(ctx context.Context, sev Severity, msg string) {
-	Shoutf(ctx, sev, msg)
-}
-
-// Shoutf is like Shout but uses formatting.
-func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
-	if sev == severity.FATAL {
-		// Fatal error handling later already tries to exit even if I/O should
-		// block, but crash reporting might also be in the way.
-		t := time.AfterFunc(10*time.Second, func() {
-			exit.WithCode(exit.TimeoutAfterFatalError())
-		})
-		defer t.Stop()
-	}
-	if !LoggingToStderr(sev) {
-		// The logging call below would not otherwise appear on stderr;
-		// however this is what the Shout() contract guarantees, so we do
-		// it here.
-		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
-			strings.Replace(
-				FormatWithContextTags(ctx, format, args...),
-				"\n", "\n* ", -1))
-	}
-	logDepth(ctx, 1, sev, format, args...)
 }
 
 // V returns true if the logging verbosity is set to the specified level or

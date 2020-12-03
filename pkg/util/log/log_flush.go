@@ -31,7 +31,7 @@ type flushSyncWriter interface {
 // flushes, and signalFlusher() that manages flushes in reaction to a
 // user signal.
 func Flush() {
-	_ = allFileSinks.iter(func(l *fileSink) error {
+	_ = allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		l.lockAndFlushAndSync(true /*doSync*/)
 		return nil
 	})
@@ -83,7 +83,7 @@ func flushDaemon() {
 
 		if !disableDaemons {
 			// Flush the loggers.
-			_ = allFileSinks.iter(func(l *fileSink) error {
+			_ = allSinkInfos.iterFileSinks(func(l *fileSink) error {
 				l.lockAndFlushAndSync(doSync)
 				return nil
 			})

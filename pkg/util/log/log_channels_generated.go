@@ -5,193 +5,3037 @@ package log
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
 
-// Infof logs with severity INFO,
+// ChannelLogger is a helper interface to ease the run-time selection
+// of channels. We do not force use of ChannelLogger when
+// instantiating the logger objects below (e.g. by giving them the
+// interface type), to ensure the calls remain inlinable in the common
+// case.
+//
+// Note that casting a channel logger to the interface
+// type yields a heap allocation: it may be useful for performance to
+// pre-allocate interface references in the global scope.
+type ChannelLogger interface {
+	// Infof logs to the channel with severity INFO.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	Infof(ctx context.Context, format string, args ...interface{})
+
+	// VInfof logs to the channel with severity INFO,
+	// if logging has been enabled for the source file where the call is
+	// performed at the provided verbosity level, via the vmodule setting.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	VInfof(ctx context.Context, level Level, format string, args ...interface{})
+
+	// Info logs to the channel with severity INFO.
+	// It extracts log tags from the context and logs them along with the given
+	// message.
+	Info(ctx context.Context, msg string)
+
+	// InfofDepth logs to the channel with severity INFO,
+	// offsetting the caller's stack frame by 'depth'.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	InfofDepth(ctx context.Context, depth int, format string, args ...interface{})
+	// Warningf logs to the channel with severity WARNING.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	Warningf(ctx context.Context, format string, args ...interface{})
+
+	// VWarningf logs to the channel with severity WARNING,
+	// if logging has been enabled for the source file where the call is
+	// performed at the provided verbosity level, via the vmodule setting.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	VWarningf(ctx context.Context, level Level, format string, args ...interface{})
+
+	// Warning logs to the channel with severity WARNING.
+	// It extracts log tags from the context and logs them along with the given
+	// message.
+	Warning(ctx context.Context, msg string)
+
+	// WarningfDepth logs to the channel with severity WARNING,
+	// offsetting the caller's stack frame by 'depth'.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	WarningfDepth(ctx context.Context, depth int, format string, args ...interface{})
+	// Errorf logs to the channel with severity ERROR.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	Errorf(ctx context.Context, format string, args ...interface{})
+
+	// VErrorf logs to the channel with severity ERROR,
+	// if logging has been enabled for the source file where the call is
+	// performed at the provided verbosity level, via the vmodule setting.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	VErrorf(ctx context.Context, level Level, format string, args ...interface{})
+
+	// Error logs to the channel with severity ERROR.
+	// It extracts log tags from the context and logs them along with the given
+	// message.
+	Error(ctx context.Context, msg string)
+
+	// ErrorfDepth logs to the channel with severity ERROR,
+	// offsetting the caller's stack frame by 'depth'.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{})
+	// Fatalf logs to the channel with severity FATAL.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	Fatalf(ctx context.Context, format string, args ...interface{})
+
+	// VFatalf logs to the channel with severity FATAL,
+	// if logging has been enabled for the source file where the call is
+	// performed at the provided verbosity level, via the vmodule setting.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	VFatalf(ctx context.Context, level Level, format string, args ...interface{})
+
+	// Fatal logs to the channel with severity FATAL.
+	// It extracts log tags from the context and logs them along with the given
+	// message.
+	Fatal(ctx context.Context, msg string)
+
+	// FatalfDepth logs to the channel with severity FATAL,
+	// offsetting the caller's stack frame by 'depth'.
+	// It extracts log tags from the context and logs them along with the given
+	// message. Arguments are handled in the manner of fmt.Printf.
+	FatalfDepth(ctx context.Context, depth int, format string, args ...interface{})
+	// Shout logs to the channel, and also to the real stderr if logging
+	// is currently redirected to a file.
+	Shout(ctx context.Context, sev Severity, msg string)
+
+	// Shoutf logs to the channel, and also to the real stderr if
+	// logging is currently redirected to a file. Arguments are handled in
+	// the manner of fmt.Printf.
+	Shoutf(ctx context.Context, sev Severity, format string, args ...interface{})
+}
+
+// loggerDev is the logger type for the DEV channel.
+type loggerDev struct{}
+
+// Dev is a logger that logs to the DEV channel.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+var Dev loggerDev
+
+// Dev and loggerDev implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Dev
+
+// Infof logs to the DEV channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerDev) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
+}
+
+// VInfof logs to the DEV channel with severity INFO,
 // if logging has been enabled for the source file where the call is
 // performed at the provided verbosity level, via the vmodule setting.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// INFO is used for informational messages, when no action
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The INFO severity is used for informational messages, when no action
 // is required as a result.
-func Infof(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, severity.INFO, format, args...)
+func (loggerDev) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
+	}
 }
 
-// VInfof logs with severity INFO.
+// Info logs to the DEV channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerDev) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, msg)
+}
+
+// InfofDepth logs to the DEV channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// INFO is used for informational messages, when no action
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerDev) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.DEV, format, args...)
+}
+
+// Infof logs to the DEV channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
+}
+
+// VInfof logs to the DEV channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The INFO severity is used for informational messages, when no action
 // is required as a result.
 func VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
-		logDepth(ctx, 1, severity.INFO, format, args...)
+		logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
 	}
 }
 
-// Info logs with severity INFO.
+// Info logs to the DEV channel with severity INFO.
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// INFO is used for informational messages, when no action
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The INFO severity is used for informational messages, when no action
 // is required as a result.
 func Info(ctx context.Context, msg string) {
-	logDepth(ctx, 1, severity.INFO, msg)
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, msg)
 }
 
-// InfofDepth logs with severity INFO,
+// InfofDepth logs to the DEV channel with severity INFO,
 // offsetting the caller's stack frame by 'depth'.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// INFO is used for informational messages, when no action
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The INFO severity is used for informational messages, when no action
 // is required as a result.
 func InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logDepth(ctx, depth+1, severity.INFO, format, args...)
+	logfDepth(ctx, depth+1, severity.INFO, channel.DEV, format, args...)
 }
 
-// Warningf logs with severity WARNING,
+// Warningf logs to the DEV channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerDev) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
+}
+
+// VWarningf logs to the DEV channel with severity WARNING,
 // if logging has been enabled for the source file where the call is
 // performed at the provided verbosity level, via the vmodule setting.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// WARNING is used for situations which may require special handling,
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The WARNING severity is used for situations which may require special handling,
 // while normal operation is expected to resume automatically.
-func Warningf(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, severity.WARNING, format, args...)
+func (loggerDev) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
+	}
 }
 
-// VWarningf logs with severity WARNING.
+// Warning logs to the DEV channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerDev) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.DEV, msg)
+}
+
+// WarningfDepth logs to the DEV channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// WARNING is used for situations which may require special handling,
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerDev) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.DEV, format, args...)
+}
+
+// Warningf logs to the DEV channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
+}
+
+// VWarningf logs to the DEV channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The WARNING severity is used for situations which may require special handling,
 // while normal operation is expected to resume automatically.
 func VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
-		logDepth(ctx, 1, severity.WARNING, format, args...)
+		logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
 	}
 }
 
-// Warning logs with severity WARNING.
+// Warning logs to the DEV channel with severity WARNING.
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// WARNING is used for situations which may require special handling,
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The WARNING severity is used for situations which may require special handling,
 // while normal operation is expected to resume automatically.
 func Warning(ctx context.Context, msg string) {
-	logDepth(ctx, 1, severity.WARNING, msg)
+	logfDepth(ctx, 1, severity.WARNING, channel.DEV, msg)
 }
 
-// WarningfDepth logs with severity WARNING,
+// WarningfDepth logs to the DEV channel with severity WARNING,
 // offsetting the caller's stack frame by 'depth'.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// WARNING is used for situations which may require special handling,
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The WARNING severity is used for situations which may require special handling,
 // while normal operation is expected to resume automatically.
 func WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logDepth(ctx, depth+1, severity.WARNING, format, args...)
+	logfDepth(ctx, depth+1, severity.WARNING, channel.DEV, format, args...)
 }
 
-// Errorf logs with severity ERROR,
+// Errorf logs to the DEV channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerDev) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
+}
+
+// VErrorf logs to the DEV channel with severity ERROR,
 // if logging has been enabled for the source file where the call is
 // performed at the provided verbosity level, via the vmodule setting.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// ERROR is used for situations that require special handling,
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The ERROR severity is used for situations that require special handling,
 // when normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-func Errorf(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, severity.ERROR, format, args...)
+func (loggerDev) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
+	}
 }
 
-// VErrorf logs with severity ERROR.
+// Error logs to the DEV channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerDev) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.DEV, msg)
+}
+
+// ErrorfDepth logs to the DEV channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// ERROR is used for situations that require special handling,
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerDev) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.DEV, format, args...)
+}
+
+// Errorf logs to the DEV channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
+}
+
+// VErrorf logs to the DEV channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The ERROR severity is used for situations that require special handling,
 // when normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
-		logDepth(ctx, 1, severity.ERROR, format, args...)
+		logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
 	}
 }
 
-// Error logs with severity ERROR.
+// Error logs to the DEV channel with severity ERROR.
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// ERROR is used for situations that require special handling,
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The ERROR severity is used for situations that require special handling,
 // when normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func Error(ctx context.Context, msg string) {
-	logDepth(ctx, 1, severity.ERROR, msg)
+	logfDepth(ctx, 1, severity.ERROR, channel.DEV, msg)
 }
 
-// ErrorfDepth logs with severity ERROR,
+// ErrorfDepth logs to the DEV channel with severity ERROR,
 // offsetting the caller's stack frame by 'depth'.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// ERROR is used for situations that require special handling,
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The ERROR severity is used for situations that require special handling,
 // when normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logDepth(ctx, depth+1, severity.ERROR, format, args...)
+	logfDepth(ctx, depth+1, severity.ERROR, channel.DEV, format, args...)
 }
 
-// Fatalf logs with severity FATAL,
+// Fatalf logs to the DEV channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerDev) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.DEV, format, args...)
+}
+
+// VFatalf logs to the DEV channel with severity FATAL,
 // if logging has been enabled for the source file where the call is
 // performed at the provided verbosity level, via the vmodule setting.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// FATAL is used for situations that require an immedate, hard
-// server shutdown. A report is also sent to telemetry if telemetry
-// is enabled.
-func Fatalf(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, severity.FATAL, format, args...)
-}
-
-// VFatalf logs with severity FATAL.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
 //
-// FATAL is used for situations that require an immedate, hard
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The FATAL severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+func (loggerDev) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
-		logDepth(ctx, 1, severity.FATAL, format, args...)
+		logfDepth(ctx, 1, severity.FATAL, channel.DEV, format, args...)
 	}
 }
 
-// Fatal logs with severity FATAL.
+// Fatal logs to the DEV channel with severity FATAL.
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// FATAL is used for situations that require an immedate, hard
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The FATAL severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-func Fatal(ctx context.Context, msg string) {
-	logDepth(ctx, 1, severity.FATAL, msg)
+func (loggerDev) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.DEV, msg)
 }
 
-// FatalfDepth logs with severity FATAL,
+// FatalfDepth logs to the DEV channel with severity FATAL,
 // offsetting the caller's stack frame by 'depth'.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// FATAL is used for situations that require an immedate, hard
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerDev) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.DEV, format, args...)
+}
+
+// Fatalf logs to the DEV channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.DEV, format, args...)
+}
+
+// VFatalf logs to the DEV channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.DEV, format, args...)
+	}
+}
+
+// Fatal logs to the DEV channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.DEV, msg)
+}
+
+// FatalfDepth logs to the DEV channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+//
+// The FATAL severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logDepth(ctx, depth+1, severity.FATAL, format, args...)
+	logfDepth(ctx, depth+1, severity.FATAL, channel.DEV, format, args...)
+}
+
+// Shout logs to channel DEV, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+func (loggerDev) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.DEV, msg)
+}
+
+// Shoutf logs to channel DEV, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+func (loggerDev) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
+}
+
+// Shout logs to channel DEV, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+func Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.DEV, msg)
+}
+
+// Shoutf logs to channel DEV, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The DEV channel is the channel used during development, to collect log
+// details useful for troubleshooting when it is unclear which other
+// channel to use. It is also the default logging channel in
+// CockroachDB, when the caller does not indicate a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect The DEV channel logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
+}
+
+// loggerStorage is the logger type for the STORAGE channel.
+type loggerStorage struct{}
+
+// Storage is a logger that logs to the STORAGE channel.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+var Storage loggerStorage
+
+// Storage and loggerStorage implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Storage
+
+// Infof logs to the STORAGE channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerStorage) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.STORAGE, format, args...)
+}
+
+// VInfof logs to the STORAGE channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerStorage) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.STORAGE, format, args...)
+	}
+}
+
+// Info logs to the STORAGE channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerStorage) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.STORAGE, msg)
+}
+
+// InfofDepth logs to the STORAGE channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerStorage) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.STORAGE, format, args...)
+}
+
+// Warningf logs to the STORAGE channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerStorage) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.STORAGE, format, args...)
+}
+
+// VWarningf logs to the STORAGE channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerStorage) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.STORAGE, format, args...)
+	}
+}
+
+// Warning logs to the STORAGE channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerStorage) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.STORAGE, msg)
+}
+
+// WarningfDepth logs to the STORAGE channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerStorage) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.STORAGE, format, args...)
+}
+
+// Errorf logs to the STORAGE channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerStorage) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.STORAGE, format, args...)
+}
+
+// VErrorf logs to the STORAGE channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerStorage) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.STORAGE, format, args...)
+	}
+}
+
+// Error logs to the STORAGE channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerStorage) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.STORAGE, msg)
+}
+
+// ErrorfDepth logs to the STORAGE channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerStorage) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.STORAGE, format, args...)
+}
+
+// Fatalf logs to the STORAGE channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerStorage) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.STORAGE, format, args...)
+}
+
+// VFatalf logs to the STORAGE channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerStorage) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.STORAGE, format, args...)
+	}
+}
+
+// Fatal logs to the STORAGE channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerStorage) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.STORAGE, msg)
+}
+
+// FatalfDepth logs to the STORAGE channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerStorage) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.STORAGE, format, args...)
+}
+
+// Shout logs to channel STORAGE, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+func (loggerStorage) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.STORAGE, msg)
+}
+
+// Shoutf logs to channel STORAGE, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The STORAGE channel is the channel used to report low-level storage
+// layer events (RocksDB/Pebble).
+func (loggerStorage) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.STORAGE, format, args...)
+}
+
+// loggerSessions is the logger type for the SESSIONS channel.
+type loggerSessions struct{}
+
+// Sessions is a logger that logs to the SESSIONS channel.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+var Sessions loggerSessions
+
+// Sessions and loggerSessions implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Sessions
+
+// Infof logs to the SESSIONS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSessions) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.SESSIONS, format, args...)
+}
+
+// VInfof logs to the SESSIONS channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSessions) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.SESSIONS, format, args...)
+	}
+}
+
+// Info logs to the SESSIONS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSessions) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.SESSIONS, msg)
+}
+
+// InfofDepth logs to the SESSIONS channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSessions) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.SESSIONS, format, args...)
+}
+
+// Warningf logs to the SESSIONS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSessions) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SESSIONS, format, args...)
+}
+
+// VWarningf logs to the SESSIONS channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSessions) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.SESSIONS, format, args...)
+	}
+}
+
+// Warning logs to the SESSIONS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSessions) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SESSIONS, msg)
+}
+
+// WarningfDepth logs to the SESSIONS channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSessions) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.SESSIONS, format, args...)
+}
+
+// Errorf logs to the SESSIONS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSessions) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SESSIONS, format, args...)
+}
+
+// VErrorf logs to the SESSIONS channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSessions) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.SESSIONS, format, args...)
+	}
+}
+
+// Error logs to the SESSIONS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSessions) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SESSIONS, msg)
+}
+
+// ErrorfDepth logs to the SESSIONS channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSessions) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.SESSIONS, format, args...)
+}
+
+// Fatalf logs to the SESSIONS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSessions) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SESSIONS, format, args...)
+}
+
+// VFatalf logs to the SESSIONS channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSessions) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.SESSIONS, format, args...)
+	}
+}
+
+// Fatal logs to the SESSIONS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSessions) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SESSIONS, msg)
+}
+
+// FatalfDepth logs to the SESSIONS channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSessions) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.SESSIONS, format, args...)
+}
+
+// Shout logs to channel SESSIONS, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSessions) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.SESSIONS, msg)
+}
+
+// Shoutf logs to channel SESSIONS, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The SESSIONS channel is the channel used to report client network activity:
+//
+// - connections opened/closed.
+// - authentication events: logins, failed attempts.
+// - session and query cancellation.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSessions) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.SESSIONS, format, args...)
+}
+
+// loggerSensitiveAccess is the logger type for the SENSITIVE_ACCESS channel.
+type loggerSensitiveAccess struct{}
+
+// SensitiveAccess is a logger that logs to the SENSITIVE_ACCESS channel.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+var SensitiveAccess loggerSensitiveAccess
+
+// SensitiveAccess and loggerSensitiveAccess implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = SensitiveAccess
+
+// Infof logs to the SENSITIVE_ACCESS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSensitiveAccess) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// VInfof logs to the SENSITIVE_ACCESS channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSensitiveAccess) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.SENSITIVE_ACCESS, format, args...)
+	}
+}
+
+// Info logs to the SENSITIVE_ACCESS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSensitiveAccess) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.SENSITIVE_ACCESS, msg)
+}
+
+// InfofDepth logs to the SENSITIVE_ACCESS channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSensitiveAccess) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// Warningf logs to the SENSITIVE_ACCESS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSensitiveAccess) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// VWarningf logs to the SENSITIVE_ACCESS channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSensitiveAccess) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.SENSITIVE_ACCESS, format, args...)
+	}
+}
+
+// Warning logs to the SENSITIVE_ACCESS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSensitiveAccess) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SENSITIVE_ACCESS, msg)
+}
+
+// WarningfDepth logs to the SENSITIVE_ACCESS channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSensitiveAccess) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// Errorf logs to the SENSITIVE_ACCESS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSensitiveAccess) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// VErrorf logs to the SENSITIVE_ACCESS channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSensitiveAccess) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.SENSITIVE_ACCESS, format, args...)
+	}
+}
+
+// Error logs to the SENSITIVE_ACCESS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSensitiveAccess) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SENSITIVE_ACCESS, msg)
+}
+
+// ErrorfDepth logs to the SENSITIVE_ACCESS channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSensitiveAccess) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// Fatalf logs to the SENSITIVE_ACCESS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// VFatalf logs to the SENSITIVE_ACCESS channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.SENSITIVE_ACCESS, format, args...)
+	}
+}
+
+// Fatal logs to the SENSITIVE_ACCESS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SENSITIVE_ACCESS, msg)
+}
+
+// FatalfDepth logs to the SENSITIVE_ACCESS channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSensitiveAccess) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// Shout logs to channel SENSITIVE_ACCESS, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSensitiveAccess) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.SENSITIVE_ACCESS, msg)
+}
+
+// Shoutf logs to channel SENSITIVE_ACCESS, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The SENSITIVE_ACCESS channel is the channel used to report SQL
+// data access to sensitive data (when enabled):
+//
+// - data access audit events (when table audit is enabled).
+// - SQL statements executed by users with the ADMIN bit.
+// - operations that write to `system` tables.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSensitiveAccess) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// loggerSqlExec is the logger type for the SQL_EXEC channel.
+type loggerSqlExec struct{}
+
+// SqlExec is a logger that logs to the SQL_EXEC channel.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+var SqlExec loggerSqlExec
+
+// SqlExec and loggerSqlExec implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = SqlExec
+
+// Infof logs to the SQL_EXEC channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlExec) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_EXEC, format, args...)
+}
+
+// VInfof logs to the SQL_EXEC channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlExec) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.SQL_EXEC, format, args...)
+	}
+}
+
+// Info logs to the SQL_EXEC channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlExec) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_EXEC, msg)
+}
+
+// InfofDepth logs to the SQL_EXEC channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlExec) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_EXEC, format, args...)
+}
+
+// Warningf logs to the SQL_EXEC channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlExec) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_EXEC, format, args...)
+}
+
+// VWarningf logs to the SQL_EXEC channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlExec) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.SQL_EXEC, format, args...)
+	}
+}
+
+// Warning logs to the SQL_EXEC channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlExec) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_EXEC, msg)
+}
+
+// WarningfDepth logs to the SQL_EXEC channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlExec) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_EXEC, format, args...)
+}
+
+// Errorf logs to the SQL_EXEC channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlExec) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_EXEC, format, args...)
+}
+
+// VErrorf logs to the SQL_EXEC channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlExec) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.SQL_EXEC, format, args...)
+	}
+}
+
+// Error logs to the SQL_EXEC channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlExec) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_EXEC, msg)
+}
+
+// ErrorfDepth logs to the SQL_EXEC channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlExec) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_EXEC, format, args...)
+}
+
+// Fatalf logs to the SQL_EXEC channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlExec) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_EXEC, format, args...)
+}
+
+// VFatalf logs to the SQL_EXEC channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlExec) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.SQL_EXEC, format, args...)
+	}
+}
+
+// Fatal logs to the SQL_EXEC channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_EXEC, msg)
+}
+
+// FatalfDepth logs to the SQL_EXEC channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlExec) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_EXEC, format, args...)
+}
+
+// Shout logs to channel SQL_EXEC, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, msg)
+}
+
+// Shoutf logs to channel SQL_EXEC, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The SQL_EXEC channel is the channel used to report SQL execution on
+// behalf of client connections:
+//
+// - logical SQL statement executions (if enabled)
+// - pgwire events (if enabled)
+func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, format, args...)
+}
+
+// loggerSqlPerf is the logger type for the SQL_PERF channel.
+type loggerSqlPerf struct{}
+
+// SqlPerf is a logger that logs to the SQL_PERF channel.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+var SqlPerf loggerSqlPerf
+
+// SqlPerf and loggerSqlPerf implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = SqlPerf
+
+// Infof logs to the SQL_PERF channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlPerf) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_PERF, format, args...)
+}
+
+// VInfof logs to the SQL_PERF channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlPerf) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.SQL_PERF, format, args...)
+	}
+}
+
+// Info logs to the SQL_PERF channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlPerf) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_PERF, msg)
+}
+
+// InfofDepth logs to the SQL_PERF channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlPerf) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_PERF, format, args...)
+}
+
+// Warningf logs to the SQL_PERF channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlPerf) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_PERF, format, args...)
+}
+
+// VWarningf logs to the SQL_PERF channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlPerf) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.SQL_PERF, format, args...)
+	}
+}
+
+// Warning logs to the SQL_PERF channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlPerf) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_PERF, msg)
+}
+
+// WarningfDepth logs to the SQL_PERF channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlPerf) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_PERF, format, args...)
+}
+
+// Errorf logs to the SQL_PERF channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlPerf) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_PERF, format, args...)
+}
+
+// VErrorf logs to the SQL_PERF channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlPerf) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.SQL_PERF, format, args...)
+	}
+}
+
+// Error logs to the SQL_PERF channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlPerf) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_PERF, msg)
+}
+
+// ErrorfDepth logs to the SQL_PERF channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlPerf) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_PERF, format, args...)
+}
+
+// Fatalf logs to the SQL_PERF channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlPerf) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_PERF, format, args...)
+}
+
+// VFatalf logs to the SQL_PERF channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlPerf) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.SQL_PERF, format, args...)
+	}
+}
+
+// Fatal logs to the SQL_PERF channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlPerf) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_PERF, msg)
+}
+
+// FatalfDepth logs to the SQL_PERF channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlPerf) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_PERF, format, args...)
+}
+
+// Shout logs to channel SQL_PERF, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+func (loggerSqlPerf) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_PERF, msg)
+}
+
+// Shoutf logs to channel SQL_PERF, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The SQL_PERF channel is the channel used to report SQL executions
+// that are marked to be highlighted as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the "SQL slow query log".
+//
+// Arguably, this channel overlaps with SQL_EXEC defined above.
+// However, we keep them separate for backward-compatibility
+// with previous versions, where the corresponding events
+// were redirected to separate files.
+func (loggerSqlPerf) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_PERF, format, args...)
+}
+
+// loggerSqlInternalPerf is the logger type for the SQL_INTERNAL_PERF channel.
+type loggerSqlInternalPerf struct{}
+
+// SqlInternalPerf is a logger that logs to the SQL_INTERNAL_PERF channel.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+var SqlInternalPerf loggerSqlInternalPerf
+
+// SqlInternalPerf and loggerSqlInternalPerf implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = SqlInternalPerf
+
+// Infof logs to the SQL_INTERNAL_PERF channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlInternalPerf) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
+// VInfof logs to the SQL_INTERNAL_PERF channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlInternalPerf) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.SQL_INTERNAL_PERF, format, args...)
+	}
+}
+
+// Info logs to the SQL_INTERNAL_PERF channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlInternalPerf) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_INTERNAL_PERF, msg)
+}
+
+// InfofDepth logs to the SQL_INTERNAL_PERF channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlInternalPerf) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
+// Warningf logs to the SQL_INTERNAL_PERF channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlInternalPerf) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
+// VWarningf logs to the SQL_INTERNAL_PERF channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlInternalPerf) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.SQL_INTERNAL_PERF, format, args...)
+	}
+}
+
+// Warning logs to the SQL_INTERNAL_PERF channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlInternalPerf) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_INTERNAL_PERF, msg)
+}
+
+// WarningfDepth logs to the SQL_INTERNAL_PERF channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlInternalPerf) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
+// Errorf logs to the SQL_INTERNAL_PERF channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlInternalPerf) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
+// VErrorf logs to the SQL_INTERNAL_PERF channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlInternalPerf) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.SQL_INTERNAL_PERF, format, args...)
+	}
+}
+
+// Error logs to the SQL_INTERNAL_PERF channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlInternalPerf) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_INTERNAL_PERF, msg)
+}
+
+// ErrorfDepth logs to the SQL_INTERNAL_PERF channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlInternalPerf) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
+// Fatalf logs to the SQL_INTERNAL_PERF channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlInternalPerf) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
+// VFatalf logs to the SQL_INTERNAL_PERF channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlInternalPerf) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.SQL_INTERNAL_PERF, format, args...)
+	}
+}
+
+// Fatal logs to the SQL_INTERNAL_PERF channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlInternalPerf) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_INTERNAL_PERF, msg)
+}
+
+// FatalfDepth logs to the SQL_INTERNAL_PERF channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlInternalPerf) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
+// Shout logs to channel SQL_INTERNAL_PERF, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+func (loggerSqlInternalPerf) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_INTERNAL_PERF, msg)
+}
+
+// Shoutf logs to channel SQL_INTERNAL_PERF, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the SQL perf logging output with
+// internal troubleshooting details.
+func (loggerSqlInternalPerf) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_INTERNAL_PERF, format, args...)
 }

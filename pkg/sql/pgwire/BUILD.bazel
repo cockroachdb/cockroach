@@ -102,6 +102,8 @@ go_test(
         "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/channel",
+        "//pkg/util/log/logconfig",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/randutil",

@@ -147,13 +147,6 @@ percentage of physical memory (e.g. .25). If left unspecified, defaults to 25% o
 physical memory.`,
 	}
 
-	SQLAuditLogDirName = FlagInfo{
-		Name: "sql-audit-dir",
-		Description: `
-If non-empty, create a SQL audit log in this directory.
-`,
-	}
-
 	SQLTempStorage = FlagInfo{
 		Name: "max-disk-temp-storage",
 		Description: `
@@ -1161,35 +1154,6 @@ Simulate a global cluster. This adds artificial latencies to nodes in different
 regions. This flag only works with the default node localities. This setting is experimental.`,
 	}
 
-	LogDir = FlagInfo{
-		Name: "log-dir",
-		Description: `
-If non-empty, write log files in this directory. If empty, write log files to
-<store-dir>/logs where <store-dir> is the directory of the first on disk store.
-`,
-	}
-
-	LogDirMaxSize = FlagInfo{
-		Name: "log-group-max-size",
-		Description: `
-Maximum combined size of all log files in a logging group.
-`,
-	}
-
-	LogFileMaxSize = FlagInfo{
-		Name: "log-file-max-size",
-		Description: `
-Maximum size of each log file.
-`,
-	}
-
-	LogFileVerbosity = FlagInfo{
-		Name: "log-file-verbosity",
-		Description: `
-Minimum verbosity of messages written to the log file.
-`,
-	}
-
 	WriteSize = FlagInfo{
 		Name: "write-size",
 		Description: `
@@ -1295,6 +1259,53 @@ dependencies on other tables.
 		Description: `
 Override limits on line size when importing Postgres dump files. This setting 
 may need to be tweaked if the Postgres dump file has extremely long lines.
+`,
+	}
+
+	Log = FlagInfo{
+		Name:        "log",
+		Description: `Logging configuration. See the documentation for details.`,
+	}
+
+	DeprecatedStderrThreshold = FlagInfo{
+		Name:        "logtostderr",
+		Description: `Write log messages beyond the specified severity to stderr.`,
+	}
+
+	DeprecatedFileThreshold = FlagInfo{
+		Name:        "log-file-verbosity",
+		Description: `Write log messages beyond the specified severity to files.`,
+	}
+
+	DeprecatedStderrNoColor = FlagInfo{
+		Name:        "no-color",
+		Description: `Avoid color in the stderr output.`,
+	}
+
+	DeprecatedRedactableLogs = FlagInfo{
+		Name:        "redactable-logs",
+		Description: `Request redaction markers.`,
+	}
+
+	DeprecatedLogFileMaxSize = FlagInfo{
+		Name:        "log-file-max-size",
+		Description: "Maximum size of a log file before switching to a new file.",
+	}
+
+	DeprecatedLogGroupMaxSize = FlagInfo{
+		Name:        "log-group-max-size",
+		Description: `Maximum size of a group of log files before old files are removed.`,
+	}
+
+	DeprecatedLogDir = FlagInfo{
+		Name:        "log-dir",
+		Description: `Override the logging directory.`,
+	}
+
+	DeprecatedSQLAuditLogDir = FlagInfo{
+		Name: "sql-audit-dir",
+		Description: `
+If non-empty, create a SQL audit log in this directory.
 `,
 	}
 )

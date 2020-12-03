@@ -561,11 +561,11 @@ func TestStatusLocalLogs(t *testing.T) {
 		}
 		for _, entry := range wrapper.Entries {
 			switch entry.Message {
-			case "‹TestStatusLocalLogFile test message-Error›":
+			case "TestStatusLocalLogFile test message-Error":
 				foundError = true
-			case "‹TestStatusLocalLogFile test message-Warning›":
+			case "TestStatusLocalLogFile test message-Warning":
 				foundWarning = true
-			case "‹TestStatusLocalLogFile test message-Info›":
+			case "TestStatusLocalLogFile test message-Info":
 				foundInfo = true
 			}
 		}
@@ -640,11 +640,11 @@ func TestStatusLocalLogs(t *testing.T) {
 				fmt.Fprintln(&logsBuf, entry.Message)
 
 				switch entry.Message {
-				case "‹TestStatusLocalLogFile test message-Error›":
+				case "TestStatusLocalLogFile test message-Error":
 					actual.Error = true
-				case "‹TestStatusLocalLogFile test message-Warning›":
+				case "TestStatusLocalLogFile test message-Warning":
 					actual.Warning = true
-				case "‹TestStatusLocalLogFile test message-Info›":
+				case "TestStatusLocalLogFile test message-Info":
 					actual.Info = true
 				}
 			}

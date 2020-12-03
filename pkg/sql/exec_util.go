@@ -686,22 +686,17 @@ type ExecutorConfig struct {
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
-	SQLStatusServer         serverpb.SQLStatusServer
-	MetricsRecorder         nodeStatusGenerator
-	SessionRegistry         *SessionRegistry
-	SQLLivenessReader       sqlliveness.Reader
-	JobRegistry             *jobs.Registry
-	VirtualSchemas          *VirtualSchemaHolder
-	DistSQLPlanner          *DistSQLPlanner
-	TableStatsCache         *stats.TableStatisticsCache
-	StatsRefresher          *stats.Refresher
-	ExecLogger              *log.SecondaryLogger
-	AuditLogger             *log.SecondaryLogger
-	SlowQueryLogger         *log.SecondaryLogger
-	SlowInternalQueryLogger *log.SecondaryLogger
-	AuthLogger              *log.SecondaryLogger
-	InternalExecutor        *InternalExecutor
-	QueryCache              *querycache.C
+	SQLStatusServer   serverpb.SQLStatusServer
+	MetricsRecorder   nodeStatusGenerator
+	SessionRegistry   *SessionRegistry
+	SQLLivenessReader sqlliveness.Reader
+	JobRegistry       *jobs.Registry
+	VirtualSchemas    *VirtualSchemaHolder
+	DistSQLPlanner    *DistSQLPlanner
+	TableStatsCache   *stats.TableStatisticsCache
+	StatsRefresher    *stats.Refresher
+	InternalExecutor  *InternalExecutor
+	QueryCache        *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 

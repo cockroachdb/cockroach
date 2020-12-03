@@ -48,9 +48,14 @@ environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 `,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
+	// Note: RunE is set in the init() function below to avoid an
+	// initialization cycle.
+}
+
+func init() {
+	demoCmd.RunE = MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
 		return runDemo(cmd, nil /* gen */)
-	}),
+	})
 }
 
 const demoOrg = "Cockroach Demo"

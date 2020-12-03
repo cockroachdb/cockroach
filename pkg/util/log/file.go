@@ -15,7 +15,6 @@ package log
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"math"
 	"os"
@@ -262,52 +261,6 @@ func (l *fileSink) flushAndSyncLocked(doSync bool) {
 		_ = l.mu.file.Sync() // ignore error
 	}
 }
-
-// DirName overrides (if non-empty) the choice of directory in
-// which to write logs.
-type DirName string
-
-var _ flag.Value = (*DirName)(nil)
-
-// Set implements the flag.Value interface.
-func (l *DirName) Set(dir string) error {
-	if len(dir) > 0 && dir[0] == '~' {
-		return fmt.Errorf("log directory cannot start with '~': %s", dir)
-	}
-	if len(dir) > 0 {
-		absDir, err := filepath.Abs(dir)
-		if err != nil {
-			return err
-		}
-		dir = absDir
-	}
-	*l = DirName(dir)
-	return nil
-}
-
-// Type implements the flag.Value interface.
-func (l *DirName) Type() string {
-	return "string"
-}
-
-// String implements the flag.Value interface.
-func (l *DirName) String() string {
-	return string(*l)
-}
-
-func (l *DirName) get() (dirName string, isSet bool) {
-	return string(*l), *l != ""
-}
-
-// IsSet returns true iff the directory name is set.
-func (l *DirName) IsSet() bool {
-	res := *l != ""
-	return res
-}
-
-// DirSet returns true iff the log directory has been changed from the
-// command line.
-func DirSet() bool { return logging.logDir.IsSet() }
 
 var (
 	pid      = os.Getpid()

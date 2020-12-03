@@ -19,22 +19,6 @@ import (
 	"sync/atomic"
 )
 
-// StartGCDaemon starts the log file GC -- this must be called after
-// command-line parsing has completed so that no data is lost when the
-// user configures larger max sizes than the defaults.
-//
-// The logger's GC daemon stops when the provided context is canceled.
-//
-// Note that secondary logger get their GC daemon started when
-// they are allocated (NewSecondaryLogger). This assumes that
-// secondary loggers are only allocated after command line parsing
-// has completed too.
-func StartGCDaemon(ctx context.Context) {
-	if fileSink := debugLog.getFileSink(); fileSink != nil {
-		go fileSink.gcDaemon(ctx)
-	}
-}
-
 // gcDaemon runs the GC loop for the given logger.
 func (l *fileSink) gcDaemon(ctx context.Context) {
 	l.gcOldFiles()
@@ -72,6 +56,11 @@ func (l *fileSink) gcOldFiles() {
 	}
 
 	logFilesCombinedMaxSize := atomic.LoadInt64(&l.logFilesCombinedMaxSize)
+	if logFilesCombinedMaxSize == 0 {
+		// Nothing to do.
+		return
+	}
+
 	files := selectFiles(allFiles, math.MaxInt64)
 	if len(files) == 0 {
 		return

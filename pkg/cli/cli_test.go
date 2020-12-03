@@ -1432,9 +1432,10 @@ Available Commands:
   help              Help about any command
 
 Flags:
-  -h, --help                             help for cockroach
-      --logtostderr Severity[=DEFAULT]   logs at or above this threshold go to stderr (default NONE)
-      --no-color                         disable standard error log colorization
+  -h, --help                 help for cockroach
+      --log <string>         
+                                     Logging configuration. See the documentation for details.
+                                    
 
 Use "cockroach [command] --help" for more information about a command.
 `

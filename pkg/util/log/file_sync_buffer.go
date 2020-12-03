@@ -43,7 +43,7 @@ func (sb *syncBuffer) Sync() error {
 
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	maxFileSize := atomic.LoadInt64(&sb.fileSink.logFileMaxSize)
-	if sb.nbytes+int64(len(p)) >= maxFileSize {
+	if maxFileSize > 0 && sb.nbytes+int64(len(p)) >= maxFileSize {
 		if err := sb.rotateFileLocked(timeutil.Now()); err != nil {
 			return 0, err
 		}

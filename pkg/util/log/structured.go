@@ -13,9 +13,6 @@ package log
 import (
 	"context"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/errors"
 )
 
 // FormatWithContextTags formats the string and prepends the context
@@ -29,24 +26,3 @@ func FormatWithContextTags(ctx context.Context, format string, args ...interface
 	formatArgs(&buf, format, args...)
 	return buf.String()
 }
-
-// addStructured creates a structured log entry to be written to the
-// specified facility of the logger.
-func addStructured(
-	ctx context.Context, sev Severity, depth int, format string, args ...interface{},
-) {
-	if sev == severity.FATAL && MaybeSendCrashReport != nil {
-		err := errors.NewWithDepthf(depth+1, "log.Fatal: "+format, args...)
-		MaybeSendCrashReport(ctx, err)
-	}
-
-	entry := MakeEntry(
-		ctx, sev, depth+1, true /* redactable */, format, args...)
-	if sp, el, ok := getSpanOrEventLog(ctx); ok {
-		eventInternal(sp, el, (sev >= severity.ERROR), entry)
-	}
-	debugLog.outputLogEntry(entry)
-}
-
-// MaybeSendCrashReport is injected by package logcrash
-var MaybeSendCrashReport func(ctx context.Context, err error)

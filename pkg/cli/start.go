@@ -13,7 +13,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -37,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -47,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -97,9 +94,17 @@ replication disabled (replication factor = 1).
 	RunE:    maybeShoutError(MaybeDecorateGRPCError(runStartSingleNode)),
 }
 
-// StartCmds exports startCmd and startSingleNodeCmds so that other
-// packages can add flags to them.
+// StartCmds lists the commands that start KV nodes as a server.
+// This includes 'start' and 'start-single-node' but excludes
+// the MT SQL server (not KV node) and 'demo' (not a server).
 var StartCmds = []*cobra.Command{startCmd, startSingleNodeCmd}
+
+// serverCmds lists the commands that start servers.
+var serverCmds = append(StartCmds, mtStartSQLCmd)
+
+// customLoggingSetupCmds lists the commands that call setupLogging()
+// after other types of configuration.
+var customLoggingSetupCmds = append(serverCmds, debugCheckLogConfigCmd, demoCmd)
 
 func initBlockProfile() {
 	// Enable the block profile for a sample of mutex and channel operations.
@@ -339,7 +344,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// additional server configuration tweaks for the startup process
 	// must be necessarily non-logging-related, as logging parameters
 	// cannot be picked up beyond this point.
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd)
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, true /* isServerCmd */)
 	if err != nil {
 		return err
 	}
@@ -620,10 +625,17 @@ If problems persist, please see %s.`
 			if len(serverCfg.SocketFile) != 0 {
 				buf.Printf("socket:\t%s\n", serverCfg.SocketFile)
 			}
-			buf.Printf("logs:\t%s\n", flag.Lookup("log-dir").Value)
-			if serverCfg.AuditLogDirName.IsSet() {
-				buf.Printf("SQL audit logs:\t%s\n", serverCfg.AuditLogDirName)
-			}
+			logNum := 1
+			_ = cliCtx.logConfig.IterateDirectories(func(d string) error {
+				if logNum == 1 {
+					// Backward-compatibility.
+					buf.Printf("logs:\t%s\n", d)
+				} else {
+					buf.Printf("logs[%d]:\t%s\n", logNum, d)
+				}
+				logNum++
+				return nil
+			})
 			if serverCfg.Attrs != "" {
 				buf.Printf("attrs:\t%s\n", serverCfg.Attrs)
 			}
@@ -955,144 +967,16 @@ func maybeWarnMemorySizes(ctx context.Context) {
 	}
 }
 
-func logOutputDirectory() string {
-	return startCtx.logDir.String()
-}
-
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
 // Prior to this however it determines suitable defaults for the
 // logging output directory and the verbosity level of stderr logging.
 // We only do this for the "start" and "start-sql" commands which is why this work
 // occurs here and not in an OnInitialize function.
 func setupAndInitializeLoggingAndProfiling(
-	ctx context.Context, cmd *cobra.Command,
+	ctx context.Context, cmd *cobra.Command, isServerCmd bool,
 ) (stopper *stop.Stopper, err error) {
-	if active, firstUse := log.IsActive(); active {
-		panic(errors.Newf("logging already active; first used at:\n%s", firstUse))
-	}
-
-	fl := flagSetForCmd(cmd)
-
-	// Default the log directory to the "logs" subdirectory of the first
-	// non-memory store. If more than one non-memory stores is detected,
-	// print a warning.
-	ambiguousLogDirs := false
-	lf := fl.Lookup(cliflags.LogDir.Name)
-	if !startCtx.logDir.IsSet() && !lf.Changed {
-		// We only override the log directory if the user has not explicitly
-		// disabled file logging using --log-dir="".
-		newDir := ""
-		for _, spec := range serverCfg.Stores.Specs {
-			if spec.InMemory {
-				continue
-			}
-			if newDir != "" {
-				ambiguousLogDirs = true
-				break
-			}
-			newDir = filepath.Join(spec.Path, "logs")
-		}
-
-		if err := startCtx.logDir.Set(newDir); err != nil {
-			return nil, err
-		}
-	}
-
-	if logDir := logOutputDirectory(); logDir != "" {
-		ls := fl.Lookup(logflags.LogToStderrName)
-		if !ls.Changed {
-			// Unless the settings were overridden by the user, silence
-			// logging to stderr because the messages will go to a log file.
-			if err := ls.Value.Set(severity.NONE.String()); err != nil {
-				return nil, err
-			}
-		}
-
-		// Make sure the path exists.
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return nil, errors.Wrap(err, "unable to create log directory")
-		}
-
-		// Note that we configured the --log-dir flag to set
-		// startContext.logDir. This is the point at which we set log-dir for the
-		// util/log package. We don't want to set it earlier to avoid spuriously
-		// creating a file in an incorrect log directory or if something is
-		// accidentally logging after flag parsing but before the --background
-		// dispatch has occurred.
-		// Note: this uses flag.Lookup() and not fl.Lookup() because we want
-		// to get the original flag set up by the logging package.
-		if err := flag.Lookup(logflags.LogDirName).Value.Set(logDir); err != nil {
-			return nil, err
-		}
-
-		// Enable redactable logs if no other instruction given by the
-		// user. We do this only if we have a logging directory, because
-		// it's not safe to enable redaction markers on stderr.
-		if rl := fl.Lookup(logflags.RedactableLogsName); !rl.Changed {
-			if err := rl.Value.Set("true"); err != nil {
-				return nil, err
-			}
-		}
-
-		defer func() {
-			// Start the log file GC daemon to remove files that make the log
-			// directory too large.
-			//
-			// Note that as per the comment on this function, this must be
-			// called after command-line parsing has completed and the
-			// configuration was effected, so that no data is lost when the user
-			// configures larger max sizes than the defaults.
-			// This is why we defer this call here, to ensure it only occurs
-			// after SetupRedactionAndStderrRedirects() has been called.
-			log.StartGCDaemon(ctx)
-
-			if stopper != nil {
-				// When the function complete successfully, start the loggers
-				// for the storage engines. We need to do this at the end
-				// because we need to register the loggers.
-				stopper.AddCloser(storage.InitPebbleLogger(ctx))
-			}
-		}()
-	}
-
-	// Initialize the redirection of stderr and log redaction.  Note,
-	// this function must be called even if there is no log directory
-	// configured, to verify whether the combination of requested flags
-	// is valid.
-	if _, err := log.SetupRedactionAndStderrRedirects(); err != nil {
+	if err := setupLogging(ctx, cmd, isServerCmd, true /* applyConfig */); err != nil {
 		return nil, err
-	}
-
-	// Record redaction usage for telemetry.
-	if log.RedactableLogsEnabled() {
-		telemetry.Count("server.logging.redactable_logs.enabled")
-	} else {
-		telemetry.Count("server.logging.redactable_logs.disabled")
-	}
-
-	// We want to be careful to still produce useful debug dumps if the
-	// server configuration has disabled logging to files.
-	outputDirectory := "."
-	if p := logOutputDirectory(); p != "" {
-		outputDirectory = p
-	}
-	serverCfg.GoroutineDumpDirName = filepath.Join(outputDirectory, base.GoroutineDumpDir)
-	serverCfg.HeapProfileDirName = filepath.Join(outputDirectory, base.HeapProfileDir)
-
-	if ambiguousLogDirs {
-		// Note that we can't report this message earlier, because the log directory
-		// may not have been ready before the call to MkdirAll() above.
-		log.Shout(ctx, severity.WARNING, "multiple stores configured"+
-			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
-	}
-
-	if auditLogDir := serverCfg.AuditLogDirName.String(); auditLogDir != "" && auditLogDir != outputDirectory {
-		// Make sure the path for the audit log exists, if it's a different path than
-		// the main log.
-		if err := os.MkdirAll(auditLogDir, 0755); err != nil {
-			return nil, err
-		}
-		log.Eventf(ctx, "created SQL audit log directory %s", auditLogDir)
 	}
 
 	if startCtx.serverInsecure {
@@ -1143,7 +1027,7 @@ func setupAndInitializeLoggingAndProfiling(
 	info := build.GetInfo()
 	log.Infof(ctx, "%s", info.Short())
 
-	initCPUProfile(ctx, outputDirectory, serverCfg.Settings)
+	initCPUProfile(ctx, serverCfg.CPUProfileDirName, serverCfg.Settings)
 	initBlockProfile()
 	initMutexProfile()
 
