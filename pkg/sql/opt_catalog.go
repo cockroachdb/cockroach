@@ -1661,7 +1661,7 @@ func newOptVirtualTable(
 			panic(errors.AssertionFailedf("virtual indexes with more than 1 col not supported"))
 		}
 
-		// Add 1, since the 0th index will the the primary that we added above.
+		// Add 1, since the 0th index will the primary that we added above.
 		ot.indexes[i+1] = optVirtualIndex{
 			tab:          ot,
 			desc:         idxDesc,

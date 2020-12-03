@@ -142,7 +142,7 @@ func (cv *clusterVersionSetting) activeVersionOrEmpty(
 // isActive returns true if the features of the supplied version key are active
 // at the running version. See comment on Handle.IsActive for intended usage.
 func (cv *clusterVersionSetting) isActive(
-	ctx context.Context, sv *settings.Values, versionKey VersionKey,
+	ctx context.Context, sv *settings.Values, versionKey Key,
 ) bool {
 	return cv.activeVersion(ctx, sv).IsActive(versionKey)
 }

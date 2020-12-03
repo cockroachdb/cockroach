@@ -611,8 +611,12 @@ type PlanningCtx struct {
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
 	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
-	// If set, the result of flowSpecsToDiagram will show the types of each stream.
-	saveDiagramShowInputTypes bool
+	// Flags used if we generate the diagram (in flowSpecsToDiagram).
+	saveDiagramFlags execinfrapb.DiagramFlags
+
+	// If set, we will record the mapping from planNode to tracing metadata to
+	// later allow associating statistics with the planNode.
+	traceMetadata execNodeTraceMetadata
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
@@ -678,7 +682,7 @@ func (p *PlanningCtx) flowSpecsToDiagram(
 		stmtStr = p.planner.stmt.String()
 	}
 	diagram, err := execinfrapb.GeneratePlanDiagram(
-		stmtStr, flows, p.saveDiagramShowInputTypes,
+		stmtStr, flows, p.saveDiagramFlags,
 	)
 	if err != nil {
 		return nil, err
@@ -961,7 +965,7 @@ func getIndexIdx(index *descpb.IndexDescriptor, desc *tabledesc.Immutable) (uint
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
-	n *scanNode, planCtx *PlanningCtx, indexVarMap []int,
+	n *scanNode,
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
 	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
@@ -1009,8 +1013,9 @@ func tableOrdinal(
 	}
 	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		offset := len(desc.Columns)
-		for i, col := range desc.MutationColumns() {
-			if col.ID == colID {
+		mutationColumns := desc.MutationColumns()
+		for i := range mutationColumns {
+			if mutationColumns[i].ID == colID {
 				return offset + i
 			}
 		}
@@ -1152,7 +1157,6 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 
 // createTableReaders generates a plan consisting of table reader processors,
 // one for each node that has spans that we are reading.
-// overridesResultColumns is optional.
 func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *PlanningCtx, n *scanNode,
 ) (*PhysicalPlan, error) {
@@ -1162,7 +1166,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	// scanNodeToTableOrdinalMap is a map from scan node column ordinal to
 	// table reader column ordinal.
 	scanNodeToTableOrdinalMap := toTableOrdinals(n.cols, n.desc, n.colCfg.visibility)
-	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
+	spec, post, err := initTableReaderSpec(n)
 	if err != nil {
 		return nil, err
 	}
@@ -1281,8 +1285,9 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		typs = append(typs, info.desc.Columns[i].Type)
 	}
 	if returnMutations {
-		for _, col := range info.desc.MutationColumns() {
-			typs = append(typs, col.Type)
+		mutationColumns := info.desc.MutationColumns()
+		for i := range mutationColumns {
+			typs = append(typs, mutationColumns[i].Type)
 		}
 	}
 	if info.containsSystemColumns {
@@ -1304,8 +1309,9 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		colID++
 	}
 	if returnMutations {
-		for _, c := range info.desc.MutationColumns() {
-			descColumnIDs.Set(colID, int(c.ID))
+		mutationColumns := info.desc.MutationColumns()
+		for i := range mutationColumns {
+			descColumnIDs.Set(colID, int(mutationColumns[i].ID))
 			colID++
 		}
 	}
@@ -2698,6 +2704,14 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	if err != nil {
 		return plan, err
+	}
+
+	if planCtx.traceMetadata != nil {
+		processors := make([]processorTraceMetadata, len(plan.ResultRouters))
+		for i := range plan.ResultRouters {
+			processors[i].id = execinfrapb.ProcessorID(plan.ResultRouters[i])
+		}
+		planCtx.traceMetadata.associateNodeWithProcessors(node, planCtx.infra.FlowID, processors)
 	}
 
 	if dsp.shouldPlanTestMetadata() {

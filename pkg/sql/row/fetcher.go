@@ -227,9 +227,14 @@ type Fetcher struct {
 
 	// -- Fields updated during a scan --
 
-	kvFetcher      *KVFetcher
-	indexKey       []byte // the index key of the current row
-	prettyValueBuf *bytes.Buffer
+	// testingGenerateMockContentionEvents is a field that specifies whether
+	// a kvFetcher generates mock contention events. See
+	// kvFetcher.TestingEnableMockContentionEventGeneration.
+	// TODO(asubiotto): Remove once KV layer produces real contention events.
+	testingGenerateMockContentionEvents bool
+	kvFetcher                           *KVFetcher
+	indexKey                            []byte // the index key of the current row
+	prettyValueBuf                      *bytes.Buffer
 
 	valueColsFound int // how many needed cols we've found so far in the value
 
@@ -658,6 +663,7 @@ func (rf *Fetcher) StartScanFrom(ctx context.Context, f kvBatchFetcher) error {
 		rf.kvFetcher.Close(ctx)
 	}
 	rf.kvFetcher = newKVFetcher(f)
+	rf.kvFetcher.testingGenerateMockContentionEvents = rf.testingGenerateMockContentionEvents
 	// Retrieve the first key.
 	_, err := rf.NextKey(ctx)
 	return err
@@ -1584,12 +1590,28 @@ func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
 
 // GetBytesRead returns total number of bytes read by the underlying KVFetcher.
 func (rf *Fetcher) GetBytesRead() int64 {
-	f := rf.kvFetcher
-	if f == nil {
-		// Not yet initialized.
-		return 0
+	if f := rf.kvFetcher; f != nil {
+		return f.bytesRead
 	}
-	return f.bytesRead
+	// Not yet initialized.
+	return 0
+}
+
+// TestingEnableMockContentionEventGeneration signals the underlying kv fetcher
+// to generate mock roachpb.ContentionEvents. Refer to the KVFetcher's method
+// of the same name for more information.
+func (rf *Fetcher) TestingEnableMockContentionEventGeneration() {
+	rf.testingGenerateMockContentionEvents = true
+}
+
+// GetContentionEvents returns a slice of contention events that occurred during
+// the lifetime of this Fetcher. A nil slice indicates that no contention
+// events occurred.
+func (rf *Fetcher) GetContentionEvents() []roachpb.ContentionEvent {
+	if f := rf.kvFetcher; f != nil {
+		return f.GetContentionEvents()
+	}
+	return nil
 }
 
 // Only unique secondary indexes have extra columns to decode (namely the

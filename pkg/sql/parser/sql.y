@@ -563,8 +563,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
   return u.val.(tree.RefreshDataOption)
 }
-func (u *sqlSymUnion) regionAffinity() tree.RegionalAffinity {
-  return u.val.(tree.RegionalAffinity)
+func (u *sqlSymUnion) locality() tree.Locality {
+  return u.val.(tree.Locality)
 }
 func (u *sqlSymUnion) survivalGoal() tree.SurvivalGoal {
   return u.val.(tree.SurvivalGoal)
@@ -628,7 +628,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
-%token <str> GLOBAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
+%token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
@@ -679,7 +679,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
-%token <str> SURVIVE SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
+%token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
@@ -746,7 +746,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> alter_relocate_lease_stmt
 %type <tree.Statement> alter_zone_table_stmt
 %type <tree.Statement> alter_table_set_schema_stmt
-%type <tree.Statement> alter_table_regional_affinity_stmt
+%type <tree.Statement> alter_table_locality_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -890,6 +890,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_ranges_stmt
 %type <tree.Statement> show_range_for_row_stmt
 %type <tree.Statement> show_locality_stmt
+%type <tree.Statement> show_survival_goal_stmt
 %type <tree.Statement> show_regions_stmt
 %type <tree.Statement> show_roles_stmt
 %type <tree.Statement> show_schemas_stmt
@@ -959,7 +960,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <str> region_name primary_region_clause opt_primary_region_clause
 %type <tree.NameList> region_name_list
 %type <tree.SurvivalGoal> survival_goal_clause opt_survival_goal_clause
-%type <tree.RegionalAffinity> regional_affinity
+%type <tree.Locality> locality
 %type <int32> opt_connection_limit
 
 %type <tree.IsolationLevel> transaction_iso_level
@@ -1355,7 +1356,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... PARTITION BY NOTHING
 //   ALTER TABLE ... CONFIGURE ZONE <zoneconfig>
 //   ALTER TABLE ... SET SCHEMA <newschemaname>
-//   ALTER TABLE ... SET [REGIONAL AFFINITY [TO | AT] ... | LOCALITY [REGIONAL BY [TABLE IN <region> | ROW] | GLOBAL]]
+//   ALTER TABLE ... SET LOCALITY [REGIONAL BY [TABLE IN <region> | ROW] | GLOBAL]
 //
 // Column qualifiers:
 //   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE [WITHOUT INDEX] | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
@@ -1380,7 +1381,7 @@ alter_table_stmt:
 | alter_zone_table_stmt
 | alter_rename_table_stmt
 | alter_table_set_schema_stmt
-| alter_table_regional_affinity_stmt
+| alter_table_locality_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
 | ALTER TABLE error     // SHOW HELP: ALTER TABLE
@@ -3616,7 +3617,7 @@ explain_stmt:
 | EXPLAIN ANALYZE preparable_stmt
   {
     var err error
-    $$.val, err = tree.MakeExplain([]string{"DISTSQL", "ANALYZE"}, $3.stmt())
+    $$.val, err = tree.MakeExplain([]string{"ANALYZE"}, $3.stmt())
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -3624,7 +3625,7 @@ explain_stmt:
 | EXPLAIN ANALYSE preparable_stmt
   {
     var err error
-    $$.val, err = tree.MakeExplain([]string{"DISTSQL", "ANALYZE"}, $3.stmt())
+    $$.val, err = tree.MakeExplain([]string{"ANALYZE"}, $3.stmt())
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -4335,7 +4336,7 @@ zone_value:
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
 // SHOW CREATE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
-// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES, SHOW REGIONS,
+// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
@@ -4361,6 +4362,7 @@ show_stmt:
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
 | show_range_for_row_stmt
 | show_regions_stmt         // EXTEND WITH HELP: SHOW REGIONS
+| show_survival_goal_stmt   // EXTEND_WITH_HELP: SHOW SURVIVAL GOAL
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
 | show_savepoint_stmt       // EXTEND WITH HELP: SHOW SAVEPOINT
 | show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
@@ -4620,6 +4622,26 @@ show_enums_stmt:
   {
     $$.val = &tree.ShowEnums{}
   }
+| SHOW ENUMS FROM name '.' name
+  {
+    $$.val = &tree.ShowEnums{ObjectNamePrefix:tree.ObjectNamePrefix{
+        CatalogName: tree.Name($4),
+        ExplicitCatalog: true,
+        SchemaName: tree.Name($6),
+        ExplicitSchema: true,
+      },
+    }
+  }
+| SHOW ENUMS FROM name
+{
+    $$.val = &tree.ShowEnums{ObjectNamePrefix:tree.ObjectNamePrefix{
+        // Note: the schema name may be interpreted as database name,
+        // see name_resolution.go.
+        SchemaName: tree.Name($4),
+        ExplicitSchema: true,
+      },
+    }
+}
 | SHOW ENUMS error // SHOW HELP: SHOW ENUMS
 
 // %Help: SHOW TYPES - list user defined types
@@ -5134,20 +5156,45 @@ show_ranges_stmt:
   }
 | SHOW RANGES error // SHOW HELP: SHOW RANGES
 
+// %Help: SHOW SURVIVAL GOAL - shows survival goals
+// %Category: DDL
+// %Text:
+// SHOW SURVIVAL GOAL FROM DATABASE
+// SHOW SURVIVAL GOAL FROM DATABASE <database>
+show_survival_goal_stmt:
+  SHOW SURVIVAL GOAL FROM DATABASE
+  {
+    $$.val = &tree.ShowSurvivalGoal{}
+  }
+| SHOW SURVIVAL GOAL FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowSurvivalGoal{
+      DatabaseName: tree.Name($6),
+    }
+  }
+
 // %Help: SHOW REGIONS - shows regions
 // %Category: DDL
 // %Text:
 // SHOW REGIONS FROM CLUSTER
+// SHOW REGIONS FROM DATABASE
 // SHOW REGIONS FROM DATABASE <database>
 show_regions_stmt:
   SHOW REGIONS FROM CLUSTER
   {
     $$.val = &tree.ShowRegions{}
   }
+| SHOW REGIONS FROM DATABASE
+  {
+    $$.val = &tree.ShowRegions{
+      FromDatabase: true,
+    }
+  }
 | SHOW REGIONS FROM DATABASE database_name
   {
     $$.val = &tree.ShowRegions{
-      Database: tree.Name($5),
+      FromDatabase: true,
+      DatabaseName: tree.Name($5),
     }
   }
 | SHOW REGIONS error // SHOW HELP: SHOW REGIONS
@@ -7052,99 +7099,129 @@ alter_table_set_schema_stmt:
     }
   }
 
-alter_table_regional_affinity_stmt:
-  ALTER TABLE relation_expr SET regional_affinity
+alter_table_locality_stmt:
+  ALTER TABLE relation_expr SET locality
   {
-    $$.val = &tree.AlterTableRegionalAffinity{
+    $$.val = &tree.AlterTableLocality{
       Name: $3.unresolvedObjectName(),
-      RegionalAffinity: $5.regionAffinity(),
+      Locality: $5.locality(),
       IfExists: false,
     }
   }
-| ALTER TABLE IF EXISTS relation_expr SET regional_affinity
+| ALTER TABLE IF EXISTS relation_expr SET locality
   {
-    $$.val = &tree.AlterTableRegionalAffinity{
+    $$.val = &tree.AlterTableLocality{
       Name: $5.unresolvedObjectName(),
-      RegionalAffinity: $7.regionAffinity(),
+      Locality: $7.locality(),
       IfExists: true,
     }
   }
 
-regional_affinity:
+locality:
   LOCALITY GLOBAL
   {
-    $$.val = tree.RegionalAffinity{
-      RegionalAffinityLevel: tree.RegionalAffinityLevelGlobal,
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelGlobal,
     }
   }
 | LOCALITY REGIONAL BY TABLE IN region_name
   {
-    $$.val = tree.RegionalAffinity{
+    $$.val = tree.Locality{
       TableRegion: tree.Name($6),
-      RegionalAffinityLevel: tree.RegionalAffinityLevelTable,
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
+| LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+  {
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
+| LOCALITY REGIONAL BY TABLE
+  {
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | LOCALITY REGIONAL BY ROW
   {
-    $$.val = tree.RegionalAffinity{
-      RegionalAffinityLevel: tree.RegionalAffinityLevelRowLevel,
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
     }
   }
 | REGIONAL AFFINITY TO NONE
   {
-    $$.val = tree.RegionalAffinity{
-      RegionalAffinityLevel: tree.RegionalAffinityLevelGlobal,
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelGlobal,
     }
   }
 | REGIONAL AFFINITY TO region_name
   {
-    $$.val = tree.RegionalAffinity{
+    $$.val = tree.Locality{
       TableRegion: tree.Name($4),
-      RegionalAffinityLevel: tree.RegionalAffinityLevelTable,
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
+| REGIONAL AFFINITY TO PRIMARY REGION
+  {
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | REGIONAL AFFINITY AT ROW LEVEL
   {
-    $$.val = tree.RegionalAffinity{
-      RegionalAffinityLevel: tree.RegionalAffinityLevelRowLevel,
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
     }
   }
 | REGIONAL AFFINITY NONE
   {
-    $$.val = tree.RegionalAffinity{
-      RegionalAffinityLevel: tree.RegionalAffinityLevelGlobal,
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelGlobal,
     }
   }
 | REGIONAL AFFINITY region_name
   {
-    $$.val = tree.RegionalAffinity{
+    $$.val = tree.Locality{
       TableRegion: tree.Name($3),
-      RegionalAffinityLevel: tree.RegionalAffinityLevelTable,
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
+| REGIONAL AFFINITY PRIMARY REGION
+  {
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | REGIONAL AFFINITY ROW LEVEL
   {
-    $$.val = tree.RegionalAffinity{
-      RegionalAffinityLevel: tree.RegionalAffinityLevelRowLevel,
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
     }
   }
 | NO REGIONAL AFFINITY
   {
-    $$.val = tree.RegionalAffinity{
-      RegionalAffinityLevel: tree.RegionalAffinityLevelGlobal,
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelGlobal,
     }
   }
 | TABLE LEVEL REGIONAL AFFINITY TO region_name
   {
-    $$.val = tree.RegionalAffinity{
+    $$.val = tree.Locality{
       TableRegion: tree.Name($6),
-      RegionalAffinityLevel: tree.RegionalAffinityLevelTable,
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
+| TABLE LEVEL REGIONAL AFFINITY TO PRIMARY REGION
+  {
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
     }
   }
 | ROW LEVEL REGIONAL AFFINITY
   {
-    $$.val = tree.RegionalAffinity{
-      RegionalAffinityLevel: tree.RegionalAffinityLevelRowLevel,
+    $$.val = tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
     }
   }
 
@@ -7611,6 +7688,9 @@ opt_regions_list:
 
 region_or_regions:
   REGION
+  {
+    /* SKIP DOC */
+  }
 | REGIONS
 
 survival_goal_clause:
@@ -11972,6 +12052,7 @@ unreserved_keyword:
 | GEOMETRYCOLLECTIONZ
 | GEOMETRYCOLLECTIONZM
 | GLOBAL
+| GOAL
 | GRANTS
 | GROUPS
 | HASH
@@ -12164,6 +12245,7 @@ unreserved_keyword:
 | STRICT
 | SUBSCRIPTION
 | SURVIVE
+| SURVIVAL
 | SYNTAX
 | SYSTEM
 | TABLES

@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -905,15 +906,11 @@ func (s *adminServer) Events(
 ) (*serverpb.EventsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
 
-	userName, isAdmin, err := s.getUserAndRole(ctx)
+	userName, err := s.requireAdminUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	redactEvents := false
-	if isAdmin {
-		// We obey the redacted bit only if the user is admin.
-		redactEvents = !req.UnredactedEvents
-	}
+	redactEvents := !req.UnredactedEvents
 
 	limit := req.Limit
 	if limit == 0 {
@@ -1194,12 +1191,17 @@ func splitUIKey(combined string) (string, string) {
 	return pair[0], pair[1]
 }
 
-// SetUIData stores the given key/value pairs in the
+// SetUIData is an endpoint that stores the given key/value pairs in the
 // system.ui table. See GetUIData for more details on semantics.
-// This function writes to system.ui using the internal SQL executor of the provided server.
-func (s *Server) SetUIData(
-	ctx context.Context, req *serverpb.SetUIDataRequest, userName security.SQLUsername,
+func (s *adminServer) SetUIData(
+	ctx context.Context, req *serverpb.SetUIDataRequest,
 ) (*serverpb.SetUIDataResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
+	userName, err := userFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(req.KeyValues) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
@@ -1209,37 +1211,20 @@ func (s *Server) SetUIData(
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
-		rowsAffected, err := s.sqlServer.internalExecutor.ExecEx(
+		rowsAffected, err := s.server.sqlServer.internalExecutor.ExecEx(
 			ctx, "admin-set-ui-data", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
 				User: security.RootUserName(),
 			},
 			query, makeUIKey(userName, key), val)
 		if err != nil {
-			return nil, err
+			return nil, s.serverError(err)
 		}
 		if rowsAffected != 1 {
-			return nil, errors.Newf("rows affected %d != expected %d", rowsAffected, 1)
+			return nil, s.serverErrorf("rows affected %d != expected %d", rowsAffected, 1)
 		}
 	}
 
-	return &serverpb.SetUIDataResponse{}, nil
-}
-
-// SetUIData is an endpoint that stores the given key/value pairs in the
-// system.ui table. See GetUIData for more details on semantics.
-func (s *adminServer) SetUIData(
-	ctx context.Context, req *serverpb.SetUIDataRequest,
-) (*serverpb.SetUIDataResponse, error) {
-	ctx = s.server.AnnotateCtx(ctx)
-	userName, err := userFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	_, err = s.server.SetUIData(ctx, req, userName)
-	if err != nil {
-		return nil, s.serverError(err)
-	}
 	return &serverpb.SetUIDataResponse{}, nil
 }
 
@@ -1334,7 +1319,7 @@ func (s *adminServer) Cluster(
 
 	return &serverpb.ClusterResponse{
 		ClusterID:         clusterID.String(),
-		ReportingEnabled:  log.DiagnosticsReportingEnabled.Get(&s.server.st.SV),
+		ReportingEnabled:  logcrash.DiagnosticsReportingEnabled.Get(&s.server.st.SV),
 		EnterpriseEnabled: enterpriseEnabled,
 	}, nil
 }

@@ -30,6 +30,14 @@ type createDatabaseNode struct {
 // CreateDatabase creates a database.
 // Privileges: superuser or CREATEDB
 func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		&p.ExecCfg().Settings.SV,
+		"CREATE DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -68,10 +76,6 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		}
 	}
 
-	if n.PrimaryRegion != "" {
-		return nil, unimplemented.New("create database primary region", "implementation pending")
-	}
-
 	if n.ConnectionLimit != -1 {
 		return nil, unimplemented.NewWithIssueDetailf(
 			54241,
@@ -79,10 +83,6 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 			"only connection limit -1 is supported, got: %d",
 			n.ConnectionLimit,
 		)
-	}
-
-	if n.SurvivalGoal != tree.SurvivalGoalDefault {
-		return nil, unimplemented.New("create database survive", "implementation pending")
 	}
 
 	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
@@ -128,3 +128,8 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 func (*createDatabaseNode) Next(runParams) (bool, error) { return false, nil }
 func (*createDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 func (*createDatabaseNode) Close(context.Context)        {}
+
+// ReadingOwnWrites implements the planNodeReadingOwnWrites Interface. This is
+// required because we create a type descriptor for multi-region databases,
+// which must be read during validation.
+func (*createDatabaseNode) ReadingOwnWrites() {}

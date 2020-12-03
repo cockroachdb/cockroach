@@ -324,3 +324,14 @@ func (DescriptorState) SafeValue() {}
 
 // SafeValue implements the redact.SafeValue interface.
 func (ConstraintType) SafeValue() {}
+
+// IsMultiRegion returns whether the database has multi-region properties
+// configured. If so, desc.RegionConfig can be used.
+func (desc *DatabaseDescriptor) IsMultiRegion() bool {
+	return desc.RegionConfig != nil
+}
+
+// Regions returns the multi-region regions that have been added to a database.
+func (desc *DatabaseDescriptor) Regions() Regions {
+	return desc.RegionConfig.Regions
+}

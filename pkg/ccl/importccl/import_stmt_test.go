@@ -22,7 +22,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -101,6 +101,7 @@ func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "takes >1min under race")
 	const getTablesQuery = `
 SELECT schema_name, table_name, type
 FROM [SHOW TABLES]
@@ -1283,14 +1284,104 @@ func TestImportUserDefinedTypes(t *testing.T) {
 	}
 }
 
+const (
+	testPgdumpCreateCities = `CREATE TABLE public.cities (
+	city VARCHAR(80) NOT NULL,
+	CONSTRAINT cities_pkey PRIMARY KEY (city ASC),
+	FAMILY "primary" (city)
+)`
+	testPgdumpCreateWeather = `CREATE TABLE public.weather (
+	city VARCHAR(80) NULL,
+	temp_lo INT8 NULL,
+	temp_hi INT8 NULL,
+	prcp FLOAT4 NULL,
+	date DATE NULL,
+	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city) NOT VALID,
+	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
+)`
+	testPgdumpFk = `
+CREATE TABLE public.cities (
+    city character varying(80) NOT NULL
+);
+
+ALTER TABLE public.cities OWNER TO postgres;
+
+CREATE TABLE public.weather (
+    city character varying(80),
+    temp_lo int8,
+    temp_hi int8,
+    prcp real,
+    date date
+);
+
+ALTER TABLE public.weather OWNER TO postgres;
+
+COPY public.cities (city) FROM stdin;
+Berkeley
+\.
+
+COPY public.weather (city, temp_lo, temp_hi, prcp, date) FROM stdin;
+Berkeley	45	53	0	1994-11-28
+\.
+
+ALTER TABLE ONLY public.cities
+    ADD CONSTRAINT cities_pkey PRIMARY KEY (city);
+
+ALTER TABLE ONLY public.weather
+    ADD CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city);
+`
+
+	testPgdumpFkCircular = `
+CREATE TABLE public.a (
+    i int8 NOT NULL,
+    k int8
+);
+
+CREATE TABLE public.b (
+    j int8 NOT NULL
+);
+
+COPY public.a (i, k) FROM stdin;
+2	2
+\.
+
+COPY public.b (j) FROM stdin;
+2
+\.
+
+ALTER TABLE ONLY public.a
+    ADD CONSTRAINT a_pkey PRIMARY KEY (i);
+
+ALTER TABLE ONLY public.b
+    ADD CONSTRAINT b_pkey PRIMARY KEY (j);
+
+ALTER TABLE ONLY public.a
+    ADD CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(j);
+
+ALTER TABLE ONLY public.a
+    ADD CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES public.a(i);
+
+ALTER TABLE ONLY public.b
+    ADD CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES public.a(i);
+`
+)
+
 func TestImportRowLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
 	ctx := context.Background()
-	baseDir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-	tc := testcluster.StartTestCluster(
-		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	baseDir := filepath.Join("testdata")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -1404,136 +1495,201 @@ func TestImportRowLimit(t *testing.T) {
 			verifyQuery: `SELECT * from t`,
 			err:         "invalid numeric row_limit value",
 		},
+		// Test PGDump imports.
+		{
+			name: "pgdump single table with insert",
+			typ:  "PGDUMP",
+			data: `CREATE TABLE t (a INT, b INT);		
+				INSERT INTO t (a, b) VALUES (1, 2), (3, 4);		
+				`,
+			with:        `WITH row_limit = '1'`,
+			verifyQuery: `SELECT * from t`,
+			expected:    [][]string{{"1", "2"}},
+		},
+		{
+			name: "pgdump multiple inserts same table",
+			typ:  "PGDUMP",
+			data: `CREATE TABLE t (a INT, b INT);		
+				INSERT INTO t (a, b) VALUES (1, 2);		
+				INSERT INTO t (a, b) VALUES (3, 4);		
+				INSERT INTO t (a, b) VALUES (5, 6);		
+				INSERT INTO t (a, b) VALUES (7, 8);		
+				`,
+			with:        `WITH row_limit = '2'`,
+			verifyQuery: `SELECT * from t`,
+			expected:    [][]string{{"1", "2"}, {"3", "4"}},
+		},
+		// Test Mysql imports.
+		{
+			name: "mysqldump single table",
+			typ:  "MYSQLDUMP",
+			data: `CREATE TABLE t (a INT, b INT);		
+				INSERT INTO t (a, b) VALUES (5, 6), (7, 8);		
+				`,
+			with:        `WITH row_limit = '1'`,
+			verifyQuery: `SELECT * from t`,
+			expected:    [][]string{{"5", "6"}},
+		},
+		{
+			name: "mysqldump multiple inserts same table",
+			typ:  "MYSQLDUMP",
+			data: `CREATE TABLE t (a INT, b INT);		
+				INSERT INTO t (a, b) VALUES (1, 2);		
+				INSERT INTO t (a, b) VALUES (3, 4);		
+				INSERT INTO t (a, b) VALUES (5, 6);		
+				INSERT INTO t (a, b) VALUES (7, 8);		
+				`,
+			with:        `WITH row_limit = '2'`,
+			verifyQuery: `SELECT * from t`,
+			expected:    [][]string{{"1", "2"}, {"3", "4"}},
+		},
 	}
-	for testNumber, test := range tests {
+	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
-			// Create temporary file for test data with the testNumber as the name.
-			err := ioutil.WriteFile(filepath.Join(baseDir, strconv.Itoa(testNumber)), []byte(test.data), 0666)
-			require.NoError(t, err)
-			srvURL := fmt.Sprintf("nodelocal://0/%d", testNumber)
-
+			data = test.data
 			importTableQuery := fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, test.create, test.typ, test.with)
 
 			if test.err != "" {
-				sqlDB.ExpectErr(t, test.err, importTableQuery, srvURL)
+				sqlDB.ExpectErr(t, test.err, importTableQuery, srv.URL)
 
 			} else {
-				sqlDB.Exec(t, importTableQuery, srvURL)
+				if test.typ == "CSV" || test.typ == "AVRO" || test.typ == "DELIMITED" {
+					sqlDB.Exec(t, importTableQuery, srv.URL)
 
-				// Ensure that the table data is as we expect.
-				sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
-				sqlDB.Exec(t, `DROP TABLE t`)
+					// Ensure that the table data is as we expect.
+					sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
+					sqlDB.Exec(t, `DROP TABLE t`)
+
+				} else if test.typ == "PGDUMP" || test.typ == "MYSQLDUMP" {
+					sqlDB.Exec(t, `DROP TABLE IF EXISTS t, u`)
+
+					// Import table from dump format.
+					importDumpQuery := fmt.Sprintf(`IMPORT TABLE t FROM %s ($1) %s`, test.typ, test.with)
+					sqlDB.Exec(t, importDumpQuery, srv.URL)
+					sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
+
+					sqlDB.Exec(t, `DROP TABLE t`)
+
+					// Import dump format directly.
+					importDumpQuery = fmt.Sprintf(`IMPORT %s ($1) %s`, test.typ, test.with)
+					sqlDB.Exec(t, importDumpQuery, srv.URL)
+					sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
+
+					sqlDB.Exec(t, `DROP TABLE t`)
+				}
 			}
 		})
 	}
 
+	t.Run("pgdump multitable", func(t *testing.T) {
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second, seqtable CASCADE`)
+		sqlDB.Exec(t, `DROP SEQUENCE IF EXISTS a_seq`)
+
+		// Data is populated from files using COPY FROM STDIN statement.
+		_, secondFile := getSecondPostgresDumpTestdata(t)
+		second := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(secondFile, baseDir))}
+		multitableFile := getMultiTablePostgresDumpTestdata(t)
+		multitable := []interface{}{fmt.Sprintf("nodelocal://0/%s", strings.TrimPrefix(multitableFile, baseDir))}
+		expectedRowLimit := 4
+
+		// Import a single table `second` and verify number of rows imported.
+		importQuery := fmt.Sprintf(`IMPORT TABLE second FROM PGDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
+		sqlDB.Exec(t, importQuery, second...)
+
+		var numRows int
+		sqlDB.QueryRow(t, "SELECT count(*) FROM second").Scan(&numRows)
+		require.Equal(t, expectedRowLimit, numRows)
+
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS second`)
+
+		// Import multiple tables including `simple` and `second`.
+		expectedRowLimit = 3
+		importQuery = fmt.Sprintf(`IMPORT PGDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
+		sqlDB.Exec(t, importQuery, multitable...)
+		sqlDB.QueryRow(t, "SELECT count(*) FROM second").Scan(&numRows)
+		require.Equal(t, expectedRowLimit, numRows)
+
+		sqlDB.QueryRow(t, "SELECT count(*) FROM second").Scan(&numRows)
+		require.Equal(t, expectedRowLimit, numRows)
+		sqlDB.Exec(t, `DROP TABLE simple, second, seqtable CASCADE`)
+		sqlDB.Exec(t, `DROP SEQUENCE a_seq`)
+	})
+
+	t.Run("pgdump multitable interleaved inserts", func(t *testing.T) {
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS t, u`)
+
+		var numRows int
+		expectedRowLimit := 1
+		data = `CREATE TABLE t (a INT, b INT);	
+				CREATE TABLE u (a INT);	
+				INSERT INTO t (a, b) VALUES (1, 2);		
+				INSERT INTO u (a) VALUES (100);		
+				INSERT INTO t (a, b) VALUES (7, 8);		
+				INSERT INTO u (a) VALUES (600);`
+
+		importDumpQuery := fmt.Sprintf(`IMPORT PGDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
+		sqlDB.Exec(t, importDumpQuery, srv.URL)
+
+		// Verify expectedRowLimit number of rows were imported from t, u
+		sqlDB.QueryRow(t, "SELECT count(*) FROM t").Scan(&numRows)
+		require.Equal(t, expectedRowLimit, numRows)
+
+		sqlDB.QueryRow(t, "SELECT count(*) FROM u").Scan(&numRows)
+		require.Equal(t, expectedRowLimit, numRows)
+	})
+
+	t.Run("mysqldump multitable", func(t *testing.T) {
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second, third, everything CASCADE`)
+		sqlDB.Exec(t, `DROP SEQUENCE IF EXISTS simple_auto_inc, third_auto_inc`)
+
+		var numRows int
+
+		files := getMysqldumpTestdata(t)
+		simpleMysql := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(files.simple, baseDir))}
+		multitableMysql := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(files.wholeDB, baseDir))}
+		expectedRowLimit := 2
+
+		// single table
+		importQuery := fmt.Sprintf(`IMPORT TABLE simple FROM MYSQLDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
+		sqlDB.Exec(t, importQuery, simpleMysql...)
+		sqlDB.QueryRow(t, "SELECT count(*) FROM simple").Scan(&numRows)
+		require.Equal(t, expectedRowLimit, numRows)
+
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS simple`)
+		sqlDB.Exec(t, `DROP SEQUENCE IF EXISTS simple_auto_inc`)
+
+		// multiple tables
+		importQuery = fmt.Sprintf(`IMPORT MYSQLDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
+		sqlDB.Exec(t, importQuery, multitableMysql...)
+
+		sqlDB.QueryRow(t, "SELECT count(*) FROM second").Scan(&numRows)
+		require.Equal(t, expectedRowLimit, numRows)
+
+		sqlDB.QueryRow(t, "SELECT count(*) FROM simple").Scan(&numRows)
+		require.Equal(t, expectedRowLimit, numRows)
+	})
+
 	t.Run("row limit multiple csv", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE test; USE test`)
-		defer sqlDB.Exec(t, `DROP DATABASE test`)
+		defer sqlDB.Exec(t, (`DROP DATABASE test`))
 
-		csvData1 := "apple\nblueberry"
-		err := ioutil.WriteFile(filepath.Join(baseDir, "testData1"), []byte(csvData1), 0666)
-		require.NoError(t, err)
+		data = "pear\navocado\nwatermelon\nsugar"
+		sqlDB.Exec(t, `IMPORT TABLE t (s STRING) CSV DATA ($1, $2) WITH row_limit='2'`,
+			srv.URL, srv.URL)
 
-		csvData2 := "pear\navocado\nwatermelon\nsugar"
-		err = ioutil.WriteFile(filepath.Join(baseDir, "testData2"), []byte(csvData2), 0666)
-		require.NoError(t, err)
-
-		sqlDB.Exec(t, `IMPORT TABLE t (s STRING) CSV DATA ($1, $2) WITH row_limit='1'`,
-			"nodelocal://0/testData1", "nodelocal://0/testData2")
-		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"apple"}, {"pear"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`,
+			[][]string{{"pear"}, {"avocado"}, {"pear"}, {"avocado"}})
 
 		sqlDB.Exec(t, "DROP TABLE t")
 	})
 }
 
-const (
-	testPgdumpCreateCities = `CREATE TABLE public.cities (
-	city VARCHAR(80) NOT NULL,
-	CONSTRAINT cities_pkey PRIMARY KEY (city ASC),
-	FAMILY "primary" (city)
-)`
-	testPgdumpCreateWeather = `CREATE TABLE public.weather (
-	city VARCHAR(80) NULL,
-	temp_lo INT8 NULL,
-	temp_hi INT8 NULL,
-	prcp FLOAT4 NULL,
-	date DATE NULL,
-	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city) NOT VALID,
-	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
-)`
-	testPgdumpFk = `
-CREATE TABLE public.cities (
-    city character varying(80) NOT NULL
-);
-
-ALTER TABLE public.cities OWNER TO postgres;
-
-CREATE TABLE public.weather (
-    city character varying(80),
-    temp_lo int8,
-    temp_hi int8,
-    prcp real,
-    date date
-);
-
-ALTER TABLE public.weather OWNER TO postgres;
-
-COPY public.cities (city) FROM stdin;
-Berkeley
-\.
-
-COPY public.weather (city, temp_lo, temp_hi, prcp, date) FROM stdin;
-Berkeley	45	53	0	1994-11-28
-\.
-
-ALTER TABLE ONLY public.cities
-    ADD CONSTRAINT cities_pkey PRIMARY KEY (city);
-
-ALTER TABLE ONLY public.weather
-    ADD CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city);
-`
-
-	testPgdumpFkCircular = `
-CREATE TABLE public.a (
-    i int8 NOT NULL,
-    k int8
-);
-
-CREATE TABLE public.b (
-    j int8 NOT NULL
-);
-
-COPY public.a (i, k) FROM stdin;
-2	2
-\.
-
-COPY public.b (j) FROM stdin;
-2
-\.
-
-ALTER TABLE ONLY public.a
-    ADD CONSTRAINT a_pkey PRIMARY KEY (i);
-
-ALTER TABLE ONLY public.b
-    ADD CONSTRAINT b_pkey PRIMARY KEY (j);
-
-ALTER TABLE ONLY public.a
-    ADD CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(j);
-
-ALTER TABLE ONLY public.a
-    ADD CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES public.a(i);
-
-ALTER TABLE ONLY public.b
-    ADD CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES public.a(i);
-`
-)
-
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderShort(t)
+	skip.UnderRace(t, "takes >1min under race")
 
 	const nodes = 3
 
@@ -1988,7 +2144,7 @@ func TestImportCSVStmt(t *testing.T) {
 		defer testuser.Close()
 
 		t.Run("IMPORT TABLE", func(t *testing.T) {
-			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_superuser (a INT8 PRIMARY KEY, 
+			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_superuser (a INT8 PRIMARY KEY,
 b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 				t.Fatal(err)
 			}
@@ -2160,17 +2316,17 @@ func TestImportFeatureFlag(t *testing.T) {
 
 	// Feature flag is off — test that IMPORT and IMPORT INTO surface error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = FALSE`)
-	sqlDB.ExpectErr(t, `IMPORT feature was disabled by the database administrator`,
+	sqlDB.ExpectErr(t, `feature IMPORT was disabled by the database administrator`,
 		fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]))
-	sqlDB.Exec(t, `CREATE TABLE feature_flag (a INT8 PRIMARY KEY, b STRING)`)
-	sqlDB.ExpectErr(t, `IMPORT feature was disabled by the database administrator`,
-		fmt.Sprintf(`IMPORT INTO feature_flag (a, b) CSV DATA (%s)`, testFiles.files[0]))
+	sqlDB.Exec(t, `CREATE TABLE feature_flags (a INT8 PRIMARY KEY, b STRING)`)
+	sqlDB.ExpectErr(t, `feature IMPORT was disabled by the database administrator`,
+		fmt.Sprintf(`IMPORT INTO feature_flags (a, b) CSV DATA (%s)`, testFiles.files[0]))
 
 	// Feature flag is on — test that IMPORT and IMPORT INTO do not error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.import.enabled = TRUE`)
 	sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
 		testFiles.files[0]))
-	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO feature_flag (a, b) CSV DATA (%s)`, testFiles.files[0]))
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO feature_flags (a, b) CSV DATA (%s)`, testFiles.files[0]))
 }
 
 func TestImportObjectLevelRBAC(t *testing.T) {
@@ -2218,7 +2374,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 
 		// User has no privileges at this point. Check that an IMPORT requires
 		// CREATE privileges on the database.
-		_, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_import_priv (a INT8 PRIMARY KEY, 
+		_, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_import_priv (a INT8 PRIMARY KEY,
 b STRING) CSV DATA ('%s')`, userfileDest))
 		require.True(t, testutils.IsError(err, "testuser does not have CREATE privilege on database"))
 
@@ -2236,7 +2392,7 @@ b STRING) CSV DATA ('%s')`, userfileDest))
 		writeToUserfile(t.Name())
 
 		// Import should now have the required privileges to start the job.
-		_, err = testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_import_priv (a INT8 PRIMARY KEY, 
+		_, err = testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_import_priv (a INT8 PRIMARY KEY,
 b STRING) CSV DATA ('%s')`, userfileDest))
 		require.NoError(t, err)
 	})
@@ -2250,7 +2406,7 @@ b STRING) CSV DATA ('%s')`, userfileDest))
 		// User has no privileges at this point. Check that an IMPORT INTO requires
 		// INSERT and DROP privileges.
 		for _, privilege := range []string{"INSERT", "DROP"} {
-			_, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_import_into_priv (a, 
+			_, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_import_into_priv (a,
 b) CSV DATA ('%s')`, userFileDest))
 			require.True(t, testutils.IsError(err,
 				fmt.Sprintf("user testuser does not have %s privilege on relation rbac_import_into_priv",
@@ -2435,6 +2591,7 @@ func TestImportIntoCSV(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
+	skip.UnderRace(t, "takes >1min under race")
 
 	const nodes = 3
 
@@ -3504,6 +3661,7 @@ func TestImportDefault(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "takes >1min under race")
 	const nodes = 3
 	numFiles := nodes + 2
 	rowsPerFile := 1000
@@ -3925,8 +4083,8 @@ func TestImportComputed(t *testing.T) {
 	}
 	avroData := createAvroData(t, "t", avroField, avroRows)
 	pgdumpData := `
-CREATE TABLE users (a INT, b INT, c INT AS (a + b) STORED);		
-INSERT INTO users (a, b) VALUES (1, 2), (3, 4);		
+CREATE TABLE users (a INT, b INT, c INT AS (a + b) STORED);
+INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 `
 	defer srv.Close()
 	tests := []struct {
@@ -5330,6 +5488,91 @@ func TestImportPgDumpGeo(t *testing.T) {
 	})
 }
 
+func TestImportPgDumpDropTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	// If the target table for a DROP exists, we throw an error.
+	t.Run("table exists", func(t *testing.T) {
+
+		// Set up table `t` exists for testing.
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS t; CREATE TABLE t (a INT);`)
+
+		// Import PGDump data which includes DROP TABLE.
+		data = `DROP TABLE t; CREATE TABLE t (a INT); INSERT INTO t VALUES (4);`
+		sqlDB.ExpectErr(t, `drop table "t" and then retry the import`, `IMPORT PGDUMP ($1)`, srv.URL)
+
+		// Also expect error on existing table with IF EXISTS.
+		data = `DROP TABLE IF EXISTS t; CREATE TABLE t (a INT); INSERT INTO t VALUES (4);`
+		sqlDB.ExpectErr(t, `drop table "t" and then retry the import`, `IMPORT PGDUMP ($1)`, srv.URL)
+
+		// Cleanup.
+		sqlDB.Exec(t, `DROP TABLE t`)
+	})
+
+	// If the target table for a DROP does not exist, we ignore the statement.
+	t.Run("table does not exist", func(t *testing.T) {
+
+		// Set up table `t` does not exist for testing.
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS t;`)
+
+		// No error should be thrown with DROP statement.
+		data = `DROP TABLE t; CREATE TABLE t (a INT); INSERT INTO t VALUES (4);`
+		expected := [][]string{{"4"}}
+
+		sqlDB.Exec(t, `IMPORT PGDUMP ($1)`, srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, expected)
+
+		// Drop the table `t` that pgdump imported.
+		// Now table `t` does not exist for the IF EXISTS example.
+		sqlDB.Exec(t, `DROP TABLE t;`)
+
+		// Also expect no errors and successful import with IF EXISTS.
+		data = `DROP TABLE IF EXISTS t; CREATE TABLE t (a INT); INSERT INTO t VALUES (4);`
+		sqlDB.Exec(t, `IMPORT PGDUMP ($1)`, srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, expected)
+
+		// Cleanup.
+		sqlDB.Exec(t, `DROP TABLE t`)
+	})
+
+	t.Run("multiple tables and drops", func(t *testing.T) {
+		// Set up.
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS t, u;`)
+
+		// Import table `t` successfully.
+		data = `DROP TABLE t; CREATE TABLE t (a INT)`
+		sqlDB.Exec(t, `IMPORT PGDUMP ($1)`, srv.URL)
+
+		// Table `u` does not exist, so create it successfully.
+		// Table `t` exists, so an error is thrown for table `t`.
+		data = `DROP TABLE u;
+		CREATE TABLE u (a INT);
+		INSERT INTO u VALUES (55);
+		DROP TABLE t;`
+		sqlDB.ExpectErr(t, `drop table "t" and then retry the import`, `IMPORT PGDUMP ($1)`, srv.URL)
+
+		// Since the PGDump failed on error, table `u` should not exist.
+		sqlDB.ExpectErr(t, `does not exist`, `SELECT * FROM u`)
+	})
+}
+
 func TestImportCockroachDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5750,4 +5993,74 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 				})
 		}
 	}
+}
+
+func TestImportInTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Setup a few tenants, each with a different table.
+	conn10 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	defer conn10.Close()
+	t10 := sqlutils.MakeSQLRunner(conn10)
+
+	// Setup a few tenants, each with a different table.
+	conn11 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11)})
+	defer conn11.Close()
+	t11 := sqlutils.MakeSQLRunner(conn11)
+
+	const userfileURI = "userfile://defaultdb.public.root/test.csv"
+	const importStmt = "IMPORT TABLE foo (k INT PRIMARY KEY, v INT) CSV DATA ($1)"
+
+	// Upload different files to same userfile name on each of host and tenants.
+	require.NoError(t, putUserfile(ctx, conn, security.RootUserName(), userfileURI, []byte("1,2\n3,4")))
+	require.NoError(t, putUserfile(ctx, conn10, security.RootUserName(), userfileURI, []byte("10,2")))
+	require.NoError(t, putUserfile(ctx, conn11, security.RootUserName(), userfileURI, []byte("11,22\n33,44\n55,66")))
+
+	sqlDB.Exec(t, importStmt, userfileURI)
+	sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1", "2"}, {"3", "4"}})
+
+	t10.Exec(t, importStmt, userfileURI)
+	t10.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"10", "2"}})
+
+	t11.Exec(t, importStmt, userfileURI)
+	t11.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"11", "22"}, {"33", "44"}, {"55", "66"}})
+}
+
+func putUserfile(
+	ctx context.Context, conn *gosql.DB, user security.SQLUsername, uri string, content []byte,
+) error {
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(sql.CopyInFileStmt(uri, sql.CrdbInternalName, sql.UserFileUploadTable))
+	if err != nil {
+		return err
+	}
+
+	var sent int
+	for sent < len(content) {
+		chunk := 1024
+		if sent+chunk >= len(content) {
+			chunk = len(content) - sent
+		}
+		_, err = stmt.Exec(string(content[sent : sent+chunk]))
+		if err != nil {
+			return err
+		}
+		sent += chunk
+	}
+	if err := stmt.Close(); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }

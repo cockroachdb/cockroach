@@ -1,0 +1,280 @@
+# Test all feature flags when set to off in SQL package.
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE;
+
+# Test CREATE DATABASE.
+statement error pq: feature CREATE DATABASE is part of the schema change category, which was disabled by the database administrator
+CREATE DATABASE d;
+
+# Test CREATE TABLE.
+statement error pq: feature CREATE TABLE is part of the schema change category, which was disabled by the database administrator
+CREATE TABLE t();
+
+# Test CREATE SCHEMA.
+statement error pq: feature CREATE SCHEMA is part of the schema change category, which was disabled by the database administrator
+CREATE SCHEMA s;
+
+# Test CREATE TYPE.
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+CREATE SCHEMA s;
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE
+
+statement error pq: feature CREATE TYPE is part of the schema change category, which was disabled by the database administrator
+CREATE TYPE s.typ AS ENUM ()
+
+# Test CREATE VIEW.
+statement error pq: feature CREATE VIEW is part of the schema change category, which was disabled by the database administrator
+CREATE VIEW public.bar (x) AS SELECT 1 AS x
+
+# Test CREATE SEQUENCE.
+statement error pq: feature CREATE SEQUENCE is part of the schema change category, which was disabled by the database administrator
+CREATE SEQUENCE seq
+
+# Test CREATE INDEX.
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+CREATE TABLE t1(a INT8, b INT8);
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE
+
+statement error pq: feature CREATE INDEX is part of the schema change category, which was disabled by the database administrator
+CREATE INDEX on t1 (a, b)
+
+# Test ALTER DATABASE OWNER.
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+CREATE DATABASE d;
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE
+
+statement error pq: feature ALTER DATABASE is part of the schema change category, which was disabled by the database administrator
+ALTER DATABASE d OWNER TO testuser
+
+# Test ALTER DATABASE ADD REGION.
+statement error pq: feature ALTER DATABASE is part of the schema change category, which was disabled by the database administrator
+ALTER DATABASE d ADD REGION "us-west-1"
+
+# Test ALTER DATABASE DROP REGION.
+statement error pq: feature ALTER DATABASE is part of the schema change category, which was disabled by the database administrator
+ALTER DATABASE d DROP REGION "us-west-1"
+
+# Test ALTER DATABASE SURVIVE.
+statement error pq: feature ALTER DATABASE is part of the schema change category, which was disabled by the database administrator
+ALTER DATABASE d SURVIVE REGION FAILURE
+
+# Test RENAME DATABASE.
+statement error pq: feature ALTER DATABASE is part of the schema change category, which was disabled by the database administrator
+ALTER DATABASE d RENAME TO r
+
+# Test REPARENT DATABASE
+statement error pq: feature REPARENT DATABASE is part of the schema change category, which was disabled by the database administrator
+ALTER DATABASE d CONVERT TO SCHEMA WITH PARENT test
+
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+CREATE TABLE t();
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE
+
+# Test ALTER TABLE PARTITION BY.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 PARTITION BY NOTHING
+
+# Test ALTER TABLE ADD CONSTRAINT.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 ADD CONSTRAINT a_unique UNIQUE (a)
+
+# Test ALTER TABLE RENAME CONSTRAINT.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 RENAME CONSTRAINT a_unique to r
+
+# Test ALTER TABLE ADD COLUMN.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 ADD COLUMN a STRING
+
+# Test ALTER TABLE DROP COLUMN.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 DROP COLUMN IF EXISTS a
+
+# Test ALTER TABLE DROP CONSTRAINT.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 DROP CONSTRAINT IF EXISTS a_unique
+
+# Test ALTER TABLE ALTER COLUMN SET.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 ALTER COLUMN a SET NOT NULL
+
+# Test ALTER TABLE ALTER COLUMN DROP NOT NULL.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 ALTER COLUMN a DROP NOT NULL
+
+# Test ALTER TABLE ALTER COLUMN DROP STORED.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 ALTER COLUMN a DROP STORED
+
+# Test ALTER TABLE CONFIGURE ZONE.
+statement error pq: feature CONFIGURE ZONE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 CONFIGURE ZONE USING num_replicas=5
+
+# Test RENAME TABLE.
+statement error pq: feature RENAME TABLE/VIEW/SEQUENCE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t RENAME TO r
+
+# Test ALTER TABLE SET SCHEMA.
+statement error pq: feature ALTER TABLE/VIEW/SEQUENCE SET SCHEMA is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t SET SCHEMA s
+
+# Test ALTER TABLE SET LOCALITY REGIONAL BY ROW.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t SET LOCALITY REGIONAL BY ROW
+
+# Test ALTER TABLE SPLIT AT.
+statement error pq: feature ALTER TABLE/INDEX SPLIT AT is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 SPLIT AT VALUES ('1')
+
+# Test ALTER TABLE UNSPLIT AT.
+statement error pq: feature ALTER TABLE/INDEX UNSPLIT AT is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 UNSPLIT AT VALUES ('1')
+
+# Test ALTER TABLE UNSPLIT ALL.
+statement error pq: feature ALTER TABLE/INDEX UNSPLIT ALL is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 UNSPLIT ALL
+
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+CREATE INDEX i on t1 (a, b);
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE;
+
+# Test RENAME COLUMN, throws ALTER TABLE error.
+statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
+ALTER TABLE t1 RENAME COLUMN a to c
+
+# Test ALTER INDEX CONFIGURE ZONE.
+statement error pq: feature CONFIGURE ZONE is part of the schema change category, which was disabled by the database administrator
+ALTER INDEX t1@i CONFIGURE ZONE DISCARD
+
+# Test RENAME INDEX
+statement error pq: feature RENAME INDEX is part of the schema change category, which was disabled by the database administrator
+ALTER INDEX t1@i RENAME TO r
+
+# TODO(angelaw): Test ALTER INDEX SPLIT AT. This does not throw error.
+statement error pq: feature ALTER TABLE/INDEX SPLIT AT is part of the schema change category, which was disabled by the database administrator
+ALTER INDEX t1@i SPLIT AT VALUES('1')
+
+# Test ALTER INDEX UNSPLIT AT.
+statement error pq: feature ALTER TABLE/INDEX UNSPLIT AT is part of the schema change category, which was disabled by the database administrator
+ALTER INDEX t1@i UNSPLIT AT VALUES('1')
+
+# Test ALTER INDEX UNSPLIT ALL.
+statement error pq: feature ALTER TABLE/INDEX UNSPLIT ALL is part of the schema change category, which was disabled by the database administrator
+ALTER INDEX t1@i UNSPLIT ALL
+
+# Test RENAME SCHEMA, throws ALTER SCHEMA error.
+statement error pq: feature ALTER SCHEMA is part of the schema change category, which was disabled by the database administrator
+ALTER SCHEMA s RENAME TO r
+
+# Test ALTER SCHEMA.
+statement error pq: feature ALTER SCHEMA is part of the schema change category, which was disabled by the database administrator
+ALTER SCHEMA s OWNER TO testuser
+
+# Test ALTER TYPE.
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+CREATE TYPE s.typ AS ENUM ();
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE
+
+# Test ALTER TYPE ADD VALUE.
+statement error pq: feature ALTER TYPE is part of the schema change category, which was disabled by the database administrator
+ALTER TYPE s.typ ADD VALUE 'hi'
+
+# Test ALTER TYPE RENAME VALUE TO.
+statement error pq: feature ALTER TYPE is part of the schema change category, which was disabled by the database administrator
+ALTER TYPE s.typ RENAME VALUE 'hi' TO 'no'
+
+# Test ALTER TYPE RENAME TO.
+statement error pq: feature ALTER TYPE is part of the schema change category, which was disabled by the database administrator
+ALTER TYPE s.typ RENAME TO no
+
+# Test ALTER TYPE SET SCHEMA.
+statement error pq: feature ALTER TYPE is part of the schema change category, which was disabled by the database administrator
+ALTER TYPE s.typ SET SCHEMA s
+
+# Test ALTER SEQUENCE.
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+CREATE SEQUENCE seq;
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE
+
+# Test RENAME SEQUENCE.
+statement error pq: feature RENAME TABLE/VIEW/SEQUENCE is part of the schema change category, which was disabled by the database administrator
+ALTER SEQUENCE seq RENAME TO something
+
+# Test ALTER SEQUENCE SET SCHEMA
+statement error pq: feature ALTER TABLE/VIEW/SEQUENCE SET SCHEMA is part of the schema change category, which was disabled by the database administrator
+ALTER SEQUENCE seq SET SCHEMA s
+
+statement error pq: feature ALTER SEQUENCE is part of the schema change category, which was disabled by the database administrator
+ALTER SEQUENCE seq NO CYCLE
+
+# Test REASSIGN OWNED BY.
+statement error pq: feature REASSIGN OWNED BY is part of the schema change category, which was disabled by the database administrator
+REASSIGN OWNED BY root TO testuser
+
+# Test DROP OWNED BY.
+statement error pq: feature DROP OWNED BY is part of the schema change category, which was disabled by the database administrator
+DROP OWNED BY testuser
+
+# Test DROP DATABASE.
+statement error pq: feature DROP DATABASE is part of the schema change category, which was disabled by the database administrator
+DROP DATABASE d
+
+# Test DROP SCHEMA.
+statement error pq: feature DROP SCHEMA is part of the schema change category, which was disabled by the database administrator
+DROP SCHEMA s
+
+# Test DROP TYPE.
+statement error pq: feature DROP TYPE is part of the schema change category, which was disabled by the database administrator
+DROP TYPE s.typ
+
+# Test DROP TABLE.
+statement error pq: feature DROP TABLE is part of the schema change category, which was disabled by the database administrator
+DROP TABLE t
+
+# Test DROP SEQUENCE.
+statement error pq: feature DROP SEQUENCE is part of the schema change category, which was disabled by the database administrator
+DROP SEQUENCE seq
+
+# Test DROP VIEW.
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+CREATE VIEW public.bar (x) AS SELECT 1 AS x;
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE
+
+# Test ALTER VIEW SET SCHEMA
+statement error pq: feature ALTER TABLE/VIEW/SEQUENCE SET SCHEMA is part of the schema change category, which was disabled by the database administrator
+ALTER VIEW public.bar SET SCHEMA s
+
+statement error pq: feature DROP VIEW is part of the schema change category, which was disabled by the database administrator
+DROP VIEW public.bar
+
+# Test DROP INDEX.
+statement error pq: feature DROP INDEX is part of the schema change category, which was disabled by the database administrator
+DROP INDEX t1@i
+
+# Test COMMENT ON COLUMN.
+statement error pq: feature COMMENT ON COLUMN is part of the schema change category, which was disabled by the database administrator
+COMMENT ON COLUMN t.a IS 'comment'
+
+# Test COMMENT ON DATABASE.
+statement error pq: feature COMMENT ON DATABASE is part of the schema change category, which was disabled by the database administrator
+COMMENT ON DATABASE d IS 'comment'
+
+# Test COMMENT ON INDEX.
+statement error pq: feature COMMENT ON INDEX is part of the schema change category, which was disabled by the database administrator
+COMMENT ON INDEX t1@i IS 'comment'
+
+# Test COMMENT ON TABLE.
+statement error pq: feature COMMENT ON TABLE is part of the schema change category, which was disabled by the database administrator
+COMMENT ON TABLE t IS 'comment'
+
+# Reset feature flag to true so that test objects can be dropped.
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE

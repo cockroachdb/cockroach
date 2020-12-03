@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -161,11 +162,11 @@ func alterColumnTypeGeneral(
 	// general alter column type conversions.
 	if !params.p.ExecCfg().Settings.Version.IsActive(
 		params.ctx,
-		clusterversion.VersionAlterColumnTypeGeneral,
+		clusterversion.AlterColumnTypeGeneral,
 	) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"version %v must be finalized to run this alter column type",
-			clusterversion.VersionAlterColumnTypeGeneral)
+			clusterversion.AlterColumnTypeGeneral)
 	}
 	if !params.SessionData().AlterColumnTypeGeneralEnabled {
 		return pgerror.WithCandidateCode(
@@ -174,7 +175,7 @@ func alterColumnTypeGeneral(
 					errors.Newf("ALTER COLUMN TYPE from %v to %v is only "+
 						"supported experimentally",
 						col.Type, toType),
-					errors.IssueLink{IssueURL: unimplemented.MakeURL(49329)}),
+					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
 				"you can enable alter column type general support by running "+
 					"`SET enable_experimental_alter_column_type_general = true`"),
 			pgcode.FeatureNotSupported)

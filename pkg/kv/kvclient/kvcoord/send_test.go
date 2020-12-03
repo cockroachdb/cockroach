@@ -67,6 +67,12 @@ func (n Node) Join(context.Context, *roachpb.JoinNodeRequest) (*roachpb.JoinNode
 	panic("unimplemented")
 }
 
+func (n Node) ResetQuorum(
+	context.Context, *roachpb.ResetQuorumRequest,
+) (*roachpb.ResetQuorumResponse, error) {
+	panic("unimplemented")
+}
+
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {
@@ -105,7 +111,7 @@ func TestSendToOneClient(t *testing.T) {
 // firstNErrorTransport is a mock transport that sends an error on
 // requests to the first N addresses, then succeeds.
 type firstNErrorTransport struct {
-	replicas  []roachpb.ReplicaDescriptor
+	replicas  ReplicaSlice
 	numErrors int
 	numSent   int
 }
@@ -113,6 +119,8 @@ type firstNErrorTransport struct {
 func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
+
+func (f *firstNErrorTransport) Release() {}
 
 func (f *firstNErrorTransport) SendNext(
 	_ context.Context, _ roachpb.BatchRequest,
@@ -132,7 +140,7 @@ func (f *firstNErrorTransport) NextInternalClient(
 }
 
 func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
-	return f.replicas[f.numSent]
+	return f.replicas[f.numSent].ReplicaDescriptor
 }
 
 func (f *firstNErrorTransport) SkipReplica() {
@@ -191,7 +199,7 @@ func TestComplexScenarios(t *testing.T) {
 			func(
 				_ SendOptions,
 				_ *nodedialer.Dialer,
-				replicas []roachpb.ReplicaDescriptor,
+				replicas ReplicaSlice,
 			) (Transport, error) {
 				return &firstNErrorTransport{
 					replicas:  replicas,
@@ -262,10 +270,14 @@ func TestSplitHealthy(t *testing.T) {
 	for _, td := range testData {
 		t.Run("", func(t *testing.T) {
 			replicas := make([]roachpb.ReplicaDescriptor, len(td.in))
-			health := make(map[roachpb.ReplicaDescriptor]bool)
+			var health util.FastIntMap
 			for i, r := range td.in {
 				replicas[i] = r.replica
-				health[replicas[i]] = r.healthy
+				if r.healthy {
+					health.Set(i, healthHealthy)
+				} else {
+					health.Set(i, healthUnhealthy)
+				}
 			}
 			splitHealthy(replicas, health)
 			if !reflect.DeepEqual(replicas, td.out) {

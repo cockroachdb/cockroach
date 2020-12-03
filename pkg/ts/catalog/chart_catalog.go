@@ -1238,6 +1238,10 @@ var charts = []sectionDescription{
 				Title:   "Log Commit",
 				Metrics: []string{"raft.process.logcommit.latency"},
 			},
+			{
+				Title:   "Scheduler",
+				Metrics: []string{"raft.scheduler.latency"},
+			},
 		},
 	},
 	{
@@ -1604,6 +1608,10 @@ var charts = []sectionDescription{
 			{
 				Title:   "Total Queries",
 				Metrics: []string{"sql.distsql.queries.total"},
+			},
+			{
+				Title:   "Contended Queries",
+				Metrics: []string{"sql.distsql.contended_queries.count"},
 			},
 			{
 				Title:   "Vectorized Temporary Storage Open File Descriptors",

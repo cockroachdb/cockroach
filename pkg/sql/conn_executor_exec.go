@@ -928,9 +928,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache,
 		planner.txn,
-		func(ts hlc.Timestamp) {
-			ex.server.cfg.Clock.Update(ts)
-		},
+		ex.server.cfg.Clock,
 		&ex.sessionTracing,
 	)
 	recv.progressAtomic = progressAtomic
@@ -944,6 +942,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	} else if planner.instrumentation.ShouldCollectBundle() {
 		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
+	planCtx.traceMetadata = planner.instrumentation.traceMetadata
 
 	var evalCtxFactory func() *extendedEvalContext
 	if len(planner.curPlan.subqueryPlans) != 0 ||

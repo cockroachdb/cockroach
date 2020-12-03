@@ -35,7 +35,7 @@ func TestShowBackup(t *testing.T) {
 	const numAccounts = 11
 	_, tc, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
 	kvDB := tc.Server(0).DB()
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 	sqlDB.Exec(t, `
@@ -374,7 +374,7 @@ func TestShowBackups(t *testing.T) {
 
 	const numAccounts = 11
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 

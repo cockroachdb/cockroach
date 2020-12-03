@@ -306,7 +306,7 @@ func (p *planner) MemberOfWithAdminOption(
 	roleMembersCache := p.execCfg.RoleMemberCache
 
 	// Lookup table version.
-	tableDesc, err := p.Descriptors().GetTableVersion(
+	tableDesc, err := p.Descriptors().GetTableByName(
 		ctx,
 		p.txn,
 		&roleMembersTableName,

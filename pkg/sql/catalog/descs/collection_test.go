@@ -57,9 +57,10 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		tn := tree.MakeTableNameWithSchema("db", "schema", "table")
 		flags := tree.ObjectLookupFlagsWithRequired()
 		flags.RequireMutable = true
-		mut, err := descriptors.GetMutableTableDescriptor(ctx, txn, &tn, flags)
+		tbl, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
 		require.NoError(t, err)
-		require.NotNil(t, mut)
+		require.NotNil(t, tbl)
+		mut := tbl.(*tabledesc.Mutable)
 		// We want to create some descriptors and then ensure that writing them to a
 		// batch works as expected.
 		newTable := tabledesc.NewCreatedMutable(descpb.TableDescriptor{
@@ -78,12 +79,13 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		require.Equal(t, descpb.DescriptorVersion(1), newTable.Version)
 
 		// Ensure that the descriptor has been added to the collection.
-		mut2, err := descriptors.GetMutableTableDescriptor(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+		tbl2, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
 		require.NoError(t, err)
+		mut2 := tbl2.(*tabledesc.Mutable)
 		require.Equal(t, mut, mut2)
 
 		t2n := tree.MakeTableNameWithSchema("db", "schema", "table2")
-		newTableResolved, err := descriptors.GetMutableTableDescriptor(ctx, txn, &t2n, tree.ObjectLookupFlagsWithRequired())
+		newTableResolved, err := descriptors.GetTableByName(ctx, txn, &t2n, flags)
 		require.NoError(t, err)
 		require.Equal(t, newTable, newTableResolved)
 		return txn.Run(ctx, b)
@@ -141,13 +143,14 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.RequireMutable = true
-			desc, err := descriptors.GetMutableTableDescriptor(ctx, txn, &tn, flags)
+			desc, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
 			require.NoError(t, err)
+			mut := desc.(*tabledesc.Mutable)
 			// Verify that the descriptor version is always 1 prior to the write and 2
 			// after the write even after a retry.
-			require.Equal(t, descpb.DescriptorVersion(1), desc.Version)
-			require.NoError(t, descriptors.WriteDesc(ctx, false /* kvTrace */, desc, txn))
-			require.Equal(t, descpb.DescriptorVersion(2), desc.Version)
+			require.Equal(t, descpb.DescriptorVersion(1), mut.Version)
+			require.NoError(t, descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn))
+			require.Equal(t, descpb.DescriptorVersion(2), mut.Version)
 			return nil
 		},
 	)

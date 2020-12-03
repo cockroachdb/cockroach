@@ -3172,7 +3172,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	})
 
 	close(blockPromoteCh)
-	if err := g.Wait(); !testutils.IsError(err, `descriptor changed`) {
+	if err := g.Wait(); !kvserver.IsRetriableReplicationChangeError(err) {
 		t.Fatalf(`expected "descriptor changed" error got: %+v`, err)
 	}
 
@@ -3184,8 +3184,8 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		// has not heard a raft message addressed to a later replica ID while the
 		// "was not found on" error is expected if the store has heard that it has
 		// a newer replica ID before receiving the snapshot.
-		if !testutils.IsError(err, `snapshot intersects existing range|r[0-9]+ was not found on s[0-9]+`) {
-			t.Fatalf(`expected snapshot intersects existing range|r[0-9]+ was not found on s[0-9]+" error got: %+v`, err)
+		if !kvserver.IsRetriableReplicationChangeError(err) {
+			t.Fatal(err)
 		}
 	}
 	for i := 0; i < 5; i++ {

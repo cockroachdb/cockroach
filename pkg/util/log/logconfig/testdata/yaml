@@ -1,0 +1,107 @@
+# Check how the empty config pretty-prints itself.
+yaml
+----
+{}
+
+# Verify that it's possible to only pass a subset
+# of the fields in the YAML input.
+yaml
+capture-stray-errors:
+  enable: true
+sinks:
+  file-groups:
+    auth:
+      dir: /hello/world
+----
+sinks:
+  file-groups:
+    auth:
+      dir: /hello/world
+capture-stray-errors:
+  enable: true
+
+# Verify that a channel can be selected.
+yaml
+sinks:
+   stderr:
+     channels: DEV
+----
+sinks:
+  stderr:
+    channels: DEV
+
+
+# Verify that more than one channel can be selected.
+yaml
+sinks:
+  stderr:
+   channels: DEV,SESSIONS
+----
+sinks:
+  stderr:
+    channels: DEV,SESSIONS
+
+
+# Verify that all channels can be selected.
+yaml
+sinks:
+  stderr:
+     channels: all
+----
+sinks:
+  stderr:
+    channels: all
+
+# Verify that the inverse of a channel list can be selected.
+yaml
+sinks: { stderr: { channels: 'all except DEV,SESSIONS' } }
+----
+sinks:
+  stderr:
+    channels: STORAGE,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+
+
+# Try populating all the fields.
+yaml
+file-defaults:
+     dir: /default/dir
+     filter: ERROR
+     redact: true
+     redactable: false
+     max-file-size: 10MB
+     max-group-size: 100MB
+
+sinks:
+  file-groups:
+    auth:
+       dir: /hello/world
+       max-group-size: 1GB
+    debug:
+       dir: universe
+       max-file-size: 1MB
+    perf:
+       filter: INFO
+       redact: true
+
+  stderr:
+    filter: WARNING
+    redact: false
+    redactable: true
+
+  fluent-servers:
+   default:
+     address: 127.0.0.1:5170
+   other:
+     net: udp
+     address: 127.0.0.1:5111
+----
+ERROR: yaml: unmarshal errors:
+  line 26: field fluent-servers not found in type logconfig.SinkConfig
+
+# Check that duplicate channels are refused.
+yaml
+sinks:
+   stderr:
+      channels: DEV,DEV
+----
+ERROR: duplicate channel name: "DEV"

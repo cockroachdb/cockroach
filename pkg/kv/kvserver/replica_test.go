@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -7006,7 +7005,7 @@ func TestReplicaDestroy(t *testing.T) {
 		t.Fatal(err)
 	} else if ok {
 		// If the range is destroyed, only a tombstone key should be there.
-		k1 := iter.Key().Key
+		k1 := iter.UnsafeKey().Key
 		if tombstoneKey := keys.RangeTombstoneKey(tc.repl.RangeID); !bytes.Equal(k1, tombstoneKey) {
 			t.Errorf("expected a tombstone key %q, but found %q", tombstoneKey, k1)
 		}
@@ -7967,12 +7966,13 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	var tc testContext
 	cfg := TestStoreConfig(nil)
 	// Disable ticks which would interfere with the manual ticking in this test.
 	cfg.RaftTickInterval = math.MaxInt32
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	// Flush a write all the way through the Raft proposal pipeline. This
@@ -7995,7 +7995,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 		for ; (ticks % electionTicks) != 0; ticks++ {
-			if _, err := r.tick(nil); err != nil {
+			if _, err := r.tick(ctx, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -8025,7 +8025,6 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		lease, _ := r.GetLease()
-		ctx := context.Background()
 		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), &ba, &allSpans)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -8046,7 +8045,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Unlock()
 
 		// Tick raft.
-		if _, err := r.tick(nil); err != nil {
+		if _, err := r.tick(ctx, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -9366,7 +9365,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 		ba2.Timestamp = tc.Clock().Now()
 
 		var pErr *roachpb.Error
-		ch, _, _, pErr = repl.evalAndPropose(ctx, &ba, allSpansGuard(), &exLease)
+		ch, _, _, pErr = repl.evalAndPropose(ctx, &ba2, allSpansGuard(), &exLease)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -12730,15 +12729,11 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 }
 
 // TestContainsEstimatesClamp tests the massaging of ContainsEstimates
-// before proposing a raft command.
-// - If the proposing node's version is lower than the VersionContainsEstimatesCounter,
-// ContainsEstimates must be clamped to {0,1}.
-// - Otherwise, it should always be >1 and an even number.
+// before proposing a raft command. It should always be >1 and an even number.
+// See the comment on ContainEstimates to understand why.
 func TestContainsEstimatesClampProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	_ = clusterversion.VersionContainsEstimatesCounter // see for details on the ContainsEstimates migration
 
 	someRequestToProposal := func(tc *testContext, ctx context.Context) *ProposalData {
 		cmdIDKey := kvserverbase.CmdIDKey("some-cmdid-key")
@@ -12757,23 +12752,6 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 	// any number >1.
 	defer setMockPutWithEstimates(2)()
 
-	t.Run("Pre-VersionContainsEstimatesCounter", func(t *testing.T) {
-		ctx := context.Background()
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-		cfg := TestStoreConfig(nil)
-		version := clusterversion.VersionByKey(clusterversion.VersionContainsEstimatesCounter - 1)
-		cfg.Settings = cluster.MakeTestingClusterSettingsWithVersions(version, version, false /* initializeVersion */)
-		var tc testContext
-		tc.StartWithStoreConfigAndVersion(t, stopper, cfg, version)
-
-		proposal := someRequestToProposal(&tc, ctx)
-
-		if proposal.command.ReplicatedEvalResult.Delta.ContainsEstimates != 1 {
-			t.Error("Expected ContainsEstimates to be 1, was", proposal.command.ReplicatedEvalResult.Delta.ContainsEstimates)
-		}
-	})
-
 	t.Run("VersionContainsEstimatesCounter", func(t *testing.T) {
 		ctx := context.Background()
 		stopper := stop.NewStopper()
@@ -12788,77 +12766,6 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 		}
 	})
 
-}
-
-// TestContainsEstimatesClampApplication tests that if the ContainsEstimates
-// delta from a proposed command is 1 (and the replica state ContainsEstimates <= 1),
-// ContainsEstimates will be kept 1 in the replica state. This is because
-// ContainsEstimates==1 in a proposed command means that the proposer may run
-// with a version older than VersionContainsEstimatesCounter, in which ContainsEstimates
-// is a bool.
-func TestContainsEstimatesClampApplication(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	_ = clusterversion.VersionContainsEstimatesCounter // see for details on the ContainsEstimates migration
-
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc := testContext{}
-	tc.Start(t, stopper)
-
-	// We will stage and apply 2 batches with a command that has ContainsEstimates=1
-	// and expect that ReplicaState.Stats.ContainsEstimates will not become greater than 1.
-	applyBatch := func() {
-		tc.repl.raftMu.Lock()
-		defer tc.repl.raftMu.Unlock()
-		sm := tc.repl.getStateMachine()
-		batch := sm.NewBatch(false /* ephemeral */)
-		rAppbatch := batch.(*replicaAppBatch)
-
-		lease, _ := tc.repl.GetLease()
-
-		cmd := replicatedCmd{
-			ctx: ctx,
-			ent: &raftpb.Entry{
-				// Term:  1,
-				Index: rAppbatch.state.RaftAppliedIndex + 1,
-				Type:  raftpb.EntryNormal,
-			},
-			decodedRaftEntry: decodedRaftEntry{
-				idKey: makeIDKey(),
-				raftCmd: kvserverpb.RaftCommand{
-					ProposerLeaseSequence: rAppbatch.state.Lease.Sequence,
-					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
-						Timestamp:      tc.Clock().Now(),
-						IsLeaseRequest: true,
-						State: &kvserverpb.ReplicaState{
-							Lease: &lease,
-						},
-						Delta: enginepb.MVCCStatsDelta{
-							ContainsEstimates: 1,
-						},
-					},
-				},
-			},
-		}
-
-		_, err := rAppbatch.Stage(apply.Command(&cmd))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := batch.ApplyToStateMachine(ctx); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	applyBatch()
-	assert.Equal(t, int64(1), tc.repl.State().ReplicaState.Stats.ContainsEstimates)
-
-	applyBatch()
-	assert.Equal(t, int64(1), tc.repl.State().ReplicaState.Stats.ContainsEstimates)
 }
 
 // setMockPutWithEstimates mocks the Put command (could be any) to simulate a command
@@ -12954,25 +12861,25 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 	tcs := []testCase{
 		// Simple addition of learner.
 		mk(
-			"SIMPLE(l2) ADD_VOTER[(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
+			"SIMPLE(l2) [(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 		),
 		// Simple addition of voter (necessarily via learner).
 		mk(
-			"SIMPLE(v2) ADD_VOTER[(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
+			"SIMPLE(v2) [(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 		),
 		// Simple removal of voter.
 		mk(
-			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2]: after=[(n100,s100):1] next=3",
+			"SIMPLE(r2) [(n200,s200):2]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 		),
 		// Simple removal of learner.
 		mk(
-			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
+			"SIMPLE(r2) [(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypeRemove},
 		),
@@ -12982,7 +12889,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Addition of learner and removal of voter at same time.
 		mk(
-			"ENTER_JOINT(r2 l3) ADD_VOTER[(n200,s200):3LEARNER], REMOVE_VOTER[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
+			"ENTER_JOINT(r2 l3) [(n200,s200):3LEARNER], [(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
@@ -12990,7 +12897,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Promotion of two voters.
 		mk(
-			"ENTER_JOINT(v2 v3) ADD_VOTER[(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
+			"ENTER_JOINT(v2 v3) [(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
@@ -12998,7 +12905,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Removal of two voters.
 		mk(
-			"ENTER_JOINT(r2 r3) REMOVE_VOTER[(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
+			"ENTER_JOINT(r2 r3) [(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
@@ -13006,7 +12913,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Demoting two voters.
 		mk(
-			"ENTER_JOINT(r2 l2 r3 l3) REMOVE_VOTER[(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
+			"ENTER_JOINT(r2 l2 r3 l3) [(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},

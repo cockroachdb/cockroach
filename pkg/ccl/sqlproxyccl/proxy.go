@@ -45,7 +45,7 @@ type Options struct {
 	// connection. The TLS config is in it and it must have an appropriate
 	// ServerName for the remote backend.
 	BackendConfigFromParams func(
-		params map[string]string, incomingConn net.Conn,
+		params map[string]string, incomingConn *Conn,
 	) (config *BackendConfig, clientErr error)
 
 	// If set, consulted to modify the parameters set by the frontend before
@@ -59,7 +59,7 @@ type Options struct {
 
 // Proxy takes an incoming client connection and relays it to a backend SQL
 // server.
-func (s *Server) Proxy(conn net.Conn) error {
+func (s *Server) Proxy(proxyConn *Conn) error {
 	sendErrToClient := func(conn net.Conn, code ErrorCode, msg string) {
 		if s.opts.OnSendErrToClient != nil {
 			msg = s.opts.OnSendErrToClient(code, msg)
@@ -71,7 +71,14 @@ func (s *Server) Proxy(conn net.Conn) error {
 		}).Encode(nil))
 	}
 
-	{
+	var conn net.Conn = proxyConn
+	// `conn` could be replaced by `conn` embedded in a `tls.Conn` connection,
+	// hence it's important to close `conn` rather than `proxyConn` since closing
+	// the latter will not call `Close` method of `tls.Conn`.
+	defer func() { _ = conn.Close() }()
+	// If we have an incoming TLS Config, require that the client initiates
+	// with a TLS connection.
+	if s.opts.IncomingTLSConfig != nil {
 		m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 		if err != nil {
 			return NewErrorf(CodeClientReadFailed, "while receiving startup message")
@@ -126,7 +133,7 @@ func (s *Server) Proxy(conn net.Conn) error {
 	var backendConfig *BackendConfig
 	{
 		var clientErr error
-		backendConfig, clientErr = s.opts.BackendConfigFromParams(msg.Parameters, conn)
+		backendConfig, clientErr = s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
 		if clientErr != nil {
 			var codeErr *codeError
 			if !errors.As(clientErr, &codeErr) {
@@ -152,26 +159,29 @@ func (s *Server) Proxy(conn net.Conn) error {
 		sendErrToClient(conn, code, "unable to reach backend SQL server")
 		return NewErrorf(code, "dialing backend server: %v", err)
 	}
+	defer func() { _ = crdbConn.Close() }()
 
-	// Send SSLRequest.
-	if err := binary.Write(crdbConn, binary.BigEndian, pgSSLRequest); err != nil {
-		s.metrics.BackendDownCount.Inc(1)
-		return NewErrorf(CodeBackendDown, "sending SSLRequest to target server: %v", err)
+	if backendConfig.TLSConf != nil {
+		// Send SSLRequest.
+		if err := binary.Write(crdbConn, binary.BigEndian, pgSSLRequest); err != nil {
+			s.metrics.BackendDownCount.Inc(1)
+			return NewErrorf(CodeBackendDown, "sending SSLRequest to target server: %v", err)
+		}
+
+		response := make([]byte, 1)
+		if _, err = io.ReadFull(crdbConn, response); err != nil {
+			s.metrics.BackendDownCount.Inc(1)
+			return NewErrorf(CodeBackendDown, "reading response to SSLRequest")
+		}
+
+		if response[0] != pgAcceptSSLRequest {
+			s.metrics.BackendDownCount.Inc(1)
+			return NewErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
+		}
+
+		outCfg := backendConfig.TLSConf.Clone()
+		crdbConn = tls.Client(crdbConn, outCfg)
 	}
-
-	response := make([]byte, 1)
-	if _, err = io.ReadFull(crdbConn, response); err != nil {
-		s.metrics.BackendDownCount.Inc(1)
-		return NewErrorf(CodeBackendDown, "reading response to SSLRequest")
-	}
-
-	if response[0] != pgAcceptSSLRequest {
-		s.metrics.BackendDownCount.Inc(1)
-		return NewErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
-	}
-
-	outCfg := backendConfig.TLSConf.Clone()
-	crdbConn = tls.Client(crdbConn, outCfg)
 
 	if s.opts.ModifyRequestParams != nil {
 		s.opts.ModifyRequestParams(msg.Parameters)

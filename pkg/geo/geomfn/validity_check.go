@@ -72,3 +72,12 @@ func MakeValid(g geo.Geometry) (geo.Geometry, error) {
 	}
 	return geo.ParseGeometryFromEWKB(validEWKB)
 }
+
+// EqualsExact validates if two geometry objects are exact equal under some epsilon
+func EqualsExact(lhs, rhs geo.Geometry, epsilon float64) bool {
+	equalsExact, err := geos.EqualsExact(lhs.EWKB(), rhs.EWKB(), epsilon)
+	if err != nil {
+		return false
+	}
+	return equalsExact
+}

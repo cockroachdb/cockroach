@@ -867,6 +867,12 @@ define RegressionSYY {
 }
 
 [Scalar, Aggregate]
+define RegressionCount {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
 define Max {
     Input ScalarExpr
 }

@@ -1049,7 +1049,7 @@ func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 		// finalized as committed and already had its transaction record GCed. Both
 		// these cases return an ABORTED txn; in the GC case the record has been
 		// synthesized.
-		// If the the record has been GC'ed, then we can't distinguish between the
+		// If the record has been GC'ed, then we can't distinguish between the
 		// two cases, and so we're forced to return an ambiguous error. On the other
 		// hand, if the record exists, then we know that the transaction did not
 		// commit because a committed record cannot be GC'ed and the recreated as
@@ -1549,7 +1549,7 @@ func (ds *DistSender) sendPartialBatch(
 			// the br.
 			if ba.ReturnRangeInfo &&
 				len(reply.RangeInfos) == 0 &&
-				!ds.st.Version.IsActive(ctx, clusterversion.VersionClientRangeInfosOnBatchResponse) {
+				!ds.st.Version.IsActive(ctx, clusterversion.ClientRangeInfosOnBatchResponse) {
 				// All the responses have the same RangeInfos in them, so just look at the
 				// first one.
 				firstRes := reply.Responses[0].GetInner()
@@ -1805,10 +1805,11 @@ func (ds *DistSender) sendToReplicas(
 		class:   rpc.ConnectionClassForKey(desc.RSpan().Key),
 		metrics: &ds.metrics,
 	}
-	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas.Descriptors())
+	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
 	if err != nil {
 		return nil, err
 	}
+	defer transport.Release()
 
 	// inTransferRetry is used to slow down retries in cases where an ongoing
 	// lease transfer is suspected.

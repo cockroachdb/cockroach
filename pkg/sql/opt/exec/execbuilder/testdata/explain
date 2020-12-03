@@ -1330,7 +1330,7 @@ vectorized: false
 • explain
 
 query T
-EXPLAIN (VERBOSE) EXPLAIN ANALYZE SELECT 1
+EXPLAIN (VERBOSE) EXPLAIN ANALYZE (DISTSQL) SELECT 1
 ----
 distribution: local
 vectorized: false

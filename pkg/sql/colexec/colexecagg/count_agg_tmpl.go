@@ -44,7 +44,7 @@ type count_COUNTKIND_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
-	vec    []int64
+	col    []int64
 	curAgg int64
 }
 
@@ -56,7 +56,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{else}}
 	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.vec = vec.Int64()
+	a.col = vec.Int64()
 }
 
 func (a *count_COUNTKIND_AGGKINDAgg) Compute(
@@ -68,51 +68,54 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
 	// {{end}}
-	// {{if eq "_AGGKIND" "Ordered"}}
-	groups := a.groups
-	// {{/*
-	// We don't need to check whether sel is non-nil when performing
-	// hash aggregation because the hash aggregator always uses non-nil
-	// sel to specify the tuples to be aggregated.
-	// */}}
-	if sel == nil {
-		_ = groups[inputLen-1]
-		// {{if not (eq .CountKind "Rows")}}
-		if nulls.MaybeHasNulls() {
-			for i := 0; i < inputLen; i++ {
-				_ACCUMULATE_COUNT(a, nulls, i, true)
-			}
-		} else
-		// {{end}}
-		{
-			for i := 0; i < inputLen; i++ {
-				_ACCUMULATE_COUNT(a, nulls, i, false)
-			}
-		}
-	} else
-	// {{end}}
-	{
-		// {{if not (eq .CountKind "Rows")}}
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel[:inputLen] {
-				_ACCUMULATE_COUNT(a, nulls, i, true)
-			}
-		} else
-		// {{end}}
-		{
-			// {{if eq "_AGGKIND" "Hash"}}
-			// We don't need to pay attention to nulls (either because it's a
-			// COUNT_ROWS aggregate or because there are no nulls), and we're
-			// performing a hash aggregation (meaning there is a single group),
-			// so all inputLen tuples contribute to the count.
-			a.curAgg += int64(inputLen)
-			// {{else}}
-			for _, i := range sel[:inputLen] {
-				_ACCUMULATE_COUNT(a, nulls, i, false)
-			}
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// {{if eq "_AGGKIND" "Ordered"}}
+		groups := a.groups
+		// {{/*
+		// We don't need to check whether sel is non-nil when performing
+		// hash aggregation because the hash aggregator always uses non-nil
+		// sel to specify the tuples to be aggregated.
+		// */}}
+		if sel == nil {
+			_ = groups[inputLen-1]
+			// {{if not (eq .CountKind "Rows")}}
+			if nulls.MaybeHasNulls() {
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_COUNT(a, nulls, i, true)
+				}
+			} else
 			// {{end}}
+			{
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_COUNT(a, nulls, i, false)
+				}
+			}
+		} else
+		// {{end}}
+		{
+			// {{if not (eq .CountKind "Rows")}}
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel[:inputLen] {
+					_ACCUMULATE_COUNT(a, nulls, i, true)
+				}
+			} else
+			// {{end}}
+			{
+				// {{if eq "_AGGKIND" "Hash"}}
+				// We don't need to pay attention to nulls (either because it's a
+				// COUNT_ROWS aggregate or because there are no nulls), and we're
+				// performing a hash aggregation (meaning there is a single group),
+				// so all inputLen tuples contribute to the count.
+				a.curAgg += int64(inputLen)
+				// {{else}}
+				for _, i := range sel[:inputLen] {
+					_ACCUMULATE_COUNT(a, nulls, i, false)
+				}
+				// {{end}}
+			}
 		}
-	}
+	},
+	)
 }
 
 func (a *count_COUNTKIND_AGGKINDAgg) Flush(outputIdx int) {
@@ -122,14 +125,14 @@ func (a *count_COUNTKIND_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	a.vec[outputIdx] = a.curAgg
+	a.col[outputIdx] = a.curAgg
 }
 
 // {{if eq "_AGGKIND" "Ordered"}}
 func (a *count_COUNTKIND_AGGKINDAgg) HandleEmptyInputScalar() {
 	// COUNT aggregates are special because they return zero in case of an
 	// empty input in the scalar context.
-	a.vec[0] = 0
+	a.col[0] = 0
 }
 
 // {{end}}
@@ -150,6 +153,7 @@ func (a *count_COUNTKIND_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]count_COUNTKIND_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
@@ -164,7 +168,7 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		a.vec[a.curIdx] = a.curAgg
+		a.col[a.curIdx] = a.curAgg
 		a.curIdx++
 		a.curAgg = int64(0)
 	}

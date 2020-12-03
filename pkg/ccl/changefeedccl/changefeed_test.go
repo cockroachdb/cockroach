@@ -473,6 +473,7 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes >1 min under race")
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -1884,9 +1885,9 @@ func TestChangefeedErrors(t *testing.T) {
 	// Feature flag for changefeeds is off — test that CREATE CHANGEFEED and
 	// EXPERIMENTAL CHANGEFEED FOR surface error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = false`)
-	sqlDB.ExpectErr(t, `CHANGEFEED feature was disabled by the database administrator`,
+	sqlDB.ExpectErr(t, `feature CHANGEFEED was disabled by the database administrator`,
 		`CREATE CHANGEFEED FOR foo`)
-	sqlDB.ExpectErr(t, `CHANGEFEED feature was disabled by the database administrator`,
+	sqlDB.ExpectErr(t, `feature CHANGEFEED was disabled by the database administrator`,
 		`EXPERIMENTAL CHANGEFEED FOR foo`)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = true`)

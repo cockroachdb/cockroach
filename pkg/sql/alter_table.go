@@ -53,6 +53,14 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		&p.ExecCfg().Settings.SV,
+		"ALTER TABLE",
+	); err != nil {
+		return nil, err
+	}
+
 	tableDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Table, !n.IfExists, tree.ResolveRequireTableDesc,
 	)
@@ -188,6 +196,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 					continue
 				}
+
+				// Check if the columns exist on the table.
+				for _, column := range d.Columns {
+					if _, _, err := n.tableDesc.FindColumnByName(column.Column); err != nil {
+						return err
+					}
+				}
+
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
@@ -220,7 +236,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				var err error
 				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
 					info, infoErr := n.tableDesc.GetConstraintInfo(params.ctx, nil)
-					if err != nil {
+					if infoErr != nil {
 						err = infoErr
 						return
 					}
@@ -527,7 +543,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Since we are able to drop indexes used by foreign keys on the origin side,
 			// the drop index codepaths aren't going to remove dependent FKs, so we
 			// need to do that here.
-			if params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionNoOriginFKIndexes) {
+			if params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.NoOriginFKIndexes) {
 				// We update the FK's slice in place here.
 				sliceIdx := 0
 				for i := range n.tableDesc.OutboundFKs {

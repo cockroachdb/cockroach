@@ -240,6 +240,8 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 func TestReplicateQueueDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes >1min under race")
+
 	ctx := context.Background()
 	const replicaCount = 3
 
@@ -496,6 +498,7 @@ func (h delayingRaftMessageHandler) HandleRaftRequest(
 func TestTransferLeaseToLaggingNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes >1min under race")
 
 	ctx := context.Background()
 	clusterArgs := base.TestClusterArgs{

@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -63,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -111,8 +113,8 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 }
 
 func (d *datadrivenTestState) addServer(
-	t *testing.T, name, iodir string, allowImplicitAccess bool,
-) {
+	t *testing.T, name, iodir, tempCleanupFrequency string, allowImplicitAccess bool,
+) error {
 	var tc serverutils.TestClusterInterface
 	var cleanup func()
 	params := base.TestClusterArgs{}
@@ -120,6 +122,15 @@ func (d *datadrivenTestState) addServer(
 		params.ServerArgs.Knobs.BackupRestore = &sql.BackupRestoreTestingKnobs{
 			AllowImplicitAccess: true,
 		}
+	}
+	if tempCleanupFrequency != "" {
+		duration, err := time.ParseDuration(tempCleanupFrequency)
+		if err != nil {
+			return errors.New("unable to parse tempCleanupFrequency during server creation")
+		}
+		settings := cluster.MakeTestingClusterSettings()
+		sql.TempObjectCleanupInterval.Override(&settings.SV, duration)
+		params.ServerArgs.Settings = settings
 	}
 	if iodir == "" {
 		_, tc, _, iodir, cleanup = backupRestoreTestSetupWithParams(t, singleNode, 0, InitNone, params)
@@ -129,6 +140,8 @@ func (d *datadrivenTestState) addServer(
 	d.servers[name] = tc.Server(0)
 	d.dataDirs[name] = iodir
 	d.cleanupFns = append(d.cleanupFns, cleanup)
+
+	return nil
 }
 
 func (d *datadrivenTestState) getIODir(t *testing.T, server string) string {
@@ -181,6 +194,7 @@ func newDatadrivenTestState() datadrivenTestState {
 func TestBackupRestoreDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes >1 min under race")
 
 	ctx := context.Background()
 	datadriven.Walk(t, "testdata/backup-restore/", func(t *testing.T, path string) {
@@ -189,12 +203,21 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 		defer ds.cleanup(ctx)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "sleep":
+				var sleepDuration string
+				d.ScanArgs(t, "time", &sleepDuration)
+				duration, err := time.ParseDuration(sleepDuration)
+				if err != nil {
+					return err.Error()
+				}
+				time.Sleep(duration)
+				return ""
 			case "reset":
 				ds.cleanup(ctx)
 				ds = newDatadrivenTestState()
 				return ""
 			case "new-server":
-				var name, shareDirWith, iodir string
+				var name, shareDirWith, iodir, tempCleanupFrequency string
 				var allowImplicitAccess bool
 				d.ScanArgs(t, "name", &name)
 				if d.HasArg("share-io-dir") {
@@ -206,8 +229,14 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				if d.HasArg("allow-implicit-access") {
 					allowImplicitAccess = true
 				}
+				if d.HasArg("temp-cleanup-freq") {
+					d.ScanArgs(t, "temp-cleanup-freq", &tempCleanupFrequency)
+				}
 				lastCreatedServer = name
-				ds.addServer(t, name, iodir, allowImplicitAccess)
+				err := ds.addServer(t, name, iodir, tempCleanupFrequency, allowImplicitAccess)
+				if err != nil {
+					return err.Error()
+				}
 				return ""
 			case "exec-sql":
 				server := lastCreatedServer
@@ -2037,7 +2066,7 @@ INSERT INTO sc.tb2 VALUES ('hello');
 		// Now backup the full cluster.
 		sqlDB.Exec(t, `BACKUP TO 'nodelocal://0/test/'`)
 		// Start a new server that shares the data directory.
-		_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dataDir, InitNone)
+		_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dataDir, InitNone, base.TestClusterArgs{})
 		defer cleanupRestore()
 
 		// Restore into the new cluster.
@@ -5675,7 +5704,283 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 		})
 		require.NoError(t, g.Wait())
 	}
+}
 
+// TestSpanSelectionDuringBackup tests the method spansForAllTableIndexes which
+// is used to resolve the spans which will be backed up, and spans for which
+// protected ts records will be created.
+func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t,
+		"not worth starting/stopping the server for each subtest as they all rely on the shared"+
+			" variable `actualResolvedSpan`")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	var actualResolvedSpans []string
+	params.ServerArgs.Knobs.BackupRestore = &sql.BackupRestoreTestingKnobs{
+		CaptureResolvedTableDescSpans: func(mergedSpans []roachpb.Span) {
+			for _, span := range mergedSpans {
+				actualResolvedSpans = append(actualResolvedSpans, span.String())
+			}
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	conn := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(conn)
+	baseBackupURI := "nodelocal://0/foo/"
+
+	t.Run("contiguous-span-merge", func(t *testing.T) {
+		runner.Exec(t, "CREATE DATABASE test; USE test;")
+		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
+			"INDEX baz(name), INDEX bar (v))")
+
+		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
+		require.Equal(t, []string{"/Table/53/{1-4}"}, actualResolvedSpans)
+		runner.Exec(t, "DROP DATABASE test;")
+		actualResolvedSpans = nil
+	})
+
+	t.Run("drop-index-span-merge", func(t *testing.T) {
+		runner.Exec(t, "CREATE DATABASE test; USE test;")
+		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
+			"INDEX baz(name), INDEX bar (v))")
+		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'testuser')")
+		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=60")
+		runner.Exec(t, "DROP INDEX foo@baz")
+
+		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
+		require.Equal(t, []string{"/Table/55/{1-2}", "/Table/55/{3-4}"}, actualResolvedSpans)
+		runner.Exec(t, "DROP DATABASE test;")
+		actualResolvedSpans = nil
+	})
+
+	t.Run("drop-index-gced-span-merge", func(t *testing.T) {
+		runner.Exec(t, "CREATE DATABASE test; USE test;")
+		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
+			"INDEX baz(name), INDEX bar (v))")
+		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'testuser')")
+		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=1")
+		runner.Exec(t, "DROP INDEX foo@baz")
+		time.Sleep(time.Second * 2)
+
+		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
+		require.Equal(t, []string{"/Table/57/{1-4}"}, actualResolvedSpans)
+		runner.Exec(t, "DROP DATABASE test;")
+		actualResolvedSpans = nil
+	})
+
+	t.Run("interleaved-spans", func(t *testing.T) {
+		runner.Exec(t, "CREATE DATABASE test; USE test;")
+		runner.Exec(t, "CREATE TABLE grandparent (a INT PRIMARY KEY, v BYTES, INDEX gpindex (v))")
+		runner.Exec(t, "CREATE TABLE parent (a INT, b INT, v BYTES, "+
+			"PRIMARY KEY(a, b)) INTERLEAVE IN PARENT grandparent(a)")
+		runner.Exec(t, "CREATE TABLE child (a INT, b INT, c INT, v BYTES, "+
+			"PRIMARY KEY(a, b, c), INDEX childindex(c)) INTERLEAVE IN PARENT parent(a, b)")
+
+		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
+		// /Table/59/{1-2} encompasses the pk of grandparent, and the interleaved
+		// tables parent and child.
+		// /Table/59/2 - /Table/59/3 is for the gpindex
+		// /Table/61/{2-3} is for the childindex
+		require.Equal(t, []string{"/Table/59/{1-3}", "/Table/61/{2-3}"}, actualResolvedSpans)
+		runner.Exec(t, "DROP DATABASE test;")
+		actualResolvedSpans = nil
+	})
+
+	t.Run("revs-span-merge", func(t *testing.T) {
+		runner.Exec(t, "CREATE DATABASE test; USE test;")
+		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
+			"INDEX baz(name), INDEX bar (v))")
+		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'testuser')")
+		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=60")
+		runner.Exec(t, "DROP INDEX foo@baz")
+
+		runner.Exec(t, `BACKUP DATABASE test TO 'nodelocal://0/fooz' WITH revision_history`)
+
+		// The BACKUP with revision history will pickup the dropped index baz as
+		// well because it existed in a non-drop state at some point in the interval
+		// covered by this BACKUP.
+		require.Equal(t, []string{"/Table/63/{1-4}"}, actualResolvedSpans)
+		actualResolvedSpans = nil
+		runner.Exec(t, "DROP TABLE foo")
+
+		runner.Exec(t, "CREATE TABLE foo2 (k INT PRIMARY KEY, v BYTES, name STRING, "+
+			"INDEX baz(name), INDEX bar (v))")
+		runner.Exec(t, "INSERT INTO foo2 VALUES (1, NULL, 'testuser')")
+		runner.Exec(t, "ALTER TABLE foo2 CONFIGURE ZONE USING gc.ttlseconds=60")
+		runner.Exec(t, "DROP INDEX foo2@baz")
+
+		runner.Exec(t, `BACKUP DATABASE test TO 'nodelocal://0/fooz' WITH revision_history`)
+		// We expect to see only the non-drop indexes of table foo in this
+		// incremental backup with revision history. We also expect to see both drop
+		// and non-drop indexes of table foo2 as all the indexes were live at some
+		// point in the interval covered by this BACKUP.
+		require.Equal(t, []string{"/Table/63/{1-2}", "/Table/63/{3-4}", "/Table/64/{1-4}"}, actualResolvedSpans)
+		runner.Exec(t, "DROP DATABASE test;")
+		actualResolvedSpans = nil
+	})
+
+	t.Run("last-index-dropped", func(t *testing.T) {
+		runner.Exec(t, "CREATE DATABASE test; USE test;")
+		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
+		runner.Exec(t, "CREATE TABLE foo2 (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
+		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=60")
+		runner.Exec(t, "DROP INDEX foo@baz")
+
+		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
+		require.Equal(t, []string{"/Table/66/{1-2}", "/Table/67/{1-3}"}, actualResolvedSpans)
+		runner.Exec(t, "DROP DATABASE test;")
+		actualResolvedSpans = nil
+	})
+
+	t.Run("last-index-gced", func(t *testing.T) {
+		runner.Exec(t, "CREATE DATABASE test; USE test;")
+		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
+		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'test')")
+		runner.Exec(t, "CREATE TABLE foo2 (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
+		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=1")
+		runner.Exec(t, "DROP INDEX foo@baz")
+		time.Sleep(time.Second * 2)
+		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=60")
+
+		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
+		require.Equal(t, []string{"/Table/69/{1-2}", "/Table/70/{1-3}"}, actualResolvedSpans)
+		runner.Exec(t, "DROP DATABASE test;")
+		actualResolvedSpans = nil
+	})
+}
+
+func getMockIndexDesc(indexID descpb.IndexID) descpb.IndexDescriptor {
+	mockIndexDescriptor := descpb.IndexDescriptor{ID: indexID}
+	return mockIndexDescriptor
+}
+
+func getMockTableDesc(
+	tableID descpb.ID, pkIndex descpb.IndexDescriptor, indexes []descpb.IndexDescriptor,
+) tabledesc.Immutable {
+	mockTableDescriptor := descpb.TableDescriptor{
+		ID:           tableID,
+		PrimaryIndex: pkIndex,
+		Indexes:      indexes,
+	}
+	mockImmutableTableDesc := tabledesc.Immutable{TableDescriptor: mockTableDescriptor}
+	return mockImmutableTableDesc
+}
+
+// Unit tests for the getLogicallyMergedTableSpans() method.
+func TestLogicallyMergedTableSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	codec := keys.TODOSQLCodec
+	unusedMap := make(map[tableAndIndex]bool)
+	testCases := []struct {
+		name                       string
+		checkForKVInBoundsOverride func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error)
+		tableID                    descpb.ID
+		pkIndex                    descpb.IndexDescriptor
+		indexes                    []descpb.IndexDescriptor
+		expectedSpans              []string
+	}{
+		{
+			name: "contiguous-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			tableID:       55,
+			pkIndex:       getMockIndexDesc(1),
+			indexes:       []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+			expectedSpans: []string{"/Table/55/{1-3}"},
+		},
+		{
+			name: "dropped-span-between-two-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				if start.String() == "/Table/56/2" && end.String() == "/Table/56/3" {
+					return true, nil
+				}
+				return false, nil
+			},
+			tableID:       56,
+			pkIndex:       getMockIndexDesc(1),
+			indexes:       []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3)},
+			expectedSpans: []string{"/Table/56/{1-2}", "/Table/56/{3-4}"},
+		},
+		{
+			name: "gced-span-between-two-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			tableID:       57,
+			pkIndex:       getMockIndexDesc(1),
+			indexes:       []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3)},
+			expectedSpans: []string{"/Table/57/{1-4}"},
+		},
+		{
+			name: "alternate-spans-dropped",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				if (start.String() == "/Table/58/2" && end.String() == "/Table/58/3") ||
+					(start.String() == "/Table/58/4" && end.String() == "/Table/58/5") {
+					return true, nil
+				}
+				return false, nil
+			},
+			tableID: 58,
+			pkIndex: getMockIndexDesc(1),
+			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(5)},
+			expectedSpans: []string{"/Table/58/{1-2}", "/Table/58/{3-4}", "/Table/58/{5-6}"},
+		},
+		{
+			name: "alternate-spans-gced",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			tableID: 59,
+			pkIndex: getMockIndexDesc(1),
+			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(5)},
+			expectedSpans: []string{"/Table/59/{1-6}"},
+		},
+		{
+			name: "one-drop-one-gc",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				if start.String() == "/Table/60/2" && end.String() == "/Table/60/3" {
+					return true, nil
+				}
+				return false, nil
+			},
+			tableID: 60,
+			pkIndex: getMockIndexDesc(1),
+			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(5)},
+			expectedSpans: []string{"/Table/60/{1-2}", "/Table/60/{3-6}"},
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			tableDesc := getMockTableDesc(test.tableID, test.pkIndex, test.indexes)
+			spans, err := getLogicallyMergedTableSpans(&tableDesc, unusedMap, codec,
+				hlc.Timestamp{}, test.checkForKVInBoundsOverride)
+			var mergedSpans []string
+			for _, span := range spans {
+				mergedSpans = append(mergedSpans, span.String())
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.expectedSpans, mergedSpans)
+		})
+	}
 }
 
 func getFirstStoreReplica(
@@ -5818,6 +6123,11 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	systemDB.Exec(t, `BACKUP TENANT 11 TO 'nodelocal://1/t11'`)
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
+
+	t.Run("inside-tenant", func(t *testing.T) {
+		skip.WithIssue(t, 57317)
+		tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
+	})
 
 	t.Run("non-existent", func(t *testing.T) {
 		systemDB.ExpectErr(t, "tenant 123 does not exist", `BACKUP TENANT 123 TO 'nodelocal://1/t1'`)
@@ -6302,7 +6612,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		// first place. Right now we just settle for having some error reported, even
 		// if it's not the ideal error.
 
-		sqlDB.CheckQueryResults(t, `SHOW DATABASES`, [][]string{
+		sqlDB.CheckQueryResults(t, `SELECT database_name, owner FROM [SHOW DATABASES]`, [][]string{
 			{"data", security.RootUser}, {"defaultdb", security.RootUser},
 			{"postgres", security.RootUser}, {"system", security.NodeUser}})
 
@@ -6698,4 +7008,129 @@ func flipBitInManifests(t *testing.T, rawDir string) {
 	if !foundManifest {
 		t.Fatal("found no manifest")
 	}
+}
+
+func TestFullClusterTemporaryBackupAndRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "times out under race cause it starts up two test servers")
+
+	numNodes := 4
+	// Start a new server that shares the data directory.
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.UseDatabase = "defaultdb"
+	knobs := base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			DisableTempObjectsCleanupOnSessionExit: true,
+		},
+	}
+	params.ServerArgs.Knobs = knobs
+	tc := serverutils.StartNewTestCluster(
+		t, numNodes, params,
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	// Start two temporary schemas and create a table in each. This table will
+	// have different pg_temp schemas but will be created in the same defaultdb.
+	comment := "never see this"
+	for _, connID := range []int{0, 1} {
+		conn := tc.ServerConn(connID)
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+		sqlDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+		sqlDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+		sqlDB.Exec(t, fmt.Sprintf(`COMMENT ON TABLE t IS '%s'`, comment))
+		require.NoError(t, conn.Close())
+	}
+
+	// Create a third session where we have two temp tables which will be in the
+	// same pg_temp schema with the same name but in different DBs.
+	diffDBConn := tc.ServerConn(2)
+	diffDB := sqlutils.MakeSQLRunner(diffDBConn)
+	diffDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+	diffDB.Exec(t, `CREATE DATABASE d1`)
+	diffDB.Exec(t, `USE d1`)
+	diffDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+	diffDB.Exec(t, `CREATE DATABASE d2`)
+	diffDB.Exec(t, `USE d2`)
+	diffDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+	require.NoError(t, diffDBConn.Close())
+
+	backupDBConn := tc.ServerConn(3)
+	backupDB := sqlutils.MakeSQLRunner(backupDBConn)
+	backupDB.Exec(t, `BACKUP TO 'nodelocal://0/full_cluster_backup'`)
+	require.NoError(t, backupDBConn.Close())
+
+	params = base.TestClusterArgs{}
+	ch := make(chan time.Time)
+	finishedCh := make(chan struct{})
+	knobs = base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			OnTempObjectsCleanupDone: func() {
+				finishedCh <- struct{}{}
+			},
+			TempObjectsCleanupCh: ch,
+		},
+	}
+	params.ServerArgs.Knobs = knobs
+	_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dir, InitNone,
+		params)
+	defer cleanupRestore()
+	sqlDBRestore.Exec(t, `RESTORE FROM 'nodelocal://0/full_cluster_backup'`)
+
+	// Before the reconciliation job runs we should be able to see the following:
+	// - 4 synthesized pg_temp sessions in defaultdb.
+	// We synthesize a new temp schema for each unique backed-up <dbID, schemaID>
+	// tuple of a temporary table descriptor.
+	// - All temp tables remapped to belong to the associated synthesized temp
+	// schema, and in the defaultdb.
+	checkSchemasQuery := `SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%' ORDER BY
+schema_name`
+	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery,
+		[][]string{{"pg_temp_0_0"}, {"pg_temp_0_1"}, {"pg_temp_0_2"}, {"pg_temp_0_3"}})
+
+	checkTempTablesQuery := `SELECT schema_name,
+table_name FROM [SHOW TABLES] ORDER BY schema_name, table_name`
+	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{{"pg_temp_0_0", "t"},
+		{"pg_temp_0_1", "t"}, {"pg_temp_0_2", "t"}, {"pg_temp_0_3", "t"}})
+
+	// Sanity check that the databases the temporary tables originally belonged to
+	// are restored and empty because of the remapping.
+	sqlDBRestore.CheckQueryResults(t,
+		`SELECT database_name FROM [SHOW DATABASES] ORDER BY database_name`,
+		[][]string{{"d1"}, {"d2"}, {"defaultdb"}, {"postgres"}, {"system"}})
+
+	// Check that we can see the comment on the temporary tables before the
+	// reconciliation job runs.
+	checkCommentQuery := fmt.Sprintf(`SELECT count(comment) FROM system.comments WHERE comment='%s'`,
+		comment)
+	var commentCount int
+	sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
+	require.Equal(t, commentCount, 2)
+
+	// Check that show tables in one of the restored DBs returns an empty result.
+	sqlDBRestore.Exec(t, "USE d1")
+	sqlDBRestore.CheckQueryResults(t, "SHOW TABLES", [][]string{})
+
+	sqlDBRestore.Exec(t, "USE d2")
+	sqlDBRestore.CheckQueryResults(t, "SHOW TABLES", [][]string{})
+
+	testutils.SucceedsSoon(t, func() error {
+		ch <- timeutil.Now()
+		<-finishedCh
+
+		// Check that all the synthesized temp schemas have been wiped.
+		sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{})
+
+		// Check that all the temp tables have been wiped.
+		sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{})
+
+		// Check that all the temp table comments have been wiped.
+		sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
+		require.Equal(t, commentCount, 0)
+		return nil
+	})
 }

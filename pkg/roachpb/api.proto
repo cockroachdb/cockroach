@@ -21,6 +21,7 @@ import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -1978,7 +1979,7 @@ message BatchResponse {
     // checked nor populated (it is reset by the DistSender, which extracts this
     // error and returns it separately). In effect, nearly no usage of
     // BatchResponse needs to care about this field.
-    Error error = 1;
+    kv.kvpb.Error error = 1;
     // timestamp denotes the timestamp at which the batch's reads executed. The
     // timestamp cache is updated at this timestamp.
     //
@@ -2034,7 +2035,7 @@ message RangeLookupResponse {
   repeated RangeDescriptor descriptors            = 1 [(gogoproto.nullable) = false];
   repeated RangeDescriptor prefetched_descriptors = 2 [(gogoproto.nullable) = false];
   // If non-nil, the other fields will be empty.
-  Error error = 3;
+  kv.kvpb.Error error = 3;
 }
 
 // RangeFeedRequest is a request that expresses the intention to establish a
@@ -2077,7 +2078,7 @@ message RangeFeedCheckpoint {
 // event will always be the final event on a RangeFeed response stream before
 // it is torn down.
 message RangeFeedError {
-  Error error = 1 [(gogoproto.nullable) = false];
+  kv.kvpb.Error error = 1 [(gogoproto.nullable) = false];
 }
 
 // RangeFeedEvent is a union of all event types that may be returned on a
@@ -2089,6 +2090,24 @@ message RangeFeedEvent {
   RangeFeedCheckpoint checkpoint = 2;
   RangeFeedError      error      = 3;
 }
+
+
+// ResetQuorumRequest makes a range that is unavailable due to lost quorum
+// available again, at the cost of losing all of the data in the range. Any
+// existing replica, even one residing on the target node, will irrevocably
+// be removed. ResetQuorumRequest first uses meta2 to identify the range
+// descriptor. Then, it removes all replicas from the range descriptor and
+// adds a store from the target node as the one designated survivor replica.
+// This change is then written to meta2 and sent as a snapshot to a store
+// local to the target node.
+//
+// This RPC is called by the user directly and will not work for ranges
+// that have not lost quorum or for a meta range.
+message ResetQuorumRequest {
+  int32 range_id = 1 [(gogoproto.customname) = "RangeID"];
+}
+
+message ResetQuorumResponse {}
 
 // GossipSubscriptionRequest initiates a game of telephone. It establishes an
 // indefinite stream that proxies gossip information overheard by the recipient
@@ -2110,7 +2129,7 @@ message GossipSubscriptionEvent {
   string pattern_matched = 3;
   // If non-nil, the other fields will be empty and this will be the final event
   // send on the stream before it is terminated.
-  Error error = 4;
+  kv.kvpb.Error error = 4;
 }
 
 // JoinNodeRequest is used to specify to the server node what the client's
@@ -2136,8 +2155,24 @@ service Internal {
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+  rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
 
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
   rpc Join(JoinNodeRequest) returns (JoinNodeResponse) { }
+}
+
+// ContentionEvent is a message that will be attached to BatchResponses
+// indicating any conflicts with another transaction during replica evaluation.
+// This message is currently not emitted and only exists for SQL Execution to
+// have a protobuf to work with to build the higher-level infrastructure around
+// contention observability while the work to emit these events is ongoing.
+message ContentionEvent {
+  // Key is the key that this and the other transaction conflicted on.
+  bytes key = 1 [(gogoproto.casttype) = "Key"];
+  // Txn is the other transaction.
+  Transaction txn = 2 [(gogoproto.nullable) = false];
+  // Duration spent contending against the other transaction.
+  google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
+                                         (gogoproto.stdduration) = true];
 }

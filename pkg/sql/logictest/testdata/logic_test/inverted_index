@@ -474,6 +474,29 @@ SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 16  [{"a": {"b": [1, [2]]}}, "d"]
 
+# Filter with a fully-specified array.
+query IT
+SELECT * FROM d WHERE b @> '[1, 2]' ORDER BY a
+----
+2   [1, 2, 3, 4, "foo"]
+22  [1, 2, 3, 1]
+
+# Combine predicates with AND. Should have the same rows as b @> '[1, 2]'.
+query I
+SELECT a FROM d WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
+----
+2
+22
+
+statement ok
+INSERT INTO d VALUES (32, '[[1, 2]]');
+INSERT INTO d VALUES (33, '[[1], [2]]')
+
+# Filter with a nested array. This index expression is not tight.
+query IT
+SELECT * FROM d WHERE b @> '[[1, 2]]' ORDER BY a
+----
+32  [[1, 2]]
 
 statement ok
 CREATE TABLE users (
@@ -839,3 +862,8 @@ SELECT * FROM c WHERE bar @> ARRAY[]::TEXT[] ORDER BY id
 3  {0,1,NULL}  {a,NULL,b,NULL}
 4  {1,2,3}     {b,NULL,c}
 5  {}          {NULL,NULL}
+
+query ITT
+SELECT * FROM c WHERE foo @> '{1, 2}' ORDER BY id
+----
+4  {1,2,3}  {b,NULL,c}

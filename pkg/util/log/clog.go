@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -51,6 +52,30 @@ type loggingT struct {
 
 	// The common stderr sink.
 	stderrSink stderrSink
+	// The template for the stderr sink info. This is where the configuration
+	// parameters are applied in ApplyConfig().
+	// This template is copied to the heap for use as sinkInfo in the
+	// actual loggers, so that configuration updates do not race
+	// with logging operations.
+	stderrSinkInfoTemplate sinkInfo
+
+	// the mapping of channels to loggers.
+	//
+	// This is under a R/W lock because some tests leak goroutines
+	// asynchronously with TestLogScope.Close() calls. If/when that
+	// misdesign is corrected, this lock can be dropped.
+	rmu struct {
+		syncutil.RWMutex
+		channels map[Channel]*loggerT
+		// currentStderrSinkInfo is the currently active copy of
+		// stderrSinkInfoTemplate. This is used in tests and
+		// DescribeAppliedConfiguration().
+		currentStderrSinkInfo *sinkInfo
+	}
+
+	// testingFd2CaptureLogger remembers the logger that was last set up
+	// to capture fd2 writes. Used by unit tests in this package.
+	testingFd2CaptureLogger *loggerT
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
@@ -86,57 +111,67 @@ func init() {
 	logging.bufPool.New = newBuffer
 	logging.bufSlicePool.New = newBufferSlice
 	logging.mu.fatalCh = make(chan struct{})
+	logging.stderrSinkInfoTemplate.sink = &logging.stderrSink
+	si := logging.stderrSinkInfoTemplate
+	logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
 }
 
 type sinkInfo struct {
 	// sink is where the log entries should be written.
 	sink logSink
 
+	// Level at or beyond which entries are output to this sink.
+	threshold Severity
+
 	// editor is the optional step that occurs prior to emitting the log
 	// entry.
 	editor redactEditor
 
+	// formatter for entries written via this sink.
+	formatter logFormatter
+
+	// msgCount supports the generation of a per-entry log entry
+	// counter. This is needed in audit logs to hinder malicious
+	// repudiation of log events by manually erasing log files or log
+	// entries.
+	msgCount uint64
+
 	// criticality indicates whether a failure to output some log
 	// entries should incur the process to terminate.
 	criticality bool
+
+	// redact and redactable memorize the input configuration
+	// that was used to create the editor above.
+	redact, redactable bool
 }
 
 // loggerT represents the logging source for a given log channel.
 type loggerT struct {
 	// sinkInfos stores the destinations for log entries.
-	sinkInfos []sinkInfo
-
-	// logCounter supports the generation of a per-entry log entry
-	// counter. This is needed in audit logs to hinder malicious
-	// repudiation of log events by manually erasing log files or log
-	// entries.
-	logCounter EntryCounter
+	sinkInfos []*sinkInfo
 
 	// outputMu is used to coordinate output to the sinks, to guarantee
-	// that the ordering of events the the same on all sinks.
+	// that the ordering of events the same on all sinks.
 	outputMu syncutil.Mutex
+}
+
+// getFileSinkIndex retrieves the index of the fileSink, if defined,
+// in the sinkInfos. Returns -1 if there is no file sink.
+func (l *loggerT) getFileSinkIndex() int {
+	for i, s := range l.sinkInfos {
+		if _, ok := s.sink.(*fileSink); ok {
+			return i
+		}
+	}
+	return -1
 }
 
 // getFileSink retrieves the file sink if defined.
 func (l *loggerT) getFileSink() *fileSink {
-	for _, s := range l.sinkInfos {
-		if fs, ok := s.sink.(*fileSink); ok {
-			return fs
-		}
+	if i := l.getFileSinkIndex(); i != -1 {
+		return l.sinkInfos[i].sink.(*fileSink)
 	}
 	return nil
-}
-
-// EntryCounter supports the generation of a per-entry log entry
-// counter. This is needed in audit logs to hinder malicious
-// repudiation of log events by manually erasing log files or log
-// entries.
-type EntryCounter struct {
-	// EnableMsgCount, if true, enables the production of entry
-	// counters.
-	EnableMsgCount bool
-	// msgCount is the current value of the counter.
-	msgCount uint64
 }
 
 // FatalChan is closed when Fatal is called. This can be used to make
@@ -170,7 +205,7 @@ func SetClusterID(clusterID string) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	addStructured(ctx, severity.INFO, 1, "clusterID: %s", []interface{}{clusterID})
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, "clusterID: %s", clusterID) // TODO(knz): Use OPS here.
 
 	// Perform the change proper.
 	logging.mu.Lock()
@@ -269,11 +304,24 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	// not eliminate the event.
 	someSinkActive := false
 	for i, s := range l.sinkInfos {
-		if s.sink.activeAtSeverity(entry.Severity) {
-			editedEntry := maybeRedactEntry(entry, s.editor)
-			bufs.b[i] = s.sink.getFormatter().formatEntry(editedEntry, stacks)
-			someSinkActive = true
+		// Note: we need to use the .Get() method instead of reading the
+		// severity threshold directly, because some tests are unruly and
+		// let goroutines live and perform log calls beyond their
+		// Stopper's Stop() call (e.g. the pgwire async processing
+		// goroutine). These asynchronous log calls are concurrent with
+		// the stderrSinkInfo update in (*TestLogScope).Close().
+		if entry.Severity < s.threshold.Get() || !s.sink.active() {
+			continue
 		}
+		editedEntry := maybeRedactEntry(entry, s.editor)
+
+		// Add a counter. This is important for e.g. the SQL audit logs.
+		// Note: whether the counter is displayed or not depends on
+		// the formatter.
+		editedEntry.Counter = atomic.AddUint64(&s.msgCount, 1)
+
+		bufs.b[i] = s.formatter.formatEntry(editedEntry, stacks)
+		someSinkActive = true
 	}
 
 	// If any of the sinks is active, it is now time to send it out.

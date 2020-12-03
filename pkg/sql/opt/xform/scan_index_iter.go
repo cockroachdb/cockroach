@@ -177,7 +177,7 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 	ord++
 	for ; ord < it.tabMeta.Table.IndexCount(); ord++ {
 		// Skip over the primary index if rejectPrimaryIndex is set.
-		if it.hasRejectFlag(rejectPrimaryIndex) && ord == cat.PrimaryIndex {
+		if it.hasRejectFlags(rejectPrimaryIndex) && ord == cat.PrimaryIndex {
 			continue
 		}
 
@@ -189,24 +189,24 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 		index := it.tabMeta.Table.Index(ord)
 
 		// Skip over inverted indexes if rejectInvertedIndexes is set.
-		if it.hasRejectFlag(rejectInvertedIndexes) && index.IsInverted() {
+		if it.hasRejectFlags(rejectInvertedIndexes) && index.IsInverted() {
 			continue
 		}
 
 		// Skip over non-inverted indexes if rejectNonInvertedIndexes is set.
-		if it.hasRejectFlag(rejectNonInvertedIndexes) && !index.IsInverted() {
+		if it.hasRejectFlags(rejectNonInvertedIndexes) && !index.IsInverted() {
 			continue
 		}
 
 		_, isPartialIndex := index.Predicate()
 
 		// Skip over partial indexes if rejectPartialIndexes is set.
-		if it.hasRejectFlag(rejectPartialIndexes) && isPartialIndex {
+		if it.hasRejectFlags(rejectPartialIndexes) && isPartialIndex {
 			continue
 		}
 
 		// Skip over non-partial indexes if rejectNonPartialIndexes is set.
-		if it.hasRejectFlag(rejectNonPartialIndexes) && !isPartialIndex {
+		if it.hasRejectFlags(rejectNonPartialIndexes) && !isPartialIndex {
 			continue
 		}
 
@@ -281,7 +281,7 @@ func (it *scanIndexIter) filtersImplyPredicate(
 	return nil, false
 }
 
-// hasRejectFlag returns true if the given flag is set in the rejectFlags.
-func (it *scanIndexIter) hasRejectFlag(flag indexRejectFlags) bool {
-	return it.rejectFlags&flag != 0
+// hasRejectFlags tests whether the given flags are all set.
+func (it *scanIndexIter) hasRejectFlags(subset indexRejectFlags) bool {
+	return it.rejectFlags&subset == subset
 }

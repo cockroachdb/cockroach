@@ -41,6 +41,14 @@ type renameTableNode struct {
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		&p.ExecCfg().Settings.SV,
+		"RENAME TABLE/VIEW/SEQUENCE",
+	); err != nil {
+		return nil, err
+	}
+
 	oldTn := n.Name.ToTableName()
 	newTn := n.NewName.ToTableName()
 	toRequire := tree.ResolveRequireTableOrViewDesc

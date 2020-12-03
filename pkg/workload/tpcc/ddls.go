@@ -226,8 +226,8 @@ func scatterRanges(db *gosql.DB) error {
 
 	var g errgroup.Group
 	for _, table := range tables {
+		sql := fmt.Sprintf(`ALTER TABLE %s SCATTER`, table)
 		g.Go(func() error {
-			sql := fmt.Sprintf(`ALTER TABLE %s SCATTER`, table)
 			if _, err := db.Exec(sql); err != nil {
 				return errors.Wrapf(err, "Couldn't exec %q", sql)
 			}

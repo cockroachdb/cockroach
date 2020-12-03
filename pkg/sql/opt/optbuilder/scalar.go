@@ -522,7 +522,7 @@ func (b *Builder) buildFunction(
 		}
 		if name != nil {
 			tn := tree.MakeUnqualifiedTableName(tree.Name(*name))
-			ds, _ := b.resolveDataSource(&tn, privilege.SELECT)
+			ds, _, _ := b.resolveDataSource(&tn, privilege.SELECT)
 
 			b.viewDeps = append(b.viewDeps, opt.ViewDep{
 				DataSource: ds,

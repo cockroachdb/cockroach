@@ -37,7 +37,7 @@ type NetworkReader interface {
 // VectorizedStatsCollector is the common interface implemented by collectors.
 type VectorizedStatsCollector interface {
 	colexecbase.Operator
-	OutputStats(ctx context.Context, flowID string, deterministicStats bool)
+	OutputStats(ctx context.Context, flowID string)
 }
 
 // ChildStatsCollector gives access to the stopwatches of a
@@ -120,15 +120,15 @@ func (bic *batchInfoCollector) getElapsedTime() time.Duration {
 
 // NewVectorizedStatsCollector creates a VectorizedStatsCollector which wraps
 // 'op' that corresponds to a component with either ProcessorID or StreamID 'id'
-// (with 'idTagKey' distinguishing between the two). 'ioReader' is a component
-// (either an operator or a wrapped processor) that performs IO reads that is
+// (with 'idTagKey' distinguishing between the two). 'kvReader' is a component
+// (either an operator or a wrapped processor) that performs KV reads that is
 // present in the chain of operators rooted at 'op'.
 //
 // If omitNumTuples is set, the Output.NumTuples stat will not be set. This is
 // used for operators that wrap row processors which already emit the same stat.
 func NewVectorizedStatsCollector(
 	op colexecbase.Operator,
-	ioReader execinfra.IOReader,
+	kvReader execinfra.KVReader,
 	id int32,
 	idTagKey string,
 	omitNumTuples bool,
@@ -143,7 +143,7 @@ func NewVectorizedStatsCollector(
 		batchInfoCollector: makeBatchInfoCollector(op, id, inputWatch, inputStatsCollectors),
 		idTagKey:           idTagKey,
 		omitNumTuples:      omitNumTuples,
-		ioReader:           ioReader,
+		kvReader:           kvReader,
 		memMonitors:        memMonitors,
 		diskMonitors:       diskMonitors,
 	}
@@ -158,10 +158,9 @@ type vectorizedStatsCollectorImpl struct {
 	idTagKey string
 
 	omitNumTuples bool
-
-	ioReader     execinfra.IOReader
-	memMonitors  []*mon.BytesMonitor
-	diskMonitors []*mon.BytesMonitor
+	kvReader      execinfra.KVReader
+	memMonitors   []*mon.BytesMonitor
+	diskMonitors  []*mon.BytesMonitor
 }
 
 // finish returns the collected stats.
@@ -177,31 +176,32 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 		s.Exec.MaxAllocatedDisk.Add(diskMon.MaximumBytes())
 	}
 
-	// Depending on ioReader, the accumulated time spent by the wrapped operator
+	// Depending on kvReader, the accumulated time spent by the wrapped operator
 	// inside Next() is reported as either execution time or KV time.
-	ioTime := false
-	if vsc.ioReader != nil {
-		ioTime = true
-		if _, isProcessor := vsc.ioReader.(execinfra.Processor); isProcessor {
-			// We have a wrapped processor that performs IO reads. Most likely
+	kvTime := false
+	if vsc.kvReader != nil {
+		kvTime = true
+		if _, isProcessor := vsc.kvReader.(execinfra.Processor); isProcessor {
+			// We have a wrapped processor that performs KV reads. Most likely
 			// it is a rowexec.joinReader, so we want to display "execution
-			// time" and not "IO time". In the less likely case that it is a
+			// time" and not "KV time". In the less likely case that it is a
 			// wrapped rowexec.tableReader showing "execution time" is also
 			// acceptable.
-			ioTime = false
+			kvTime = false
 		}
 	}
 
-	if ioTime {
-		s.KV.KVTime = time
-		// Note that ioTime is true only for ColBatchScans, and this is the
+	if kvTime {
+		s.KV.KVTime.Set(time)
+		// Note that kvTime is true only for ColBatchScans, and this is the
 		// only case when we want to add the number of rows read (because the
 		// wrapped joinReaders and tableReaders will add that statistic
 		// themselves).
-		s.KV.TuplesRead.Set(uint64(vsc.ioReader.GetRowsRead()))
-		s.KV.BytesRead.Set(uint64(vsc.ioReader.GetBytesRead()))
+		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
+		s.KV.BytesRead.Set(uint64(vsc.kvReader.GetBytesRead()))
+		s.KV.ContentionTime.Set(vsc.kvReader.GetCumulativeContentionTime())
 	} else {
-		s.Exec.ExecTime = time
+		s.Exec.ExecTime.Set(time)
 	}
 
 	s.Output.NumBatches.Set(numBatches)
@@ -212,13 +212,8 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 }
 
 // OutputStats is part of the VectorizedStatsCollector interface.
-func (vsc *vectorizedStatsCollectorImpl) OutputStats(
-	ctx context.Context, flowID string, deterministicStats bool,
-) {
+func (vsc *vectorizedStatsCollectorImpl) OutputStats(ctx context.Context, flowID string) {
 	s := vsc.finish()
-	if deterministicStats {
-		s.MakeDeterministic()
-	}
 	createStatsSpan(ctx, fmt.Sprintf("%T", vsc.Operator), flowID, vsc.idTagKey, s)
 }
 
@@ -254,9 +249,9 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 
 	s := &execinfrapb.ComponentStats{ComponentID: nvsc.operatorID}
 
-	s.NetRx.Latency = nvsc.latency
-	s.NetRx.WaitTime = time
-	s.NetRx.DeserializationTime = nvsc.networkReader.GetDeserializationTime()
+	s.NetRx.Latency.Set(nvsc.latency)
+	s.NetRx.WaitTime.Set(time)
+	s.NetRx.DeserializationTime.Set(nvsc.networkReader.GetDeserializationTime())
 	s.NetRx.TuplesReceived.Set(uint64(nvsc.networkReader.GetRowsRead()))
 	s.NetRx.BytesReceived.Set(uint64(nvsc.networkReader.GetBytesRead()))
 
@@ -267,13 +262,8 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 }
 
 // OutputStats is part of the VectorizedStatsCollector interface.
-func (nvsc *networkVectorizedStatsCollectorImpl) OutputStats(
-	ctx context.Context, flowID string, deterministicStats bool,
-) {
+func (nvsc *networkVectorizedStatsCollectorImpl) OutputStats(ctx context.Context, flowID string) {
 	s := nvsc.finish()
-	if deterministicStats {
-		s.MakeDeterministic()
-	}
 	createStatsSpan(ctx, fmt.Sprintf("%T", nvsc.Operator), flowID, execinfrapb.StreamIDTagKey, s)
 }
 

@@ -16,7 +16,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -61,7 +64,7 @@ type castInfo struct {
 //    - current timezone
 //    - current time (e.g. 'now'::string).
 //
-// TODO(radu): move the PerformCast code for each cast into functions defined
+// TODO(#55094): move the PerformCast code for each cast into functions defined
 // within each cast.
 //
 var validCasts = []castInfo{
@@ -374,45 +377,236 @@ func LookupCastVolatility(from, to *types.T) (_ Volatility, ok bool) {
 // PerformCast performs a cast from the provided Datum to the specified
 // types.T.
 func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
+	ret, err := performCastWithoutPrecisionTruncation(ctx, d, t)
+	if err != nil {
+		return nil, err
+	}
+	return AdjustValueToType(t, ret)
+}
+
+// AdjustValueToType checks that the width (for strings, byte arrays, and bit
+// strings) and scale (decimal). and, shape/srid (for geospatial types) fits the
+// specified column type.
+//
+// Additionally, some precision truncation may occur for the specified column type.
+//
+// In case of decimals, it can truncate fractional digits in the input
+// value in order to fit the target column. If the input value fits the target
+// column, it is returned unchanged. If the input value can be truncated to fit,
+// then a truncated copy is returned. Otherwise, an error is returned.
+//
+// In the case of time, it can truncate fractional digits of time datums
+// to its relevant rounding for the given type definition.
+//
+// In the case of geospatial types, it will check whether the SRID and Shape in the
+// datum matches the type definition.
+//
+// This method is used by casts, parsing, INSERT and UPDATE. It is important to note
+// that width must be altered *before* this function, as width truncations should
+// only occur during casting and parsing but not update/inserts (see
+// enforceLocalColumnConstraints).
+func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
+	switch typ.Family() {
+	case types.StringFamily, types.CollatedStringFamily:
+		var sv string
+		if v, ok := AsDString(inVal); ok {
+			sv = string(v)
+		} else if v, ok := inVal.(*DCollatedString); ok {
+			sv = v.Contents
+		}
+
+		if typ.Oid() == oid.T_bpchar {
+			sv = strings.TrimRight(sv, " ")
+		}
+
+		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
+			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
+				"value too long for type %s",
+				typ.SQLString())
+		}
+
+		if typ.Oid() == oid.T_bpchar {
+			if _, ok := AsDString(inVal); ok {
+				return NewDString(strings.TrimRight(sv, " ")), nil
+			} else if _, ok := inVal.(*DCollatedString); ok {
+				return NewDCollatedString(strings.TrimRight(sv, " "), typ.Locale(), &CollationEnvironment{})
+			}
+		}
+	case types.IntFamily:
+		if v, ok := AsDInt(inVal); ok {
+			if typ.Width() == 32 || typ.Width() == 64 || typ.Width() == 16 {
+				// Width is defined in bits.
+				width := uint(typ.Width() - 1)
+
+				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
+				shifted := v >> width
+				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange,
+						"integer out of range for type %s",
+						typ.Name(),
+					)
+				}
+			}
+		}
+	case types.BitFamily:
+		if v, ok := AsDBitArray(inVal); ok {
+			if typ.Width() > 0 {
+				bitLen := v.BitLen()
+				switch typ.Oid() {
+				case oid.T_varbit:
+					if bitLen > uint(typ.Width()) {
+						return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
+							"bit string length %d too large for type %s", bitLen, typ.SQLString())
+					}
+				default:
+					if bitLen != uint(typ.Width()) {
+						return nil, pgerror.Newf(pgcode.StringDataLengthMismatch,
+							"bit string length %d does not match type %s", bitLen, typ.SQLString())
+					}
+				}
+			}
+		}
+	case types.DecimalFamily:
+		if inDec, ok := inVal.(*DDecimal); ok {
+			if inDec.Form != apd.Finite || typ.Precision() == 0 {
+				// Non-finite form or unlimited target precision, so no need to limit.
+				break
+			}
+			if int64(typ.Precision()) >= inDec.NumDigits() && typ.Scale() == inDec.Exponent {
+				// Precision and scale of target column are sufficient.
+				break
+			}
+
+			var outDec DDecimal
+			outDec.Set(&inDec.Decimal)
+			err := LimitDecimalWidth(&outDec.Decimal, int(typ.Precision()), int(typ.Scale()))
+			if err != nil {
+				return nil, errors.Wrapf(err, "type %s", typ.SQLString())
+			}
+			return &outDec, nil
+		}
+	case types.ArrayFamily:
+		if inArr, ok := inVal.(*DArray); ok {
+			var outArr *DArray
+			elementType := typ.ArrayContents()
+			for i, inElem := range inArr.Array {
+				outElem, err := AdjustValueToType(elementType, inElem)
+				if err != nil {
+					return nil, err
+				}
+				if outElem != inElem {
+					if outArr == nil {
+						outArr = &DArray{}
+						*outArr = *inArr
+						outArr.Array = make(Datums, len(inArr.Array))
+						copy(outArr.Array, inArr.Array[:i])
+					}
+				}
+				if outArr != nil {
+					outArr.Array[i] = inElem
+				}
+			}
+			if outArr != nil {
+				return outArr, nil
+			}
+		}
+	case types.TimeFamily:
+		if in, ok := inVal.(*DTime); ok {
+			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision())), nil
+		}
+	case types.TimestampFamily:
+		if in, ok := inVal.(*DTimestamp); ok {
+			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+		}
+	case types.TimestampTZFamily:
+		if in, ok := inVal.(*DTimestampTZ); ok {
+			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+		}
+	case types.TimeTZFamily:
+		if in, ok := inVal.(*DTimeTZ); ok {
+			return in.Round(TimeFamilyPrecisionToRoundDuration(typ.Precision())), nil
+		}
+	case types.IntervalFamily:
+		if in, ok := inVal.(*DInterval); ok {
+			itm, err := typ.IntervalTypeMetadata()
+			if err != nil {
+				return nil, err
+			}
+			return NewDInterval(in.Duration, itm), nil
+		}
+	case types.GeometryFamily:
+		if in, ok := inVal.(*DGeometry); ok {
+			if err := geo.SpatialObjectFitsColumnMetadata(
+				in.Geometry.SpatialObject(),
+				typ.InternalType.GeoMetadata.SRID,
+				typ.InternalType.GeoMetadata.ShapeType,
+			); err != nil {
+				return nil, err
+			}
+		}
+	case types.GeographyFamily:
+		if in, ok := inVal.(*DGeography); ok {
+			if err := geo.SpatialObjectFitsColumnMetadata(
+				in.Geography.SpatialObject(),
+				typ.InternalType.GeoMetadata.SRID,
+				typ.InternalType.GeoMetadata.ShapeType,
+			); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return inVal, nil
+}
+
+// formatBitArrayToType formats bit arrays such that they fill the total width
+// if too short, or truncate if too long.
+func formatBitArrayToType(d *DBitArray, t *types.T) *DBitArray {
+	if t.Width() == 0 || d.BitLen() == uint(t.Width()) {
+		return d
+	}
+	a := d.BitArray.Clone()
+	switch t.Oid() {
+	case oid.T_varbit:
+		// VARBITs do not have padding attached, so only truncate.
+		if uint(t.Width()) < a.BitLen() {
+			a = a.ToWidth(uint(t.Width()))
+		}
+	default:
+		a = a.ToWidth(uint(t.Width()))
+	}
+	return &DBitArray{a}
+}
+
+// performCastWithoutPrecisionTruncation performs the cast, but does not do a check on whether
+// the datum fits the type.
+// In an ideal state, components of AdjustValueToType should be embedded into
+// this function, but the code base needs a general refactor of parsing
+// and casting logic before this can happen.
+// See also: #55094.
+func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 	switch t.Family() {
 	case types.BitFamily:
 		switch v := d.(type) {
 		case *DBitArray:
-			if t.Width() == 0 || v.BitLen() == uint(t.Width()) {
-				return d, nil
-			}
-			var a DBitArray
-			switch t.Oid() {
-			case oid.T_varbit:
-				// VARBITs do not have padding attached.
-				a.BitArray = v.BitArray.Clone()
-				if uint(t.Width()) < a.BitArray.BitLen() {
-					a.BitArray = a.BitArray.ToWidth(uint(t.Width()))
-				}
-			default:
-				a.BitArray = v.BitArray.Clone().ToWidth(uint(t.Width()))
-			}
-			return &a, nil
+			return formatBitArrayToType(v, t), nil
 		case *DInt:
-			return NewDBitArrayFromInt(int64(*v), uint(t.Width()))
+			r, err := NewDBitArrayFromInt(int64(*v), uint(t.Width()))
+			if err != nil {
+				return nil, err
+			}
+			return formatBitArrayToType(r, t), nil
 		case *DString:
 			res, err := bitarray.Parse(string(*v))
 			if err != nil {
 				return nil, err
 			}
-			if t.Width() > 0 {
-				res = res.ToWidth(uint(t.Width()))
-			}
-			return &DBitArray{BitArray: res}, nil
+			return formatBitArrayToType(&DBitArray{res}, t), nil
 		case *DCollatedString:
 			res, err := bitarray.Parse(v.Contents)
 			if err != nil {
 				return nil, err
 			}
-			if t.Width() > 0 {
-				res = res.ToWidth(uint(t.Width()))
-			}
-			return &DBitArray{BitArray: res}, nil
+			return formatBitArrayToType(&DBitArray{res}, t), nil
 		}
 
 	case types.BoolFamily:
@@ -1082,230 +1276,10 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return oid, nil
 			}
 		case *DString:
-			s := string(*v)
-
-			// If it is an integer in string form, convert it as an int.
-			if val, err := ParseDInt(strings.TrimSpace(s)); err == nil {
-				tmpOid := NewDOid(*val)
-				oid, err := queryOid(ctx, t, tmpOid)
-				if err != nil {
-					oid = tmpOid
-					oid.semanticType = t
-				}
-				return oid, nil
-			}
-
-			switch t.Oid() {
-			case oid.T_regproc, oid.T_regprocedure:
-				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
-				// Postgres only does this when the cast is ::regprocedure, but we're
-				// going to always do it.
-				// We additionally do not yet implement disambiguation based on type
-				// parameters: we return the match iff there is exactly one.
-				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
-
-				substrs, err := splitIdentifierList(s)
-				if err != nil {
-					return nil, err
-				}
-				if len(substrs) > 3 {
-					// A fully qualified function name in pg's dialect can contain
-					// at most 3 parts: db.schema.funname.
-					// For example mydb.pg_catalog.max().
-					// Anything longer is always invalid.
-					return nil, pgerror.Newf(pgcode.Syntax,
-						"invalid function name: %s", s)
-				}
-				name := UnresolvedName{NumParts: len(substrs)}
-				for i := 0; i < len(substrs); i++ {
-					name.Parts[i] = substrs[len(substrs)-1-i]
-				}
-				funcDef, err := name.ResolveFunction(ctx.SessionData.SearchPath)
-				if err != nil {
-					return nil, err
-				}
-				return queryOid(ctx, t, NewDString(funcDef.Name))
-			case oid.T_regtype:
-				parsedTyp, err := ctx.Planner.ParseType(s)
-				if err == nil {
-					return &DOid{
-						semanticType: t,
-						DInt:         DInt(parsedTyp.Oid()),
-						name:         parsedTyp.SQLStandardName(),
-					}, nil
-				}
-
-				// Fall back to searching pg_type, since we don't provide syntax for
-				// every postgres type that we understand OIDs for.
-				// Note this section does *not* work if there is a schema in front of the
-				// type, e.g. "pg_catalog"."int4" (if int4 was not defined).
-
-				// Trim whitespace and unwrap outer quotes if necessary.
-				// This is required to mimic postgres.
-				s = strings.TrimSpace(s)
-				if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
-					s = s[1 : len(s)-1]
-				}
-				// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
-				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
-
-				dOid, missingTypeErr := queryOid(ctx, t, NewDString(s))
-				if missingTypeErr == nil {
-					return dOid, missingTypeErr
-				}
-				// Fall back to some special cases that we support for compatibility
-				// only. Client use syntax like 'sometype'::regtype to produce the oid
-				// for a type that they want to search a catalog table for. Since we
-				// don't support that type, we return an artificial OID that will never
-				// match anything.
-				switch s {
-				// We don't support triggers, but some tools search for them
-				// specifically.
-				case "trigger":
-				default:
-					return nil, missingTypeErr
-				}
-				return &DOid{
-					semanticType: t,
-					// Types we don't support get OID -1, so they won't match anything
-					// in catalogs.
-					DInt: -1,
-					name: s,
-				}, nil
-
-			case oid.T_regclass:
-				tn, err := castStringToRegClassTableName(s)
-				if err != nil {
-					return nil, err
-				}
-				id, err := ctx.Planner.ResolveTableName(ctx.Ctx(), &tn)
-				if err != nil {
-					return nil, err
-				}
-				return &DOid{
-					semanticType: t,
-					DInt:         DInt(id),
-					name:         tn.ObjectName.String(),
-				}, nil
-			default:
-				return queryOid(ctx, t, NewDString(s))
-			}
+			return ParseDOid(ctx, string(*v), t)
 		}
 	}
 
 	return nil, pgerror.Newf(
 		pgcode.CannotCoerce, "invalid cast: %s -> %s", d.ResolvedType(), t)
-}
-
-// castStringToRegClassTableName normalizes a TableName from a string.
-func castStringToRegClassTableName(s string) (TableName, error) {
-	components, err := splitIdentifierList(s)
-	if err != nil {
-		return TableName{}, err
-	}
-
-	if len(components) > 3 {
-		return TableName{}, pgerror.Newf(
-			pgcode.InvalidName,
-			"too many components: %s",
-			s,
-		)
-	}
-	var retComponents [3]string
-	for i := 0; i < len(components); i++ {
-		retComponents[len(components)-1-i] = components[i]
-	}
-	u, err := NewUnresolvedObjectName(
-		len(components),
-		retComponents,
-		0,
-	)
-	if err != nil {
-		return TableName{}, err
-	}
-	return u.ToTableName(), nil
-}
-
-// splitIdentifierList splits identifiers to individual components, lower
-// casing non-quoted identifiers and escaping quoted identifiers as appropriate.
-// It is based on PostgreSQL's SplitIdentifier.
-func splitIdentifierList(in string) ([]string, error) {
-	var pos int
-	var ret []string
-	const separator = '.'
-
-	for pos < len(in) {
-		if isWhitespace(in[pos]) {
-			pos++
-			continue
-		}
-		if in[pos] == '"' {
-			var b strings.Builder
-			// Attempt to find the ending quote. If the quote is double "",
-			// fold it into a " character for the str (e.g. "a""" means a").
-			for {
-				pos++
-				endIdx := strings.IndexByte(in[pos:], '"')
-				if endIdx == -1 {
-					return nil, pgerror.Newf(
-						pgcode.InvalidName,
-						`invalid name: unclosed ": %s`,
-						in,
-					)
-				}
-				b.WriteString(in[pos : pos+endIdx])
-				pos += endIdx + 1
-				// If we reached the end, or the following character is not ",
-				// we can break and assume this is one identifier.
-				// There are checks below to ensure EOF or whitespace comes
-				// afterward.
-				if pos == len(in) || in[pos] != '"' {
-					break
-				}
-				b.WriteByte('"')
-			}
-			ret = append(ret, b.String())
-		} else {
-			var b strings.Builder
-			for pos < len(in) && in[pos] != separator && !isWhitespace(in[pos]) {
-				b.WriteByte(in[pos])
-				pos++
-			}
-			// Anything with no quotations should be lowered.
-			ret = append(ret, strings.ToLower(b.String()))
-		}
-
-		// Further ignore all white space.
-		for pos < len(in) && isWhitespace(in[pos]) {
-			pos++
-		}
-
-		// At this stage, we expect separator or end of string.
-		if pos == len(in) {
-			break
-		}
-
-		if in[pos] != separator {
-			return nil, pgerror.Newf(
-				pgcode.InvalidName,
-				"invalid name: expected separator %c: %s",
-				separator,
-				in,
-			)
-		}
-
-		pos++
-	}
-
-	return ret, nil
-}
-
-// isWhitespace returns true if the given character is a space.
-// This must match parser.SkipWhitespace above.
-func isWhitespace(ch byte) bool {
-	switch ch {
-	case ' ', '\t', '\r', '\f', '\n':
-		return true
-	}
-	return false
 }

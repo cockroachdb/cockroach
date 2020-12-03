@@ -285,6 +285,16 @@ func (p *pebbleIterator) UnsafeRawKey() []byte {
 	return p.iter.Key()
 }
 
+// UnsafeRawMVCCKey implements the MVCCIterator interface.
+func (p *pebbleIterator) UnsafeRawMVCCKey() []byte {
+	return p.iter.Key()
+}
+
+// UnsafeRawEngineKey implements the EngineIterator interface.
+func (p *pebbleIterator) UnsafeRawEngineKey() []byte {
+	return p.iter.Key()
+}
+
 // UnsafeValue implements the MVCCIterator and EngineIterator interfaces.
 func (p *pebbleIterator) UnsafeValue() []byte {
 	if valid, err := p.Valid(); err != nil || !valid {
@@ -358,6 +368,11 @@ func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 	value := p.UnsafeValue()
 
 	return protoutil.Unmarshal(value, msg)
+}
+
+// IsCurIntentSeparated implements the MVCCIterator interface.
+func (p *pebbleIterator) IsCurIntentSeparated() bool {
+	return false
 }
 
 // ComputeStats implements the MVCCIterator interface.

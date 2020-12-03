@@ -119,7 +119,7 @@ func makeInternalColumnData(
 	// sample period.
 	isRollup := false
 
-	// Variance computation must consider each value against the the average.
+	// Variance computation must consider each value against the average.
 	// Retain the component values of each column and compute a variance.
 	valuesForSample := make([]float64, 0, 1)
 	computeVariance := func() float64 {

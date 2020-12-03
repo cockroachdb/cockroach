@@ -192,7 +192,7 @@ func (n FiltersExpr) IsFalse() bool {
 
 // OuterCols returns the set of outer columns needed by any of the filter
 // condition expressions.
-func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
+func (n FiltersExpr) OuterCols() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
 		colSet.UnionWith(n[i].ScalarProps().OuterCols)
@@ -677,7 +677,7 @@ func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 	return *p.(*FiltersExpr)
 }
 
-// UsesPartialIndex returns true if the the LookupJoinPrivate looks-up via a
+// UsesPartialIndex returns true if the LookupJoinPrivate looks-up via a
 // partial index.
 func (lj *LookupJoinPrivate) UsesPartialIndex(md *opt.Metadata) bool {
 	_, isPartialIndex := md.Table(lj.Table).Index(lj.Index).Predicate()

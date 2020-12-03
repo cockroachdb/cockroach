@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -47,24 +48,47 @@ type Mutable struct {
 	ClusterVersion *Immutable
 }
 
+// NewInitialOption is an optional argument for NewInitial.
+type NewInitialOption func(*descpb.DatabaseDescriptor)
+
+// NewInitialOptionDatabaseRegionConfig is an option allowing an optional
+// regional configuration to be set on the database descriptor.
+func NewInitialOptionDatabaseRegionConfig(
+	regionConfig *descpb.DatabaseDescriptor_RegionConfig,
+) NewInitialOption {
+	return func(desc *descpb.DatabaseDescriptor) {
+		desc.RegionConfig = regionConfig
+	}
+}
+
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
-func NewInitial(id descpb.ID, name string, owner security.SQLUsername) *Mutable {
-	return NewInitialWithPrivileges(id, name,
-		descpb.NewDefaultPrivilegeDescriptor(owner))
+func NewInitial(
+	id descpb.ID, name string, owner security.SQLUsername, options ...NewInitialOption,
+) *Mutable {
+	return NewInitialWithPrivileges(
+		id,
+		name,
+		descpb.NewDefaultPrivilegeDescriptor(owner),
+		options...,
+	)
 }
 
 // NewInitialWithPrivileges constructs a new Mutable for an initial version
 // from an id and name and custom privileges.
 func NewInitialWithPrivileges(
-	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor,
+	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor, options ...NewInitialOption,
 ) *Mutable {
-	return NewCreatedMutable(descpb.DatabaseDescriptor{
+	ret := descpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,
 		Version:    1,
 		Privileges: privileges,
-	})
+	}
+	for _, option := range options {
+		option(&ret)
+	}
+	return NewCreatedMutable(ret)
 }
 
 func makeImmutable(desc descpb.DatabaseDescriptor) Immutable {
@@ -196,6 +220,26 @@ func (desc *Immutable) Validate() error {
 	}
 	if desc.GetID() == 0 {
 		return fmt.Errorf("invalid database ID %d", desc.GetID())
+	}
+
+	if desc.IsMultiRegion() {
+		// Ensure no regions are duplicated.
+		regions := make(map[descpb.Region]struct{})
+		for _, region := range desc.Regions() {
+			if _, seen := regions[region]; seen {
+				return errors.AssertionFailedf("region %q seen twice on db %d", region, desc.GetID())
+			}
+			regions[region] = struct{}{}
+		}
+
+		if desc.RegionConfig.PrimaryRegion == "" {
+			return errors.AssertionFailedf("primary region unset on a multi-region db %d", desc.GetID())
+		}
+
+		if _, found := regions[desc.RegionConfig.PrimaryRegion]; !found {
+			return errors.AssertionFailedf(
+				"primary region not found in list of regions on db %d", desc.GetID())
+		}
 	}
 
 	// Fill in any incorrect privileges that may have been missed due to mixed-versions.

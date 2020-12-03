@@ -1086,33 +1086,6 @@ func TestIndexJoiner(t *testing.T) {
 			},
 		},
 		{
-			description: "Test a filter in the post process spec and using a secondary index",
-			desc:        td.TableDesc(),
-			post: execinfrapb.PostProcessSpec{
-				Filter:        execinfrapb.Expression{Expr: "@3 <= 5"}, // sum <= 5
-				Projection:    true,
-				OutputColumns: []uint32{3},
-			},
-			input: rowenc.EncDatumRows{
-				{v[0], v[1]},
-				{v[2], v[5]},
-				{v[0], v[5]},
-				{v[2], v[1]},
-				{v[3], v[4]},
-				{v[1], v[3]},
-				{v[5], v[1]},
-				{v[5], v[0]},
-			},
-			outputTypes: []*types.T{types.String},
-			expected: rowenc.EncDatumRows{
-				{rowenc.StrEncDatum("one")},
-				{rowenc.StrEncDatum("five")},
-				{rowenc.StrEncDatum("two-one")},
-				{rowenc.StrEncDatum("one-three")},
-				{rowenc.StrEncDatum("five-zero")},
-			},
-		},
-		{
 			description: "Test selecting rows using the primary index with multiple family spans",
 			desc:        tdf.TableDesc(),
 			post: execinfrapb.PostProcessSpec{

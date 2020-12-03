@@ -197,9 +197,12 @@ type TestingKnobs struct {
 	// checked by a test receiver on the gateway.
 	MetadataTestLevel MetadataTestLevel
 
-	// DeterministicStats overrides stats which don't have reliable values, like
-	// stall time and bytes sent. It replaces them with a zero value.
-	DeterministicStats bool
+	// GenerateMockContentionEvents causes any kv fetcher used in the flow to
+	// generate mock contention events. See
+	// TestingEnableMockContentionEventGeneration for more details. This testing
+	// knob can also be enabled via a cluster setting.
+	// TODO(asubiotto): Remove once KV layer produces real contention events.
+	GenerateMockContentionEvents bool
 
 	// CheckVectorizedFlowIsClosedCorrectly checks that all components in a flow
 	// were closed explicitly in flow.Cleanup.

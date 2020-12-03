@@ -343,7 +343,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // must have already been wrapped).
 func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	op colexecbase.Operator,
-	ioReader execinfra.IOReader,
+	kvReader execinfra.KVReader,
 	inputs []colexecbase.Operator,
 	id int32,
 	idTagKey string,
@@ -368,7 +368,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 		inputStatsCollectors[i] = sc
 	}
 	vsc := colexec.NewVectorizedStatsCollector(
-		op, ioReader, id, idTagKey, omitNumTuples, inputWatch,
+		op, kvReader, id, idTagKey, omitNumTuples, inputWatch,
 		memMonitors, diskMonitors, inputStatsCollectors,
 	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
@@ -393,12 +393,11 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 func finishVectorizedStatsCollectors(
 	ctx context.Context,
 	flowID execinfrapb.FlowID,
-	deterministicStats bool,
 	vectorizedStatsCollectors []colexec.VectorizedStatsCollector,
 ) {
 	flowIDString := flowID.String()
 	for _, vsc := range vectorizedStatsCollectors {
-		vsc.OutputStats(ctx, flowIDString, deterministicStats)
+		vsc.OutputStats(ctx, flowIDString)
 	}
 }
 
@@ -480,7 +479,7 @@ type vectorizedFlowCreator struct {
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
 	exprHelper                     *colexec.ExprHelper
-	typeResolver                   *descs.DistSQLTypeResolver
+	typeResolver                   descs.DistSQLTypeResolver
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
 	// It must be accessed atomically.
@@ -538,7 +537,7 @@ func newVectorizedFlowCreator(
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	typeResolver *descs.DistSQLTypeResolver,
+	typeResolver descs.DistSQLTypeResolver,
 ) *vectorizedFlowCreator {
 	creator := vectorizedFlowCreatorPool.Get().(*vectorizedFlowCreator)
 	*creator = vectorizedFlowCreator{
@@ -774,7 +773,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				// information (e.g. output stall time).
 				var err error
 				localOp, err = s.wrapWithVectorizedStatsCollectorBase(
-					op, nil /* ioReader */, nil, /* inputs */
+					op, nil /* kvReader */, nil, /* inputs */
 					int32(stream.StreamID), execinfrapb.StreamIDTagKey, false /* omitNumTuples */, mons,
 				)
 				if err != nil {
@@ -913,7 +912,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// this stats collector to display stats.
 			var err error
 			op, err = s.wrapWithVectorizedStatsCollectorBase(
-				op, nil /* ioReader */, statsInputsAsOps, -1, /* id */
+				op, nil /* kvReader */, statsInputsAsOps, -1, /* id */
 				"" /* idTagKey */, false /* omitNumTuples */, nil, /* monitors */
 			)
 			if err != nil {
@@ -975,10 +974,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 					DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
-						ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
-						finishVectorizedStatsCollectors(
-							ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs,
-						)
+						ctx, span := tracing.ChildSpanRemote(ctx, "")
+						finishVectorizedStatsCollectors(ctx, flowCtx.ID, vscs)
 						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
 					},
 				},
@@ -1004,9 +1001,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				// TODO(radu): this is a sketchy way to use this infrastructure. We
 				// aren't actually returning any stats, but we are creating and closing
 				// child spans with stats.
-				finishVectorizedStatsCollectors(
-					ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq,
-				)
+				finishVectorizedStatsCollectors(ctx, flowCtx.ID, vscq)
 				return nil
 			}
 		}
@@ -1155,7 +1150,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				// wrapped processor already emits the same stat.
 				_, isColumnarizer := originalOp.(*colexec.Columnarizer)
 				op, err = s.wrapWithVectorizedStatsCollectorBase(
-					op, result.IOReader, inputs, pspec.ProcessorID,
+					op, result.KVReader, inputs, pspec.ProcessorID,
 					execinfrapb.ProcessorIDTagKey, isColumnarizer, result.OpMonitors,
 				)
 				if err != nil {

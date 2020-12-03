@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -43,6 +42,14 @@ type renameDatabaseNode struct {
 // Privileges: superuser + DROP or ownership + CREATEDB privileges
 //   Notes: mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		&p.ExecCfg().Settings.SV,
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -123,10 +130,9 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 	for _, schema := range schemas {
-		tbNames, err := descs.GetObjectNames(
+		tbNames, err := p.Descriptors().GetObjectNames(
 			ctx,
 			p.txn,
-			p.ExecCfg().Codec,
 			dbDesc,
 			schema,
 			tree.DatabaseListFlags{
@@ -139,15 +145,16 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		}
 		lookupFlags.Required = false
 		for i := range tbNames {
-			tbDesc, err := p.Descriptors().GetTableVersion(
+			t, err := p.Descriptors().GetTableByName(
 				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
 			)
 			if err != nil {
 				return err
 			}
-			if tbDesc == nil {
+			if t == nil {
 				continue
 			}
+			tbDesc := t.(*tabledesc.Immutable)
 
 			if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
 				dependentDesc, err := catalogkv.MustGetTableDescByID(ctx, p.txn, p.ExecCfg().Codec, dependedOn.ID)

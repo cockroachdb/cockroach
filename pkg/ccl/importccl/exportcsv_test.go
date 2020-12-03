@@ -384,7 +384,7 @@ func TestExportShow(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/show' FROM SELECT * FROM [SHOW DATABASES] ORDER BY database_name`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/show' FROM SELECT database_name, owner FROM [SHOW DATABASES] ORDER BY database_name`)
 	content := readFileByGlob(t, filepath.Join(dir, "show", "export*-n1.0.csv"))
 
 	if expected, got := "defaultdb,"+security.RootUser+"\npostgres,"+security.RootUser+"\nsystem,"+
@@ -424,11 +424,11 @@ func TestExportFeatureFlag(t *testing.T) {
 
 	// Feature flag is off — test that EXPORT surfaces error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = FALSE`)
-	sqlDB.Exec(t, `CREATE TABLE feature_flag (a INT PRIMARY KEY)`)
-	sqlDB.ExpectErr(t, `EXPORT feature was disabled by the database administrator`,
-		`EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flag`)
+	sqlDB.Exec(t, `CREATE TABLE feature_flags (a INT PRIMARY KEY)`)
+	sqlDB.ExpectErr(t, `feature EXPORT was disabled by the database administrator`,
+		`EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flags`)
 
 	// Feature flag is on — test that EXPORT does not error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = TRUE`)
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flag`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flags`)
 }

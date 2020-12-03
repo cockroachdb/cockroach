@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/hintdetail"
@@ -51,7 +52,7 @@ type setClusterSettingNode struct {
 	// versionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
-	versionUpgradeHook func(ctx context.Context, to roachpb.Version) error
+	versionUpgradeHook func(ctx context.Context, from, to clusterversion.ClusterVersion) error
 }
 
 func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, action string) error {
@@ -244,12 +245,20 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 
 			if isSetVersion {
+				var from, to clusterversion.ClusterVersion
+
+				fromVersionVal := []byte(string(*prev.(*tree.DString)))
+				if err := protoutil.Unmarshal(fromVersionVal, &from); err != nil {
+					return err
+				}
+
+				targetVersionStr := string(*value.(*tree.DString))
+				to.Version = roachpb.MustParseVersion(targetVersionStr)
+
 				// toSettingString already validated the input, and checked to
 				// see that we are allowed to transition. Let's call into our
 				// upgrade hook to run migrations, if any.
-				versionStr := string(*value.(*tree.DString))
-				targetVersion := roachpb.MustParseVersion(versionStr)
-				if err := n.versionUpgradeHook(ctx, targetVersion); err != nil {
+				if err := n.versionUpgradeHook(ctx, from, to); err != nil {
 					return err
 				}
 			}

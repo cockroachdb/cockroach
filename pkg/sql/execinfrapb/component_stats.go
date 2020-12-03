@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/dustin/go-humanize"
 )
 
@@ -30,7 +31,8 @@ func (s *ComponentStats) Stats() map[string]string {
 	return result
 }
 
-// StatsForQueryPlan is part of DistSQLSpanStats interface.
+// StatsForQueryPlan returns the statistics as a list of strings that can be
+// displayed in query plans and diagrams.
 func (s *ComponentStats) StatsForQueryPlan() []string {
 	result := make([]string, 0, 4)
 	s.formatStats(func(key string, value interface{}) {
@@ -42,14 +44,14 @@ func (s *ComponentStats) StatsForQueryPlan() []string {
 // formatStats calls fn for each statistic that is set.
 func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) {
 	// Network Rx stats.
-	if s.NetRx.Latency != 0 {
-		fn("network latency", s.NetRx.Latency.Round(time.Microsecond))
+	if s.NetRx.Latency.HasValue() {
+		fn("network latency", s.NetRx.Latency.Value().Round(time.Microsecond))
 	}
-	if s.NetRx.WaitTime != 0 {
-		fn("network wait time", s.NetRx.WaitTime.Round(time.Microsecond))
+	if s.NetRx.WaitTime.HasValue() {
+		fn("network wait time", s.NetRx.WaitTime.Value().Round(time.Microsecond))
 	}
-	if s.NetRx.DeserializationTime != 0 {
-		fn("deserialization time", s.NetRx.DeserializationTime.Round(time.Microsecond))
+	if s.NetRx.DeserializationTime.HasValue() {
+		fn("deserialization time", s.NetRx.DeserializationTime.Value().Round(time.Microsecond))
 	}
 	if s.NetRx.TuplesReceived.HasValue() {
 		fn("network tuples received", s.NetRx.TuplesReceived.Value())
@@ -72,28 +74,32 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		if s.Inputs[0].NumTuples.HasValue() {
 			fn("input tuples", s.Inputs[0].NumTuples.Value())
 		}
-		if s.Inputs[0].WaitTime != 0 {
-			fn("input stall time", s.Inputs[0].WaitTime.Round(time.Microsecond))
+		if s.Inputs[0].WaitTime.HasValue() {
+			fn("input stall time", s.Inputs[0].WaitTime.Value().Round(time.Microsecond))
 		}
 
 	case 2:
 		if s.Inputs[0].NumTuples.HasValue() {
 			fn("left tuples", s.Inputs[0].NumTuples.Value())
 		}
-		if s.Inputs[0].WaitTime != 0 {
-			fn("left stall time", s.Inputs[0].WaitTime.Round(time.Microsecond))
+		if s.Inputs[0].WaitTime.HasValue() {
+			fn("left stall time", s.Inputs[0].WaitTime.Value().Round(time.Microsecond))
 		}
 		if s.Inputs[1].NumTuples.HasValue() {
 			fn("right tuples", s.Inputs[1].NumTuples.Value())
 		}
-		if s.Inputs[1].WaitTime != 0 {
-			fn("right stall time", s.Inputs[1].WaitTime.Round(time.Microsecond))
+		if s.Inputs[1].WaitTime.HasValue() {
+			fn("right stall time", s.Inputs[1].WaitTime.Value().Round(time.Microsecond))
 		}
 	}
 
 	// KV stats.
-	if s.KV.KVTime != 0 {
-		fn("KV time", s.KV.KVTime.Round(time.Microsecond))
+	if s.KV.KVTime.HasValue() {
+		fn("KV time", s.KV.KVTime.Value().Round(time.Microsecond))
+	}
+	if s.KV.ContentionTime.HasValue() {
+		// TODO(asubiotto): Round once KV layer produces real contention events.
+		fn("KV contention time", s.KV.ContentionTime.Value())
 	}
 	if s.KV.TuplesRead.HasValue() {
 		fn("KV tuples read", s.KV.TuplesRead.Value())
@@ -103,8 +109,8 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	}
 
 	// Exec stats.
-	if s.Exec.ExecTime != 0 {
-		fn("execution time", s.Exec.ExecTime.Round(time.Microsecond))
+	if s.Exec.ExecTime.HasValue() {
+		fn("execution time", s.Exec.ExecTime.Value().Round(time.Microsecond))
 	}
 	if s.Exec.MaxAllocatedMem.HasValue() {
 		fn("max memory allocated", humanize.IBytes(s.Exec.MaxAllocatedMem.Value()))
@@ -131,16 +137,16 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 // value before. This allows tests to verify the set of stats that were
 // collected.
 func (s *ComponentStats) MakeDeterministic() {
-	// intVal resets an IntValue to 0, if it was set.
-	intVal := func(v *IntValue) {
+	// resetUint resets an optional.Uint to 0, if it was set.
+	resetUint := func(v *optional.Uint) {
 		if v.HasValue() {
 			v.Set(0)
 		}
 	}
 	// timeVal resets a duration to 1ns, if it was set.
-	timeVal := func(v *time.Duration) {
-		if *v != 0 {
-			*v = 1
+	timeVal := func(v *optional.Duration) {
+		if v.HasValue() {
+			v.Set(0)
 		}
 	}
 
@@ -149,15 +155,23 @@ func (s *ComponentStats) MakeDeterministic() {
 	timeVal(&s.NetRx.WaitTime)
 	timeVal(&s.NetRx.DeserializationTime)
 	if s.NetRx.BytesReceived.HasValue() {
-		// BytesReceived is overridden to a useful value for tests.
-		s.NetRx.BytesReceived.Set(8 * s.Output.NumTuples.Value())
+		// BytesReceived can be non-deterministic because some message fields have
+		// varying sizes across different runs (e.g. metadata). Override to a useful
+		// value for tests.
+		s.NetRx.BytesReceived.Set(8 * s.NetRx.TuplesReceived.Value())
 	}
 
 	// NetTx.
-	intVal(&s.NetTx.BytesSent)
+	if s.NetTx.BytesSent.HasValue() {
+		// BytesSent can be non-deterministic because some message fields have
+		// varying sizes across different runs (e.g. metadata). Override to a useful
+		// value for tests.
+		s.NetTx.BytesSent.Set(8 * s.NetTx.TuplesSent.Value())
+	}
 
 	// KV.
 	timeVal(&s.KV.KVTime)
+	timeVal(&s.KV.ContentionTime)
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
 		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())
@@ -165,11 +179,11 @@ func (s *ComponentStats) MakeDeterministic() {
 
 	// Exec.
 	timeVal(&s.Exec.ExecTime)
-	intVal(&s.Exec.MaxAllocatedMem)
-	intVal(&s.Exec.MaxAllocatedDisk)
+	resetUint(&s.Exec.MaxAllocatedMem)
+	resetUint(&s.Exec.MaxAllocatedDisk)
 
 	// Output.
-	intVal(&s.Output.NumBatches)
+	resetUint(&s.Output.NumBatches)
 
 	// Inputs.
 	for i := range s.Inputs {

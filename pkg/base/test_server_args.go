@@ -68,7 +68,7 @@ type TestServerArgs struct {
 	// JoinAddr is the address of a node we are joining.
 	//
 	// If left empty and the TestServer is being added to a nonempty cluster, this
-	// will be set to the the address of the cluster's first node.
+	// will be set to the address of the cluster's first node.
 	JoinAddr string
 
 	// StoreSpecs define the stores for this server. If you want more than

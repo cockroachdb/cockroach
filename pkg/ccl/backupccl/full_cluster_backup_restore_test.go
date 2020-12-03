@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,7 +39,7 @@ func TestFullClusterBackup(t *testing.T) {
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -139,7 +140,7 @@ CREATE TABLE data2.foo (a int);
 
 	t.Run("ensure all databases restored", func(t *testing.T) {
 		sqlDBRestore.CheckQueryResults(t,
-			`SHOW DATABASES`,
+			`SELECT database_name, owner FROM [SHOW DATABASES]`,
 			[][]string{
 				{"data", security.RootUser},
 				{"data2", security.RootUser},
@@ -272,7 +273,7 @@ func TestFullClusterBackupDroppedTables(t *testing.T) {
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -294,7 +295,7 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	const numAccounts = 10
 	const incrementalBackupLocation = "nodelocal://0/inc-full-backup"
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -315,7 +316,7 @@ func TestEmptyFullClusterRestore(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -335,7 +336,7 @@ func TestClusterRestoreEmptyDB(t *testing.T) {
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -354,7 +355,7 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -372,7 +373,7 @@ func TestDisallowFullClusterRestoreOfNonFullBackup(t *testing.T) {
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -457,6 +458,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "takes >1 min under race")
 	params := base.TestServerArgs{}
 	// Disable GC job so that the final check of crdb_internal.tables is
 	// guaranteed to not be cleaned up. Although this was never observed by a
@@ -497,9 +499,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 
 	t.Run("during restoration of data", func(t *testing.T) {
-		_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(
-			t, singleNode, tempDir, InitNone,
-		)
+		_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
 		sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM 'nodelocal://1/missing-ssts'`)
 		// Verify the failed RESTORE added some DROP tables.
@@ -524,9 +524,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	})
 
 	t.Run("during system table restoration", func(t *testing.T) {
-		_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(
-			t, singleNode, tempDir, InitNone,
-		)
+		_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
 
 		// Bugger the backup by injecting a failure while restoring the system data.
@@ -566,9 +564,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	})
 
 	t.Run("after offline tables", func(t *testing.T) {
-		_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(
-			t, singleNode, tempDir, InitNone,
-		)
+		_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
 
 		// Bugger the backup by injecting a failure while restoring the system data.
@@ -682,9 +678,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 
 	for i, testCase := range testCases {
 		t.Run(fmt.Sprintf("t%d", i), func(t *testing.T) {
-			_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(
-				t, singleNode, tempDir, InitNone,
-			)
+			_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 			defer cleanupEmptyCluster()
 
 			sqlDBRestore.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+testCase.ts, LocalFoo)

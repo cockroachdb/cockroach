@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -43,6 +44,13 @@ type createIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		&p.ExecCfg().Settings.SV,
+		"CREATE INDEX",
+	); err != nil {
+		return nil, err
+	}
 	tableDesc, err := p.ResolveMutableTableDescriptor(
 		ctx, &n.Table, true /*required*/, tree.ResolveRequireTableOrViewDesc,
 	)
@@ -392,6 +400,16 @@ func (n *createIndexNode) startExec(params runParams) error {
 		)
 	}
 
+	if n.n.Interleave != nil {
+		params.p.BufferClientNotice(
+			params.ctx,
+			errors.WithIssueLink(
+				pgnotice.Newf("interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2"),
+				errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
+			),
+		)
+	}
+
 	indexDesc, err := MakeIndexDescriptor(params, n.n, n.tableDesc)
 	if err != nil {
 		return err
@@ -403,7 +421,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	encodingVersion := descpb.SecondaryIndexFamilyFormatVersion
-	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionEmptyArraysInInvertedIndexes) {
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.EmptyArraysInInvertedIndexes) {
 		encodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
 	}
 	indexDesc.Version = encodingVersion

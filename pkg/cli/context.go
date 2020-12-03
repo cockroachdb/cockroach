@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -78,9 +78,7 @@ var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings()
 	settings.SetCanonicalValuesContainer(&st.SV)
 
-	s := server.MakeConfig(context.Background(), st)
-	s.AuditLogDirName = &sqlAuditLogDir
-	return s
+	return server.MakeConfig(context.Background(), st)
 }()
 
 // setServerContextDefaults set the default values in serverCfg.  This
@@ -93,6 +91,7 @@ func setServerContextDefaults() {
 	serverCfg.ExternalIODirConfig = base.ExternalIODirConfig{}
 	serverCfg.GoroutineDumpDirName = ""
 	serverCfg.HeapProfileDirName = ""
+	serverCfg.CPUProfileDirName = ""
 
 	serverCfg.AutoInitializeCluster = false
 	serverCfg.KVConfig.ReadyFn = nil
@@ -100,6 +99,9 @@ func setServerContextDefaults() {
 	serverCfg.KVConfig.JoinList = nil
 	serverCfg.KVConfig.JoinPreferSRVRecords = false
 	serverCfg.KVConfig.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
+	// Reset the store list.
+	storeSpec, _ := base.NewStoreSpec(server.DefaultStorePath)
+	serverCfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{storeSpec}}
 
 	serverCfg.TenantKVAddrs = []string{"127.0.0.1:26257"}
 
@@ -164,11 +166,29 @@ type cliContext struct {
 	// provided this way.
 	// TODO(knz): Relax this when SCRAM is implemented.
 	allowUnencryptedClientPassword bool
+
+	// logConfigInput is the YAML input for the logging configuration.
+	logConfigInput settableString
+	// logConfig is the resulting logging configuration after the input
+	// configuration has been parsed and validated.
+	logConfig logconfig.Config
+	// deprecatedLogOverrides is the legacy pre-v21.1 discrete flag
+	// overrides for the logging configuration.
+	// TODO(knz): Deprecated in v21.1. Remove this.
+	deprecatedLogOverrides *logConfigFlags
+	// ambiguousLogDir is populated during setupLogging() to indicate
+	// that no log directory was specified and there were multiple
+	// on-disk stores.
+	ambiguousLogDir bool
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
 // See below for defaults.
-var cliCtx = cliContext{Config: baseCfg}
+var cliCtx = cliContext{
+	Config: baseCfg,
+	// TODO(knz): Deprecated in v21.1. Remove this.
+	deprecatedLogOverrides: newLogConfigOverrides(),
+}
 
 // setCliContextDefaults set the default values in cliCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
@@ -195,6 +215,11 @@ func setCliContextDefaults() {
 	cliCtx.sqlConnDBName = ""
 	cliCtx.extraConnURLOptions = nil
 	cliCtx.allowUnencryptedClientPassword = false
+	cliCtx.logConfigInput = settableString{s: ""}
+	cliCtx.logConfig = logconfig.Config{}
+	cliCtx.ambiguousLogDir = false
+	// TODO(knz): Deprecated in v21.1. Remove this.
+	cliCtx.deprecatedLogOverrides.reset()
 }
 
 // sqlCtx captures the configuration of the `sql` command.
@@ -395,9 +420,6 @@ var startCtx struct {
 	// pidFile indicates the file to which the server writes its PID
 	// when it is ready.
 	pidFile string
-
-	// logging settings specific to file logging.
-	logDir log.DirName
 
 	// geoLibsDir is used to specify locations of the GEOS library.
 	geoLibsDir string

@@ -33,25 +33,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO(sumeer):
-// - randomized test with random intents that are interleaved and
-//   compare with no interleaved intents without using intentInterleavingIter.
-// - microbenchmarks to compare with non-interleaved intents.
-
 func scanRoachKey(t *testing.T, td *datadriven.TestData, field string) roachpb.Key {
 	var k string
 	td.ScanArgs(t, field, &k)
 	rk := roachpb.Key(k)
 	if strings.HasPrefix(k, "L") {
-		return append(keys.LocalRangePrefix, rk[1:]...)
+		rk = append(keys.LocalRangePrefix, rk[1:]...)
 	}
-	return rk
+	return bytes.ReplaceAll(rk, []byte("\\0"), []byte{0})
 }
 
 func makePrintableKey(k MVCCKey) MVCCKey {
 	if bytes.HasPrefix(k.Key, keys.LocalRangePrefix) {
 		k.Key = append([]byte("L"), k.Key[len(keys.LocalRangePrefix):]...)
 	}
+	k.Key = bytes.ReplaceAll(k.Key, []byte{0}, []byte("\\0"))
 	return k
 }
 
@@ -80,6 +76,48 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 	if !k1.Equal(k2) {
 		fmt.Fprintf(b, "output: key: %s != %s\n", k1, k2)
 		return
+	}
+	engineKey, ok := DecodeEngineKey(iter.UnsafeRawKey())
+	if !ok {
+		fmt.Fprintf(b, "output: could not DecodeEngineKey: %x\n", iter.UnsafeRawKey())
+		return
+	}
+	rawMVCCKey := iter.UnsafeRawMVCCKey()
+	if iter.IsCurIntentSeparated() {
+		if !engineKey.IsLockTableKey() {
+			fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", engineKey)
+			return
+		}
+		ltKey, err := engineKey.ToLockTableKey()
+		if err != nil {
+			fmt.Fprintf(b, "output: engineKey should be a lock table key: %s\n", err.Error())
+			return
+		}
+		// Strip off the sentinel byte.
+		rawMVCCKey = rawMVCCKey[:len(rawMVCCKey)-1]
+		if !bytes.Equal(ltKey.Key, rawMVCCKey) {
+			fmt.Fprintf(b, "output: rawMVCCKey %x != ltKey.Key %x\n", rawMVCCKey, ltKey.Key)
+			return
+		}
+	} else {
+		if !engineKey.IsMVCCKey() {
+			fmt.Fprintf(b, "output: engineKey should be a MVCC key: %s\n", engineKey)
+			return
+		}
+		mvccKey, err := engineKey.ToMVCCKey()
+		if err != nil {
+			fmt.Fprintf(b, "output: engineKey should be a MVCC key: %s\n", err.Error())
+			return
+		}
+		if !bytes.Equal(iter.UnsafeRawKey(), iter.UnsafeRawMVCCKey()) {
+			fmt.Fprintf(b, "output: UnsafeRawKey %x != UnsafeRawMVCCKey %x\n",
+				iter.UnsafeRawKey(), iter.UnsafeRawMVCCKey())
+			return
+		}
+		if !mvccKey.Equal(iter.UnsafeKey()) {
+			fmt.Fprintf(b, "output: mvccKey %s != UnsafeKey %s\n", mvccKey, iter.UnsafeKey())
+			return
+		}
 	}
 	v1 := iter.UnsafeValue()
 	v2 := iter.Value()
@@ -204,7 +242,8 @@ func TestIntentInterleavingIter(t *testing.T) {
 							}
 						} else {
 							ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}
-							if err := batch.PutEngineKey(ltKey.ToEngineKey(), val); err != nil {
+							eKey, _ := ltKey.ToEngineKey(nil)
+							if err := batch.PutEngineKey(eKey, val); err != nil {
 								return err.Error()
 							}
 						}
@@ -357,7 +396,8 @@ func writeRandomData(
 		if interleave {
 			require.NoError(t, batch.PutUnversioned(kv.key.Key, kv.val))
 		} else {
-			require.NoError(t, batch.PutEngineKey(kv.key.ToEngineKey(), kv.val))
+			eKey, _ := kv.key.ToEngineKey(nil)
+			require.NoError(t, batch.PutEngineKey(eKey, kv.val))
 		}
 	}
 	for _, kv := range mvcckv {
@@ -533,8 +573,9 @@ func writeBenchData(
 			val, err := protoutil.Marshal(&meta)
 			require.NoError(b, err)
 			if separated {
-				require.NoError(b, batch.PutEngineKey(
-					LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}.ToEngineKey(), val))
+				eKey, _ :=
+					LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}.ToEngineKey(nil)
+				require.NoError(b, batch.PutEngineKey(eKey, val))
 			} else {
 				require.NoError(b, batch.PutUnversioned(key, val))
 			}

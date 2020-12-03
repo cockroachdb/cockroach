@@ -282,9 +282,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			tree.Rows,
 			sc.execCfg.RangeDescriptorCache,
 			txn,
-			func(ts hlc.Timestamp) {
-				sc.clock.Update(ts)
-			},
+			sc.clock,
 			// Make a session tracing object on-the-fly. This is OK
 			// because it sets "enabled: false" and thus none of the
 			// other fields are used.

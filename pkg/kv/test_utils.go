@@ -43,6 +43,10 @@ func OnlyFollowerReads(rec tracing.Recording) bool {
 // https://github.cm/cockroachdb/cockroach/issues/34012
 // https://github.com/cockroachdb/cockroach/issues/33683#issuecomment-454889149
 // for more failure modes not caught here.
+//
+// Note that whenever possible, callers should rely on
+// kvserver.Is{Retryable,Illegal}ReplicationChangeError,
+// which avoids string matching.
 func IsExpectedRelocateError(err error) bool {
 	allowlist := []string{
 		"descriptor changed",

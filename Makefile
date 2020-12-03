@@ -377,7 +377,7 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 # Update the git hooks and install commands from dependencies whenever they
 # change.
 # These should be synced with `./pkg/cmd/import-tools/main.go`.
-bin/.bootstrap: $(GITHOOKS) | bin/.submodules-initialized
+bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 	@$(GO_INSTALL) -v \
 		github.com/client9/misspell/cmd/misspell \
 		github.com/cockroachdb/crlfmt \
@@ -809,6 +809,7 @@ COCKROACHSHORT := ./cockroachshort$(SUFFIX)
 
 LOG_TARGETS = \
 	pkg/util/log/severity/severity_generated.go \
+	pkg/util/log/channel/channel_generated.go \
 	pkg/util/log/log_channels_generated.go
 
 SQLPARSER_TARGETS = \
@@ -1549,6 +1550,11 @@ docs/generated/logging.md: pkg/util/log/gen.sh pkg/util/log/logpb/log.proto
 
 pkg/util/log/severity/severity_generated.go: pkg/util/log/gen.sh pkg/util/log/logpb/log.proto
 	bash $< severity.go >$@.tmp || { rm -f $@.tmp; exit 1; }
+	mv -f $@.tmp $@
+	gofmt -s -w $@
+
+pkg/util/log/channel/channel_generated.go: pkg/util/log/gen.sh pkg/util/log/logpb/log.proto
+	bash $< channel.go >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 

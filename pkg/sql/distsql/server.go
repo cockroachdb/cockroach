@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -86,6 +87,14 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 		),
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
+
+	testingGenerateMockContentionEvents.SetOnChange(&cfg.Settings.SV, func() {
+		// Note: If a race occurs with this line, this setting is being improperly
+		// used. Mock contention events should be generated either using the cluster
+		// setting or programmatically using the testing knob, but not both.
+		cfg.TestingKnobs.GenerateMockContentionEvents = testingGenerateMockContentionEvents.Get(&cfg.Settings.SV)
+	})
+
 	return ds
 }
 
@@ -202,12 +211,12 @@ func (ds *ServerImpl) setupFlow(
 		// TODO(andrei): localState.IsLocal is not quite the right thing to use.
 		//  If that field is unset, we might still want to create a child span if
 		//  this flow is run synchronously.
-		sp = ds.Tracer.StartSpan(opName, tracing.WithParent(parentSpan), tracing.WithCtxLogTags(ctx))
+		sp = ds.Tracer.StartSpan(opName, tracing.WithParentAndAutoCollection(parentSpan), tracing.WithCtxLogTags(ctx))
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
 		sp = ds.Tracer.StartSpan(
 			opName,
-			tracing.WithParent(parentSpan),
+			tracing.WithParentAndAutoCollection(parentSpan),
 			tracing.WithFollowsFrom(),
 			tracing.WithCtxLogTags(ctx),
 		)
@@ -364,6 +373,18 @@ func (ds *ServerImpl) setupFlow(
 
 	return ctx, f, nil
 }
+
+// testingGenerateMockContentionEvents is a testing cluster setting that
+// produces mock contention events. Refer to
+// KVFetcher.TestingEnableMockContentionEventGeneration for a more in-depth
+// description of these contention events. This setting is currently used to
+// test SQL Execution contention observability.
+// TODO(asubiotto): Remove once KV layer produces real contention events.
+var testingGenerateMockContentionEvents = settings.RegisterBoolSetting(
+	"sql.testing.mock_contention.enabled",
+	"whether the KV layer should generate mock contention events",
+	false,
+)
 
 // NewFlowContext creates a new FlowCtx that can be used during execution of
 // a flow.
