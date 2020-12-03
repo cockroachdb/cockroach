@@ -106,6 +106,18 @@ func (n *renameIndexNode) startExec(params runParams) error {
 		return err
 	}
 
+	// If this index is associated with a unique constraint, rename the
+	// constraint too.
+	if idx.Unique {
+		for i := range tableDesc.UniqueConstraints {
+			uc := &tableDesc.UniqueConstraints[i]
+			if uc.IndexID == idx.ID {
+				uc.Name = string(n.n.NewName)
+				break
+			}
+		}
+	}
+
 	if err := tableDesc.Validate(
 		ctx, catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec),
 	); err != nil {

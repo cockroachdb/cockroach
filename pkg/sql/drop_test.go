@@ -602,6 +602,54 @@ func TestDropIndexInterleaved(t *testing.T) {
 	}
 }
 
+func TestDropUniqueIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sql := `
+CREATE DATABASE test;
+USE test;
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, CONSTRAINT bc_key UNIQUE (b, c));
+`
+	_, err := db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`
+ALTER TABLE t DROP CONSTRAINT bc_key
+`); !testutils.IsError(err, "pq: unimplemented: cannot drop UNIQUE constraint \"bc_key\" "+
+		"using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead") {
+		t.Fatalf("err = %v", err)
+	}
+
+	if _, err := db.Exec(`
+DROP INDEX t@bc_key
+`); !testutils.IsError(err, "pq: index \"bc_key\" is in use as unique constraint") {
+		t.Fatalf("err = %v", err)
+	}
+
+	if _, err := db.Exec(`
+DROP INDEX t@bc_key CASCADE
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	if _, _, err := tableDesc.FindIndexByName("bc_key"); err == nil {
+		t.Fatalf("table descriptor still contains index after index is dropped")
+	}
+	for i := range tableDesc.UniqueConstraints {
+		uc := &tableDesc.UniqueConstraints[i]
+		if uc.Name == "bc_key" {
+			t.Fatalf("table descriptor still contains unqiue constraint after index is dropped")
+		}
+	}
+}
+
 // Tests DROP TABLE and also checks that the table data is not deleted
 // via the synchronous path.
 func TestDropTable(t *testing.T) {

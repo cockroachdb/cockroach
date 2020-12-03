@@ -289,7 +289,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						err = scanErr
 						return
 					}
-					var tableState FKTableState
+					var tableState TableState
 					if len(kvs) == 0 {
 						tableState = EmptyTable
 					} else {
@@ -433,6 +433,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.Name)
 			}
+
 			var idxNamesToDelete []string
 			for _, idx := range n.tableDesc.AllNonDropIndexes() {
 				// We automatically drop indexes that reference the column
@@ -512,6 +513,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 			}
+
+			// Drop unique constraints that reference the column.
+			sliceIdx := 0
+			for i := range n.tableDesc.UniqueConstraints {
+				n.tableDesc.UniqueConstraints[sliceIdx] = n.tableDesc.UniqueConstraints[i]
+				sliceIdx++
+				constraint := &n.tableDesc.UniqueConstraints[i]
+				if descpb.ColumnIDs(constraint.ColumnIDs).Contains(colToDrop.ID) {
+					sliceIdx--
+				}
+			}
+			n.tableDesc.UniqueConstraints = n.tableDesc.UniqueConstraints[:sliceIdx]
 
 			// Drop check constraints which reference the column.
 			validChecks := n.tableDesc.Checks[:0]
@@ -629,7 +642,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				found := false
 				var ck *descpb.TableDescriptor_CheckConstraint
 				for _, c := range n.tableDesc.Checks {
-					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
+					// If the constraint is still being validated, don't allow
+					// VALIDATE CONSTRAINT to run.
 					if c.Name == name && c.Validity != descpb.ConstraintValidity_Validating {
 						found = true
 						ck = c
@@ -651,7 +665,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				var foundFk *descpb.ForeignKeyConstraint
 				for i := range n.tableDesc.OutboundFKs {
 					fk := &n.tableDesc.OutboundFKs[i]
-					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
+					// If the constraint is still being validated, don't allow
+					// VALIDATE CONSTRAINT to run.
 					if fk.Name == name && fk.Validity != descpb.ConstraintValidity_Validating {
 						foundFk = fk
 						break
@@ -667,6 +682,31 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				foundFk.Validity = descpb.ConstraintValidity_Validated
+
+			case descpb.ConstraintTypeUnique:
+				var foundUnique *descpb.UniqueConstraint
+				for i := range n.tableDesc.UniqueConstraints {
+					uc := &n.tableDesc.UniqueConstraints[i]
+					// If the constraint is still being validated, don't allow
+					// VALIDATE CONSTRAINT to run.
+					if uc.Name == name && uc.Validity != descpb.ConstraintValidity_Validating {
+						foundUnique = uc
+						break
+					}
+				}
+				if foundUnique == nil {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"constraint %q in the middle of being added, try again later", t.Constraint)
+				}
+				if foundUnique.WithoutIndex {
+					// TODO(rytaft): Call validateUniqueConstraint once supported.
+					return pgerror.New(pgcode.FeatureNotSupported,
+						"validation of unique constraints without an index are not yet supported",
+					)
+				}
+				// We don't need to validate unique constraints that are enforced by
+				// an index.
+				foundUnique.Validity = descpb.ConstraintValidity_Validated
 
 			default:
 				return pgerror.Newf(pgcode.WrongObjectType,

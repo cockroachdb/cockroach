@@ -265,6 +265,28 @@ func (p *planner) dropIndexByName(
 			"use CASCADE if you really want to drop it.",
 		)
 	}
+	if idx.Unique {
+		for i := range tableDesc.UniqueConstraints {
+			uc := &tableDesc.UniqueConstraints[i]
+			if uc.IndexID == idx.ID {
+				// TODO(rytaft): Once indexes are no longer used for unique constraints,
+				//  instead of removing the constraint here, return the error:
+				//return errors.WithHint(
+				//	pgerror.Newf(pgcode.DependentObjectsStillExist,
+				//		"cannot drop index %s because constraint %s on table %s requires it",
+				//		idx.Name, uc.Name, tableDesc.Name,
+				//	),
+				//	fmt.Sprintf("You can drop constraint %s on table %s instead.",
+				//		uc.Name, tableDesc.Name,
+				//	),
+				//)
+				tableDesc.UniqueConstraints = append(
+					tableDesc.UniqueConstraints[:i], tableDesc.UniqueConstraints[i+1:]...,
+				)
+				break
+			}
+		}
+	}
 
 	// Check if requires CCL binary for eventual zone config removal. Only
 	// necessary for the system tenant, because secondary tenants do not have

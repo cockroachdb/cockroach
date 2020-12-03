@@ -524,13 +524,14 @@ func qualifyFKColErrorWithDB(
 	return tree.ErrString(tree.NewUnresolvedName(db.GetName(), schema, tbl.Name, col))
 }
 
-// FKTableState is the state of the referencing table ResolveFK() is called on.
-type FKTableState int
+// TableState is the state of the referencing table ResolveFK() or
+// ResolveUniqueConstraint() is called on.
+type TableState int
 
 const (
-	// NewTable represents a new table, where the FK constraint is specified in the
+	// NewTable represents a new table, where the constraint is specified in the
 	// CREATE TABLE
-	NewTable FKTableState = iota
+	NewTable TableState = iota
 	// EmptyTable represents an existing table that is empty
 	EmptyTable
 	// NonEmptyTable represents an existing non-empty table
@@ -580,6 +581,96 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 	return nil
 }
 
+// ResolveUniqueConstraint looks up the columns mentioned in a `UNIQUE`
+// constraint and adds metadata representing that constraint to the descriptor.
+//
+// The passed validationBehavior is used to determine whether or not preexisting
+// entries in the table need to be validated against the unique constraint being
+// added. This only applies for existing tables, not new tables.
+func ResolveUniqueConstraint(
+	ctx context.Context,
+	tbl *tabledesc.Mutable,
+	constraintName string,
+	withoutIndex bool,
+	indexID descpb.IndexID,
+	colNames []string,
+	ts TableState,
+	validationBehavior tree.ValidationBehavior,
+) error {
+	var colSet catalog.TableColSet
+	cols := make([]*descpb.ColumnDescriptor, len(colNames))
+	for i, name := range colNames {
+		col, err := tbl.FindActiveOrNewColumnByName(tree.Name(name))
+		if err != nil {
+			return err
+		}
+		// Ensure that the columns don't have duplicates.
+		if colSet.Contains(col.ID) {
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"column %q appears twice in unique constraint", col.Name)
+		}
+		colSet.Add(col.ID)
+		cols[i] = col
+	}
+
+	if constraintName == "" {
+		// TODO(rytaft): The constraintName is currently guaranteed to be non-empty
+		// since it comes from the index name. Once we support UNIQUE WITHOUT INDEX,
+		// we'll need to generate a name here.
+		return errors.AssertionFailedf("constraint name must not be empty")
+	}
+
+	// Verify we are not writing a constraint over the same name.
+	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if detail, ok := constraintInfo[constraintName]; ok {
+		if withoutIndex || detail.Index == nil || detail.Index.ID != indexID {
+			// Throw an error if there is a matching item that does not correspond to
+			// the unique index associated with this constraint.
+			return pgerror.Newf(
+				pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName,
+			)
+		}
+	}
+
+	columnIDs := make(descpb.ColumnIDs, len(cols))
+	for i, col := range cols {
+		columnIDs[i] = col.ID
+	}
+
+	var validity descpb.ConstraintValidity
+	if ts != NewTable {
+		if validationBehavior == tree.ValidationSkip {
+			validity = descpb.ConstraintValidity_Unvalidated
+		} else {
+			validity = descpb.ConstraintValidity_Validating
+		}
+	}
+
+	uc := descpb.UniqueConstraint{
+		Name:         constraintName,
+		TableID:      tbl.ID,
+		ColumnIDs:    columnIDs,
+		Validity:     validity,
+		WithoutIndex: withoutIndex,
+		IndexID:      indexID,
+	}
+
+	if ts == NewTable {
+		tbl.UniqueConstraints = append(tbl.UniqueConstraints, uc)
+	} else {
+		// TODO(rytaft): call AddUniqueConstraintMutation and remove the error
+		//  below.
+		return errors.AssertionFailedf(
+			"resolving unique constraints on existing tables not yet supported",
+		)
+	}
+
+	return nil
+}
+
 // ResolveFK looks up the tables and columns mentioned in a `REFERENCES`
 // constraint and adds metadata representing that constraint to the descriptor.
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
@@ -612,7 +703,7 @@ func ResolveFK(
 	tbl *tabledesc.Mutable,
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
-	ts FKTableState,
+	ts TableState,
 	validationBehavior tree.ValidationBehavior,
 	evalCtx *tree.EvalContext,
 ) error {
@@ -850,7 +941,7 @@ func addIndexForFK(
 	tbl *tabledesc.Mutable,
 	srcCols []*descpb.ColumnDescriptor,
 	constraintName string,
-	ts FKTableState,
+	ts TableState,
 ) (descpb.IndexID, error) {
 	autoIndexName := tabledesc.GenerateUniqueConstraintName(
 		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
@@ -1586,6 +1677,15 @@ func NewTableDesc(
 		// Increment the counter if this index could be storing data across multiple column families.
 		if len(idx.StoreColumnNames) > 1 && len(desc.Families) > 1 {
 			telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
+		}
+		if idx.Unique {
+			// Add a unique constraint for this index.
+			if err := ResolveUniqueConstraint(
+				ctx, &desc, idx.Name, false /* withoutIndex */, idx.ID, idx.ColumnNames, NewTable,
+				tree.ValidationDefault,
+			); err != nil {
+				return nil, err
+			}
 		}
 	}
 
