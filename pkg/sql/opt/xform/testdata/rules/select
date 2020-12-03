@@ -5791,35 +5791,108 @@ project
            └── const-agg [as=v:3, outer=(3)]
                 └── v:3
 
-# Columns are passed-through correctly when EliminateUnionAllLeft is applied.
-opt expect=SplitDisjunction
+# Don't apply to disjunctions with a contradiction on the right.
+opt expect-not=SplitDisjunction
 SELECT k FROM d WHERE u = 2 OR (v = 1 AND v = 3)
 ----
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── distinct-on
+ └── select
       ├── columns: k:1!null u:2!null v:3
-      ├── grouping columns: k:1!null
-      ├── internal-ordering: +1 opt(2)
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3)
-      ├── index-join d
-      │    ├── columns: k:1!null u:2!null v:3
+      ├── scan d
+      │    ├── columns: k:1!null u:2 v:3
       │    ├── key: (1)
-      │    ├── fd: ()-->(2), (1)-->(3)
-      │    ├── ordering: +1 opt(2) [actual: +1]
-      │    └── scan d@u
-      │         ├── columns: k:1!null u:2!null
-      │         ├── constraint: /2/1: [/2 - /2]
-      │         ├── key: (1)
-      │         ├── fd: ()-->(2)
-      │         └── ordering: +1 opt(2) [actual: +1]
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── (u:2 = 2) OR ((v:3 = 1) AND (v:3 = 3)) [outer=(2,3), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+
+# Don't apply to disjunctions with a contradiction on the left.
+opt expect-not=SplitDisjunction
+SELECT k FROM d WHERE (u = 2 AND u = 4) OR v = 1
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null u:2 v:3!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── scan d
+      │    ├── columns: k:1!null u:2 v:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── ((u:2 = 2) AND (u:2 = 4)) OR (v:3 = 1) [outer=(2,3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+
+# Before SplitDisjunction was updated to ensure that it does not fire when
+# either side of the UnionAll has a cardinality of zero, SplitDisjunction could
+# generate plans with empty Value expressions. This was the result of
+# normalizing a UnionAll with zero-cardinality left and right inputs. This test
+# shows that empty Value expressions are no longer generated in the memo.
+memo memo-format=hide-state
+SELECT k FROM d WHERE
+  (u >= 6 OR v < 8) AND
+  (u = 1 OR v >= 12) AND
+  (u < 1 OR v = 6.8) AND
+  (u > 4 OR v <= 5.23)
+----
+memo (optimized, ~21KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ ├── G2: (select G4 G5) (distinct-on G6 G7 cols=(1))
+ ├── G3: (projections)
+ ├── G4: (scan d,cols=(1-3))
+ ├── G5: (filters G8 G9 G10 G11)
+ ├── G6: (union-all G12 G13)
+ ├── G7: (aggregations G14 G15)
+ ├── G8: (or G16 G17)
+ ├── G9: (or G18 G19)
+ ├── G10: (or G20 G21)
+ ├── G11: (or G22 G23)
+ ├── G12: (select G4 G24) (select G25 G26)
+ ├── G13: (select G27 G28) (select G29 G30)
+ ├── G14: (const-agg G31)
+ ├── G15: (const-agg G32)
+ ├── G16: (ge G31 G33)
+ ├── G17: (lt G32 G34)
+ ├── G18: (eq G31 G35)
+ ├── G19: (ge G32 G36)
+ ├── G20: (lt G31 G35)
+ ├── G21: (eq G32 G37)
+ ├── G22: (gt G31 G38)
+ ├── G23: (le G32 G39)
+ ├── G24: (filters G16 G9 G10 G11)
+ ├── G25: (index-join G40 d,cols=(1-3))
+ ├── G26: (filters G9 G10)
+ ├── G27: (scan d,cols=(6-8))
+ ├── G28: (filters G41 G42 G43 G44)
+ ├── G29: (index-join G45 d,cols=(6-8))
+ ├── G30: (filters G42 G43 G44)
+ ├── G31: (variable u)
+ ├── G32: (variable v)
+ ├── G33: (const 6)
+ ├── G34: (const 8)
+ ├── G35: (const 1)
+ ├── G36: (const 12)
+ ├── G37: (const 6.8)
+ ├── G38: (const 4)
+ ├── G39: (const 5.23)
+ ├── G40: (scan d@u,cols=(1,2),constrained)
+ ├── G41: (lt G46 G34)
+ ├── G42: (or G47 G48)
+ ├── G43: (or G49 G50)
+ ├── G44: (or G51 G52)
+ ├── G45: (scan d@v,cols=(6,8),constrained)
+ ├── G46: (variable v)
+ ├── G47: (eq G53 G35)
+ ├── G48: (ge G46 G36)
+ ├── G49: (lt G53 G35)
+ ├── G50: (eq G46 G37)
+ ├── G51: (gt G53 G38)
+ ├── G52: (le G46 G39)
+ └── G53: (variable u)
 
 # Regression test for #52207. Partial index predicates in TableMeta must be
 # duplicated when TableMeta is duplicated.
@@ -6862,22 +6935,29 @@ project
            └── const-agg [as=v:3, outer=(3)]
                 └── v:3
 
-# Columns are passed-through correctly when EliminateUnionAllLeft is applied.
-opt expect=SplitDisjunctionAddKey
+# Don't apply to disjunctions with a contradiction on the right.
+opt expect-not=SplitDisjunctionAddKey
 SELECT u, v FROM d WHERE u = 2 OR (v = 1 AND v = 3)
 ----
-project
+select
  ├── columns: u:2!null v:3
  ├── fd: ()-->(2)
- └── index-join d
-      ├── columns: k:1!null u:2!null v:3
-      ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(3)
-      └── scan d@u
-           ├── columns: k:1!null u:2!null
-           ├── constraint: /2/1: [/2 - /2]
-           ├── key: (1)
-           └── fd: ()-->(2)
+ ├── scan d
+ │    └── columns: u:2 v:3
+ └── filters
+      └── (u:2 = 2) OR ((v:3 = 1) AND (v:3 = 3)) [outer=(2,3), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+
+# Don't apply to disjunctions with a contradiction on the left.
+opt expect-not=SplitDisjunctionAddKey
+SELECT u, v FROM d WHERE (u = 2 AND u = 4) OR v = 1
+----
+select
+ ├── columns: u:2 v:3!null
+ ├── fd: ()-->(3)
+ ├── scan d
+ │    └── columns: u:2 v:3
+ └── filters
+      └── ((u:2 = 2) AND (u:2 = 4)) OR (v:3 = 1) [outer=(2,3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
 
 exec-ddl
 CREATE INDEX idx_i ON p (i)

@@ -29,7 +29,15 @@ const (
 	// FmtPretty performs a breadth-first topological sort on the memo groups,
 	// and shows the root group at the top of the memo.
 	FmtPretty FmtFlags = iota
+
+	// FmtHideState does not show group states in the output of the memo command.
+	FmtHideState
 )
+
+// hasFlags tests whether the given flags are all set.
+func (f FmtFlags) hasFlags(subset FmtFlags) bool {
+	return f&subset == subset
+}
 
 type group struct {
 	first  opt.Expr
@@ -85,12 +93,14 @@ func (mf *memoFormatter) format() string {
 		}
 		mf.formatGroup(rel)
 		tpChild := tpRoot.Childf("G%d: %s", i+1, mf.buf.String())
-		for _, s := range e.states {
-			mf.buf.Reset()
-			c := tpChild.Childf("%s", s.required)
-			mf.formatBest(s.best, s.required)
-			c.Childf("best: %s", mf.buf.String())
-			c.Childf("cost: %.2f", s.cost)
+		if !mf.flags.hasFlags(FmtHideState) {
+			for _, s := range e.states {
+				mf.buf.Reset()
+				c := tpChild.Childf("%s", s.required)
+				mf.formatBest(s.best, s.required)
+				c.Childf("best: %s", mf.buf.String())
+				c.Childf("cost: %.2f", s.cost)
+			}
 		}
 	}
 
