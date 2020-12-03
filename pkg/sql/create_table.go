@@ -1715,6 +1715,10 @@ func NewTableDesc(
 		return nil, err
 	}
 
+	if n.Locality != nil {
+		return nil, unimplemented.New("create table locality", "implementation pending")
+	}
+
 	return &desc, nil
 }
 
