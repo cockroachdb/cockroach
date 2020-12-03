@@ -118,6 +118,21 @@ CREATE DATABASE invalid_region_db PRIMARY REGION "region_no_exists"
 statement error region "test1" defined multiple times
 CREATE DATABASE duplicate_region_name_db PRIMARY REGION "test1" REGIONS "test1", "test1"
 
+statement error implementation pending
+CREATE TABLE regional_primary_region_table (a int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement error implementation pending
+CREATE TABLE regional_implicit_primary_region_table (a int) LOCALITY REGIONAL BY TABLE
+
+statement error implementation pending
+CREATE TABLE regional_test3_table (a int) LOCALITY REGIONAL BY TABLE IN "test3"
+
+statement error implementation pending
+CREATE TABLE regional_by_row_table (a int) LOCALITY REGIONAL BY ROW
+
+statement error implementation pending
+CREATE TABLE global_table (a int) LOCALITY GLOBAL
+
 statement ok
 CREATE DATABASE new_db
 
