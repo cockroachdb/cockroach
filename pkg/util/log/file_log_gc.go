@@ -21,7 +21,6 @@ import (
 
 // gcDaemon runs the GC loop for the given logger.
 func (l *fileSink) gcDaemon(ctx context.Context) {
-	l.gcOldFiles()
 	for {
 		select {
 		case <-ctx.Done():
