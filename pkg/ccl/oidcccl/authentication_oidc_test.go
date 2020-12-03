@@ -287,3 +287,44 @@ func TestOIDCStateEncodeDecode(t *testing.T) {
 		t.Fatal("state didn't match when decoded")
 	}
 }
+
+func Test_getRegionSpecificRedirectURL(t *testing.T) {
+	type args struct {
+		locality roachpb.Locality
+		conf     multiRegionRedirectURLs
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{"empty locality", args{
+			locality: roachpb.Locality{},
+			conf:     multiRegionRedirectURLs{RedirectURLs: nil, DefaultURL: "example.com"},
+		}, "example.com"},
+		{"locality with no region", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "who", Value: "knows"}}},
+			conf:     multiRegionRedirectURLs{RedirectURLs: nil, DefaultURL: "example.com"},
+		}, "example.com"},
+		{"locality with region but no corresponding url", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}}},
+			conf:     multiRegionRedirectURLs{RedirectURLs: nil, DefaultURL: "example.com"},
+		}, "example.com"},
+		{"locality with region and corresponding url", args{
+			locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}}},
+			conf: multiRegionRedirectURLs{
+				RedirectURLs: map[string]string{
+					"us-east-1": "correct.example.com",
+					"us-west-2": "incorrect.example.com",
+				},
+				DefaultURL: "incorrect.example.com",
+			},
+		}, "correct.example.com"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getRegionSpecificRedirectURL(context.Background(), tt.args.locality, tt.args.conf)
+			require.Equal(t, got, tt.want)
+		})
+	}
+}

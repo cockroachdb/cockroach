@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -123,16 +124,16 @@ type oidcAuthenticationServer struct {
 }
 
 type oidcAuthenticationConf struct {
-	clientID       string
-	clientSecret   string
-	redirectURL    string
-	providerURL    string
-	scopes         string
-	enabled        bool
-	claimJSONKey   string
-	principalRegex *regexp.Regexp
-	buttonText     string
-	autoLogin      bool
+	clientID        string
+	clientSecret    string
+	redirectURLConf multiRegionRedirectURLs
+	providerURL     string
+	scopes          string
+	enabled         bool
+	claimJSONKey    string
+	principalRegex  *regexp.Regexp
+	buttonText      string
+	autoLogin       bool
 }
 
 // GetUIConf is used to extract certain parts of the OIDC
@@ -147,23 +148,31 @@ func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 	}
 }
 
-func reloadConfig(ctx context.Context, server *oidcAuthenticationServer, st *cluster.Settings) {
+func reloadConfig(
+	ctx context.Context,
+	server *oidcAuthenticationServer,
+	locality roachpb.Locality,
+	st *cluster.Settings,
+) {
 	server.mutex.Lock()
 	defer server.mutex.Unlock()
-	reloadConfigLocked(ctx, server, st)
+	reloadConfigLocked(ctx, server, locality, st)
 }
 
 func reloadConfigLocked(
-	ctx context.Context, server *oidcAuthenticationServer, st *cluster.Settings,
+	ctx context.Context,
+	server *oidcAuthenticationServer,
+	locality roachpb.Locality,
+	st *cluster.Settings,
 ) {
 	conf := oidcAuthenticationConf{
-		clientID:     OIDCClientID.Get(&st.SV),
-		clientSecret: OIDCClientSecret.Get(&st.SV),
-		redirectURL:  OIDCRedirectURL.Get(&st.SV),
-		providerURL:  OIDCProviderURL.Get(&st.SV),
-		scopes:       OIDCScopes.Get(&st.SV),
-		claimJSONKey: OIDCClaimJSONKey.Get(&st.SV),
-		enabled:      OIDCEnabled.Get(&st.SV),
+		clientID:        OIDCClientID.Get(&st.SV),
+		clientSecret:    OIDCClientSecret.Get(&st.SV),
+		redirectURLConf: mustParseOIDCRedirectURL(OIDCRedirectURL.Get(&st.SV)),
+		providerURL:     OIDCProviderURL.Get(&st.SV),
+		scopes:          OIDCScopes.Get(&st.SV),
+		claimJSONKey:    OIDCClaimJSONKey.Get(&st.SV),
+		enabled:         OIDCEnabled.Get(&st.SV),
 		// The success of this line is guaranteed by the validation of the setting
 		principalRegex: regexp.MustCompile(OIDCPrincipalRegex.Get(&st.SV)),
 		buttonText:     OIDCButtonText.Get(&st.SV),
@@ -198,10 +207,12 @@ func reloadConfigLocked(
 	// Validation of the scope setting will require that we have the `openid` scope
 	scopesForOauth := strings.Split(server.conf.scopes, " ")
 
+	regionSpecificRedirectURL := getRegionSpecificRedirectURL(ctx, locality, server.conf.redirectURLConf)
+
 	server.oauth2Config = oauth2.Config{
 		ClientID:     server.conf.clientID,
 		ClientSecret: server.conf.clientSecret,
-		RedirectURL:  server.conf.redirectURL,
+		RedirectURL:  regionSpecificRedirectURL,
 
 		Endpoint: provider.Endpoint(),
 		Scopes:   scopesForOauth,
@@ -209,7 +220,26 @@ func reloadConfigLocked(
 
 	server.verifier = provider.Verifier(&oidc.Config{ClientID: server.conf.clientID})
 	server.initialized = true
-	log.Infof(ctx, "initialized oidc server")
+	log.Infof(ctx, "initialized OIDC server")
+}
+
+func getRegionSpecificRedirectURL(
+	ctx context.Context, locality roachpb.Locality, conf multiRegionRedirectURLs,
+) string {
+	if conf.RedirectURLs != nil {
+		if len(locality.Tiers) > 0 {
+			region, containsRegion := locality.Find("region")
+			if !containsRegion {
+				log.Warning(ctx, "OIDC: no region locality tier set, using default callback URL")
+			} else {
+				if redirectURL, ok := conf.RedirectURLs[region]; ok {
+					return redirectURL
+				}
+				log.Warningf(ctx, "OIDC: no matching redirect URL found for region %s, using default callback URL", region)
+			}
+		}
+	}
+	return conf.DefaultURL
 }
 
 // ConfigureOIDC attaches handlers to the server `mux` that
@@ -221,6 +251,7 @@ func reloadConfigLocked(
 var ConfigureOIDC = func(
 	serverCtx context.Context,
 	st *cluster.Settings,
+	locality roachpb.Locality,
 	mux *http.ServeMux,
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
@@ -239,7 +270,7 @@ var ConfigureOIDC = func(
 		defer oidcAuthentication.mutex.Unlock()
 
 		if oidcAuthentication.enabled && !oidcAuthentication.initialized {
-			reloadConfigLocked(ctx, oidcAuthentication, st)
+			reloadConfigLocked(ctx, oidcAuthentication, locality, st)
 		}
 
 		if !oidcAuthentication.enabled {
@@ -348,7 +379,7 @@ var ConfigureOIDC = func(
 		defer oidcAuthentication.mutex.Unlock()
 
 		if oidcAuthentication.enabled && !oidcAuthentication.initialized {
-			reloadConfigLocked(ctx, oidcAuthentication, st)
+			reloadConfigLocked(ctx, oidcAuthentication, locality, st)
 		}
 
 		if !oidcAuthentication.enabled {
@@ -371,77 +402,37 @@ var ConfigureOIDC = func(
 		)
 	})
 
-	reloadConfig(serverCtx, oidcAuthentication, st)
+	reloadConfig(serverCtx, oidcAuthentication, locality, st)
 
 	OIDCEnabled.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 	OIDCClientID.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 	OIDCClientSecret.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 	OIDCRedirectURL.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 	OIDCProviderURL.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 	OIDCScopes.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 	OIDCClaimJSONKey.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 	OIDCPrincipalRegex.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 	OIDCButtonText.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 	OIDCAutoLogin.SetOnChange(&st.SV, func() {
-		reloadConfig(
-			ambientCtx.AnnotateCtx(context.Background()),
-			oidcAuthentication,
-			st,
-		)
+		reloadConfig(ambientCtx.AnnotateCtx(context.Background()), oidcAuthentication, locality, st)
 	})
 
 	return oidcAuthentication, nil
