@@ -7,8 +7,8 @@ plan-string
 SELECT oid FROM t.orders WHERE oid = 123
 ----
 ----
-planning time: 0s
-execution time: 0s
+planning time: 0µs
+execution time: 0µs
 distribution: local
 vectorized: false
 
@@ -37,14 +37,14 @@ plan-string
 SELECT cid, date, value FROM t.orders
 ----
 ----
-planning time: 0s
-execution time: 0s
+planning time: 0µs
+execution time: 0µs
 distribution: local
 vectorized: false
 
 • scan
   columns: (cid int, date date, value decimal)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: orders@primary
   spans: FULL SCAN
 ----
@@ -67,8 +67,8 @@ plan-string
 SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
 ----
 ----
-planning time: 0s
-execution time: 0s
+planning time: 0µs
+execution time: 0µs
 distribution: local
 vectorized: false
 
@@ -104,7 +104,7 @@ vectorized: false
                     │
                     └── • scan
                           columns: (cid int, value decimal, date date)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: orders@primary
                           spans: FULL SCAN
 ----
@@ -145,14 +145,14 @@ plan-string
 SELECT value FROM (SELECT cid, date, value FROM t.orders)
 ----
 ----
-planning time: 0s
-execution time: 0s
+planning time: 0µs
+execution time: 0µs
 distribution: local
 vectorized: false
 
 • scan
   columns: (value decimal)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: orders@primary
   spans: FULL SCAN
 ----
@@ -175,14 +175,14 @@ plan-string
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
 ----
 ----
-planning time: 0s
-execution time: 0s
+planning time: 0µs
+execution time: 0µs
 distribution: local
 vectorized: false
 
 • project
 │ columns: (cid int, date date, value decimal)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • hash join (inner)
     │ columns: (cid int, value decimal, date date, date date)
@@ -192,7 +192,7 @@ vectorized: false
     │
     ├── • scan
     │     columns: (cid int, value decimal, date date)
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: orders@primary
     │     spans: FULL SCAN
     │
@@ -203,7 +203,7 @@ vectorized: false
         │
         └── • scan
               columns: (date date)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: orders@primary
               spans: FULL SCAN
 ----
@@ -263,8 +263,8 @@ plan-string
 SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FROM t.movies
 ----
 ----
-planning time: 0s
-execution time: 0s
+planning time: 0µs
+execution time: 0µs
 distribution: local
 vectorized: false
 
@@ -273,14 +273,14 @@ vectorized: false
 │
 ├── • render
 │   │ columns: (movie_id int, title string, name string)
-│   │ estimated row count: 1000 (missing stats)
+│   │ estimated row count: 1,000 (missing stats)
 │   │ render 0: (@S1)[string]
 │   │ render 1: (id)[int]
 │   │ render 2: (title)[string]
 │   │
 │   └── • scan
 │         columns: (id int, title string)
-│         estimated row count: 1000 (missing stats)
+│         estimated row count: 1,000 (missing stats)
 │         table: movies@primary
 │         spans: FULL SCAN
 │
@@ -300,7 +300,7 @@ vectorized: false
             │
             └── • scan
                   columns: (name string)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: actors@primary
                   spans: FULL SCAN
 ----

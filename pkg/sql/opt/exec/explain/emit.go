@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -328,7 +329,7 @@ func (e *emitter) joinNodeName(algo string, joinType descpb.JoinType) string {
 func (e *emitter) emitNodeAttributes(n *Node) error {
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok {
 		s := stats.(*exec.ExecutionStats)
-		e.ob.Attr("actual row count", s.RowCount)
+		e.ob.AddField("actual row count", humanizeutil.Count(s.RowCount))
 	}
 
 	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok {
@@ -339,19 +340,19 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		// scans (and when it is based on real statistics), where it is most useful
 		// and accurate.
 		if n.op != valuesOp && (e.ob.flags.Verbose || n.op == scanOp) {
-			count := int(math.Round(s.RowCount))
+			count := uint64(math.Round(s.RowCount))
 			if s.TableStatsAvailable {
-				e.ob.Attr("estimated row count", count)
+				e.ob.AddField("estimated row count", humanizeutil.Count(count))
 			} else {
 				// No stats available.
 				if e.ob.flags.Verbose {
-					e.ob.Attrf("estimated row count", "%d (missing stats)", count)
+					e.ob.Attrf("estimated row count", "%s (missing stats)", humanizeutil.Count(count))
 				} else {
 					// In non-verbose mode, don't show the row count (which is not based
 					// on reality); only show a "missing stats" field. Don't show it for
 					// virtual tables though, where we expect no stats.
 					if !n.args.(*scanArgs).Table.IsVirtualTable() {
-						e.ob.Attr("missing stats", "")
+						e.ob.AddField("missing stats", "")
 					}
 				}
 			}

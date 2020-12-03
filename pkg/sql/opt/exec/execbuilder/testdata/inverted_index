@@ -369,7 +369,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: d@primary
       spans: FULL SCAN
 
@@ -417,7 +417,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: d@primary
       spans: FULL SCAN
 
@@ -777,7 +777,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: e@primary
       spans: FULL SCAN
 
@@ -795,7 +795,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: e@primary
       spans: FULL SCAN
 
@@ -821,7 +821,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: e@primary
       spans: FULL SCAN
 
@@ -980,7 +980,7 @@ vectorized: true
 ·
 • lookup join (inner)
 │ columns: (k, geom, k, geom)
-│ estimated row count: 9801 (missing stats)
+│ estimated row count: 9,801 (missing stats)
 │ table: geo_table@primary
 │ equality: (k) = (k)
 │ equality cols are key
@@ -988,7 +988,7 @@ vectorized: true
 │
 └── • project
     │ columns: (k, geom, k)
-    │ estimated row count: 10000 (missing stats)
+    │ estimated row count: 10,000 (missing stats)
     │
     └── • inverted join (inner)
         │ columns: (k, geom, k, geom_inverted_key)
@@ -997,7 +997,7 @@ vectorized: true
         │
         └── • scan
               columns: (k, geom)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: geo_table2@primary
               spans: FULL SCAN
 
@@ -1019,7 +1019,7 @@ vectorized: true
     │
     └── • scan
           columns: (k, geom)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: geo_table@primary
           spans: FULL SCAN
 

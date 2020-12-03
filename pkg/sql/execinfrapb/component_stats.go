@@ -13,8 +13,8 @@ package execinfrapb
 import (
 	"fmt"
 	"strings"
-	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/dustin/go-humanize"
 )
@@ -45,16 +45,16 @@ func (s *ComponentStats) StatsForQueryPlan() []string {
 func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) {
 	// Network Rx stats.
 	if s.NetRx.Latency.HasValue() {
-		fn("network latency", s.NetRx.Latency.Value().Round(time.Microsecond))
+		fn("network latency", humanizeutil.Duration(s.NetRx.Latency.Value()))
 	}
 	if s.NetRx.WaitTime.HasValue() {
-		fn("network wait time", s.NetRx.WaitTime.Value().Round(time.Microsecond))
+		fn("network wait time", humanizeutil.Duration(s.NetRx.WaitTime.Value()))
 	}
 	if s.NetRx.DeserializationTime.HasValue() {
-		fn("deserialization time", s.NetRx.DeserializationTime.Value().Round(time.Microsecond))
+		fn("deserialization time", humanizeutil.Duration(s.NetRx.DeserializationTime.Value()))
 	}
 	if s.NetRx.TuplesReceived.HasValue() {
-		fn("network tuples received", s.NetRx.TuplesReceived.Value())
+		fn("network tuples received", humanizeutil.Count(s.NetRx.TuplesReceived.Value()))
 	}
 	if s.NetRx.BytesReceived.HasValue() {
 		fn("network bytes received", humanize.IBytes(s.NetRx.BytesReceived.Value()))
@@ -62,7 +62,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 
 	// Network Tx stats.
 	if s.NetTx.TuplesSent.HasValue() {
-		fn("network tuples sent", s.NetTx.TuplesSent.Value())
+		fn("network tuples sent", humanizeutil.Count(s.NetTx.TuplesSent.Value()))
 	}
 	if s.NetTx.BytesSent.HasValue() {
 		fn("network bytes sent", humanize.IBytes(s.NetTx.BytesSent.Value()))
@@ -72,37 +72,37 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	switch len(s.Inputs) {
 	case 1:
 		if s.Inputs[0].NumTuples.HasValue() {
-			fn("input tuples", s.Inputs[0].NumTuples.Value())
+			fn("input tuples", humanizeutil.Count(s.Inputs[0].NumTuples.Value()))
 		}
 		if s.Inputs[0].WaitTime.HasValue() {
-			fn("input stall time", s.Inputs[0].WaitTime.Value().Round(time.Microsecond))
+			fn("input stall time", humanizeutil.Duration(s.Inputs[0].WaitTime.Value()))
 		}
 
 	case 2:
 		if s.Inputs[0].NumTuples.HasValue() {
-			fn("left tuples", s.Inputs[0].NumTuples.Value())
+			fn("left tuples", humanizeutil.Count(s.Inputs[0].NumTuples.Value()))
 		}
 		if s.Inputs[0].WaitTime.HasValue() {
-			fn("left stall time", s.Inputs[0].WaitTime.Value().Round(time.Microsecond))
+			fn("left stall time", humanizeutil.Duration(s.Inputs[0].WaitTime.Value()))
 		}
 		if s.Inputs[1].NumTuples.HasValue() {
-			fn("right tuples", s.Inputs[1].NumTuples.Value())
+			fn("right tuples", humanizeutil.Count(s.Inputs[1].NumTuples.Value()))
 		}
 		if s.Inputs[1].WaitTime.HasValue() {
-			fn("right stall time", s.Inputs[1].WaitTime.Value().Round(time.Microsecond))
+			fn("right stall time", humanizeutil.Duration(s.Inputs[1].WaitTime.Value()))
 		}
 	}
 
 	// KV stats.
 	if s.KV.KVTime.HasValue() {
-		fn("KV time", s.KV.KVTime.Value().Round(time.Microsecond))
+		fn("KV time", humanizeutil.Duration(s.KV.KVTime.Value()))
 	}
 	if s.KV.ContentionTime.HasValue() {
 		// TODO(asubiotto): Round once KV layer produces real contention events.
-		fn("KV contention time", s.KV.ContentionTime.Value())
+		fn("KV contention time", humanizeutil.Duration(s.KV.ContentionTime.Value()))
 	}
 	if s.KV.TuplesRead.HasValue() {
-		fn("KV tuples read", s.KV.TuplesRead.Value())
+		fn("KV tuples read", humanizeutil.Count(s.KV.TuplesRead.Value()))
 	}
 	if s.KV.BytesRead.HasValue() {
 		fn("KV bytes read", humanize.IBytes(s.KV.BytesRead.Value()))
@@ -110,7 +110,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 
 	// Exec stats.
 	if s.Exec.ExecTime.HasValue() {
-		fn("execution time", s.Exec.ExecTime.Value().Round(time.Microsecond))
+		fn("execution time", humanizeutil.Duration(s.Exec.ExecTime.Value()))
 	}
 	if s.Exec.MaxAllocatedMem.HasValue() {
 		fn("max memory allocated", humanize.IBytes(s.Exec.MaxAllocatedMem.Value()))
@@ -121,10 +121,10 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 
 	// Output stats.
 	if s.Output.NumBatches.HasValue() {
-		fn("batches output", s.Output.NumBatches.Value())
+		fn("batches output", humanizeutil.Count(s.Output.NumBatches.Value()))
 	}
 	if s.Output.NumTuples.HasValue() {
-		fn("tuples output", s.Output.NumTuples.Value())
+		fn("tuples output", humanizeutil.Count(s.Output.NumTuples.Value()))
 	}
 }
 
