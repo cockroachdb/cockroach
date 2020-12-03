@@ -808,6 +808,11 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 		}
 
 	case types.StringFamily, types.CollatedStringFamily:
+		if w, ok := d.(*DOidWrapper); ok {
+			// If we're casting a DOidWrapper, then we want to cast the wrapped
+			// datum. It is also reasonable to lose the old Oid value too.
+			d = w.Wrapped
+		}
 		var s string
 		switch t := d.(type) {
 		case *DBitArray:
