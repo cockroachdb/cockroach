@@ -146,7 +146,7 @@ func (s *ComponentStats) MakeDeterministic() {
 	// timeVal resets a duration to 1ns, if it was set.
 	timeVal := func(v *optional.Duration) {
 		if v.HasValue() {
-			v.Set(0)
+			v.Set(1)
 		}
 	}
 

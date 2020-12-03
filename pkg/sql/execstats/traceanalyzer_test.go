@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -184,6 +185,17 @@ func TestTraceAnalyzer(t *testing.T) {
 			// For tests, the bytes read is based on the number of rows read, rather
 			// than actual bytes read.
 			require.Equal(t, int64(30*8), actualBytesRead)
+		}
+	})
+
+	t.Run("TimeInKV", func(t *testing.T) {
+		for _, analyzer := range []*execstats.TraceAnalyzer{
+			rowexecTraceAnalyzer, colexecTraceAnalyzer,
+		} {
+			actualKVTime, numKVOps := analyzer.GetTotalKVTime()
+
+			// For tests, the KV time for operators that have a KV time set is reset to 1ns.
+			require.Equal(t, time.Duration(numKVOps)*time.Nanosecond, actualKVTime)
 		}
 	})
 }

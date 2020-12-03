@@ -13,6 +13,7 @@ package execstats
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -284,12 +285,28 @@ func (a *TraceAnalyzer) GetRowsReadFromKV() int64 {
 	return rowsRead
 }
 
+func (a *TraceAnalyzer) GetTotalKVTime() (time.Duration, int64) {
+	var kvTime time.Duration
+	var numKVOps int64
+	for _, stats := range a.processorStats {
+		if stats.stats == nil {
+			continue
+		}
+		if stats.stats.KV.KVTime.HasValue() {
+			kvTime += stats.stats.KV.KVTime.Value()
+			numKVOps += 1
+		}
+	}
+	return kvTime, numKVOps
+}
+
 // QueryLevelStats returns all the top level stats that correspond to the given traces and flow metadata.
 type QueryLevelStats struct {
 	NetworkBytesSent int64
 	MaxMemUsage      int64
 	BytesReadFromKV  int64
 	RowsReadFromKV   int64
+	KVTime           time.Duration
 }
 
 // GetQueryLevelStats returns all the top-level stats in a QueryLevelStats struct.
@@ -304,6 +321,7 @@ func GetQueryLevelStats(
 	queryMaxMemUsage := int64(0)
 	bytesReadFromKV := int64(0)
 	rowsReadFromKV := int64(0)
+	var totalKVTime time.Duration
 	for _, metadata := range flowMetadata {
 		analyzer := NewTraceAnalyzer(*metadata)
 		if err := analyzer.AddTrace(trace, deterministicExplainAnalyze); err != nil {
@@ -325,11 +343,14 @@ func GetQueryLevelStats(
 
 		bytesReadFromKV += analyzer.GetBytesReadFromKV()
 		rowsReadFromKV += analyzer.GetRowsReadFromKV()
+		kvTime, _ := analyzer.GetTotalKVTime()
+		totalKVTime += kvTime
 	}
 	return &QueryLevelStats{
 		NetworkBytesSent: networkBytesSent,
 		MaxMemUsage:      queryMaxMemUsage,
 		BytesReadFromKV:  bytesReadFromKV,
 		RowsReadFromKV:   rowsReadFromKV,
+		KVTime:           totalKVTime,
 	}
 }
