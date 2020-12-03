@@ -116,7 +116,7 @@ vectorized: true
 • group (scalar)
 │
 └── • scan
-      estimated row count: 100000
+      estimated row count: 100,000
       table: large@primary
       spans: FULL SCAN
 
@@ -134,7 +134,7 @@ vectorized: false
 • group (scalar)
 │
 └── • scan
-      estimated row count: 100000
+      estimated row count: 100,000
       table: large@primary
       spans: FULL SCAN
 
@@ -160,6 +160,6 @@ vectorized: true
 │     spans: FULL SCAN
 │
 └── • scan
-      estimated row count: 100000
+      estimated row count: 100,000
       table: large@primary
       spans: FULL SCAN
