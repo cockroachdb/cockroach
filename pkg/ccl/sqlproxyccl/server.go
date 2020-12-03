@@ -157,8 +157,6 @@ func (s *Server) Serve(ln net.Listener) error {
 	}
 }
 
-var _ = (*Conn)(nil).Done // silence unused lint
-
 // Conn is a SQL connection into the proxy.
 type Conn struct {
 	net.Conn

@@ -4580,3 +4580,14 @@ build
 SELECT max((SELECT jsonb_agg(v))) FROM kv
 ----
 error (42803): aggregate function calls cannot be nested
+
+# Regression test for #57441.
+build
+SELECT v FROM kv UNION ALL SELECT count(1) FROM kv ORDER BY count(1)
+----
+error (42803): count(): aggregate functions are not allowed in ORDER BY
+
+build
+SELECT count(1) FROM kv UNION ALL SELECT v FROM kv ORDER BY count(1)
+----
+error (42803): count(): aggregate functions are not allowed in ORDER BY

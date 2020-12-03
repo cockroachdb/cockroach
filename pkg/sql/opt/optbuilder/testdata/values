@@ -158,3 +158,9 @@ values
                      │    └── ()
                      └── projections
                           └── 2 [as=a:1]
+
+# Regression test for #57441.
+build
+VALUES (1) ORDER BY count(1)
+----
+error (42803): count(): aggregate functions are not allowed in ORDER BY

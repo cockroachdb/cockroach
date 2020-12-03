@@ -1464,3 +1464,12 @@ GROUP BY
     tab_536191.col8, tab_536191.col5
 ----
 error (42P10): argument of ROWS must not contain variables
+
+# Regression test for #57441.
+build
+SELECT rank() OVER w FROM kv WINDOW w AS (ORDER BY v)
+UNION ALL SELECT rank() OVER w FROM kv WINDOW w AS (ORDER BY v)
+ORDER BY
+  rank() OVER()
+----
+error (42P20): rank(): window functions are not allowed in ORDER BY

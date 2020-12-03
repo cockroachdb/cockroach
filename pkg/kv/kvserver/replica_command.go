@@ -984,7 +984,14 @@ func (r *Replica) changeReplicasImpl(
 		for _, rem := range removals {
 			iChgs := []internalReplicationChange{{target: rem, typ: internalChangeTypeRemove}}
 			var err error
-			desc, err = execChangeReplicasTxn(ctx, r.store, desc, reason, details, iChgs)
+			desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs,
+				changeReplicasTxnArgs{
+					db:                                   r.store.DB(),
+					liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+					logChange:                            r.store.logChange,
+					testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
+					testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
+				})
 			if err != nil {
 				return nil, err
 			}
@@ -1048,7 +1055,7 @@ func (r *Replica) changeReplicasImpl(
 // descriptor returned from this method will contain replicas of type LEARNER
 // and VOTER_FULL only.
 func maybeLeaveAtomicChangeReplicas(
-	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
+	ctx context.Context, s *Store, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
 	// We want execChangeReplicasTxn to be able to make sure it's only tasked
 	// with leaving a joint state when it's in one, so make sure we don't call
@@ -1064,8 +1071,14 @@ func maybeLeaveAtomicChangeReplicas(
 	//
 	// TODO(tbg): reconsider this.
 	return execChangeReplicasTxn(
-		ctx, store, desc, kvserverpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
-	)
+		ctx, desc, kvserverpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
+		changeReplicasTxnArgs{
+			db:                                   s.DB(),
+			liveAndDeadReplicas:                  s.allocator.storePool.liveAndDeadReplicas,
+			logChange:                            s.logChange,
+			testForceJointConfig:                 s.TestingKnobs().ReplicationAlwaysUseJointConfig,
+			testAllowDangerousReplicationChanges: s.TestingKnobs().AllowDangerousReplicationChanges,
+		})
 }
 
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
@@ -1099,8 +1112,15 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	for _, target := range targets {
 		var err error
 		desc, err = execChangeReplicasTxn(
-			ctx, store, desc, kvserverpb.ReasonAbandonedLearner, "",
+			ctx, desc, kvserverpb.ReasonAbandonedLearner, "",
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
+			changeReplicasTxnArgs{
+				db:                                   store.DB(),
+				liveAndDeadReplicas:                  store.allocator.storePool.liveAndDeadReplicas,
+				logChange:                            store.logChange,
+				testForceJointConfig:                 store.TestingKnobs().ReplicationAlwaysUseJointConfig,
+				testAllowDangerousReplicationChanges: store.TestingKnobs().AllowDangerousReplicationChanges,
+			},
 		)
 		if err != nil {
 			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
@@ -1240,7 +1260,13 @@ func addRaftLearners(
 		iChgs := []internalReplicationChange{{target: target, typ: typ}}
 		var err error
 		desc, err = execChangeReplicasTxn(
-			ctx, s, desc, reason, details, iChgs,
+			ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
+				db:                                   s.DB(),
+				liveAndDeadReplicas:                  s.allocator.storePool.liveAndDeadReplicas,
+				logChange:                            s.logChange,
+				testForceJointConfig:                 s.TestingKnobs().ReplicationAlwaysUseJointConfig,
+				testAllowDangerousReplicationChanges: s.TestingKnobs().AllowDangerousReplicationChanges,
+			},
 		)
 		if err != nil {
 			return nil, err
@@ -1393,7 +1419,13 @@ func (r *Replica) atomicReplicationChange(
 	}
 
 	var err error
-	desc, err = execChangeReplicasTxn(ctx, r.store, desc, reason, details, iChgs)
+	desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
+		db:                                   r.store.DB(),
+		liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+		logChange:                            r.store.logChange,
+		testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
+		testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1433,9 +1465,15 @@ func (r *Replica) tryRollBackLearnerReplica(
 
 	rollbackFn := func(ctx context.Context) error {
 		_, err := execChangeReplicasTxn(
-			ctx, r.store, desc, reason, details,
+			ctx, desc, reason, details,
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
-		)
+			changeReplicasTxnArgs{
+				db:                                   r.store.DB(),
+				liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+				logChange:                            r.store.logChange,
+				testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
+				testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
+			})
 		return err
 	}
 	rollbackCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
@@ -1488,16 +1526,11 @@ func (c internalReplicationChanges) useJoint() bool {
 	return len(c) > 1 || c[0].typ == internalChangeTypeDemoteVoter
 }
 
-type storeSettings interface {
-	ClusterSettings() *cluster.Settings
-	TestingKnobs() *StoreTestingKnobs
-}
-
 func prepareChangeReplicasTrigger(
 	ctx context.Context,
-	store storeSettings,
 	desc *roachpb.RangeDescriptor,
 	chgs internalReplicationChanges,
+	testingForceJointConfig func() bool,
 ) (*roachpb.ChangeReplicasTrigger, error) {
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
@@ -1510,7 +1543,7 @@ func prepareChangeReplicasTrigger(
 		}
 
 		useJoint := chgs.useJoint()
-		if fn := store.TestingKnobs().ReplicationAlwaysUseJointConfig; fn != nil && fn() {
+		if fn := testingForceJointConfig; fn != nil && fn() {
 			useJoint = true
 		}
 		for _, chg := range chgs {
@@ -1612,6 +1645,23 @@ func prepareChangeReplicasTrigger(
 	return crt, nil
 }
 
+type changeReplicasTxnArgs struct {
+	db *kv.DB
+
+	// liveAndDeadReplicas divides the provided repls slice into two slices: the
+	// first for live replicas, and the second for dead replicas. Replicas for
+	// which liveness or deadness cannot be ascertained are excluded from the
+	// returned slices. Replicas on decommissioning node/store are considered
+	// live.
+	liveAndDeadReplicas func(
+		repls []roachpb.ReplicaDescriptor,
+	) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor)
+
+	logChange                            logChangeFn
+	testForceJointConfig                 func() bool
+	testAllowDangerousReplicationChanges bool
+}
+
 // execChangeReplicasTxn runs a txn updating a range descriptor. The txn commit
 // will carry a ChangeReplicasTrigger. Returns the updated descriptor. Note
 // that, if the current node does not have the leaseholder for the respective
@@ -1619,11 +1669,11 @@ func prepareChangeReplicasTrigger(
 // reflect the updated descriptor yet until it applies the transaction.
 func execChangeReplicasTxn(
 	ctx context.Context,
-	store *Store,
 	referenceDesc *roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs internalReplicationChanges,
+	args changeReplicasTxnArgs,
 ) (*roachpb.RangeDescriptor, error) {
 	var returnDesc *roachpb.RangeDescriptor
 
@@ -1649,7 +1699,7 @@ func execChangeReplicasTxn(
 		return checkDescsEqual(referenceDesc)(kvDesc)
 	}
 
-	if err := store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := args.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
 		desc, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, referenceDesc.StartKey, check)
@@ -1663,14 +1713,14 @@ func execChangeReplicasTxn(
 		}
 		// Note that we are now using the descriptor from KV, not the one passed
 		// into this method.
-		crt, err := prepareChangeReplicasTrigger(ctx, store, desc, chgs)
+		crt, err := prepareChangeReplicasTrigger(ctx, desc, chgs, args.testForceJointConfig)
 		if err != nil {
 			return err
 		}
 		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
 
 		for maxAttempts, i := 10, 0; i < maxAttempts; i++ {
-			if knobs := store.TestingKnobs(); knobs != nil && knobs.AllowDangerousReplicationChanges {
+			if args.testAllowDangerousReplicationChanges {
 				break
 			}
 			// Run (and retry for a bit) a sanity check that the configuration
@@ -1683,7 +1733,7 @@ func execChangeReplicasTxn(
 			// See:
 			// https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
 			replicas := crt.Desc.Replicas()
-			liveReplicas, _ := store.allocator.storePool.liveAndDeadReplicas(replicas.All())
+			liveReplicas, _ := args.liveAndDeadReplicas(replicas.All())
 			if !crt.Desc.Replicas().CanMakeProgress(
 				func(rDesc roachpb.ReplicaDescriptor) bool {
 					for _, inner := range liveReplicas {
@@ -1721,13 +1771,13 @@ func execChangeReplicasTxn(
 
 		// Log replica change into range event log.
 		err = recordRangeEventsInLog(
-			ctx, txn, true /* added */, crt.Added(), crt.Desc, store, reason, details,
+			ctx, txn, true /* added */, crt.Added(), crt.Desc, reason, details, args.logChange,
 		)
 		if err != nil {
 			return err
 		}
 		err = recordRangeEventsInLog(
-			ctx, txn, false /* added */, crt.Removed(), crt.Desc, store, reason, details,
+			ctx, txn, false /* added */, crt.Removed(), crt.Desc, reason, details, args.logChange,
 		)
 		if err != nil {
 			return err
@@ -1774,15 +1824,25 @@ func execChangeReplicasTxn(
 	return returnDesc, nil
 }
 
+type logChangeFn func(
+	ctx context.Context,
+	txn *kv.Txn,
+	changeType roachpb.ReplicaChangeType,
+	replica roachpb.ReplicaDescriptor,
+	desc roachpb.RangeDescriptor,
+	reason kvserverpb.RangeLogEventReason,
+	details string,
+) error
+
 func recordRangeEventsInLog(
 	ctx context.Context,
 	txn *kv.Txn,
 	added bool,
 	repDescs []roachpb.ReplicaDescriptor,
 	rangeDesc *roachpb.RangeDescriptor,
-	store *Store,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
+	logChange logChangeFn,
 ) error {
 	for _, repDesc := range repDescs {
 		isNonVoter := repDesc.GetType() == roachpb.NON_VOTER
@@ -1798,7 +1858,7 @@ func recordRangeEventsInLog(
 				typ = roachpb.REMOVE_NON_VOTER
 			}
 		}
-		if err := store.logChange(
+		if err := logChange(
 			ctx, txn, typ, repDesc, *rangeDesc, reason, details,
 		); err != nil {
 			return err
@@ -2068,23 +2128,7 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 }
 
 func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescriptor) bool {
-	// TODO(jeffreyxiao): This hacky fix ensures that we don't fail the
-	// conditional get because of the ordering of InternalReplicas. Calling
-	// Replicas() will sort the list of InternalReplicas as a side-effect. The
-	// invariant of having InternalReplicas sorted is not maintained in 19.1.
-	// Additionally, in 19.2, it's possible for the in-memory copy of
-	// RangeDescriptor to become sorted from a call to Replicas() without
-	// updating the copy in kv. These two factors makes it possible for the
-	// in-memory copy to be out of sync from the copy in kv. The sorted invariant
-	// of InternalReplicas is used by ReplicaDescriptors.Voters() and
-	// ReplicaDescriptors.Learners().
-	if desc != nil {
-		desc.Replicas() // for sorting side-effect
-	}
 	return func(desc2 *roachpb.RangeDescriptor) bool {
-		if desc2 != nil {
-			desc2.Replicas() // for sorting side-effect
-		}
 		return desc.Equal(desc2)
 	}
 }

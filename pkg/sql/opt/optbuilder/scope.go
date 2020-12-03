@@ -1568,6 +1568,12 @@ func (s *scope) String() string {
 		}
 		fmt.Fprintf(&buf, "%s:%d", c.name.String(), c.id)
 	}
+	for i, c := range s.extraCols {
+		if i > 0 || len(s.cols) > 0 {
+			buf.WriteByte(',')
+		}
+		fmt.Fprintf(&buf, "%s:%d!extra", c.name.String(), c.id)
+	}
 	buf.WriteByte(')')
 
 	return buf.String()
