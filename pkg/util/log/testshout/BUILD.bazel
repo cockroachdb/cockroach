@@ -5,7 +5,7 @@ go_test(
     srcs = ["shout_test.go"],
     deps = [
         "//pkg/util/log",
-        "//pkg/util/log/logflags",
+        "//pkg/util/log/logconfig",
         "//pkg/util/log/severity",
     ],
 )

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -160,7 +161,8 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 		if err == nil {
 			if dropped := atomic.LoadInt32(&countDropped); dropped > 0 {
 				entry := log.MakeEntry(
-					ctx, severity.WARNING, 0 /* depth */, false, /* redactable */
+					ctx, severity.WARNING, channel.DEV,
+					0 /* depth */, false, /* redactable */
 					"%d messages were dropped", log.Safe(dropped))
 				err = log.FormatEntry(entry, w) // modify return value
 			}
@@ -175,7 +177,8 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 
 	{
 		entry := log.MakeEntry(
-			ctx, severity.INFO, 0 /* depth */, false, /* redactable */
+			ctx, severity.INFO, channel.DEV,
+			0 /* depth */, false, /* redactable */
 			"intercepting logs with options %+v", opts)
 		entries <- entry
 	}

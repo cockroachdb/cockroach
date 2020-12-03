@@ -18,6 +18,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/util/log",
+        "//pkg/util/log/channel",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
         "//pkg/util/stop",

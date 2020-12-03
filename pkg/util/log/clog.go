@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -50,8 +51,31 @@ type loggingT struct {
 	vmoduleConfig vmoduleConfig
 
 	// The common stderr sink.
-	stderrSink     stderrSink
-	stderrSinkInfo sinkInfo
+	stderrSink stderrSink
+	// The template for the stderr sink info. This is where the configuration
+	// parameters are applied in ApplyConfig().
+	// This template is copied to the heap for use as sinkInfo in the
+	// actual loggers, so that configuration updates do not race
+	// with logging operations.
+	stderrSinkInfoTemplate sinkInfo
+
+	// the mapping of channels to loggers.
+	//
+	// This is under a R/W lock because some tests leak goroutines
+	// asynchronously with TestLogScope.Close() calls. If/when that
+	// misdesign is corrected, this lock can be dropped.
+	rmu struct {
+		syncutil.RWMutex
+		channels map[Channel]*loggerT
+		// currentStderrSinkInfo is the currently active copy of
+		// stderrSinkInfoTemplate. This is used in tests and
+		// DescribeAppliedConfiguration().
+		currentStderrSinkInfo *sinkInfo
+	}
+
+	// testingFd2CaptureLogger remembers the logger that was last set up
+	// to capture fd2 writes. Used by unit tests in this package.
+	testingFd2CaptureLogger *loggerT
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
@@ -87,6 +111,9 @@ func init() {
 	logging.bufPool.New = newBuffer
 	logging.bufSlicePool.New = newBufferSlice
 	logging.mu.fatalCh = make(chan struct{})
+	logging.stderrSinkInfoTemplate.sink = &logging.stderrSink
+	si := logging.stderrSinkInfoTemplate
+	logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
 }
 
 type sinkInfo struct {
@@ -112,6 +139,10 @@ type sinkInfo struct {
 	// criticality indicates whether a failure to output some log
 	// entries should incur the process to terminate.
 	criticality bool
+
+	// redact and redactable memorize the input configuration
+	// that was used to create the editor above.
+	redact, redactable bool
 }
 
 // loggerT represents the logging source for a given log channel.
@@ -174,7 +205,7 @@ func SetClusterID(clusterID string) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	addStructured(ctx, severity.INFO, 1, "clusterID: %s", []interface{}{clusterID})
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, "clusterID: %s", clusterID) // TODO(knz): Use OPS here.
 
 	// Perform the change proper.
 	logging.mu.Lock()
