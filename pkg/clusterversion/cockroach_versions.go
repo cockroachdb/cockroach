@@ -178,11 +178,6 @@ const (
 	MaterializedViews
 	// Box2DType enables the use of the box2d type.
 	Box2DType
-	// LeasedDatabasedDescriptors enables leased database descriptors. Now that
-	// we unconditionally use leased descriptors in 21.1 and the main usages of
-	// this version gate have been removed, this version remains to gate a few
-	// miscellaneous database descriptor changes.
-	LeasedDatabaseDescriptors
 	// UpdateScheduledJobsSchema drops schedule_changes and adds
 	// schedule_status.
 	UpdateScheduledJobsSchema
@@ -299,10 +294,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     Box2DType,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 17},
-	},
-	{
-		Key:     LeasedDatabaseDescriptors,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 18},
 	},
 	{
 		Key:     UpdateScheduledJobsSchema,
