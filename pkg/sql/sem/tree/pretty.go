@@ -12,6 +12,7 @@ package tree
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -1230,7 +1231,7 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 		)
 	}
 
-	clauses := make([]pretty.Doc, 0, 2)
+	clauses := make([]pretty.Doc, 0, 4)
 	if node.As() {
 		clauses = append(clauses, p.Doc(node.AsSource))
 	}
@@ -1239,6 +1240,9 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	}
 	if node.PartitionBy != nil {
 		clauses = append(clauses, p.Doc(node.PartitionBy))
+	}
+	if node.Locality != nil {
+		clauses = append(clauses, p.Doc(node.Locality))
 	}
 	if len(clauses) == 0 {
 		return title
@@ -1431,6 +1435,32 @@ func (node *PartitionBy) doc(p *PrettyCfg) pretty.Doc {
 	return p.nestUnder(title,
 		p.bracket("(", p.commaSeparated(inner...), ")"),
 	)
+}
+
+func (node *Locality) doc(p *PrettyCfg) pretty.Doc {
+	// Final layout:
+	//
+	// LOCALITY [GLOBAL | REGIONAL BY [TABLE [IN [PRIMARY REGION|region]]|ROW]]
+	localityKW := pretty.Keyword("LOCALITY")
+	switch node.LocalityLevel {
+	case LocalityLevelGlobal:
+		return pretty.ConcatSpace(localityKW, pretty.Keyword("GLOBAL"))
+	case LocalityLevelRow:
+		return pretty.ConcatSpace(localityKW, pretty.Keyword("REGIONAL BY ROW"))
+	case LocalityLevelTable:
+		byTable := pretty.ConcatSpace(localityKW, pretty.Keyword("REGIONAL BY TABLE IN"))
+		if node.TableRegion == "" {
+			return pretty.ConcatSpace(
+				byTable,
+				pretty.Keyword("PRIMARY REGION"),
+			)
+		}
+		return pretty.ConcatSpace(
+			byTable,
+			p.Doc(&node.TableRegion),
+		)
+	}
+	panic(fmt.Sprintf("unknown locality: %v", *node))
 }
 
 func (node *ListPartition) doc(p *PrettyCfg) pretty.Doc {
