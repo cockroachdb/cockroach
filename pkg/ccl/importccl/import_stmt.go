@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1048,11 +1047,8 @@ func prepareNewTableDescsForIngestion(
 		}
 		seqVals[id] = tableDesc.SeqVal
 	}
-	// TODO(ajwerner): Remove this in 21.1.
-	canResetModTime := p.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.LeasedDatabaseDescriptors)
 	if err := backupccl.RewriteTableDescs(
-		newMutableTableDescriptors, tableRewrites, "", canResetModTime,
+		newMutableTableDescriptors, tableRewrites, "",
 	); err != nil {
 		return nil, err
 	}
