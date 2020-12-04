@@ -898,11 +898,6 @@ func backupPlanHook(
 			return errors.Errorf("expected backup (along with any previous backups) to cover to %v, not %v", endTime, coveredEnd)
 		}
 
-		descBytes, err := protoutil.Marshal(&backupManifest)
-		if err != nil {
-			return err
-		}
-
 		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.kmsURIs, resolvedSubdir)
 		if err != nil {
 			return err
@@ -933,8 +928,21 @@ func backupPlanHook(
 		if baseURI == "" {
 			baseURI = defaultURI
 		}
-		if err := verifyWriteableDestination(ctx, p.User(), makeCloudStorage, baseURI); err != nil {
-			return err
+
+		// Write backup manifest into a temporary checkpoint file.
+		// This accomplishes 2 purposes:
+		//  1. Persists large state needed for backup job completion.
+		//  2. Verifies we can write to destination location.
+		// This temporary checkpoint file gets renamed to real checkpoint
+		// file when the backup jobs starts execution.
+		doWriteBackupManifestCheckpoint := func(ctx context.Context, jobID int64) error {
+			if err := writeBackupManifest(
+				ctx, p.ExecCfg().Settings, defaultStore, tempCheckpointFileNameForJob(jobID),
+				encryptionOptions, &backupManifest,
+			); err != nil {
+				return errors.Wrapf(err, "writing checkpoint file")
+			}
+			return nil
 		}
 
 		backupDetails := jobspb.BackupDetails{
@@ -942,7 +950,6 @@ func backupPlanHook(
 			EndTime:           endTime,
 			URI:               defaultURI,
 			URIsByLocalityKV:  urisByLocalityKV,
-			BackupManifest:    descBytes,
 			EncryptionOptions: encryptionOptions,
 			EncryptionInfo:    encryptionInfo,
 			CollectionURI:     collectionURI,
@@ -1017,6 +1024,7 @@ func backupPlanHook(
 		jr := jobs.Record{
 			Description: description,
 			Username:    p.User(),
+			// TODO(yevgeniy): Consider removing -- this info available in backup manifest.
 			DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
 				for i := range backupManifest.Descriptors {
 					sqlDescIDs = append(sqlDescIDs,
@@ -1035,6 +1043,10 @@ func backupPlanHook(
 			aj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
 				ctx, jr, p.ExtendedEvalContext().Txn)
 			if err != nil {
+				return err
+			}
+
+			if err := doWriteBackupManifestCheckpoint(ctx, *aj.ID()); err != nil {
 				return err
 			}
 
@@ -1058,9 +1070,12 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-			err = protectTimestampForBackup(ctx, p, txn, *sj.ID(), spans, startTime, endTime,
+			if err := doWriteBackupManifestCheckpoint(ctx, *sj.ID()); err != nil {
+				return err
+			}
+
+			return protectTimestampForBackup(ctx, p, txn, *sj.ID(), spans, startTime, endTime,
 				backupDetails)
-			return err
 		}); err != nil {
 			if sj != nil {
 				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
