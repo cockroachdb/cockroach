@@ -457,6 +457,11 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		}
 	}
 
+	// Don't validate cross-references for dropped descriptors.
+	if desc.Dropped() {
+		return nil
+	}
+
 	// Validate all cross references on the descriptor.
 
 	// Buffer all the requested requests and error checks together to run at once.
