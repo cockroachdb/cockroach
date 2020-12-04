@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // FeatureFlagEnabledDefault is used for the default value of all feature flag
@@ -30,10 +31,16 @@ const FeatureFlagEnabledDefault = true
 // increments a telemetry counter for any feature flag that is denied and logs
 // the feature and category that was denied.
 func CheckEnabled(
-	ctx context.Context, s *settings.BoolSetting, sv *settings.Values, featureName string,
+	ctx context.Context,
+	accessories FeatureFlagAccessories,
+	s *settings.BoolSetting,
+	featureName string,
 ) error {
+	sv := accessories.SV()
+
 	if enabled := s.Get(sv); !enabled {
 		telemetry.Inc(sqltelemetry.FeatureDeniedByFeatureFlagCounter)
+		accessories.Metrics().FeatureDenialMetric.Inc(1)
 		if log.V(2) {
 			log.Warningf(
 				ctx,
@@ -49,4 +56,39 @@ func CheckEnabled(
 		)
 	}
 	return nil
+}
+
+// metaFeatureDenialMetric is a metric counting the statements denied by a
+//feature flag.
+var metaFeatureDenialMetric = metric.Metadata{
+	Name:        "sql.feature_flag_denial",
+	Help:        "Counter of the number of statements denied by a feature flag",
+	Measurement: "Statements",
+	Unit:        metric.Unit_COUNT,
+}
+
+// FeatureFlagMetrics is a struct corresponding to any metrics related to
+// feature flags. Future metrics related to feature flags should be added to
+// this struct.
+type FeatureFlagMetrics struct {
+	FeatureDenialMetric *metric.Counter
+}
+
+// MetricStruct makes FeatureFlagMetrics a metric.Struct.
+func (s *FeatureFlagMetrics) MetricStruct() {}
+
+var _ metric.Struct = (*FeatureFlagMetrics)(nil)
+
+// NewFeatureFlagMetrics constructs a new FeatureFlagMetrics metric.Struct.
+func NewFeatureFlagMetrics() *FeatureFlagMetrics {
+	return &FeatureFlagMetrics{
+		FeatureDenialMetric: metric.NewCounter(metaFeatureDenialMetric),
+	}
+}
+
+// FeatureFlagAccessories is an interface used to pass required values from
+// ExecutorConfig to check if a feature flag is enabled.
+type FeatureFlagAccessories interface {
+	SV() *settings.Values
+	Metrics() *FeatureFlagMetrics
 }

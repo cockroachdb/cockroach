@@ -101,8 +101,8 @@ func (ef *execFactory) ConstructExport(
 
 	if err := featureflag.CheckEnabled(
 		ef.planner.EvalContext().Context,
+		ef.planner.execCfg,
 		featureExportEnabled,
-		&ef.planner.ExecCfg().Settings.SV,
 		"EXPORT",
 	); err != nil {
 		return nil, err

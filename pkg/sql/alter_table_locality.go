@@ -23,7 +23,7 @@ func (p *planner) AlterTableLocality(
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER TABLE",
 	); err != nil {
 		return nil, err
