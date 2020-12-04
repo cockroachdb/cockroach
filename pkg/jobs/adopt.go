@@ -25,6 +25,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const claimableStatusTupleString = `(` +
+	`'` + string(StatusRunning) + `', ` +
+	`'` + string(StatusPending) + `', ` +
+	`'` + string(StatusCancelRequested) + `', ` +
+	`'` + string(StatusPauseRequested) + `', ` +
+	`'` + string(StatusReverting) + `'` +
+	`)`
+
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
 func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
@@ -34,14 +42,11 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
    UPDATE system.jobs
       SET claim_session_id = $1, claim_instance_id = $2
     WHERE claim_session_id IS NULL
-      AND status NOT IN ($3, $4, $5)
+      AND status IN `+claimableStatusTupleString+`
  ORDER BY created DESC
-    LIMIT $6
+    LIMIT $3
 RETURNING id;`,
-			s.ID().UnsafeBytes(), r.ID(),
-			// Don't touch terminal jobs.
-			StatusSucceeded, StatusCanceled, StatusFailed,
-			maxAdoptionsPerLoop,
+			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop,
 		)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
