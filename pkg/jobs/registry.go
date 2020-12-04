@@ -630,11 +630,9 @@ func (r *Registry) Start(
 UPDATE system.jobs
    SET claim_session_id = NULL
  WHERE claim_session_id <> $1
-   AND status NOT IN ($2, $3, $4)
+   AND status IN `+claimableStatusTupleString+`
    AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)`,
 			s.ID().UnsafeBytes(),
-			// Don't touch terminal jobs.
-			StatusSucceeded, StatusCanceled, StatusFailed,
 		); err != nil {
 			log.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
