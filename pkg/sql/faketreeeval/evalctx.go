@@ -136,8 +136,8 @@ func (ep *DummyEvalPlanner) ResolveTableName(
 	return 0, errors.WithStack(errEvalPlanner)
 }
 
-// ParseType is part of the tree.EvalPlanner interface.
-func (ep *DummyEvalPlanner) ParseType(sql string) (*types.T, error) {
+// GetTypeFromValidSQLSyntax is part of the tree.EvalPlanner interface.
+func (ep *DummyEvalPlanner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 

@@ -349,7 +349,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		// invalid input type like "notatype" will be parsed successfully as
 		// a ResolvableTypeReference, so the error here does not need to be
 		// intercepted and inspected.
-		typRef, err := parser.ParseType(name)
+		typRef, err := parser.GetTypeReferenceFromName(tree.Name(name))
 		if err != nil {
 			return nil, err
 		}

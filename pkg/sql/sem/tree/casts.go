@@ -1118,7 +1118,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				}
 				return queryOid(ctx, t, NewDString(funcDef.Name))
 			case oid.T_regtype:
-				parsedTyp, err := ctx.Planner.ParseType(s)
+				parsedTyp, err := ctx.Planner.GetTypeFromValidSQLSyntax(s)
 				if err == nil {
 					return &DOid{
 						semanticType: t,

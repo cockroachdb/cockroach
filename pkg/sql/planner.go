@@ -469,10 +469,10 @@ func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 	return p.extendedEvalCtx.DistSQLPlanner
 }
 
-// ParseType implements the tree.EvalPlanner interface.
+// GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.
 // We define this here to break the dependency from eval.go to the parser.
-func (p *planner) ParseType(sql string) (*types.T, error) {
-	ref, err := parser.ParseType(sql)
+func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
+	ref, err := parser.GetTypeFromValidSQLSyntax(sql)
 	if err != nil {
 		return nil, err
 	}

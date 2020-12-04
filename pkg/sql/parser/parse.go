@@ -256,8 +256,13 @@ func HasMultipleStatements(sql string) bool {
 	return false
 }
 
-// ParseQualifiedTableName parses a SQL string of the form
-// `[ database_name . ] [ schema_name . ] table_name`.
+// ParseQualifiedTableName parses a possibly qualified table name. The
+// table name must contain one or more name parts, using the full
+// input SQL syntax: each name part containing special characters, or
+// non-lowercase characters, must be enclosed in double quote. The
+// name may not be an invalid table name (the caller is responsible
+// for guaranteeing that only valid table names are provided as
+// input).
 func ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	name, err := ParseTableName(sql)
 	if err != nil {
@@ -267,7 +272,12 @@ func ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return &tn, nil
 }
 
-// ParseTableName parses a table name.
+// ParseTableName parses a table name. The table name must contain one
+// or more name parts, using the full input SQL syntax: each name
+// part containing special characters, or non-lowercase characters,
+// must be enclosed in double quote. The name may not be an invalid
+// table name (the caller is responsible for guaranteeing that only
+// valid table names are provided as input).
 func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	// We wrap the name we want to parse into a dummy statement since our parser
 	// can only parse full statements.
@@ -292,6 +302,8 @@ func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 // around this limitation by parsing the input table name as a column name
 // with a fake non-keyword prefix, and then shifting the result down into an
 // UnresolvedObjectName.
+//
+// TODO(knz): This function is obsolete (only used in cockroach dump). Remove it.
 func ParseTableNameWithQualifiedNames(sql string) (*tree.UnresolvedObjectName, error) {
 	stmt, err := ParseOne(fmt.Sprintf("SELECT fakeprefix.%s", sql))
 	if err != nil {
@@ -319,7 +331,11 @@ func parseExprs(exprs []string) (tree.Exprs, error) {
 	return set.Values, nil
 }
 
-// ParseExprs is a short-hand for parseExprs(sql)
+// ParseExprs parses a comma-delimited sequence of SQL scalar
+// expressions. The caller is responsible for ensuring that the input
+// is, in fact, a comma-delimited sequence of SQL scalar expressions —
+// the results are undefined if the string contains invalid SQL
+// syntax.
 func ParseExprs(sql []string) (tree.Exprs, error) {
 	if len(sql) == 0 {
 		return tree.Exprs{}, nil
@@ -327,7 +343,10 @@ func ParseExprs(sql []string) (tree.Exprs, error) {
 	return parseExprs(sql)
 }
 
-// ParseExpr is a short-hand for parseExprs([]string{sql})
+// ParseExpr parses a SQL scalar expression. The caller is responsible
+// for ensuring that the input is, in fact, a valid SQL scalar
+// expression — the results are undefined if the string contains
+// invalid SQL syntax.
 func ParseExpr(sql string) (tree.Expr, error) {
 	exprs, err := parseExprs([]string{sql})
 	if err != nil {
@@ -339,8 +358,29 @@ func ParseExpr(sql string) (tree.Expr, error) {
 	return exprs[0], nil
 }
 
-// ParseType parses a column type.
-func ParseType(sql string) (tree.ResolvableTypeReference, error) {
+// GetTypeReferenceFromName turns a type name into a type
+// reference. This supports only “simple” (single-identifier)
+// references to built-in types, when the identifer has already been
+// parsed away from the input SQL syntax.
+func GetTypeReferenceFromName(typeName tree.Name) (tree.ResolvableTypeReference, error) {
+	expr, err := ParseExpr(fmt.Sprintf("1::%s", typeName.String()))
+	if err != nil {
+		return nil, err
+	}
+
+	cast, ok := expr.(*tree.CastExpr)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected a tree.CastExpr, but found %T", expr)
+	}
+
+	return cast.Type, nil
+}
+
+// GetTypeFromValidSQLSyntax retrieves a type from its SQL syntax. The caller is
+// responsible for guaranteeing that the type expression is valid
+// SQL. This includes verifying that complex identifiers are enclosed
+// in double quotes, etc.
+func GetTypeFromValidSQLSyntax(sql string) (tree.ResolvableTypeReference, error) {
 	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
 	if err != nil {
 		return nil, err
