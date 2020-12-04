@@ -1,0 +1,579 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.eventlog;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+import "roachpb/metadata.proto";
+
+// CommonEventDetails contains the fields common to all events.
+//
+// Notes:
+// - the fields time, nodeID, instanceID are omitted from the JSON
+//   output to preserve compatibility with the "info" columns in
+//   system.eventlog.
+// - likewise, the entire CommonEventDetails payload is marked
+//   as embedded and its json tag is removed in every event log
+//   message before, to ensure that it appears inline in JSON, again
+//   for compatibility with system.eventlog.
+//
+// Beware: because this is marked inline in the individual events,
+// care must be taken to not reuse field identifiers across the
+// message types, otherwise the JSON conversions cannot work.
+message CommonEventDetails {
+  // The timestamp of the event.
+  google.protobuf.Timestamp timestamp = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true, (gogoproto.jsontag) = "timestamp,omitempty"];
+}
+
+// CommonSQLEventDetails contains the fields common to all
+// SQL events.
+//
+// As above, the field is marked inline in the events below to
+// preserve compatibility with system.eventlog. Likewise, because this
+// is marked inline in the individual events, care must be taken to
+// not reuse field identifiers across the message types, otherwise the
+// JSON conversions cannot work.
+message CommonSQLEventDetails {
+  string statement = 1;
+
+  // The user account that triggered the event.
+  string user = 2;
+
+  // The instance ID (not tenant ID) of the SQL server where the event was originated.
+  int32 instance_id = 3 [(gogoproto.customname) = "InstanceID"];
+
+  // The primary object descriptor affected by the operation. Set to zero for operations
+  // that don't affect descriptors.
+  uint32 descriptor_id = 4 [(gogoproto.customname) = "DescriptorID"];
+}
+
+// CommonSQLPrivilegeEventDetails contains the fields copmmon to all
+// grant/revoke events.
+//
+// As above, the field is marked inline in the events below to
+// preserve compatibility with system.eventlog. Likewise, because this
+// is marked inline in the individual events, care must be taken to
+// not reuse field identifiers across the message types, otherwise the
+// JSON conversions cannot work.
+message CommonSQLPrivilegeEventDetails {
+  string grantee = 1;
+  repeated string privileges = 2;
+}
+
+// CommonNodeEventDetails contains the fields common to all
+// node-level events.
+//
+// As above, the field is marked inline in the events below to
+// preserve compatibility with system.eventlog. Likewise, because this
+// is marked inline in the individual events, care must be taken to
+// not reuse field identifiers across the message types, otherwise the
+// JSON conversions cannot work.
+message CommonNodeEventDetails {
+  // The node ID where the event was originated.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The descriptor for the node.
+  cockroach.roachpb.NodeDescriptor descriptor = 2;
+
+  // The cluster ID for the event.
+  bytes cluster_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ClusterID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  int64 started_at = 4;
+  int64 last_up = 5;
+}
+
+
+// CreateDatabase is recorded when a database is created.
+message CreateDatabase {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string database_name = 3;
+}
+
+// DropDatabase is recorded when a database is dropped.
+message DropDatabase {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string database_name = 3;
+  repeated string dropped_schema_objects = 4;
+}
+
+// RenameDatabase is recorded when a database is renamed.
+message RenameDatabase {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string database_name = 3;
+  string new_database_name = 4;
+}
+
+// ConvertToSchema is recorded when a database is converted to a schema.
+message ConvertToSchema {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string database_name = 3;
+  string new_database_parent = 4;
+}
+
+// AlterDatabaseOwner is recorded when a database's owner is changed.
+message AlterDatabaseOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string database_name = 3;
+  string owner = 4;
+}
+
+
+// CreateSchema is recorded when a schema is created.
+message CreateSchema {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string schema_name = 3;
+  string owner = 4;
+}
+
+// DropSchema is recorded when a schema is dropped.
+message DropSchema {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string schema_name = 3;
+}
+
+// RenameSchema is recorded when a schema is renamed.
+message RenameSchema {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string schema_name = 3;
+  string new_schema_name = 4;
+}
+
+// AlterSchemaOwner is recorded when a schema's owner is changed.
+message AlterSchemaOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string schema_name = 3;
+  string owner = 4;
+}
+
+// CreateTable is recorded when a table is created.
+message CreateTable {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  string owner = 4;
+}
+
+// DropTable is recorded when a table is dropped.
+message DropTable {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  repeated string cascade_dropped_views = 4;
+}
+
+// RenameTable is recorded when a table, sequence or view is renamed.
+message RenameTable {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  string new_table_name = 4;
+}
+
+// TruncateTable is recorded when a table is truncated.
+message TruncateTable {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+}
+
+// AlterTable is recorded when a table is altered.
+message AlterTable {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  uint32 mutation_id = 4 [(gogoproto.customname) = "MutationID"];
+  repeated string cascade_dropped_views = 5;
+}
+
+// CommentOnColumn is recorded when a column is commented.
+message CommentOnColumn {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  string column_name = 4;
+  string comment = 5;
+}
+
+// CommentOnTable is recorded when a table is commented.
+message CommentOnDatabase {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string database_name = 3;
+  string comment = 4;
+}
+
+// CommentOnTable is recorded when a table is commented.
+message CommentOnTable {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  string comment = 4;
+}
+
+// CommentOnIndex is recorded when a index is commented.
+message CommentOnIndex {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  string index_name = 4;
+  string comment = 5;
+}
+
+
+// CreateIndex is recorded when an index is created.
+message CreateIndex {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  string index_name = 4;
+  uint32 mutation_id = 5 [(gogoproto.customname) = "MutationID"];
+}
+
+// DropIndex is recorded when an index is dropped.
+message DropIndex {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  string index_name = 4;
+  uint32 mutation_id = 5 [(gogoproto.customname) = "MutationID"];
+  repeated string cascade_dropped_views = 6;
+}
+
+// AlterIndex is recorded when an index is altered.
+message AlterIndex {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+  string index_name = 4;
+  uint32 mutation_id = 5 [(gogoproto.customname) = "MutationID"];
+}
+
+
+// CreateView is recorded when a view is created.
+message CreateView {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string view_name = 3;
+  string owner = 4;
+  string view_query = 5;
+}
+
+// DropView is recorded when a view is dropped.
+message DropView {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string view_name = 3;
+  repeated string cascade_dropped_views = 4;
+}
+
+
+// CreateSequence is recorded when a sequence is created.
+message CreateSequence {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string sequence_name = 3;
+  string owner = 4;
+}
+
+// DropSequence is recorded when a sequence is dropped.
+message DropSequence {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string sequence_name = 3;
+}
+
+// AlterSequence is recorded when a sequence is altered.
+message AlterSequence {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string sequence_name = 3;
+}
+
+
+// ReverseSchemaChange is recorded when an in-progress schema change
+// encounters a problem and is reversed.
+message ReverseSchemaChange {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  uint32 mutation_id = 3 [(gogoproto.customname) = "MutationID"];
+  string error = 4;
+}
+
+// FinishSchemaChange is recorded when a previously initiated schema
+// change has completed.
+message FinishSchemaChange {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  uint32 mutation_id = 3 [(gogoproto.customname) = "MutationID"];
+}
+
+// FinishSchemaRollback is recorded when a previously
+// initiated schema change rollback has completed.
+message FinishSchemaRollback {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  uint32 mutation_id = 3 [(gogoproto.customname) = "MutationID"];
+}
+
+
+// CreateType is recorded when a type is created.
+message CreateType {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string type_name = 4;
+  string owner = 5;
+}
+
+// DropType is recorded when a type is dropped.
+message DropType {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string type_name = 3;
+}
+
+// EventAlterType is recorded when a type is altered.
+message AlterType {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string type_name = 3;
+}
+
+
+// NodeJoin is recorded when a node joins the cluster.
+message NodeJoin {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeRestart is recorded when an existing node rejoins the cluster
+// after being offline.
+message NodeRestart {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+
+// NodeDecommissioned is recorded when a node is marked as
+// decommissioning.
+message NodeDecommissioning {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeDecommissioned is recorded when a node is marked as
+// decommissioned.
+message NodeDecommissioned {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeRecommissioned is recorded when a decommissioning node is
+// recommissioned.
+message NodeRecommissioned {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+
+// SetClusterSetting is recorded when a cluster setting is changed.
+message SetClusterSetting {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string setting_name = 3;
+  string value = 4;
+}
+
+// ZoneConfigDetails is common to zone config change events.
+message ZoneConfigDetails {
+  string target = 1;
+  string config = 2;
+  repeated string options = 3;
+}
+
+// SetZoneConfig is recorded when a zone config is changed.
+message SetZoneConfig {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  ZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// RemoveZoneConfig is recorded when a zone config is removed.
+message RemoveZoneConfig {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  ZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+
+// CreateStatistics is recorded when statistics are collected for a
+// table.
+message CreateStatistics {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 3;
+}
+
+
+// GrantDatabasePrivilege is recorded when privileges are added to a user
+// for a database object.
+message GrantDatabasePrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string database_name = 4;
+}
+
+// RevokeDatabasePrivilege is recorded when privileges are removed from a
+// user for a database object.
+message RevokeDatabasePrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string database_name = 4;
+}
+
+// GrantTablePrivilege is recorded when privileges are added to a user
+// for a table, sequence or view object.
+message GrantTablePrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 4;
+}
+
+// RevokeTablePrivilege is recorded when privileges are removed from a
+// user for a table, sequence or view object.
+message RevokeTablePrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string table_name = 4;
+}
+
+// GrantSchemaPrivilege is recorded when privileges are added to a user
+// for a schema object.
+message GrantSchemaPrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string schema_name = 4;
+}
+
+// RevokeSchemaPrivilege is recorded when privileges are removed from a
+// user for a schema object.
+message RevokeSchemaPrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string schema_name = 4;
+}
+
+
+// GrantTypePrivilege is recorded when privileges are added to a user
+// for a type object.
+message GrantTypePrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string type_name = 4;
+}
+
+// RevokeTypePrivilege is recorded when privileges are removed from a
+// user for a type object.
+message RevokeTypePrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string type_name = 4;
+}
+
+
+
+// CreateRole is recorded when a role is created.
+message CreateRole {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string role_name = 3;
+}
+
+// DropRole is recorded when a role is dropped.
+message DropRole {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string role_name = 3;
+}
+
+// AlterRole is recorded when a role is altered.
+message AlterRole {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string role_name = 3;
+}
+
+
+// UnsafeUpsertDescriptor is recorded when a descriptor is written
+// using crdb_internal.unsafe_upsert_descriptor.
+message UnsafeUpsertDescriptor {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string previous_descriptor = 3;
+  string new_descriptor = 4;
+}
+
+
+// UnsafeDeleteDescriptor is recorded when a descriptor is written
+// using crdb_internal.unsafe_delete_descriptor.
+message UnsafeDeleteDescriptor {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  uint32 parent_id = 3 [(gogoproto.customname) = "ParentID"];
+  uint32 parent_schema_id = 4 [(gogoproto.customname) = "ParentSchemaID"];
+  string name = 5;
+}
+
+
+// UnsafeUpsertNamespaceEntry is recorded when a namespace entry is
+// written using crdb_internal.unsafe_upsert_namespace_entry.
+message UnsafeUpsertNamespaceEntry {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  uint32 parent_id = 3 [(gogoproto.customname) = "ParentID"];
+  uint32 parent_schema_id = 4 [(gogoproto.customname) = "ParentSchemaID"];
+  string name = 5;
+  uint32 previous_id = 6;
+  bool force = 7;
+  bool failed_validation = 8;
+  string validation_errors = 9;
+}
+
+
+// UnsafeDeleteNamespaceEntry is recorded when a namespace entry is
+// written using crdb_internal.unsafe_delete_namespace_entry.
+message UnsafeDeleteNamespaceEntry {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  uint32 parent_id = 3 [(gogoproto.customname) = "ParentID"];
+  uint32 parent_schema_id = 4 [(gogoproto.customname) = "ParentSchemaID"];
+  string name = 5;
+}
+
