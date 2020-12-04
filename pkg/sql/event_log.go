@@ -13,9 +13,15 @@ package sql
 import (
 	"context"
 	"encoding/json"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -174,6 +180,52 @@ type EventLogger struct {
 // MakeEventLogger constructs a new EventLogger.
 func MakeEventLogger(execCfg *ExecutorConfig) EventLogger {
 	return EventLogger{InternalExecutor: execCfg.InternalExecutor}
+}
+
+// logEvent logs an event using an event logger derived from the current planner.
+func (p *planner) logEvent(
+	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
+) error {
+	// Compute the common fields from data already known to the planner.
+	ts := p.extendedEvalCtx.TxnTimestamp
+	sqlInstanceID := p.extendedEvalCtx.NodeID.SQLInstanceID()
+	user := p.User()
+	stmt := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
+
+	return logEventInternal(ctx, p.extendedEvalCtx.ExecCfg, p.txn, ts, sqlInstanceID, descID, user, stmt, event)
+}
+
+func logEventInternal(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	txn *kv.Txn,
+	ts time.Time,
+	sqlInstanceID base.SQLInstanceID,
+	descID descpb.ID,
+	user security.SQLUsername,
+	stmt string,
+	event eventpb.EventPayload,
+) error {
+	// Inject the common fields into the payload provided by the caller.
+	event.CommonDetails().Timestamp = ts
+	sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
+	if !ok {
+		return errors.AssertionFailedf("unknown event type: %T", event)
+	}
+	m := sqlCommon.CommonSQLDetails()
+	m.Statement = stmt
+	m.User = user.Normalized()
+	m.InstanceID = int32(sqlInstanceID)
+	m.DescriptorID = uint32(descID)
+
+	// Delegate the storing of the event to the regular event logic.
+	return MakeEventLogger(execCfg).InsertEventRecord(
+		ctx,
+		txn,
+		EventLogType(eventpb.GetEventName(event)),
+		int32(descID),
+		int32(sqlInstanceID),
+		event)
 }
 
 // InsertEventRecord inserts a single event into the event log as part of the

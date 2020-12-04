@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -533,20 +534,14 @@ func (p *planner) dropIndexByName(
 	// Record index drop in the event log. This is an auditable log event
 	// and is recorded in the same transaction as the table descriptor
 	// update.
-	return MakeEventLogger(p.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		ctx,
-		p.txn,
-		EventLogDropIndex,
-		int32(tableDesc.ID),
-		int32(p.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			TableName           string
-			IndexName           string
-			Statement           string
-			User                string
-			MutationID          uint32
-			CascadeDroppedViews []string
-		}{tn.FQString(), string(idxName), jobDesc, p.User().Normalized(), uint32(mutationID),
-			droppedViews},
-	)
+	return p.logEvent(ctx,
+		tableDesc.ID,
+		&eventpb.DropIndex{
+			TableName:  tn.FQString(),
+			IndexName:  string(idxName),
+			MutationID: uint32(mutationID),
+			// TODO(knz): the dropped views are improperly qualified.
+			// See: https://github.com/cockroachdb/cockroach/issues/57735
+			CascadeDroppedViews: droppedViews,
+		})
 }

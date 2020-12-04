@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnColumnNode struct {
@@ -88,25 +89,20 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 		}
 	}
 
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogCommentOnColumn,
-		int32(n.tableDesc.ID),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			TableName  string
-			ColumnName string
-			Statement  string
-			User       string
-			Comment    *string
-		}{
-			n.tableDesc.Name,
-			string(n.n.ColumnItem.ColumnName),
-			n.n.String(),
-			params.p.User().Normalized(),
-			n.n.Comment},
-	)
+	comment := ""
+	if n.n.Comment != nil {
+		comment = *n.n.Comment
+	}
+	return params.p.logEvent(params.ctx,
+		n.tableDesc.ID,
+		&eventpb.CommentOnColumn{
+			// TODO(knz): This table name is improperly qualified.
+			// See: https://github.com/cockroachdb/cockroach/issues/57740
+			TableName:   n.tableDesc.Name,
+			ColumnName:  string(n.n.ColumnItem.ColumnName),
+			Comment:     comment,
+			NullComment: n.n.Comment == nil,
+		})
 }
 
 func (n *commentOnColumnNode) Next(runParams) (bool, error) { return false, nil }
