@@ -153,7 +153,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
-        "//pkg/util/uuid",
         "//pkg/util/version",
         "//pkg/workload/histogram",
         "//pkg/workload/querybench",

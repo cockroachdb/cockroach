@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -228,17 +229,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogCreateRole,
+	return params.p.logEvent(params.ctx,
 		0, /* no target */
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			RoleName string
-			User     string
-		}{normalizedUsername.Normalized(), params.p.User().Normalized()},
-	)
+		&eventpb.CreateRole{RoleName: normalizedUsername.Normalized()})
 }
 
 // Next implements the planNode interface.

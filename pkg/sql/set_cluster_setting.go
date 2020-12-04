@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -315,14 +316,12 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			telemetry.Inc(sqltelemetry.VecModeCounter(validatedExecMode.String()))
 		}
 
-		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-			ctx,
-			txn,
-			EventLogSetClusterSetting,
+		return params.p.logEvent(ctx,
 			0, /* no target */
-			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-			EventLogSetClusterSettingDetail{n.name, reportedValue, params.p.User().Normalized()},
-		)
+			&eventpb.SetClusterSetting{
+				SettingName: n.name,
+				Value:       reportedValue,
+			})
 	}); err != nil {
 		return err
 	}

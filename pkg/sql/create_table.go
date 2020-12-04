@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -391,18 +392,11 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogCreateTable,
-		int32(desc.ID),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			TableName string
-			Statement string
-			User      string
-		}{n.n.Table.FQString(), n.n.String(), params.p.User().Normalized()},
-	); err != nil {
+	if err := params.p.logEvent(params.ctx,
+		desc.ID,
+		&eventpb.CreateTable{
+			TableName: n.n.Table.FQString(),
+		}); err != nil {
 		return err
 	}
 

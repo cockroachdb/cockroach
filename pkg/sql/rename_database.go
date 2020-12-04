@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 )
@@ -243,19 +244,12 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 
 	// Log Rename Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		ctx,
-		p.txn,
-		EventLogRenameDatabase,
-		int32(n.dbDesc.GetID()),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			DatabaseName    string
-			Statement       string
-			User            string
-			NewDatabaseName string
-		}{n.n.Name.String(), n.n.String(), p.User().Normalized(), n.newName},
-	)
+	return p.logEvent(ctx,
+		n.dbDesc.GetID(),
+		&eventpb.RenameDatabase{
+			DatabaseName:    n.n.Name.String(),
+			NewDatabaseName: n.newName,
+		})
 }
 
 // isAllowedDependentDescInRename determines when rename database is allowed with

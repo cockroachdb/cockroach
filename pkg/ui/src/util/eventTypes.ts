@@ -75,10 +75,14 @@ export const SET_ZONE_CONFIG = "set_zone_config";
 export const REMOVE_ZONE_CONFIG = "remove_zone_config";
 // Recorded when statistics are collected for a table.
 export const CREATE_STATISTICS = "create_statistics";
-// Recorded when privileges are added to a user(s).
-export const GRANT_PRIVILEGE = "grant_privilege";
-// Recorded when privileges are removed from a user(s).
-export const REVOKE_PRIVILEGE = "revoke_privilege";
+// Recorded when privileges are added to a user.
+export const CHANGE_DATABASE_PRIVILEGE = "change_database_privilege";
+// Recorded when privileges are added to a user.
+export const CHANGE_TABLE_PRIVILEGE = "change_table_privilege";
+// Recorded when privileges are added to a user.
+export const CHANGE_SCHEMA_PRIVILEGE = "change_schema_privilege";
+// Recorded when privileges are added to a user.
+export const CHANGE_TYPE_PRIVILEGE = "change_type_privilege";
 // Recorded when a schema is created.
 export const CREATE_SCHEMA = "create_schema";
 // Recorded when a schema is dropped.

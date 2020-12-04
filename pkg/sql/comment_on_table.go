@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnTableNode struct {
@@ -79,24 +80,17 @@ func (n *commentOnTableNode) startExec(params runParams) error {
 		}
 	}
 
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogCommentOnTable,
-		int32(n.tableDesc.ID),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			TableName string
-			Statement string
-			User      string
-			Comment   *string
-		}{
-			params.p.ResolvedName(n.n.Table).FQString(),
-			n.n.String(),
-			params.p.User().Normalized(),
-			n.n.Comment,
-		},
-	)
+	comment := ""
+	if n.n.Comment != nil {
+		comment = *n.n.Comment
+	}
+	return params.p.logEvent(params.ctx,
+		n.tableDesc.ID,
+		&eventpb.CommentOnTable{
+			TableName:   params.p.ResolvedName(n.n.Table).FQString(),
+			Comment:     comment,
+			NullComment: n.n.Comment == nil,
+		})
 }
 
 func (n *commentOnTableNode) Next(runParams) (bool, error) { return false, nil }

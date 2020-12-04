@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -249,6 +250,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 
 	// Create a job to run statistics creation.
 	statement := tree.AsStringWithFQNames(n, n.p.EvalContext().Annotations)
+	eventLogStatement := statement
 	var description string
 	if n.Name == stats.AutoStatsName {
 		// Use a user-friendly description for automatic statistics.
@@ -268,7 +270,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			FQTableName:     fqTableName,
 			Table:           tableDesc.TableDescriptor,
 			ColumnStats:     colStats,
-			Statement:       n.String(),
+			Statement:       eventLogStatement,
 			AsOf:            asOf,
 			MaxFractionIdle: n.Options.Throttling,
 		},
@@ -548,19 +550,20 @@ func (r *createStatsResumer) Resume(
 	// because that transaction must be read-only. In the future we may want
 	// to use the transaction that inserted the new stats into the
 	// system.table_statistics table, but that would require calling
-	// MakeEventLogger from the distsqlrun package.
+	// logEvent() from the distsqlrun package.
+	//
+	// TODO(knz): figure out why this is not triggered for a regular
+	// CREATE STATISTICS statement.
+	// See: https://github.com/cockroachdb/cockroach/issues/57739
 	return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return MakeEventLogger(evalCtx.ExecCfg).InsertEventRecord(
-			ctx,
-			txn,
-			EventLogCreateStatistics,
-			int32(details.Table.ID),
-			int32(evalCtx.NodeID.SQLInstanceID()),
-			struct {
-				TableName string
-				Statement string
-			}{details.FQTableName, details.Statement},
-		)
+		return logEventInternalForSQLStatements(ctx, evalCtx.ExecCfg, txn,
+			evalCtx.NodeID.SQLInstanceID(),
+			details.Table.ID,
+			evalCtx.SessionData.User(),
+			details.Statement,
+			&eventpb.CreateStatistics{
+				TableName: details.FQTableName,
+			})
 	})
 }
 

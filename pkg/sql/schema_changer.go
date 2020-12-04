@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1335,25 +1336,23 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
-		schemaChangeEventType := EventLogFinishSchemaChange
+		var info eventpb.EventPayload
 		if isRollback {
-			schemaChangeEventType = EventLogFinishSchemaRollback
+			info = &eventpb.FinishSchemaChangeRollback{}
+		} else {
+			info = &eventpb.FinishSchemaChange{}
 		}
 
 		// Log "Finish Schema Change" or "Finish Schema Change Rollback"
 		// event. Only the table ID and mutation ID are logged; this can
 		// be correlated with the DDL statement that initiated the change
 		// using the mutation id.
-		return MakeEventLogger(sc.execCfg).InsertEventRecord(
-			ctx,
-			txn,
-			schemaChangeEventType,
-			int32(sc.descID),
-			int32(sc.sqlInstanceID),
-			struct {
-				MutationID uint32
-			}{uint32(sc.mutationID)},
-		)
+		return logEventInternalForSchemaChanges(
+			ctx, sc.execCfg, txn,
+			sc.sqlInstanceID,
+			sc.descID,
+			sc.mutationID,
+			info)
 	})
 	if fn := sc.testingKnobs.RunBeforeChildJobs; fn != nil {
 		if len(childJobs) != 0 {
@@ -1634,17 +1633,15 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		// Log "Reverse Schema Change" event. Only the causing error and the
 		// mutation ID are logged; this can be correlated with the DDL statement
 		// that initiated the change using the mutation id.
-		return MakeEventLogger(sc.execCfg).InsertEventRecord(
-			ctx,
-			txn,
-			EventLogReverseSchemaChange,
-			int32(sc.descID),
-			int32(sc.sqlInstanceID),
-			struct {
-				Error      string
-				MutationID uint32
-			}{fmt.Sprintf("%+v", causingError), uint32(sc.mutationID)},
-		)
+		return logEventInternalForSchemaChanges(
+			ctx, sc.execCfg, txn,
+			sc.sqlInstanceID,
+			sc.descID,
+			sc.mutationID,
+			&eventpb.ReverseSchemaChange{
+				Error:    fmt.Sprintf("%+v", causingError),
+				SQLSTATE: pgerror.GetPGCode(causingError).String(),
+			})
 	})
 	if err != nil || alreadyReversed {
 		return err

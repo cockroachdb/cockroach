@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -134,20 +135,14 @@ func (n *dropTableNode) startExec(params runParams) error {
 		// Log a Drop Table event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-			ctx,
-			params.p.txn,
-			EventLogDropTable,
-			int32(droppedDesc.ID),
-			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-			struct {
-				TableName           string
-				Statement           string
-				User                string
-				CascadeDroppedViews []string
-			}{toDel.tn.FQString(), n.n.String(),
-				params.p.User().Normalized(), droppedViews},
-		); err != nil {
+		if err := params.p.logEvent(params.ctx,
+			droppedDesc.ID,
+			&eventpb.DropTable{
+				TableName: toDel.tn.FQString(),
+				// TODO(knz): the droppedViews are insufficiently qualified
+				// See: https://github.com/cockroachdb/cockroach/issues/57735
+				CascadeDroppedViews: droppedViews,
+			}); err != nil {
 			return err
 		}
 	}

@@ -810,6 +810,7 @@ COCKROACHSHORT := ./cockroachshort$(SUFFIX)
 LOG_TARGETS = \
 	pkg/util/log/severity/severity_generated.go \
 	pkg/util/log/channel/channel_generated.go \
+	pkg/util/log/eventpb/eventlog_channels_generated.go \
 	pkg/util/log/log_channels_generated.go
 
 SQLPARSER_TARGETS = \
@@ -827,7 +828,8 @@ DOCGEN_TARGETS := \
 	bin/.docgen_functions \
 	docs/generated/redact_safe.md \
 	bin/.docgen_http \
-	docs/generated/logging.md
+	docs/generated/logging.md \
+	docs/generated/eventlog.md
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
@@ -1551,6 +1553,22 @@ docs/generated/redact_safe.md:
 	  grep -v '^vendor/github.com/cockroachdb/redact' | \
 	  sed -E -e 's/^([^:]*):[0-9]+:.*redact\.RegisterSafeType\((.*)\).*/\1 | \`\2\`/g' >>$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv -f $@.tmp $@
+
+EVENTLOG_PROTOS = \
+	pkg/util/log/eventpb/events.proto \
+	pkg/util/log/eventpb/ddl_events.proto \
+	pkg/util/log/eventpb/misc_sql_events.proto \
+	pkg/util/log/eventpb/privilege_events.proto \
+	pkg/util/log/eventpb/role_events.proto \
+	pkg/util/log/eventpb/cluster_events.proto
+
+docs/generated/eventlog.md: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< eventlog.md $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	mv -f $@.tmp $@
+
+pkg/util/log/eventpb/eventlog_channels_generated.go: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< eventlog_channels $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	mv -f $@.tmp $@
 
 docs/generated/logging.md: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
 	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $^ logging.md $@.tmp || { rm -f $@.tmp; exit 1; }

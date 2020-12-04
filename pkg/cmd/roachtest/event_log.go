@@ -19,13 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func runEventLog(ctx context.Context, t *test, c *cluster) {
 	type nodeEventInfo struct {
-		Descriptor roachpb.NodeDescriptor
-		ClusterID  uuid.UUID
+		NodeID roachpb.NodeID
 	}
 
 	c.Put(ctx, cockroach, "./cockroach")
@@ -36,7 +34,6 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 	waitForFullReplication(t, db)
-	var clusterID uuid.UUID
 
 	err := retry.ForDuration(10*time.Second, func() error {
 		rows, err := db.Query(
@@ -45,7 +42,6 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		clusterID = uuid.UUID{}
 		seenIds := make(map[int64]struct{})
 		for rows.Next() {
 			var targetID int64
@@ -62,20 +58,8 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 			if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 				t.Fatal(err)
 			}
-			if a, e := int64(info.Descriptor.NodeID), targetID; a != e {
+			if a, e := int64(info.NodeID), targetID; a != e {
 				t.Fatalf("Node join with targetID %d had descriptor for wrong node %d", e, a)
-			}
-
-			// Verify cluster ID is recorded, and is the same for all nodes.
-			if (info.ClusterID == uuid.UUID{}) {
-				t.Fatalf("Node join recorded nil cluster id, info: %v", info)
-			}
-			if (clusterID == uuid.UUID{}) {
-				clusterID = info.ClusterID
-			} else if clusterID != info.ClusterID {
-				t.Fatalf(
-					"Node join recorded different cluster ID than earlier node. Expected %s, got %s. Info: %v",
-					clusterID, info.ClusterID, info)
 			}
 
 			// Verify that all NodeIDs are different.
@@ -126,13 +110,8 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 			if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 				t.Fatal(err)
 			}
-			if a, e := int64(info.Descriptor.NodeID), targetID; a != e {
+			if a, e := int64(info.NodeID), targetID; a != e {
 				t.Fatalf("node join with targetID %d had descriptor for wrong node %d", e, a)
-			}
-
-			// Verify cluster ID is recorded, and is the same for all nodes.
-			if clusterID != info.ClusterID {
-				t.Fatalf("expected cluser ID %s, got %s\n%v", clusterID, info.ClusterID, info)
 			}
 
 			seenCount++

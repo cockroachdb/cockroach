@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -167,18 +168,11 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	// in the same transaction as table descriptor update.
 	for _, schemaToDelete := range n.d.schemasToDelete {
 		sc := schemaToDelete.schema
-		if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-			ctx,
-			p.txn,
-			EventLogDropSchema,
-			int32(sc.ID),
-			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-			struct {
-				SchemaName string
-				Statement  string
-				User       string
-			}{sc.Name, n.n.String(), p.User().Normalized()},
-		); err != nil {
+		if err := params.p.logEvent(params.ctx,
+			sc.ID,
+			// TODO(knz): This is missing some details about the database.
+			// See: https://github.com/cockroachdb/cockroach/issues/57738
+			&eventpb.DropSchema{SchemaName: sc.Name}); err != nil {
 			return err
 		}
 	}

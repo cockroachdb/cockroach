@@ -1,0 +1,49 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+// This file contains common payloads to multiple event types.
+//
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this file.*
+
+// CommonEventDetails contains the fields common to all events.
+message CommonEventDetails {
+  // The timestamp of the event.
+  google.protobuf.Timestamp timestamp = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true, (gogoproto.jsontag) = ",omitempty"];
+  // The type of the event.
+  string event_type = 2 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// CommonSQLEventDetails contains the fields common to all
+// SQL events.
+message CommonSQLEventDetails {
+  // A normalized copy of the SQL statement that triggered the event.
+  string statement = 1 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The user account that triggered the event.
+  string user = 2 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The instance ID (not tenant ID) of the SQL server where the event was originated.
+  int32 instance_id = 3 [(gogoproto.customname) = "InstanceID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The primary object descriptor affected by the operation. Set to zero for operations
+  // that don't affect descriptors.
+  uint32 descriptor_id = 4 [(gogoproto.customname) = "DescriptorID" , (gogoproto.jsontag) = ",omitempty"];
+}
+

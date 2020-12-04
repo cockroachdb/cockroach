@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -165,18 +166,14 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	); err != nil {
 		return err
 	}
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogCreateSchema,
-		int32(desc.GetID()),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			SchemaName string
-			Owner      string
-			User       string
-		}{schemaName, privs.Owner().Normalized(), params.p.User().Normalized()},
-	)
+	return params.p.logEvent(params.ctx,
+		desc.GetID(),
+		// TODO(knz): This is missing some details about the database.
+		// See: https://github.com/cockroachdb/cockroach/issues/57738
+		&eventpb.CreateSchema{
+			SchemaName: schemaName,
+			Owner:      privs.Owner().Normalized(),
+		})
 }
 
 func (*createSchemaNode) Next(runParams) (bool, error) { return false, nil }

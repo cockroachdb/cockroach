@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -142,18 +143,9 @@ func (n *dropTypeNode) startExec(params runParams) error {
 			return err
 		}
 		// Log a Drop Type event.
-		if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-			params.ctx,
-			params.p.txn,
-			EventLogDropType,
-			int32(typ.ID),
-			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-			struct {
-				TypeName  string
-				Statement string
-				User      string
-			}{typ.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.p.User().Normalized()},
-		); err != nil {
+		// TODO(knz): This logging is imperfect, see this issue:
+		// https://github.com/cockroachdb/cockroach/issues/57734
+		if err := params.p.logEvent(params.ctx, typ.ID, &eventpb.DropType{TypeName: typ.Name}); err != nil {
 			return err
 		}
 	}

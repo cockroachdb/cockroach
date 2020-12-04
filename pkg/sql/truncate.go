@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -151,18 +152,11 @@ func (t *truncateNode) startExec(params runParams) error {
 		}
 
 		// Log a Truncate Table event for this table.
-		if err := MakeEventLogger(p.extendedEvalCtx.ExecCfg).InsertEventRecord(
-			ctx,
-			p.txn,
-			EventLogTruncateTable,
-			int32(id),
-			int32(p.extendedEvalCtx.NodeID.SQLInstanceID()),
-			struct {
-				TableName string
-				Statement string
-				User      string
-			}{name, n.String(), p.User().Normalized()},
-		); err != nil {
+		if err := params.p.logEvent(ctx,
+			id,
+			&eventpb.TruncateTable{
+				TableName: name,
+			}); err != nil {
 			return err
 		}
 	}

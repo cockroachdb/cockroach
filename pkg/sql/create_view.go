@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 // createViewNode represents a CREATE VIEW statement.
@@ -257,22 +258,12 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogCreateView,
-		int32(newDesc.ID),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			ViewName  string
-			ViewQuery string
-			User      string
-		}{
+	return params.p.logEvent(params.ctx,
+		newDesc.ID,
+		&eventpb.CreateView{
 			ViewName:  n.viewName.FQString(),
 			ViewQuery: n.viewQuery,
-			User:      params.p.User().Normalized(),
-		},
-	)
+		})
 }
 
 func (*createViewNode) Next(runParams) (bool, error) { return false, nil }
