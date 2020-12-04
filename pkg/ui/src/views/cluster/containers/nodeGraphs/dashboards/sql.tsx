@@ -292,5 +292,15 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.sql.ddl.count" title="DDL Statements" nonNegativeRate />
       </Axis>
     </LineGraph>,
+
+    <LineGraph
+      title="Feature Flag Denials"
+      sources={nodeSources}
+      tooltip={`The number of statements denied by a feature flag ${tooltipSelection}.`}
+    >
+      <Axis label="statements">
+        <Metric name="cr.node.sql.feature_flag_denial" title="Statements Denied" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
   ];
 }

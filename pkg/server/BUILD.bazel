@@ -49,6 +49,7 @@ go_library(
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/docs",
+        "//pkg/featureflag",
         "//pkg/gossip",
         "//pkg/gossip/resolver",
         "//pkg/jobs",
