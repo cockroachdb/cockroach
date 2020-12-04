@@ -82,6 +82,19 @@ region_test_db                                root   test1           {test1}    
 system                                        node   NULL            {}                   NULL
 test                                          root   NULL            {}                   NULL
 
+query TTT colnames
+SHOW REGIONS FROM ALL DATABASES
+----
+database_name                                 regions              primary_region
+defaultdb                                     {}                   NULL
+multi_region_test_db                          {test1,test2,test3}  test2
+multi_region_test_explicit_primary_region_db  {test1,test2,test3}  test1
+multi_region_test_survive_zone_failure_db     {test1,test2,test3}  test3
+postgres                                      {}                   NULL
+region_test_db                                {test1}              test1
+system                                        {}                   NULL
+test                                          {}                   NULL
+
 query TTBBT colnames
 USE multi_region_test_db; SHOW REGIONS FROM DATABASE
 ----
