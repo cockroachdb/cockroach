@@ -41,19 +41,19 @@ var _ metric.Struct = DistSQLMetrics{}
 var (
 	metaQueriesActive = metric.Metadata{
 		Name:        "sql.distsql.queries.active",
-		Help:        "Number of distributed SQL queries currently active",
+		Help:        "Number of SQL queries currently active",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaQueriesTotal = metric.Metadata{
 		Name:        "sql.distsql.queries.total",
-		Help:        "Number of distributed SQL queries executed",
+		Help:        "Number of SQL queries executed",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaContendedQueriesCount = metric.Metadata{
 		Name:        "sql.distsql.contended_queries.count",
-		Help:        "Number of distributed SQL queries that experienced contention",
+		Help:        "Number of SQL queries that experienced contention",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
 	}
