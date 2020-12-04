@@ -287,8 +287,7 @@ func validateDescriptor(ctx context.Context, dg catalog.DescGetter, desc catalog
 	case catalog.DatabaseDescriptor:
 		return desc.Validate()
 	case catalog.TypeDescriptor:
-		// TODO(ajwerner): Validate type descriptor.
-		return nil
+		return desc.Validate(ctx, dg)
 	case catalog.SchemaDescriptor:
 		return nil
 	default:
