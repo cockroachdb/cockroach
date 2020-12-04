@@ -15,6 +15,7 @@ import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+import { StatementDenialsClusterSettingsTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
@@ -290,6 +291,16 @@ export default function (props: GraphDashboardProps) {
     >
       <Axis label="statements">
         <Metric name="cr.node.sql.ddl.count" title="DDL Statements" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Statement Denials: Cluster Settings"
+      sources={nodeSources}
+      tooltip={< StatementDenialsClusterSettingsTooltip tooltipSelection={tooltipSelection} />}
+    >
+      <Axis label="statements">
+        <Metric name="cr.node.sql.feature_flag_denial" title="Statements Denied" nonNegativeRate />
       </Axis>
     </LineGraph>,
   ];

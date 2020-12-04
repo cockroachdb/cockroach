@@ -50,7 +50,7 @@ type toDelete struct {
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"DROP TABLE",
 	); err != nil {
 		return nil, err
