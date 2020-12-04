@@ -386,7 +386,11 @@ func (s *Builder) SpansFromInvertedSpans(
 			scratchRows[i] = make(rowenc.EncDatumRow, keyLength+1)
 			for j := 0; j < keyLength; j++ {
 				val := span.StartKey().Value(j)
-				scratchRows[i][j] = rowenc.DatumToEncDatum(val.ResolvedType(), val)
+				var err error
+				scratchRows[i][j], err = rowenc.DatumToEncDatum(val.ResolvedType(), val)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	} else {
@@ -429,7 +433,10 @@ func (s *Builder) generateInvertedSpanKey(
 		// true, since JSON inverted columns use a custom encoding. But since we
 		// are providing an already encoded Datum, the following will eventually
 		// fall through to EncDatum.Encode() which will reuse the encoded bytes.
-		encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
+		encDatum, err := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
+		if err != nil {
+			return nil, err
+		}
 		scratchRow = append(scratchRow, encDatum)
 		keyLen++
 	}

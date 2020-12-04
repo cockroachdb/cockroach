@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -485,7 +486,8 @@ func TestInvertedJoiner(t *testing.T) {
 				for rowIdx, row := range c.input {
 					encRow := make(rowenc.EncDatumRow, len(row))
 					for i, d := range row {
-						encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+						encRow[i], err = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+						assert.NoError(t, err)
 					}
 					encRows[rowIdx] = encRow
 				}

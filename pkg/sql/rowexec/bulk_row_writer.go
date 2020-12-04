@@ -90,8 +90,13 @@ func (sp *bulkRowWriter) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 		sp.MoveToDraining(marshalErr)
 		if marshalErr == nil {
 			// Output the summary.
+			ed, err := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes)))
+			if err != nil {
+				sp.MoveToDraining(err)
+				return nil, sp.DrainHelper()
+			}
 			return rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+				ed,
 			}, nil
 		}
 	}

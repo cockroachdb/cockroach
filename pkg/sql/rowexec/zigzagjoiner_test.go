@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +52,11 @@ func intCols(numCols int) []*types.T {
 }
 
 func encInt(i int) rowenc.EncDatum {
-	return rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+	datum, err := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+	if err != nil {
+		panic(err)
+	}
+	return datum
 }
 
 func TestZigzagJoiner(t *testing.T) {
@@ -558,8 +563,10 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	for i := range v {
 		v[i] = tree.NewDInt(tree.DInt(i))
 	}
-	encThree := rowenc.DatumToEncDatum(types.Int, v[3])
-	encSeven := rowenc.DatumToEncDatum(types.Int, v[7])
+	encThree, err := rowenc.DatumToEncDatum(types.Int, v[3])
+	assert.NoError(t, err)
+	encSeven, err := rowenc.DatumToEncDatum(types.Int, v[7])
+	assert.NoError(t, err)
 
 	sqlutils.CreateTable(
 		t,

@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -381,8 +382,10 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	// The left values rows are consecutive values.
 	leftRows := make(rowenc.EncDatumRows, 20)
 	for i := range leftRows {
+		encDatum, err := rowenc.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 		leftRows[i] = rowenc.EncDatumRow{
-			rowenc.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
+			encDatum,
 		}
 	}
 	leftValuesSpec, err := execinfra.GenerateValuesSpec(typs, leftRows, 10 /* rows per chunk */)
@@ -395,8 +398,10 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	rightRows := make(rowenc.EncDatumRows, 0)
 	for i := 1; i <= 20; i++ {
 		for j := 1; j <= 4*execinfra.RowChannelBufSize; j++ {
+			datum, err := rowenc.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i)))
+			assert.NoError(t, err)
 			rightRows = append(rightRows, rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
+				datum,
 			})
 		}
 	}
@@ -695,9 +700,13 @@ func BenchmarkInfrastructure(b *testing.B) {
 						for j := 0; j < numRows; j++ {
 							row := make(rowenc.EncDatumRow, 3)
 							lastVal += rng.Intn(10)
-							row[0] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(lastVal)))
-							row[1] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
-							row[2] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							var err error
+							row[0], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(lastVal)))
+							assert.NoError(b, err)
+							row[1], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							assert.NoError(b, err)
+							row[2], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							assert.NoError(b, err)
 							if err := se.AddRow(row); err != nil {
 								b.Fatal(err)
 							}

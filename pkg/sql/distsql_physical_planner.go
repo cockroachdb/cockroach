@@ -2915,7 +2915,10 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 			if err != nil {
 				return nil, err
 			}
-			encDatum := rowenc.DatumToEncDatum(resultTypes[colIdx], datum)
+			encDatum, err := rowenc.DatumToEncDatum(resultTypes[colIdx], datum)
+			if err != nil {
+				return nil, err
+			}
 			buf, err = encDatum.Encode(resultTypes[colIdx], &a, descpb.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return nil, err

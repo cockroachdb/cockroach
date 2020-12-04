@@ -78,7 +78,10 @@ func toEncDatum(datumType *types.T, v interface{}) rowenc.EncDatum {
 	if err != nil {
 		panic(err)
 	}
-	encodedDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
+	encodedDatum, err := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
+	if err != nil {
+		panic(err)
+	}
 	encodedDatum.Datum = d
 	return encodedDatum
 }

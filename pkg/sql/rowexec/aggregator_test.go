@@ -633,12 +633,19 @@ func makeGroupedIntRows(groupSize, numCols int, groupedCols []int) rowenc.EncDat
 
 	for i := range rows {
 		rows[i] = make(rowenc.EncDatumRow, numCols)
+		var err error
 		for j := 0; j < numCols; j++ {
 			if groupColSet.Contains(j) {
-				rows[i][j] = rowenc.DatumToEncDatum(
+				rows[i][j], err = rowenc.DatumToEncDatum(
 					types.Int, tree.NewDInt(tree.DInt(getGroupedColVal(i, j))))
+				if err != nil {
+					panic(err)
+				}
 			} else {
-				rows[i][j] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i+j)))
+				rows[i][j], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i+j)))
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 	}

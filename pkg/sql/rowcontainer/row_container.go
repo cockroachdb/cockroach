@@ -193,12 +193,16 @@ func (mc *MemRowContainer) Less(i, j int) bool {
 
 // EncRow returns the idx-th row as an EncDatumRow. The slice itself is reused
 // so it is only valid until the next call to EncRow.
-func (mc *MemRowContainer) EncRow(idx int) rowenc.EncDatumRow {
+func (mc *MemRowContainer) EncRow(idx int) (rowenc.EncDatumRow, error) {
 	datums := mc.At(idx)
 	for i, d := range datums {
-		mc.scratchEncRow[i] = rowenc.DatumToEncDatum(mc.types[i], d)
+		var err error
+		mc.scratchEncRow[i], err = rowenc.DatumToEncDatum(mc.types[i], d)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return mc.scratchEncRow
+	return mc.scratchEncRow, nil
 }
 
 // AddRow adds a row to the container.
@@ -300,7 +304,7 @@ func (i *memRowIterator) Next() {
 
 // Row implements the RowIterator interface.
 func (i *memRowIterator) Row() (rowenc.EncDatumRow, error) {
-	return i.EncRow(i.curIdx), nil
+	return i.EncRow(i.curIdx)
 }
 
 // Close implements the RowIterator interface.
@@ -325,7 +329,11 @@ func (mc *MemRowContainer) NewFinalIterator(ctx context.Context) RowIterator {
 
 // GetRow implements IndexedRowContainer.
 func (mc *MemRowContainer) GetRow(ctx context.Context, pos int) (tree.IndexedRow, error) {
-	return IndexedRow{Idx: pos, Row: mc.EncRow(pos)}, nil
+	row, err := mc.EncRow(pos)
+	if err != nil {
+		return nil, err
+	}
+	return IndexedRow{Idx: pos, Row: row}, nil
 }
 
 var _ RowIterator = memRowFinalIterator{}
@@ -345,7 +353,7 @@ func (i memRowFinalIterator) Next() {
 
 // Row implements the RowIterator interface.
 func (i memRowFinalIterator) Row() (rowenc.EncDatumRow, error) {
-	return i.EncRow(0), nil
+	return i.EncRow(0)
 }
 
 // Close implements the RowIterator interface.
@@ -701,10 +709,14 @@ func NewDiskBackedIndexedRowContainer(
 // AddRow implements SortableRowContainer.
 func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	copy(f.scratchEncRow, row)
-	f.scratchEncRow[len(f.scratchEncRow)-1] = rowenc.DatumToEncDatum(
+	var err error
+	f.scratchEncRow[len(f.scratchEncRow)-1], err = rowenc.DatumToEncDatum(
 		types.Int,
 		tree.NewDInt(tree.DInt(f.idx)),
 	)
+	if err != nil {
+		return err
+	}
 	f.idx++
 	return f.DiskBackedRowContainer.AddRow(ctx, f.scratchEncRow)
 }
@@ -864,7 +876,10 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 			f.idxRowIter++
 		}
 	}
-	rowWithIdx = f.DiskBackedRowContainer.mrc.EncRow(pos)
+	rowWithIdx, err = f.DiskBackedRowContainer.mrc.EncRow(pos)
+	if err != nil {
+		return nil, err
+	}
 	row, rowIdx := rowWithIdx[:len(rowWithIdx)-1], rowWithIdx[len(rowWithIdx)-1].Datum
 	if idx, ok := rowIdx.(*tree.DInt); ok {
 		return IndexedRow{int(*idx), row}, nil

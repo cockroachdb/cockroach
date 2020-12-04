@@ -26,14 +26,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestOrderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [6]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 
 	asc := encoding.Ascending
@@ -191,8 +194,10 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
-				b := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
+				a, err := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+				assert.NoError(t, err)
+				b, err := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
+				assert.NoError(t, err)
 				row := rowenc.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
@@ -239,8 +244,10 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
-				b := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
+				a, err := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+				assert.NoError(t, err)
+				b, err := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
+				assert.NoError(t, err)
 				row := rowenc.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/assert"
 )
 
 // runSampleTest feeds rows with the given ranks through a reservoir
@@ -32,7 +33,8 @@ func runSampleTest(t *testing.T, evalCtx *tree.EvalContext, numSamples int, rank
 	var sr SampleReservoir
 	sr.Init(numSamples, []*types.T{types.Int}, nil /* memAcc */, util.MakeFastIntSet(0))
 	for _, r := range ranks {
-		d := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
+		d, err := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
+		assert.NoError(t, err)
 		if err := sr.SampleRow(ctx, evalCtx, rowenc.EncDatumRow{d}, uint64(r)); err != nil {
 			t.Errorf("%v", err)
 		}

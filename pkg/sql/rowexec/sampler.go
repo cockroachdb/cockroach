@@ -364,7 +364,10 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	outRow := make(rowenc.EncDatumRow, len(s.outTypes))
 	// Emit the sampled rows.
 	for i := range outRow {
-		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i], err = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		if err != nil {
+			return earlyExit, err
+		}
 	}
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
@@ -375,7 +378,10 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	}
 	// Emit the inverted sample rows.
 	for i := range outRow {
-		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i], err = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		if err != nil {
+			return earlyExit, err
+		}
 	}
 	for col, invSr := range s.invSr {
 		outRow[s.invColIdxCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(col))}
@@ -394,7 +400,10 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	// Emit the sketch rows.
 	for i := range outRow {
-		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i], err = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		if err != nil {
+			return earlyExit, err
+		}
 	}
 	for i, si := range s.sketches {
 		outRow[s.sketchIdxCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
@@ -405,7 +414,10 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	// Emit the inverted sketch rows.
 	for i := range outRow {
-		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i], err = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		if err != nil {
+			return earlyExit, err
+		}
 	}
 	for col, invSketch := range s.invSketch {
 		outRow[s.invColIdxCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(col))}

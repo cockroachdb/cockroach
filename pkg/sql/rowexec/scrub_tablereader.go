@@ -172,20 +172,20 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	}
 
 	primaryKeyValues := tr.prettyPrimaryKeyValues(row, tr.tableDesc.TableDesc())
-	return rowenc.EncDatumRow{
-		rowenc.DatumToEncDatum(
-			ScrubTypes[0],
-			tree.NewDString(scrubErr.Code),
-		),
-		rowenc.DatumToEncDatum(
-			ScrubTypes[1],
-			tree.NewDString(primaryKeyValues),
-		),
-		rowenc.DatumToEncDatum(
-			ScrubTypes[2],
-			detailsJSON,
-		),
-	}, nil
+	ret := make(rowenc.EncDatumRow, 3)
+	ret[0], err = rowenc.DatumToEncDatum(ScrubTypes[0], tree.NewDString(scrubErr.Code))
+	if err != nil {
+		return nil, err
+	}
+	ret[1], err = rowenc.DatumToEncDatum(ScrubTypes[1], tree.NewDString(primaryKeyValues))
+	if err != nil {
+		return nil, err
+	}
+	ret[2], err = rowenc.DatumToEncDatum(ScrubTypes[2], detailsJSON)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 func (tr *scrubTableReader) prettyPrimaryKeyValues(

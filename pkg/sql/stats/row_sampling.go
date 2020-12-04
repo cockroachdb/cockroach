@@ -153,7 +153,11 @@ func (sr *SampleReservoir) copyRow(
 			return err
 		}
 		beforeSize := dst[i].Size()
-		dst[i] = rowenc.DatumToEncDatum(sr.colTypes[i], src[i].Datum)
+		var err error
+		dst[i], err = rowenc.DatumToEncDatum(sr.colTypes[i], src[i].Datum)
+		if err != nil {
+			return err
+		}
 		afterSize := dst[i].Size()
 
 		// If the datum is too large, truncate it (this also performs a copy).

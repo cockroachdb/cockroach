@@ -23,13 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFilterer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	v := [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 
 	// We run the same input rows through various PostProcessSpecs.

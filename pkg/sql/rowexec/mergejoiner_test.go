@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 )
 
 type mergeJoinerTestCase struct {
@@ -44,8 +45,10 @@ func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 	null := rowenc.EncDatum{Datum: tree.DNull}
 
@@ -701,12 +704,12 @@ func TestMergeJoiner(t *testing.T) {
 	}
 
 	// Add INTERSECT ALL cases with MergeJoinerSpecs.
-	for _, tc := range intersectAllTestCases() {
+	for _, tc := range intersectAllTestCases(t) {
 		testCases = append(testCases, setOpTestCaseToMergeJoinerTestCase(tc))
 	}
 
 	// Add EXCEPT ALL cases with MergeJoinerSpecs.
-	for _, tc := range exceptAllTestCases() {
+	for _, tc := range exceptAllTestCases(t) {
 		testCases = append(testCases, setOpTestCaseToMergeJoinerTestCase(tc))
 	}
 
@@ -759,8 +762,10 @@ func TestConsumerClosed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [10]rowenc.EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 
 	spec := execinfrapb.MergeJoinerSpec{

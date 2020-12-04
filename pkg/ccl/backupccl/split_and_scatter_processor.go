@@ -196,13 +196,22 @@ func (ssp *splitAndScatterProcessor) Run(ctx context.Context) {
 		// The routing datums informs the router which output stream should be used.
 		routingDatum, ok := routingDatumCache[scatteredEntry.node]
 		if !ok {
-			routingDatum, _ = routingDatumsForNode(scatteredEntry.node)
+			routingDatum, _, err = routingDatumsForNode(scatteredEntry.node)
+			if err != nil {
+				ssp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+				break
+			}
 			routingDatumCache[scatteredEntry.node] = routingDatum
 		}
 
+		ed, err := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(entryBytes)))
+		if err != nil {
+			ssp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+			break
+		}
 		row := rowenc.EncDatumRow{
 			routingDatum,
-			rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(entryBytes))),
+			ed,
 		}
 		ssp.output.Push(row, nil)
 	}
@@ -278,21 +287,30 @@ func runSplitAndScatter(
 	return g.Wait()
 }
 
-func routingDatumsForNode(nodeID roachpb.NodeID) (rowenc.EncDatum, rowenc.EncDatum) {
+func routingDatumsForNode(nodeID roachpb.NodeID) (rowenc.EncDatum, rowenc.EncDatum, error) {
 	routingBytes := roachpb.Key(fmt.Sprintf("node%d", nodeID))
-	startDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
-	endDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
-	return startDatum, endDatum
+	startDatum, err := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
+	if err != nil {
+		return rowenc.EncDatum{}, rowenc.EncDatum{}, err
+	}
+	endDatum, err := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
+	if err != nil {
+		return rowenc.EncDatum{}, rowenc.EncDatum{}, err
+	}
+	return startDatum, endDatum, nil
 }
 
 // routingSpanForNode provides the mapping to be used during distsql planning
 // when setting up the output router.
 func routingSpanForNode(nodeID roachpb.NodeID) ([]byte, []byte, error) {
 	var alloc rowenc.DatumAlloc
-	startDatum, endDatum := routingDatumsForNode(nodeID)
+	startDatum, endDatum, err := routingDatumsForNode(nodeID)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	startBytes, endBytes := make([]byte, 0), make([]byte, 0)
-	startBytes, err := startDatum.Encode(splitAndScatterOutputTypes[0], &alloc, descpb.DatumEncoding_ASCENDING_KEY, startBytes)
+	startBytes, err = startDatum.Encode(splitAndScatterOutputTypes[0], &alloc, descpb.DatumEncoding_ASCENDING_KEY, startBytes)
 	if err != nil {
 		return nil, nil, err
 	}

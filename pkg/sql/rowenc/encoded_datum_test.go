@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestEncDatum(t *testing.T) {
@@ -42,7 +43,8 @@ func TestEncDatum(t *testing.T) {
 		t.Errorf("empty EncDatum has an encoding")
 	}
 
-	x := DatumToEncDatum(types.Int, tree.NewDInt(5))
+	x, err := DatumToEncDatum(types.Int, tree.NewDInt(5))
+	assert.NoError(t, err)
 
 	check := func(x EncDatum) {
 		if x.IsUnset() {
@@ -64,7 +66,8 @@ func TestEncDatum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	y := EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
+	y, err := EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
+	assert.NoError(t, err)
 	check(y)
 
 	if enc, ok := y.Encoding(); !ok {
@@ -90,7 +93,8 @@ func TestEncDatum(t *testing.T) {
 	} else if enc != descpb.DatumEncoding_ASCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	z := EncDatumFromEncoded(descpb.DatumEncoding_DESCENDING_KEY, enc2)
+	z, err := EncDatumFromEncoded(descpb.DatumEncoding_DESCENDING_KEY, enc2)
+	assert.NoError(t, err)
 	if enc, ok := z.Encoding(); !ok {
 		t.Error("no encoding")
 	} else if enc != descpb.DatumEncoding_DESCENDING_KEY {
@@ -119,7 +123,8 @@ func BenchmarkDatumToEncDatum(b *testing.B) {
 	d := tree.NewDInt(0)
 	s := 0
 	for i := 0; i < b.N; i++ {
-		ed := DatumToEncDatum(types.Int, d)
+		ed, err := DatumToEncDatum(types.Int, d)
+		assert.NoError(b, err)
 		s += int(*(ed.Datum.(*tree.DInt)))
 	}
 	b.Log(s)
@@ -132,7 +137,8 @@ func TestEncDatumNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Verify DNull is null.
-	n := DatumToEncDatum(types.Int, tree.DNull)
+	n, err := DatumToEncDatum(types.Int, tree.DNull)
+	assert.NoError(t, err)
 	if !n.IsNull() {
 		t.Error("DNull not null")
 	}
@@ -152,7 +158,8 @@ func TestEncDatumNull(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			b := EncDatumFromEncoded(descpb.DatumEncoding(enc), encoded)
+			b, err := EncDatumFromEncoded(descpb.DatumEncoding(enc), encoded)
+			assert.NoError(t, err)
 			if a.IsNull() != b.IsNull() {
 				t.Errorf("before: %s (null=%t) after: %s (null=%t)",
 					a.String(types.Int), a.IsNull(), b.String(types.Int), b.IsNull())
@@ -182,9 +189,11 @@ func checkEncDatumCmp(
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec1 := EncDatumFromEncoded(enc1, buf1)
+	dec1, err := EncDatumFromEncoded(enc1, buf1)
+	assert.NoError(t, err)
 
-	dec2 := EncDatumFromEncoded(enc2, buf2)
+	dec2, err := EncDatumFromEncoded(enc2, buf2)
+	assert.NoError(t, err)
 
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
@@ -238,8 +247,10 @@ func TestEncDatumCompare(t *testing.T) {
 				break
 			}
 		}
-		v1 := DatumToEncDatum(typ, d1)
-		v2 := DatumToEncDatum(typ, d2)
+		v1, err := DatumToEncDatum(typ, d1)
+		assert.NoError(t, err)
+		v2, err := DatumToEncDatum(typ, d2)
+		assert.NoError(t, err)
 
 		if val, err := v1.Compare(typ, a, evalCtx, &v2); err != nil {
 			t.Fatal(err)
@@ -336,8 +347,10 @@ func TestEncDatumRowCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [5]EncDatum{}
+	var err error
 	for i := range v {
-		v[i] = DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i], err = DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		assert.NoError(t, err)
 	}
 
 	asc := encoding.Ascending
@@ -488,9 +501,11 @@ func TestEncDatumRowAlloc(t *testing.T) {
 			in := make(EncDatumRows, rows)
 			for i := 0; i < rows; i++ {
 				in[i] = make(EncDatumRow, cols)
+				var err error
 				for j := 0; j < cols; j++ {
 					datum := RandDatum(rng, colTypes[j], true /* nullOk */)
-					in[i][j] = DatumToEncDatum(colTypes[j], datum)
+					in[i][j], err = DatumToEncDatum(colTypes[j], datum)
+					assert.NoError(t, err)
 				}
 			}
 			var alloc EncDatumRowAlloc
@@ -568,7 +583,18 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 			t.Fatalf("seed %d: non-null test case %v is not a tuple", seed, test)
 		}
 	}
+}
 
+func mustDecodeED(t *testing.T, enc descpb.DatumEncoding, encoded []byte) EncDatum {
+	ed, err := EncDatumFromEncoded(enc, encoded)
+	assert.NoError(t, err)
+	return ed
+}
+
+func mustConvertED(t *testing.T, ctyp *types.T, d tree.Datum) EncDatum {
+	ed, err := DatumToEncDatum(ctyp, d)
+	assert.NoError(t, err)
+	return ed
 }
 
 func TestEncDatumSize(t *testing.T) {
@@ -591,19 +617,19 @@ func TestEncDatumSize(t *testing.T) {
 		expectedSize uintptr
 	}{
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 0)),
+			encDatum:     mustDecodeED(t, asc, encoding.EncodeVarintAscending(nil, 0)),
 			expectedSize: EncDatumOverhead + 1, // 1 is encoded with length 1 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeVarintDescending(nil, 123)),
+			encDatum:     mustDecodeED(t, desc, encoding.EncodeVarintDescending(nil, 123)),
 			expectedSize: EncDatumOverhead + 2, // 123 is encoded with length 2 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 12345)),
+			encDatum:     mustDecodeED(t, asc, encoding.EncodeVarintAscending(nil, 12345)),
 			expectedSize: EncDatumOverhead + 3, // 12345 is encoded with length 3 byte array
 		},
 		{
-			encDatum:     DatumToEncDatum(types.Int, tree.NewDInt(123)),
+			encDatum:     mustConvertED(t, types.Int, tree.NewDInt(123)),
 			expectedSize: EncDatumOverhead + DIntSize,
 		},
 		{
@@ -615,15 +641,15 @@ func TestEncDatumSize(t *testing.T) {
 			expectedSize: EncDatumOverhead + 2 + DIntSize, // 123 is encoded with length 2 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeFloatAscending(nil, 0)),
+			encDatum:     mustDecodeED(t, asc, encoding.EncodeFloatAscending(nil, 0)),
 			expectedSize: EncDatumOverhead + 1, // 0.0 is encoded with length 1 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeFloatDescending(nil, 123)),
+			encDatum:     mustDecodeED(t, desc, encoding.EncodeFloatDescending(nil, 123)),
 			expectedSize: EncDatumOverhead + 9, // 123.0 is encoded with length 9 byte array
 		},
 		{
-			encDatum:     DatumToEncDatum(types.Float, tree.NewDFloat(123)),
+			encDatum:     mustConvertED(t, types.Float, tree.NewDFloat(123)),
 			expectedSize: EncDatumOverhead + DFloatSize,
 		},
 		{
@@ -635,15 +661,15 @@ func TestEncDatumSize(t *testing.T) {
 			expectedSize: EncDatumOverhead + 9 + DFloatSize, // 123.0 is encoded with length 9 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeDecimalAscending(nil, apd.New(0, 0))),
+			encDatum:     mustDecodeED(t, asc, encoding.EncodeDecimalAscending(nil, apd.New(0, 0))),
 			expectedSize: EncDatumOverhead + 1, // 0.0 is encoded with length 1 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeDecimalDescending(nil, apd.New(123, 2))),
+			encDatum:     mustDecodeED(t, desc, encoding.EncodeDecimalDescending(nil, apd.New(123, 2))),
 			expectedSize: EncDatumOverhead + 4, // 123.0 is encoded with length 4 byte array
 		},
 		{
-			encDatum:     DatumToEncDatum(types.Decimal, dec12300),
+			encDatum:     mustConvertED(t, types.Decimal, dec12300),
 			expectedSize: EncDatumOverhead + decimalSize,
 		},
 		{
@@ -655,15 +681,15 @@ func TestEncDatumSize(t *testing.T) {
 			expectedSize: EncDatumOverhead + 4 + decimalSize,
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeStringAscending(nil, "")),
+			encDatum:     mustDecodeED(t, asc, encoding.EncodeStringAscending(nil, "")),
 			expectedSize: EncDatumOverhead + 3, // "" is encoded with length 3 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeStringDescending(nil, "123⌘")),
+			encDatum:     mustDecodeED(t, desc, encoding.EncodeStringDescending(nil, "123⌘")),
 			expectedSize: EncDatumOverhead + 9, // "123⌘" is encoded with length 9 byte array
 		},
 		{
-			encDatum:     DatumToEncDatum(types.String, tree.NewDString("12")),
+			encDatum:     mustConvertED(t, types.String, tree.NewDString("12")),
 			expectedSize: EncDatumOverhead + DStringSize + 2,
 		},
 		{
@@ -675,11 +701,13 @@ func TestEncDatumSize(t *testing.T) {
 			expectedSize: EncDatumOverhead + 7 + DStringSize + 5, // "1234" is encoded with length 7 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 0, 0, time.FixedZone("EDT", 0)))),
+			encDatum: mustDecodeED(t, asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 0, 0,
+				time.FixedZone("EDT", 0)))),
 			expectedSize: EncDatumOverhead + 7, // This time is encoded with length 7 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 12, 3456789, time.FixedZone("EDT", 0)))),
+			encDatum: mustDecodeED(t, asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 12,
+				3456789, time.FixedZone("EDT", 0)))),
 			expectedSize: EncDatumOverhead + 10, // This time is encoded with length 10 byte array
 		},
 	}
@@ -723,19 +751,19 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 		newMemUsage int64
 	}{
 		{
-			encDatum: EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 0)),
+			encDatum: mustDecodeED(t, asc, encoding.EncodeVarintAscending(nil, 0)),
 			typ:      types.Int,
 			// Fingerprint should reuse already existing encoded representation,
 			// so it shouldn't use any new memory.
 			newMemUsage: 0,
 		},
 		{
-			encDatum:    EncDatumFromEncoded(desc, encoding.EncodeVarintDescending(nil, i)),
+			encDatum:    mustDecodeED(t, desc, encoding.EncodeVarintDescending(nil, i)),
 			typ:         types.Int,
 			newMemUsage: int64(unsafe.Sizeof(tree.DInt(i))),
 		},
 		{
-			encDatum:    EncDatumFromEncoded(value, encoding.EncodeBytesValue(nil, encoding.NoColumnID, []byte(s))),
+			encDatum:    mustDecodeED(t, value, encoding.EncodeBytesValue(nil, encoding.NoColumnID, []byte(s))),
 			typ:         types.String,
 			newMemUsage: int64(tree.NewDString(s).Size()),
 		},

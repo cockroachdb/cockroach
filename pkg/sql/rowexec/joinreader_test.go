@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -690,7 +691,8 @@ func TestJoinReader(t *testing.T) {
 							for rowIdx, row := range c.input {
 								encRow := make(rowenc.EncDatumRow, len(row))
 								for i, d := range row {
-									encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+									encRow[i], err = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+									assert.NoError(t, err)
 								}
 								encRows[rowIdx] = encRow
 							}
@@ -947,7 +949,8 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 
 	encRow := make(rowenc.EncDatumRow, 1)
-	encRow[0] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(1))
+	encRow[0], err = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(1))
+	assert.NoError(t, err)
 
 	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
 		return newJoinReader(

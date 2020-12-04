@@ -109,15 +109,15 @@ func (ed EncDatum) Size() uintptr {
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.
 // The underlying Datum is nil.
-func EncDatumFromEncoded(enc descpb.DatumEncoding, encoded []byte) EncDatum {
+func EncDatumFromEncoded(enc descpb.DatumEncoding, encoded []byte) (EncDatum, error) {
 	if len(encoded) == 0 {
-		panic(errors.AssertionFailedf("empty encoded value"))
+		return EncDatum{}, errors.AssertionFailedf("empty encoded value")
 	}
 	return EncDatum{
 		encoding: enc,
 		encoded:  encoded,
 		Datum:    nil,
-	}
+	}, nil
 }
 
 // EncDatumFromBuffer initializes an EncDatum with an encoding that is
@@ -138,17 +138,17 @@ func EncDatumFromBuffer(
 		if err != nil {
 			return EncDatum{}, nil, err
 		}
-		ed := EncDatumFromEncoded(enc, buf[:encLen])
-		return ed, buf[encLen:], nil
+		ed, err := EncDatumFromEncoded(enc, buf[:encLen])
+		return ed, buf[encLen:], err
 	case descpb.DatumEncoding_VALUE:
 		typeOffset, encLen, err := encoding.PeekValueLength(buf)
 		if err != nil {
 			return EncDatum{}, nil, err
 		}
-		ed := EncDatumFromEncoded(enc, buf[typeOffset:encLen])
-		return ed, buf[encLen:], nil
+		ed, err := EncDatumFromEncoded(enc, buf[typeOffset:encLen])
+		return ed, buf[encLen:], err
 	default:
-		panic(errors.AssertionFailedf("unknown encoding %s", enc))
+		return EncDatum{}, nil, errors.AssertionFailedf("unknown encoding %s", enc)
 	}
 }
 
@@ -164,21 +164,21 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 	if err != nil {
 		return EncDatum{}, nil, err
 	}
-	ed := EncDatumFromEncoded(descpb.DatumEncoding_VALUE, buf[typeOffset:encLen])
-	return ed, buf[encLen:], nil
+	ed, err := EncDatumFromEncoded(descpb.DatumEncoding_VALUE, buf[typeOffset:encLen])
+	return ed, buf[encLen:], err
 }
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
-func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
+func DatumToEncDatum(ctyp *types.T, d tree.Datum) (EncDatum, error) {
 	if d == nil {
-		panic(errors.AssertionFailedf("cannot convert nil datum to EncDatum"))
+		return EncDatum{}, errors.AssertionFailedf("cannot convert nil datum to EncDatum")
 	}
 
 	dTyp := d.ResolvedType()
 	if d != tree.DNull && !ctyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
-		panic(errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp, ctyp))
+		return EncDatum{}, errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp, ctyp)
 	}
-	return EncDatum{Datum: d}
+	return EncDatum{Datum: d}, nil
 }
 
 // UnsetDatum ensures subsequent IsUnset() calls return false.
@@ -281,7 +281,7 @@ func (ed *EncDatum) Encode(
 	case descpb.DatumEncoding_VALUE:
 		return EncodeTableValue(appendTo, descpb.ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
 	default:
-		panic(errors.AssertionFailedf("unknown encoding requested %s", enc))
+		return nil, errors.AssertionFailedf("unknown encoding requested %s", enc)
 	}
 }
 

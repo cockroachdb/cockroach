@@ -1132,7 +1132,10 @@ func (rf *Fetcher) processValueSingle(
 			if rf.traceKV {
 				prettyValue = value.String()
 			}
-			table.row[idx] = rowenc.DatumToEncDatum(typ, value)
+			table.row[idx], err = rowenc.DatumToEncDatum(typ, value)
+			if err != nil {
+				return "", "", err
+			}
 			if DebugRowFetch {
 				log.Infof(ctx, "Scan %s -> %v", kv.Key, value)
 			}

@@ -350,7 +350,7 @@ func (i *hashMemRowBucketIterator) Next() {
 
 // Row implements the RowIterator interface.
 func (i *hashMemRowBucketIterator) Row() (rowenc.EncDatumRow, error) {
-	return i.EncRow(i.rowIdxs[i.curIdx]), nil
+	return i.EncRow(i.rowIdxs[i.curIdx])
 }
 
 // IsMarked implements the RowMarkerIterator interface.
@@ -434,7 +434,10 @@ func (i *hashMemRowIterator) computeKey() error {
 
 	var row rowenc.EncDatumRow
 	if valid {
-		row = i.EncRow(i.curIdx)
+		row, err = i.EncRow(i.curIdx)
+		if err != nil {
+			return err
+		}
 	} else {
 		if i.curIdx == 0 {
 			// There are no rows in the container, so the key corresponding to the
@@ -446,7 +449,10 @@ func (i *hashMemRowIterator) computeKey() error {
 		// will "simulate" the key corresponding to the non-existent row as the key
 		// to the last existing row plus one (plus one part is done below where we
 		// append the index of the row to curKey).
-		row = i.EncRow(i.curIdx - 1)
+		row, err = i.EncRow(i.curIdx - 1)
+		if err != nil {
+			return err
+		}
 	}
 
 	i.curKey = i.curKey[:0]
@@ -473,7 +479,7 @@ func (i *hashMemRowIterator) Next() {
 
 // Row implements the RowIterator interface.
 func (i *hashMemRowIterator) Row() (rowenc.EncDatumRow, error) {
-	return i.EncRow(i.curIdx), nil
+	return i.EncRow(i.curIdx)
 }
 
 // Close implements the RowIterator interface.
@@ -527,10 +533,14 @@ func (h *HashDiskRowContainer) Init(
 		h.scratchEncRow = make(rowenc.EncDatumRow, len(storedTypes))
 		// Initialize the last column of the scratch row we use in AddRow() to
 		// be unmarked.
-		h.scratchEncRow[len(h.scratchEncRow)-1] = rowenc.DatumToEncDatum(
+		var err error
+		h.scratchEncRow[len(h.scratchEncRow)-1], err = rowenc.DatumToEncDatum(
 			types.Bool,
 			tree.MakeDBool(false),
 		)
+		if err != nil {
+			return err
+		}
 	}
 
 	h.DiskRowContainer = MakeDiskRowContainer(h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
