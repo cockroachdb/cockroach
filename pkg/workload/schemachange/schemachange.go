@@ -66,6 +66,7 @@ type schemaChange struct {
 	dryRun             bool
 	maxSourceTables    int
 	sequenceOwnedByPct int
+	retryOpGenFailures bool
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -91,6 +92,8 @@ var schemaChangeMeta = workload.Meta{
 			`Maximum tables or views that a newly created tables or views can depend on`)
 		s.flags.IntVar(&s.sequenceOwnedByPct, `seq-owned-pct`, defaultSequenceOwnedByPct,
 			`Percentage of times that a sequence is owned by column upon creation.`)
+		s.flags.BoolVar(&s.retryOpGenFailures, `retry-op-gen`, true,
+			`Determines if operation generation failures will not terminate the workload.`)
 		return s
 	},
 }
@@ -151,12 +154,13 @@ func (s *schemaChange) Ops(
 		}
 
 		w := &schemaChangeWorker{
-			verbose:         s.verbose,
-			dryRun:          s.dryRun,
-			maxOpsPerWorker: s.maxOpsPerWorker,
-			pool:            pool,
-			hists:           reg.GetHandle(),
-			opGen:           makeOperationGenerator(&opGeneratorParams),
+			verbose:            s.verbose,
+			dryRun:             s.dryRun,
+			maxOpsPerWorker:    s.maxOpsPerWorker,
+			pool:               pool,
+			hists:              reg.GetHandle(),
+			opGen:              makeOperationGenerator(&opGeneratorParams),
+			retryOpGenFailures: s.retryOpGenFailures,
 		}
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
@@ -189,12 +193,13 @@ SELECT max(regexp_extract(name, '[0-9]+$')::int)
 }
 
 type schemaChangeWorker struct {
-	verbose         int
-	dryRun          bool
-	maxOpsPerWorker int
-	pool            *workload.MultiConnPool
-	hists           *histogram.Histograms
-	opGen           *operationGenerator
+	verbose            int
+	dryRun             bool
+	maxOpsPerWorker    int
+	pool               *workload.MultiConnPool
+	hists              *histogram.Histograms
+	opGen              *operationGenerator
+	retryOpGenFailures bool
 }
 
 var (
@@ -226,9 +231,13 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
 	for i := 0; i < opsNum; i++ {
 		op, noops, err := w.opGen.randOp(tx)
 		if err != nil {
+			mark := errRunInTxnFatalSentinel
+			if w.retryOpGenFailures {
+				mark = errRunInTxnRbkSentinel
+			}
 			return noops, errors.Mark(
 				errors.Wrap(err, "could not generate a random operation"),
-				errRunInTxnFatalSentinel,
+				mark,
 			)
 		}
 		if w.verbose >= 2 {

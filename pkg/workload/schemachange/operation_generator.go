@@ -209,24 +209,28 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 		op := opType(og.params.ops.Int())
 		og.resetOpState()
 		stmt, err := opFuncs[op](og, tx)
-		// TODO(spaskob): use more fine-grained error reporting.
-		if stmt == "" || errors.Is(err, pgx.ErrNoRows) {
-			log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
-			continue
-		}
 
-		// Screen for schema change after write in the same transaction.
-		if op != insertRow && op != validate {
-			if _, previous := og.opsInTxn[insertRow]; previous {
-				og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		if err == nil {
+			// Screen for schema change after write in the same transaction.
+			if op != insertRow && op != validate {
+				if _, previous := og.opsInTxn[insertRow]; previous {
+					og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+				}
 			}
+
+			// Add candidateExpectedCommitErrors to expectedCommitErrors
+			og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
+
+			og.opsInTxn[op] = true
+
+			return stmt, log.String(), err
+		}
+		if strings.Contains(err.Error(), pgcode.InFailedSQLTransaction.String()) {
+			log.WriteString(fmt.Sprintf("Aborted: %s -> %v\n", op, err))
+			return "SELECT 1", log.String(), err
 		}
 
-		// Add candidateExpectedCommitErrors to expectedCommitErrors
-		og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
-
-		og.opsInTxn[op] = true
-		return stmt, log.String(), err
+		log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
 	}
 }
 
