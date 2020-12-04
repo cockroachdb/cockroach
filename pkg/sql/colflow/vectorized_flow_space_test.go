@@ -72,9 +72,9 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, success), func(t *testing.T) {
-				inputs := []colexecbase.Operator{colexec.NewZeroOpNoInput()}
+				inputs := []colexecbase.Operator{colexec.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */)}
 				if len(tc.spec.Input) > 1 {
-					inputs = append(inputs, colexec.NewZeroOpNoInput())
+					inputs = append(inputs, colexec.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */))
 				}
 				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if success {
