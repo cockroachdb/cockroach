@@ -1375,8 +1375,8 @@ func WithAnonymizedStatement(err error, stmt tree.Statement) error {
 		"while executing: %s", errors.Safe(anonStmtStr))
 }
 
-// SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
-// the context of one SQL session.
+// SessionTracing holds the state used by SET TRACING statements in the context
+// of one SQL session.
 // It holds the current trace being collected (or the last trace collected, if
 // tracing is not currently ongoing).
 //
@@ -1474,9 +1474,6 @@ func (st *SessionTracing) StartTracing(
 				comma = ", "
 			}
 			recOption := "cluster"
-			if recType == tracing.SingleNodeRecording {
-				recOption = "local"
-			}
 			fmt.Fprintf(&desiredOptions, "%s%s", comma, recOption)
 
 			err := pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -1563,11 +1560,6 @@ func (st *SessionTracing) StopTracing() error {
 	var err error
 	st.lastRecording, err = generateSessionTraceVTable(spans)
 	return err
-}
-
-// RecordingType returns which type of tracing is currently being done.
-func (st *SessionTracing) RecordingType() tracing.RecordingType {
-	return st.recordingType
 }
 
 // KVTracingEnabled checks whether KV tracing is currently enabled.

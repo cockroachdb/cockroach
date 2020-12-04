@@ -67,7 +67,7 @@ func TestTracerRecording(t *testing.T) {
 	noop3.Finish()
 
 	s1.LogKV("x", 1)
-	s1.StartRecording(SingleNodeRecording)
+	s1.StartRecording(SnowballRecording)
 	s1.LogKV("x", 2)
 	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
 	if s2.IsBlackHole() {
@@ -77,10 +77,10 @@ func TestTracerRecording(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
-			tags: unfinished=
+			tags: sb=1 unfinished=
 			x: 2
 		Span b:
-			tags: unfinished=
+			tags: sb=1 unfinished=
 			x: 3
 	`); err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestTracerRecording(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(s2.GetRecording(), `
 		Span b:
-			tags: unfinished=
+			tags: sb=1 unfinished=
 			x: 3
 	`); err != nil {
 		t.Fatal(err)
@@ -102,12 +102,13 @@ func TestTracerRecording(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
-			tags: unfinished=
+			tags: sb=1 unfinished=
 			x: 2
 		Span b:
+			tags: sb=1
 			x: 3
 		Span c:
-			tags: tag=val unfinished=
+			tags: sb=1 tag=val unfinished=
 			x: 4
 	`); err != nil {
 		t.Fatal(err)
@@ -115,12 +116,13 @@ func TestTracerRecording(t *testing.T) {
 	s3.Finish()
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
-      tags: unfinished=
+      tags: sb=1 unfinished=
 			x: 2
 		Span b:
+      tags: sb=1
 			x: 3
 		Span c:
-			tags: tag=val
+			tags: sb=1 tag=val
 			x: 4
 	`); err != nil {
 		t.Fatal(err)
@@ -135,7 +137,7 @@ func TestTracerRecording(t *testing.T) {
 	s3.LogKV("x", 5)
 	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
 		Span c:
-			tags: tag=val
+			tags: sb=1 tag=val
 			x: 4
 			x: 5
 	`); err != nil {
@@ -147,43 +149,51 @@ func TestTracerRecording(t *testing.T) {
 func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
 	sp1 := tr.StartSpan("parent", WithForceRealSpan())
-	sp1.StartRecording(SingleNodeRecording)
+	sp1.StartRecording(SnowballRecording)
 	sp2 := tr.StartSpan("child", WithParentAndAutoCollection(sp1))
 	sp2.Finish()
 	sp1.Finish()
-	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
-		Span parent:
-			Span child:
-	`); err != nil {
+
+	var exp = `
+Span parent:
+      tags: sb=1
+    Span child:
+      tags: sb=1
+`
+
+	if err := TestingCheckRecordedSpans(sp1.GetRecording(), exp); err != nil {
 		t.Fatal(err)
 	}
 
 	sp1 = tr.StartSpan("parent", WithForceRealSpan())
-	sp1.StartRecording(SingleNodeRecording)
+	sp1.StartRecording(SnowballRecording)
 	sp2 = tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
 		Span parent:
+			tags: sb=1
 	`); err != nil {
 		t.Fatal(err)
 	}
 	if err := TestingCheckRecordedSpans(sp2.GetRecording(), `
 		Span child:
+			tags: sb=1
 	`); err != nil {
 		t.Fatal(err)
 	}
 
 	sp1 = tr.StartSpan("parent", WithForceRealSpan())
-	sp1.StartRecording(SingleNodeRecording)
+	sp1.StartRecording(SnowballRecording)
 	sp2 = tr.StartSpan("child", WithParentAndAutoCollection(sp1),
 		WithLogTags(logtags.SingleTagBuffer("key", "val")))
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
 		Span parent:
+			tags: sb=1
 			Span child:
-				tags: key=val
+				tags: key=val sb=1
 	`); err != nil {
 		t.Fatal(err)
 	}

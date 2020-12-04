@@ -40,12 +40,6 @@ const (
 	// their own recording, and this recording will be included in that of
 	// any local parent spans.
 	SnowballRecording
-	// SingleNodeRecording means that the Span is recording and that locally
-	// derived spans will as well (i.e. a remote Span typically won't be
-	// recording by default, in contrast to SnowballRecording). Similar to
-	// SnowballRecording, children have their own recording which is also
-	// included in that of their parents.
-	SingleNodeRecording
 )
 
 type traceLogData struct {
