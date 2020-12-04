@@ -281,7 +281,7 @@ func TestConnMessageTooBig(t *testing.T) {
 				var str string
 				return r.Scan(&str, &str)
 			},
-			expectedErrRegex: "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
+			expectedErrRegex: "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
 		},
 		{
 			desc: "prepared statement with argument",
@@ -303,7 +303,7 @@ func TestConnMessageTooBig(t *testing.T) {
 				var str string
 				return r.Scan(&str)
 			},
-			expectedErrRegex: "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
+			expectedErrRegex: "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
 		},
 	}
 

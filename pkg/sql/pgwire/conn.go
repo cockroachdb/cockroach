@@ -312,7 +312,7 @@ func (c *conn) serveImpl(
 	// to keep reading from the network connection while authentication is in
 	// progress in order to react to the connection closing).
 	var intSizer unqualifiedIntSizer = fixedIntSizer{size: types.Int}
-	var authDone bool
+	var authDone, ignoreUntilSync bool
 Loop:
 	for {
 		var typ pgwirebase.ClientMessageType
@@ -320,11 +320,7 @@ Loop:
 		typ, n, err = c.readBuf.ReadTypedMsg(&c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
-			// Only perform this logic on ClientMsgSimpleQuery for v20.2.
-			// We cannot safely do the rest of this (i.e. for portals) without doing
-			// the todo message by jordan regarding error in extended protocol state
-			// below.
-			if pgwirebase.IsMessageTooBigError(err) && typ == pgwirebase.ClientMsgSimpleQuery {
+			if pgwirebase.IsMessageTooBigError(err) {
 				log.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
 
 				// Slurp the remaining bytes.
@@ -347,15 +343,20 @@ Loop:
 					break Loop
 				}
 
-				// We have to send the sync message back as well.
-				if err = c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
-					log.VInfof(ctx, 1, "pgwire: error writing sync to the client whilst message is too big")
-					break Loop
+				// If this is a simple query, we have to send the sync message back as
+				// well. Otherwise, we ignore all messages until receiving a sync.
+				if typ == pgwirebase.ClientMsgSimpleQuery {
+					if err = c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
+						log.VInfof(ctx, 1, "pgwire: error writing sync to the client whilst message is too big")
+						break Loop
+					}
+				} else {
+					ignoreUntilSync = true
 				}
 
 				// We need to continue processing here for pgwire clients to be able to
 				// successfully read the error message off pgwire.
-				// If break here, we terminate the connection., The client will instead see that
+				// If break here, we terminate the connection. The client will instead see that
 				// we terminated the connection prematurely (as opposed to seeing a ClientMsgTerminate
 				// packet) and instead return a broken pipe or io.EOF error message.
 				continue Loop
@@ -365,6 +366,13 @@ Loop:
 		}
 		timeReceived := timeutil.Now()
 		log.VEventf(ctx, 2, "pgwire: processing %s", typ)
+
+		if ignoreUntilSync && typ != pgwirebase.ClientMsgSync {
+			log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
+			continue Loop
+		} else {
+			ignoreUntilSync = false
+		}
 
 		if !authDone {
 			if typ == pgwirebase.ClientMsgPassword {
@@ -389,12 +397,6 @@ Loop:
 				authDone = true
 			}
 		}
-
-		// TODO(jordan): there's one big missing piece of implementation here.
-		// In Postgres, if an error is encountered during extended protocol mode,
-		// the protocol skips all messages until a Sync is received to "regain
-		// protocol synchronization". We don't do this. If this becomes a problem,
-		// we should copy their behavior.
 
 		switch typ {
 		case pgwirebase.ClientMsgPassword:
@@ -455,7 +457,7 @@ Loop:
 				sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)})
 		}
 		if err != nil {
-			break Loop
+			ignoreUntilSync = true
 		}
 	}
 

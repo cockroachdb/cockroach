@@ -44,6 +44,7 @@ import (
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 )
 
 func wrongArgCountString(want, got int) string {
@@ -1955,4 +1956,32 @@ func TestFailPrepareFailsTxn(t *testing.T) {
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestOverlyLargeRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	stmt, err := db.Prepare("select length($1::text)")
+	assert.NoError(t, err)
+	// This string will cause the message to exceed pgwire.maxMessageSize.
+	largeString := make([]byte, 16*1024*1024)
+	_, err = stmt.Exec(string(largeString))
+	assert.EqualError(t, err,
+		"pq: message size 16 MiB bigger than maximum allowed message size 16 MiB")
+	// Try again, subtracting off 16 bytes from the string. The request has 16
+	// other bytes to send besides our string - this is supposed to represent the
+	// largest query that will still run properly.
+	//
+	// In addition, this demonstrates that the connection is still usable even
+	// after we ended a query with a message too large error.
+	_, err = stmt.Exec(string(largeString[:len(largeString)-16]))
+	assert.NoError(t, err)
 }

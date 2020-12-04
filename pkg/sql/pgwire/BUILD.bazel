@@ -117,6 +117,7 @@ go_test(
         "//vendor/github.com/jackc/pgx",
         "//vendor/github.com/lib/pq",
         "//vendor/github.com/lib/pq/oid",
+        "//vendor/github.com/stretchr/testify/assert",
         "//vendor/github.com/stretchr/testify/require",
         "//vendor/golang.org/x/sync/errgroup",
     ],
