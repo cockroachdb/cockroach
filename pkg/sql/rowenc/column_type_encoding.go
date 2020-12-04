@@ -281,7 +281,13 @@ func DecodeTableKey(
 		d, err := tree.NewDCollatedString(r, valType.Locale(), &a.env)
 		return d, rkey, err
 	case types.JsonFamily:
-		return tree.DNull, []byte{}, nil
+		// Don't attempt to decode the JSON value. Instead, just return the
+		// remaining bytes of the key.
+		jsonLen, err := encoding.PeekLength(key)
+		if err != nil {
+			return nil, nil, err
+		}
+		return tree.DNull, key[jsonLen:], nil
 	case types.BytesFamily:
 		var r []byte
 		if dir == encoding.Ascending {
