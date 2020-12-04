@@ -114,8 +114,6 @@ func (p *planner) createDatabase(
 		for _, region := range regionConfig.Regions {
 			regionLabels = append(regionLabels, tree.EnumValue(region))
 		}
-		// TODO(#multiregion): See github issue:
-		// https://github.com/cockroachdb/cockroach/issues/56877.
 		err := p.createEnumWithID(
 			p.RunParams(ctx),
 			desc.RegionConfig.RegionEnumID,

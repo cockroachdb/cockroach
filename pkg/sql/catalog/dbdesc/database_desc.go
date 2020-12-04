@@ -225,7 +225,11 @@ func (desc *Immutable) Validate() error {
 	if desc.IsMultiRegion() {
 		// Ensure no regions are duplicated.
 		regions := make(map[descpb.Region]struct{})
-		for _, region := range desc.Regions() {
+		dbRegions, err := desc.Regions()
+		if err != nil {
+			return err
+		}
+		for _, region := range dbRegions {
 			if _, seen := regions[region]; seen {
 				return errors.AssertionFailedf("region %q seen twice on db %d", region, desc.GetID())
 			}
