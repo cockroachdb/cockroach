@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1012,9 +1011,6 @@ var varGen = map[string]sessionVar{
 			sessTracing := evalCtx.Tracing
 			if sessTracing.Enabled() {
 				val := "on"
-				if sessTracing.RecordingType() == tracing.SingleNodeRecording {
-					val += ", local"
-				}
 				if sessTracing.KVTracingEnabled() {
 					val += ", kv"
 				}
