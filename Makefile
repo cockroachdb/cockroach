@@ -904,6 +904,11 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/exec/factory.og.go \
 	pkg/sql/opt/exec/explain/explain_factory.og.go
 
+test-targets := \
+	check test testshort testslow testrace testraceslow testbuild \
+	stress stressrace \
+	roachprod-stress roachprod-stressrace
+
 go-targets-ccl := \
 	$(COCKROACH) \
 	bin/workload \
@@ -935,6 +940,9 @@ $(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go
 $(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
 $(COCKROACHSHORT): TAGS += short
 $(COCKROACHSHORT): $(C_LIBS_SHORT)
+
+# For test targets, add a tag (used to enable extra assertions).
+$(test-targets): TAGS += crdb_test
 
 $(go-targets-ccl): $(C_LIBS_CCL)
 
