@@ -362,3 +362,16 @@ SELECT * FROM t
 ----
 1  1  false
 2  2  true
+
+# Regression test for TEMP in CREATE ... AS (#56733)
+statement ok
+SET experimental_enable_temp_tables = 'on';
+CREATE TEMP TABLE abcd_tmp AS SELECT a from abcd;
+
+query TT
+SHOW CREATE TABLE abcd_tmp
+----
+abcd_tmp  CREATE TEMP TABLE abcd_tmp (
+          a INT8 NULL,
+          FAMILY "primary" (a, rowid)
+)

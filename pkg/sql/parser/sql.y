@@ -4432,6 +4432,7 @@ create_table_as_stmt:
       AsSource: $8.slct(),
       StorageParams: $6.storageParams(),
       OnCommit: $10.createTableOnCommitSetting(),
+      Temporary: $2.persistenceType(),
     }
   }
 | CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
@@ -4445,6 +4446,7 @@ create_table_as_stmt:
       AsSource: $11.slct(),
       StorageParams: $9.storageParams(),
       OnCommit: $13.createTableOnCommitSetting(),
+      Temporary: $2.persistenceType(),
     }
   }
 
