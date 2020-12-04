@@ -39,7 +39,7 @@ func (n *createSchemaNode) startExec(params runParams) error {
 func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema) error {
 	if err := checkSchemaChangeEnabled(
 		p.EvalContext().Context,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"CREATE SCHEMA",
 	); err != nil {
 		return err
@@ -187,7 +187,7 @@ func (n *createSchemaNode) Close(ctx context.Context)  {}
 func (p *planner) CreateSchema(ctx context.Context, n *tree.CreateSchema) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"CREATE SCHEMA",
 	); err != nil {
 		return nil, err

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 )
 
-// featureSchemaChangeEnabled is the cluste rsetting used to enable and disable
+// featureSchemaChangeEnabled is the cluster setting used to enable and disable
 // any features that require schema changes. Documentation for which features
 // are covered TBD.
 var featureSchemaChangeEnabled = settings.RegisterPublicBoolSetting(
@@ -29,12 +29,12 @@ var featureSchemaChangeEnabled = settings.RegisterPublicBoolSetting(
 // checkSchemaChangeEnabled is a method that wraps the featureflag.CheckEnabled
 // method specifically for all features that are categorized as schema changes.
 func checkSchemaChangeEnabled(
-	ctx context.Context, sv *settings.Values, schemaFeatureName string,
+	ctx context.Context, execCfg *ExecutorConfig, schemaFeatureName string,
 ) error {
 	if err := featureflag.CheckEnabled(
 		ctx,
+		execCfg,
 		featureSchemaChangeEnabled,
-		sv,
 		fmt.Sprintf("%s is part of the schema change category, which", schemaFeatureName),
 	); err != nil {
 		return err

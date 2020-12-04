@@ -32,7 +32,7 @@ func (p *planner) AlterDatabaseOwner(
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER DATABASE",
 	); err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (p *planner) AlterDatabaseAddRegion(
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER DATABASE",
 	); err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func (p *planner) AlterDatabaseDropRegion(
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER DATABASE",
 	); err != nil {
 		return nil, err
@@ -147,7 +147,7 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER DATABASE",
 	); err != nil {
 		return nil, err
