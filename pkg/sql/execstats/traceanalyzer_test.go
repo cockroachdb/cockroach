@@ -58,8 +58,9 @@ func TestTraceAnalyzer(t *testing.T) {
 							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error { return nil }
 						}
 						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-							analyzer := execstats.NewTraceAnalyzer(flows)
-							analyzerChan <- analyzer
+							flowMetadata := execstats.NewFlowMetadata(flows)
+							analyzer := execstats.MakeTraceAnalyzer(flowMetadata)
+							analyzerChan <- &analyzer
 							return nil
 						}
 					},
