@@ -219,3 +219,37 @@ func registerImportMixedVersion(r *testRegistry) {
 		},
 	})
 }
+
+func registerImportDecommissioned(r *testRegistry) {
+	runImportDecommissioned := func(ctx context.Context, t *test, c *cluster) {
+		warehouses := 100
+		if local {
+			warehouses = 10
+		}
+
+		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, workload, "./workload")
+		t.Status("starting csv servers")
+		c.Start(ctx, t)
+		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+
+		// Decommission a node.
+		nodeToDecommission := 2
+		t.Status(fmt.Sprintf("decommissioning node %d", nodeToDecommission))
+		c.Run(ctx, c.Node(nodeToDecommission), `./cockroach node decommission --insecure --self --wait=all`)
+
+		// Wait for a bit for node liveness leases to expire.
+		time.Sleep(10 * time.Second)
+
+		t.Status("running workload")
+		c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
+	}
+
+	r.Add(testSpec{
+		Name:       "import/decommissioned",
+		Owner:      OwnerBulkIO,
+		MinVersion: "v21.1.0",
+		Cluster:    makeClusterSpec(4),
+		Run:        runImportDecommissioned,
+	})
+}

@@ -41,6 +41,7 @@ func registerTests(r *testRegistry) {
 	registerGossip(r)
 	registerHibernate(r)
 	registerHotSpotSplits(r)
+	registerImportDecommissioned(r)
 	registerImportMixedVersion(r)
 	registerImportTPCC(r)
 	registerImportTPCH(r)
