@@ -13,6 +13,7 @@ package rowflow
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -28,6 +29,13 @@ type rowBasedFlow struct {
 	*flowinfra.FlowBase
 
 	localStreams map[execinfrapb.StreamID]execinfra.RowReceiver
+
+	// numOutboxes is an atomic that counts how many outboxes have been created.
+	// At the last outbox we can accurately retrieve stats for the whole flow from
+	// parent monitors.
+	// Note that due to the row exec engine infrastructure, it is too complicated to attach
+	// flow-level stats to a flow-level span, so they are added to the last outbox's span.
+	numOutboxes int32
 }
 
 var _ flowinfra.Flow = &rowBasedFlow{}
@@ -373,7 +381,8 @@ func (f *rowBasedFlow) setupOutboundStream(
 		return f.GetSyncFlowConsumer(), nil
 
 	case execinfrapb.StreamEndpointSpec_REMOTE:
-		outbox := flowinfra.NewOutbox(&f.FlowCtx, spec.TargetNodeID, f.ID, sid)
+		atomic.AddInt32(&f.numOutboxes, 1)
+		outbox := flowinfra.NewOutbox(&f.FlowCtx, spec.TargetNodeID, f.ID, sid, &f.numOutboxes)
 		f.AddStartable(outbox)
 		return outbox, nil
 

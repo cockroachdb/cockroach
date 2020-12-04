@@ -34,6 +34,8 @@ message ComponentStats {
 
   // Stats for the inputs of an operator (only in the row execution engine).
   repeated InputStats inputs = 7 [(gogoproto.nullable) = false];
+
+  optional FlowStats flow_stats = 8 [(gogoproto.nullable) = false];
 }
 
 // InputStats contains statistics about the rows received as an input to a
@@ -82,7 +84,7 @@ message KVStats {
   optional util.optional.Duration contention_time = 4 [(gogoproto.nullable) = false];
 }
 
-// ExecStats contains statistics about the execution of an components.
+// ExecStats contains statistics about the execution of a component.
 message ExecStats {
   // Time spent executing the component.
   optional util.optional.Duration exec_time = 1 [(gogoproto.nullable) = false];
@@ -93,11 +95,16 @@ message ExecStats {
   optional util.optional.Uint max_allocated_disk = 3 [(gogoproto.nullable) = false];
 }
 
-// OutputStats contains statistics about the output (results) of an component.
+// OutputStats contains statistics about the output (results) of a component.
 message OutputStats {
   // Number of batches produced by the component.
   optional util.optional.Uint num_batches = 1 [(gogoproto.nullable) = false];
 
   // Number of tuples produced by the component.
   optional util.optional.Uint num_tuples = 2 [(gogoproto.nullable) = false];
+}
+
+// FlowStats contains flow level statistics.
+message FlowStats {
+  optional util.optional.Uint max_mem_usage = 1 [(gogoproto.nullable) = false];
 }
