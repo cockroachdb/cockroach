@@ -343,6 +343,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/json",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "//pkg/util/log/logcrash",
         "//pkg/util/log/severity",
         "//pkg/util/metric",

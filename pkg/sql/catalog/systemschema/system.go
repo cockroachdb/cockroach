@@ -127,6 +127,9 @@ CREATE TABLE system.lease (
   PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
+	// TODO(knz): targetID and reportingID are deprecated and should
+	// be removed after v21.1 is released. Their content is now
+	// available inside the info payload, which is a JSON blob.
 	EventLogTableSchema = `
 CREATE TABLE system.eventlog (
   timestamp     TIMESTAMP  NOT NULL,
@@ -719,6 +722,9 @@ var (
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: types.Timestamp},
 			{Name: "eventType", ID: 2, Type: types.String},
+			// TODO(knz): targetID and reportingID are deprecated and should
+			// be removed after v21.1 is released. Their content is now
+			// available inside the info payload, which is a JSON blob.
 			{Name: "targetID", ID: 3, Type: types.Int},
 			{Name: "reportingID", ID: 4, Type: types.Int},
 			{Name: "info", ID: 5, Type: types.String, Nullable: true},

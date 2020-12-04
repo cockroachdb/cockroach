@@ -1,0 +1,87 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// CommonNodeEventDetails contains the fields common to all
+// node-level events.
+//
+// As above, the field is marked inline in the events below to
+// preserve compatibility with system.eventlog. Likewise, because this
+// is marked inline in the individual events, care must be taken to
+// not reuse field identifiers across the message types, otherwise the
+// JSON conversions cannot work.
+message CommonNodeEventDetails {
+  // The node ID where the event was originated.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The time when this node was last started.
+  int64 started_at = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The approximate last time the node was up before the last restart.
+  int64 last_up = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// NodeJoin is recorded when a node joins the cluster.
+message NodeJoin {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeRestart is recorded when an existing node rejoins the cluster
+// after being offline.
+message NodeRestart {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+
+// CommonNodeDecommissionDetails contains the fields common to all
+// node-level decommission/recommission events.
+//
+// As above, the field is marked inline in the events below to
+// preserve compatibility with system.eventlog. Likewise, because this
+// is marked inline in the individual events, care must be taken to
+// not reuse field identifiers across the message types, otherwise the
+// JSON conversions cannot work.
+message CommonNodeDecommissionDetails {
+  // The node ID where the event was originated.
+  int32 requesting_node_id = 1 [(gogoproto.customname) = "RequestingNodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The node ID affected by the operation.
+  int32 target_node_id = 2 [(gogoproto.customname) = "TargetNodeID", (gogoproto.jsontag) = ",omitempty"];
+}
+
+// NodeDecommissioned is recorded when a node is marked as
+// decommissioning.
+message NodeDecommissioning {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeDecommissionDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeDecommissioned is recorded when a node is marked as
+// decommissioned.
+message NodeDecommissioned {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeDecommissionDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeRecommissioned is recorded when a decommissioning node is
+// recommissioned.
+message NodeRecommissioned {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeDecommissionDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+
