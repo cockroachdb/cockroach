@@ -39,7 +39,7 @@ type renameColumnNode struct {
 func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"RENAME COLUMN",
 	); err != nil {
 		return nil, err

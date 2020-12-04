@@ -683,8 +683,8 @@ func backupPlanHook(
 
 	if err := featureflag.CheckEnabled(
 		ctx,
+		p.ExecCfg(),
 		featureBackupEnabled,
-		&p.ExecCfg().Settings.SV,
 		"BACKUP",
 	); err != nil {
 		return nil, nil, nil, false, err

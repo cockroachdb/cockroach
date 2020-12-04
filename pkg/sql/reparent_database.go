@@ -44,7 +44,7 @@ func (p *planner) ReparentDatabase(
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"REPARENT DATABASE",
 	); err != nil {
 		return nil, err

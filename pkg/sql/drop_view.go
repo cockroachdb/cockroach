@@ -38,7 +38,7 @@ type dropViewNode struct {
 func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"DROP VIEW",
 	); err != nil {
 		return nil, err

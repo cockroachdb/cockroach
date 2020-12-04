@@ -28,7 +28,7 @@ type dropOwnedByNode struct {
 func (p *planner) DropOwnedBy(ctx context.Context) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"DROP OWNED BY",
 	); err != nil {
 		return nil, err

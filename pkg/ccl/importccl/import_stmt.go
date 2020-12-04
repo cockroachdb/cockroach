@@ -270,8 +270,8 @@ func importPlanHook(
 
 	if err := featureflag.CheckEnabled(
 		ctx,
+		p.ExecCfg(),
 		featureImportEnabled,
-		&p.ExecCfg().Settings.SV,
 		"IMPORT",
 	); err != nil {
 		return nil, nil, nil, false, err

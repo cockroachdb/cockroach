@@ -35,7 +35,7 @@ func (p *planner) CommentOnDatabase(
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"COMMENT ON DATABASE",
 	); err != nil {
 		return nil, err

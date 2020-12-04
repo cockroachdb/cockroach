@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -724,6 +725,7 @@ type ExecutorConfig struct {
 	QueryCache        *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
+	FeatureFlagMetrics   *featureflag.DenialMetrics
 
 	TestingKnobs                  ExecutorTestingKnobs
 	PGWireTestingKnobs            *PGWireTestingKnobs
@@ -767,6 +769,16 @@ type ExecutorConfig struct {
 // Organization returns the value of cluster.organization.
 func (cfg *ExecutorConfig) Organization() string {
 	return ClusterOrganization.Get(&cfg.Settings.SV)
+}
+
+// GetFeatureFlagMetrics returns the value of the FeatureFlagMetrics struct.
+func (cfg *ExecutorConfig) GetFeatureFlagMetrics() *featureflag.DenialMetrics {
+	return cfg.FeatureFlagMetrics
+}
+
+// SV returns the setting values.
+func (cfg *ExecutorConfig) SV() *settings.Values {
+	return &cfg.Settings.SV
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}

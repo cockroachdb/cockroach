@@ -55,7 +55,7 @@ var _ planNode = &createTypeNode{n: nil}
 func (p *planner) CreateType(ctx context.Context, n *tree.CreateType) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"CREATE TYPE",
 	); err != nil {
 		return nil, err

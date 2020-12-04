@@ -34,7 +34,7 @@ type alterIndexNode struct {
 func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER INDEX",
 	); err != nil {
 		return nil, err

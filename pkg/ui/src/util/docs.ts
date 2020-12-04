@@ -48,6 +48,7 @@ export const nodeLivenessIssues = docsURL("cluster-setup-troubleshooting.html#no
 export const howItWork = docsURL("cockroach-quit.html#how-it-works");
 export const clusterStore = docsURL("cockroach-start.html#store");
 export const clusterGlossary = docsURL("architecture/overview.html#glossary");
+export const clusterSettings = docsURL("cluster-settings.html");
 export const reviewOfCockroachTerminology = docsURL("admin-ui-replication-dashboard.html#review-of-cockroachdb-terminology");
 export const privileges = docsURL("authorization.html#privileges");
 export const showSessions = docsURL("show-sessions.html");
