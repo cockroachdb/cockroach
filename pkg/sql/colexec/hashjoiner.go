@@ -307,7 +307,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 }
 
 func (hj *hashJoiner) build(ctx context.Context) {
-	hj.ht.build(ctx, hj.inputTwo)
+	hj.ht.fullBuild(ctx, hj.inputTwo)
 
 	// We might have duplicates in the hash table, so we need to set up
 	// same and visited slices for the prober.
