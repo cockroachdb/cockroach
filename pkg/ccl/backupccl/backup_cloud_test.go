@@ -24,7 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func InitNone(_ *testcluster.TestCluster) {}
+// InitManualReplication calls tc.ToggleReplicateQueues(false).
+//
+// Note that the test harnesses that use this typically call
+// tc.WaitForFullReplication before calling this method,
+// so up-replication has usually already taken place.
+func InitManualReplication(tc *testcluster.TestCluster) {
+	tc.ToggleReplicateQueues(false)
+}
 
 // The tests in this file talk to remote APIs which require credentials.
 // To run these tests, you need to supply credentials via env vars (the tests
@@ -51,7 +58,7 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
-	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitNone)
+	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
@@ -77,7 +84,7 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
-	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitNone)
+	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
@@ -104,7 +111,7 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
-	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitNone)
+	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
