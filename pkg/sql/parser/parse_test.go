@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestParse verifies that we can parse the supplied SQL and regenerate the SQL
@@ -2899,23 +2898,6 @@ func TestParseDatadriven(t *testing.T) {
 			return ""
 		})
 	})
-}
-
-func TestParseTableNameWithQualifiedNames(t *testing.T) {
-	testdata := []struct {
-		name     string
-		expected string
-	}{
-		{"unique", `"unique"`},
-		{"unique.index", `"unique".index`},
-		{"table.index.primary", `"table".index.primary`},
-	}
-
-	for _, tc := range testdata {
-		name, err := parser.ParseTableNameWithQualifiedNames(tc.name)
-		require.NoError(t, err)
-		require.Equal(t, tc.expected, name.String())
-	}
 }
 
 func TestParsePanic(t *testing.T) {

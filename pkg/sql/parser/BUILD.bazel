@@ -62,7 +62,6 @@ go_test(
         "//vendor/github.com/cockroachdb/datadriven",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
     ],
 )
 

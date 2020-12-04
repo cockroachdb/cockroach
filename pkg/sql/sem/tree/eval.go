@@ -3026,8 +3026,11 @@ type EvalDatabase interface {
 type EvalPlanner interface {
 	EvalDatabase
 	TypeReferenceResolver
-	// ParseType parses a column type.
-	ParseType(sql string) (*types.T, error)
+
+	// GetTypeFromValidSQLSyntax parses a column type when the input
+	// string uses the parseable SQL representation of a type name, e.g.
+	// `INT(13)`, `mytype`, `"mytype"`, `pg_catalog.int4` or `"public".mytype`.
+	GetTypeFromValidSQLSyntax(sql string) (*types.T, error)
 
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *Subquery) (Datum, error)
