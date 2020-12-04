@@ -206,6 +206,30 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// IsMultiRegion returns whether the database has multi-region properties
+// configured. If so, desc.RegionConfig can be used.
+func (desc *Immutable) IsMultiRegion() bool {
+	return desc.RegionConfig != nil
+}
+
+// Regions returns the multi-region regions that have been added to a database.
+func (desc *Immutable) Regions() (descpb.Regions, error) {
+	if !desc.IsMultiRegion() {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region database")
+	}
+	return desc.RegionConfig.Regions, nil
+}
+
+// PrimaryRegion returns the primary region for a multi-region database.
+func (desc *Immutable) PrimaryRegion() (descpb.Region, error) {
+	if !desc.IsMultiRegion() {
+		return "", errors.AssertionFailedf(
+			"can not get the primary region of a non multi-region database")
+	}
+	return desc.RegionConfig.PrimaryRegion, nil
+}
+
 // SetName sets the name on the descriptor.
 func (desc *Mutable) SetName(name string) {
 	desc.Name = name
