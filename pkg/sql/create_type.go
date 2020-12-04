@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -376,18 +377,11 @@ func (p *planner) createEnumWithID(
 	}
 
 	// Log the event.
-	return MakeEventLogger(p.ExecCfg()).InsertEventRecord(
-		params.ctx,
-		p.txn,
-		EventLogCreateType,
-		int32(typeDesc.GetID()),
-		int32(p.ExtendedEvalContext().NodeID.SQLInstanceID()),
-		struct {
-			TypeName  string
-			Statement string
-			User      string
-		}{typeName.FQString(), typeName.String(), p.User().Normalized()},
-	)
+	return p.logEvent(params.ctx,
+		typeDesc.GetID(),
+		&eventpb.CreateType{
+			TypeName: typeName.FQString(),
+		})
 }
 
 func (n *createTypeNode) Next(params runParams) (bool, error) { return false, nil }

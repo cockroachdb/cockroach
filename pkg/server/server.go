@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1732,7 +1733,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
-	s.node.recordJoinEvent()
+	s.node.recordJoinEvent(ctx)
 
 	if err := s.sqlServer.preStart(
 		workersCtx,
@@ -2011,17 +2012,25 @@ func (s *Server) Decommission(
 		}
 	}
 
-	eventLogger := sql.MakeEventLogger(s.sqlServer.execCfg)
-	var eventType sql.EventLogType
+	var event eventpb.EventPayload
+	var nodeDetails *eventpb.CommonNodeDecommissionDetails
 	if targetStatus.Decommissioning() {
-		eventType = sql.EventLogNodeDecommissioning
+		ev := &eventpb.NodeDecommissioning{}
+		nodeDetails = &ev.CommonNodeDecommissionDetails
+		event = ev
 	} else if targetStatus.Decommissioned() {
-		eventType = sql.EventLogNodeDecommissioned
+		ev := &eventpb.NodeDecommissioned{}
+		nodeDetails = &ev.CommonNodeDecommissionDetails
+		event = ev
 	} else if targetStatus.Active() {
-		eventType = sql.EventLogNodeRecommissioned
+		ev := &eventpb.NodeRecommissioned{}
+		nodeDetails = &ev.CommonNodeDecommissionDetails
+		event = ev
 	} else {
 		panic("unexpected target membership status")
 	}
+	event.CommonDetails().Timestamp = timeutil.Now()
+	nodeDetails.RequestingNodeID = int32(s.NodeID())
 
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
@@ -2032,6 +2041,10 @@ func (s *Server) Decommission(
 			return err
 		}
 		if statusChanged {
+			nodeDetails.TargetNodeID = int32(nodeID)
+			// Ensure an entry is produced in the external log in all cases.
+			log.StructuredEvent(ctx, event)
+
 			// If we die right now or if this transaction fails to commit, the
 			// membership event will not be recorded to the event log. While we
 			// could insert the event record in the same transaction as the liveness
@@ -2039,11 +2052,15 @@ func (s *Server) Decommission(
 			// the node liveness range. Better to make the event logging best effort
 			// than to slow down future node liveness transactions.
 			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return eventLogger.InsertEventRecord(
-					ctx, txn, eventType, int32(nodeID), int32(s.NodeID()), struct{}{},
-				)
+				return sql.InsertEventRecord(
+					ctx,
+					s.sqlServer.execCfg.InternalExecutor,
+					txn,
+					int32(nodeID), int32(s.NodeID()),
+					true, /* skipExternalLog - we already call log.StructuredEvent above */
+					event)
 			}); err != nil {
-				log.Errorf(ctx, "unable to record %s event for node %d: %s", eventType, nodeID, err)
+				log.Errorf(ctx, "unable to record event: %+v: %+v", event, err)
 			}
 		}
 	}

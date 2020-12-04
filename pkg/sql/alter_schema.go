@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -98,18 +99,12 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
-		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-			params.ctx,
-			params.p.txn,
-			EventLogRenameSchema,
-			int32(n.desc.ID),
-			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-			struct {
-				SchemaName    string
-				NewSchemaName string
-				User          string
-			}{oldName, newName, params.p.User().Normalized()},
-		)
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.RenameSchema{
+			// TODO(knz): This name is insufficiently qualified.
+			// See: https://github.com/cockroachdb/cockroach/issues/57738
+			SchemaName:    oldName,
+			NewSchemaName: newName,
+		})
 	case *tree.AlterSchemaOwner:
 		newOwner := t.Owner
 		if err := params.p.alterSchemaOwner(
@@ -117,18 +112,12 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
-		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-			params.ctx,
-			params.p.txn,
-			EventLogAlterSchemaOwner,
-			int32(n.desc.ID),
-			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-			struct {
-				SchemaName string
-				Owner      string
-				User       string
-			}{n.desc.Name, newOwner.Normalized(), params.p.User().Normalized()},
-		)
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterSchemaOwner{
+			// TODO(knz): This name is insufficiently qualified.
+			// See: https://github.com/cockroachdb/cockroach/issues/57738
+			SchemaName: n.desc.Name,
+			Owner:      newOwner.Normalized(),
+		})
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)
 	}
