@@ -115,6 +115,19 @@ func columnTypeCompatibleWithEncoding(typ *types.T, enc descpb.DatumEncoding) bo
 	return enc == descpb.DatumEncoding_VALUE || colinfo.ColumnTypeIsIndexable(typ)
 }
 
+func BenchmarkDatumToEncDatum(b *testing.B) {
+	d := tree.NewDInt(0)
+	s := 0
+	for i := 0; i < b.N; i++ {
+		ed := DatumToEncDatum(types.Int, d)
+		s += int(*(ed.Datum.(*tree.DInt)))
+	}
+	b.Log(s)
+}
+
+func BenchmarkEncDatumFromEncoded(b *testing.B) {
+}
+
 func TestEncDatumNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
