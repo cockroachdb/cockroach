@@ -665,7 +665,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 			return err
 		}
 		planner.curPlan.distSQLFlowInfos = append(
-			planner.curPlan.distSQLFlowInfos, flowInfo{typ: typ, diagram: diagram, analyzer: execstats.NewTraceAnalyzer(flows)},
+			planner.curPlan.distSQLFlowInfos, flowInfo{typ: typ, diagram: diagram, flowMetadata: execstats.NewFlowMetadata(flows)},
 		)
 		return nil
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -186,22 +187,13 @@ func (ih *instrumentationHelper) Finish(
 	// TODO(radu): this should be unified with other stmt stats accesses.
 	stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
 	if stmtStats != nil {
-		networkBytesSent := int64(0)
+		var flowMetadata []*execstats.FlowMetadata
 		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
-			analyzer := flowInfo.analyzer
-			if err := analyzer.AddTrace(trace, cfg.TestingKnobs.DeterministicExplainAnalyze); err != nil {
-				log.VInfof(ctx, 1, "error analyzing trace statistics for stmt %s: %v", ast, err)
-				continue
-			}
-
-			networkBytesSentGroupedByNode, err := analyzer.GetNetworkBytesSent()
-			if err != nil {
-				log.VInfof(ctx, 1, "error calculating network bytes sent for stmt %s: %v", ast, err)
-				continue
-			}
-			for _, bytesSentByNode := range networkBytesSentGroupedByNode {
-				networkBytesSent += bytesSentByNode
-			}
+			flowMetadata = append(flowMetadata, flowInfo.flowMetadata)
+		}
+		queryLevelStats, errors := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowMetadata)
+		for i := 0; i < len(errors); i++ {
+			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %v", ast, errors[i])
 		}
 
 		stmtStats.mu.Lock()
@@ -209,7 +201,7 @@ func (ih *instrumentationHelper) Finish(
 		// statistic is only recorded when statement diagnostics are enabled.
 		// TODO(asubiotto): NumericStat properties will be properly calculated
 		//  once this statistic is always collected.
-		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(networkBytesSent))
+		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(queryLevelStats.NetworkBytesSent))
 		stmtStats.mu.Unlock()
 	}
 
