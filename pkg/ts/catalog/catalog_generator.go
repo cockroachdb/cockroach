@@ -429,8 +429,8 @@ func (ic *IndividualChart) addDisplayProperties(cd chartDescription) error {
 
 		for _, m := range ic.Metrics {
 			if m.AxisLabel != al {
-				return errors.Errorf(`Chart %s has metrics with different axis labels; 
-				need to specify an AxisLabel in its chartDescription: %v`, cd.Title, ic)
+				return errors.Errorf(`Chart %s has metrics with different axis labels (%s vs %s); 
+				need to specify an AxisLabel in its chartDescription: %v`, al, m.AxisLabel, cd.Title, ic)
 			}
 		}
 

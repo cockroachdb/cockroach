@@ -1857,6 +1857,7 @@ var charts = []sectionDescription{
 					"sql.txns.open",
 					"sql.txns.open.internal",
 				},
+				AxisLabel: "Transactions",
 			},
 			{
 				Title: "Byte I/O",
