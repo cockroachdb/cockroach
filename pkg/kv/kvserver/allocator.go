@@ -770,6 +770,8 @@ func (a *Allocator) scorerOptions() scorerOptions {
 // to from the provided list. It excludes the current lease holder replica
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
 //
+// Returns an empty descriptor if no target is found.
+//
 // TODO(aayush, andrei): If a draining leaseholder doesn't see any other voters
 // in its locality, but sees a learner, rather than allowing the lease to be
 // transferred outside of its current locality (likely violating leaseholder

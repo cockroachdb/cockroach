@@ -25,10 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,6 +41,29 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri string) error {
+	// Check if the user issuing the SHOW BACKUP needs to be of the admin role
+	// depending on the URI destination.
+	hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
+	if err != nil {
+		return err
+	}
+	if hasExplicitAuth {
+		return nil
+	}
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if !hasAdmin {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role are allowed to SHOW BACKUP from the specified %s URI",
+			uriScheme)
+	}
+	return nil
+}
+
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -45,10 +71,6 @@ func showBackupPlanHook(
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
 		return nil, nil, nil, false, nil
-	}
-
-	if err := p.RequireAdminRole(ctx, "SHOW BACKUP"); err != nil {
-		return nil, nil, nil, false, err
 	}
 
 	if backup.Path == nil && backup.InCollection != nil {
@@ -99,6 +121,10 @@ func showBackupPlanHook(
 
 		str, err := toFn()
 		if err != nil {
+			return err
+		}
+
+		if err := checkShowBackupURIPrivileges(ctx, p, str); err != nil {
 			return err
 		}
 
@@ -491,6 +517,10 @@ func showBackupsInCollectionPlanHook(
 
 		collection, err := collectionFn()
 		if err != nil {
+			return err
+		}
+
+		if err := checkShowBackupURIPrivileges(ctx, p, collection); err != nil {
 			return err
 		}
 

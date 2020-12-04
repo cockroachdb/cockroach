@@ -79,6 +79,7 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.AggregatorSpec_REGR_SXY:             2,
 	execinfrapb.AggregatorSpec_REGR_SYY:             2,
 	execinfrapb.AggregatorSpec_REGR_COUNT:           2,
+	execinfrapb.AggregatorSpec_REGR_AVGX:            2,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
