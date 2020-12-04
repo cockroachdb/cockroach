@@ -1017,7 +1017,10 @@ func (rq *replicateQueue) changeReplicas(
 	if dryRun {
 		return nil
 	}
-	if _, err := repl.ChangeReplicas(ctx, desc, priority, reason, details, chgs); err != nil {
+	// NB: this calls the impl rather than ChangeReplicas because
+	// the latter traps tests that try to call it while the replication
+	// queue is active.
+	if _, err := repl.changeReplicasImpl(ctx, desc, priority, reason, details, chgs); err != nil {
 		return err
 	}
 	rangeUsageInfo := rangeUsageInfoForRepl(repl)

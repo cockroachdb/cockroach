@@ -141,7 +141,7 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 		params := base.TestServerArgs{}
 		const numAccounts = 1000
 		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
-			InitNone, base.TestClusterArgs{ServerArgs: params})
+			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
 		require.NoError(t, err)

@@ -929,6 +929,21 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
+	// If there are testing knobs, we're definitely in a test.
+	// Try to catch tests that use manual replication while the
+	// replication queue is active. Such tests are often flaky.
+	if knobs := r.store.TestingKnobs(); knobs != nil &&
+		!knobs.DisableReplicateQueue &&
+		!knobs.AllowDangerousReplicationChanges {
+		bq := r.store.replicateQueue.baseQueue
+		bq.mu.Lock()
+		disabled := bq.mu.disabled
+		bq.mu.Unlock()
+		if !disabled {
+			return nil, errors.New("must disable replicate queue to use ChangeReplicas manually")
+		}
+	}
+
 	// We execute the change serially if we're not allowed to run atomic
 	// replication changes or if that was explicitly disabled.
 	st := r.ClusterSettings()
@@ -1645,6 +1660,18 @@ func prepareChangeReplicasTrigger(
 	return crt, nil
 }
 
+func within10s(ctx context.Context, fn func() error) error {
+	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
+	var err error
+	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
+		err = fn()
+		if err == nil {
+			return nil
+		}
+	}
+	return ctx.Err()
+}
+
 type changeReplicasTxnArgs struct {
 	db *kv.DB
 
@@ -1719,9 +1746,11 @@ func execChangeReplicasTxn(
 		}
 		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
 
-		for maxAttempts, i := 10, 0; i < maxAttempts; i++ {
+		// NB: we haven't written any intents yet, so even in the unlikely case in which
+		// this is held up, we won't block anyone else.
+		if err := within10s(ctx, func() error {
 			if args.testAllowDangerousReplicationChanges {
-				break
+				return nil
 			}
 			// Run (and retry for a bit) a sanity check that the configuration
 			// resulting from this change is able to meet quorum. It's
@@ -1734,7 +1763,7 @@ func execChangeReplicasTxn(
 			// https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
 			replicas := crt.Desc.Replicas()
 			liveReplicas, _ := args.liveAndDeadReplicas(replicas.All())
-			if !crt.Desc.Replicas().CanMakeProgress(
+			if !replicas.CanMakeProgress(
 				func(rDesc roachpb.ReplicaDescriptor) bool {
 					for _, inner := range liveReplicas {
 						if inner.ReplicaID == rDesc.ReplicaID {
@@ -1744,14 +1773,12 @@ func execChangeReplicasTxn(
 					return false
 				}) {
 				// NB: we use newQuorumError which is recognized by the replicate queue.
-				err := newQuorumError("range %s cannot make progress with proposed changes add=%v del=%v "+
+				return newQuorumError("range %s cannot make progress with proposed changes add=%v del=%v "+
 					"based on live replicas %v", crt.Desc, crt.Added(), crt.Removed(), liveReplicas)
-				if i == maxAttempts-1 {
-					return err
-				}
-				log.Infof(ctx, "%s; retrying", err)
-				time.Sleep(time.Second)
 			}
+			return nil
+		}); err != nil {
+			return err
 		}
 
 		{
