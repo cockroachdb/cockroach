@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -322,42 +323,35 @@ func (c *conn) serveImpl(
 	// to keep reading from the network connection while authentication is in
 	// progress in order to react to the connection closing).
 	var intSizer unqualifiedIntSizer = fixedIntSizer{size: types.Int}
-	var authDone bool
+	var authDone, ignoreUntilSync bool
 	for {
-		if breakLoop, err := func() (breakLoop bool, err error) {
-			var typ pgwirebase.ClientMessageType
-			var n int
-			typ, n, err = c.readBuf.ReadTypedMsg(&c.rd)
+		breakLoop, err := func() (bool, error) {
+			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
 			c.metrics.BytesInCount.Inc(int64(n))
 			if err != nil {
-				// Only perform this logic on ClientMsgSimpleQuery for v20.2.
-				// We cannot safely do the rest of this (i.e. for portals) without doing
-				// the todo message by jordan regarding error in extended protocol state
-				// below.
-				if pgwirebase.IsMessageTooBigError(err) && typ == pgwirebase.ClientMsgSimpleQuery {
+				if pgwirebase.IsMessageTooBigError(err) {
 					log.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
 
 					// Slurp the remaining bytes.
 					slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
 					c.metrics.BytesInCount.Inc(int64(slurpN))
 					if slurpErr != nil {
-						return false, errors.Newf("pgwire: error slurping remaining bytes: %s", slurpErr)
+						return false, errors.Wrap(slurpErr, "pgwire: error slurping remaining bytes")
 					}
 
 					// Write out the error over pgwire.
-					if err := writeErr(
-						ctx,
-						&sqlServer.GetExecutorConfig().Settings.SV,
-						err,
-						&c.msgBuilder,
-						&c.writerState.buf,
-					); err != nil {
+					if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
 						return false, errors.New("pgwire: error writing too big error message to the client")
 					}
 
-					// We have to send the sync message back as well.
-					if err = c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
-						return false, errors.New("pgwire: error writing sync to the client whilst message is too big")
+					// If this is a simple query, we have to send the sync message back as
+					// well. Otherwise, we ignore all messages until receiving a sync.
+					if typ == pgwirebase.ClientMsgSimpleQuery {
+						if err = c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
+							return false, errors.New("pgwire: error writing sync to the client whilst message is too big")
+						}
+					} else {
+						ignoreUntilSync = true
 					}
 
 					// We need to continue processing here for pgwire clients to be able to
@@ -368,10 +362,16 @@ func (c *conn) serveImpl(
 					// packet) and instead return a broken pipe or io.EOF error message.
 					return false, nil
 				}
-				return false, errors.Newf("pgwire: error reading input: %s", err)
+				return false, errors.Wrap(err, "pgwire: error reading input")
 			}
 			timeReceived := timeutil.Now()
 			log.VEventf(ctx, 2, "pgwire: processing %s", typ)
+
+			if ignoreUntilSync && typ != pgwirebase.ClientMsgSync {
+				log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
+				return false, nil
+			}
+			ignoreUntilSync = false
 
 			if !authDone {
 				if typ == pgwirebase.ClientMsgPassword {
@@ -394,12 +394,6 @@ func (c *conn) serveImpl(
 				}
 				authDone = true
 			}
-
-			// TODO(jordan): there's one big missing piece of implementation here.
-			// In Postgres, if an error is encountered during extended protocol mode,
-			// the protocol skips all messages until a Sync is received to "regain
-			// protocol synchronization". We don't do this. If this becomes a problem,
-			// we should copy their behavior.
 
 			switch typ {
 			case pgwirebase.ClientMsgPassword:
@@ -458,10 +452,17 @@ func (c *conn) serveImpl(
 					ctx,
 					sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)})
 			}
-		}(); err != nil {
+		}()
+		if err != nil {
 			log.VEventf(ctx, 1, "pgwire: error processing message: %s", err)
-			break
-		} else if breakLoop {
+			ignoreUntilSync = true
+			// If we can't read data because the connection was closed or the context
+			// was canceled (e.g. during authentication), then we should break.
+			if netutil.IsClosedConnection(err) || errors.Is(err, context.Canceled) {
+				break
+			}
+		}
+		if breakLoop {
 			break
 		}
 	}

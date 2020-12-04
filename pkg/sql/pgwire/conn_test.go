@@ -193,6 +193,7 @@ func TestConnMessageTooBig(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer mainDB.Close()
 	defer s.Stopper().Stop(context.Background())
 
 	// Form a 1MB string.
@@ -278,11 +279,15 @@ func TestConnMessageTooBig(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				r := c.QueryRow("long_statement", shortStr)
+				r := c.QueryRow("long_statement", longStr)
 				var str string
 				return r.Scan(&str, &str)
 			},
-			expectedErrRegex: "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
+			postLongStrAction: func(c *pgx.Conn) error {
+				_, err := c.Exec("SELECT 1")
+				return err
+			},
+			expectedErrRegex: "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
 		},
 		{
 			desc: "prepared statement with argument",
@@ -304,7 +309,20 @@ func TestConnMessageTooBig(t *testing.T) {
 				var str string
 				return r.Scan(&str)
 			},
-			expectedErrRegex: "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
+			postLongStrAction: func(c *pgx.Conn) error {
+				// The test reuses the same connection, so this makes sure that the
+				// prepared statement is still usable even after we ended a query with a
+				// message too large error.
+				// The test sets the max message size to 32 KiB. Subtracting off 24
+				// bytes from that represents the largest query that will still run
+				// properly. (The request has 16 other bytes to send besides our
+				// string and 8 more bytes for the name of the prepared statement.)
+				borderlineStr := string(make([]byte, (32*1024)-24))
+				r := c.QueryRow("long_arg", borderlineStr)
+				var str string
+				return r.Scan(&str)
+			},
+			expectedErrRegex: "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
 		},
 	}
 
@@ -382,10 +400,7 @@ func TestConnMessageTooBig(t *testing.T) {
 					// We should still be able to use the connection afterwards.
 					require.Error(t, gotErr)
 					require.Regexp(t, tc.expectedErrRegex, gotErr.Error())
-
-					if tc.postLongStrAction != nil {
-						require.NoError(t, tc.postLongStrAction(c))
-					}
+					require.NoError(t, tc.postLongStrAction(c))
 				})
 			})
 		}
