@@ -233,9 +233,22 @@ func TestEncodeDecimal(t *testing.T) {
 							}
 						}
 					}
+					t.Run("flat-decimal-encoding", func(t *testing.T) {
+						assertFlatDecimalRoundtrips(t, c.Value)
+					})
 				})
 			}
 		}
+	}
+}
+
+func assertFlatDecimalRoundtrips(t *testing.T, v *apd.Decimal) {
+	var b []byte
+	b = EncodeFlatDecimal(v, b)
+	var decoded apd.Decimal
+	DecodeFlatDecimal(b, &decoded)
+	if decoded.Cmp(v) != 0 {
+		t.Errorf("unexpected mismatch for %v. got %v", v, decoded)
 	}
 }
 
@@ -296,6 +309,8 @@ func TestEncodeDecimalRand(t *testing.T) {
 			}
 			prev = cur
 			prevEnc = enc
+
+			assertFlatDecimalRoundtrips(t, cur)
 		}
 	}
 }
