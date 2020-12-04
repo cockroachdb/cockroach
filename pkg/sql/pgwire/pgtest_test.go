@@ -36,7 +36,7 @@ func TestPGTest(t *testing.T) {
 	if *flagAddr == "" {
 		newServer := func() (addr, user string, cleanup func()) {
 			ctx := context.Background()
-			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 				Insecure: true,
 			})
 			cleanup = func() {
@@ -44,6 +44,10 @@ func TestPGTest(t *testing.T) {
 			}
 			addr = s.ServingSQLAddr()
 			user = security.RootUser
+			// None of the tests read that much data, so we hardcode the max message
+			// size to something small. This lets us test the handling of large
+			// query inputs. See the large_input test.
+			_, _ = db.ExecContext(ctx, "SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '32 KiB'")
 			return addr, user, cleanup
 		}
 		pgtest.WalkWithNewServer(t, "testdata/pgtest", newServer)
