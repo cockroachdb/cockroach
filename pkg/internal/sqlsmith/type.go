@@ -21,10 +21,10 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-func (s *Smither) typeFromName(name string) (*types.T, error) {
-	typRef, err := parser.ParseType(name)
+func (s *Smither) typeFromSQLTypeSyntax(typeStr string) (*types.T, error) {
+	typRef, err := parser.GetTypeFromValidSQLSyntax(typeStr)
 	if err != nil {
-		return nil, errors.AssertionFailedf("failed to parse type: %v", name)
+		return nil, errors.AssertionFailedf("failed to parse type: %v", typeStr)
 	}
 	typ, err := tree.ResolveType(context.Background(), typRef, s)
 	if err != nil {

@@ -131,6 +131,11 @@ SELECT 'numeric(10,3)'::REGTYPE, 'numeric( 10, 3 )'::REGTYPE
 ----
 numeric  numeric
 
+query OO
+SELECT '"char"'::REGTYPE, 'pg_catalog.int4'::REGTYPE
+----
+"char"  integer
+
 query error type 'foo.' does not exist
 SELECT 'foo.'::REGTYPE
 
@@ -148,6 +153,9 @@ SELECT 'blah'::REGNAMESPACE
 
 query error type 'blah' does not exist
 SELECT 'blah'::REGTYPE
+
+query error type 'pg_catalog.int' does not exist
+SELECT 'pg_catalog.int'::REGTYPE
 
 ## Test other cast syntaxes
 

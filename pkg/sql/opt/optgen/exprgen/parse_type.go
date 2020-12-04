@@ -42,7 +42,7 @@ func ParseType(typeStr string) (*types.T, error) {
 		}
 		return types.MakeTuple(colTypes), nil
 	}
-	typ, err := parser.ParseType(typeStr)
+	typ, err := parser.GetTypeFromValidSQLSyntax(typeStr)
 	if err != nil {
 		return nil, err
 	}
