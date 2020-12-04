@@ -44,7 +44,7 @@ type renameTableNode struct {
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"RENAME TABLE/VIEW/SEQUENCE",
 	); err != nil {
 		return nil, err

@@ -42,7 +42,7 @@ var _ planNode = &alterSchemaNode{n: nil}
 func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER SCHEMA",
 	); err != nil {
 		return nil, err

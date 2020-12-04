@@ -2029,6 +2029,17 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "SQL", "Feature Flag"}},
+		Charts: []chartDescription{
+			{
+				Title: "Feature Flag Denials",
+				Metrics: []string{
+					"sql.feature_flag_denial",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Block Cache"}},
 		Charts: []chartDescription{
 			{

@@ -33,7 +33,7 @@ type createDatabaseNode struct {
 func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"CREATE DATABASE",
 	); err != nil {
 		return nil, err

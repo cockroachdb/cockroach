@@ -35,7 +35,7 @@ func (p *planner) AlterTableSetSchema(
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER TABLE/VIEW/SEQUENCE SET SCHEMA",
 	); err != nil {
 		return nil, err
