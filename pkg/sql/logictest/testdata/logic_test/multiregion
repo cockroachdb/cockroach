@@ -20,48 +20,48 @@ CREATE DATABASE multi_region_test_explicit_primary_region_db PRIMARY REGION "tes
 
 # Ensure that the region types were created for all the MR databases above.
 query IITI colnames
-SELECT * FROM system.namespace WHERE name='region'
+SELECT * FROM system.namespace WHERE name='crdb_internal_region'
 ----
-parentID  parentSchemaID  name    id
-53        29              region  54
-56        29              region  57
-59        29              region  60
+parentID  parentSchemaID  name                   id
+53        29              crdb_internal_region  54
+56        29              crdb_internal_region  57
+59        29              crdb_internal_region  60
 
 query TTTT colnames
 SHOW ENUMS FROM region_test_db.public
 ----
-schema  name    values   owner
-public  region  {test1}  root
+schema  name                   values   owner
+public  crdb_internal_region  {test1}  root
 
 query TTTT colnames
 SHOW ENUMS FROM multi_region_test_db.public
 ----
-schema  name    values               owner
-public  region  {test1,test2,test3}  root
+schema  name                   values               owner
+public  crdb_internal_region  {test1,test2,test3}  root
 
 query TTTT colnames
 SHOW ENUMS FROM multi_region_test_explicit_primary_region_db.public
 ----
-schema  name    values               owner
-public  region  {test1,test2,test3}  root
+schema  name                   values               owner
+public  crdb_internal_region  {test1,test2,test3}  root
 
 statement ok
-SELECT 'test1'::region_test_db.public.region
+SELECT 'test1'::region_test_db.public.crdb_internal_region
 
-statement error invalid input value for enum region: "test2"
-SELECT 'test2'::region_test_db.public.region
-
-statement ok
-SELECT 'test1'::multi_region_test_db.public.region
+statement error invalid input value for enum crdb_internal_region: "test2"
+SELECT 'test2'::region_test_db.public.crdb_internal_region
 
 statement ok
-SELECT 'test2'::multi_region_test_db.public.region
+SELECT 'test1'::multi_region_test_db.public.crdb_internal_region
 
-statement error "multi_region_test_db.public.region" is a multi-region enum and cannot be modified directly
-DROP TYPE multi_region_test_db.public.region
+statement ok
+SELECT 'test2'::multi_region_test_db.public.crdb_internal_region
 
-statement error "multi_region_test_db.public.region" is a multi-region enum and can't be modified using the alter type command
-ALTER TYPE multi_region_test_db.public.region ADD VALUE 'test3'
+statement error "multi_region_test_db.public.crdb_internal_region" is a multi-region enum and cannot be modified directly
+DROP TYPE multi_region_test_db.public.crdb_internal_region
+
+statement error "multi_region_test_db.public.crdb_internal_region" is a multi-region enum and can't be modified using the alter type command
+ALTER TYPE multi_region_test_db.public.crdb_internal_region ADD VALUE 'test3'
 
 statement error region "region_no_exists" does not exist\nHINT:.*valid regions: test1, test2, test3
 CREATE DATABASE invalid_region_db PRIMARY REGION "region_no_exists" REGION "region_no_exists"

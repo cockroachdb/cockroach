@@ -210,6 +210,7 @@ var validationMap = []struct {
 			"ReferencingDescriptorIDs": {status: iSolemnlySwearThisFieldIsValidated},
 			"Privileges":               {status: iSolemnlySwearThisFieldIsValidated},
 			"OfflineReason":            {status: thisFieldReferencesNoObjects},
+			"RegionConfig":             {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 }

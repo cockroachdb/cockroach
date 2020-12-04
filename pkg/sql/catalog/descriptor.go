@@ -83,8 +83,9 @@ type DatabaseDescriptor interface {
 	tree.SchemaMeta
 	DatabaseDesc() *descpb.DatabaseDescriptor
 
-	Regions() descpb.Regions
+	Regions() (descpb.Regions, error)
 	IsMultiRegion() bool
+	PrimaryRegion() (descpb.Region, error)
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
@@ -185,6 +186,8 @@ type TypeDescriptor interface {
 	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	HasPendingSchemaChanges() bool
 	GetIDClosure() map[descpb.ID]struct{}
+
+	PrimaryRegion() (descpb.Region, error)
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type
