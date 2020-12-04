@@ -1,0 +1,22 @@
+statement ok
+CREATE TABLE fuzzystrmatch_table(
+  id int primary key,
+  a text,
+  b text
+)
+
+statement ok
+INSERT INTO fuzzystrmatch_table VALUES
+  (1, 'apple', 'banana'),
+  (2, '', 'pear'),
+  (3, '😄', '🐯')
+
+statement error levenshtein argument exceeds maximum length of 255 characters
+SELECT levenshtein(lpad('', 256, 'x'), '')
+
+query TTI
+SELECT a, b, levenshtein(a, b) FROM fuzzystrmatch_table ORDER BY id
+----
+apple  banana  5
+·      pear    4
+😄      🐯       1
