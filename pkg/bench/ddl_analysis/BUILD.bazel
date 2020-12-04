@@ -27,6 +27,7 @@ go_test(
         "grant_revoke_bench_test.go",
         "grant_revoke_role_bench_test.go",
         "truncate_bench_test.go",
+        "virtual_table_bench_test.go",
     ],
     embed = [":ddl_analysis"],
     deps = [
