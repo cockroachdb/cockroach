@@ -74,6 +74,7 @@ var retiredSettings = map[string]struct{}{
 	// removed as of 21.1.
 	"sql.distsql.interleaved_joins.enabled": {},
 	"sql.testing.vectorize.batch_size":      {},
+	"sql.testing.mutations.max_batch_size":  {},
 }
 
 // register adds a setting to the registry.
