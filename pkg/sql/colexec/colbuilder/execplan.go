@@ -176,8 +176,8 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.Values != nil:
-		if spec.Core.Values.NumRows != 0 {
-			return errors.Newf("values core only with zero rows supported")
+		if spec.Core.Values.NumRows != 0 && len(spec.Core.Values.Columns) != 0 {
+			return errors.Newf("values core is supported only with zero rows or zero columns")
 		}
 		return nil
 
@@ -695,10 +695,13 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
-			if core.Values.NumRows != 0 {
-				return r, errors.AssertionFailedf("values core only with zero rows supported, %d given", core.Values.NumRows)
+			if core.Values.NumRows != 0 && len(core.Values.Columns) != 0 {
+				return r, errors.AssertionFailedf(
+					"values core is supported only with zero rows or zero columns, %d rows, %d columns given",
+					core.Values.NumRows, len(core.Values.Columns),
+				)
 			}
-			result.Op = colexec.NewZeroOpNoInput()
+			result.Op = colexec.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows))
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
 				result.ColumnTypes[i] = col.Type
@@ -758,7 +761,7 @@ func NewColOperator(
 				// TODO(solon): The distsql plan for this case includes a TableReader, so
 				// we end up creating an orphaned colBatchScan. We should avoid that.
 				// Ideally the optimizer would not plan a scan in this unusual case.
-				result.Op, err = colexec.NewSingleTupleNoInputOp(streamingAllocator), nil
+				result.Op, err = colexec.NewFixedNumTuplesNoInputOp(streamingAllocator, 1 /* numTuples */), nil
 				// We make ColumnTypes non-nil so that sanity check doesn't panic.
 				result.ColumnTypes = []*types.T{}
 				break
