@@ -922,8 +922,8 @@ func backupAndRestore(
 			}
 			backupDetails := backupPayload.Backup
 			found = true
-			if err := protoutil.Unmarshal(backupDetails.BackupManifest, backupManifest); err != nil {
-				t.Fatal("cannot unmarshal backup descriptor from job payload from system.jobs")
+			if backupDetails.DeprecatedBackupManifest != nil {
+				t.Fatal("expected backup_manifest field of backup descriptor payload to be nil")
 			}
 			if backupManifest.DeprecatedStatistics != nil {
 				t.Fatal("expected statistics field of backup descriptor payload to be nil")
@@ -1097,7 +1097,6 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	const numAccounts = 0
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
-	conn := sqlDB.DB.(*gosql.DB)
 	defer cleanupFn()
 
 	sanitizedIncDir := LocalFoo + "/inc?AWS_SESSION_TOKEN="
@@ -1105,12 +1104,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	sanitizedFullDir := LocalFoo + "/full?AWS_SESSION_TOKEN="
 	fullDir := sanitizedFullDir + "moarSecretsHere"
-
-	backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
-	backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
-
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
-	restoreDatabaseID := sqlutils.QueryDatabaseID(t, conn, "restoredb")
 
 	// We create a full backup so that, below, we can test that incremental
 	// backups sanitize credentials in "INCREMENTAL FROM" URLs.
@@ -1130,10 +1124,6 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir+"redacted", sanitizedFullDir+"redacted",
 		),
-		DescriptorIDs: descpb.IDs{
-			descpb.ID(backupDatabaseID),
-			descpb.ID(backupTableID),
-		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1145,9 +1135,6 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db='restoredb'`,
 			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
 		),
-		DescriptorIDs: descpb.IDs{
-			descpb.ID(restoreDatabaseID + 1),
-		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1210,15 +1197,10 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
-			conn := sqlDB.DB.(*gosql.DB)
 			defer cleanupFn()
 			backupLoc1 := LocalFoo + "/x"
 
 			sqlDB.Exec(t, `CREATE DATABASE restoredb`)
-			backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
-			backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
-			restoreDatabaseID := sqlutils.QueryDatabaseID(t, conn, "restoredb")
-
 			// Take an encrypted BACKUP.
 			sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 WITH %s`, encryptionOption),
 				backupLoc1)
@@ -1230,10 +1212,6 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 					Description: fmt.Sprintf(
 						`BACKUP DATABASE data TO '%s' WITH %s`,
 						backupLoc1, sanitizedEncryptionOption),
-					DescriptorIDs: descpb.IDs{
-						descpb.ID(backupDatabaseID),
-						descpb.ID(backupTableID),
-					},
 				}); err != nil {
 				t.Fatal(err)
 			}
@@ -1249,9 +1227,6 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db='restoredb'`,
 					backupLoc1, sanitizedEncryptionOption,
 				),
-				DescriptorIDs: descpb.IDs{
-					descpb.ID(restoreDatabaseID + 1),
-				},
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -1441,17 +1416,12 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 }
 
 func createAndWaitForJob(
-	t *testing.T,
-	db *sqlutils.SQLRunner,
-	descriptorIDs []descpb.ID,
-	details jobspb.Details,
-	progress jobspb.ProgressDetails,
+	t *testing.T, db *sqlutils.SQLRunner, details jobspb.Details, progress jobspb.ProgressDetails,
 ) {
 	t.Helper()
 	now := timeutil.ToUnixMicros(timeutil.Now())
 	payload, err := protoutil.Marshal(&jobspb.Payload{
 		UsernameProto: security.RootUserName().EncodeProto(),
-		DescriptorIDs: descriptorIDs,
 		StartedMicros: now,
 		Details:       jobspb.WrapPayloadDetails(details),
 		Lease:         &jobspb.Lease{NodeID: 1},
@@ -1522,11 +1492,10 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		createAndWaitForJob(
-			t, sqlDB, []descpb.ID{backupTableDesc.ID},
+			t, sqlDB,
 			jobspb.BackupDetails{
-				EndTime:        tc.Servers[0].Clock().Now(),
-				URI:            "nodelocal://0/backup",
-				BackupManifest: mockManifest,
+				EndTime: tc.Servers[0].Clock().Now(),
+				URI:     "nodelocal://0/backup",
 			},
 			jobspb.BackupProgress{},
 		)
@@ -1569,7 +1538,7 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		createAndWaitForJob(
-			t, sqlDB, []descpb.ID{restoreTableID},
+			t, sqlDB,
 			jobspb.RestoreDetails{
 				DescriptorRewrites: map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite{
 					backupTableDesc.ID: {
