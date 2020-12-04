@@ -22,6 +22,7 @@ The FATAL severity is used for situations that require an immedate, hard
 server shutdown. A report is also sent to telemetry if telemetry
 is enabled.
 
+
 # Logging channels
 
 ## DEV
@@ -33,7 +34,7 @@ CockroachDB, when the caller does not indicate a channel.
 
 This channel is special in that there are no constraints as to
 what may or may not be logged on it. Conversely, users in
-production deployments are invited to not collect The DEV channel logs in
+production deployments are invited to not collect DEV logs in
 centralized logging facilities, because they likely contain
 sensitive operational data.
 
