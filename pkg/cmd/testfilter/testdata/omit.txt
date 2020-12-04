@@ -57,6 +57,8 @@ omit
 {"Time":"2019-11-29T14:21:47.595977+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"--- FAIL: TestFaker (0.00s)\n"}
 {"Time":"2019-11-29T14:21:47.595982+01:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Output":"    stopper_test.go:379: failed\n"}
 {"Time":"2019-11-29T14:21:47.595991+01:00","Action":"fail","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestFaker","Elapsed":0}
+{"Time":"2019-11-29T14:21:47.596863+01:00","Action":"run","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"PackageLevel","Elapsed":1.593,"Output":""}
+{"Time":"2019-11-29T14:21:47.596863+01:00","Action":"fail","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"PackageLevel","Elapsed":1.593,"Output":"\nCheck full_output.txt in artifacts for stray panics or other errors that broke the test process."}
 
 # Keeps panicking test.
 omit
