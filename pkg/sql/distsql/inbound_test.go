@@ -95,7 +95,8 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	}
 
 	streamID := execinfrapb.StreamID(1)
-	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, execinfrapb.FlowID{}, streamID)
+	numOutboxes := int32(0)
+	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, execinfrapb.FlowID{}, streamID, &numOutboxes)
 	outbox.Init(rowenc.OneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no
