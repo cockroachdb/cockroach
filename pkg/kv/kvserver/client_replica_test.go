@@ -875,6 +875,7 @@ func TestLeaseExpirationBasedDrainTransfer(t *testing.T) {
 // complete before transferring away the new lease.
 func TestLeaseExpirationBasedDrainTransferWithExtension(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 57547, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	l := setupLeaseTransferTest(t)
