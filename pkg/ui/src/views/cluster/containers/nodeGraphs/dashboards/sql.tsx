@@ -21,9 +21,9 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
-      title="SQL Connections"
+      title="Open SQL Connections"
       sources={nodeSources}
-      tooltip={`The total number of active SQL connections ${tooltipSelection}.`}
+      tooltip={`The total number of open SQL connections ${tooltipSelection}.`}
     >
       <Axis label="connections">
         {
@@ -37,6 +37,26 @@ export default function (props: GraphDashboardProps) {
             />
           ))
         }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Open SQL Transactions"
+      sources={nodeSources}
+      tooltip={`The total number of SQL transactions currently open ${tooltipSelection}.`}
+    >
+      <Axis label="transactions">
+        <Metric name="cr.node.sql.txns.open" title="Open Transactions" />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Active SQL Queries"
+      sources={nodeSources}
+      tooltip={`The total number of SQL queries currently running ${tooltipSelection}.`}
+    >
+      <Axis label="queries">
+        <Metric name="cr.node.sql.distsql.queries.active" title="Active Queries" />
       </Axis>
     </LineGraph>,
 
@@ -76,16 +96,6 @@ export default function (props: GraphDashboardProps) {
     >
       <Axis label="errors">
         <Metric name="cr.node.sql.failure.count" title="Errors" nonNegativeRate />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Active Distributed SQL Queries"
-      sources={nodeSources}
-      tooltip={`The total number of distributed SQL queries currently running ${tooltipSelection}.`}
-    >
-      <Axis label="queries">
-        <Metric name="cr.node.sql.distsql.queries.active" title="Active Queries" />
       </Axis>
     </LineGraph>,
 
