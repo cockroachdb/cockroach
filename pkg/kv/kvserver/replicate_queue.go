@@ -319,13 +319,29 @@ func (rq *replicateQueue) processOneChange(
 	desc, zone := repl.DescAndZone()
 
 	// Avoid taking action if the range has too many dead replicas to make
-	// quorum.
+	// quorum. Note that this is checked again at a lower-level, in execChangeReplicasTxn.
+	// However, retaining the additional check here helps paper over the races between the
+	// replicate queue and manual replication in tests. This is undesirable and should be
+	// addressed via a mechanism that serializes all changes to the range descriptors.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/57563
 	voterReplicas := desc.Replicas().Voters()
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(voterReplicas)
-
-	// NB: the replication layer ensures that the below operations don't cause
-	// unavailability; see:
-	_ = execChangeReplicasTxn
+	unavailable := !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
+		for _, inner := range liveVoterReplicas {
+			if inner.ReplicaID == rDesc.ReplicaID {
+				return true
+			}
+		}
+		return false
+	})
+	if unavailable {
+		return false, newQuorumError(
+			"range requires a replication change, but live replicas %v don't constitute a quorum for %v:",
+			liveVoterReplicas,
+			desc.Replicas().All(),
+		)
+	}
 
 	action, _ := rq.allocator.ComputeAction(ctx, zone, desc)
 	log.VEventf(ctx, 1, "next replica action: %s", action)
