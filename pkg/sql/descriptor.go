@@ -114,16 +114,20 @@ func (p *planner) createDatabase(
 		for _, region := range regionConfig.Regions {
 			regionLabels = append(regionLabels, tree.EnumValue(region))
 		}
-		err := p.createEnumWithID(
+		// TODO(#multiregion): See github issue:
+		// https://github.com/cockroachdb/cockroach/issues/56877.
+		if err := p.createEnumWithID(
 			p.RunParams(ctx),
 			desc.RegionConfig.RegionEnumID,
 			regionLabels,
 			desc,
 			tree.NewQualifiedTypeName(dbName, tree.PublicSchema, tree.RegionEnum),
 			enumTypeMultiRegion,
-		)
-		if err != nil {
+		); err != nil {
 			return nil, false, err
+		}
+		if err := p.applyZoneConfigFromRegionConfigForDatabase(ctx, database.Name, *regionConfig); err != nil {
+			return nil, true, err
 		}
 	}
 

@@ -106,6 +106,50 @@ SHOW SURVIVAL GOAL FROM DATABASE region_test_db
 ----
 region_test_db  zone
 
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE region_test_db
+----
+DATABASE region_test_db  ALTER DATABASE region_test_db CONFIGURE ZONE USING
+                         range_min_bytes = 134217728,
+                         range_max_bytes = 536870912,
+                         gc.ttlseconds = 90000,
+                         num_replicas = 3,
+                         constraints = '{+region=test1: 1}',
+                         lease_preferences = '[[+region=test1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE multi_region_test_db
+----
+DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 90000,
+                               num_replicas = 3,
+                               constraints = '{+region=test1: 1, +region=test2: 1, +region=test3: 1}',
+                               lease_preferences = '[[+region=test2]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE multi_region_test_explicit_primary_region_db
+----
+DATABASE multi_region_test_explicit_primary_region_db  ALTER DATABASE multi_region_test_explicit_primary_region_db CONFIGURE ZONE USING
+                                                       range_min_bytes = 134217728,
+                                                       range_max_bytes = 536870912,
+                                                       gc.ttlseconds = 90000,
+                                                       num_replicas = 3,
+                                                       constraints = '{+region=test1: 1, +region=test2: 1, +region=test3: 1}',
+                                                       lease_preferences = '[[+region=test1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE multi_region_test_survive_zone_failure_db
+----
+DATABASE multi_region_test_survive_zone_failure_db  ALTER DATABASE multi_region_test_survive_zone_failure_db CONFIGURE ZONE USING
+                                                    range_min_bytes = 134217728,
+                                                    range_max_bytes = 536870912,
+                                                    gc.ttlseconds = 90000,
+                                                    num_replicas = 3,
+                                                    constraints = '{+region=test1: 1, +region=test2: 1, +region=test3: 1}',
+                                                    lease_preferences = '[[+region=test3]]'
+
 statement error PRIMARY REGION must be specified if REGIONS are specified
 CREATE DATABASE no_primary_region_db REGIONS "test1"
 
