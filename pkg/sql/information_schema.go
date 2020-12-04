@@ -2025,12 +2025,6 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 		}
 	}
 
-	// Generate all schema names, and keep a mapping.
-	schemaNames, err := getSchemaNames(ctx, p, dbContext)
-	if err != nil {
-		return err
-	}
-
 	// Physical descriptors next.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
@@ -2041,9 +2035,30 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
 		if parentExists {
 			var ok bool
-			scName, ok = schemaNames[table.GetParentSchemaID()]
-			if !ok {
+			scName, ok = lCtx.schemaNames[table.GetParentSchemaID()]
+			// Look up the schemas for this database if we discover that there is a
+			// missing temporary schema name. The only schemas which do not have
+			// descriptors are the public schema and temporary schemas. The public
+			// schema does not have a descriptor but will appear in the map. Temporary
+			// schemas do, however, have namespace entries. The below code will go
+			// and lookup schema names from the namespace table if needed to qualify
+			// the name of a temporary table.
+			if !ok && !table.IsTemporary() {
 				return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
+			}
+			if !ok { // && table.IsTemporary()
+				namesForSchema, err := getSchemaNames(ctx, p, dbDesc)
+				if err != nil {
+					return errors.Wrapf(err, "failed to look up schema id %d",
+						table.GetParentSchemaID())
+				}
+				for id, n := range namesForSchema {
+					if _, exists := lCtx.schemaNames[id]; exists {
+						continue
+					}
+					lCtx.schemaNames[id] = n
+					scName = lCtx.schemaNames[table.GetParentSchemaID()]
+				}
 			}
 		}
 		if err := fn(dbDesc, scName, table, lCtx); err != nil {
