@@ -448,6 +448,9 @@ ALTER DATABASE system RENAME TO not_system
 statement error user root does not have DROP privilege on database system
 DROP DATABASE system
 
+statement error user root does not have DROP privilege on relation users
+DROP TABLE system.users
+
 statement error user root does not have ALL privilege on database system
 GRANT ALL ON DATABASE system TO testuser
 

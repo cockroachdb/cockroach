@@ -630,7 +630,13 @@ func (p *planner) checkCanAlterToNewOwner(
 // HasOwnershipOnSchema checks if the current user has ownership on the schema.
 // For schemas, we cannot always use HasOwnership as not every schema has a
 // descriptor.
-func (p *planner) HasOwnershipOnSchema(ctx context.Context, schemaID descpb.ID) (bool, error) {
+func (p *planner) HasOwnershipOnSchema(
+	ctx context.Context, schemaID descpb.ID, dbID descpb.ID,
+) (bool, error) {
+	if dbID == keys.SystemDatabaseID {
+		// Only the node user has ownership over the system database.
+		return p.User() == security.NodeUser, nil
+	}
 	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(
 		ctx, p.Txn(), schemaID,
 	)
