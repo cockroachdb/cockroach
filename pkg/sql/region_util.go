@@ -11,12 +11,16 @@
 package sql
 
 import (
+	"context"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -71,6 +75,73 @@ func checkLiveClusterRegion(liveClusterRegions liveClusterRegions, region descpb
 			"valid regions: %s",
 			strings.Join(liveClusterRegions.toStrings(), ", "),
 		)
+	}
+	return nil
+}
+
+func makeRequiredZoneConstraintForRegion(r descpb.Region) zonepb.Constraint {
+	return zonepb.Constraint{
+		Type:  zonepb.Constraint_REQUIRED,
+		Key:   "region",
+		Value: string(r),
+	}
+}
+
+// genZoneConfigFromRegionConfigForDatabase generates a desired ZoneConfig based
+// on the region config.
+// TODO(aayushshah15): properly configure this for region survivability and leaseholder
+// preferences when new zone configuration parameters merge.
+func genZoneConfigFromRegionConfigForDatabase(
+	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+) *zonepb.ZoneConfig {
+	numReplicas := int32(len(regionConfig.Regions))
+	if numReplicas < 3 {
+		numReplicas = 3
+	}
+	conjunctions := []zonepb.ConstraintsConjunction{}
+	for _, region := range regionConfig.Regions {
+		conjunctions = append(
+			conjunctions,
+			zonepb.ConstraintsConjunction{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{makeRequiredZoneConstraintForRegion(region)},
+			},
+		)
+	}
+	return &zonepb.ZoneConfig{
+		NumReplicas: &numReplicas,
+		LeasePreferences: []zonepb.LeasePreference{
+			{Constraints: []zonepb.Constraint{makeRequiredZoneConstraintForRegion(regionConfig.PrimaryRegion)}},
+		},
+		Constraints: conjunctions,
+	}
+}
+
+func (p *planner) applyZoneConfigFromRegionConfigForDatabase(
+	ctx context.Context, dbName tree.Name, regionConfig descpb.DatabaseDescriptor_RegionConfig,
+) error {
+	// Convert the partially filled zone config to re-run as a SQL command.
+	// This avoid us having to modularize planNode logic from set_zone_config
+	// and the optimizer.
+	sql, err := zoneConfigToSQL(
+		&tree.ZoneSpecifier{
+			Database: dbName,
+		},
+		genZoneConfigFromRegionConfigForDatabase(regionConfig),
+	)
+	if err != nil {
+		return err
+	}
+	if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+		ctx,
+		"apply-database-multiregion-set-zone-config",
+		p.Txn(),
+		sessiondata.InternalExecutorOverride{
+			User: p.SessionData().User(),
+		},
+		sql,
+	); err != nil {
+		return err
 	}
 	return nil
 }
