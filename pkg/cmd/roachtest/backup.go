@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -431,4 +432,93 @@ func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 
 	return correctURI, nil
+}
+
+// A user should be able to upgrade their cluster while a backup is running.
+func registerBackupDuringUpgrade(r *testRegistry) {
+	// Create a detached backup job.
+	createBackupStep := func(nodeID int) versionStep {
+		return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+			u.c.Run(ctx, u.c.Node(nodeID), "BACKUP TO 'nodelocal://0/foo")
+		}
+	}
+
+	verifyBackupSucceedsStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		var jobStatus string
+
+		db := u.conn(ctx, t, 1)
+		if err := retry.ForDuration(5*time.Minute, func() error {
+			rows, err := db.Query(`SELECT status FROM [SHOW JOBS] WHERE job_type = 'BACKUP'`)
+			if err != nil {
+				t.Fatal(errors.Wrap(err, "checking backup status"))
+			}
+			if err := rows.Scan(&jobStatus); err != nil {
+				t.Fatal(err)
+			}
+			if rows.Next() {
+				t.Fatal("expected exactly 1 backup job")
+			}
+
+			if jobStatus != "succeeded" {
+				return errors.New("backup job not yet succeeded")
+			}
+
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	runBackupDuringUpgrade := func(
+		ctx context.Context, t *test, c *cluster, warehouses int, predecessorVersion string,
+	) {
+		// An empty string means that the cockroach binary specified by flag
+		// `cockroach` will be used.
+		const mainVersion = ""
+		roachNodes := c.All()
+
+		t.Status("starting csv servers")
+
+		// We'll be issuing all commands on node 1.
+		// This node should be one that is upgraded.
+		gatewayNodeID := 1
+
+		u := newVersionUpgradeTest(c,
+			uploadAndStartFromCheckpointFixture(roachNodes, predecessorVersion),
+			waitForUpgradeStep(roachNodes),
+			preventAutoUpgradeStep(1),
+
+			// Import some data into the cluster.
+			successfulImportStep(warehouses, gatewayNodeID),
+
+			// Create the backup job.
+			createBackupStep(gatewayNodeID),
+
+			// Upgrade some of the nodes.
+			binaryUpgradeStep(c.Node(1), mainVersion),
+			binaryUpgradeStep(c.Node(2), mainVersion),
+
+			// Wait for job to complete.
+			verifyBackupSucceedsStep,
+		)
+		u.run(ctx, t)
+	}
+
+	r.Add(testSpec{
+		Name:       "backup/during-upgrade",
+		Owner:      OwnerBulkIO,
+		MinVersion: "v21.1.0",
+		Cluster:    makeClusterSpec(4),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			predV, err := PredecessorVersion(r.buildVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
+			warehouses := 100
+			if local {
+				warehouses = 10
+			}
+			runBackupDuringUpgrade(ctx, t, c, warehouses, predV)
+		},
+	})
 }
