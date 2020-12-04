@@ -617,6 +617,9 @@ func (r *DistSQLReceiver) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if meta != nil {
+		if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
+			metaWriter.AddMeta(r.ctx, meta)
+		}
 		if meta.LeafTxnFinalState != nil {
 			if r.txn != nil {
 				if r.txn.ID() == meta.LeafTxnFinalState.Txn.ID {
@@ -673,17 +676,15 @@ func (r *DistSQLReceiver) Push(
 				atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
 			}
 			meta.Metrics.Release()
-			meta.Release()
 		}
-		if meta.ContentionEvents != nil && r.contendedQueryMetric != nil {
+		if r.contendedQueryMetric != nil && len(meta.ContentionEvents) > 0 {
 			// Increment the contended query metric at most once if the query sees at
 			// least one contention event.
 			r.contendedQueryMetric.Inc(1)
 			r.contendedQueryMetric = nil
 		}
-		if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
-			metaWriter.AddMeta(r.ctx, meta)
-		}
+		// Release the meta object. It is unsafe for use after this call.
+		meta.Release()
 		return r.status
 	}
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {

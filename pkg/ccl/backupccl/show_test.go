@@ -9,7 +9,10 @@
 package backupccl
 
 import (
+	"context"
+	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -450,4 +454,49 @@ func TestShowBackupTenants(t *testing.T) {
 	require.Equal(t, [][]string{
 		{"/Tenant/10", "/Tenant/11"},
 	}, res)
+}
+
+func TestShowBackupPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE USER testuser`)
+	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
+
+	pgURL, cleanup := sqlutils.PGUrl(t, srv.ServingSQLAddr(),
+		"TestShowBackupPrivileges-testuser", url.User("testuser"))
+	defer cleanup()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, testuser.Close())
+	}()
+
+	// Make an initial backup.
+	const full = LocalFoo + "/full"
+	sqlDB.Exec(t, `BACKUP privs INTO $1`, full)
+	// Add an incremental backup to it.
+	sqlDB.Exec(t, `BACKUP privs INTO LATEST IN $1`, full)
+	// Make a second full backup using non into syntax.
+	sqlDB.Exec(t, `BACKUP TO $1;`, full)
+
+	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
+	require.True(t, testutils.IsError(err,
+		"only users with the admin role are allowed to SHOW BACKUP from the specified nodelocal URI"))
+
+	_, err = testuser.Exec(`SHOW BACKUP $1`, full)
+	require.True(t, testutils.IsError(err,
+		"only users with the admin role are allowed to SHOW BACKUP from the specified nodelocal URI"))
+
+	sqlDB.Exec(t, `GRANT admin TO testuser`)
+	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
+	require.NoError(t, err)
+
+	_, err = testuser.Exec(`SHOW BACKUP $1`, full)
+	require.NoError(t, err)
 }

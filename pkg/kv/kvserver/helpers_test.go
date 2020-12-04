@@ -52,9 +52,10 @@ func (s *Store) Transport() *RaftTransport {
 func (s *Store) FindTargetAndTransferLease(
 	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, zone *zonepb.ZoneConfig,
 ) (bool, error) {
-	return s.replicateQueue.findTargetAndTransferLease(
+	transferStatus, err := s.replicateQueue.shedLease(
 		ctx, repl, desc, zone, transferLeaseOptions{},
 	)
+	return transferStatus == transferOK, err
 }
 
 // AddReplica adds the replica to the store's replica map and to the sorted

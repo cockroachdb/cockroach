@@ -251,7 +251,10 @@ func (r *Registry) runJob(
 
 	// Run the actual job.
 	err := r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, status, finalResumeError)
-	if err != nil {
+	// If the context has been canceled, disregard errors for the sake of logging
+	// as presumably they are due to the context cancellation which commonly
+	// happens during shutdown.
+	if err != nil && ctx.Err() == nil {
 		log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 	}
 	r.unregister(*job.ID())

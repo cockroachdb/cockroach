@@ -831,6 +831,12 @@ define CovarSamp {
 }
 
 [Scalar, Aggregate]
+define RegressionAvgX {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
 define RegressionIntercept {
     Y ScalarExpr
     X ScalarExpr

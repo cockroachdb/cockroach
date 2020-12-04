@@ -181,6 +181,10 @@ var aggregates = map[string]builtinDefinition{
 		"Calculates the sample covariance of the selected values.",
 	),
 
+	"regr_avgx": makeRegressionAggregateBuiltin(
+		newRegressionAvgXAggregate, "Calculates the average of the independent variable (sum(X)/N).",
+	),
+
 	"regr_intercept": makeRegressionAggregateBuiltin(
 		newRegressionInterceptAggregate, "Calculates y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs.",
 	),
@@ -2012,6 +2016,25 @@ func (a *covarSampAggregate) Result() (tree.Datum, error) {
 	}
 
 	return tree.NewDFloat(tree.DFloat(a.sxy / (a.n - 1))), nil
+}
+
+// regressionAvgXAggregate represents SQL:2003 average of the independent
+// variable (sum(X)/N).
+type regressionAvgXAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionAvgXAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionAvgXAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionAvgXAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sx / a.n)), nil
 }
 
 // regressionInterceptAggregate represents y-intercept.
