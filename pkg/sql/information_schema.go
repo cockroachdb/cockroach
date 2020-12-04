@@ -2013,12 +2013,6 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 		}
 	}
 
-	// Generate all schema names, and keep a mapping.
-	schemaNames, err := getSchemaNames(ctx, p, dbContext)
-	if err != nil {
-		return err
-	}
-
 	// Physical descriptors next.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
@@ -2029,8 +2023,14 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
 		if parentExists {
 			var ok bool
-			scName, ok = schemaNames[table.GetParentSchemaID()]
-			if !ok {
+			scName, ok = lCtx.schemaNames[table.GetParentSchemaID()]
+			if table.IsTemporary() {
+				if p.extendedEvalCtx.SessionData.IsTemporarySchemaID(uint32(table.GetParentSchemaID())) {
+					scName = p.TemporarySchemaName()
+				} else {
+					continue
+				}
+			} else if !ok {
 				return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
 			}
 		}
