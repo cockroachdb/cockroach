@@ -60,7 +60,7 @@ func unwrapValidationTest(t *testing.T, descriptorCSVPath string) {
 		if ts == (hlc.Timestamp{}) {
 			ts = hlc.Timestamp{WallTime: 1}
 		}
-		_, err := unwrapDescriptor(context.Background(), m, ts, &desc)
+		_, err := unwrapDescriptor(context.Background(), m, ts, &desc, true /* validate */)
 		require.NoErrorf(t, err, "id: %d", id)
 	}
 }
