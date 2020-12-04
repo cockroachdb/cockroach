@@ -82,6 +82,8 @@ type DatabaseDescriptor interface {
 	// schemas.
 	tree.SchemaMeta
 	DatabaseDesc() *descpb.DatabaseDescriptor
+
+	Validate() error
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
