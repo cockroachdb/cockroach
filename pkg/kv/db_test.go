@@ -145,6 +145,64 @@ func TestDB_CPut(t *testing.T) {
 	checkResult(t, []byte("4"), result.ValueBytes())
 }
 
+func TestDB_CPutInline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	ctx := kv.CtxForCPutInline(context.Background())
+
+	if err := db.PutInline(ctx, "aa", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CPutInline(ctx, "aa", "2", kvclientutils.StrToCPutExistingValue("1")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := db.Get(ctx, "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("2"), result.ValueBytes())
+
+	if err = db.CPutInline(ctx, "aa", "3", kvclientutils.StrToCPutExistingValue("1")); err == nil {
+		t.Fatal("expected error from conditional put")
+	}
+	result, err = db.Get(ctx, "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("2"), result.ValueBytes())
+
+	if err = db.CPutInline(ctx, "bb", "4", kvclientutils.StrToCPutExistingValue("1")); err == nil {
+		t.Fatal("expected error from conditional put")
+	}
+	result, err = db.Get(ctx, "bb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte(""), result.ValueBytes())
+
+	if err = db.CPutInline(ctx, "bb", "4", nil); err != nil {
+		t.Fatal(err)
+	}
+	result, err = db.Get(ctx, "bb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("4"), result.ValueBytes())
+
+	if err = db.CPutInline(ctx, "aa", nil, kvclientutils.StrToCPutExistingValue("2")); err != nil {
+		t.Fatal(err)
+	}
+	result, err = db.Get(ctx, "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Value != nil {
+		t.Fatalf("expected deleted value, got %x", result.ValueBytes())
+	}
+}
+
 func TestDB_InitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
