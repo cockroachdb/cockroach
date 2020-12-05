@@ -103,7 +103,7 @@ func (a *avgInt16OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -147,7 +147,7 @@ func (a *avgInt16OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -193,7 +193,7 @@ func (a *avgInt16OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -237,7 +237,7 @@ func (a *avgInt16OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -288,7 +288,7 @@ func (a *avgInt16OrderedAgg) Flush(outputIdx int) {
 		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
-		a.col.Set(outputIdx, d)
+		a.col.Set(outputIdx, &d)
 	}
 }
 
@@ -368,7 +368,7 @@ func (a *avgInt32OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -412,7 +412,7 @@ func (a *avgInt32OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -458,7 +458,7 @@ func (a *avgInt32OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -502,7 +502,7 @@ func (a *avgInt32OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -553,7 +553,7 @@ func (a *avgInt32OrderedAgg) Flush(outputIdx int) {
 		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
-		a.col.Set(outputIdx, d)
+		a.col.Set(outputIdx, &d)
 	}
 }
 
@@ -633,7 +633,7 @@ func (a *avgInt64OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -677,7 +677,7 @@ func (a *avgInt64OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -723,7 +723,7 @@ func (a *avgInt64OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -767,7 +767,7 @@ func (a *avgInt64OrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -818,7 +818,7 @@ func (a *avgInt64OrderedAgg) Flush(outputIdx int) {
 		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
-		a.col.Set(outputIdx, d)
+		a.col.Set(outputIdx, &d)
 	}
 }
 
@@ -894,7 +894,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -937,7 +937,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -982,7 +982,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -1025,7 +1025,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 							if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 								colexecerror.InternalError(err)
 							}
-							a.col.Set(a.curIdx, d)
+							a.col.Set(a.curIdx, &d)
 						}
 						a.curIdx++
 						a.curSum = zeroDecimalValue
@@ -1075,7 +1075,7 @@ func (a *avgDecimalOrderedAgg) Flush(outputIdx int) {
 		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
-		a.col.Set(outputIdx, d)
+		a.col.Set(outputIdx, &d)
 	}
 }
 

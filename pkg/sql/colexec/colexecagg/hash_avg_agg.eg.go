@@ -151,7 +151,7 @@ func (a *avgInt16HashAgg) Flush(outputIdx int) {
 		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
-		a.col.Set(outputIdx, d)
+		a.col.Set(outputIdx, &d)
 	}
 }
 
@@ -279,7 +279,7 @@ func (a *avgInt32HashAgg) Flush(outputIdx int) {
 		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
-		a.col.Set(outputIdx, d)
+		a.col.Set(outputIdx, &d)
 	}
 }
 
@@ -407,7 +407,7 @@ func (a *avgInt64HashAgg) Flush(outputIdx int) {
 		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
-		a.col.Set(outputIdx, d)
+		a.col.Set(outputIdx, &d)
 	}
 }
 
@@ -529,7 +529,7 @@ func (a *avgDecimalHashAgg) Flush(outputIdx int) {
 		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
-		a.col.Set(outputIdx, d)
+		a.col.Set(outputIdx, &d)
 	}
 }
 

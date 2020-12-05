@@ -177,7 +177,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
 }
 
@@ -219,7 +219,9 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(a.curIdx)
 		} else {
-			a.col.Set(a.curIdx, a.curAgg)
+			// {{with .Global}}
+			execgen.SET(a.col, a.curIdx, a.curAgg)
+			// {{end}}
 		}
 		a.curIdx++
 		// {{with .Global}}

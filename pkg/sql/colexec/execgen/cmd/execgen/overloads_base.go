@@ -468,8 +468,10 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 
 func set(canonicalTypeFamily types.Family, target, i, new string) string {
 	switch canonicalTypeFamily {
-	case types.BytesFamily, types.DecimalFamily, typeconv.DatumVecCanonicalTypeFamily:
+	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
+	case types.DecimalFamily:
+		return fmt.Sprintf("%s.Set(%s, &%s)", target, i, new)
 	}
 	return fmt.Sprintf("%s[%s] = %s", target, i, new)
 }

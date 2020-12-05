@@ -117,7 +117,7 @@ func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 			t.Fatal(err)
 		}
 		rows[i] = rowenc.EncDatumRow{rowenc.EncDatum{Datum: dec}}
-		expected.Decimal().Set(i, dec.Decimal)
+		expected.Decimal().Set(i, &dec.Decimal)
 	}
 	vec := testAllocator.NewMemColumn(types.Decimal, 3)
 	ct := types.Decimal

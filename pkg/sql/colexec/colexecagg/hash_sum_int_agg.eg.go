@@ -14,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -121,7 +122,7 @@ func (a *sumIntInt16HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
 }
 
@@ -227,7 +228,7 @@ func (a *sumIntInt32HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
 }
 
@@ -333,7 +334,7 @@ func (a *sumIntInt64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
 }
 

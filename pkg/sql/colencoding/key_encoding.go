@@ -241,7 +241,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
-		vec.Decimal().Set(idx, d)
+		vec.Decimal().Set(idx, &d)
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		var r []byte
 		if dir == descpb.IndexDescriptor_ASC {
@@ -316,7 +316,7 @@ func UnmarshalColumnValueToCol(
 	case types.DecimalFamily:
 		var d apd.Decimal
 		err = value.GetDecimalInto(&d)
-		vec.Decimal().Set(idx, d)
+		vec.Decimal().Set(idx, &d)
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		var v []byte
 		v, err = value.GetBytes()

@@ -45,9 +45,7 @@ func (d *Decimals) CopySlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int)
 // Set sets the ith apd.Decimal in d. Overwriting a value that is not at the end
 // of the Decimals is not allowed since it complicates memory movement to make/take
 // away necessary space in the flat buffer. Note that a nil value will be
-// "converted" into an empty byte slice.
-// TODO(yuzefovich): shouldn't we take in a pointer to apd.Decimal?
-func (d *Decimals) Set(i int, v apd.Decimal) {
+func (d *Decimals) Set(i int, v *apd.Decimal) {
 	if d.isWindow {
 		panic("Set is called on a window into Decimals")
 	}
@@ -65,7 +63,7 @@ func (d *Decimals) Set(i int, v apd.Decimal) {
 	// NULL values that are stored separately. In order to maintain the
 	// assumption of non-decreasing offsets, we need to backfill them.
 	d.maybeBackfillOffsets(i)
-	d.data = encoding.EncodeFlatDecimal(&v, d.data)
+	d.data = encoding.EncodeFlatDecimal(v, d.data)
 	d.offsets[i+1] = int32(len(d.data))
 	d.maxSetIndex = i
 }

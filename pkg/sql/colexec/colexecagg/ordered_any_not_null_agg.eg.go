@@ -477,7 +477,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col.Set(a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, &a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -502,7 +502,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col.Set(a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, &a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -530,7 +530,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col.Set(a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, &a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -555,7 +555,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col.Set(a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, &a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -590,7 +590,7 @@ func (a *anyNotNullDecimalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		a.col.Set(outputIdx, &a.curAgg)
 	}
 	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
 	a.curAgg = apd.Decimal{}
