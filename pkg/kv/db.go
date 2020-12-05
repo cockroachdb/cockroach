@@ -388,6 +388,30 @@ func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue []byte)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// CPutInline conditionally sets the value for a key if the existing value is
+// equal to expValue, but does not maintain multi-version values. To
+// conditionally set a value only if the key doesn't currently exist, pass an
+// empty expValue. The most recent value is always overwritten. Inline values
+// cannot be mutated transactionally and should be used with caution.
+//
+// Returns an error if the existing value is not equal to expValue.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// protoutil.Message or any Go primitive type (bool, int, etc). A nil value
+// means delete the key.
+//
+// An empty expValue means that the key is expected to not exist. If not empty,
+// expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
+// value without the checksum (as the checksum includes the key too).
+//
+// Callers should check the feature gate clusterversion.InlineCPut to make
+// sure this is supported.
+func (db *DB) CPutInline(ctx context.Context, key, value interface{}, expValue []byte) error {
+	b := &Batch{}
+	b.CPutInline(key, value, expValue)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // InitPut sets the first value for a key to value. A ConditionFailedError is
 // reported if a value already exists for the key and it's not equal to the
 // value passed in. If failOnTombstones is set to true, tombstones count as
