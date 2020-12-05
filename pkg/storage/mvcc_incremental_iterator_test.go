@@ -190,7 +190,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		keyMin   = roachpb.KeyMin
+		keyMin   = keys.LocalMax
 		keyMax   = roachpb.KeyMax
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
@@ -651,6 +651,11 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	db2 := NewInMem(ctx, roachpb.Attributes{}, 10<<20)
 	defer db2.Close()
 
+	// NB: If the original intent was separated, iterating using an interleaving
+	// iterator, as done below, and writing to an sst, transforms the separated
+	// intent to an interleaved intent. This is ok for now since both kinds of
+	// intents are supported.
+	// TODO(sumeer): change this test before interleaved intents are disallowed.
 	ingest := func(it MVCCIterator, count int) {
 		memFile := &MemFile{}
 		sst := MakeIngestionSSTWriter(memFile)
@@ -687,7 +692,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 			UpperBound: keys.MaxKey,
 		})
 		defer it.Close()
-		it.SeekGE(MVCCKey{Key: keys.MinKey})
+		it.SeekGE(MVCCKey{Key: keys.LocalMax})
 		ingest(it, 2)
 		ingest(it, 1)
 	}
@@ -703,7 +708,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 			EndTime:     hlc.Timestamp{WallTime: 2},
 		})
 		defer it.Close()
-		for it.SeekGE(MVCCKey{Key: keys.MinKey}); ; it.Next() {
+		for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; it.Next() {
 			ok, err := it.Valid()
 			if err != nil {
 				if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
@@ -786,7 +791,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 				t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
 			}
 
-			assertEqualKVs(eng, keys.MinKey, keys.MaxKey, testCase.start, testCase.end, latest, expectedKVs)(t)
+			assertEqualKVs(eng, keys.LocalMax, keys.MaxKey, testCase.start, testCase.end, latest, expectedKVs)(t)
 		})
 	}
 }

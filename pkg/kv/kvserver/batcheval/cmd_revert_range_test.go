@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -44,7 +45,7 @@ func getStats(t *testing.T, reader storage.Reader) enginepb.MVCCStats {
 	t.Helper()
 	iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
-	s, err := storage.ComputeStatsForRange(iter, roachpb.KeyMin, roachpb.KeyMax, 1100)
+	s, err := storage.ComputeStatsForRange(iter, keys.LocalMax, roachpb.KeyMax, 1100)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

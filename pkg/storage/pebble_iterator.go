@@ -50,6 +50,16 @@ type pebbleIterator struct {
 	// Stat tracking the number of sstables encountered during time-bound
 	// iteration. Only used for MVCCIterator.
 	timeBoundNumSSTables int
+
+	// mvccDir and mvccDone are used only for the methods implementing
+	// MVCCIterator. They are used to prevent the iterator from iterating into
+	// the lock table key space.
+	//
+	// The current direction. +1 for forward, -1 for reverse.
+	mvccDir int
+	// True iff the iterator is exhausted in the current direction. There is
+	// no error to report when it is true.
+	mvccDone bool
 }
 
 var _ MVCCIterator = &pebbleIterator{}
@@ -190,6 +200,8 @@ func (p *pebbleIterator) Close() {
 
 // SeekGE implements the MVCCIterator interface.
 func (p *pebbleIterator) SeekGE(key MVCCKey) {
+	p.mvccDir = +1
+	p.mvccDone = false
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
 	if p.prefix {
 		p.iter.SeekPrefixGE(p.keyBuf)
@@ -215,11 +227,33 @@ func (p *pebbleIterator) SeekEngineKeyGE(key EngineKey) (valid bool, err error) 
 	return false, p.iter.Error()
 }
 
-// Valid implements the MVCCIterator interface.
+// Valid implements the MVCCIterator interface. Must not be called from
+// methods of EngineIterator.
 func (p *pebbleIterator) Valid() (bool, error) {
+	if p.mvccDone {
+		return false, nil
+	}
 	// NB: A Pebble Iterator always returns Valid()==false when an error is
 	// present. If Valid() is true, there is no error.
 	if ok := p.iter.Valid(); ok {
+		// The MVCCIterator interface is broken in that it silently discards
+		// the error when UnsafeKey(), Key() are unable to parse the key as
+		// an MVCCKey. This is especially problematic if the caller is
+		// accidentally iterating into the lock table key space, since that
+		// parsing will fail. We do a cheap check here to make sure we are
+		// not in the lock table key space.
+		//
+		// TODO(sumeer): fix this properly by changing those method signatures.
+		k := p.iter.Key()
+		if len(k) == 0 {
+			return false, errors.Errorf("iterator encountered 0 length key")
+		}
+		// Last byte is the version length + 1 or 0.
+		versionLen := int(k[len(k)-1])
+		if versionLen == engineKeyVersionLockTableLen+1 {
+			p.mvccDone = true
+			return false, nil
+		}
 		return ok, nil
 	}
 	return false, p.iter.Error()
@@ -227,6 +261,14 @@ func (p *pebbleIterator) Valid() (bool, error) {
 
 // Next implements the MVCCIterator interface.
 func (p *pebbleIterator) Next() {
+	if p.mvccDir != +1 {
+		// Switching directions.
+		p.mvccDir = +1
+		p.mvccDone = false
+	}
+	if p.mvccDone {
+		return
+	}
 	p.iter.Next()
 }
 
@@ -243,6 +285,17 @@ func (p *pebbleIterator) NextEngineKey() (valid bool, err error) {
 
 // NextKey implements the MVCCIterator interface.
 func (p *pebbleIterator) NextKey() {
+	// Even though NextKey() is not allowed for switching direction by the
+	// MVCCIterator interface, pebbleIterator works correctly even when
+	// switching direction. So we set mvccDir = +1.
+	if p.mvccDir != +1 {
+		// Switching directions.
+		p.mvccDir = +1
+		p.mvccDone = false
+	}
+	if p.mvccDone {
+		return
+	}
 	if valid, err := p.Valid(); err != nil || !valid {
 		return
 	}
@@ -297,7 +350,7 @@ func (p *pebbleIterator) UnsafeRawEngineKey() []byte {
 
 // UnsafeValue implements the MVCCIterator and EngineIterator interfaces.
 func (p *pebbleIterator) UnsafeValue() []byte {
-	if valid, err := p.Valid(); err != nil || !valid {
+	if ok := p.iter.Valid(); !ok {
 		return nil
 	}
 	return p.iter.Value()
@@ -305,6 +358,8 @@ func (p *pebbleIterator) UnsafeValue() []byte {
 
 // SeekLT implements the MVCCIterator interface.
 func (p *pebbleIterator) SeekLT(key MVCCKey) {
+	p.mvccDir = -1
+	p.mvccDone = false
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
 	p.iter.SeekLT(p.keyBuf)
 }
@@ -323,6 +378,14 @@ func (p *pebbleIterator) SeekEngineKeyLT(key EngineKey) (valid bool, err error) 
 
 // Prev implements the MVCCIterator interface.
 func (p *pebbleIterator) Prev() {
+	if p.mvccDir != -1 {
+		// Switching directions.
+		p.mvccDir = -1
+		p.mvccDone = false
+	}
+	if p.mvccDone {
+		return
+	}
 	p.iter.Prev()
 }
 
