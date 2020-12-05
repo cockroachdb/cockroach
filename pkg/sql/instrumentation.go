@@ -258,6 +258,13 @@ func (ih *instrumentationHelper) ShouldCollectBundle() bool {
 	return ih.collectBundle
 }
 
+// ShouldInlineCreateStatsJob is true if we are running a statement under
+// EXPLAIN ANALYZE, in which case we want to run any CREATE STATISTICS plan
+// directly (and not through a job).
+func (ih *instrumentationHelper) ShouldInlineCreateStatsJob() bool {
+	return ih.outputMode == explainAnalyzePlanOutput || ih.outputMode == explainAnalyzeDebugOutput
+}
+
 // ShouldBuildExplainPlan returns true if we should build an explain plan and
 // call RecordExplainPlan.
 func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
