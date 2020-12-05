@@ -583,7 +583,7 @@ func (n *Node) initializeAdditionalStores(
 
 	// Write a new status summary after all stores have been initialized; this
 	// helps the UI remain responsive when new nodes are added.
-	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */); err != nil {
+	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */); err != nil {
 		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
 
@@ -701,11 +701,13 @@ func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
 
 // startWriteNodeStatus begins periodically persisting status summaries for the
 // node and its stores.
-func (n *Node) startWriteNodeStatus(frequency time.Duration) {
+func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 	ctx := logtags.AddTag(n.AnnotateCtx(context.Background()), "summaries", nil)
-	// Immediately record summaries once on server startup.
-	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */); err != nil {
-		log.Warningf(ctx, "error recording initial status summaries: %s", err)
+	// Immediately record summaries once on server startup. The update loop below
+	// will only update the key if it exists, to avoid race conditions during
+	// node decommissioning, so we have to error out if we can't create it.
+	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */); err != nil {
+		return errors.Wrap(err, "error recording initial status summaries")
 	}
 	n.stopper.RunWorker(ctx, func(ctx context.Context) {
 		// Write a status summary immediately; this helps the UI remain
@@ -719,7 +721,13 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) {
 				// alerts don't disappear and reappear spuriously while at the same
 				// time ensuring that an alert doesn't linger for too long after having
 				// resolved.
-				if err := n.writeNodeStatus(ctx, 2*frequency); err != nil {
+				//
+				// The status key must already exist, to avoid race conditions
+				// during decommissioning of this node. Decommissioning may be
+				// carried out by a different node, so this avoids resurrecting
+				// the status entry after the decommissioner has removed it.
+				// See Server.Decommission().
+				if err := n.writeNodeStatus(ctx, 2*frequency, true /* mustExist */); err != nil {
 					log.Warningf(ctx, "error recording status summaries: %s", err)
 				}
 			case <-n.stopper.ShouldStop():
@@ -727,11 +735,14 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) {
 			}
 		}
 	})
+	return nil
 }
 
 // writeNodeStatus retrieves status summaries from the supplied
 // NodeStatusRecorder and persists them to the cockroach data store.
-func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration) error {
+// If mustExist is true the status key must already exist and must
+// not change during writing -- if false, the status is always written.
+func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, mustExist bool) error {
 	var err error
 	if runErr := n.stopper.RunTask(ctx, "node.Node: writing summary", func(ctx context.Context) {
 		nodeStatus := n.recorder.GenerateNodeStatus(ctx)
@@ -762,7 +773,7 @@ func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration) erro
 			// state (since it'll be incremented every ~10s).
 		}
 
-		err = n.recorder.WriteNodeStatus(ctx, n.storeCfg.DB, *nodeStatus)
+		err = n.recorder.WriteNodeStatus(ctx, n.storeCfg.DB, *nodeStatus, mustExist)
 	}); runErr != nil {
 		err = runErr
 	}
