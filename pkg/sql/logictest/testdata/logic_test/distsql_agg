@@ -592,6 +592,11 @@ SELECT regr_count(y, x) FROM statistics_agg_test
 ----
 100
 
+query FF
+SELECT regr_avgx(y, x), regr_avgy(y, x) FROM statistics_agg_test
+----
+4.5 50.5
+
 # Regression test for #37211 (incorrect ordering between aggregator stages).
 statement ok
 CREATE TABLE uv (u INT PRIMARY KEY, v INT);
