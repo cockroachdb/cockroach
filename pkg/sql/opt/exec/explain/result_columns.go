@@ -174,9 +174,6 @@ func getResultColumns(
 			return nil, errors.AssertionFailedf("unknown explain mode %v", o.Mode)
 		}
 
-	case explainPlanOp:
-		return colinfo.ExplainPlanColumns, nil
-
 	case explainOptOp:
 		return colinfo.ExplainPlanColumns, nil
 
