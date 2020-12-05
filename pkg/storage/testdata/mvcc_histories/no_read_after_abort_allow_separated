@@ -14,7 +14,7 @@ called PutIntent("a", _, NoExistingIntent, TDNUM(true), 00000000-0000-0000-0000-
 meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000022,0 min=0,0 seq=0} ts=0.000000022,0 del=false klen=12 vlen=8
 data: "a"/0.000000022,0 -> /BYTES/cde
 >> resolve_intent status=ABORTED t=A k=a
-called ClearIntent("a", ExistingIntentInterleaved, TDNUM(true), 00000000-0000-0000-0000-000000000000)
+called ClearIntent("a", ExistingIntentInterleaved, TDNUM(true), 00000000-0000-0000-0000-000000000001)
 <no data>
 >> txn_remove t=A k=a
 

@@ -32,8 +32,15 @@ import (
 
 // assertEq compares the given ms and expMS and errors when they don't match. It
 // also recomputes the stats over the whole ReadWriter with all known
-// implementations and errors on mismatch with any of them.
+// implementations and errors on mismatch with any of them. It is used for global
+// keys.
 func assertEq(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginepb.MVCCStats) {
+	assertEqImpl(t, rw, debug, true /* globalKeys */, ms, expMS)
+}
+
+func assertEqImpl(
+	t *testing.T, rw ReadWriter, debug string, globalKeys bool, ms, expMS *enginepb.MVCCStats,
+) {
 	t.Helper()
 
 	msCpy := *ms // shallow copy
@@ -46,9 +53,13 @@ func assertEq(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginepb.MVC
 
 	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
+	keyMin := roachpb.KeyMin
+	if globalKeys {
+		keyMin = keys.LocalMax
+	}
 
 	for _, mvccStatsTest := range mvccStatsTests {
-		compMS, err := mvccStatsTest.fn(it, roachpb.KeyMin, roachpb.KeyMax, ms.LastUpdateNanos)
+		compMS, err := mvccStatsTest.fn(it, keyMin, roachpb.KeyMax, ms.LastUpdateNanos)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -56,6 +67,11 @@ func assertEq(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginepb.MVC
 			t.Errorf("%s: diff(ms, %s) = %s", debug, mvccStatsTest.name, pretty.Diff(*ms, compMS))
 		}
 	}
+}
+
+// assertEqLocal is like assertEq, but for tests that use only local keys.
+func assertEqLocal(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginepb.MVCCStats) {
+	assertEqImpl(t, rw, debug, false /* globalKeys */, ms, expMS)
 }
 
 // TestMVCCStatsDeleteCommitMovesTimestamp exercises the case in which a value
@@ -1142,7 +1158,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			ctx := context.Background()
 			aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+			assertEqLocal(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
@@ -1189,7 +1205,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 				SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+(46[+2])+12+10 = 79[+2]
 				SysCount:        1,
 			}
-			assertEq(t, engine, "after first put", aggMS, &expMS)
+			assertEqLocal(t, engine, "after first put", aggMS, &expMS)
 
 			// Rewrite the intent to ts2 with a different value.
 			txn.WriteTimestamp.Forward(ts2)
@@ -1218,7 +1234,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 				SysCount:        1,
 			}
 
-			assertEq(t, engine, "after intent rewrite", aggMS, &expMS)
+			assertEqLocal(t, engine, "after intent rewrite", aggMS, &expMS)
 		})
 	}
 }
@@ -1237,7 +1253,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 			ctx := context.Background()
 			aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+			assertEqLocal(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
@@ -1282,7 +1298,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 				SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+(46[+2])+12+10 = 79[+2]
 				SysCount:        1,
 			}
-			assertEq(t, engine, "after first put", aggMS, &expMS)
+			assertEqLocal(t, engine, "after first put", aggMS, &expMS)
 
 			// Now abort the intent.
 			txn.Status = roachpb.ABORTED
@@ -1295,7 +1311,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 			expMS = enginepb.MVCCStats{
 				LastUpdateNanos: 1e9,
 			}
-			assertEq(t, engine, "after aborting", aggMS, &expMS)
+			assertEqLocal(t, engine, "after aborting", aggMS, &expMS)
 		})
 	}
 }
@@ -1313,7 +1329,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 			ctx := context.Background()
 			aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+			assertEqLocal(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
@@ -1344,7 +1360,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 				SysBytes:        mKeySize + vKeySize + vVal1Size, // 11+12+10 = 33
 				SysCount:        1,
 			}
-			assertEq(t, engine, "after first put", aggMS, &expMS)
+			assertEqLocal(t, engine, "after first put", aggMS, &expMS)
 
 			// Put another value at ts2.
 
@@ -1358,7 +1374,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 				SysCount:        1,
 			}
 
-			assertEq(t, engine, "after second put", aggMS, &expMS)
+			assertEqLocal(t, engine, "after second put", aggMS, &expMS)
 		})
 	}
 }
@@ -1386,9 +1402,10 @@ type state struct {
 	TS  hlc.Timestamp
 	Txn *roachpb.Transaction
 
-	eng Engine
-	rng *rand.Rand
-	key roachpb.Key
+	eng        Engine
+	rng        *rand.Rand
+	key        roachpb.Key
+	isLocalKey bool
 }
 
 func (s *state) intent(status roachpb.TransactionStatus) roachpb.LockUpdate {
@@ -1467,7 +1484,7 @@ func (s *randomTest) step(t *testing.T) {
 	log.Infof(context.Background(), "%10s %s txn=%s%s", s.TS, actName, txnS, info)
 
 	// Verify stats agree with recomputations.
-	assertEq(t, s.eng, fmt.Sprintf("cycle %d", s.cycle), s.MS, s.MS)
+	assertEqImpl(t, s.eng, fmt.Sprintf("cycle %d", s.cycle), !s.isLocalKey, s.MS, s.MS)
 
 	if t.Failed() {
 		t.FailNow()
@@ -1512,7 +1529,11 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		returnKeys := (s.rng.Intn(2) == 0)
 		max := s.rng.Int63n(5)
 		desc := fmt.Sprintf("returnKeys=%t, max=%d", returnKeys, max)
-		if _, _, _, err := MVCCDeleteRange(ctx, s.eng, s.MS, roachpb.KeyMin, roachpb.KeyMax, max, s.TS, s.Txn, returnKeys); err != nil {
+		keyMin := roachpb.KeyMin
+		if !s.isLocalKey {
+			keyMin = keys.LocalMax
+		}
+		if _, _, _, err := MVCCDeleteRange(ctx, s.eng, s.MS, keyMin, roachpb.KeyMax, max, s.TS, s.Txn, returnKeys); err != nil {
 			return desc + ": " + err.Error()
 		}
 		return desc
@@ -1604,10 +1625,11 @@ func TestMVCCStatsRandomized(t *testing.T) {
 								actions: actions,
 								inline:  inline,
 								state: state{
-									rng: rand.New(rand.NewSource(test.seed)),
-									eng: eng,
-									key: test.key,
-									MS:  &enginepb.MVCCStats{},
+									rng:        rand.New(rand.NewSource(test.seed)),
+									eng:        eng,
+									key:        test.key,
+									isLocalKey: keys.IsLocal(test.key),
+									MS:         &enginepb.MVCCStats{},
 								},
 							}
 

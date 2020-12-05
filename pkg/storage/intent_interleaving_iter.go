@@ -11,6 +11,8 @@
 package storage
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -46,6 +48,32 @@ import (
 // The one exception to the minimal distance rule is a sub-case of prefix
 // iteration, when we know that no separated intents need to be seen, and so
 // don't bother positioning intentIter.
+//
+// The implementation of intentInterleavingIter assumes callers iterating
+// forward (reverse) are setting an upper (lower) bound. There is protection
+// for misbehavior by the callers for the lock table iterator, which prevents
+// that iterator from leaving the lock table key space, by adding additional
+// bounds. But we do not manufacture bounds to prevent MVCCIterator to iterate
+// into the lock table key space, for the following reasons:
+// - Adding a bound where the caller has not specified one adds a key
+//   comparison when iterating. We don't expect much iteration (next/prev
+//   calls) over the lock table iterator, because of the rarity of intents,
+//   but that is not the case for the MVCC key space.
+// - The MVCC key space is split into two spans: local keys preceding the lock
+//   table key space, and global keys. Adding a bound where one is not
+//   specified by the caller requires us to know which one the caller wants to
+//   iterate over -- the bounds may not fully specify the intent of the caller
+//   e.g. a caller could use ["", \xFF\xFF) as the bounds, and use the seek
+//   key to narrow down iteration over the local key space or the global key
+//   space.
+// Instead, pebbleIterator, the base implementation of MVCCIterator, cheaply
+// checks whether it has iterated into the lock table key space, and if so,
+// marks itself as exhausted (Valid() returns false, nil).
+//
+// A limitation of these MVCCIterator implementations, that follows from the
+// fact that the MVCC key space is split into two spans, is that one can't
+// typically iterate using next/prev from the local MVCC key space to the
+// global one and vice versa. One needs to seek in-between.
 type intentInterleavingIter struct {
 	prefix bool
 
@@ -95,9 +123,22 @@ type intentInterleavingIter struct {
 
 var _ MVCCIterator = &intentInterleavingIter{}
 
+func isLocal(k roachpb.Key) bool {
+	return len(k) == 0 || keys.IsLocal(k)
+}
+
 func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator {
 	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
 		panic("intentInterleavingIter must not be used with timestamp hints")
+	}
+	if opts.LowerBound != nil && opts.UpperBound != nil {
+		lowerIsLocal := isLocal(opts.LowerBound)
+		upperIsLocal := isLocal(opts.UpperBound)
+		if lowerIsLocal != upperIsLocal {
+			panic(fmt.Sprintf(
+				"intentInterleavingIter cannot span from lowerIsLocal %t to upperIsLocal %t",
+				lowerIsLocal, upperIsLocal))
+		}
 	}
 	intentOpts := opts
 	var intentKeyBuf []byte
@@ -115,6 +156,10 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 		// Make sure we don't step outside the lock table key space.
 		intentOpts.UpperBound = keys.LockTableSingleKeyEnd
 	}
+	// TODO(sumeer): the creation of these iterators can race with concurrent
+	// mutations, which may make them inconsistent with each other. Add a way to
+	// cheaply clone the underlying Pebble iterator and use it in both places
+	// (the clones will have the same underlying memtables and sstables).
 	// Note that we can reuse intentKeyBuf after NewEngineIterator returns.
 	intentIter := reader.NewEngineIterator(intentOpts)
 
