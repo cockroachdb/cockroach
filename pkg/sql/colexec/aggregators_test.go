@@ -1106,7 +1106,7 @@ func BenchmarkAggregator(b *testing.B) {
 		for _, numInputRows := range numRows {
 			for _, groupSize := range groupSizes {
 				benchmarkAggregateFunction(
-					b, agg, aggFn, []*types.T{types.Int}, groupSize,
+					b, agg, aggFn, []*types.T{types.Decimal}, groupSize,
 					0 /* distinctProb */, numInputRows,
 				)
 			}
