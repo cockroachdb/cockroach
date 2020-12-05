@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/dustin/go-humanize"
@@ -2801,7 +2800,7 @@ func mvccResolveWriteIntent(
 				rw, metaKey, precedingIntentState, txnDidNotUpdateMeta, &buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
-			err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, uuid.UUID{})
+			err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID)
 		}
 		if err != nil {
 			return false, err
@@ -2904,7 +2903,7 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		if err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, uuid.UUID{}); err != nil {
+		if err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
@@ -2922,7 +2921,7 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: valueSize,
 	}
-	if err := rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, uuid.UUID{}); err != nil {
+	if err := rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
 		return false, err
 	}
 	metaKeySize := int64(metaKey.EncodedSize())
@@ -3429,6 +3428,10 @@ func willOverflow(a, b int64) bool {
 // for the first range (i.e. the one with start key == KeyMin). The nowNanos arg
 // specifies the wall time in nanoseconds since the epoch and is used to compute
 // the total age of all intents.
+//
+// TODO(sumeer): the comment about "adjusted to avoid counting local keys" is
+// not quite true below. It only ignores a particular replicated range-id local
+// key.
 //
 // When optional callbacks are specified, they are invoked for each physical
 // key-value pair (i.e. not for implicit meta records), and iteration is aborted

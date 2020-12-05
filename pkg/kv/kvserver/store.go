@@ -2160,7 +2160,34 @@ func ReadMaxHLCUpperBound(ctx context.Context, engines []storage.Engine) (int64,
 // checkCanInitializeEngine ensures that the engine is empty except for a
 // cluster version, which must be present.
 func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
-	kvs, err := storage.Scan(eng, roachpb.KeyMin, roachpb.KeyMax, 10)
+	// We use an EngineIterator to ensure that there are no keys that cannot be
+	// parsed as MVCCKeys (e.g. lock table keys) in the engine.
+	const maxKeys = 10
+	var kvs []storage.MVCCKeyValue
+	iter := eng.NewEngineIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+	defer iter.Close()
+	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+	for valid {
+		var k storage.EngineKey
+		k, err = iter.EngineKey()
+		if err != nil {
+			break
+		}
+		if !k.IsMVCCKey() {
+			err = errors.Errorf("found non-mvcc key: %s", k)
+			break
+		}
+		var key storage.MVCCKey
+		key, err = k.ToMVCCKey()
+		if err != nil {
+			break
+		}
+		kvs = append(kvs, storage.MVCCKeyValue{Key: key, Value: iter.Value()})
+		if len(kvs) >= maxKeys {
+			break
+		}
+		valid, err = iter.NextEngineKey()
+	}
 	if err != nil {
 		return err
 	}
@@ -2172,9 +2199,13 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		return errors.Wrap(err, "unable to read store ident")
 	}
 
-	// Engine is not bootstrapped yet (i.e. no StoreIdent). Does it contain
-	// a cluster version, cached settings and nothing else?
-
+	// Engine is not bootstrapped yet (i.e. no StoreIdent). Does it contain a
+	// cluster version, cached settings and nothing else? Note that there is one
+	// cluster version key and many cached settings key, and the cluster version
+	// key precedes the cached settings.
+	//
+	// TODO(tschottdorf): if there are 9 or more cached settings keys, we may
+	// not notice that there are other disallowed keys.
 	var sawClusterVersion bool
 	var keyVals []string
 	for _, kv := range kvs {

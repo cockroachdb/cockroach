@@ -45,7 +45,7 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
-	keyMin       = roachpb.KeyMin
+	keyMin       = keys.LocalMax
 	keyMax       = roachpb.KeyMax
 	testKey1     = roachpb.Key("/db1")
 	testKey2     = roachpb.Key("/db2")
@@ -1034,10 +1034,11 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Should Next() from key2/5 to key2/3 first, then Seek to key3, and see
-			// the intent.
-			iter.NextKey()
-
+			iter.SeekGE(MVCCKey{Key: testKey3})
+			if ok, err := iter.Valid(); !ok || err != nil {
+				t.Fatalf("expected valid iter: ok %t, err %s", ok, err.Error())
+			}
+			// Should see the intent.
 			if iter.UnsafeKey().IsValue() {
 				t.Fatalf("expected iterator to land on an intent, got a value: %v", iter.UnsafeKey())
 			}

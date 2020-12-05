@@ -53,6 +53,6 @@ meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0
 data: "a"/0.000000002,0 -> /BYTES/first
 data: "a"/0.000000001,0 -> /BYTES/default
 >> resolve_intent k=a t=A
-called ClearIntent("a", ExistingIntentInterleaved, TDNUM(false), 00000000-0000-0000-0000-000000000000)
+called ClearIntent("a", ExistingIntentInterleaved, TDNUM(false), 00000000-0000-0000-0000-000000000002)
 data: "a"/0.000000002,0 -> /BYTES/first
 data: "a"/0.000000001,0 -> /BYTES/default
