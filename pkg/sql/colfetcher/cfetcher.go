@@ -18,7 +18,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -296,7 +295,7 @@ type cFetcher struct {
 		// timestampCol is the underlying ColVec for the timestamp output column,
 		// or nil if the timestamp column was not requested. It is pulled out from
 		// colvecs to avoid having to cast the vec to decimal on every write.
-		timestampCol []apd.Decimal
+		timestampCol *coldata.Decimals
 		// tableoidCol is the same as timestampCol but for the tableoid system column.
 		tableoidCol []int64
 	}
@@ -999,7 +998,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFinalizeRow:
 			// Populate any system columns in the output.
 			if rf.table.timestampOutputIdx != noOutputColumn {
-				rf.machine.timestampCol[rf.machine.rowIdx] = tree.TimestampToDecimal(rf.table.rowLastModified)
+				rf.machine.timestampCol.Set(rf.machine.rowIdx, tree.TimestampToDecimal(rf.table.rowLastModified))
 			}
 			if rf.table.oidOutputIdx != noOutputColumn {
 				rf.machine.tableoidCol[rf.machine.rowIdx] = int64(rf.table.desc.GetID())

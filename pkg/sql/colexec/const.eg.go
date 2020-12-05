@@ -282,7 +282,9 @@ func (c constDecimalOp) Next(ctx context.Context) coldata.Batch {
 					col.Set(i, c.constVal)
 				}
 			} else {
-				col = col[0:n]
+				col = col
+				_ = 0
+				_ = n
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					col.Set(i, c.constVal)

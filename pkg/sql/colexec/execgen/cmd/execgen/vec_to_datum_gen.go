@@ -77,12 +77,12 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 	types.IntFamily:   `%[1]s = %[4]s.NewDInt(tree.DInt(%[2]s[%[3]s]))`,
 	types.FloatFamily: `%[1]s = %[4]s.NewDFloat(tree.DFloat(%[2]s[%[3]s]))`,
 	types.DecimalFamily: `v := %[2]s.Get(srcIdx)
-d := %[4]s.NewDDecimal(tree.DDecimal{Decimal: v})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							d.Coeff = big.Int{}
-							d.Coeff.Set(&v.Coeff)
-							%[1]s = d`,
+						d := %[4]s.NewDDecimal(tree.DDecimal{Decimal: v})
+						// Clear the Coeff so that the Set below allocates a new slice for the
+						// Coeff.abs field.
+						d.Coeff = big.Int{}
+						d.Coeff.Set(&v.Coeff)
+						%[1]s = d`,
 	types.DateFamily: `%[1]s = %[4]s.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(%[2]s[%[3]s])})`,
 	types.BytesFamily: `// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.

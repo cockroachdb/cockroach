@@ -73,6 +73,7 @@ func (a *concat_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_CONCAT(a, nulls, i, true)

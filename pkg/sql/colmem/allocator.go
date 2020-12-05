@@ -81,6 +81,8 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 	for _, vec := range b.ColVecs() {
 		if vec.CanonicalTypeFamily() == types.BytesFamily {
 			proportionalBatchMemSize += int64(vec.Bytes().ProportionalSize(length))
+		} else if vec.CanonicalTypeFamily() == types.DecimalFamily {
+			proportionalBatchMemSize += int64(vec.Decimal().ProportionalSize(length))
 		} else {
 			proportionalBatchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
 		}
@@ -250,6 +252,10 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				// Flat bytes vector needs to be reset before the vector can be
 				// reused.
 				presentVec.Bytes().Reset()
+			} else if presentVec.CanonicalTypeFamily() == types.DecimalFamily {
+				// Flat bytes vector needs to be reset before the vector can be
+				// reused.
+				presentVec.Decimal().Reset()
 			}
 			return
 		}
@@ -356,7 +362,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		case types.BoolFamily:
 			acc += sizeOfBool
-		case types.BytesFamily:
+		case types.BytesFamily, types.DecimalFamily:
 			numBytesVectors++
 		case types.IntFamily:
 			switch t.Width() {
@@ -369,10 +375,6 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			}
 		case types.FloatFamily:
 			acc += sizeOfFloat64
-		case types.DecimalFamily:
-			// Similar to byte arrays, we can't tell how much space is used
-			// to hold the arbitrary precision decimal objects.
-			acc += 50
 		case types.TimestampTZFamily:
 			// time.Time consists of two 64 bit integers and a pointer to
 			// time.Location. We will only account for this 3 bytes without paying

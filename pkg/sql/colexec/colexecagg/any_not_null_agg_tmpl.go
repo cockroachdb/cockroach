@@ -121,7 +121,6 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		// {{if eq "_AGGKIND" "Ordered"}}
 		groups := a.groups
 		// {{/*
@@ -131,6 +130,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)

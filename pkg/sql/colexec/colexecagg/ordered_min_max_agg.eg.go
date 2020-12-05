@@ -124,7 +124,7 @@ func (a *minBoolOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -387,9 +387,7 @@ func (a *minBytesOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col
-			_ = 0
-			_ = inputLen
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -624,7 +622,7 @@ func (a *minDecimalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -784,7 +782,7 @@ func (a *minDecimalOrderedAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := len(a.curAgg)
+	newCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
@@ -858,7 +856,7 @@ func (a *minInt16OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -1132,7 +1130,7 @@ func (a *minInt32OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -1406,7 +1404,7 @@ func (a *minInt64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -1680,7 +1678,7 @@ func (a *minFloat64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -1986,7 +1984,7 @@ func (a *minTimestampOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -2244,7 +2242,7 @@ func (a *minIntervalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -2478,7 +2476,7 @@ func (a *minDatumOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col.Slice(0, inputLen)
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -2725,7 +2723,7 @@ func (a *maxBoolOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -2988,9 +2986,7 @@ func (a *maxBytesOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col
-			_ = 0
-			_ = inputLen
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -3225,7 +3221,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -3385,7 +3381,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := len(a.curAgg)
+	newCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
@@ -3459,7 +3455,7 @@ func (a *maxInt16OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -3733,7 +3729,7 @@ func (a *maxInt32OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -4007,7 +4003,7 @@ func (a *maxInt64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -4281,7 +4277,7 @@ func (a *maxFloat64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -4587,7 +4583,7 @@ func (a *maxTimestampOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -4845,7 +4841,7 @@ func (a *maxIntervalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[0:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -5079,7 +5075,7 @@ func (a *maxDatumOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col.Slice(0, inputLen)
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 

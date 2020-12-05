@@ -84,9 +84,9 @@ func (a *sumInt16OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -109,18 +109,20 @@ func (a *sumInt16OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -142,11 +144,13 @@ func (a *sumInt16OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -179,11 +183,13 @@ func (a *sumInt16OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -212,11 +218,13 @@ func (a *sumInt16OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -299,9 +307,9 @@ func (a *sumInt32OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -324,18 +332,20 @@ func (a *sumInt32OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -357,11 +367,13 @@ func (a *sumInt32OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -394,11 +406,13 @@ func (a *sumInt32OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -427,11 +441,13 @@ func (a *sumInt32OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -514,9 +530,9 @@ func (a *sumInt64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -539,18 +555,20 @@ func (a *sumInt64OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -572,11 +590,13 @@ func (a *sumInt64OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -609,11 +629,13 @@ func (a *sumInt64OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -642,11 +664,13 @@ func (a *sumInt64OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -725,9 +749,9 @@ func (a *sumDecimalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -750,17 +774,19 @@ func (a *sumDecimalOrderedAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &elt)
+							result := &a.curAgg
+							_, err := tree.ExactCtx.Add(result, &a.curAgg, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -782,10 +808,12 @@ func (a *sumDecimalOrderedAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &elt)
+							result := &a.curAgg
+							_, err := tree.ExactCtx.Add(result, &a.curAgg, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -818,10 +846,12 @@ func (a *sumDecimalOrderedAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &elt)
+							result := &a.curAgg
+							_, err := tree.ExactCtx.Add(result, &a.curAgg, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -850,10 +880,12 @@ func (a *sumDecimalOrderedAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &elt)
+							result := &a.curAgg
+							_, err := tree.ExactCtx.Add(result, &a.curAgg, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -932,9 +964,9 @@ func (a *sumFloat64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -964,7 +996,7 @@ func (a *sumFloat64OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -1127,9 +1159,9 @@ func (a *sumIntervalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -1154,7 +1186,7 @@ func (a *sumIntervalOrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the

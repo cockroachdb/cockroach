@@ -1153,7 +1153,9 @@ func (c *castDecimalBoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
+					inputCol = inputCol
+					_ = 0
+					_ = n
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1184,7 +1186,9 @@ func (c *castDecimalBoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
+					inputCol = inputCol
+					_ = 0
+					_ = n
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1261,7 +1265,9 @@ func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
+					inputCol = inputCol
+					_ = 0
+					_ = n
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1302,7 +1308,9 @@ func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
+					inputCol = inputCol
+					_ = 0
+					_ = n
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int

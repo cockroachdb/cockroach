@@ -46,6 +46,7 @@ func (d *Decimals) CopySlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int)
 // of the Decimals is not allowed since it complicates memory movement to make/take
 // away necessary space in the flat buffer. Note that a nil value will be
 // "converted" into an empty byte slice.
+// TODO(yuzefovich): shouldn't we take in a pointer to apd.Decimal?
 func (d *Decimals) Set(i int, v apd.Decimal) {
 	if d.isWindow {
 		panic("Set is called on a window into Decimals")

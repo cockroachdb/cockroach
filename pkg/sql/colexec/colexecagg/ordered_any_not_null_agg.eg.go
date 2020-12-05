@@ -111,10 +111,10 @@ func (a *anyNotNullBoolOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -286,10 +286,10 @@ func (a *anyNotNullBytesOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -465,10 +465,10 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -643,10 +643,10 @@ func (a *anyNotNullInt16OrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -817,10 +817,10 @@ func (a *anyNotNullInt32OrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -991,10 +991,10 @@ func (a *anyNotNullInt64OrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -1165,10 +1165,10 @@ func (a *anyNotNullFloat64OrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -1339,10 +1339,10 @@ func (a *anyNotNullTimestampOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -1513,10 +1513,10 @@ func (a *anyNotNullIntervalOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -1691,10 +1691,10 @@ func (a *anyNotNullDatumOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {

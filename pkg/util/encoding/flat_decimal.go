@@ -124,6 +124,13 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 // without worrying about out-of-bounds, since we've indubitably allocated
 // sufficient space in the input byte slice in an earlier call to EncodeFlatDecimal.
 func DecodeFlatDecimal(bytes []byte, decodeInto *apd.Decimal) []byte {
+	if len(bytes) == 0 {
+		// When our decimal is actually NULL, in the vectorized engine this fact
+		// is stored in a separate bitmap, and the flat bytes representation
+		// might be of zero length. In such cases we simply short-circuit.
+		// TODO(yuzefovich): improve the comments.
+		return bytes
+	}
 	form := apd.Form(bytes[0])
 	negativeByte := int(bytes[1])
 	exponent := int32(nativeEndian.Uint32(bytes[2:]))

@@ -71,9 +71,9 @@ func (a *sumIntInt16OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -106,7 +106,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -278,9 +278,9 @@ func (a *sumIntInt32OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -313,7 +313,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -485,9 +485,9 @@ func (a *sumIntInt64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the
@@ -520,7 +520,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						// If we encounter a new group, and we haven't found any non-nulls for the

@@ -977,7 +977,9 @@ func (pi *projectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			col = col
+			_ = 0
+			_ = n
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -1005,7 +1007,9 @@ func (pi *projectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			col = col
+			_ = 0
+			_ = n
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInDecimal(v, col, pi.filterRow, pi.hasNulls)

@@ -443,7 +443,7 @@ func (a *minDecimalHashAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := len(a.curAgg)
+	newCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
@@ -1814,7 +1814,7 @@ func (a *maxDecimalHashAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := len(a.curAgg)
+	newCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 

@@ -1416,7 +1416,9 @@ func (p partitionerDecimal) partitionWithOrder(
 	}
 
 	col := colVec.Decimal()
-	col = col[0:n]
+	col = col
+	_ = 0
+	_ = n
 	outputCol = outputCol[:n]
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]

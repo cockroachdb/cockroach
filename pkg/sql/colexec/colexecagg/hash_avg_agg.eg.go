@@ -96,11 +96,13 @@ func (a *avgInt16HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							result := &a.curSum
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curSum, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++
@@ -117,11 +119,13 @@ func (a *avgInt16HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							result := &a.curSum
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curSum, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++
@@ -220,11 +224,13 @@ func (a *avgInt32HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							result := &a.curSum
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curSum, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++
@@ -241,11 +247,13 @@ func (a *avgInt32HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							result := &a.curSum
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curSum, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++
@@ -344,11 +352,13 @@ func (a *avgInt64HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							result := &a.curSum
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curSum, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++
@@ -365,11 +375,13 @@ func (a *avgInt64HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							result := &a.curSum
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curSum, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++
@@ -464,10 +476,12 @@ func (a *avgDecimalHashAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &elt)
+							result := &a.curSum
+							_, err := tree.ExactCtx.Add(result, &a.curSum, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++
@@ -484,10 +498,12 @@ func (a *avgDecimalHashAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &elt)
+							result := &a.curSum
+							_, err := tree.ExactCtx.Add(result, &a.curSum, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++

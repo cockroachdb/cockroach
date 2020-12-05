@@ -482,9 +482,9 @@ func (b *argWidthOverloadBase) Set(target, i, new string) string {
 // Slice is a function that should only be used in templates.
 func (b *argWidthOverloadBase) Slice(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily:
-		// Slice is a noop for Bytes. We also add a few lines to address "unused
-		// variable" compiler errors.
+	case types.BytesFamily, types.DecimalFamily:
+		// Slice is a noop for Bytes-like vectors. We also add a few lines to
+		// address "unused variable" compiler errors.
 		return fmt.Sprintf(`%s
 _ = %s
 _ = %s`, target, start, end)

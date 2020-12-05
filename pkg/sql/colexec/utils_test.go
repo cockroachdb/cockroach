@@ -578,7 +578,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 		// setColVal is used in multiple places, therefore val can be either a float
 		// or apd.Decimal.
 		if decimalVal, ok := val.(apd.Decimal); ok {
-			vec.Decimal()[idx].Set(&decimalVal)
+			vec.Decimal().Set(idx, decimalVal)
 		} else {
 			floatVal := val.(float64)
 			decimalVal, _, err := apd.NewFromString(fmt.Sprintf("%f", floatVal))
@@ -589,7 +589,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			// .Set is used here instead of assignment to ensure the pointer address
 			// of the underlying storage for apd.Decimal remains the same. This can
 			// cause the code that does not properly use execgen package to fail.
-			vec.Decimal()[idx].Set(decimalVal)
+			vec.Decimal().Set(idx, *decimalVal)
 		}
 	} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 		switch v := val.(type) {
@@ -772,7 +772,6 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		vec := s.batch.ColVec(i)
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
-		col := reflect.ValueOf(vec.Col())
 		for j := 0; j < batchSize; j++ {
 			// If useSel is false, then the selection vector will contain
 			// [0, ..., batchSize] in ascending order.
@@ -794,7 +793,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.InternalError(errors.AssertionFailedf("%v", err))
 						}
-						col.Index(outputIdx).Set(reflect.ValueOf(d))
+						setColVal(vec, outputIdx, d, s.evalCtx)
 					case types.BytesFamily:
 						newBytes := make([]byte, rng.Intn(16)+1)
 						rng.Read(newBytes)
@@ -987,9 +986,9 @@ func getTupleFromBatch(batch coldata.Batch, tupleIdx int) tuple {
 			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
 				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(tupleIdx)...))
 			} else if vec.CanonicalTypeFamily() == types.DecimalFamily {
-				colDec := vec.Decimal()
+				oldDec := vec.Decimal().Get(tupleIdx)
 				var newDec apd.Decimal
-				newDec.Set(&colDec[tupleIdx])
+				newDec.Set(&oldDec)
 				val = reflect.ValueOf(newDec)
 			} else if vec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
 				val = reflect.ValueOf(vec.Datum().Get(tupleIdx).(*coldataext.Datum).Datum)

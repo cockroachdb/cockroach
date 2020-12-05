@@ -142,13 +142,13 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_AVG(a, nulls, i, true)
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_AVG(a, nulls, i, false)
 				}
 			}

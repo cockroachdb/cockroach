@@ -173,7 +173,7 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = execgen.SLICE(col, 0, inputLen)
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_MINMAX(a, nulls, i, true)
@@ -199,7 +199,7 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
-	// {{if .VecMethod.IsBytesLike}}
+	// {{if eq .VecMethod "Bytes"}}
 	newCurAggSize := len(a.curAgg)
 	// {{else if eq .VecMethod "Decimal"}}
 	newCurAggSize := encoding.FlatDecimalLen(&a.curAgg)

@@ -93,11 +93,13 @@ func (a *sumInt16HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -113,11 +115,13 @@ func (a *sumInt16HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -205,11 +209,13 @@ func (a *sumInt32HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -225,11 +231,13 @@ func (a *sumInt32HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -317,11 +325,13 @@ func (a *sumInt64HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -337,11 +347,13 @@ func (a *sumInt64HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(elt))
-							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+							result := &a.curAgg
+							right := &_overloadHelper.TmpDec2
+							right.SetInt64(int64(elt))
+							if _, err := tree.ExactCtx.Add(result, &a.curAgg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -425,10 +437,12 @@ func (a *sumDecimalHashAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &elt)
+							result := &a.curAgg
+							_, err := tree.ExactCtx.Add(result, &a.curAgg, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -444,10 +458,12 @@ func (a *sumDecimalHashAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &elt)
+							result := &a.curAgg
+							_, err := tree.ExactCtx.Add(result, &a.curAgg, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.foundNonNullForCurrentGroup = true

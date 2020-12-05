@@ -117,7 +117,6 @@ func (a *anyNotNullBoolHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -226,7 +225,6 @@ func (a *anyNotNullBytesHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -339,7 +337,6 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -451,7 +448,6 @@ func (a *anyNotNullInt16HashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -559,7 +555,6 @@ func (a *anyNotNullInt32HashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -667,7 +662,6 @@ func (a *anyNotNullInt64HashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -775,7 +769,6 @@ func (a *anyNotNullFloat64HashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -883,7 +876,6 @@ func (a *anyNotNullTimestampHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -991,7 +983,6 @@ func (a *anyNotNullIntervalHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1103,7 +1094,6 @@ func (a *anyNotNullDatumHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
