@@ -112,10 +112,9 @@ func (c Float64s) Set(idx int, agg float64) { c[idx] = agg }
 // Len returns the length of the vector.
 func (c Decimals) Len() int { return c.Bytes.Len() }
 
-func (c *Decimals) GetTmp(i int) *apd.Decimal {
+func (c *Decimals) GetInto(i int, d *apd.Decimal) {
 	bytes := c.Bytes.Get(i)
-	encoding.DecodeFlatDecimal(bytes, &c.tmp)
-	return &c.tmp
+	encoding.DecodeFlatDecimal(bytes, d)
 }
 
 // Len returns the length of the vector.

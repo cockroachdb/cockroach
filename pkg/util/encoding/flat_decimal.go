@@ -131,19 +131,20 @@ func DecodeFlatDecimal(bytes []byte, decodeInto *apd.Decimal) []byte {
 		// TODO(yuzefovich): improve the comments.
 		return bytes
 	}
-	form := apd.Form(bytes[0])
-	negativeByte := int(bytes[1])
-	exponent := int32(nativeEndian.Uint32(bytes[2:]))
-	*decodeInto = apd.Decimal{
-		Form:     form,
-		Exponent: exponent,
-	}
-	if negativeByte == 1 {
+	// Bounds check
+	_ = bytes[9]
+	decodeInto.Form = apd.Form(bytes[0])
+	if bytes[1] == 1 {
 		decodeInto.Negative = true
+	} else {
+		decodeInto.Negative = false
 	}
-	nCoeffBytes := int(nativeEndian.Uint32(bytes[6:]))
+	decodeInto.Exponent = int32(uint32(bytes[2]) | uint32(bytes[3])<<8 | uint32(bytes[4])<<16 | uint32(bytes[5])<<24)
+	nCoeffBytes := int32(uint32(bytes[6]) | uint32(bytes[7])<<8 | uint32(bytes[8])<<16 | uint32(bytes[9])<<24)
 	if nCoeffBytes > 0 {
-		decodeInto.Coeff.SetBits(wordSliceFromByteSlice(bytes[10 : 10+nCoeffBytes]))
+		b := bytes[10 : 10+nCoeffBytes]
+		slice := wordSliceFromByteSlice(b)
+		decodeInto.Coeff.SetBits(slice)
 	}
 	return bytes[10+nCoeffBytes:]
 }
