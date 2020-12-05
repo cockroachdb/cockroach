@@ -405,6 +405,7 @@ type ColumnTableDef struct {
 	Computed struct {
 		Computed bool
 		Expr     Expr
+		Virtual  bool
 	}
 	Family struct {
 		Name        Name
@@ -532,6 +533,7 @@ func NewColumnTableDef(
 		case *ColumnComputedDef:
 			d.Computed.Computed = true
 			d.Computed.Expr = t.Expr
+			d.Computed.Virtual = t.Virtual
 		case *ColumnFamilyConstraint:
 			if d.HasColumnFamily() {
 				return nil, pgerror.Newf(pgcode.InvalidTableDefinition,
@@ -560,6 +562,11 @@ func (node *ColumnTableDef) HasFKConstraint() bool {
 // IsComputed returns if the ColumnTableDef is a computed column.
 func (node *ColumnTableDef) IsComputed() bool {
 	return node.Computed.Computed
+}
+
+// IsVirtual returns if the ColumnTableDef is a virtual column.
+func (node *ColumnTableDef) IsVirtual() bool {
+	return node.Computed.Virtual
 }
 
 // HasColumnFamily returns if the ColumnTableDef has a column family.
@@ -644,7 +651,11 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	if node.IsComputed() {
 		ctx.WriteString(" AS (")
 		ctx.FormatNode(node.Computed.Expr)
-		ctx.WriteString(") STORED")
+		if node.Computed.Virtual {
+			ctx.WriteString(") VIRTUAL")
+		} else {
+			ctx.WriteString(") STORED")
+		}
 	}
 	if node.HasColumnFamily() {
 		if node.Family.Create {
@@ -748,7 +759,8 @@ type ColumnFKConstraint struct {
 
 // ColumnComputedDef represents the description of a computed column.
 type ColumnComputedDef struct {
-	Expr Expr
+	Expr    Expr
+	Virtual bool
 }
 
 // ColumnFamilyConstraint represents FAMILY on a column.

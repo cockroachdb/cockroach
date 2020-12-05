@@ -1819,8 +1819,19 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 
 	// Compute expression (for computed columns).
 	if node.IsComputed() {
-		clauses = append(clauses, pretty.ConcatSpace(pretty.Keyword("AS"),
-			p.bracket("(", p.Doc(node.Computed.Expr), ") STORED"),
+		var typ string
+		if node.Computed.Virtual {
+			typ = "VIRTUAL"
+		} else {
+			typ = "STORED"
+		}
+
+		clauses = append(clauses, pretty.ConcatSpace(
+			pretty.Keyword("AS"),
+			pretty.ConcatSpace(
+				p.bracket("(", p.Doc(node.Computed.Expr), ")"),
+				pretty.Keyword(typ),
+			),
 		))
 	}
 
