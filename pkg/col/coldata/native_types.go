@@ -35,6 +35,7 @@ type Float64s []float64
 
 // Decimals is a flat representation of apd.Decimal objects.
 type Decimals struct {
+	tmp apd.Decimal
 	Bytes
 }
 
@@ -110,6 +111,12 @@ func (c Float64s) Set(idx int, agg float64) { c[idx] = agg }
 
 // Len returns the length of the vector.
 func (c Decimals) Len() int { return c.Bytes.Len() }
+
+func (c *Decimals) GetTmp(i int) *apd.Decimal {
+	bytes := c.Bytes.Get(i)
+	encoding.DecodeFlatDecimal(bytes, &c.tmp)
+	return &c.tmp
+}
 
 // Len returns the length of the vector.
 func (c Times) Len() int { return len(c) }

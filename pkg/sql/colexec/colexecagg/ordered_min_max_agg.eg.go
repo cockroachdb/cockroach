@@ -642,8 +642,8 @@ func (a *minDecimalOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
-							val := col.Get(i)
-							a.curAgg.Set(&val)
+							val := col.GetTmp(i)
+							a.curAgg.Set(val)
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
@@ -680,21 +680,21 @@ func (a *minDecimalOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
-							val := col.Get(i)
-							a.curAgg.Set(&val)
+							val := col.GetTmp(i)
+							a.curAgg.Set(val)
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
-							candidate := col.Get(i)
+							candidate := col.GetTmp(i)
 
 							{
 								var cmpResult int
-								cmpResult = tree.CompareDecimals(&candidate, &a.curAgg)
+								cmpResult = tree.CompareDecimals(candidate, &a.curAgg)
 								cmp = cmpResult < 0
 							}
 
 							if cmp {
-								a.curAgg.Set(&candidate)
+								a.curAgg.Set(candidate)
 							}
 						}
 					}
@@ -721,8 +721,8 @@ func (a *minDecimalOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
-							val := col.Get(i)
-							a.curAgg.Set(&val)
+							val := col.GetTmp(i)
+							a.curAgg.Set(val)
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
@@ -759,8 +759,8 @@ func (a *minDecimalOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
-							val := col.Get(i)
-							a.curAgg.Set(&val)
+							val := col.GetTmp(i)
+							a.curAgg.Set(val)
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
