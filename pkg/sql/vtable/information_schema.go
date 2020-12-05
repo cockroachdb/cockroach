@@ -169,3 +169,15 @@ CREATE TABLE information_schema.tables (
 	IS_INSERTABLE_INTO STRING NOT NULL,
 	VERSION            INT
 )`
+
+// InformationSchemaCollations describes the schema of the
+// information_schema.collations table.
+// Postgres: https://www.postgresql.org/docs/current/infoschema-collations.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html
+const InformationSchemaCollations = `
+CREATE TABLE information_schema.collations (
+	COLLATION_CATALOG STRING NOT NULL,
+	COLLATION_SCHEMA  STRING NOT NULL,
+	COLLATION_NAME    STRING NOT NULL,
+	PAD_ATTRIBUTE     STRING NOT NULL
+)`

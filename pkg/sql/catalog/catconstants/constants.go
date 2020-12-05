@@ -80,6 +80,7 @@ const (
 	InformationSchemaApplicableRolesID
 	InformationSchemaCharacterSets
 	InformationSchemaCheckConstraints
+	InformationSchemaCollations
 	InformationSchemaColumnPrivilegesID
 	InformationSchemaColumnsTableID
 	InformationSchemaColumnUDTUsageID

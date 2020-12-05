@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/text/collate"
 )
 
 const (
@@ -127,6 +128,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaApplicableRolesID:                 informationSchemaApplicableRoles,
 		catconstants.InformationSchemaCharacterSets:                     informationSchemaCharacterSets,
 		catconstants.InformationSchemaCheckConstraints:                  informationSchemaCheckConstraints,
+		catconstants.InformationSchemaCollations:                        informationSchemaCollations,
 		catconstants.InformationSchemaColumnPrivilegesID:                informationSchemaColumnPrivileges,
 		catconstants.InformationSchemaColumnsTableID:                    informationSchemaColumnsTable,
 		catconstants.InformationSchemaColumnUDTUsageID:                  informationSchemaColumnUDTUsage,
@@ -1600,6 +1602,36 @@ CREATE TABLE information_schema.views (
 					noString,                              // is_trigger_insertable_into
 				)
 			})
+	},
+}
+
+// Postgres: https://www.postgresql.org/docs/current/infoschema-collations.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html
+var informationSchemaCollations = virtualSchemaTable{
+	comment: `shows the collations available in the current database
+https://www.postgresql.org/docs/current/infoschema-collations.html`,
+	schema: vtable.InformationSchemaCollations,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		dbNameStr := tree.NewDString(p.CurrentDatabase())
+		add := func(collName string) error {
+			return addRow(
+				dbNameStr,
+				pgCatalogNameDString,
+				tree.NewDString(collName),
+				// Always NO PAD (The alternative PAD SPACE is not supported.)
+				tree.NewDString("NO PAD"),
+			)
+		}
+		if err := add(tree.DefaultCollationTag); err != nil {
+			return err
+		}
+		for _, tag := range collate.Supported() {
+			collName := tag.String()
+			if err := add(collName); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 

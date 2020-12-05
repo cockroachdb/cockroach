@@ -775,4 +775,3 @@ ALTER TABLE public_table_to_rename RENAME TO public.renamed_public_table;
 statement error pq: relation "public_table_exists" already exists
 ALTER TABLE renamed_public_table RENAME TO public_table_exists;
 
-
