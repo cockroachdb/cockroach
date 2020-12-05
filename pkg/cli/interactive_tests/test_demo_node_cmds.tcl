@@ -85,14 +85,14 @@ eexpect "node 6 has been added with locality \"region=ca-central,zone=a\""
 send "show regions from cluster;\r"
 eexpect "ca-central | \{a\}"
 eexpect "us-east1   | \{b,c,d\}"
-eexpect "us-west1   | \{a,b\}"
+eexpect "us-west1   | \{b\}"
 
 # We use kv_node_status here because gossip_liveness is timing dependant.
+# Node 4's status entry should have been removed by now.
 send "select node_id, locality from crdb_internal.kv_node_status;\r"
 eexpect "1 | region=us-east1,az=b"
 eexpect "2 | region=us-east1,az=c"
 eexpect "3 | region=us-east1,az=d"
-eexpect "4 | region=us-west1,az=a"
 eexpect "5 | region=us-west1,az=b"
 eexpect "6 | region=ca-central,zone=a"
 
@@ -100,7 +100,7 @@ eexpect "6 | region=ca-central,zone=a"
 send "\\demo shutdown 6\r"
 eexpect "node 6 has been shutdown"
 
-# By now the node should have stabalized in gossip which allows us to query the more detailed information there.
+# By now the node should have stabilized in gossip which allows us to query the more detailed information there.
 send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
 eexpect "1 |  false   |      false      | active"
 eexpect "2 |  false   |      false      | active"
