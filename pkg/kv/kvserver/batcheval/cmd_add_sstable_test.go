@@ -392,7 +392,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			beforeStats := func() enginepb.MVCCStats {
 				iter := e.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
 				defer iter.Close()
-				beforeStats, err := storage.ComputeStatsForRange(iter, roachpb.KeyMin, roachpb.KeyMax, 10)
+				beforeStats, err := storage.ComputeStatsForRange(iter, keys.LocalMax, roachpb.KeyMax, 10)
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}
@@ -443,7 +443,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			afterStats := func() enginepb.MVCCStats {
 				iter := e.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
 				defer iter.Close()
-				afterStats, err := storage.ComputeStatsForRange(iter, roachpb.KeyMin, roachpb.KeyMax, 10)
+				afterStats, err := storage.ComputeStatsForRange(iter, keys.LocalMax, roachpb.KeyMax, 10)
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}

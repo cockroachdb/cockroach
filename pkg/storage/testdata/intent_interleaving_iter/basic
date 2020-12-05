@@ -89,7 +89,9 @@ next: output: value k=a ts=20 v=a20
 next: output: value k=a ts=10 v=a10
 next: output: meta k=b ts=30 txn=2
 
-# More forward and reverse iteration.
+# More forward and reverse iteration. This confirms that the underlying
+# MVCCIterator does not iterate into the lock table key space despite no lower
+# bound.
 iter upper=b
 seek-ge k=a
 next
@@ -98,6 +100,9 @@ next
 prev
 prev
 prev
+prev
+prev
+next
 ----
 seek-ge "a"/0,0: output: meta k=a ts=20 txn=1
 next: output: value k=a ts=20 v=a20
@@ -106,6 +111,9 @@ next: output: .
 prev: output: value k=a ts=10 v=a10
 prev: output: value k=a ts=20 v=a20
 prev: output: meta k=a ts=20 txn=1
+prev: output: .
+prev: output: .
+next: output: meta k=a ts=20 txn=1
 
 # Prefix iteration.
 iter prefix=true
@@ -414,6 +422,64 @@ prev: output: meta k=Lb ts=20 txn=2
 prev: output: value k=La ts=10 v=a10
 prev: output: meta k=La ts=10 txn=1
 prev: output: .
+
+# Confirm that the lock table iterator does not step out of the lock table
+# keys space despite no lower bound.
+iter upper=Lc
+seek-ge k=La
+next
+prev
+prev
+prev
+next
+next
+next
+----
+seek-ge "La"/0,0: output: meta k=La ts=10 txn=1
+next: output: value k=La ts=10 v=a10
+prev: output: meta k=La ts=10 txn=1
+prev: output: .
+prev: output: .
+next: output: meta k=La ts=10 txn=1
+next: output: value k=La ts=10 v=a10
+next: output: meta k=Lb ts=20 txn=2
+
+# Confirm that the underlying MVCCIterator does not iterate into the lock
+# table key space despite no upper bound.
+iter lower=La
+seek-lt k=Ld
+prev
+prev
+prev
+prev
+prev
+prev
+next
+next
+next
+next
+next
+next
+next
+next
+prev
+----
+seek-lt "Ld"/0,0: output: value k=Lc ts=30 v=c30
+prev: output: meta k=Lc ts=30 txn=4
+prev: output: value k=Lb ts=20 v=b20
+prev: output: meta k=Lb ts=20 txn=2
+prev: output: value k=La ts=10 v=a10
+prev: output: meta k=La ts=10 txn=1
+prev: output: .
+next: output: meta k=La ts=10 txn=1
+next: output: value k=La ts=10 v=a10
+next: output: meta k=Lb ts=20 txn=2
+next: output: value k=Lb ts=20 v=b20
+next: output: meta k=Lc ts=30 txn=4
+next: output: value k=Lc ts=30 v=c30
+next: output: .
+next: output: .
+prev: output: value k=Lc ts=30 v=c30
 
 iter prefix=true
 seek-ge k=Lb

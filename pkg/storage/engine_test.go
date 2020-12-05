@@ -661,7 +661,7 @@ func TestEngineTimeBound(t *testing.T) {
 			}{
 				// Completely to the right, not touching.
 				{
-					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 						MinTimestampHint: maxTimestamp.Next(),
 						MaxTimestampHint: maxTimestamp.Next().Next(),
 						UpperBound:       roachpb.KeyMax,
@@ -672,7 +672,7 @@ func TestEngineTimeBound(t *testing.T) {
 				},
 				// Completely to the left, not touching.
 				{
-					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 						MinTimestampHint: minTimestamp.Prev().Prev(),
 						MaxTimestampHint: minTimestamp.Prev(),
 						UpperBound:       roachpb.KeyMax,
@@ -683,7 +683,7 @@ func TestEngineTimeBound(t *testing.T) {
 				},
 				// Touching on the right.
 				{
-					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 						MinTimestampHint: maxTimestamp,
 						MaxTimestampHint: maxTimestamp,
 						UpperBound:       roachpb.KeyMax,
@@ -694,7 +694,7 @@ func TestEngineTimeBound(t *testing.T) {
 				},
 				// Touching on the left.
 				{
-					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 						MinTimestampHint: minTimestamp,
 						MaxTimestampHint: minTimestamp,
 						UpperBound:       roachpb.KeyMax,
@@ -706,7 +706,7 @@ func TestEngineTimeBound(t *testing.T) {
 				// Copy of last case, but confirm that we don't get SST stats if we don't
 				// ask for them.
 				{
-					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 						MinTimestampHint: minTimestamp,
 						MaxTimestampHint: minTimestamp,
 						UpperBound:       roachpb.KeyMax,
@@ -717,7 +717,7 @@ func TestEngineTimeBound(t *testing.T) {
 				},
 				// Copy of last case, but confirm that upper bound is respected.
 				{
-					iter: batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 						MinTimestampHint: minTimestamp,
 						MaxTimestampHint: minTimestamp,
 						UpperBound:       []byte("02"),
