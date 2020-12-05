@@ -250,6 +250,7 @@ var nodeNames = [...]string{
 	cancelSessionsOp:       "cancel sessions",
 	controlJobsOp:          "control jobs",
 	controlSchedulesOp:     "control schedules",
+	createStatisticsOp:     "create statistics",
 	createTableOp:          "create table",
 	createTableAsOp:        "create table as",
 	createViewOp:           "create view",
@@ -681,6 +682,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		controlSchedulesOp,
 		cancelQueriesOp,
 		cancelSessionsOp,
+		createStatisticsOp,
 		exportOp:
 
 	default:

@@ -995,6 +995,12 @@ func (b *logicalPropsBuilder) buildCancelSessionsProps(
 	b.buildBasicProps(cancel, opt.ColList{}, rel)
 }
 
+func (b *logicalPropsBuilder) buildCreateStatisticsProps(
+	ctl *CreateStatisticsExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(ctl, opt.ColList{}, rel)
+}
+
 func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Relational) {
 	b.buildBasicProps(export, export.Columns, rel)
 }
