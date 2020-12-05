@@ -1297,6 +1297,10 @@ func NewTableDesc(
 				n.Defs = append(n.Defs, checkConstraint)
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
+			if d.IsVirtual() {
+				return nil, unimplemented.NewWithIssue(57608, "virtual computed columns")
+			}
+
 			col, idx, expr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
 			if err != nil {
 				return nil, err
