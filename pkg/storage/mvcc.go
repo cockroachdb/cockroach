@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/dustin/go-humanize"
@@ -2801,7 +2800,7 @@ func mvccResolveWriteIntent(
 				rw, metaKey, precedingIntentState, txnDidNotUpdateMeta, &buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
-			err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, uuid.UUID{})
+			err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID)
 		}
 		if err != nil {
 			return false, err
@@ -2904,7 +2903,7 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		if err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, uuid.UUID{}); err != nil {
+		if err = rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
@@ -2922,7 +2921,7 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: valueSize,
 	}
-	if err := rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, uuid.UUID{}); err != nil {
+	if err := rw.ClearIntent(metaKey.Key, precedingIntentState, txnDidNotUpdateMeta, meta.Txn.ID); err != nil {
 		return false, err
 	}
 	metaKeySize := int64(metaKey.EncodedSize())
