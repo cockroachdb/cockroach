@@ -20,6 +20,7 @@ information_schema  administrable_role_authorizations  table  NULL  NULL
 information_schema  applicable_roles                   table  NULL  NULL
 information_schema  character_sets                     table  NULL  NULL
 information_schema  check_constraints                  table  NULL  NULL
+information_schema  collations                         table  NULL  NULL
 information_schema  column_privileges                  table  NULL  NULL
 information_schema  column_udt_usage                   table  NULL  NULL
 information_schema  columns                            table  NULL  NULL
@@ -82,6 +83,9 @@ ALTER TABLE information_schema.tables ALTER COLUMN x SET DEFAULT 'foo'
 statement error tables is a virtual object and cannot be modified
 ALTER TABLE information_schema.tables ALTER x DROP NOT NULL
 
+statement error collations is a virtual object and cannot be modified
+ALTER TABLE information_schema.collations ALTER x DROP NOT NULL
+
 statement error tables is a virtual object and cannot be modified
 CREATE INDEX i on information_schema.tables (x)
 
@@ -112,6 +116,19 @@ UPDATE information_schema.tables SET a = 'abc'
 statement error tables is a virtual object and cannot be modified
 TRUNCATE TABLE information_schema.tables
 
+# Verify information_schema collations handles read-only property correctly.
+
+query error user root does not have DELETE privilege on relation collations
+DELETE FROM information_schema.collations
+
+query error user root does not have INSERT privilege on relation collations
+INSERT INTO information_schema.collations VALUES ('abc')
+
+statement error user root does not have UPDATE privilege on relation collations
+UPDATE information_schema.collations SET a = 'abc'
+
+statement error collations is a virtual object and cannot be modified
+TRUNCATE TABLE information_schema.collations
 
 # Verify information_schema handles reflection correctly.
 
@@ -130,6 +147,7 @@ information_schema  administrable_role_authorizations  table  NULL  NULL
 information_schema  applicable_roles                   table  NULL  NULL
 information_schema  character_sets                     table  NULL  NULL
 information_schema  check_constraints                  table  NULL  NULL
+information_schema  collations                         table  NULL  NULL
 information_schema  column_privileges                  table  NULL  NULL
 information_schema  column_udt_usage                   table  NULL  NULL
 information_schema  columns                            table  NULL  NULL
@@ -269,6 +287,7 @@ information_schema  administrable_role_authorizations
 information_schema  applicable_roles
 information_schema  character_sets
 information_schema  check_constraints
+information_schema  collations
 information_schema  column_privileges
 information_schema  column_udt_usage
 information_schema  columns
@@ -425,6 +444,7 @@ administrable_role_authorizations
 applicable_roles
 character_sets
 check_constraints
+collations
 column_privileges
 column_udt_usage
 columns
@@ -600,6 +620,7 @@ system         information_schema  administrable_role_authorizations  SYSTEM VIE
 system         information_schema  applicable_roles                   SYSTEM VIEW  NO                  1
 system         information_schema  character_sets                     SYSTEM VIEW  NO                  1
 system         information_schema  check_constraints                  SYSTEM VIEW  NO                  1
+system         information_schema  collations                         SYSTEM VIEW  NO                  1
 system         information_schema  column_privileges                  SYSTEM VIEW  NO                  1
 system         information_schema  column_udt_usage                   SYSTEM VIEW  NO                  1
 system         information_schema  columns                            SYSTEM VIEW  NO                  1
@@ -1723,6 +1744,7 @@ NULL     public   system         information_schema  administrable_role_authoriz
 NULL     public   system         information_schema  applicable_roles                   SELECT          NULL          YES
 NULL     public   system         information_schema  character_sets                     SELECT          NULL          YES
 NULL     public   system         information_schema  check_constraints                  SELECT          NULL          YES
+NULL     public   system         information_schema  collations                         SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_udt_usage                   SELECT          NULL          YES
 NULL     public   system         information_schema  columns                            SELECT          NULL          YES
@@ -2104,6 +2126,7 @@ NULL     public   system         information_schema  administrable_role_authoriz
 NULL     public   system         information_schema  applicable_roles                   SELECT          NULL          YES
 NULL     public   system         information_schema  character_sets                     SELECT          NULL          YES
 NULL     public   system         information_schema  check_constraints                  SELECT          NULL          YES
+NULL     public   system         information_schema  collations                         SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_udt_usage                   SELECT          NULL          YES
 NULL     public   system         information_schema  columns                            SELECT          NULL          YES
@@ -2972,3 +2995,106 @@ udt_catalog  udt_schema  udt_name  table_catalog  table_schema  table_name    co
 test         public      typ1      test           public        tb_enum_cols  x
 test         public      typ2      test           public        tb_enum_cols  z
 test         public      typ2      test           public        tb_enum_cols  w
+
+## information_schema.collations
+
+query TTTT colnames
+SELECT * FROM information_schema.collations
+----
+collation_catalog  collation_schema  collation_name       pad_attribute
+test               pg_catalog        default              NO PAD
+test               pg_catalog        und                  NO PAD
+test               pg_catalog        aa                   NO PAD
+test               pg_catalog        af                   NO PAD
+test               pg_catalog        ar                   NO PAD
+test               pg_catalog        as                   NO PAD
+test               pg_catalog        az                   NO PAD
+test               pg_catalog        be                   NO PAD
+test               pg_catalog        bg                   NO PAD
+test               pg_catalog        bn                   NO PAD
+test               pg_catalog        bs                   NO PAD
+test               pg_catalog        bs-Cyrl              NO PAD
+test               pg_catalog        ca                   NO PAD
+test               pg_catalog        cs                   NO PAD
+test               pg_catalog        cy                   NO PAD
+test               pg_catalog        da                   NO PAD
+test               pg_catalog        de-u-co-phonebk      NO PAD
+test               pg_catalog        de                   NO PAD
+test               pg_catalog        dz                   NO PAD
+test               pg_catalog        ee                   NO PAD
+test               pg_catalog        el                   NO PAD
+test               pg_catalog        en                   NO PAD
+test               pg_catalog        en-US                NO PAD
+test               pg_catalog        en-US-u-va-posix     NO PAD
+test               pg_catalog        eo                   NO PAD
+test               pg_catalog        es                   NO PAD
+test               pg_catalog        et                   NO PAD
+test               pg_catalog        fa                   NO PAD
+test               pg_catalog        fa-AF                NO PAD
+test               pg_catalog        fi                   NO PAD
+test               pg_catalog        fi-u-co-standard     NO PAD
+test               pg_catalog        fil                  NO PAD
+test               pg_catalog        fo                   NO PAD
+test               pg_catalog        fr                   NO PAD
+test               pg_catalog        fr-CA                NO PAD
+test               pg_catalog        gu                   NO PAD
+test               pg_catalog        ha                   NO PAD
+test               pg_catalog        haw                  NO PAD
+test               pg_catalog        he                   NO PAD
+test               pg_catalog        hi                   NO PAD
+test               pg_catalog        hr                   NO PAD
+test               pg_catalog        hu                   NO PAD
+test               pg_catalog        hy                   NO PAD
+test               pg_catalog        ig                   NO PAD
+test               pg_catalog        is                   NO PAD
+test               pg_catalog        ja                   NO PAD
+test               pg_catalog        kk                   NO PAD
+test               pg_catalog        kl                   NO PAD
+test               pg_catalog        km                   NO PAD
+test               pg_catalog        kn                   NO PAD
+test               pg_catalog        ko                   NO PAD
+test               pg_catalog        kok                  NO PAD
+test               pg_catalog        ln-u-co-phonetic     NO PAD
+test               pg_catalog        ln                   NO PAD
+test               pg_catalog        lt                   NO PAD
+test               pg_catalog        lv                   NO PAD
+test               pg_catalog        mk                   NO PAD
+test               pg_catalog        ml                   NO PAD
+test               pg_catalog        mr                   NO PAD
+test               pg_catalog        mt                   NO PAD
+test               pg_catalog        my                   NO PAD
+test               pg_catalog        nb                   NO PAD
+test               pg_catalog        nn                   NO PAD
+test               pg_catalog        nso                  NO PAD
+test               pg_catalog        om                   NO PAD
+test               pg_catalog        or                   NO PAD
+test               pg_catalog        pa                   NO PAD
+test               pg_catalog        pl                   NO PAD
+test               pg_catalog        ps                   NO PAD
+test               pg_catalog        ro                   NO PAD
+test               pg_catalog        ru                   NO PAD
+test               pg_catalog        se                   NO PAD
+test               pg_catalog        si                   NO PAD
+test               pg_catalog        sk                   NO PAD
+test               pg_catalog        sl                   NO PAD
+test               pg_catalog        sq                   NO PAD
+test               pg_catalog        sr                   NO PAD
+test               pg_catalog        sr-Latn              NO PAD
+test               pg_catalog        ssy                  NO PAD
+test               pg_catalog        sv                   NO PAD
+test               pg_catalog        sv-u-co-standard     NO PAD
+test               pg_catalog        ta                   NO PAD
+test               pg_catalog        te                   NO PAD
+test               pg_catalog        th                   NO PAD
+test               pg_catalog        tn                   NO PAD
+test               pg_catalog        to                   NO PAD
+test               pg_catalog        tr                   NO PAD
+test               pg_catalog        uk                   NO PAD
+test               pg_catalog        ur                   NO PAD
+test               pg_catalog        vi                   NO PAD
+test               pg_catalog        wae                  NO PAD
+test               pg_catalog        yo                   NO PAD
+test               pg_catalog        zh                   NO PAD
+test               pg_catalog        zh-u-co-stroke       NO PAD
+test               pg_catalog        zh-Hant-u-co-pinyin  NO PAD
+test               pg_catalog        zh-Hant              NO PAD
