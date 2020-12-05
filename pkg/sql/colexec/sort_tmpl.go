@@ -46,6 +46,9 @@ var (
 // _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
 
+// _ABBREVIATEDGOTYPESLICE is the abbreviated type template variable.
+type _ABBREVIATED_GOTYPESLICE interface{}
+
 // _CANONICAL_TYPE_FAMILY is the template variable.
 const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 
@@ -130,7 +133,10 @@ func newSingleSorter(
 // {{range .WidthOverloads}}
 
 type sort_TYPE_DIR_HANDLES_NULLSOp struct {
-	sortCol       _GOTYPESLICE
+	sortCol _GOTYPESLICE
+	// {{if .CanAbbreviate}}
+	abbreviatedSortCol _ABBREVIATED_GOTYPESLICE
+	// {{end}}
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -139,6 +145,9 @@ type sort_TYPE_DIR_HANDLES_NULLSOp struct {
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(col coldata.Vec, order []int) {
 	s.sortCol = col.TemplateType()
 	s.nulls = col.Nulls()
+	// {{if .CanAbbreviate}}
+	s.abbreviatedSortCol = col.AbbreviatedTemplateType()
+	// {{end}}
 	s.order = order
 }
 
@@ -190,6 +199,21 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// {{end}}
 	// {{end}}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+	// {{if .CanAbbreviate}}
+	{
+		a := uint64(s.abbreviatedSortCol.Get(s.order[i]))
+		b := uint64(s.abbreviatedSortCol.Get(s.order[j]))
+		if a < b {
+			return true
+		} else if a > b {
+			return false
+		}
+	}
+	// {{end}}
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])

@@ -29,6 +29,9 @@ type Int32s []int32
 // Int64s is a slice of int64.
 type Int64s []int64
 
+// Uint64s is a slice of uint64.
+type Uint64s []uint64
+
 // Float64s is a slice of float64.
 type Float64s []float64
 
@@ -60,6 +63,11 @@ func (c Int32s) Get(idx int) int32 { return c[idx] }
 // used anymore once the vector is modified.
 //gcassert:inline
 func (c Int64s) Get(idx int) int64 { return c[idx] }
+
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//gcassert:inline
+func (c Uint64s) Get(idx int) uint64 { return c[idx] }
 
 // Get returns the element at index idx of the vector. The element cannot be
 // used anymore once the vector is modified.

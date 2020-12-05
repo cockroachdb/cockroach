@@ -40,6 +40,7 @@ func genSortOps(inputFileContents string, wr io.Writer) error {
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
 		"_GOTYPE", "{{.GoType}}",
+		"_ABBREVIATED_GOTYPESLICE", "{{.AbbreviatedGoTypeSliceName}}",
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 
