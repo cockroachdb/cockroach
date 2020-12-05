@@ -1257,7 +1257,7 @@ func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1278,7 +1278,7 @@ func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1298,7 +1298,7 @@ func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1316,7 +1316,7 @@ func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1817,7 +1817,7 @@ func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1839,7 +1839,7 @@ func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1860,7 +1860,7 @@ func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1879,7 +1879,7 @@ func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2491,7 +2491,7 @@ func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2513,7 +2513,7 @@ func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2534,7 +2534,7 @@ func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2553,7 +2553,7 @@ func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3165,7 +3165,7 @@ func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3187,7 +3187,7 @@ func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3208,7 +3208,7 @@ func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3227,7 +3227,7 @@ func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3619,7 +3619,7 @@ func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3643,7 +3643,7 @@ func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3666,7 +3666,7 @@ func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3687,7 +3687,7 @@ func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}

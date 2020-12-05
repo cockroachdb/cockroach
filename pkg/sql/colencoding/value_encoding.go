@@ -13,6 +13,7 @@ package colencoding
 import (
 	"time"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -76,7 +77,9 @@ func decodeUntaggedDatumToCol(
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		vec.Int64()[idx] = i
 	case types.DecimalFamily:
-		buf, err = encoding.DecodeIntoUntaggedDecimalValue(&vec.Decimal()[idx], buf)
+		var d apd.Decimal
+		buf, err = encoding.DecodeIntoUntaggedDecimalValue(&d, buf)
+		vec.Decimal().Set(idx, d)
 	case types.FloatFamily:
 		var f float64
 		buf, f, err = encoding.DecodeUntaggedFloatValue(buf)

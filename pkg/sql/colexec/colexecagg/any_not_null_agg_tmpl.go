@@ -22,12 +22,14 @@ package colexecagg
 import (
 	"unsafe"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -105,8 +107,9 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 
 	// {{if eq .VecMethod "Bytes"}}
 	oldCurAggSize := len(a.curAgg)
-	// {{end}}
-	// {{if eq .VecMethod "Datum"}}
+	// {{else if eq .VecMethod "Decimal"}}
+	oldCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
+	// {{else if eq .VecMethod "Datum"}}
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
 		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
@@ -155,14 +158,15 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 	)
 	// {{if eq .VecMethod "Bytes"}}
 	newCurAggSize := len(a.curAgg)
-	// {{end}}
-	// {{if eq .VecMethod "Datum"}}
+	// {{else if eq .VecMethod "Decimal"}}
+	newCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
+	// {{else if eq .VecMethod "Datum"}}
 	var newCurAggSize uintptr
 	if a.curAgg != nil {
 		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
 	}
 	// {{end}}
-	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
+	// {{if or (.VecMethod.IsBytesLike) (eq .VecMethod "Datum")}}
 	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	// {{end}}
 }
@@ -181,15 +185,16 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	} else {
 		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
-	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
-	// Release the reference to curAgg eagerly.
 	// {{if eq .VecMethod "Bytes"}}
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
-	// {{else}}
+	a.curAgg = nil
+	// {{else if eq .VecMethod "Decimal"}}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
+	// {{else if eq .VecMethod "Datum"}}
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}
-	// {{end}}
 	a.curAgg = nil
 	// {{end}}
 }

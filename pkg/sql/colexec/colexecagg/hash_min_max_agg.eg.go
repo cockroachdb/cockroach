@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // Remove unused warning.
@@ -329,7 +330,6 @@ func (a *minBytesHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
@@ -357,7 +357,7 @@ func (a *minBytesHashAggAlloc) newAggFunc() AggregateFunc {
 
 type minDecimalHashAgg struct {
 	// col points to the output vector we are updating.
-	col coldata.Decimals
+	col *coldata.Decimals
 	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
@@ -378,6 +378,7 @@ func (a *minDecimalHashAgg) SetOutput(vec coldata.Vec) {
 func (a *minDecimalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -442,6 +443,8 @@ func (a *minDecimalHashAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *minDecimalHashAgg) Flush(outputIdx int) {
@@ -451,8 +454,10 @@ func (a *minDecimalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
 }
 
 type minDecimalHashAggAlloc struct {
@@ -1431,7 +1436,6 @@ func (a *minDatumHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}
@@ -1697,7 +1701,6 @@ func (a *maxBytesHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
@@ -1725,7 +1728,7 @@ func (a *maxBytesHashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxDecimalHashAgg struct {
 	// col points to the output vector we are updating.
-	col coldata.Decimals
+	col *coldata.Decimals
 	hashAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
@@ -1746,6 +1749,7 @@ func (a *maxDecimalHashAgg) SetOutput(vec coldata.Vec) {
 func (a *maxDecimalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -1810,6 +1814,8 @@ func (a *maxDecimalHashAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *maxDecimalHashAgg) Flush(outputIdx int) {
@@ -1819,8 +1825,10 @@ func (a *maxDecimalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
 }
 
 type maxDecimalHashAggAlloc struct {
@@ -2799,7 +2807,6 @@ func (a *maxDatumHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}

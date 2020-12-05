@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -280,7 +281,6 @@ func (a *anyNotNullBytesHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
@@ -310,7 +310,7 @@ func (a *anyNotNullBytesHashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullDecimalHashAgg struct {
 	hashAggregateFuncBase
-	col                         coldata.Decimals
+	col                         *coldata.Decimals
 	curAgg                      apd.Decimal
 	foundNonNullForCurrentGroup bool
 }
@@ -332,6 +332,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 		return
 	}
 
+	oldCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -381,6 +382,8 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *anyNotNullDecimalHashAgg) Flush(outputIdx int) {
@@ -389,8 +392,10 @@ func (a *anyNotNullDecimalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
 }
 
 type anyNotNullDecimalHashAggAlloc struct {
@@ -1156,7 +1161,6 @@ func (a *anyNotNullDatumHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}

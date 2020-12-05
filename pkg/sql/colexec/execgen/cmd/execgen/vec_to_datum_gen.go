@@ -29,9 +29,21 @@ type vecToDatumTmplInfo struct {
 	Widths []vecToDatumWidthTmplInfo
 }
 
+type VecMethod string
+
+// IsBytesLike returns true if this VecMethod returns a type slice that is
+// backed by a flat Bytes representation.
+func (v VecMethod) IsBytesLike() bool {
+	switch v {
+	case "Decimal", "Bytes":
+		return true
+	}
+	return false
+}
+
 type vecToDatumWidthTmplInfo struct {
 	Width     int32
-	VecMethod string
+	VecMethod VecMethod
 	// ConversionTmpl is a "format string" for the conversion template. It has
 	// the same "signature" as AssignConverted, meaning that it should use
 	//   %[1]s for targetElem
@@ -64,11 +76,12 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 	// INT8, so there is a single conversion template for IntFamily.
 	types.IntFamily:   `%[1]s = %[4]s.NewDInt(tree.DInt(%[2]s[%[3]s]))`,
 	types.FloatFamily: `%[1]s = %[4]s.NewDFloat(tree.DFloat(%[2]s[%[3]s]))`,
-	types.DecimalFamily: `  d := %[4]s.NewDDecimal(tree.DDecimal{Decimal: %[2]s[%[3]s]})
+	types.DecimalFamily: `v := %[2]s.Get(srcIdx)
+d := %[4]s.NewDDecimal(tree.DDecimal{Decimal: v})
 							// Clear the Coeff so that the Set below allocates a new slice for the
 							// Coeff.abs field.
 							d.Coeff = big.Int{}
-							d.Coeff.Set(&%[2]s[%[3]s].Coeff)
+							d.Coeff.Set(&v.Coeff)
 							%[1]s = d`,
 	types.DateFamily: `%[1]s = %[4]s.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(%[2]s[%[3]s])})`,
 	types.BytesFamily: `// Note that there is no need for a copy since DBytes uses a string

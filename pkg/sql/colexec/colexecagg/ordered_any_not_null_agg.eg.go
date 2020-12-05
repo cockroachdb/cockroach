@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -412,7 +413,6 @@ func (a *anyNotNullBytesOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
@@ -442,7 +442,7 @@ func (a *anyNotNullBytesOrderedAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullDecimalOrderedAgg struct {
 	orderedAggregateFuncBase
-	col                         coldata.Decimals
+	col                         *coldata.Decimals
 	curAgg                      apd.Decimal
 	foundNonNullForCurrentGroup bool
 }
@@ -458,6 +458,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
 
+	oldCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -476,7 +477,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -501,7 +502,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -529,7 +530,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -554,7 +555,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -575,6 +576,8 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *anyNotNullDecimalOrderedAgg) Flush(outputIdx int) {
@@ -587,8 +590,10 @@ func (a *anyNotNullDecimalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
 }
 
 type anyNotNullDecimalOrderedAggAlloc struct {
@@ -1816,7 +1821,6 @@ func (a *anyNotNullDatumOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}

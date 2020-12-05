@@ -55,7 +55,7 @@ type sumInt16HashAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col *coldata.Decimals
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -89,11 +89,12 @@ func (a *sumInt16HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -108,11 +109,12 @@ func (a *sumInt16HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -134,7 +136,7 @@ func (a *sumInt16HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -165,7 +167,7 @@ type sumInt32HashAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col *coldata.Decimals
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -199,11 +201,12 @@ func (a *sumInt32HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -218,11 +221,12 @@ func (a *sumInt32HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -244,7 +248,7 @@ func (a *sumInt32HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -275,7 +279,7 @@ type sumInt64HashAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col *coldata.Decimals
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -309,11 +313,12 @@ func (a *sumInt64HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -328,11 +333,12 @@ func (a *sumInt64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -354,7 +360,7 @@ func (a *sumInt64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -385,7 +391,7 @@ type sumDecimalHashAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col *coldata.Decimals
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -415,10 +421,11 @@ func (a *sumDecimalHashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -433,10 +440,11 @@ func (a *sumDecimalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -458,7 +466,7 @@ func (a *sumDecimalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -489,7 +497,7 @@ type sumFloat64HashAgg struct {
 	// group, instead of on each iteration.
 	curAgg float64
 	// col points to the output vector we are updating.
-	col []float64
+	col coldata.Float64s
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -519,10 +527,11 @@ func (a *sumFloat64HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
-							a.curAgg = float64(a.curAgg) + float64(col[i])
+							a.curAgg = float64(a.curAgg) + float64(elt)
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -534,10 +543,11 @@ func (a *sumFloat64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
-							a.curAgg = float64(a.curAgg) + float64(col[i])
+							a.curAgg = float64(a.curAgg) + float64(elt)
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -556,7 +566,7 @@ func (a *sumFloat64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -587,7 +597,7 @@ type sumIntervalHashAgg struct {
 	// group, instead of on each iteration.
 	curAgg duration.Duration
 	// col points to the output vector we are updating.
-	col []duration.Duration
+	col coldata.Durations
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -617,7 +627,8 @@ func (a *sumIntervalHashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						a.curAgg = a.curAgg.Add(col[i])
+						elt := col.Get(i)
+						a.curAgg = a.curAgg.Add(elt)
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
@@ -627,7 +638,8 @@ func (a *sumIntervalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						a.curAgg = a.curAgg.Add(col[i])
+						elt := col.Get(i)
+						a.curAgg = a.curAgg.Add(elt)
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
@@ -644,7 +656,7 @@ func (a *sumIntervalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 

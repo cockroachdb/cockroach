@@ -532,7 +532,7 @@ func (s *sortBytesAscWithNullsOp) Len() int {
 }
 
 type sortDecimalAscWithNullsOp struct {
-	sortCol       coldata.Decimals
+	sortCol       *coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1301,7 +1301,7 @@ func (s *sortBytesDescWithNullsOp) Len() int {
 }
 
 type sortDecimalDescWithNullsOp struct {
-	sortCol       coldata.Decimals
+	sortCol       *coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2050,7 +2050,7 @@ func (s *sortBytesAscOp) Len() int {
 }
 
 type sortDecimalAscOp struct {
-	sortCol       coldata.Decimals
+	sortCol       *coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2719,7 +2719,7 @@ func (s *sortBytesDescOp) Len() int {
 }
 
 type sortDecimalDescOp struct {
-	sortCol       coldata.Decimals
+	sortCol       *coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker

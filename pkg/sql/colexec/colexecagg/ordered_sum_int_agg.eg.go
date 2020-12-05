@@ -46,7 +46,7 @@ type sumIntInt16OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -81,7 +81,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -92,10 +92,11 @@ func (a *sumIntInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -113,7 +114,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -123,10 +124,11 @@ func (a *sumIntInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -147,7 +149,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -158,10 +160,11 @@ func (a *sumIntInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -179,7 +182,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -189,10 +192,11 @@ func (a *sumIntInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -218,7 +222,7 @@ func (a *sumIntInt16OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -249,7 +253,7 @@ type sumIntInt32OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -284,7 +288,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -295,10 +299,11 @@ func (a *sumIntInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -316,7 +321,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -326,10 +331,11 @@ func (a *sumIntInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -350,7 +356,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -361,10 +367,11 @@ func (a *sumIntInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -382,7 +389,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -392,10 +399,11 @@ func (a *sumIntInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -421,7 +429,7 @@ func (a *sumIntInt32OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -452,7 +460,7 @@ type sumIntInt64OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -487,7 +495,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -498,10 +506,11 @@ func (a *sumIntInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -519,7 +528,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -529,10 +538,11 @@ func (a *sumIntInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -553,7 +563,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -564,10 +574,11 @@ func (a *sumIntInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -585,7 +596,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -595,10 +606,11 @@ func (a *sumIntInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -624,7 +636,7 @@ func (a *sumIntInt64OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 

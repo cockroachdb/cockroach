@@ -24,9 +24,10 @@ import (
 
 type avgTmplInfo struct {
 	NeedsHelper    bool
-	InputVecMethod string
+	InputVecMethod VecMethod
 	RetGoType      string
-	RetVecMethod   string
+	RetGoTypeSlice string
+	RetVecMethod   VecMethod
 
 	addOverload assignFunc
 }
@@ -42,22 +43,24 @@ func (a avgTmplInfo) AssignAdd(targetElem, leftElem, rightElem, _, _, _ string) 
 	return a.addOverload(lawo, targetElem, leftElem, rightElem, "", "", "")
 }
 
-func (a avgTmplInfo) AssignDivInt64(targetElem, leftElem, rightElem, _, _, _ string) string {
+func (a avgTmplInfo) AssignDivInt64(targetIdx, leftElem, rightElem, targetCol, _, _ string) string {
 	switch a.RetVecMethod {
 	case toVecMethod(types.DecimalFamily, anyWidth):
 		// Note that the result of summation of integers is stored as a
 		// decimal, so ints and decimals share the division code.
 		return fmt.Sprintf(`
-			%s.SetInt64(%s)
-			if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
-				colexecerror.InternalError(err)
-			}`,
-			targetElem, rightElem, targetElem, leftElem, targetElem,
+		  var d apd.Decimal
+		  d.SetInt64(%s)
+		  if _, err := tree.DecimalCtx.Quo(&d, &%s, &d); err != nil {
+		  	colexecerror.InternalError(err)
+		  }
+      %s.Set(%s, d)`,
+			rightElem, leftElem, targetCol, targetIdx,
 		)
 	case toVecMethod(types.FloatFamily, anyWidth):
-		return fmt.Sprintf("%s = %s / float64(%s)", targetElem, leftElem, rightElem)
+		return fmt.Sprintf("%s[%s] = %s / float64(%s)", targetCol, targetIdx, leftElem, rightElem)
 	case toVecMethod(types.IntervalFamily, anyWidth):
-		return fmt.Sprintf("%s = %s.Div(int64(%s))", targetElem, leftElem, rightElem)
+		return fmt.Sprintf("%s[%s] = %s.Div(int64(%s))", targetCol, targetIdx, leftElem, rightElem)
 	}
 	colexecerror.InternalError(errors.AssertionFailedf("unsupported avg agg type"))
 	// This code is unreachable, but the compiler cannot infer that.
@@ -73,6 +76,7 @@ const avgAggTmpl = "pkg/sql/colexec/colexecagg/avg_agg_tmpl.go"
 
 func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
+		"_RET_GOTYPESLICE", `{{.RetGoTypeSlice}}`,
 		"_RET_GOTYPE", `{{.RetGoType}}`,
 		"_RET_TYPE", "{{.RetVecMethod}}",
 		"_TYPE", "{{.InputVecMethod}}",
@@ -116,6 +120,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 			NeedsHelper:    needsHelper,
 			InputVecMethod: toVecMethod(inputType.Family(), inputType.Width()),
 			RetGoType:      toPhysicalRepresentation(retType.Family(), retType.Width()),
+			RetGoTypeSlice: goTypeSliceName(retType.Family(), retType.Width()),
 			RetVecMethod:   toVecMethod(retType.Family(), retType.Width()),
 			addOverload:    getSumAddOverload(inputType),
 		})

@@ -6861,7 +6861,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 						switch input.sourceTypes[colIdx].Width() {
 						case -1:
 						default:
-							var srcCol coldata.Decimals
+							var srcCol *coldata.Decimals
 							if src != nil {
 								srcCol = src.Decimal()
 							}
@@ -6896,7 +6896,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx].Set(&val)
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -7481,7 +7481,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 						switch input.sourceTypes[colIdx].Width() {
 						case -1:
 						default:
-							var srcCol coldata.Decimals
+							var srcCol *coldata.Decimals
 							if src != nil {
 								srcCol = src.Decimal()
 							}
@@ -7515,7 +7515,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol[outStartIdx].Set(&val)
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -8136,7 +8136,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx)
 									for i := 0; i < toAppend; i++ {
-										outCol[outStartIdx].Set(&val)
+										outCol.Set(outStartIdx, val)
 										outStartIdx++
 									}
 								}
@@ -8719,7 +8719,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 						switch input.sourceTypes[colIdx].Width() {
 						case -1:
 						default:
-							var srcCol coldata.Decimals
+							var srcCol *coldata.Decimals
 							if src != nil {
 								srcCol = src.Decimal()
 							}
@@ -8747,7 +8747,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx].Set(&v)
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
@@ -9411,7 +9411,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 						switch input.sourceTypes[colIdx].Width() {
 						case -1:
 						default:
-							var srcCol coldata.Decimals
+							var srcCol *coldata.Decimals
 							if src != nil {
 								srcCol = src.Decimal()
 							}
@@ -9439,7 +9439,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol[outStartIdx].Set(&v)
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
@@ -10079,7 +10079,7 @@ func (o *mergeJoinLeftSemiOp) buildRightBufferedGroup(
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx)
-										outCol[outStartIdx].Set(&v)
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(

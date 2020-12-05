@@ -19,6 +19,7 @@ import (
 	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -104,8 +105,9 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
 			data = c.builders.boolBuilder.NewBooleanArray().Data()
 		case types.DecimalFamily:
-			decimals := vec.Decimal()[:n]
-			for _, d := range decimals {
+			decimals := vec.Decimal()
+			for i := 0; i < decimals.Len(); i++ {
+				d := decimals.Get(i)
 				marshaled, err := d.MarshalText()
 				if err != nil {
 					return nil, err
@@ -291,9 +293,11 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			offsets := bytesArr.ValueOffsets()
 			vecArr := vec.Decimal()
 			for i := 0; i < len(offsets)-1; i++ {
-				if err := vecArr[i].UnmarshalText(bytes[offsets[i]:offsets[i+1]]); err != nil {
+				var d apd.Decimal
+				if err := d.UnmarshalText(bytes[offsets[i]:offsets[i+1]]); err != nil {
 					return err
 				}
+				vecArr.AppendVal(d)
 			}
 			arr = bytesArr
 		case types.TimestampTZFamily:

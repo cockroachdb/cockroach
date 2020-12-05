@@ -24,9 +24,10 @@ import (
 type sumTmplInfo struct {
 	SumKind        string
 	NeedsHelper    bool
-	InputVecMethod string
+	InputVecMethod VecMethod
 	RetGoType      string
-	RetVecMethod   string
+	RetGoTypeSlice string
+	RetVecMethod   VecMethod
 
 	addOverload assignFunc
 }
@@ -78,12 +79,15 @@ const sumAggTmpl = "pkg/sql/colexec/colexecagg/sum_agg_tmpl.go"
 func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	r := strings.NewReplacer(
 		"_SUMKIND", "{{.SumKind}}",
+		"_RET_GOTYPESLICE", `{{.RetGoTypeSlice}}`,
 		"_RET_GOTYPE", `{{.RetGoType}}`,
 		"_RET_TYPE", "{{.RetVecMethod}}",
 		"_TYPE", "{{.InputVecMethod}}",
 		"TemplateType", "{{.InputVecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
+
+	s = replaceManipulationFuncs(s)
 
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
 	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 6))
@@ -136,6 +140,7 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 			NeedsHelper:    needsHelper,
 			InputVecMethod: toVecMethod(inputType.Family(), inputType.Width()),
 			RetGoType:      toPhysicalRepresentation(retType.Family(), retType.Width()),
+			RetGoTypeSlice: goTypeSliceName(retType.Family(), retType.Width()),
 			RetVecMethod:   toVecMethod(retType.Family(), retType.Width()),
 			addOverload:    getAddOverload(inputType),
 		})

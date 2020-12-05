@@ -65,6 +65,20 @@ func wordSliceFromByteSlice(b []byte) []big.Word {
 	return *(*[]big.Word)(newSliceHeaderFromBytes(b, bigWordSize))
 }
 
+// FlatDecimalLen returns the number of bytes in the flat-bytes encoded version
+// of the input decimal.
+func FlatDecimalLen(decimal *apd.Decimal) int {
+	coeffWords := decimal.Coeff.Bits()
+	headerLen, coeffBytes := flatDecimalLenFromBits(coeffWords)
+	return headerLen + coeffBytes
+}
+
+func flatDecimalLenFromBits(bits []big.Word) (headerLen, coeffBytes int) {
+	nCoeffBytes := WordLen(bits)
+	// See below for the layout of a flat decimal.
+	return 1 + 1 + (2 * int(unsafe.Sizeof(int32(0)))), nCoeffBytes
+}
+
 // EncodeFlatDecimal encodes the input decimal into the input byte slice.
 // A "Flat Decimal" is a bytes representation of an apd.Decimal. It is organized
 // as follows:
@@ -74,11 +88,12 @@ func wordSliceFromByteSlice(b []byte) []big.Word {
 //   1 byte     1 byte     4 bytes      4 bytes: n            n bytes
 func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	coeffWords := decimal.Coeff.Bits()
-
 	// Get the number of bytes that we'll need to reserve space for to store the
-	// entire coefficient of the decimal.
-	nCoeffBytes := WordLen(coeffWords)
-	nBytes := 1 + 1 + (2 * int(unsafe.Sizeof(int32(0)))) + nCoeffBytes
+	// entire coefficient of the decimal. We need to reserve space for the
+	// coefficient all at once, to prevent copy() from getting flummoxed by
+	// running off the end of the slice its handed.
+	headerLen, nCoeffBytes := flatDecimalLenFromBits(coeffWords)
+	nBytes := headerLen + nCoeffBytes
 
 	l := len(appendTo)
 	if cap(appendTo) < len(appendTo)+nBytes {

@@ -58,7 +58,7 @@ type avgInt16HashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []apd.Decimal
+	col *coldata.Decimals
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -92,11 +92,12 @@ func (a *avgInt16HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -112,11 +113,12 @@ func (a *avgInt16HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -140,10 +142,12 @@ func (a *avgInt16HashAgg) Flush(outputIdx int) {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		var d apd.Decimal
+		d.SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
+		a.col.Set(outputIdx, d)
 	}
 }
 
@@ -178,7 +182,7 @@ type avgInt32HashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []apd.Decimal
+	col *coldata.Decimals
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -212,11 +216,12 @@ func (a *avgInt32HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -232,11 +237,12 @@ func (a *avgInt32HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -260,10 +266,12 @@ func (a *avgInt32HashAgg) Flush(outputIdx int) {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		var d apd.Decimal
+		d.SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
+		a.col.Set(outputIdx, d)
 	}
 }
 
@@ -298,7 +306,7 @@ type avgInt64HashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []apd.Decimal
+	col *coldata.Decimals
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -332,11 +340,12 @@ func (a *avgInt64HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -352,11 +361,12 @@ func (a *avgInt64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(elt))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -380,10 +390,12 @@ func (a *avgInt64HashAgg) Flush(outputIdx int) {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		var d apd.Decimal
+		d.SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
+		a.col.Set(outputIdx, d)
 	}
 }
 
@@ -418,7 +430,7 @@ type avgDecimalHashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []apd.Decimal
+	col *coldata.Decimals
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -448,10 +460,11 @@ func (a *avgDecimalHashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -467,10 +480,11 @@ func (a *avgDecimalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &elt)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -494,10 +508,12 @@ func (a *avgDecimalHashAgg) Flush(outputIdx int) {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		var d apd.Decimal
+		d.SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&d, &a.curSum, &d); err != nil {
 			colexecerror.InternalError(err)
 		}
+		a.col.Set(outputIdx, d)
 	}
 }
 
@@ -532,7 +548,7 @@ type avgFloat64HashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []float64
+	col coldata.Float64s
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -562,10 +578,11 @@ func (a *avgFloat64HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
-							a.curSum = float64(a.curSum) + float64(col[i])
+							a.curSum = float64(a.curSum) + float64(elt)
 						}
 
 						a.curCount++
@@ -578,10 +595,11 @@ func (a *avgFloat64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
 
-							a.curSum = float64(a.curSum) + float64(col[i])
+							a.curSum = float64(a.curSum) + float64(elt)
 						}
 
 						a.curCount++
@@ -636,7 +654,7 @@ type avgIntervalHashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []duration.Duration
+	col coldata.Durations
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -666,7 +684,8 @@ func (a *avgIntervalHashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						a.curSum = a.curSum.Add(col[i])
+						elt := col.Get(i)
+						a.curSum = a.curSum.Add(elt)
 						a.curCount++
 						a.foundNonNullForCurrentGroup = true
 					}
@@ -677,7 +696,8 @@ func (a *avgIntervalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						a.curSum = a.curSum.Add(col[i])
+						elt := col.Get(i)
+						a.curSum = a.curSum.Add(elt)
 						a.curCount++
 						a.foundNonNullForCurrentGroup = true
 					}

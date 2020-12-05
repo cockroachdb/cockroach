@@ -3173,7 +3173,7 @@ func (p projPlusDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -3302,7 +3302,7 @@ func (p projPlusDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -3431,7 +3431,7 @@ func (p projPlusDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -3560,7 +3560,7 @@ func (p projPlusDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -6793,7 +6793,7 @@ func (p projMinusDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -6922,7 +6922,7 @@ func (p projMinusDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -7051,7 +7051,7 @@ func (p projMinusDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -7180,7 +7180,7 @@ func (p projMinusDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch 
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -10699,7 +10699,7 @@ func (p projMultDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -10828,7 +10828,7 @@ func (p projMultDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -10957,7 +10957,7 @@ func (p projMultDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -11086,7 +11086,7 @@ func (p projMultDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -11211,7 +11211,7 @@ func (p projMultDecimalIntervalConstOp) Next(ctx context.Context) coldata.Batch 
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -14106,7 +14106,7 @@ func (p projDivDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -14251,7 +14251,7 @@ func (p projDivDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -14396,7 +14396,7 @@ func (p projDivDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -14541,7 +14541,7 @@ func (p projDivDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -16745,7 +16745,7 @@ func (p projFloorDivDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -16890,7 +16890,7 @@ func (p projFloorDivDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -17035,7 +17035,7 @@ func (p projFloorDivDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -17180,7 +17180,7 @@ func (p projFloorDivDecimalDecimalConstOp) Next(ctx context.Context) coldata.Bat
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -18986,7 +18986,7 @@ func (p projModDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -19131,7 +19131,7 @@ func (p projModDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -19276,7 +19276,7 @@ func (p projModDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -19421,7 +19421,7 @@ func (p projModDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -21227,7 +21227,7 @@ func (p projPowDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -21356,7 +21356,7 @@ func (p projPowDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -21485,7 +21485,7 @@ func (p projPowDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -21614,7 +21614,7 @@ func (p projPowDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -27945,7 +27945,7 @@ func (p projEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -28086,7 +28086,7 @@ func (p projEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -28227,7 +28227,7 @@ func (p projEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -28368,7 +28368,7 @@ func (p projEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -28517,7 +28517,7 @@ func (p projEQDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -32663,7 +32663,7 @@ func (p projNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -32804,7 +32804,7 @@ func (p projNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -32945,7 +32945,7 @@ func (p projNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -33086,7 +33086,7 @@ func (p projNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -33235,7 +33235,7 @@ func (p projNEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -37381,7 +37381,7 @@ func (p projLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -37522,7 +37522,7 @@ func (p projLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -37663,7 +37663,7 @@ func (p projLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -37804,7 +37804,7 @@ func (p projLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -37953,7 +37953,7 @@ func (p projLTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -42099,7 +42099,7 @@ func (p projLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -42240,7 +42240,7 @@ func (p projLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -42381,7 +42381,7 @@ func (p projLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -42522,7 +42522,7 @@ func (p projLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -42671,7 +42671,7 @@ func (p projLEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -46817,7 +46817,7 @@ func (p projGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -46958,7 +46958,7 @@ func (p projGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -47099,7 +47099,7 @@ func (p projGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -47240,7 +47240,7 @@ func (p projGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -47389,7 +47389,7 @@ func (p projGTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -51535,7 +51535,7 @@ func (p projGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -51676,7 +51676,7 @@ func (p projGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -51817,7 +51817,7 @@ func (p projGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -51958,7 +51958,7 @@ func (p projGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
@@ -52107,7 +52107,7 @@ func (p projGEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col coldata.Decimals
+	var col *coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {

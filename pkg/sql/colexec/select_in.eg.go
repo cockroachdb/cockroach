@@ -829,7 +829,7 @@ func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bo
 }
 
 func cmpInDecimal(
-	targetElem apd.Decimal, targetCol coldata.Decimals, filterRow []apd.Decimal, hasNulls bool,
+	targetElem apd.Decimal, targetCol *coldata.Decimals, filterRow []apd.Decimal, hasNulls bool,
 ) comparisonResult {
 	// Filter row input is already sorted due to normalization, so we can use a
 	// binary search right away.

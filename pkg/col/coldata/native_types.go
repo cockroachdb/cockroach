@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // Bools is a slice of bool.
@@ -32,8 +33,10 @@ type Int64s []int64
 // Float64s is a slice of float64.
 type Float64s []float64
 
-// Decimals is a slice of apd.Decimal.
-type Decimals []apd.Decimal
+// Decimals is a flat representation of apd.Decimal objects.
+type Decimals struct {
+	Bytes
+}
 
 // Times is a slice of time.Time.
 type Times []time.Time
@@ -69,7 +72,12 @@ func (c Float64s) Get(idx int) float64 { return c[idx] }
 // Get returns the element at index idx of the vector. The element cannot be
 // used anymore once the vector is modified.
 //gcassert:inline
-func (c Decimals) Get(idx int) apd.Decimal { return c[idx] }
+func (c Decimals) Get(idx int) apd.Decimal {
+	bytes := c.Bytes.Get(idx)
+	var ret apd.Decimal
+	encoding.DecodeFlatDecimal(bytes, &ret)
+	return ret
+}
 
 // Get returns the element at index idx of the vector. The element cannot be
 // used anymore once the vector is modified.
@@ -93,14 +101,20 @@ func (c Int32s) Len() int { return len(c) }
 // Len returns the length of the vector.
 func (c Int64s) Len() int { return len(c) }
 
+func (c Int64s) Set(idx int, agg int64) { c[idx] = agg }
+
 // Len returns the length of the vector.
 func (c Float64s) Len() int { return len(c) }
 
+func (c Float64s) Set(idx int, agg float64) { c[idx] = agg }
+
 // Len returns the length of the vector.
-func (c Decimals) Len() int { return len(c) }
+func (c Decimals) Len() int { return c.Bytes.Len() }
 
 // Len returns the length of the vector.
 func (c Times) Len() int { return len(c) }
 
 // Len returns the length of the vector.
 func (c Durations) Len() int { return len(c) }
+
+func (c Durations) Set(idx int, agg duration.Duration) { c[idx] = agg }

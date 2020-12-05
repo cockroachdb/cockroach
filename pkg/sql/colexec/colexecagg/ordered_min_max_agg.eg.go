@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // Remove unused warning.
@@ -565,7 +566,6 @@ func (a *minBytesOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
@@ -594,7 +594,7 @@ func (a *minBytesOrderedAggAlloc) newAggFunc() AggregateFunc {
 type minDecimalOrderedAgg struct {
 	orderedAggregateFuncBase
 	// col points to the output vector we are updating.
-	col coldata.Decimals
+	col *coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -614,6 +614,7 @@ func (a *minDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -633,7 +634,7 @@ func (a *minDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -671,7 +672,7 @@ func (a *minDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -712,7 +713,7 @@ func (a *minDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -750,7 +751,7 @@ func (a *minDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -783,6 +784,8 @@ func (a *minDecimalOrderedAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *minDecimalOrderedAgg) Flush(outputIdx int) {
@@ -796,8 +799,10 @@ func (a *minDecimalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
 }
 
 type minDecimalOrderedAggAlloc struct {
@@ -2661,7 +2666,6 @@ func (a *minDatumOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}
@@ -3163,7 +3167,6 @@ func (a *maxBytesOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
@@ -3192,7 +3195,7 @@ func (a *maxBytesOrderedAggAlloc) newAggFunc() AggregateFunc {
 type maxDecimalOrderedAgg struct {
 	orderedAggregateFuncBase
 	// col points to the output vector we are updating.
-	col coldata.Decimals
+	col *coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -3212,6 +3215,7 @@ func (a *maxDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := encoding.FlatDecimalLen(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -3231,7 +3235,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -3269,7 +3273,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -3310,7 +3314,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -3348,7 +3352,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							a.col[a.curIdx].Set(&a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.foundNonNullForCurrentGroup = false
@@ -3381,6 +3385,8 @@ func (a *maxDecimalOrderedAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *maxDecimalOrderedAgg) Flush(outputIdx int) {
@@ -3394,8 +3400,10 @@ func (a *maxDecimalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
 }
 
 type maxDecimalOrderedAggAlloc struct {
@@ -5259,7 +5267,6 @@ func (a *maxDatumOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}

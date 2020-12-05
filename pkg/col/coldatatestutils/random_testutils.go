@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -104,12 +105,15 @@ func RandomVec(args RandomVecArgs) {
 		decs := args.Vec.Decimal()
 		for i := 0; i < args.N; i++ {
 			// int64(args.Rand.Uint64()) to get negative numbers, too
-			decs[i].SetFinite(int64(args.Rand.Uint64()), int32(args.Rand.Intn(40)-20))
-			if args.ZeroProhibited {
-				if decs[i].IsZero() {
-					i--
+			var d apd.Decimal
+			for {
+				d.SetFinite(int64(args.Rand.Uint64()), int32(args.Rand.Intn(40)-20))
+				if args.ZeroProhibited && d.IsZero() {
+					continue
 				}
+				break
 			}
+			decs.Set(i, d)
 		}
 	case types.IntFamily:
 		switch args.Vec.Type().Width() {

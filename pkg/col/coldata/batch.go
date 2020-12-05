@@ -259,7 +259,8 @@ func (m *MemBatch) SetLength(length int) {
 
 // AppendCol implements the Batch interface.
 func (m *MemBatch) AppendCol(col Vec) {
-	if col.CanonicalTypeFamily() == types.BytesFamily {
+	family := col.CanonicalTypeFamily()
+	if family == types.BytesFamily || family == types.DecimalFamily {
 		m.bytesVecIdxs.Add(len(m.b))
 	}
 	m.b = append(m.b, col)

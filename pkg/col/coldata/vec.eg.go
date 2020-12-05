@@ -91,33 +91,26 @@ func (m *memColumn) Append(args SliceArgs) {
 			// attention, the performance suffers dramatically, so we choose to copy
 			// over "actual" as well as "garbage" values.
 			if args.Sel == nil {
-				{
-					__desiredCap := args.DestIdx + args.SrcEndIdx - args.SrcStartIdx
-					if cap(toCol) >= __desiredCap {
-						toCol = toCol[:__desiredCap]
-					} else {
-						__prevCap := cap(toCol)
-						__capToAllocate := __desiredCap
-						if __capToAllocate < 2*__prevCap {
-							__capToAllocate = 2 * __prevCap
-						}
-						__new_slice := make([]apd.Decimal, __desiredCap, __capToAllocate)
-						copy(__new_slice, toCol[:args.DestIdx])
-						toCol = __new_slice
-					}
-					__src_slice := fromCol[args.SrcStartIdx:args.SrcEndIdx]
-					__dst_slice := toCol[args.DestIdx:]
-					for __i := range __src_slice {
-						__dst_slice[__i].Set(&__src_slice[__i])
-					}
-				}
+				toCol.AppendSlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol[0:args.DestIdx]
+				// We need to truncate toCol before appending to it, so in case of Bytes,
+				// we append an empty slice.
+				toCol.AppendSlice(toCol, args.DestIdx, 0, 0)
+				// We will be getting all values below to be appended, regardless of
+				// whether the value is NULL. It is possible that Bytes' invariant of
+				// non-decreasing offsets on the source is currently not maintained, so
+				// we explicitly enforce it.
+				maxIdx := 0
+				for _, selIdx := range sel {
+					if selIdx > maxIdx {
+						maxIdx = selIdx
+					}
+				}
+				fromCol.UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
-					toCol = append(toCol, apd.Decimal{})
-					toCol[len(toCol)-1].Set(&val)
+					toCol.AppendVal(val)
 				}
 			}
 			m.nulls.set(args)
@@ -423,7 +416,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							} else {
 								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
-								toCol[selIdx].Set(&v)
+								toCol.Set(selIdx, v)
 							}
 						}
 						return
@@ -432,7 +425,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
 						v := fromCol.Get(selIdx)
-						toCol[selIdx].Set(&v)
+						toCol.Set(selIdx, v)
 					}
 				} else {
 					if args.Src.MaybeHasNulls() {
@@ -442,7 +435,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
 								v := fromCol.Get(selIdx)
-								toCol[i+args.DestIdx].Set(&v)
+								toCol.Set(i+args.DestIdx, v)
 							}
 						}
 						return
@@ -451,19 +444,13 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
 						v := fromCol.Get(selIdx)
-						toCol[i+args.DestIdx].Set(&v)
+						toCol.Set(i+args.DestIdx, v)
 					}
 				}
 				return
 			}
 			// No Sel.
-			{
-				__tgt_slice := toCol[args.DestIdx:]
-				__src_slice := fromCol[args.SrcStartIdx:args.SrcEndIdx]
-				for __i := range __src_slice {
-					__tgt_slice[__i].Set(&__src_slice[__i])
-				}
-			}
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 		}
 	case types.IntFamily:
@@ -889,7 +876,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col[start:end],
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		}
@@ -999,7 +986,7 @@ func SetValueAt(v Vec, elem interface{}, rowIdx int) {
 		default:
 			target := v.Decimal()
 			newVal := elem.(apd.Decimal)
-			target[rowIdx].Set(&newVal)
+			target.Set(rowIdx, newVal)
 		}
 	case types.IntFamily:
 		switch t.Width() {
