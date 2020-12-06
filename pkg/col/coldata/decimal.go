@@ -95,7 +95,7 @@ func (d *Decimals) Set(i int, v apd.Decimal) {
 	d.data = encoding.EncodeFlatDecimal(&v, d.data)
 	d.offsets[i+1] = int32(len(d.data))
 	d.maxSetIndex = i
-	if v.Coeff.BitLen() > 0 {
+	if len(v.Coeff.Bits()) > 0 {
 		b := d.data[n:]
 		slice := encoding.WordSliceFromByteSlice(b)
 		v.Coeff.SetBits(slice)
