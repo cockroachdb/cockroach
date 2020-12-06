@@ -61,7 +61,7 @@ func byteSliceFromWordSlice(b []big.Word) []byte {
 	return *(*[]byte)(newSliceHeader(unsafe.Pointer(&b[0]), len(b)*bigWordSize))
 }
 
-func wordSliceFromByteSlice(b []byte) []big.Word {
+func WordSliceFromByteSlice(b []byte) []big.Word {
 	return *(*[]big.Word)(newSliceHeaderFromBytes(b, bigWordSize))
 }
 
@@ -92,8 +92,9 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	// entire coefficient of the decimal. We need to reserve space for the
 	// coefficient all at once, to prevent copy() from getting flummoxed by
 	// running off the end of the slice its handed.
-	headerLen, nCoeffBytes := flatDecimalLenFromBits(coeffWords)
-	nBytes := headerLen + nCoeffBytes
+	_, nCoeffBytes := flatDecimalLenFromBits(coeffWords)
+	//nBytes := headerLen + nCoeffBytes
+	nBytes := nCoeffBytes
 
 	l := len(appendTo)
 	if cap(appendTo) < len(appendTo)+nBytes {
@@ -103,17 +104,17 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	}
 	decimalSlice := appendTo[l:]
 
-	decimalSlice[0] = byte(decimal.Form)
-	var negativeByte byte
-	if decimal.Negative {
-		negativeByte = 1
-	}
-	decimalSlice[1] = negativeByte
-	nativeEndian.PutUint32(decimalSlice[2:], uint32(decimal.Exponent))
-	nativeEndian.PutUint32(decimalSlice[6:], uint32(nCoeffBytes))
+	//decimalSlice[0] = byte(decimal.Form)
+	//var negativeByte byte
+	//if decimal.Negative {
+	//	negativeByte = 1
+	//}
+	//decimalSlice[1] = negativeByte
+	//nativeEndian.PutUint32(decimalSlice[2:], uint32(decimal.Exponent))
+	//nativeEndian.PutUint32(decimalSlice[6:], uint32(nCoeffBytes))
 	if nCoeffBytes > 0 {
 		coeffBytes := byteSliceFromWordSlice(coeffWords)
-		copy(decimalSlice[10:], coeffBytes)
+		copy(decimalSlice, coeffBytes)
 	}
 	return appendTo
 }
@@ -143,7 +144,7 @@ func DecodeFlatDecimal(bytes []byte, decodeInto *apd.Decimal) []byte {
 	nCoeffBytes := int32(uint32(bytes[6]) | uint32(bytes[7])<<8 | uint32(bytes[8])<<16 | uint32(bytes[9])<<24)
 	if nCoeffBytes > 0 {
 		b := bytes[10 : 10+nCoeffBytes]
-		slice := wordSliceFromByteSlice(b)
+		slice := WordSliceFromByteSlice(b)
 		decodeInto.Coeff.SetBits(slice)
 	}
 	return bytes[10+nCoeffBytes:]

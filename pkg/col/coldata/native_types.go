@@ -36,6 +36,9 @@ type Float64s []float64
 // Decimals is a flat representation of apd.Decimal objects.
 type Decimals struct {
 	tmp apd.Decimal
+	// decimals is a slice of apd.Decimal, whose Coeff is a big.Int backed by
+	// the flat Bytes representation below.
+	decimals []apd.Decimal
 	Bytes
 }
 
@@ -74,10 +77,7 @@ func (c Float64s) Get(idx int) float64 { return c[idx] }
 // used anymore once the vector is modified.
 //gcassert:inline
 func (c Decimals) Get(idx int) apd.Decimal {
-	bytes := c.Bytes.Get(idx)
-	var ret apd.Decimal
-	encoding.DecodeFlatDecimal(bytes, &ret)
-	return ret
+	return c.decimals[idx]
 }
 
 // Get returns the element at index idx of the vector. The element cannot be
@@ -110,7 +110,7 @@ func (c Float64s) Len() int { return len(c) }
 func (c Float64s) Set(idx int, agg float64) { c[idx] = agg }
 
 // Len returns the length of the vector.
-func (c Decimals) Len() int { return c.Bytes.Len() }
+func (c Decimals) Len() int { return len(c.decimals) }
 
 func (c *Decimals) GetInto(i int, d *apd.Decimal) {
 	bytes := c.Bytes.Get(i)

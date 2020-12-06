@@ -21,6 +21,12 @@ import (
 // values from src into the receiver starting at destIdx.
 func (d *Decimals) AppendSlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int) {
 	d.Bytes.AppendSlice(&src.Bytes, destIdx, srcStartIdx, srcEndIdx)
+	d.decimals = append(d.decimals[:destIdx], src.decimals[srcStartIdx:srcEndIdx]...)
+	for i := range d.decimals[destIdx:(srcEndIdx - srcStartIdx)] {
+		b := d.Bytes.Get(destIdx + i)
+		slice := encoding.WordSliceFromByteSlice(b)
+		d.decimals[destIdx+i].Coeff.SetBits(slice)
+	}
 }
 
 // AppendVal appends the given []byte value to the end of the receiver. A nil
@@ -33,6 +39,7 @@ func (d *Decimals) AppendVal(v apd.Decimal) {
 	d.data = encoding.EncodeFlatDecimal(&v, d.data)
 	d.maxSetIndex = d.Len()
 	d.offsets = append(d.offsets, int32(len(d.data)))
+	d.decimals = append(d.decimals, v)
 }
 
 // CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive apd.Decimal values
@@ -40,6 +47,12 @@ func (d *Decimals) AppendVal(v apd.Decimal) {
 // Bytes.CopySlice for more information.
 func (d *Decimals) CopySlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int) {
 	d.Bytes.CopySlice(&src.Bytes, destIdx, srcStartIdx, srcEndIdx)
+	copy(d.decimals[destIdx:], src.decimals[srcStartIdx:srcEndIdx])
+	for i := range d.decimals[destIdx:(srcEndIdx - srcStartIdx)] {
+		b := d.Bytes.Get(destIdx + i)
+		slice := encoding.WordSliceFromByteSlice(b)
+		d.decimals[destIdx+i].Coeff.SetBits(slice)
+	}
 }
 
 // Set sets the ith apd.Decimal in d. Overwriting a value that is not at the end
@@ -66,6 +79,11 @@ func (d *Decimals) Set(i int, v *apd.Decimal) {
 	d.data = encoding.EncodeFlatDecimal(v, d.data)
 	d.offsets[i+1] = int32(len(d.data))
 	d.maxSetIndex = i
+	b := d.Bytes.Get(i)
+	slice := encoding.WordSliceFromByteSlice(b)
+	c := *v
+	v.Coeff.SetBits(slice)
+	d.decimals[i] = c
 }
 
 // Window creates a "window" into the receiver. It behaves similarly to
@@ -75,6 +93,7 @@ func (d *Decimals) Set(i int, v *apd.Decimal) {
 func (d *Decimals) Window(start, end int) *Decimals {
 	bytesWindow := d.Bytes.newWindow(start, end)
 	return &Decimals{
-		Bytes: bytesWindow,
+		Bytes:    bytesWindow,
+		decimals: d.decimals[start:end],
 	}
 }
