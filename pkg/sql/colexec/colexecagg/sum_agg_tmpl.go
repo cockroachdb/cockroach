@@ -121,6 +121,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
 	// {{end}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -162,6 +163,10 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {

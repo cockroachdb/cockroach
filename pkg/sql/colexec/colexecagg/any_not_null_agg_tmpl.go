@@ -103,15 +103,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 	}
 	// {{end}}
 
-	// {{if eq .VecMethod "Bytes"}}
-	oldCurAggSize := len(a.curAgg)
-	// {{end}}
-	// {{if eq .VecMethod "Datum"}}
-	var oldCurAggSize uintptr
-	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
-	}
-	// {{end}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -153,18 +145,10 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
-	// {{if eq .VecMethod "Bytes"}}
-	newCurAggSize := len(a.curAgg)
-	// {{end}}
-	// {{if eq .VecMethod "Datum"}}
-	var newCurAggSize uintptr
-	if a.curAgg != nil {
-		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
-	// {{end}}
-	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	// {{end}}
 }
 
 func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {

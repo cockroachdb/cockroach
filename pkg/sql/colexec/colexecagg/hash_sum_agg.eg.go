@@ -75,6 +75,7 @@ func (a *sumInt16HashAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -125,6 +126,10 @@ func (a *sumInt16HashAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sumInt16HashAgg) Flush(outputIdx int) {
@@ -185,6 +190,7 @@ func (a *sumInt32HashAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -235,6 +241,10 @@ func (a *sumInt32HashAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sumInt32HashAgg) Flush(outputIdx int) {
@@ -295,6 +305,7 @@ func (a *sumInt64HashAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -345,6 +356,10 @@ func (a *sumInt64HashAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sumInt64HashAgg) Flush(outputIdx int) {
@@ -401,6 +416,7 @@ func (a *sumDecimalHashAgg) SetOutput(vec coldata.Vec) {
 func (a *sumDecimalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -449,6 +465,10 @@ func (a *sumDecimalHashAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sumDecimalHashAgg) Flush(outputIdx int) {
@@ -505,6 +525,7 @@ func (a *sumFloat64HashAgg) SetOutput(vec coldata.Vec) {
 func (a *sumFloat64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -547,6 +568,10 @@ func (a *sumFloat64HashAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sumFloat64HashAgg) Flush(outputIdx int) {
@@ -603,6 +628,7 @@ func (a *sumIntervalHashAgg) SetOutput(vec coldata.Vec) {
 func (a *sumIntervalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -635,6 +661,10 @@ func (a *sumIntervalHashAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sumIntervalHashAgg) Flush(outputIdx int) {

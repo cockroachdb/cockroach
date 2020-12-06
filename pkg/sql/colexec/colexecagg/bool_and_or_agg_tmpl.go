@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/errors"
@@ -78,6 +79,7 @@ func (a *bool_OP_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -116,6 +118,10 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *bool_OP_TYPE_AGGKINDAgg) Flush(outputIdx int) {
