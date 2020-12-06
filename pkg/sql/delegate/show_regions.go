@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/errors"
 )
 
 // delegateShowRanges implements the SHOW REGIONS statement.
@@ -44,8 +45,20 @@ func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, er
 		GROUP BY
 			region
 	`
+	switch n.ShowRegionsFrom {
+	case tree.ShowRegionsFromAllDatabases:
+		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromAllDatabases)
+		return parse(`
+SELECT
+	name as database_name,
+	regions,
+	primary_region
+FROM crdb_internal.databases
+ORDER BY database_name
+			`,
+		)
 
-	if n.FromDatabase {
+	case tree.ShowRegionsFromDatabase:
 		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromDatabase)
 		dbName := string(n.DatabaseName)
 		if dbName == "" {
@@ -79,12 +92,12 @@ ORDER BY region`,
 			lex.EscapeSQLString(dbName),
 		)
 		return parse(query)
-	}
 
-	sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromCluster)
+	case tree.ShowRegionsFromCluster:
+		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromCluster)
 
-	query := fmt.Sprintf(
-		`
+		query := fmt.Sprintf(
+			`
 SELECT
 	region, zones
 FROM
@@ -93,8 +106,10 @@ WHERE
 	region IS NOT NULL
 ORDER BY
 	region`,
-		zonesClause,
-	)
+			zonesClause,
+		)
 
-	return parse(query)
+		return parse(query)
+	}
+	return nil, errors.Newf("unhandled ShowRegionsFrom: %v", n.ShowRegionsFrom)
 }

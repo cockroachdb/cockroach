@@ -19,7 +19,11 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/lex"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+)
 
 // ShowVar represents a SHOW statement.
 type ShowVar struct {
@@ -294,23 +298,40 @@ func (node *ShowSurvivalGoal) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowRegionsFrom denotes what kind of SHOW REGIONS command is being used.
+type ShowRegionsFrom int
+
+const (
+	// ShowRegionsFromCluster represents SHOW REGIONS FROM CLUSTER.
+	ShowRegionsFromCluster ShowRegionsFrom = iota
+	// ShowRegionsFromDatabase represents SHOW REGIONS FROM DATABASE.
+	ShowRegionsFromDatabase
+	// ShowRegionsFromAllDatabases represents SHOW REGIONS FROM ALL DATABASES.
+	ShowRegionsFromAllDatabases
+)
+
 // ShowRegions represents a SHOW REGIONS statement
 type ShowRegions struct {
-	FromDatabase bool
-	DatabaseName Name
+	ShowRegionsFrom ShowRegionsFrom
+	DatabaseName    Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRegions) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW REGIONS ")
-	if node.FromDatabase {
+	switch node.ShowRegionsFrom {
+	case ShowRegionsFromAllDatabases:
+		ctx.WriteString("FROM ALL DATABASES")
+	case ShowRegionsFromDatabase:
 		ctx.WriteString("FROM DATABASE")
 		if node.DatabaseName != "" {
 			ctx.WriteString(" ")
 			node.DatabaseName.Format(ctx)
 		}
-	} else {
+	case ShowRegionsFromCluster:
 		ctx.WriteString("FROM CLUSTER")
+	default:
+		panic(fmt.Sprintf("unknown ShowRegionsFrom: %v", node.ShowRegionsFrom))
 	}
 }
 
