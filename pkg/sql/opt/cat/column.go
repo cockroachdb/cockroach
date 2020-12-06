@@ -161,8 +161,7 @@ const (
 	// VirtualInverted columns are implicit columns that are used by inverted
 	// indexes.
 	VirtualInverted
-	// VirtualComputed columns are non-stored computed columns that are used by
-	// expression-based indexes.
+	// VirtualComputed columns are non-stored computed columns.
 	VirtualComputed
 )
 
@@ -228,15 +227,21 @@ func (c *Column) InitVirtualInverted(
 // InitVirtualComputed is used by catalog implementations to populate a
 // VirtualComputed Column. It should not be used anywhere else.
 func (c *Column) InitVirtualComputed(
-	ordinal int, name tree.Name, datumType *types.T, nullable bool, computedExpr string,
+	ordinal int,
+	stableID StableID,
+	name tree.Name,
+	datumType *types.T,
+	nullable bool,
+	hidden bool,
+	computedExpr string,
 ) {
 	c.ordinal = ordinal
-	c.stableID = 0
+	c.stableID = stableID
 	c.name = name
 	c.kind = VirtualComputed
 	c.datumType = datumType
 	c.nullable = nullable
-	c.hidden = true
+	c.hidden = hidden
 	c.defaultExpr = ""
 	c.computedExpr = computedExpr
 	c.invertedSourceColumnOrdinal = -1
