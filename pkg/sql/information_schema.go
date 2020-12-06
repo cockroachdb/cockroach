@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/text/collate"
 )
 
 const (
@@ -123,30 +124,32 @@ var informationSchema = virtualSchema{
 		"views",
 	),
 	tableDefs: map[descpb.ID]virtualSchemaDef{
-		catconstants.InformationSchemaAdministrableRoleAuthorizationsID: informationSchemaAdministrableRoleAuthorizations,
-		catconstants.InformationSchemaApplicableRolesID:                 informationSchemaApplicableRoles,
-		catconstants.InformationSchemaCharacterSets:                     informationSchemaCharacterSets,
-		catconstants.InformationSchemaCheckConstraints:                  informationSchemaCheckConstraints,
-		catconstants.InformationSchemaColumnPrivilegesID:                informationSchemaColumnPrivileges,
-		catconstants.InformationSchemaColumnsTableID:                    informationSchemaColumnsTable,
-		catconstants.InformationSchemaColumnUDTUsageID:                  informationSchemaColumnUDTUsage,
-		catconstants.InformationSchemaConstraintColumnUsageTableID:      informationSchemaConstraintColumnUsageTable,
-		catconstants.InformationSchemaTypePrivilegesID:                  informationSchemaTypePrivilegesTable,
-		catconstants.InformationSchemaEnabledRolesID:                    informationSchemaEnabledRoles,
-		catconstants.InformationSchemaKeyColumnUsageTableID:             informationSchemaKeyColumnUsageTable,
-		catconstants.InformationSchemaParametersTableID:                 informationSchemaParametersTable,
-		catconstants.InformationSchemaReferentialConstraintsTableID:     informationSchemaReferentialConstraintsTable,
-		catconstants.InformationSchemaRoleTableGrantsID:                 informationSchemaRoleTableGrants,
-		catconstants.InformationSchemaRoutineTableID:                    informationSchemaRoutineTable,
-		catconstants.InformationSchemaSchemataTableID:                   informationSchemaSchemataTable,
-		catconstants.InformationSchemaSchemataTablePrivilegesID:         informationSchemaSchemataTablePrivileges,
-		catconstants.InformationSchemaSequencesID:                       informationSchemaSequences,
-		catconstants.InformationSchemaStatisticsTableID:                 informationSchemaStatisticsTable,
-		catconstants.InformationSchemaTableConstraintTableID:            informationSchemaTableConstraintTable,
-		catconstants.InformationSchemaTablePrivilegesID:                 informationSchemaTablePrivileges,
-		catconstants.InformationSchemaTablesTableID:                     informationSchemaTablesTable,
-		catconstants.InformationSchemaViewsTableID:                      informationSchemaViewsTable,
-		catconstants.InformationSchemaUserPrivilegesID:                  informationSchemaUserPrivileges,
+		catconstants.InformationSchemaAdministrableRoleAuthorizationsID:  informationSchemaAdministrableRoleAuthorizations,
+		catconstants.InformationSchemaApplicableRolesID:                  informationSchemaApplicableRoles,
+		catconstants.InformationSchemaCharacterSets:                      informationSchemaCharacterSets,
+		catconstants.InformationSchemaCheckConstraints:                   informationSchemaCheckConstraints,
+		catconstants.InformationSchemaCollationCharacterSetApplicability: informationSchemaCollationCharacterSetApplicability,
+		catconstants.InformationSchemaCollations:                         informationSchemaCollations,
+		catconstants.InformationSchemaColumnPrivilegesID:                 informationSchemaColumnPrivileges,
+		catconstants.InformationSchemaColumnsTableID:                     informationSchemaColumnsTable,
+		catconstants.InformationSchemaColumnUDTUsageID:                   informationSchemaColumnUDTUsage,
+		catconstants.InformationSchemaConstraintColumnUsageTableID:       informationSchemaConstraintColumnUsageTable,
+		catconstants.InformationSchemaTypePrivilegesID:                   informationSchemaTypePrivilegesTable,
+		catconstants.InformationSchemaEnabledRolesID:                     informationSchemaEnabledRoles,
+		catconstants.InformationSchemaKeyColumnUsageTableID:              informationSchemaKeyColumnUsageTable,
+		catconstants.InformationSchemaParametersTableID:                  informationSchemaParametersTable,
+		catconstants.InformationSchemaReferentialConstraintsTableID:      informationSchemaReferentialConstraintsTable,
+		catconstants.InformationSchemaRoleTableGrantsID:                  informationSchemaRoleTableGrants,
+		catconstants.InformationSchemaRoutineTableID:                     informationSchemaRoutineTable,
+		catconstants.InformationSchemaSchemataTableID:                    informationSchemaSchemataTable,
+		catconstants.InformationSchemaSchemataTablePrivilegesID:          informationSchemaSchemataTablePrivileges,
+		catconstants.InformationSchemaSequencesID:                        informationSchemaSequences,
+		catconstants.InformationSchemaStatisticsTableID:                  informationSchemaStatisticsTable,
+		catconstants.InformationSchemaTableConstraintTableID:             informationSchemaTableConstraintTable,
+		catconstants.InformationSchemaTablePrivilegesID:                  informationSchemaTablePrivileges,
+		catconstants.InformationSchemaTablesTableID:                      informationSchemaTablesTable,
+		catconstants.InformationSchemaViewsTableID:                       informationSchemaViewsTable,
+		catconstants.InformationSchemaUserPrivilegesID:                   informationSchemaUserPrivileges,
 	},
 	tableValidator:             validateInformationSchemaTable,
 	validWithNoDatabaseContext: true,
@@ -1600,6 +1603,69 @@ CREATE TABLE information_schema.views (
 					noString,                              // is_trigger_insertable_into
 				)
 			})
+	},
+}
+
+// Postgres: https://www.postgresql.org/docs/current/infoschema-collations.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html
+var informationSchemaCollations = virtualSchemaTable{
+	comment: `shows the collations available in the current database
+https://www.postgresql.org/docs/current/infoschema-collations.html`,
+	schema: vtable.InformationSchemaCollations,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		dbNameStr := tree.NewDString(p.CurrentDatabase())
+		add := func(collName string) error {
+			return addRow(
+				dbNameStr,
+				pgCatalogNameDString,
+				tree.NewDString(collName),
+				// Always NO PAD (The alternative PAD SPACE is not supported.)
+				tree.NewDString("NO PAD"),
+			)
+		}
+		if err := add(tree.DefaultCollationTag); err != nil {
+			return err
+		}
+		for _, tag := range collate.Supported() {
+			collName := tag.String()
+			if err := add(collName); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// Postgres: https://www.postgresql.org/docs/current/infoschema-collation-character-set-applicab.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.0/en/information-schema-collation-character-set-applicability-table.html
+var informationSchemaCollationCharacterSetApplicability = virtualSchemaTable{
+	comment: `identifies which character set the available collations are 
+applicable to. As UTF-8 is the only available encoding this table does not
+provide much useful information.
+https://www.postgresql.org/docs/current/infoschema-collation-character-set-applicab.html`,
+	schema: vtable.InformationSchemaCollationCharacterSetApplicability,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		dbNameStr := tree.NewDString(p.CurrentDatabase())
+		add := func(collName string) error {
+			return addRow(
+				dbNameStr,                 // collation_catalog
+				pgCatalogNameDString,      // collation_schema
+				tree.NewDString(collName), // collation_name
+				tree.DNull,                // character_set_catalog
+				tree.DNull,                // character_set_schema
+				tree.NewDString("UTF8"),   // character_set_name: UTF8 is the only available encoding
+			)
+		}
+		if err := add(tree.DefaultCollationTag); err != nil {
+			return err
+		}
+		for _, tag := range collate.Supported() {
+			collName := tag.String()
+			if err := add(collName); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
