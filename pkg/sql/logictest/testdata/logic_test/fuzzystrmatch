@@ -29,3 +29,29 @@ apple  banana  5     18
 NULL   a       NULL  NULL
 a      NULL    NULL  NULL
 NULL   NULL    NULL  NULL
+
+query T
+SELECT soundex('hello world!')
+----
+H464
+
+query TTT
+SELECT soundex('Anne'), soundex('Ann'), difference('Anne', 'Ann');
+----
+A500 A500 4
+
+query TTT
+SELECT soundex('Anne'), soundex('Andrew'), difference('Anne', 'Andrew');
+----
+A500 A536 2
+
+query TTT
+SELECT soundex('Anne'), soundex('Margaret'), difference('Anne', 'Margaret');
+----
+A500 M626 0
+
+query TTT
+SELECT soundex('Anne'), soundex(NULL), difference('Anne', NULL);
+----
+A500 · ·
+
