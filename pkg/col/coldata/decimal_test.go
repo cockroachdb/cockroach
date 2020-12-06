@@ -22,7 +22,7 @@ var Res apd.Decimal
 
 func BenchmarkSumDecimals(b *testing.B) {
 	colFactory := defaultColumnFactory{}
-	col := colFactory.MakeColumn(types.Decimal, 1024).(Decimals)
+	col := colFactory.MakeColumn(types.Decimal, 1024).(*Decimals)
 	var ctx = &apd.Context{
 		Precision:   20,
 		Rounding:    apd.RoundHalfUp,
