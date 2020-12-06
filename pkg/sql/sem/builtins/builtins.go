@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -93,22 +94,23 @@ const maxAllocatedStringSize = 128 * 1024 * 1024
 const errInsufficientArgsFmtString = "unknown signature: %s()"
 
 const (
-	categoryArray          = "Array"
-	categoryComparison     = "Comparison"
-	categoryCompatibility  = "Compatibility"
-	categoryDateAndTime    = "Date and time"
-	categoryEnum           = "Enum"
-	categoryFullTextSearch = "Full Text Search"
-	categoryGenerator      = "Set-returning"
-	categoryTrigram        = "Trigrams"
-	categoryIDGeneration   = "ID generation"
-	categoryJSON           = "JSONB"
-	categoryMultiTenancy   = "Multi-tenancy"
-	categorySequences      = "Sequence"
-	categorySpatial        = "Spatial"
-	categoryString         = "String and byte"
-	categorySystemInfo     = "System info"
-	categorySystemRepair   = "System repair"
+	categoryArray               = "Array"
+	categoryComparison          = "Comparison"
+	categoryCompatibility       = "Compatibility"
+	categoryDateAndTime         = "Date and time"
+	categoryEnum                = "Enum"
+	categoryFullTextSearch      = "Full Text Search"
+	categoryGenerator           = "Set-returning"
+	categoryTrigram             = "Trigrams"
+	categoryFuzzyStringMatching = "Fuzzy String Matching"
+	categoryIDGeneration        = "ID generation"
+	categoryJSON                = "JSONB"
+	categoryMultiTenancy        = "Multi-tenancy"
+	categorySequences           = "Sequence"
+	categorySpatial             = "Spatial"
+	categoryString              = "String and byte"
+	categorySystemInfo          = "System info"
+	categorySystemRepair        = "System repair"
 )
 
 func categorizeType(t *types.T) string {
@@ -2925,6 +2927,34 @@ may increase either contention or retry errors, or both.`,
 	"tsvector_to_array":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
 	"tsvector_update_trigger":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
 	"tsvector_update_trigger_column": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
+
+	// Fuzzy String Matching
+	"soundex": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"source", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				t := fuzzystrmatch.Soundex(s)
+				return tree.NewDString(t), nil
+			},
+			Info:       "Converts a string to its Soundex code.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"difference": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"source", types.String}, {"target", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				ld := fuzzystrmatch.Difference(s, t)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info:       "Converts two strings to their Soundex codes and then reports the number of matching code positions.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	// Trigram functions.
 	"similarity":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),

@@ -763,6 +763,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="crc32ieee"></a><code>crc32ieee(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the CRC-32 hash using the IEEE polynomial.</p>
 </span></td></tr>
+<tr><td><a name="difference"></a><code>difference(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Converts two strings to their Soundex codes and then reports the number of matching code positions.</p>
+</span></td></tr>
 <tr><td><a name="fnv32"></a><code>fnv32(<a href="bytes.html">bytes</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 32-bit FNV-1 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="fnv32"></a><code>fnv32(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 32-bit FNV-1 hash value of a set of values.</p>
@@ -2430,6 +2432,8 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tr><td><a name="sha512"></a><code>sha512(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="sha512"></a><code>sha512(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
+</span></td></tr>
+<tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a string to its Soundex code.</p>
 </span></td></tr>
 <tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> on <code>delimiter</code> and return the value in the <code>return_index_pos</code>  position (starting at 1).</p>
 <p>For example, <code>split_part('123.456.789.0','.',3)</code>returns <code>789</code>.</p>
