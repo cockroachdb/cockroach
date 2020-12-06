@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -103,6 +104,8 @@ type TestServerInterface interface {
 
 	// MigrationServer returns the internal *migrationServer as in interface{}
 	MigrationServer() interface{}
+
+	Engines() []storage.Engine
 
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}

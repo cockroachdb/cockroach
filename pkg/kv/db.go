@@ -642,9 +642,7 @@ func (db *DB) AddSSTable(
 // Migrate proactively forces ranges overlapping with the provided keyspace to
 // transition out of any legacy modes of operation (as defined by the target
 // version).
-func (db *DB) Migrate(
-	ctx context.Context, begin, end interface{}, version roachpb.Version,
-) error {
+func (db *DB) Migrate(ctx context.Context, begin, end interface{}, version roachpb.Version) error {
 	b := &Batch{}
 	b.migrate(begin, end, version)
 	return getOneErr(db.Run(ctx, b), b)

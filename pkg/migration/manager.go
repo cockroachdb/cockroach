@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 )
@@ -40,12 +40,12 @@ import (
 // cluster.
 type Manager struct {
 	dialer   *nodedialer.Dialer
-	executor *sql.InternalExecutor
+	executor sqlutil.InternalExecutor
 	nl       nodeLiveness
 	db       *kv.DB
 }
 
-// nodeLiveness is the subset of the interface satisfied by CRDB's node liveness
+// nodeLiveness is the subset of the interface satisfied by crdb's node liveness
 // component that the migration manager relies upon.
 type nodeLiveness interface {
 	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
@@ -56,7 +56,7 @@ type nodeLiveness interface {
 //
 // TODO(irfansharif): We'll need to eventually plumb in on a lease manager here.
 func NewManager(
-	dialer *nodedialer.Dialer, nl nodeLiveness, executor *sql.InternalExecutor, db *kv.DB,
+	dialer *nodedialer.Dialer, nl nodeLiveness, executor sqlutil.InternalExecutor, db *kv.DB,
 ) *Manager {
 	return &Manager{
 		dialer:   dialer,
@@ -72,7 +72,7 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
 	// for each migration, so they log distinctly?
 	ctx = logtags.AddTag(ctx, "migration-mgr", nil)
-	if from == to && false { // XXX: Stop gap for until I write real tests.
+	if from == to { // XXX: Stop gap for until I write real tests.
 		// Nothing to do here.
 		log.Infof(ctx, "no need to migrate, cluster already at newest version")
 		return nil
@@ -93,10 +93,17 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 		// here instead, so that we're able to actually migrate into it.
 		clusterVersions = append(clusterVersions, to)
 	}
-	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
+	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)",
+		from, to, clusterVersions)
 
 	for _, clusterVersion := range clusterVersions {
-		h := &Helper{m, clusterVersion}
+		cluster := &clusterImpl{
+			nl:     m.nl,
+			dialer: m.dialer,
+			exec:   m.executor,
+			kvDB:   m.db,
+		}
+		h := newHelper(cluster, clusterVersion)
 
 		// Push out the version gate to every node in the cluster. Each node
 		// will persist the version, bump the local version gates, and then

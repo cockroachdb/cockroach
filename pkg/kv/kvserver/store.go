@@ -2765,6 +2765,32 @@ func (s *Store) ManuallyEnqueue(
 	return collect(), processErr, nil
 }
 
+// GCReplicas iterates over all ranges and processes any that may need to be
+// GC'd.
+func (s *Store) GCReplicas() error {
+	if interceptor := s.TestingKnobs().GCReplicasInterceptor; interceptor != nil {
+		interceptor()
+	}
+	return forceScanAndProcess(s, s.replicaGCQueue.baseQueue)
+}
+
+func forceScanAndProcess(s *Store, q *baseQueue) error {
+	// Check that the system config is available. It is needed by many queues. If
+	// it's not available, some queues silently fail to process any replicas,
+	// which is undesirable for this method.
+	if cfg := s.Gossip().GetSystemConfig(); cfg == nil {
+		return errors.Errorf("system config not available in gossip")
+	}
+
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+		q.maybeAdd(context.Background(), repl, s.cfg.Clock.Now())
+		return true
+	})
+
+	q.DrainQueue(s.stopper)
+	return nil
+}
+
 // WriteClusterVersion writes the given cluster version to the store-local
 // cluster version key.
 func WriteClusterVersion(

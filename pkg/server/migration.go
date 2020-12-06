@@ -101,6 +101,7 @@ func (m *migrationServer) BumpClusterVersion(
 	if err := func() error {
 		if !prevCV.Less(newCV.Version) {
 			// Nothing to do.
+			log.Infof(ctx, "xxx: here %s %s %s %s", prevCV, newCV, versionSetting.BinaryMinSupportedVersion(), versionSetting.BinaryVersion())
 			return nil
 		}
 
@@ -157,7 +158,7 @@ func (m *migrationServer) GCReplicas(
 	_ context.Context, _ *serverpb.GCReplicasRequest,
 ) (*serverpb.GCReplicasResponse, error) {
 	if err := m.server.node.stores.VisitStores(func(s *kvserver.Store) error {
-		return s.ForceReplicaGCScanAndProcess()
+		return s.GCReplicas()
 	}); err != nil {
 		return nil, err
 	}

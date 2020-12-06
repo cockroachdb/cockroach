@@ -255,6 +255,9 @@ type StoreTestingKnobs struct {
 	// heartbeats and then expect other replicas to take the lease without
 	// worrying about Raft).
 	AllowLeaseRequestProposalsWhenNotLeader bool
+	// GCReplicasInterceptor intercepts attempts to GC all replicas in the
+	// store.
+	GCReplicasInterceptor func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -22,6 +22,68 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// node captures the relevant bits of each node as it pertains to the migration
+// infrastructure.
+type node struct {
+	id    roachpb.NodeID
+	epoch int64
+}
+
+// nodes is a collection of node objects.
+type nodes []node
+
+// identical returns whether or not two lists of nodes are identical as sets,
+// and if not, what changed. The textual diff is only to be used for logging
+// purposes.
+func (ns nodes) identical(other nodes) (ok bool, diff string) {
+	a, b := ns, other
+	if len(a) != len(b) {
+		if len(a) < len(b) {
+			diff = fmt.Sprintf("node added to the cluster")
+		} else {
+			diff = fmt.Sprintf("node removed from the cluster")
+		}
+		return false, diff
+	}
+
+	// Sort by node IDs.
+	sort.Slice(a, func(i, j int) bool {
+		return a[i].id < a[j].id
+	})
+	sort.Slice(b, func(i, j int) bool {
+		return b[i].id < b[j].id
+	})
+
+	for i := 0; i < len(a); i++ {
+		if a[i].id != b[i].id {
+			return false, "found different set of nodes"
+		}
+		if a[i].epoch != b[i].epoch {
+			return false, fmt.Sprintf("n%d was restarted", a[i].id)
+		}
+	}
+	return true, ""
+}
+
+func (ns nodes) String() string {
+	var b strings.Builder
+	b.WriteString("n{")
+	if len(ns) > 0 {
+		b.WriteString(fmt.Sprintf("%d", ns[0].id))
+		for _, node := range ns[1:] {
+			b.WriteString(fmt.Sprintf(",%d", node.id))
+		}
+	}
+	b.WriteString("}")
+
+	return b.String()
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (ns nodes) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.SafeString(redact.SafeString(ns.String()))
+}
+
 // fenceVersionFor constructs the appropriate "fence version" for the given
 // cluster version. Fence versions allow the migrations infrastructure to safely
 // step through consecutive cluster versions in the presence of nodes (running
@@ -46,57 +108,6 @@ func fenceVersionFor(
 	fenceCV := cv
 	fenceCV.Internal--
 	return fenceCV
-}
-
-type nodes []node
-
-// node captures the relevant bits of each node as it pertains to the migration
-// infrastructure.
-type node struct {
-	id    roachpb.NodeID
-	epoch int64
-}
-
-// identical returns whether or not two lists of nodes are identical as sets.
-func (ns nodes) identical(other nodes) bool {
-	a, b := ns, other
-	if len(a) != len(b) {
-		return false
-	}
-
-	// Sort by node IDs.
-	sort.Slice(a, func(i, j int) bool {
-		return a[i].id < a[j].id
-	})
-	sort.Slice(b, func(i, j int) bool {
-		return b[i].id < b[j].id
-	})
-
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func (ns nodes) String() string {
-	var b strings.Builder
-	b.WriteString("n{")
-	if len(ns) > 0 {
-		b.WriteString(fmt.Sprintf("%d", ns[0].id))
-		for _, node := range ns[1:] {
-			b.WriteString(fmt.Sprintf(",%d", node.id))
-		}
-	}
-	b.WriteString("}")
-
-	return b.String()
-}
-
-// SafeFormat implements redact.SafeFormatter.
-func (ns nodes) SafeFormat(s redact.SafePrinter, _ rune) {
-	s.SafeString(redact.SafeString(ns.String()))
 }
 
 // register is a short hand to register a given migration within the global

@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // Code in this file is for testing usage only. It is exported only because it
@@ -24,23 +23,6 @@ func (bq *baseQueue) testingAdd(
 	ctx context.Context, repl replicaInQueue, priority float64,
 ) (bool, error) {
 	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
-}
-
-func forceScanAndProcess(s *Store, q *baseQueue) error {
-	// Check that the system config is available. It is needed by many queues. If
-	// it's not available, some queues silently fail to process any replicas,
-	// which is undesirable for this method.
-	if cfg := s.Gossip().GetSystemConfig(); cfg == nil {
-		return errors.Errorf("system config not available in gossip")
-	}
-
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		q.maybeAdd(context.Background(), repl, s.cfg.Clock.Now())
-		return true
-	})
-
-	q.DrainQueue(s.stopper)
-	return nil
 }
 
 func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {

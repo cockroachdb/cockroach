@@ -18,17 +18,54 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc"
 )
 
 // Helper captures all the primitives required to fully specify a migration.
 type Helper struct {
-	m  *Manager
+	c  cluster
 	cv clusterversion.ClusterVersion
+}
+
+// cluster mediates access to the crdb cluster.
+type cluster interface {
+	// nodes returns the IDs and epochs for all nodes that are currently part of
+	// the cluster (i.e. they haven't been decommissioned away). Migrations have
+	// the pre-requisite that all nodes are up and running so that we're able to
+	// execute all relevant node-level operations on them. If any of the nodes
+	// are found to be unavailable, an error is returned.
+	//
+	// It's important to note that this makes no guarantees about new nodes
+	// being added to the cluster. It's entirely possible for that to happen
+	// concurrently with the retrieval of the current set of nodes. Appropriate
+	// usage of this entails wrapping it under a stabilizing loop, like we do in
+	// EveryNode.
+	nodes(ctx context.Context) (nodes, error)
+
+	// dial returns a grpc connection to the given node.
+	dial(context.Context, roachpb.NodeID) (*grpc.ClientConn, error)
+
+	// db provides access the kv.DB instance backing the cluster.
+	//
+	// TODO(irfansharif): We could hide the kv.DB instance behind an interface
+	// to expose only relevant, vetted bits of kv.DB. It'll make our tests less
+	// "integration-ey".
+	db() *kv.DB
+
+	// executor provides access to an internal executor instance to run
+	// arbitrary SQL statements.
+	executor() sqlutil.InternalExecutor
+}
+
+func newHelper(c cluster, cv clusterversion.ClusterVersion) *Helper {
+	return &Helper{c: c, cv: cv}
 }
 
 // IterateRangeDescriptors provides a handle on every range descriptor in the
@@ -42,27 +79,32 @@ type Helper struct {
 // the following is an anti-pattern:
 //
 //     processed := 0
-//     _ = h.IterateRangeDescriptors(..., func(descriptors ...roachpb.RangeDescriptor) error {
-//         processed += len(descriptors) // we'll over count if retried
-//         log.Infof(ctx, "processed %d ranges", processed)
-//     })
+//     _ = h.IterateRangeDescriptors(...,
+//         func(descriptors ...roachpb.RangeDescriptor) error {
+//             processed += len(descriptors) // we'll over count if retried
+//             log.Infof(ctx, "processed %d ranges", processed)
+//         },
+//     )
 //
 // Instead we allow callers to pass in a callback to signal on every attempt
 // (including the first). This lets us salvage the example above:
 //
 //     var processed int
 //     init := func() { processed = 0 }
-//     _ = h.IterateRangeDescriptors(..., init, func(descriptors ...roachpb.RangeDescriptor) error {
-//         processed += len(descriptors)
-//         log.Infof(ctx, "processed %d ranges", processed)
-//     })
+//     _ = h.IterateRangeDescriptors(..., init,
+//         func(descriptors ...roachpb.RangeDescriptor) error {
+//             processed += len(descriptors)
+//             log.Infof(ctx, "processed %d ranges", processed)
+//         },
+//     )
 //
 // [1]: pkg/kv/kvserver/batch_eval/cmd_migrate.go
 func (h *Helper) IterateRangeDescriptors(
 	ctx context.Context, blockSize int, init func(), fn func(...roachpb.RangeDescriptor) error,
 ) error {
-	if err := h.m.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// Inform the caller that we're starting a fresh attempt to page in range descriptors.
+	if err := h.c.db().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Inform the caller that we're starting a fresh attempt to page in
+		// range descriptors.
 		init()
 
 		// Iterate through the meta ranges to pull out all the range descriptors.
@@ -71,7 +113,10 @@ func (h *Helper) IterateRangeDescriptors(
 				descriptors := make([]roachpb.RangeDescriptor, len(rows))
 				for i, row := range rows {
 					if err := row.ValueProto(&descriptors[i]); err != nil {
-						return errors.Wrapf(err, "unable to unmarshal range descriptor from %s", row.Key)
+						return errors.Wrapf(err,
+							"unable to unmarshal range descriptor from %s",
+							row.Key,
+						)
 					}
 				}
 
@@ -90,37 +135,9 @@ func (h *Helper) IterateRangeDescriptors(
 	return nil
 }
 
-// UpdateProgress is used to update the externally visible UpdateProgress is used to update the externally visible
-
-// UpdateProgress is used to update the externally visible
-// progress indicator (accessible using the `progress`
-// column in `system.migrations`) for the ongoing migration.
-func (h *Helper) UpdateProgress(ctx context.Context, progress string) error {
-	const recordProgressStmt = `
-UPDATE system.migrations SET "progress" = $1 WHERE "version" = $2
-`
-	args := []interface{}{progress, h.cv.String()}
-	_, err := h.m.executor.Exec(ctx, "update-progress", nil, recordProgressStmt, args...)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// ClusterVersion exposes the cluster version associated with the ongoing
-// migration.
-func (h *Helper) ClusterVersion() clusterversion.ClusterVersion {
-	return h.cv
-}
-
-// DB provides exposes the underlying *kv.DB instance.
-func (h *Helper) DB() *kv.DB {
-	return h.m.db
-}
-
 // EveryNode invokes the given closure (named by the informational parameter op)
-// across every node in the cluster[*]. The mechanism for ensuring that we've done
-// so, while accounting for the possibility of new nodes being added to the
+// across every node in the cluster[*]. The mechanism for ensuring that we've
+// done so, while accounting for the possibility of new nodes being added to the
 // cluster in the interim, is provided by the following structure:
 //   (a) We'll retrieve the list of node IDs for all nodes in the system
 //   (b) For each node, we'll invoke the closure
@@ -156,18 +173,18 @@ func (h *Helper) DB() *kv.DB {
 func (h *Helper) EveryNode(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
 ) error {
-	ns, err := h.requiredNodes(ctx)
+	ns, err := h.c.nodes(ctx)
 	if err != nil {
 		return err
 	}
 
 	for {
-		log.Infof(ctx, "executing %s on %s", op, ns)
+		log.Infof(ctx, "executing %s on nodes %s", op, ns)
 
 		grp := ctxgroup.WithContext(ctx)
 		for _, node := range ns {
 			grp.GoCtx(func(ctx context.Context) error {
-				conn, err := h.m.dialer.Dial(ctx, node.id, rpc.DefaultClass)
+				conn, err := h.c.dial(ctx, node.id)
 				if err != nil {
 					return err
 				}
@@ -182,12 +199,13 @@ func (h *Helper) EveryNode(
 			return err
 		}
 
-		curNodes, err := h.requiredNodes(ctx)
+		curNodes, err := h.c.nodes(ctx)
 		if err != nil {
 			return err
 		}
 
-		if !ns.identical(curNodes) {
+		if ok, diff := ns.identical(curNodes); !ok {
+			log.Infof(ctx, "%s, retrying", diff)
 			ns = curNodes
 			continue
 		}
@@ -198,37 +216,31 @@ func (h *Helper) EveryNode(
 	return nil
 }
 
-// requiredNodes returns the node IDs and epochs for all nodes that are
-// currently part of the cluster (i.e. they haven't been decommissioned away).
-// Migrations have the pre-requisite that all required nodes are up and running
-// so that we're able to execute all relevant node-level operations on them. If
-// any of the nodes are found to be unavailable, an error is returned.
-//
-// It's important to note that requiredNodes makes no guarantees about new
-// nodes being added to the cluster. It's entirely possible for new nodes to be
-// added to the cluster concurrently with the execution of this helper.
-// Appropriate usage of this entails wrapping it under a stabilizing loop, like
-// we do in EveryNode.
-func (h *Helper) requiredNodes(ctx context.Context) (nodes, error) {
-	var ns []node
-	ls, err := h.m.nl.GetLivenessesFromKV(ctx)
+// UpdateProgress is used to update the externally visible progress indicator
+// (accessible using the `progress` column in `system.migrations`) for the
+// ongoing migration.
+func (h *Helper) UpdateProgress(ctx context.Context, progress string) error {
+	const recordProgressStmt = `
+UPDATE system.migrations SET "progress" = $1 WHERE "version" = $2
+`
+	args := []interface{}{progress, h.cv.String()}
+	_, err := h.c.executor().Exec(ctx, "update-progress",
+		nil, recordProgressStmt, args...)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	for _, l := range ls {
-		if l.Membership.Decommissioned() {
-			continue
-		}
-		live, err := h.m.nl.IsLive(l.NodeID)
-		if err != nil {
-			return nil, err
-		}
-		if !live {
-			return nil, errors.Newf("n%d required, but unavailable", l.NodeID)
-		}
-		ns = append(ns, node{id: l.NodeID, epoch: l.Epoch})
-	}
-	return ns, nil
+	return nil
+}
+
+// ClusterVersion exposes the cluster version associated with the ongoing
+// migration.
+func (h *Helper) ClusterVersion() clusterversion.ClusterVersion {
+	return h.cv
+}
+
+// DB provides exposes the underlying *kv.DB instance.
+func (h *Helper) DB() *kv.DB {
+	return h.c.db()
 }
 
 // insertMigrationRecord creates a record in the `system.migrations` table for
@@ -239,22 +251,22 @@ func (h *Helper) requiredNodes(ctx context.Context) (nodes, error) {
 //
 // NB: This only intended user of this is the migration infrastructure itself,
 // not authored migrations.
-func (h *Helper) insertMigrationRecord(
-	ctx context.Context, desc string,
-) error {
+func (h *Helper) insertMigrationRecord(ctx context.Context, desc string) error {
 	// XXX: The ON CONFLICT clause is a stop gap for until I add real tests.
 	// Right now I'm allowing the infrastructure to re-do migrations over and
 	// over.
 	const insertMigrationRecordStmt = `
-INSERT into system.migrations ("version", "status", "description") VALUES ($1, $2, $3) ON CONFLICT ("version") DO UPDATE SET "start" = now()
+INSERT into system.migrations ("version", "status", "description") 
+VALUES ($1, $2, $3) ON CONFLICT ("version") DO UPDATE SET "start" = now()
 `
 	args := []interface{}{
-		h.ClusterVersion().String(),
+		h.cv.String(),
 		StatusRunning,
 		desc,
 	}
 
-	_, err := h.m.executor.Exec(ctx, "insert-migration", nil, insertMigrationRecordStmt, args...)
+	_, err := h.c.executor().Exec(ctx, "insert-migration",
+		nil, insertMigrationRecordStmt, args...)
 	if err != nil {
 		return err
 	}
@@ -269,7 +281,8 @@ INSERT into system.migrations ("version", "status", "description") VALUES ($1, $
 // not authored migrations.
 func (h *Helper) updateStatus(ctx context.Context, status Status) error {
 	const updateStatusStmt = `
-UPDATE system.migrations SET ("status", "completed") = ($1, $2) WHERE "version" = $3
+UPDATE system.migrations SET ("status", "completed") = ($1, $2) 
+WHERE "version" = $3
 `
 	args := []interface{}{
 		status,
@@ -280,9 +293,57 @@ UPDATE system.migrations SET ("status", "completed") = ($1, $2) WHERE "version" 
 	if status == StatusSucceeded {
 		args[1] = timeutil.Now()
 	}
-	_, err := h.m.executor.Exec(ctx, "update-status", nil, updateStatusStmt, args...)
+	_, err := h.c.executor().Exec(ctx, "update-status",
+		nil, updateStatusStmt, args...)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+type clusterImpl struct {
+	nl     nodeLiveness
+	exec   sqlutil.InternalExecutor
+	dialer *nodedialer.Dialer
+	kvDB   *kv.DB
+}
+
+var _ cluster = &clusterImpl{}
+
+// nodes implements the cluster interface.
+func (c *clusterImpl) nodes(ctx context.Context) (nodes, error) {
+	var ns []node
+	ls, err := c.nl.GetLivenessesFromKV(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range ls {
+		if l.Membership.Decommissioned() {
+			continue
+		}
+		live, err := c.nl.IsLive(l.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		if !live {
+			return nil, errors.Newf("n%d required, but unavailable", l.NodeID)
+		}
+		ns = append(ns, node{id: l.NodeID, epoch: l.Epoch})
+	}
+	return ns, nil
+}
+
+// dial implements the cluster interface.
+func (c *clusterImpl) dial(ctx context.Context, id roachpb.NodeID) (*grpc.ClientConn, error) {
+	return c.dialer.Dial(ctx, id, rpc.DefaultClass)
+}
+
+// db implements the cluster interface.
+func (c *clusterImpl) db() *kv.DB {
+	return c.kvDB
+}
+
+// executor implements the cluster interface.
+func (c *clusterImpl) executor() sqlutil.InternalExecutor {
+	return c.exec
 }
