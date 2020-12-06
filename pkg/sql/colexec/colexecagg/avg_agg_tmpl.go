@@ -127,6 +127,7 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
 	// {{end}}
+	execgen.VARIABLESIZE(oldCurSumSize, a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -168,6 +169,10 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	execgen.VARIABLESIZE(newCurSumSize, a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
 }
 
 func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {

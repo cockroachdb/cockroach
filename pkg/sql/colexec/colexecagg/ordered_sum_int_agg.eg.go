@@ -62,6 +62,7 @@ func (a *sumIntInt16OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *sumIntInt16OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -205,6 +206,10 @@ func (a *sumIntInt16OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sumIntInt16OrderedAgg) Flush(outputIdx int) {
@@ -265,6 +270,7 @@ func (a *sumIntInt32OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *sumIntInt32OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -408,6 +414,10 @@ func (a *sumIntInt32OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sumIntInt32OrderedAgg) Flush(outputIdx int) {
@@ -468,6 +478,7 @@ func (a *sumIntInt64OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *sumIntInt64OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -611,6 +622,10 @@ func (a *sumIntInt64OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sumIntInt64OrderedAgg) Flush(outputIdx int) {

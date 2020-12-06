@@ -596,6 +596,34 @@ func (b *argWidthOverloadBase) Window(target, start, end string) string {
 	return b.Slice(target, start, end)
 }
 
+// variableSize is a function that should only be used in templates. It returns
+// a string that contains a code snippet for computing the size of the object
+// named 'value' if it has variable size and assigns it to the variable named
+// 'target' (for fixed sizes the snippet will simply declare the 'target'
+// variable). The value object must be of canonicalTypeFamily representation.
+func variableSize(canonicalTypeFamily types.Family, target, value string) string {
+	switch canonicalTypeFamily {
+	case types.BytesFamily:
+		return fmt.Sprintf(`%s := len(%s)`, target, value)
+	case types.DecimalFamily:
+		return fmt.Sprintf(`%s := tree.SizeOfDecimal(&%s)`, target, value)
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return fmt.Sprintf(`
+		var %[1]s uintptr
+		if %[2]s != nil {
+			%[1]s = %[2]s.(*coldataext.Datum).Size()
+		}`, target, value)
+	default:
+		return fmt.Sprintf(`var %s uintptr`, target)
+	}
+}
+
+// VariableSize is a function that should only be used in templates. See comment
+// on variableSize for more details.
+func (b *argWidthOverloadBase) VariableSize(target, value string) string {
+	return variableSize(b.CanonicalTypeFamily, target, value)
+}
+
 // Remove unused warnings.
 var (
 	lawo = &lastArgWidthOverload{}
@@ -613,6 +641,7 @@ var (
 	_    = awob.AppendSlice
 	_    = awob.AppendVal
 	_    = awob.Window
+	_    = awob.VariableSize
 )
 
 func init() {

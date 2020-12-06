@@ -28,6 +28,7 @@ var (
 	_ = LEN
 	_ = ZERO
 	_ = WINDOW
+	_ = VARIABLESIZE
 )
 
 // COPYVAL is a template function that can be used to set a scalar to the value
@@ -77,6 +78,12 @@ func ZERO(target interface{}) {
 
 // WINDOW is a template function.
 func WINDOW(target, start, end interface{}) interface{} {
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
+	return nil
+}
+
+// VARIABLESIZE is a template function.
+func VARIABLESIZE(target, value interface{}) interface{} {
 	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 	return nil
 }

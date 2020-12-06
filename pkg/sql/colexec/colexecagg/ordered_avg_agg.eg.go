@@ -78,6 +78,7 @@ func (a *avgInt16OrderedAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
+	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -249,6 +250,10 @@ func (a *avgInt16OrderedAgg) Compute(
 		}
 	},
 	)
+	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
 }
 
 func (a *avgInt16OrderedAgg) Flush(outputIdx int) {
@@ -321,6 +326,7 @@ func (a *avgInt32OrderedAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
+	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -492,6 +498,10 @@ func (a *avgInt32OrderedAgg) Compute(
 		}
 	},
 	)
+	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
 }
 
 func (a *avgInt32OrderedAgg) Flush(outputIdx int) {
@@ -564,6 +574,7 @@ func (a *avgInt64OrderedAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
+	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -735,6 +746,10 @@ func (a *avgInt64OrderedAgg) Compute(
 		}
 	},
 	)
+	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
 }
 
 func (a *avgInt64OrderedAgg) Flush(outputIdx int) {
@@ -803,6 +818,7 @@ func (a *avgDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *avgDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -970,6 +986,10 @@ func (a *avgDecimalOrderedAgg) Compute(
 		}
 	},
 	)
+	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
 }
 
 func (a *avgDecimalOrderedAgg) Flush(outputIdx int) {
@@ -1038,6 +1058,7 @@ func (a *avgFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *avgFloat64OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurSumSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -1177,6 +1198,10 @@ func (a *avgFloat64OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurSumSize uintptr
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
 }
 
 func (a *avgFloat64OrderedAgg) Flush(outputIdx int) {
@@ -1241,6 +1266,7 @@ func (a *avgIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *avgIntervalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurSumSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -1360,6 +1386,10 @@ func (a *avgIntervalOrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurSumSize uintptr
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
 }
 
 func (a *avgIntervalOrderedAgg) Flush(outputIdx int) {

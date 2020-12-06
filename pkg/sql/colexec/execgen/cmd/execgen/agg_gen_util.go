@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 const (
@@ -40,3 +42,24 @@ func registerAggGenerator(aggGen generator, filenameSuffix, dep string) {
 		)
 	}
 }
+
+// aggTmplInfoBase is a helper struct used in generating the code of many
+// aggregates serving as a base for calling methods on (whenever
+// lastArgWidthOverload isn't available).
+type aggTmplInfoBase struct {
+	// canonicalTypeFamily is the canonical type family of the current aggregate
+	// object used by the aggregate function.
+	canonicalTypeFamily types.Family
+}
+
+// VariableSize is a function that should only be used in templates. See comment
+// on variableSize for more details.
+func (b aggTmplInfoBase) VariableSize(target, value string) string {
+	return variableSize(b.canonicalTypeFamily, target, value)
+}
+
+// Remove unused warning.
+var (
+	a aggTmplInfoBase
+	_ = a.VariableSize
+)
