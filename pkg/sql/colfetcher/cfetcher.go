@@ -999,7 +999,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			// Populate any system columns in the output.
 			if rf.table.timestampOutputIdx != noOutputColumn {
 				dec := tree.TimestampToDecimal(rf.table.rowLastModified)
-				rf.machine.timestampCol.Set(rf.machine.rowIdx, &dec)
+				rf.machine.timestampCol.Set(rf.machine.rowIdx, dec)
 			}
 			if rf.table.oidOutputIdx != noOutputColumn {
 				rf.machine.tableoidCol[rf.machine.rowIdx] = int64(rf.table.desc.GetID())

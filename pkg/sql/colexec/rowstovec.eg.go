@@ -179,7 +179,7 @@ func EncDatumRowsToColVec(
 
 							v = datum.(*tree.DDecimal).Decimal
 							castV := v.(apd.Decimal)
-							col.Set(i, &castV)
+							col.Set(i, castV)
 						}
 					}
 				}

@@ -168,7 +168,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 							srcCol := vec.Decimal()
 							outCol := o.outDecimalCols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol.Set(outputIdx, &v)
+							outCol.Set(outputIdx, v)
 						}
 					case types.IntFamily:
 						switch o.typs[i].Width() {

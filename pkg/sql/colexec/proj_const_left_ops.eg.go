@@ -3204,7 +3204,7 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -3225,7 +3225,7 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -3251,7 +3251,7 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -3269,7 +3269,7 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -3341,7 +3341,7 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -3362,7 +3362,7 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -3388,7 +3388,7 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -3406,7 +3406,7 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -3478,7 +3478,7 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -3499,7 +3499,7 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -3525,7 +3525,7 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -3543,7 +3543,7 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Add(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -3614,7 +3614,7 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -3636,7 +3636,7 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -3661,7 +3661,7 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -3680,7 +3680,7 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -4128,7 +4128,7 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -4152,7 +4152,7 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -4179,7 +4179,7 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -4200,7 +4200,7 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -4801,7 +4801,7 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -4825,7 +4825,7 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -4852,7 +4852,7 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -4873,7 +4873,7 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -5474,7 +5474,7 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -5498,7 +5498,7 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -5525,7 +5525,7 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -5546,7 +5546,7 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -6896,7 +6896,7 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -6917,7 +6917,7 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -6943,7 +6943,7 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -6961,7 +6961,7 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -7033,7 +7033,7 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -7054,7 +7054,7 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -7080,7 +7080,7 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -7098,7 +7098,7 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -7170,7 +7170,7 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -7191,7 +7191,7 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -7217,7 +7217,7 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -7235,7 +7235,7 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Sub(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -7306,7 +7306,7 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -7328,7 +7328,7 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -7353,7 +7353,7 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -7372,7 +7372,7 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -7820,7 +7820,7 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -7844,7 +7844,7 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -7871,7 +7871,7 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -7892,7 +7892,7 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -8493,7 +8493,7 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -8517,7 +8517,7 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -8544,7 +8544,7 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -8565,7 +8565,7 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -9166,7 +9166,7 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -9190,7 +9190,7 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -9217,7 +9217,7 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -9238,7 +9238,7 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -10878,7 +10878,7 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -10899,7 +10899,7 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -10925,7 +10925,7 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -10943,7 +10943,7 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -11015,7 +11015,7 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -11036,7 +11036,7 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -11062,7 +11062,7 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -11080,7 +11080,7 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -11152,7 +11152,7 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -11173,7 +11173,7 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -11199,7 +11199,7 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -11217,7 +11217,7 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.ExactCtx.Mul(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -11288,7 +11288,7 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -11310,7 +11310,7 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -11335,7 +11335,7 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -11354,7 +11354,7 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -12011,7 +12011,7 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -12035,7 +12035,7 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -12062,7 +12062,7 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -12083,7 +12083,7 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -12720,7 +12720,7 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -12744,7 +12744,7 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -12771,7 +12771,7 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -12792,7 +12792,7 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -13429,7 +13429,7 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -13453,7 +13453,7 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -13480,7 +13480,7 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -13501,7 +13501,7 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -14365,7 +14365,7 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -14390,7 +14390,7 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -14420,7 +14420,7 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -14442,7 +14442,7 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -14518,7 +14518,7 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -14543,7 +14543,7 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -14573,7 +14573,7 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -14595,7 +14595,7 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -14671,7 +14671,7 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -14696,7 +14696,7 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -14726,7 +14726,7 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -14748,7 +14748,7 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -14823,7 +14823,7 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -14849,7 +14849,7 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -14878,7 +14878,7 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -14901,7 +14901,7 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -14976,7 +14976,7 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15000,7 +15000,7 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15029,7 +15029,7 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15050,7 +15050,7 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15125,7 +15125,7 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15149,7 +15149,7 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15178,7 +15178,7 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15199,7 +15199,7 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15274,7 +15274,7 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15298,7 +15298,7 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15327,7 +15327,7 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15348,7 +15348,7 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15425,7 +15425,7 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15453,7 +15453,7 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15484,7 +15484,7 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15509,7 +15509,7 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15584,7 +15584,7 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15608,7 +15608,7 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15637,7 +15637,7 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15658,7 +15658,7 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15733,7 +15733,7 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15757,7 +15757,7 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15786,7 +15786,7 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15807,7 +15807,7 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15882,7 +15882,7 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15906,7 +15906,7 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -15935,7 +15935,7 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -15956,7 +15956,7 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16033,7 +16033,7 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16061,7 +16061,7 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16092,7 +16092,7 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16117,7 +16117,7 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16192,7 +16192,7 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16216,7 +16216,7 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16245,7 +16245,7 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16266,7 +16266,7 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16341,7 +16341,7 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16365,7 +16365,7 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16394,7 +16394,7 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16415,7 +16415,7 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16490,7 +16490,7 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16514,7 +16514,7 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16543,7 +16543,7 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16564,7 +16564,7 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16641,7 +16641,7 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16669,7 +16669,7 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -16700,7 +16700,7 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -16725,7 +16725,7 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -17148,7 +17148,7 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 							if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -17173,7 +17173,7 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 							if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -17203,7 +17203,7 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 						if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -17225,7 +17225,7 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 						if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -17301,7 +17301,7 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 							if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -17326,7 +17326,7 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 							if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -17356,7 +17356,7 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 						if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -17378,7 +17378,7 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 						if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -17454,7 +17454,7 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 							if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -17479,7 +17479,7 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 							if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -17509,7 +17509,7 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 						if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -17531,7 +17531,7 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 						if _, err := tree.HighPrecisionCtx.QuoInteger(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -17606,7 +17606,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -17632,7 +17632,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -17661,7 +17661,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -17684,7 +17684,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -18124,7 +18124,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -18152,7 +18152,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -18183,7 +18183,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -18208,7 +18208,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -18648,7 +18648,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -18676,7 +18676,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -18707,7 +18707,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -18732,7 +18732,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19172,7 +19172,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19200,7 +19200,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19231,7 +19231,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19256,7 +19256,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19461,7 +19461,7 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19486,7 +19486,7 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19516,7 +19516,7 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19538,7 +19538,7 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19614,7 +19614,7 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19639,7 +19639,7 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19669,7 +19669,7 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19691,7 +19691,7 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19767,7 +19767,7 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19792,7 +19792,7 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19822,7 +19822,7 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19844,7 +19844,7 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.HighPrecisionCtx.Rem(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19919,7 +19919,7 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19945,7 +19945,7 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -19974,7 +19974,7 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -19997,7 +19997,7 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -20437,7 +20437,7 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -20465,7 +20465,7 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -20496,7 +20496,7 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -20521,7 +20521,7 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -20961,7 +20961,7 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -20989,7 +20989,7 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -21020,7 +21020,7 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -21045,7 +21045,7 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -21485,7 +21485,7 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -21513,7 +21513,7 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -21544,7 +21544,7 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -21569,7 +21569,7 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -21770,7 +21770,7 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -21791,7 +21791,7 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -21817,7 +21817,7 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -21835,7 +21835,7 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -21907,7 +21907,7 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -21928,7 +21928,7 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -21954,7 +21954,7 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -21972,7 +21972,7 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -22044,7 +22044,7 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -22065,7 +22065,7 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 							if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -22091,7 +22091,7 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -22109,7 +22109,7 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 						if _, err := tree.DecimalCtx.Pow(result, &p.constArg, right); err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -22180,7 +22180,7 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -22202,7 +22202,7 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -22227,7 +22227,7 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -22246,7 +22246,7 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -22766,7 +22766,7 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -22790,7 +22790,7 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -22817,7 +22817,7 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -22838,7 +22838,7 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -23358,7 +23358,7 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -23382,7 +23382,7 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -23409,7 +23409,7 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -23430,7 +23430,7 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -23950,7 +23950,7 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -23974,7 +23974,7 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							projCol.Set(i, &*result)
+							projCol.Set(i, *result)
 						}
 
 					}
@@ -24001,7 +24001,7 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}
@@ -24022,7 +24022,7 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
-						projCol.Set(i, &*result)
+						projCol.Set(i, *result)
 					}
 
 				}

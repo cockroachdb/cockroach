@@ -14,7 +14,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -82,7 +81,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -115,7 +114,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -150,7 +149,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -183,7 +182,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -223,7 +222,7 @@ func (a *sumIntInt16OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		execgen.SET(a.col, outputIdx, a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -289,7 +288,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -322,7 +321,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -357,7 +356,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -390,7 +389,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -430,7 +429,7 @@ func (a *sumIntInt32OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		execgen.SET(a.col, outputIdx, a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -496,7 +495,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -529,7 +528,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -564,7 +563,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -597,7 +596,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 						if !a.foundNonNullForCurrentGroup {
 							a.nulls.SetNull(a.curIdx)
 						} else {
-							execgen.SET(a.col, a.curIdx, a.curAgg)
+							a.col.Set(a.curIdx, a.curAgg)
 						}
 						a.curIdx++
 						a.curAgg = zeroInt64Value
@@ -637,7 +636,7 @@ func (a *sumIntInt64OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		execgen.SET(a.col, outputIdx, a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 

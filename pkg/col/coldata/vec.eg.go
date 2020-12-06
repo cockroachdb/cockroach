@@ -416,7 +416,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							} else {
 								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
-								toCol.Set(selIdx, &v)
+								toCol.Set(selIdx, v)
 							}
 						}
 						return
@@ -425,7 +425,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
 						v := fromCol.Get(selIdx)
-						toCol.Set(selIdx, &v)
+						toCol.Set(selIdx, v)
 					}
 				} else {
 					if args.Src.MaybeHasNulls() {
@@ -435,7 +435,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
 								v := fromCol.Get(selIdx)
-								toCol.Set(i+args.DestIdx, &v)
+								toCol.Set(i+args.DestIdx, v)
 							}
 						}
 						return
@@ -444,7 +444,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
 						v := fromCol.Get(selIdx)
-						toCol.Set(i+args.DestIdx, &v)
+						toCol.Set(i+args.DestIdx, v)
 					}
 				}
 				return
@@ -986,7 +986,7 @@ func SetValueAt(v Vec, elem interface{}, rowIdx int) {
 		default:
 			target := v.Decimal()
 			newVal := elem.(apd.Decimal)
-			target.Set(rowIdx, &newVal)
+			target.Set(rowIdx, newVal)
 		}
 	case types.IntFamily:
 		switch t.Width() {

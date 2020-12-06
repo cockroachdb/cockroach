@@ -578,7 +578,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 		// setColVal is used in multiple places, therefore val can be either a float
 		// or apd.Decimal.
 		if decimalVal, ok := val.(apd.Decimal); ok {
-			vec.Decimal().Set(idx, &decimalVal)
+			vec.Decimal().Set(idx, decimalVal)
 		} else {
 			floatVal := val.(float64)
 			decimalVal, _, err := apd.NewFromString(fmt.Sprintf("%f", floatVal))
@@ -589,7 +589,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			// .Set is used here instead of assignment to ensure the pointer address
 			// of the underlying storage for apd.Decimal remains the same. This can
 			// cause the code that does not properly use execgen package to fail.
-			vec.Decimal().Set(idx, decimalVal)
+			vec.Decimal().Set(idx, *decimalVal)
 		}
 	} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 		switch v := val.(type) {

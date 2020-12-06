@@ -87,6 +87,8 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	)
 	s := r.Replace(inputFileContents)
 
+	s = replaceManipulationFuncs(s)
+
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
 	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 6))
 

@@ -54,7 +54,7 @@ func (a avgTmplInfo) AssignDivInt64(targetIdx, leftElem, rightElem, targetCol, _
 		  if _, err := tree.DecimalCtx.Quo(&d, &%s, &d); err != nil {
 		  	colexecerror.InternalError(err)
 		  }
-		  %s.Set(%s, &d)`,
+		  %s.Set(%s, d)`,
 			rightElem, leftElem, targetCol, targetIdx,
 		)
 	case toVecMethod(types.FloatFamily, anyWidth):

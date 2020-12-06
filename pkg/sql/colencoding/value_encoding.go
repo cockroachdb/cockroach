@@ -79,7 +79,7 @@ func decodeUntaggedDatumToCol(
 	case types.DecimalFamily:
 		var d apd.Decimal
 		buf, err = encoding.DecodeIntoUntaggedDecimalValue(&d, buf)
-		vec.Decimal().Set(idx, &d)
+		vec.Decimal().Set(idx, d)
 	case types.FloatFamily:
 		var f float64
 		buf, f, err = encoding.DecodeUntaggedFloatValue(buf)

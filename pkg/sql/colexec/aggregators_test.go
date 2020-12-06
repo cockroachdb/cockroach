@@ -1097,7 +1097,7 @@ func benchmarkAggregateFunction(
 func BenchmarkAggregator(b *testing.B) {
 	aggFn := execinfrapb.AggregatorSpec_MIN
 	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
-	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
+	groupSizes := []int{128}
 	if testing.Short() {
 		numRows = []int{32, 32 * coldata.BatchSize()}
 		groupSizes = []int{1, coldata.BatchSize()}

@@ -8941,7 +8941,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, &val)
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -9590,7 +9590,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 										} else {
 											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, &val)
+												outCol.Set(outStartIdx, val)
 												outStartIdx++
 											}
 										}
@@ -10232,7 +10232,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx)
 									for i := 0; i < toAppend; i++ {
-										outCol.Set(outStartIdx, &val)
+										outCol.Set(outStartIdx, val)
 										outStartIdx++
 									}
 								}
@@ -10843,7 +10843,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, &v)
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
@@ -11535,7 +11535,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 												outNulls.SetNull(outStartIdx)
 											} else {
 												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, &v)
+												outCol.Set(outStartIdx, v)
 											}
 										} else {
 											out.Copy(
@@ -12175,7 +12175,7 @@ func (o *mergeJoinLeftAntiOp) buildRightBufferedGroup(
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx)
-										outCol.Set(outStartIdx, &v)
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(

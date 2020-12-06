@@ -113,7 +113,7 @@ func RandomVec(args RandomVecArgs) {
 				}
 				break
 			}
-			decs.Set(i, &d)
+			decs.Set(i, d)
 		}
 	case types.IntFamily:
 		switch args.Vec.Type().Width() {

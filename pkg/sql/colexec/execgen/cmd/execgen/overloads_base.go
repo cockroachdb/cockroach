@@ -471,7 +471,7 @@ func set(canonicalTypeFamily types.Family, target, i, new string) string {
 	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 	case types.DecimalFamily:
-		return fmt.Sprintf("%s.Set(%s, &%s)", target, i, new)
+		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 	}
 	return fmt.Sprintf("%s[%s] = %s", target, i, new)
 }

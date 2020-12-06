@@ -279,7 +279,7 @@ func (c constDecimalOp) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					col.Set(i, &c.constVal)
+					col.Set(i, c.constVal)
 				}
 			} else {
 				col = col
@@ -287,7 +287,7 @@ func (c constDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = n
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					col.Set(i, &c.constVal)
+					col.Set(i, c.constVal)
 				}
 			}
 		},
