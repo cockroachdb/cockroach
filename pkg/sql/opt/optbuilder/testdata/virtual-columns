@@ -1,0 +1,37 @@
+exec-ddl
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT AS (a+b) VIRTUAL
+)
+----
+
+build
+SELECT * FROM t
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── project
+      ├── columns: c:3 a:1!null b:2 crdb_internal_mvcc_timestamp:4
+      ├── scan t
+      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:4
+      │    └── computed column expressions
+      │         └── c:3
+      │              └── a:1 + b:2
+      └── projections
+           └── a:1 + b:2 [as=c:3]
+
+build
+SELECT c FROM t
+----
+project
+ ├── columns: c:3
+ └── project
+      ├── columns: c:3 a:1!null b:2 crdb_internal_mvcc_timestamp:4
+      ├── scan t
+      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:4
+      │    └── computed column expressions
+      │         └── c:3
+      │              └── a:1 + b:2
+      └── projections
+           └── a:1 + b:2 [as=c:3]
