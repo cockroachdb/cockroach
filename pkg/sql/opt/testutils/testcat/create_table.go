@@ -514,17 +514,29 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	}
 
 	var col cat.Column
-	col.InitNonVirtual(
-		ordinal,
-		cat.StableID(1+ordinal),
-		name,
-		kind,
-		typ,
-		nullable,
-		false, /* hidden */
-		defaultExpr,
-		computedExpr,
-	)
+	if def.Computed.Virtual {
+		col.InitVirtualComputed(
+			ordinal,
+			cat.StableID(1+ordinal),
+			name,
+			typ,
+			nullable,
+			false, /* hidden */
+			*computedExpr,
+		)
+	} else {
+		col.InitNonVirtual(
+			ordinal,
+			cat.StableID(1+ordinal),
+			name,
+			kind,
+			typ,
+			nullable,
+			false, /* hidden */
+			defaultExpr,
+			computedExpr,
+		)
+	}
 	tt.Columns = append(tt.Columns, col)
 }
 
@@ -820,9 +832,11 @@ func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 	var col cat.Column
 	col.InitVirtualComputed(
 		len(tt.Columns),
+		cat.StableID(1+len(tt.Columns)),
 		name,
 		typ,
 		true, /* nullable */
+		true, /* hidden */
 		exprStr,
 	)
 	tt.Columns = append(tt.Columns, col)
