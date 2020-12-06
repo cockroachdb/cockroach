@@ -41,11 +41,12 @@ func (d *Decimals) AppendVal(v apd.Decimal) {
 		panic("AppendVal is called on a window into Decimal")
 	}
 	d.maybeBackfillOffsets(d.Len())
+	n := len(d.data)
 	d.data = encoding.EncodeFlatDecimal(&v, d.data)
 	d.maxSetIndex = d.Len()
 	d.offsets = append(d.offsets, int32(len(d.data)))
-	b := d.Bytes.Get(d.maxSetIndex)
 	var slice []big.Word
+	b := d.data[n:]
 	if len(b) > 0 {
 		slice = encoding.WordSliceFromByteSlice(b)
 	}
@@ -90,11 +91,12 @@ func (d *Decimals) Set(i int, v apd.Decimal) {
 	// NULL values that are stored separately. In order to maintain the
 	// assumption of non-decreasing offsets, we need to backfill them.
 	d.maybeBackfillOffsets(i)
+	n := len(d.data)
 	d.data = encoding.EncodeFlatDecimal(&v, d.data)
 	d.offsets[i+1] = int32(len(d.data))
 	d.maxSetIndex = i
 	if v.Coeff.BitLen() > 0 {
-		b := d.Bytes.Get(i)
+		b := d.data[n:]
 		slice := encoding.WordSliceFromByteSlice(b)
 		v.Coeff.SetBits(slice)
 	}

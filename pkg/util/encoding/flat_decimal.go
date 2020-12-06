@@ -68,15 +68,7 @@ func WordSliceFromByteSlice(b []byte) []big.Word {
 // FlatDecimalLen returns the number of bytes in the flat-bytes encoded version
 // of the input decimal.
 func FlatDecimalLen(decimal *apd.Decimal) int {
-	coeffWords := decimal.Coeff.Bits()
-	headerLen, coeffBytes := flatDecimalLenFromBits(coeffWords)
-	return headerLen + coeffBytes
-}
-
-func flatDecimalLenFromBits(bits []big.Word) (headerLen, coeffBytes int) {
-	nCoeffBytes := WordLen(bits)
-	// See below for the layout of a flat decimal.
-	return 1 + 1 + (2 * int(unsafe.Sizeof(int32(0)))), nCoeffBytes
+	return WordLen(decimal.Coeff.Bits())
 }
 
 // EncodeFlatDecimal encodes the input decimal into the input byte slice.
@@ -92,26 +84,16 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	// entire coefficient of the decimal. We need to reserve space for the
 	// coefficient all at once, to prevent copy() from getting flummoxed by
 	// running off the end of the slice its handed.
-	_, nCoeffBytes := flatDecimalLenFromBits(coeffWords)
-	//nBytes := headerLen + nCoeffBytes
-	nBytes := nCoeffBytes
+	nCoeffBytes := WordLen(coeffWords)
 
 	l := len(appendTo)
-	if cap(appendTo) < len(appendTo)+nBytes {
-		appendTo = append(appendTo, make([]byte, nBytes)...)
+	if cap(appendTo) < len(appendTo)+nCoeffBytes {
+		appendTo = append(appendTo, make([]byte, nCoeffBytes)...)
 	} else {
-		appendTo = appendTo[:len(appendTo)+nBytes]
+		appendTo = appendTo[:len(appendTo)+nCoeffBytes]
 	}
 	decimalSlice := appendTo[l:]
 
-	//decimalSlice[0] = byte(decimal.Form)
-	//var negativeByte byte
-	//if decimal.Negative {
-	//	negativeByte = 1
-	//}
-	//decimalSlice[1] = negativeByte
-	//nativeEndian.PutUint32(decimalSlice[2:], uint32(decimal.Exponent))
-	//nativeEndian.PutUint32(decimalSlice[6:], uint32(nCoeffBytes))
 	if nCoeffBytes > 0 {
 		coeffBytes := byteSliceFromWordSlice(coeffWords)
 		copy(decimalSlice, coeffBytes)
