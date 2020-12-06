@@ -12,6 +12,7 @@ package coldata
 
 import (
 	"fmt"
+	"math/big"
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
@@ -25,7 +26,10 @@ func (d *Decimals) AppendSlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx in
 	d.decimals = append(d.decimals[:destIdx], src.decimals[srcStartIdx:srcEndIdx]...)
 	for i := range d.decimals[destIdx : destIdx+(srcEndIdx-srcStartIdx)] {
 		b := d.Bytes.Get(destIdx + i)
-		slice := encoding.WordSliceFromByteSlice(b)
+		var slice []big.Word
+		if len(b) > 0 {
+			slice = encoding.WordSliceFromByteSlice(b)
+		}
 		d.decimals[destIdx+i].Coeff.SetBits(slice)
 	}
 }
@@ -40,7 +44,11 @@ func (d *Decimals) AppendVal(v apd.Decimal) {
 	d.data = encoding.EncodeFlatDecimal(&v, d.data)
 	d.maxSetIndex = d.Len()
 	d.offsets = append(d.offsets, int32(len(d.data)))
-	slice := encoding.WordSliceFromByteSlice(d.Bytes.Get(d.maxSetIndex))
+	b := d.Bytes.Get(d.maxSetIndex)
+	var slice []big.Word
+	if len(b) > 0 {
+		slice = encoding.WordSliceFromByteSlice(b)
+	}
 	v.Coeff.SetBits(slice)
 	d.decimals = append(d.decimals, v)
 }
@@ -51,9 +59,12 @@ func (d *Decimals) AppendVal(v apd.Decimal) {
 func (d *Decimals) CopySlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int) {
 	d.Bytes.CopySlice(&src.Bytes, destIdx, srcStartIdx, srcEndIdx)
 	copy(d.decimals[destIdx:], src.decimals[srcStartIdx:srcEndIdx])
-	for i := range d.decimals[destIdx:(srcEndIdx - srcStartIdx)] {
+	for i := range d.decimals[destIdx : destIdx+(srcEndIdx-srcStartIdx)] {
 		b := d.Bytes.Get(destIdx + i)
-		slice := encoding.WordSliceFromByteSlice(b)
+		var slice []big.Word
+		if len(b) > 0 {
+			slice = encoding.WordSliceFromByteSlice(b)
+		}
 		d.decimals[destIdx+i].Coeff.SetBits(slice)
 	}
 }
