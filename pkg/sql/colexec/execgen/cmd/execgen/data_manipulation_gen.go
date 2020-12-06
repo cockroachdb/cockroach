@@ -59,6 +59,11 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 		numArgs:             3,
 		replaceWith:         "Window",
 	},
+	{
+		templatePlaceholder: "execgen.SETVARIABLESIZE",
+		numArgs:             2,
+		replaceWith:         "SetVariableSize",
+	},
 }
 
 func init() {

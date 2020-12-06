@@ -114,6 +114,7 @@ func (a *minBoolOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minBoolOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -315,6 +316,10 @@ func (a *minBoolOrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minBoolOrderedAgg) Flush(outputIdx int) {
@@ -549,7 +554,9 @@ func (a *minBytesOrderedAgg) Compute(
 	},
 	)
 	newCurAggSize := len(a.curAgg)
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minBytesOrderedAgg) Flush(outputIdx int) {
@@ -614,6 +621,7 @@ func (a *minDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -783,6 +791,10 @@ func (a *minDecimalOrderedAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minDecimalOrderedAgg) Flush(outputIdx int) {
@@ -844,6 +856,7 @@ func (a *minInt16OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minInt16OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -1057,6 +1070,10 @@ func (a *minInt16OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minInt16OrderedAgg) Flush(outputIdx int) {
@@ -1118,6 +1135,7 @@ func (a *minInt32OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minInt32OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -1331,6 +1349,10 @@ func (a *minInt32OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minInt32OrderedAgg) Flush(outputIdx int) {
@@ -1392,6 +1414,7 @@ func (a *minInt64OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minInt64OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -1605,6 +1628,10 @@ func (a *minInt64OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minInt64OrderedAgg) Flush(outputIdx int) {
@@ -1666,6 +1693,7 @@ func (a *minFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minFloat64OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -1911,6 +1939,10 @@ func (a *minFloat64OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minFloat64OrderedAgg) Flush(outputIdx int) {
@@ -1972,6 +2004,7 @@ func (a *minTimestampOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minTimestampOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -2169,6 +2202,10 @@ func (a *minTimestampOrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minTimestampOrderedAgg) Flush(outputIdx int) {
@@ -2230,6 +2267,7 @@ func (a *minIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minIntervalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -2399,6 +2437,10 @@ func (a *minIntervalOrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minIntervalOrderedAgg) Flush(outputIdx int) {
@@ -2460,6 +2502,7 @@ func (a *minDatumOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minDatumOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
 		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
@@ -2641,11 +2684,14 @@ func (a *minDatumOrderedAgg) Compute(
 		}
 	},
 	)
+
 	var newCurAggSize uintptr
 	if a.curAgg != nil {
 		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
 	}
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *minDatumOrderedAgg) Flush(outputIdx int) {
@@ -2712,6 +2758,7 @@ func (a *maxBoolOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxBoolOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -2913,6 +2960,10 @@ func (a *maxBoolOrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxBoolOrderedAgg) Flush(outputIdx int) {
@@ -3147,7 +3198,9 @@ func (a *maxBytesOrderedAgg) Compute(
 	},
 	)
 	newCurAggSize := len(a.curAgg)
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxBytesOrderedAgg) Flush(outputIdx int) {
@@ -3212,6 +3265,7 @@ func (a *maxDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -3381,6 +3435,10 @@ func (a *maxDecimalOrderedAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxDecimalOrderedAgg) Flush(outputIdx int) {
@@ -3442,6 +3500,7 @@ func (a *maxInt16OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxInt16OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -3655,6 +3714,10 @@ func (a *maxInt16OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxInt16OrderedAgg) Flush(outputIdx int) {
@@ -3716,6 +3779,7 @@ func (a *maxInt32OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxInt32OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -3929,6 +3993,10 @@ func (a *maxInt32OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxInt32OrderedAgg) Flush(outputIdx int) {
@@ -3990,6 +4058,7 @@ func (a *maxInt64OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxInt64OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -4203,6 +4272,10 @@ func (a *maxInt64OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxInt64OrderedAgg) Flush(outputIdx int) {
@@ -4264,6 +4337,7 @@ func (a *maxFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxFloat64OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -4509,6 +4583,10 @@ func (a *maxFloat64OrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxFloat64OrderedAgg) Flush(outputIdx int) {
@@ -4570,6 +4648,7 @@ func (a *maxTimestampOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxTimestampOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -4767,6 +4846,10 @@ func (a *maxTimestampOrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxTimestampOrderedAgg) Flush(outputIdx int) {
@@ -4828,6 +4911,7 @@ func (a *maxIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxIntervalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -4997,6 +5081,10 @@ func (a *maxIntervalOrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxIntervalOrderedAgg) Flush(outputIdx int) {
@@ -5058,6 +5146,7 @@ func (a *maxDatumOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxDatumOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
 		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
@@ -5239,11 +5328,14 @@ func (a *maxDatumOrderedAgg) Compute(
 		}
 	},
 	)
+
 	var newCurAggSize uintptr
 	if a.curAgg != nil {
 		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
 	}
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *maxDatumOrderedAgg) Flush(outputIdx int) {

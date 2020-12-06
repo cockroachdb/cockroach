@@ -73,7 +73,9 @@ func (a *concatHashAgg) Compute(
 	},
 	)
 	newCurAggSize := len(a.curAgg)
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *concatHashAgg) Flush(outputIdx int) {

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
@@ -110,6 +111,7 @@ func (a *anyNotNullBoolHashAgg) Compute(
 		return
 	}
 
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -159,6 +161,10 @@ func (a *anyNotNullBoolHashAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullBoolHashAgg) Flush(outputIdx int) {
@@ -269,7 +275,9 @@ func (a *anyNotNullBytesHashAgg) Compute(
 	},
 	)
 	newCurAggSize := len(a.curAgg)
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullBytesHashAgg) Flush(outputIdx int) {
@@ -332,6 +340,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 		return
 	}
 
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -381,6 +390,10 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 		}
 	},
 	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullDecimalHashAgg) Flush(outputIdx int) {
@@ -440,6 +453,7 @@ func (a *anyNotNullInt16HashAgg) Compute(
 		return
 	}
 
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -489,6 +503,10 @@ func (a *anyNotNullInt16HashAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullInt16HashAgg) Flush(outputIdx int) {
@@ -548,6 +566,7 @@ func (a *anyNotNullInt32HashAgg) Compute(
 		return
 	}
 
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -597,6 +616,10 @@ func (a *anyNotNullInt32HashAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullInt32HashAgg) Flush(outputIdx int) {
@@ -656,6 +679,7 @@ func (a *anyNotNullInt64HashAgg) Compute(
 		return
 	}
 
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -705,6 +729,10 @@ func (a *anyNotNullInt64HashAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullInt64HashAgg) Flush(outputIdx int) {
@@ -764,6 +792,7 @@ func (a *anyNotNullFloat64HashAgg) Compute(
 		return
 	}
 
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -813,6 +842,10 @@ func (a *anyNotNullFloat64HashAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullFloat64HashAgg) Flush(outputIdx int) {
@@ -872,6 +905,7 @@ func (a *anyNotNullTimestampHashAgg) Compute(
 		return
 	}
 
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -921,6 +955,10 @@ func (a *anyNotNullTimestampHashAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullTimestampHashAgg) Flush(outputIdx int) {
@@ -980,6 +1018,7 @@ func (a *anyNotNullIntervalHashAgg) Compute(
 		return
 	}
 
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -1029,6 +1068,10 @@ func (a *anyNotNullIntervalHashAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullIntervalHashAgg) Flush(outputIdx int) {
@@ -1141,11 +1184,14 @@ func (a *anyNotNullDatumHashAgg) Compute(
 		}
 	},
 	)
+
 	var newCurAggSize uintptr
 	if a.curAgg != nil {
 		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
 	}
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *anyNotNullDatumHashAgg) Flush(outputIdx int) {
