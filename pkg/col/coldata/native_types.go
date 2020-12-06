@@ -76,7 +76,7 @@ func (c Float64s) Get(idx int) float64 { return c[idx] }
 // Get returns the element at index idx of the vector. The element cannot be
 // used anymore once the vector is modified.
 //gcassert:inline
-func (c Decimals) Get(idx int) apd.Decimal {
+func (c *Decimals) Get(idx int) apd.Decimal {
 	return c.decimals[idx]
 }
 
