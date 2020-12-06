@@ -308,6 +308,8 @@ const (
 	ShowRegionsFromDatabase
 	// ShowRegionsFromAllDatabases represents SHOW REGIONS FROM ALL DATABASES.
 	ShowRegionsFromAllDatabases
+	// ShowRegionsFromDefault represents SHOW REGIONS.
+	ShowRegionsFromDefault
 )
 
 // ShowRegions represents a SHOW REGIONS statement
@@ -318,18 +320,19 @@ type ShowRegions struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRegions) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW REGIONS ")
+	ctx.WriteString("SHOW REGIONS")
 	switch node.ShowRegionsFrom {
+	case ShowRegionsFromDefault:
 	case ShowRegionsFromAllDatabases:
-		ctx.WriteString("FROM ALL DATABASES")
+		ctx.WriteString(" FROM ALL DATABASES")
 	case ShowRegionsFromDatabase:
-		ctx.WriteString("FROM DATABASE")
+		ctx.WriteString(" FROM DATABASE")
 		if node.DatabaseName != "" {
 			ctx.WriteString(" ")
 			node.DatabaseName.Format(ctx)
 		}
 	case ShowRegionsFromCluster:
-		ctx.WriteString("FROM CLUSTER")
+		ctx.WriteString(" FROM CLUSTER")
 	default:
 		panic(fmt.Sprintf("unknown ShowRegionsFrom: %v", node.ShowRegionsFrom))
 	}

@@ -110,6 +110,43 @@ ORDER BY
 		)
 
 		return parse(query)
+	case tree.ShowRegionsFromDefault:
+		sqltelemetry.IncrementShowCounter(sqltelemetry.Regions)
+
+		query := fmt.Sprintf(
+			`
+WITH databases_by_region(region, database_names) AS (
+	SELECT
+		region,
+		array_agg(name) as database_names
+	FROM [
+		SELECT
+			name,
+			unnest(regions) AS region
+		FROM crdb_internal.databases
+	] GROUP BY region
+),
+databases_by_primary_region(region, database_names) AS (
+	SELECT
+		primary_region,
+		array_agg(name)
+	FROM crdb_internal.databases
+	GROUP BY primary_region
+),
+zones_table(region, zones) AS (%s)
+SELECT
+	zones_table.region,
+	zones_table.zones,
+	COALESCE(databases_by_region.database_names, '{}'::string[]) AS database_names,
+	COALESCE(databases_by_primary_region.database_names, '{}'::string[]) AS primary_region_of
+FROM zones_table
+LEFT JOIN databases_by_region ON (zones_table.region = databases_by_region.region)
+LEFT JOIN databases_by_primary_region ON (zones_table.region = databases_by_primary_region.region)
+ORDER BY zones_table.region
+`,
+			zonesClause,
+		)
+		return parse(query)
 	}
 	return nil, errors.Newf("unhandled ShowRegionsFrom: %v", n.ShowRegionsFrom)
 }
