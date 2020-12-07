@@ -16,16 +16,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 )
 
-// Registry defines the global mapping between a cluster version, and the
+// registry defines the global mapping between a cluster version and the
 // associated migration. The migration is only executed after a cluster-wide
-// bump of the version gate.
-var Registry = make(map[clusterversion.ClusterVersion]Migration)
+// bump of the corresponding version gate.
+var registry = make(map[clusterversion.ClusterVersion]Migration)
 
 func init() {
 	// TODO(irfansharif): We'll want to register individual migrations with
 	// specific internal cluster versions here.
-	//
-	//  Registry[clusterversion.ByKey(clusterversion.VersionWhatever)] = WhateverMigration
+	_ = register // register(clusterversion.WhateverMigration, WhateverMigration, "whatever migration")
 }
 
 // Migration defines a program to be executed once every node in the cluster is

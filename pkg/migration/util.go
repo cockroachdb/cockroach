@@ -64,3 +64,13 @@ func fenceVersionFor(
 	fenceCV.Internal--
 	return fenceCV
 }
+
+// register is a short hand to register a given migration within the global
+// registry.
+func register(key clusterversion.Key, fn migrationFn, desc string) {
+	cv := clusterversion.ClusterVersion{Version: clusterversion.ByKey(key)}
+	if _, ok := registry[cv]; ok {
+		log.Fatalf(context.Background(), "doubly registering migration for %s", cv)
+	}
+	registry[cv] = Migration{cv: cv, fn: fn, desc: desc}
+}
