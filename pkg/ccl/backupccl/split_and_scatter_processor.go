@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -34,7 +35,7 @@ type splitAndScatterer interface {
 	// splitAndScatterSpan issues a split request at a given key and then scatters
 	// the range around the cluster. It returns the node ID of the leaseholder of
 	// the span after the scatter.
-	splitAndScatterKey(ctx context.Context, db *kv.DB, kr *storageccl.KeyRewriter, key roachpb.Key, randomizeLeases bool) (roachpb.NodeID, error)
+	splitAndScatterKey(ctx context.Context, codec keys.SQLCodec, db *kv.DB, kr *storageccl.KeyRewriter, key roachpb.Key, randomizeLeases bool) (roachpb.NodeID, error)
 }
 
 // dbSplitAndScatter is the production implementation of this processor's
@@ -47,10 +48,15 @@ type dbSplitAndScatterer struct{}
 // to which the span was scattered. If the destination node could not be
 // determined, node ID of 0 is returned.
 func (s dbSplitAndScatterer) splitAndScatterKey(
-	ctx context.Context, db *kv.DB, kr *storageccl.KeyRewriter, key roachpb.Key, randomizeLeases bool,
+	ctx context.Context,
+	codec keys.SQLCodec,
+	db *kv.DB,
+	kr *storageccl.KeyRewriter,
+	key roachpb.Key,
+	randomizeLeases bool,
 ) (roachpb.NodeID, error) {
 	expirationTime := db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	newSpanKey, err := rewriteBackupSpanKey(kr, key)
+	newSpanKey, err := rewriteBackupSpanKey(codec, kr, key)
 	if err != nil {
 		return 0, err
 	}
@@ -231,7 +237,7 @@ func runSplitAndScatter(
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(importSpanChunksCh)
 		for _, importSpanChunk := range spec.Chunks {
-			_, err := scatterer.splitAndScatterKey(ctx, db, kr, importSpanChunk.Entries[0].Span.Key, true /* randomizeLeases */)
+			_, err := scatterer.splitAndScatterKey(ctx, flowCtx.Codec(), db, kr, importSpanChunk.Entries[0].Span.Key, true /* randomizeLeases */)
 			if err != nil {
 				return err
 			}
@@ -254,7 +260,7 @@ func runSplitAndScatter(
 				log.Infof(ctx, "processing a chunk")
 				for _, importSpan := range importSpanChunk {
 					log.Infof(ctx, "processing a span [%s,%s)", importSpan.Span.Key, importSpan.Span.EndKey)
-					destination, err := scatterer.splitAndScatterKey(ctx, db, kr, importSpan.Span.Key, false /* randomizeLeases */)
+					destination, err := scatterer.splitAndScatterKey(ctx, flowCtx.Codec(), db, kr, importSpan.Span.Key, false /* randomizeLeases */)
 					if err != nil {
 						return err
 					}

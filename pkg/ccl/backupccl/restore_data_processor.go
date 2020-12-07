@@ -130,7 +130,7 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		return nil, rd.DrainHelper()
 	}
 
-	newSpanKey, err := rewriteBackupSpanKey(rd.kr, entry.Span.Key)
+	newSpanKey, err := rewriteBackupSpanKey(rd.flowCtx.Codec(), rd.kr, entry.Span.Key)
 	if err != nil {
 		rd.MoveToDraining(errors.Wrap(err, "re-writing span key to import"))
 		return nil, rd.DrainHelper()

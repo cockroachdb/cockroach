@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -40,7 +41,7 @@ type mockScatterer struct {
 // This mock implementation of the split and scatterer simulates a scattering of
 // ranges.
 func (s *mockScatterer) splitAndScatterKey(
-	_ context.Context, _ *kv.DB, _ *storageccl.KeyRewriter, _ roachpb.Key, _ bool,
+	_ context.Context, _ keys.SQLCodec, _ *kv.DB, _ *storageccl.KeyRewriter, _ roachpb.Key, _ bool,
 ) (roachpb.NodeID, error) {
 	s.Lock()
 	defer s.Unlock()
