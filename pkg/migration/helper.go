@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -142,6 +143,73 @@ func (h *Helper) EveryNode(
 		}
 
 		break
+	}
+
+	return nil
+}
+
+// IterateRangeDescriptors provides a handle on every range descriptor in the
+// system, which callers can then use to send out arbitrary KV requests to in
+// order to run arbitrary KV-level migrations. These requests will typically
+// just be the `Migrate` request, with code added within [1] to do the specific
+// things intended for the specified version.
+//
+// It's important to note that the closure is being executed in the context of a
+// distributed transaction that may be automatically retried. So something like
+// the following is an anti-pattern:
+//
+//     processed := 0
+//     _ = h.IterateRangeDescriptors(...,
+//         func(descriptors ...roachpb.RangeDescriptor) error {
+//             processed += len(descriptors) // we'll over count if retried
+//             log.Infof(ctx, "processed %d ranges", processed)
+//         },
+//     )
+//
+// Instead we allow callers to pass in a callback to signal on every attempt
+// (including the first). This lets us salvage the example above:
+//
+//     var processed int
+//     init := func() { processed = 0 }
+//     _ = h.IterateRangeDescriptors(..., init,
+//         func(descriptors ...roachpb.RangeDescriptor) error {
+//             processed += len(descriptors)
+//             log.Infof(ctx, "processed %d ranges", processed)
+//         },
+//     )
+//
+// [1]: pkg/kv/kvserver/batch_eval/cmd_migrate.go
+func (h *Helper) IterateRangeDescriptors(
+	ctx context.Context, blockSize int, init func(), fn func(...roachpb.RangeDescriptor) error,
+) error {
+	if err := h.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Inform the caller that we're starting a fresh attempt to page in
+		// range descriptors.
+		init()
+
+		// Iterate through meta2 to pull out all the range descriptors.
+		return txn.Iterate(ctx, keys.Meta2Prefix, keys.MetaMax, blockSize,
+			func(rows []kv.KeyValue) error {
+				descriptors := make([]roachpb.RangeDescriptor, len(rows))
+				for i, row := range rows {
+					if err := row.ValueProto(&descriptors[i]); err != nil {
+						return errors.Wrapf(err,
+							"unable to unmarshal range descriptor from %s",
+							row.Key,
+						)
+					}
+				}
+
+				// Invoke fn with the current chunk (of size ~blockSize) of
+				// range descriptors.
+				if err := fn(descriptors...); err != nil {
+					return err
+				}
+
+				return nil
+			})
+	}); err != nil {
+		return err
 	}
 
 	return nil
