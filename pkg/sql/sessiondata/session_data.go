@@ -219,6 +219,11 @@ type LocalOnlySessionData struct {
 	// TODO(mgartner): remove this once multi-column inverted indexes are fully
 	// supported.
 	EnableMultiColumnInvertedIndexes bool
+	// EnableUniqueWithoutIndexConstraints indicates whether creating unique
+	// constraints without an index is allowed.
+	// TODO(rytaft): remove this once unique without index constraints are fully
+	// supported.
+	EnableUniqueWithoutIndexConstraints bool
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //
