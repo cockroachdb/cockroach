@@ -53,27 +53,33 @@ SELECT ns.nspname AS schema_name,
        ELSE 'table'
        END AS type,
        rl.rolname AS owner,
-       s.estimated_row_count AS estimated_row_count
+       s.estimated_row_count AS estimated_row_count,
+       ct.locality AS locality
        %[3]s
-  FROM %[1]s.pg_catalog.pg_class AS pc
-  LEFT JOIN %[1]s.pg_catalog.pg_roles AS rl on (pc.relowner = rl.oid)
-  JOIN %[1]s.pg_catalog.pg_namespace AS ns ON (ns.oid = pc.relnamespace)
-  LEFT
-  JOIN %[1]s.pg_catalog.pg_description AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0)
-  LEFT
-  JOIN crdb_internal.table_row_statistics AS s on (s.table_id = pc.oid::INT8)
- WHERE pc.relkind IN ('r', 'v', 'S', 'm') %[2]s
- ORDER BY schema_name, table_name
+FROM %[1]s.pg_catalog.pg_class AS pc
+LEFT JOIN %[1]s.pg_catalog.pg_roles AS rl on (pc.relowner = rl.oid)
+JOIN %[1]s.pg_catalog.pg_namespace AS ns ON (ns.oid = pc.relnamespace)
+%[4]s
+LEFT JOIN crdb_internal.table_row_statistics AS s ON (s.table_id = pc.oid::INT8)
+LEFT JOIN crdb_internal.tables AS ct ON (pc.oid::int8 = ct.table_id)
+WHERE pc.relkind IN ('r', 'v', 'S', 'm') %[2]s
+ORDER BY schema_name, table_name
 `
+	var descJoin string
 	var comment string
 	if n.WithComment {
-		comment = `, COALESCE(pd.description, '')       AS comment`
+		descJoin = fmt.Sprintf(
+			`LEFT JOIN %s.pg_catalog.pg_description AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0)`,
+			&name.CatalogName,
+		)
+		comment = `, COALESCE(pd.description, '') AS comment`
 	}
 	query := fmt.Sprintf(
 		getTablesQuery,
 		&name.CatalogName,
 		schemaClause,
 		comment,
+		descJoin,
 	)
 	return parse(query)
 }

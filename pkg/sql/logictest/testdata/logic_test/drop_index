@@ -168,12 +168,12 @@ users       foo         true        2             id           ASC        false 
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  users  table  root  0
-public  v      view   root  0
-public  v2     view   root  0
+public  users  table  root  0  NULL
+public  v      view   root  0  NULL
+public  v2     view   root  0  NULL
 
 statement ok
 GRANT ALL ON users to testuser
@@ -197,10 +197,10 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  users  table  root  0
+public  users  table  root  0  NULL
 
 # Test the syntax without a '@'
 
