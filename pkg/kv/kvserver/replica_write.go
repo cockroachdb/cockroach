@@ -216,6 +216,36 @@ func (r *Replica) executeWriteBatch(
 					log.Warningf(ctx, "%v", err)
 				}
 			}
+			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
+				// Migrate is special since it wants commands to be durably
+				// applied on all peers, which we achieve via waitForApplication.
+				//
+				// NB: We don't have to worry about extant snapshots creating
+				// replicas that start at an index before this Migrate request.
+				// Snapshots that don't include the recipient (as specified by
+				// replicaID and descriptor in the snap vs. the replicaID of the
+				// raft instance) are discarded by the recipient, and we're
+				// already checking against all replicas in the descriptor
+				// below. Snapshots are also discarded unless they move the LAI
+				// forward, so we're not worried about old snapshots (with
+				// indexes preceding the MLAI here) instantiating pre-migrated
+				// state in anyway.
+				// As for extant snapshots with pre-migrated state, initializing
+				// replicas elsewhere, we rely on higher-level orchestration[1]
+				// to ensure that snapshots with with pre-migrated state are
+				// rejected, and that replicas with older versions are
+				// purged from the system[2].
+				//
+				// [1]: Look towards the snapshot+store active cluster version
+				//      check in Store.canApplySnapshotLocked.
+				// [2]: See PurgeOutdatedReplicas from the Migration service.
+				desc := r.Desc()
+				// NB: waitForApplication already has a timeout.
+				applicationErr := waitForApplication(
+					ctx, r.store.cfg.NodeDialer, desc.RangeID, desc.Replicas().All(),
+					uint64(maxLeaseIndex))
+				propResult.Err = roachpb.NewError(applicationErr)
+			}
 			return propResult.Reply, nil, propResult.Err
 		case <-slowTimer.C:
 			slowTimer.Read = true

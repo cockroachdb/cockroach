@@ -773,6 +773,16 @@ func (r *Replica) evaluateProposal(
 		usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
 		r.mu.RUnlock()
 		if !usingAppliedStateKey {
+			// The range applied state was introduced in v21.1. The cluster
+			// version transition into v21.1 ought to have migrated any holdover
+			// ranges still using the legacy keys, which is what we assert
+			// below. If we're not running 21.1 yet, migrate over as we've done
+			// since the introduction of the applied state key.
+			activeVersion := r.ClusterSettings().Version.ActiveVersion(ctx).Version
+			migrationVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
+			if migrationVersion.Less(activeVersion) {
+				log.Fatalf(ctx, "not using applied state key in v21.1")
+			}
 			// The range applied state was introduced in v2.1. It's possible to
 			// still find ranges that haven't activated it. If so, activate it.
 			// We can remove this code if we introduce a boot-time check that

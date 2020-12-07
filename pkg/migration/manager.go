@@ -102,17 +102,74 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 		cluster := newCluster(m.nl, m.dialer, m.executor, m.db)
 		h := newHelper(cluster, clusterVersion)
 
-		// Push out the version gate to every node in the cluster. Each node
-		// will persist the version, bump the local version gates, and then
-		// return. The migration associated with the specific version can assume
-		// that every node in the cluster has the corresponding version
-		// activated.
+		// First, run the actual migration if any.
+		if migration, ok := registry[clusterVersion]; ok {
+			if err := migration.Run(ctx, h); err != nil {
+				return err
+			}
+		}
+
+		// Next we'll push out the version gate to every node in the cluster.
+		// Each node will persist the version, bump the local version gates, and
+		// then return. The migration associated with the specific version is
+		// executed before every node in the cluster has the corresponding
+		// version activated. Migrations that depend on a certain version
+		// already being activated will need to registered using a cluster
+		// version greater than it.
 		//
-		// We'll need to first bump the fence version for each intermediate
-		// cluster version, before bumping the "real" one. Doing so allows us to
-		// provide the invariant that whenever a cluster version is active, all
-		// nodes in the cluster (including ones added concurrently during
-		// version upgrades) are running binaries that know about the version.
+		// For each intermediate version, we'll need to first bump the fence
+		// version before bumping the "real" one. Doing so allows us to provide
+		// the invariant that whenever a cluster version is active, all nodes in
+		// the cluster (including ones added concurrently during version
+		// upgrades) are running binaries that know about the version.
+
+		// Bumping the version gates only after running the migration itself is
+		// important for below-raft migrations. Below-raft migrations mutate
+		// replica state, making use of the Migrate(version=V) primitive when
+		// issuing it against the entire keyspace. As part of this process,
+		// migrations want to rely on the invariant that there are no extant
+		// replicas in the system that haven't seen the specific Migrate command.
+		// Consider the the following:
+		//
+		// - r420 is running version=87
+		// - The leaseholder for r420 generates a snapshot to add a new replica
+		//   elsewhere
+		// - While the snapshot is inflight, all existing replicas of r420 are
+		//   migrated to version=88
+		// - The snapshot is received by the store, instantiating a replica with
+		//   the pre-migrated state
+		//
+		// To guard against this, we gate any incoming snapshots that were
+		// generated from a replica that (at the time) had a version[1] less
+		// than our store's current active version[2]. After executing
+		// Migrate(version=x), the infrastructure bumps the corresponding
+		// cluster version on each store, preventing future snapshots with
+		// versions < V. We should note that the reason we bump the cluster
+		// version after the Migrate request, and not before, is because the
+		// migration process itself can be arbitrarily long running. It'd be
+		// undesirable to pause rebalancing/repair mechanisms from functioning
+		// during this time.
+		//
+		// Coming back to the invariant above ("there should be no extant
+		// replicas in the system that haven't seen the corresponding Migrate
+		// command"), this is partly achieved through the implementation of the
+		// Migrate command itself, which waits until it's applied on all
+		// followers[3] before returning. That still leaves the possibility for
+		// replicas in the replica GC queue to evade detection. To address this,
+		// below-raft migrations typically take a two-phrase approach (the
+		// TruncatedAndRangeAppliedStateMigration being one example of this),
+		// where after having migrated the entire keyspace to version V, and
+		// after having prevented subsequent snapshots originating from replicas
+		// with versions < V, the migration sets out to purge outdated replicas
+		// in the system[4]. Specifically it processes all replicas in
+		// the GC queue with a version < V (which are not accessible during the
+		// application of the Migrate command).
+		//
+		// [1]: See ReplicaState.Version.
+		// [2]: See the snapshot version checks Store.canApplySnapshotLocked.
+		// [3]: See Replica.executeWriteBatch, specifically how proposals with the
+		//      Migrate request are handled downstream of raft.
+		// [4]: See PurgeOutdatedReplicas from the Migration service.
 
 		{
 			// The migrations infrastructure makes use of internal fence
@@ -120,12 +177,15 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// instructive to walk through how we expect a version migration
 			// from v21.1 to v21.2 to take place, and how we behave in the
 			// presence of new v21.1 or v21.2 nodes being added to the cluster.
+			//
 			//   - All nodes are running v21.1
 			//   - All nodes are rolled into v21.2 binaries, but with active
 			//     cluster version still as v21.1
 			//   - The first version bump will be into v21.2-1(fence), see the
 			//     migration manager above for where that happens
+			//
 			// Then concurrently:
+			//
 			//   - A new node is added to the cluster, but running binary v21.1
 			//   - We try bumping the cluster gates to v21.2-1(fence)
 			//
@@ -178,20 +238,6 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			}); err != nil {
 				return err
 			}
-		}
-
-		// TODO(irfansharif): We'll want to be able to override which migration
-		// is retrieved here within tests. We could make the registry be a part
-		// of the manager, and all tests to provide their own.
-
-		// Finally, run the actual migration.
-		migration, ok := registry[clusterVersion]
-		if !ok {
-			log.Infof(ctx, "no migration registered for %s, skipping", clusterVersion)
-			continue
-		}
-		if err := migration.Run(ctx, h); err != nil {
-			return err
 		}
 	}
 

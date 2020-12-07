@@ -296,9 +296,9 @@ func (s *Store) processRaftSnapshotRequest(
 			defer s.mu.Unlock()
 			placeholder, err := s.canApplySnapshotLocked(ctx, snapHeader)
 			if err != nil {
-				// If the storage cannot accept the snapshot, return an
-				// error before passing it to RawNode.Step, since our
-				// error handling options past that point are limited.
+				// If we cannot accept the snapshot, return an error before
+				// passing it to RawNode.Step, since our error handling options
+				// past that point are limited.
 				log.Infof(ctx, "cannot apply snapshot: %s", err)
 				return err
 			}

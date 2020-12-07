@@ -68,6 +68,35 @@ message ReplicaState {
   // is idempotent by Replica state machines, meaning that it is ok for multiple
   // Raft commands to set it to true.
   bool using_applied_state_key = 11;
+  // Version tells us which migrations can be assumed to have run against this
+  // particular replica. When we introduce backwards incompatible changes to the
+  // replica state (for example using the unreplicated truncated state instead
+  // of the replicated variant), this field tells us if we should expect a
+  // state representation prior to, or after the change (in our example it
+  // tells us whether or not we can assume an unreplicated truncated state). All
+  // migrations associated with versions less than or equal to this one, can be
+  // assumed to have run.
+  //
+  // We should note that the progression of cluster versions in the cluster does
+  // not happen in lock step with replica versions for all replicas in the
+  // system. Well, not for all cluster versions. Replica versions is one the
+  // primitives used to coordinate below-raft migrations, and when cluster
+  // versions for those are being rolled out cluster-wide, the expectation is
+  // that all replica versions are bumped along side it. For everything else,
+  // the coupling isn't necessary nor enforced. When a new replica is being
+  // initialized (either during bootstrap, or through snapshots, or splits),
+  // it's annotated with a replica version. During bootstrap, replicas source
+  // the active cluster version at the time. For replicas created through
+  // snapshots or splits, they use the version sourced from the original
+  // replica. While a below-raft migration is underway, replicas from different
+  // ranges may have differing replica versions. This is fine, we rely on higher
+  // level orchestration primitives[1][2][3] to shepherd all replicas in the
+  // system to the right version.
+  //
+  // [1]: migration.Manager
+  // [2]: PurgeOutdatedReplicas
+  // [3]: Use of the snapshot version check in Store.canApplySnapshotLocked.
+  roachpb.Version version = 12;
 
   reserved 8, 9, 10;
 }
