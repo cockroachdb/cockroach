@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -95,4 +96,37 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 
 		s.Stopper().Stop(context.Background())
 	}
+}
+
+func TestMigrationGCReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numStores = 3
+	var storeSpecs []base.StoreSpec
+	for i := 0; i < numStores; i++ {
+		storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
+	}
+
+	intercepted := 0
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: storeSpecs,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				GCReplicasInterceptor: func() {
+					intercepted++
+				},
+			},
+		},
+	})
+
+	migrationServer := s.MigrationServer().(*migrationServer)
+	if _, err := migrationServer.GCReplicas(context.Background(), &serverpb.GCReplicasRequest{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if intercepted != numStores {
+		t.Fatalf("expected to have GC-ed replicas on %d stores, found %d", numStores, intercepted)
+	}
+
+	s.Stopper().Stop(context.Background())
 }

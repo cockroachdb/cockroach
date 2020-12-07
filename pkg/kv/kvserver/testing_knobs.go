@@ -259,6 +259,9 @@ type StoreTestingKnobs struct {
 	// in execChangeReplicasTxn that prevent moving
 	// to a configuration that cannot make progress.
 	AllowDangerousReplicationChanges bool
+	// GCReplicasInterceptor intercepts attempts to GC all replicas in the
+	// store.
+	GCReplicasInterceptor func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
