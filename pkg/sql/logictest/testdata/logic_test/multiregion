@@ -95,8 +95,11 @@ region_test_db                                {test1}              test1
 system                                        {}                   NULL
 test                                          {}                   NULL
 
+statement ok
+USE multi_region_test_db
+
 query TTBBT colnames
-USE multi_region_test_db; SHOW REGIONS FROM DATABASE
+SHOW REGIONS FROM DATABASE
 ----
 database              region  primary  is_region_active  zones
 multi_region_test_db  test1   false    true              {test1-az1,test1-az2,test1-az3}
@@ -175,23 +178,72 @@ CREATE DATABASE invalid_region_db PRIMARY REGION "region_no_exists"
 statement error region "test1" defined multiple times
 CREATE DATABASE duplicate_region_name_db PRIMARY REGION "test1" REGIONS "test1", "test1"
 
-statement error implementation pending
+statement ok
 CREATE TABLE regional_primary_region_table (a int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
-statement error implementation pending
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_primary_region_table]
+----
+CREATE TABLE public.regional_primary_region_table (
+                                                a INT8 NULL,
+                                                FAMILY "primary" (a, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
 CREATE TABLE regional_implicit_primary_region_table (a int) LOCALITY REGIONAL BY TABLE
 
-statement error implementation pending
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_implicit_primary_region_table]
+----
+CREATE TABLE public.regional_implicit_primary_region_table (
+                                                a INT8 NULL,
+                                                FAMILY "primary" (a, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
 CREATE TABLE regional_test3_table (a int) LOCALITY REGIONAL BY TABLE IN "test3"
 
-statement error implementation pending
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_test3_table]
+----
+CREATE TABLE public.regional_test3_table (
+                                       a INT8 NULL,
+                                       FAMILY "primary" (a, rowid)
+) LOCALITY REGIONAL BY TABLE IN test3
+
+statement error region "test4" has not been added to database "multi_region_test_db"\nHINT: available regions: test1, test2, test3
+CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
+
+statement ok
 CREATE TABLE regional_by_row_table (a int) LOCALITY REGIONAL BY ROW
 
-statement error implementation pending
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
+----
+CREATE TABLE public.regional_by_row_table (
+                            a INT8 NULL,
+                            FAMILY "primary" (a, rowid)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
 CREATE TABLE global_table (a int) LOCALITY GLOBAL
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE global_table]
+----
+CREATE TABLE public.global_table (
+                   a INT8 NULL,
+                   FAMILY "primary" (a, rowid)
+) LOCALITY GLOBAL
 
 statement ok
 CREATE DATABASE new_db
+
+statement ok
+USE new_db
+
+statement error database new_db is not multi-region enabled, but table cannot_create_table_no_multiregion has locality GLOBAL set
+CREATE TABLE cannot_create_table_no_multiregion (a int) LOCALITY GLOBAL
 
 statement error implementation pending
 ALTER DATABASE new_db ADD REGION "us-west-1"
