@@ -12,31 +12,77 @@ package migration
 
 import (
 	"context"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
-// identical returns whether or not two lists of node IDs are identical as sets.
-func identical(a, b []roachpb.NodeID) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	sort.Slice(a, func(i, j int) bool {
-		return a[i] < a[j]
-	})
-	sort.Slice(b, func(i, j int) bool {
-		return b[i] < b[j]
-	})
+// node captures the relevant bits of each node as it pertains to the migration
+// infrastructure.
+type node struct {
+	id    roachpb.NodeID
+	epoch int64
+}
 
-	for i, v := range a {
-		if v != b[i] {
-			return false
+// nodes is a collection of node objects.
+type nodes []node
+
+// identical returns whether or not two lists of nodes are identical as sets,
+// and if not, what changed (in terms of cluster membership operations and epoch
+// changes). The textual diffs are only to be used for logging purposes.
+func (ns nodes) identical(other nodes) (ok bool, _ []redact.RedactableString) {
+	a, b := ns, other
+
+	type ent struct {
+		node         node
+		count        int
+		epochChanged bool
+	}
+	m := map[roachpb.NodeID]ent{}
+	for _, node := range a {
+		m[node.id] = ent{count: 1, node: node, epochChanged: false}
+	}
+	for _, node := range b {
+		e, ok := m[node.id]
+		e.count--
+		if ok && e.node.epoch != node.epoch {
+			e.epochChanged = true
+		}
+		m[node.id] = e
+	}
+
+	var diffs []redact.RedactableString
+	for id, e := range m {
+		if e.epochChanged {
+			diffs = append(diffs, redact.Sprintf("n%d's epoch changed", id))
+		}
+		if e.count > 0 {
+			diffs = append(diffs, redact.Sprintf("n%d was decommissioned", id))
+		}
+		if e.count < 0 {
+			diffs = append(diffs, redact.Sprintf("n%d joined the cluster", id))
 		}
 	}
-	return true
+
+	return len(diffs) == 0, diffs
+}
+
+func (ns nodes) String() string {
+	return redact.StringWithoutMarkers(ns)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (ns nodes) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.SafeString("n{")
+	if len(ns) > 0 {
+		s.Printf("%d", ns[0].id)
+		for _, node := range ns[1:] {
+			s.Printf(",%d", node.id)
+		}
+	}
+	s.SafeString("}") // or b.SafeRune('}')
 }
 
 // fenceVersionFor constructs the appropriate "fence version" for the given
