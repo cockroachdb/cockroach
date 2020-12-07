@@ -293,6 +293,15 @@ func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Times
 	r.mu.Unlock()
 }
 
+func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Version) {
+	if (*version == roachpb.Version{}) {
+		log.Fatal(ctx, "not expecting empty replica version downstream of raft")
+	}
+	r.mu.Lock()
+	r.mu.state.Version = version
+	r.mu.Unlock()
+}
+
 func (r *Replica) handleUsingAppliedStateKeyResult(ctx context.Context) {
 	r.mu.Lock()
 	r.mu.state.UsingAppliedStateKey = true

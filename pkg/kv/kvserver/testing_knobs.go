@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -263,6 +264,12 @@ type StoreTestingKnobs struct {
 	// even when the replicate queue is enabled. This often results in flaky
 	// tests, so by default, it is prevented.
 	AllowUnsynchronizedReplicationChanges bool
+	// PurgeOutdatedReplicasInterceptor intercepts attempts to purge outdated
+	// replicas in the store.
+	PurgeOutdatedReplicasInterceptor func()
+	// If set, use the given truncated state type when bootstrapping ranges.
+	// This is used for testing the truncated state migration.
+	TruncatedStateTypeOverride *stateloader.TruncatedStateType
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

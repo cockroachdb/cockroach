@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -699,8 +700,19 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	}
 
 	if res.State != nil && res.State.TruncatedState != nil {
+		activeVersion := b.r.ClusterSettings().Version.ActiveVersion(ctx).Version
+		migrationVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
+		// NB: We're being deliberate here in using the less-than operator (as
+		// opposed to LessEq). TruncatedAndRangeAppliedStateMigration indicates
+		// that the migration to move to the unreplicated truncated
+		// state is currently underway. It's only when the active cluster
+		// version has moved past it that we can assume that the migration has
+		// completed.
+		assertNoLegacy := migrationVersion.Less(activeVersion)
+
 		if apply, err := handleTruncatedStateBelowRaft(
 			ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
+			assertNoLegacy,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to handle truncated state")
 		} else if !apply {
@@ -1112,6 +1124,10 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.State.GCThreshold = nil
 		}
 
+		if newVersion := rResult.State.Version; newVersion != nil {
+			sm.r.handleVersionResult(ctx, newVersion)
+			rResult.State.Version = nil
+		}
 		if (*rResult.State == kvserverpb.ReplicaState{}) {
 			rResult.State = nil
 		}

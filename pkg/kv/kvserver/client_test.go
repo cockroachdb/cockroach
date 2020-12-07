@@ -213,7 +213,9 @@ func createTestStoreWithOpts(
 			eng,
 			kvs, /* initialValues */
 			clusterversion.TestingBinaryVersion,
-			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow())
+			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow(),
+			storeCfg.TestingKnobs,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -959,7 +961,9 @@ func (m *multiTestContext) addStore(idx int) {
 			eng,
 			kvs, /* initialValues */
 			clusterversion.TestingBinaryVersion,
-			len(m.engines), splits, cfg.Clock.PhysicalNow())
+			len(m.engines), splits, cfg.Clock.PhysicalNow(),
+			cfg.TestingKnobs,
+		)
 		if err != nil {
 			m.t.Fatal(err)
 		}
@@ -1569,6 +1573,16 @@ func pushTxnArgs(
 		PusherTxn: *pusher,
 		PusheeTxn: pushee.TxnMeta,
 		PushType:  pushType,
+	}
+}
+
+func migrateArgs(start, end roachpb.Key, version roachpb.Version) *roachpb.MigrateRequest {
+	return &roachpb.MigrateRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    start,
+			EndKey: end,
+		},
+		Version: version,
 	}
 }
 

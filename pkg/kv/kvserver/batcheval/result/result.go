@@ -228,6 +228,13 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			q.Replicated.State.GCThreshold = nil
 		}
 
+		if p.Replicated.State.Version == nil {
+			p.Replicated.State.Version = q.Replicated.State.Version
+		} else if q.Replicated.State.Version != nil {
+			return errors.AssertionFailedf("conflicting Version")
+		}
+		q.Replicated.State.Version = nil
+
 		if q.Replicated.State.Stats != nil {
 			return errors.AssertionFailedf("must not specify Stats")
 		}

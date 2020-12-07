@@ -26,7 +26,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func TestHelperEveryNode(t *testing.T) {
+func TestHelperEveryNodeUntilClusterStable(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	cv := clusterversion.ClusterVersion{}
@@ -40,16 +40,18 @@ func TestHelperEveryNode(t *testing.T) {
 		tc := TestingNewCluster(numNodes)
 		h := newHelper(tc, cv)
 		opCount := 0
-		err := h.EveryNode(ctx, "dummy-op", func(context.Context, serverpb.MigrationClient) error {
-			mu.Lock()
-			defer mu.Unlock()
+		err := h.UntilClusterStable(ctx, func() error {
+			return h.ForEveryNode(ctx, "dummy-op", func(context.Context, serverpb.MigrationClient) error {
+				mu.Lock()
+				defer mu.Unlock()
 
-			opCount++
-			if opCount == numNodes {
-				tc.addNode()
-			}
+				opCount++
+				if opCount == numNodes {
+					tc.addNode()
+				}
 
-			return nil
+				return nil
+			})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -66,16 +68,18 @@ func TestHelperEveryNode(t *testing.T) {
 		tc := TestingNewCluster(numNodes)
 		h := newHelper(tc, cv)
 		opCount := 0
-		err := h.EveryNode(ctx, "dummy-op", func(context.Context, serverpb.MigrationClient) error {
-			mu.Lock()
-			defer mu.Unlock()
+		err := h.UntilClusterStable(ctx, func() error {
+			return h.ForEveryNode(ctx, "dummy-op", func(context.Context, serverpb.MigrationClient) error {
+				mu.Lock()
+				defer mu.Unlock()
 
-			opCount++
-			if opCount == numNodes {
-				tc.restartNode(2)
-			}
+				opCount++
+				if opCount == numNodes {
+					tc.restartNode(2)
+				}
 
-			return nil
+				return nil
+			})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -94,22 +98,26 @@ func TestHelperEveryNode(t *testing.T) {
 		expRe := fmt.Sprintf("n%d required, but unavailable", downedNode)
 		h := newHelper(tc, cv)
 		opCount := 0
-		if err := h.EveryNode(ctx, "dummy-op", func(context.Context, serverpb.MigrationClient) error {
-			mu.Lock()
-			defer mu.Unlock()
+		if err := h.UntilClusterStable(ctx, func() error {
+			return h.ForEveryNode(ctx, "dummy-op", func(context.Context, serverpb.MigrationClient) error {
+				mu.Lock()
+				defer mu.Unlock()
 
-			opCount++
-			if opCount == 1 {
-				tc.downNode(downedNode)
-			}
-			return nil
+				opCount++
+				if opCount == 1 {
+					tc.downNode(downedNode)
+				}
+				return nil
+			})
 		}); !testutils.IsError(err, expRe) {
 			t.Fatalf("expected error %q, got %q", expRe, err)
 		}
 
 		tc.restartNode(downedNode)
-		if err := h.EveryNode(ctx, "dummy-op", func(context.Context, serverpb.MigrationClient) error {
-			return nil
+		if err := h.UntilClusterStable(ctx, func() error {
+			return h.ForEveryNode(ctx, "dummy-op", func(context.Context, serverpb.MigrationClient) error {
+				return nil
+			})
 		}); err != nil {
 			t.Fatal(err)
 		}

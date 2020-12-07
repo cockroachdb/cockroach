@@ -798,6 +798,13 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
+// Version returns the replica version.
+func (r *Replica) Version() roachpb.Version {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return *r.mu.state.Version
+}
+
 // getImpliedGCThresholdRLocked returns the gc threshold of the replica which
 // should be used to determine the validity of commands. The returned timestamp
 // may be newer than the replica's true GC threshold if strict enforcement

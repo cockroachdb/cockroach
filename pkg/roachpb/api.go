@@ -712,6 +712,9 @@ func (*AdminScatterRequest) Method() Method { return AdminScatter }
 func (*AddSSTableRequest) Method() Method { return AddSSTable }
 
 // Method implements the Request interface.
+func (*MigrateRequest) Method() Method { return Migrate }
+
+// Method implements the Request interface.
 func (*RecomputeStatsRequest) Method() Method { return RecomputeStats }
 
 // Method implements the Request interface.
@@ -953,6 +956,12 @@ func (r *AdminScatterRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *AddSSTableRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *MigrateRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1317,6 +1326,7 @@ func (*AdminVerifyProtectedTimestampRequest) flags() int { return isAdmin | isRa
 func (*AddSSTableRequest) flags() int {
 	return isWrite | isRange | isAlone | isUnsplittable | canBackpressure
 }
+func (*MigrateRequest) flags() int { return isWrite | isRange | isAlone }
 
 // RefreshRequest and RefreshRangeRequest both determine which timestamp cache
 // they update based on their Write parameter.

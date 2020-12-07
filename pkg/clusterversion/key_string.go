@@ -35,11 +35,14 @@ func _() {
 	_ = x[UniqueWithoutIndexConstraints-24]
 	_ = x[VirtualComputedColumns-25]
 	_ = x[CPutInline-26]
+	_ = x[ReplicaVersions-27]
+	_ = x[TruncatedAndRangeAppliedStateMigration-28]
+	_ = x[PostTruncatedAndRangeAppliedStateMigration-29]
 }
 
-const _Key_name = "NamespaceTableWithSchemasStart20_2GeospatialTypeEnumsRangefeedLeasesAlterColumnTypeGeneralAlterSystemJobsAddCreatedByColumnsAddScheduledJobsTableUserDefinedSchemasNoOriginFKIndexesClientRangeInfosOnBatchResponseNodeMembershipStatusRangeStatsRespHasDescMinPasswordLengthAbortSpanBytesAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableMaterializedViewsBox2DTypeUpdateScheduledJobsSchemaCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1EmptyArraysInInvertedIndexesUniqueWithoutIndexConstraintsVirtualComputedColumnsCPutInline"
+const _Key_name = "NamespaceTableWithSchemasStart20_2GeospatialTypeEnumsRangefeedLeasesAlterColumnTypeGeneralAlterSystemJobsAddCreatedByColumnsAddScheduledJobsTableUserDefinedSchemasNoOriginFKIndexesClientRangeInfosOnBatchResponseNodeMembershipStatusRangeStatsRespHasDescMinPasswordLengthAbortSpanBytesAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableMaterializedViewsBox2DTypeUpdateScheduledJobsSchemaCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1EmptyArraysInInvertedIndexesUniqueWithoutIndexConstraintsVirtualComputedColumnsCPutInlineReplicaVersionsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigration"
 
-var _Key_index = [...]uint16{0, 25, 34, 48, 53, 68, 90, 124, 145, 163, 180, 211, 231, 252, 269, 283, 347, 364, 373, 398, 418, 430, 435, 444, 472, 501, 523, 533}
+var _Key_index = [...]uint16{0, 25, 34, 48, 53, 68, 90, 124, 145, 163, 180, 211, 231, 252, 269, 283, 347, 364, 373, 398, 418, 430, 435, 444, 472, 501, 523, 533, 548, 586, 628}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {

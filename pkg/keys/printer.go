@@ -171,6 +171,7 @@ var (
 		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsLegacySuffix},
 		{name: "RangeLastGC", suffix: LocalRangeLastGCSuffix},
+		{name: "RangeVersion", suffix: LocalRangeVersionSuffix},
 	}
 
 	rangeSuffixDict = []struct {
