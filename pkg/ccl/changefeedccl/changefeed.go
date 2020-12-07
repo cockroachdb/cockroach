@@ -387,6 +387,7 @@ func emitResolvedTimestamp(
 // updated to refer to this new protected timestamp record.
 func createProtectedTimestampRecord(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	pts protectedts.Storage,
 	txn *kv.Txn,
 	jobID int64,
@@ -397,19 +398,19 @@ func createProtectedTimestampRecord(
 	progress.ProtectedTimestampRecord = uuid.MakeV4()
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
 		progress.ProtectedTimestampRecord, resolved)
-	spansToProtect := makeSpansToProtect(targets)
+	spansToProtect := makeSpansToProtect(codec, targets)
 	rec := jobsprotectedts.MakeRecord(
 		progress.ProtectedTimestampRecord, jobID, resolved, spansToProtect)
 	return pts.Protect(ctx, txn, rec)
 }
 
-func makeSpansToProtect(targets jobspb.ChangefeedTargets) []roachpb.Span {
+func makeSpansToProtect(codec keys.SQLCodec, targets jobspb.ChangefeedTargets) []roachpb.Span {
 	// NB: We add 1 because we're also going to protect system.descriptors.
 	// We protect system.descriptors because a changefeed needs all of the history
 	// of table descriptors to version data.
 	spansToProtect := make([]roachpb.Span, 0, len(targets)+1)
 	addTablePrefix := func(id uint32) {
-		tablePrefix := keys.TODOSQLCodec.TablePrefix(id)
+		tablePrefix := codec.TablePrefix(id)
 		spansToProtect = append(spansToProtect, roachpb.Span{
 			Key:    tablePrefix,
 			EndKey: tablePrefix.PrefixEnd(),
