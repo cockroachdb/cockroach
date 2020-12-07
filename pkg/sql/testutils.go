@@ -54,7 +54,11 @@ func CreateTestTableDescriptor(
 			nil, /* affected */
 			&semaCtx,
 			&evalCtx,
-			&sessiondata.SessionData{}, /* sessionData */
+			&sessiondata.SessionData{
+				LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+					EnableUniqueWithoutIndexConstraints: true,
+				},
+			}, /* sessionData */
 			tree.PersistencePermanent,
 		)
 		return desc, err
