@@ -1556,7 +1556,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			scTable.Mutations[i], columns = sc.reverseMutation(mutation, false /*notStarted*/, columns)
 
 			// If the mutation is for validating a constraint that is being added,
-			// drop the constraint because validation has failed
+			// drop the constraint because validation has failed.
 			if constraint := mutation.GetConstraint(); constraint != nil &&
 				mutation.Direction == descpb.DescriptorMutation_ADD {
 				log.Warningf(ctx, "dropping constraint %+v", constraint)
@@ -1571,7 +1571,14 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 						return err
 					}
 					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scTable); err != nil {
-						return err
+						// The function being called will return an assertion error if the
+						// backreference was not found, but it may not have been installed
+						// during the incomplete schema change, so we swallow the error.
+						if log.V(2) {
+							log.Infof(ctx,
+								"backreference %s not found while attempting to remove it during rollback",
+								fk.Name)
+						}
 					}
 					if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
 						return err
