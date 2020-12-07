@@ -318,6 +318,13 @@ func (b *Builder) buildStmt(
 	case *tree.CancelSessions:
 		return b.buildCancelSessions(stmt, inScope)
 
+	case *tree.CreateStats:
+		return b.buildCreateStatistics(stmt, inScope)
+
+	case *tree.Analyze:
+		// ANALYZE is syntactic sugar for CREATE STATISTICS.
+		return b.buildCreateStatistics(&tree.CreateStats{Table: stmt.Table}, inScope)
+
 	case *tree.Export:
 		return b.buildExport(stmt, inScope)
 

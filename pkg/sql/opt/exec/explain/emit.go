@@ -252,6 +252,7 @@ var nodeNames = [...]string{
 	cancelSessionsOp:       "cancel sessions",
 	controlJobsOp:          "control jobs",
 	controlSchedulesOp:     "control schedules",
+	createStatisticsOp:     "create statistics",
 	createTableOp:          "create table",
 	createTableAsOp:        "create table as",
 	createViewOp:           "create view",
@@ -261,7 +262,6 @@ var nodeNames = [...]string{
 	errorIfRowsOp:          "error if rows",
 	explainOp:              "explain",
 	explainOptOp:           "explain",
-	explainPlanOp:          "explain",
 	exportOp:               "export",
 	filterOp:               "filter",
 	groupByOp:              "group",
@@ -675,7 +675,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		max1RowOp,
 		explainOptOp,
 		explainOp,
-		explainPlanOp,
 		showTraceOp,
 		createTableOp,
 		createTableAsOp,
@@ -693,6 +692,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		controlSchedulesOp,
 		cancelQueriesOp,
 		cancelSessionsOp,
+		createStatisticsOp,
 		exportOp:
 
 	default:

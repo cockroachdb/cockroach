@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 type distSQLSpecExecFactory struct {
@@ -741,23 +743,30 @@ func (e *distSQLSpecExecFactory) ConstructExplainOpt(
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplain(
-	options *tree.ExplainOptions, analyze bool, stmtType tree.StatementType, plan exec.Plan,
+	options *tree.ExplainOptions,
+	analyze bool,
+	stmtType tree.StatementType,
+	buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
+	if options.Flags[tree.ExplainFlagEnv] {
+		return nil, errors.New("ENV only supported with (OPT) option")
+	}
+	if options.Mode == tree.ExplainPlan {
+		// TODO(radu): all we need to do here is wrap an explainPlanNode.
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: explain plan")
+	}
+
 	// We cannot create the explained plan in the same PlanInfrastructure with the
-	// "outer" plan. Create a new PlanningCtx for the rest of the plan.
-	// TODO(radu): this is a hack and won't work if the result of the explain
-	// feeds into a join or union (on the right-hand side). Move to a model like
-	// ConstructExplainPlan, where we can build the inner plan using a separate
-	// factory instance.
-	planCtxCopy := *e.planCtx
-	planCtxCopy.infra = physicalplan.MakePhysicalInfrastructure(e.planCtx.infra.FlowID, e.planCtx.infra.GatewayNodeID)
-	e.planCtx = &planCtxCopy
+	// "outer" plan. Create a separate factory.
+	explainFactory := explain.NewFactory(newDistSQLSpecExecFactory(e.planner, e.planningMode))
+	plan, err := buildFn(explainFactory)
+	if err != nil {
+		return nil, err
+	}
 
 	// TODO(yuzefovich): make sure to return the same nice error in some
 	// variants of EXPLAIN when subqueries are present as we do in the old path.
-	// TODO(yuzefovich): make sure that local plan nodes that create
-	// distributed jobs are shown as "distributed". See distSQLExplainable.
-	p := plan.(*planComponents)
+	p := plan.(*explain.Plan).WrappedPlan.(*planComponents)
 	explain, err := constructExplainDistSQLOrVecNode(options, analyze, stmtType, p, e.planner)
 	if err != nil {
 		return nil, err
@@ -774,12 +783,6 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// subqueries and postqueries.
 	physPlan.Distribution = p.main.physPlan.Distribution
 	return makePlanMaybePhysical(physPlan, []planNode{explainNode}), nil
-}
-
-func (e *distSQLSpecExecFactory) ConstructExplainPlan(
-	options *tree.ExplainOptions, buildFn exec.BuildPlanForExplainFn,
-) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: explain plan")
 }
 
 func (e *distSQLSpecExecFactory) ConstructShowTrace(
@@ -975,6 +978,12 @@ func (e *distSQLSpecExecFactory) ConstructCancelSessions(
 	input exec.Node, ifExists bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: cancel sessions")
+}
+
+func (e *distSQLSpecExecFactory) ConstructCreateStatistics(
+	cs *tree.CreateStats,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create statistics")
 }
 
 func (e *distSQLSpecExecFactory) ConstructExport(
