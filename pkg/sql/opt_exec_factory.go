@@ -1857,7 +1857,7 @@ func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Nod
 	}
 	// Don't run as a job if we are inside an EXPLAIN / EXPLAIN ANALYZE. That will
 	// allow us to get insight into the actual execution.
-	runAsJob := !ef.isExplain
+	runAsJob := !ef.isExplain && ef.planner.instrumentation.ShouldUseJobForCreateStats()
 
 	return &createStatsNode{
 		CreateStats: *cs,
