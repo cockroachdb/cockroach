@@ -20,6 +20,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/sql",
         "//pkg/sql/sqlutil",
+        "//pkg/util/ctxgroup",
         "//pkg/util/log",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/logtags",

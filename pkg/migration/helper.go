@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -111,18 +112,22 @@ func (h *Helper) EveryNode(
 	}
 
 	for {
-		// TODO(irfansharif): We can/should send out these RPCs in parallel.
 		log.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), ns)
 
+		grp := ctxgroup.WithContext(ctx)
 		for _, node := range ns {
-			conn, err := h.c.dial(ctx, node.id)
-			if err != nil {
-				return err
-			}
-			client := serverpb.NewMigrationClient(conn)
-			if err := fn(ctx, client); err != nil {
-				return err
-			}
+			id := node.id // copy out of the loop variable
+			grp.GoCtx(func(ctx context.Context) error {
+				conn, err := h.c.dial(ctx, id)
+				if err != nil {
+					return err
+				}
+				client := serverpb.NewMigrationClient(conn)
+				return fn(ctx, client)
+			})
+		}
+		if err := grp.Wait(); err != nil {
+			return err
 		}
 
 		curNodes, err := h.c.nodes(ctx)
