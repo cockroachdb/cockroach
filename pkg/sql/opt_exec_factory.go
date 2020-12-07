@@ -1116,13 +1116,6 @@ func (ef *execFactory) ConstructExplainOpt(
 	}, nil
 }
 
-// ConstructExplain is part of the exec.Factory interface.
-func (ef *execFactory) ConstructExplain(
-	options *tree.ExplainOptions, analyze bool, stmtType tree.StatementType, plan exec.Plan,
-) (exec.Node, error) {
-	return constructExplainDistSQLOrVecNode(options, analyze, stmtType, plan.(*planComponents), ef.planner)
-}
-
 // ConstructShowTrace is part of the exec.Factory interface.
 func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) (exec.Node, error) {
 	var node planNode = ef.planner.makeShowTraceNode(compact, typ == tree.ShowTraceKV)
@@ -1847,20 +1840,27 @@ func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (
 	}, nil
 }
 
-func (ef *execFactory) ConstructExplainPlan(
-	options *tree.ExplainOptions, buildFn exec.BuildPlanForExplainFn,
+// ConstructExplain is part of the exec.Factory interface.
+func (ef *execFactory) ConstructExplain(
+	options *tree.ExplainOptions,
+	analyze bool,
+	stmtType tree.StatementType,
+	buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
-
-	flags := explain.MakeFlags(options)
 
 	explainFactory := explain.NewFactory(ef)
 	plan, err := buildFn(explainFactory)
 	if err != nil {
 		return nil, err
 	}
+	if options.Mode != tree.ExplainPlan {
+		wrappedPlan := plan.(*explain.Plan).WrappedPlan.(*planComponents)
+		return constructExplainDistSQLOrVecNode(options, analyze, stmtType, wrappedPlan, ef.planner)
+	}
+	flags := explain.MakeFlags(options)
 	n := &explainPlanNode{
 		flags: flags,
 		plan:  plan.(*explain.Plan),
