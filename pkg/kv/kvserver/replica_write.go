@@ -216,6 +216,59 @@ func (r *Replica) executeWriteBatch(
 					log.Warningf(ctx, "%v", err)
 				}
 			}
+			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
+				// Migrate is special since it wants commands to be durably
+				// applied on all peers, which we achieve via waitForApplication.
+				//
+				// We don't have to worry about extant snapshots creating
+				// replicas that start at an index before this Migrate request.
+				// Snapshots that don't include the recipient (as specified by
+				// replicaID and descriptor in the snap vs. the replicaID of the
+				// raft instance) are discarded by the recipient, and we're
+				// already checking against all replicas in the descriptor below
+				// (which include learner replicas currently in the process of
+				// receiving snapshots). Snapshots are also discarded unless
+				// they move the LAI forward, so we're not worried about old
+				// snapshots (with indexes preceding the MLAI here)
+				// instantiating pre-migrated state in anyway. We also have a
+				// separate mechanism to ensure replicas with older versions are
+				// purged from the system[1]. This is driven by a higher-level
+				// orchestration layer[2], these are the replicas that we don't
+				// have a handle on here as they're eligible for GC (but may
+				// still hit replica evaluation code paths with pre-migrated
+				// state, unless explicitly purged).
+				//
+				// It's possible that between the proposal returning and the
+				// call to r.Desc() below, the descriptor has already changed.
+				// But the only thing that matters is that r.Desc() is at least
+				// as up to date as the descriptor the command applied on
+				// previously. If a replica got removed - fine,
+				// waitForApplication will fail; we will have to cope with that.
+				// If one got added - it was likely already a learner when we
+				// migrated (in which case waitForApplication will know about
+				// it). If that's not the case, we'll note that the Migrate
+				// command also declares a read latch on the range descriptor.
+				// The replication change will have thus serialized after the
+				// migration, and so the snapshot will also include the
+				// post-migration state.
+				//
+				// TODO(irfansharif): In a cluster that is constantly changing
+				// its replica sets, it's possible to get into a situation
+				// where a Migrate command never manages to complete - all it
+				// takes is a single range in each attempt to throw things off.
+				// Perhaps an error in waitForApplication should lead to a retry
+				// of just the one RPC instead of propagating an error for the
+				// entire migrate invocation.
+				//
+				// [1]: See PurgeOutdatedReplicas from the Migration service.
+				// [2]: pkg/migration
+				desc := r.Desc()
+				// NB: waitForApplication already has a timeout.
+				applicationErr := waitForApplication(
+					ctx, r.store.cfg.NodeDialer, desc.RangeID, desc.Replicas().All(),
+					uint64(maxLeaseIndex))
+				propResult.Err = roachpb.NewError(applicationErr)
+			}
 			return propResult.Reply, nil, propResult.Err
 		case <-slowTimer.C:
 			slowTimer.Read = true

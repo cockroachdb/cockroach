@@ -189,6 +189,7 @@ var _ = [...]interface{}{
 	RaftTruncatedStateLegacyKey, // "rftt"
 	RangeLeaseKey,               // "rll-"
 	LeaseAppliedIndexLegacyKey,  // "rlla"
+	RangeVersionKey,             // "rver"
 	RangeStatsLegacyKey,         // "stat"
 
 	//   2. Unreplicated range-ID local keys: These contain metadata that

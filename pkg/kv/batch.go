@@ -228,18 +228,10 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.DeleteRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
-
 			case *roachpb.DeleteRangeRequest:
 				if result.Err == nil {
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
-
-			default:
-				if result.Err == nil {
-					result.Err = errors.Errorf("unsupported reply: %T for %T",
-						reply, args)
-				}
-
 			// Nothing to do for all methods below as they do not generate
 			// any rows.
 			case *roachpb.EndTxnRequest:
@@ -265,6 +257,12 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.ImportRequest:
 			case *roachpb.AdminScatterRequest:
 			case *roachpb.AddSSTableRequest:
+			case *roachpb.MigrateRequest:
+			default:
+				if result.Err == nil {
+					result.Err = errors.Errorf("unsupported reply: %T for %T",
+						reply, args)
+				}
 			}
 			// Fill up the resume span.
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
@@ -782,6 +780,29 @@ func (b *Batch) addSSTable(
 		DisallowShadowing: disallowShadowing,
 		MVCCStats:         stats,
 		IngestAsWrites:    ingestAsWrites,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// migrate is only exported on DB.
+func (b *Batch) migrate(s, e interface{}, version roachpb.Version) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.MigrateRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+		Version: version,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

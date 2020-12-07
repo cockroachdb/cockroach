@@ -681,6 +681,16 @@ func (db *DB) AddSSTable(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// Migrate is used instruct all ranges overlapping with the provided keyspace to
+// exercise any relevant (below-raft) migrations in order for its range state to
+// conform to what's needed by the specified version. It's a core primitive used
+// in our migrations infrastructure to phase out legacy code below raft.
+func (db *DB) Migrate(ctx context.Context, begin, end interface{}, version roachpb.Version) error {
+	b := &Batch{}
+	b.migrate(begin, end, version)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
