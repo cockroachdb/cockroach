@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -250,6 +251,7 @@ func TestDescriptorRepair(t *testing.T) {
 		typ  string
 		info string
 	}
+
 	for _, tc := range []struct {
 		before             []string
 		op                 string
@@ -318,6 +320,104 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 `,
 			expErrRE: `crdb_internal.unsafe_delete_namespace_entry\(\): refusing to delete namespace entry for non-dropped descriptor`,
 		},
+		{
+			// Upsert a descriptor which is invalid, then try to upsert a namespace
+			// entry for it and show that it fails.
+			before: []string{
+				upsertInvalidateDuplicateColumnDescriptor,
+			},
+			op:       `SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52);`,
+			expErrRE: `failed to retrieve descriptor 52: duplicate column name: "i"`,
+		},
+		{
+			// Upsert a descriptor which is invalid, then try to upsert a namespace
+			// entry for it and show that it succeeds with the force flag.
+			before: []string{
+				upsertInvalidateDuplicateColumnDescriptor,
+			},
+			op: `SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
+			expEventLogEntries: []eventLogPattern{
+				{
+					typ:  string(sql.EventLogUnsafeUpsertNamespaceEntry),
+					info: `"force":true,"validation_errors":"failed to retrieve descriptor 52: duplicate column name: \\"i\\""`,
+				},
+			},
+		},
+		{
+			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
+			// then show that deleting the descriptor fails without the force flag.
+			before: []string{
+				upsertInvalidateDuplicateColumnDescriptor,
+				`SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
+			},
+			op:       `SELECT crdb_internal.unsafe_delete_descriptor(52);`,
+			expErrRE: `duplicate column name: "i"`,
+		},
+		{
+			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
+			// then show that deleting the descriptor succeeds with the force flag.
+			before: []string{
+				upsertInvalidateDuplicateColumnDescriptor,
+				`SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
+			},
+			op: `SELECT crdb_internal.unsafe_delete_descriptor(52, true);`,
+			expEventLogEntries: []eventLogPattern{
+				{
+					typ:  string(sql.EventLogUnsafeDeleteDescriptor),
+					info: `"force":true,"validation_errors":"[^"]*duplicate column name: \\"i\\""`,
+				},
+			},
+		},
+		{
+			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
+			// then show that updating the descriptor fails without the force flag.
+			before: []string{
+				upsertInvalidateDuplicateColumnDescriptor,
+				`SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
+			},
+			op:       updateInvalidateDuplicateColumnDescriptorNoForce,
+			expErrRE: `duplicate column name: "i"`,
+		},
+		{
+			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
+			// then show that updating the descriptor succeeds the force flag.
+			before: []string{
+				upsertInvalidateDuplicateColumnDescriptor,
+				`SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
+			},
+			op: updateInvalidateDuplicateColumnDescriptorForce,
+			expEventLogEntries: []eventLogPattern{
+				{
+					typ:  string(sql.EventLogUnsafeUpsertDescriptor),
+					info: `"force":true,"validation_errors":"[^"]*duplicate column name: \\"i\\""`,
+				},
+			},
+		},
+		{
+			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
+			// then show that deleting the namespace entry fails without the force flag.
+			before: []string{
+				upsertInvalidateDuplicateColumnDescriptor,
+				`SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
+			},
+			op:       `SELECT crdb_internal.unsafe_delete_namespace_entry(50, 29, 'foo', 52);`,
+			expErrRE: `duplicate column name: "i"`,
+		},
+		{
+			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
+			// then show that deleting the namespace entry succeeds with the force flag.
+			before: []string{
+				upsertInvalidateDuplicateColumnDescriptor,
+				`SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
+			},
+			op: `SELECT crdb_internal.unsafe_delete_namespace_entry(50, 29, 'foo', 52, true);`,
+			expEventLogEntries: []eventLogPattern{
+				{
+					typ:  string(sql.EventLogUnsafeDeleteNamespaceEntry),
+					info: `"force":true,"validation_errors":"[^"]*duplicate column name: \\"i\\""`,
+				},
+			},
+		},
 	} {
 		t.Run(tc.op, func(t *testing.T) {
 			s, db, cleanup := setup(t)
@@ -354,3 +454,130 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 		})
 	}
 }
+
+const (
+
+	// This is the json representation of a descriptor which has duplicate
+	// columns i and will subsequently fail validation.
+	invalidDuplicateColumnDescriptor = `'{
+  "table": {
+    "auditMode": "DISABLED",
+    "columns": [
+      {
+        "id": 1,
+        "name": "i"
+      },
+      {
+        "id": 1,
+        "name": "i"
+      }
+    ],
+    "families": [
+      {
+        "columnIds": [
+          1
+        ],
+        "columnNames": [
+          "i"
+        ],
+        "defaultColumnId": 0,
+        "id": 0,
+        "name": "primary"
+      }
+    ],
+    "formatVersion": 3,
+    "id": 52,
+    "name": "foo",
+    "nextColumnId": 2,
+    "nextFamilyId": 1,
+    "nextIndexId": 2,
+    "nextMutationId": 2,
+    "parentId": 50,
+    "primaryIndex": {
+      "columnDirections": [
+        "ASC"
+      ],
+      "columnIds": [
+        1
+      ],
+      "columnNames": [
+        "i"
+      ],
+      "compositeColumnIds": [],
+      "createdExplicitly": false,
+      "encodingType": 0,
+      "id": 1,
+      "name": "primary",
+      "type": "FORWARD",
+      "unique": true,
+      "version": 2
+    },
+    "privileges": {
+      "owner": "root",
+      "users": [
+        {
+          "privileges": 2,
+          "user": "admin"
+        },
+        {
+          "privileges": 2,
+          "user": "root"
+        }
+      ],
+      "version": 1
+    },
+    "state": "PUBLIC",
+    "unexposedParentSchemaId": 29,
+    "version": 1
+  }
+}'`
+
+	// This is a statement to insert the invalid descriptor above using
+	// crdb_internal.unsafe_upsert_descriptor.
+	upsertInvalidateDuplicateColumnDescriptor = `
+SELECT crdb_internal.unsafe_upsert_descriptor(52,
+    crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', ` +
+		invalidDuplicateColumnDescriptor + `))`
+
+	// These are CTEs for the below statements to update the above descriptor
+	// and fix its validation problems.
+	updateInvalidateDuplicateColumnDescriptorCTEs = `
+  WITH as_json AS (
+                SELECT crdb_internal.pb_to_json(
+                            'cockroach.sql.sqlbase.Descriptor',
+                            descriptor
+                        ) AS descriptor
+                  FROM system.descriptor
+                 WHERE id = 52
+               ),
+       updated AS (
+                SELECT crdb_internal.json_to_pb(
+                        'cockroach.sql.sqlbase.Descriptor',
+                        json_set(
+                            descriptor,
+                            ARRAY['table', 'columns'],
+                            json_build_array(
+                                descriptor->'table'->'columns'->0
+                            )
+                        )
+                       ) AS descriptor
+                  FROM as_json
+               )
+`
+
+	// This is a statement to update the above descriptor fixing its validity
+	// problems without the force flag.
+	updateInvalidateDuplicateColumnDescriptorNoForce = `` +
+		updateInvalidateDuplicateColumnDescriptorCTEs + `
+SELECT crdb_internal.unsafe_upsert_descriptor(52, descriptor)
+  FROM updated;
+`
+
+	// This is a statement to update the above descriptor fixing its validity
+	// problems with the force flag.
+	updateInvalidateDuplicateColumnDescriptorForce = `` +
+		updateInvalidateDuplicateColumnDescriptorCTEs + `
+SELECT crdb_internal.unsafe_upsert_descriptor(52, descriptor, true)
+  FROM updated;
+`
+)

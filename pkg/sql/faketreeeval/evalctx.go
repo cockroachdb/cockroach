@@ -88,13 +88,15 @@ type DummyEvalPlanner struct{}
 
 // UnsafeUpsertDescriptor is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
-	ctx context.Context, descID int64, encodedDescriptor []byte,
+	ctx context.Context, descID int64, encodedDescriptor []byte, force bool,
 ) error {
 	return errors.WithStack(errEvalPlanner)
 }
 
 // UnsafeDeleteDescriptor is part of the EvalPlanner interface.
-func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(ctx context.Context, descID int64) error {
+func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(
+	ctx context.Context, descID int64, force bool,
+) error {
 	return errors.WithStack(errEvalPlanner)
 }
 
@@ -107,7 +109,7 @@ func (ep *DummyEvalPlanner) UnsafeUpsertNamespaceEntry(
 
 // UnsafeDeleteNamespaceEntry is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
-	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64,
+	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool,
 ) error {
 	return errors.WithStack(errEvalPlanner)
 }
