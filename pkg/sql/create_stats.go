@@ -67,6 +67,13 @@ type createStatsNode struct {
 	tree.CreateStats
 	p *planner
 
+	// runAsJob is true by default, and causes the code below to be executed,
+	// which sets up a job and waits for it.
+	//
+	// If it is false, the flow for create statistics is planned directly; this
+	// is used when the statement is under EXPLAIN or EXPLAIN ANALYZE.
+	runAsJob bool
+
 	run createStatsRun
 }
 
@@ -445,20 +452,6 @@ func makeColStatKey(cols []descpb.ColumnID) string {
 		colSet.Add(int(c))
 	}
 	return colSet.String()
-}
-
-// newPlanForExplainDistSQL is part of the distSQLExplainable interface.
-func (n *createStatsNode) newPlanForExplainDistSQL(
-	planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner,
-) (*PhysicalPlan, error) {
-	// Create a job record but don't actually start the job.
-	record, err := n.makeJobRecord(planCtx.ctx)
-	if err != nil {
-		return nil, err
-	}
-	job := n.p.ExecCfg().JobRegistry.NewJob(*record)
-
-	return distSQLPlanner.createPlanForCreateStats(planCtx, job)
 }
 
 // createStatsResumer implements the jobs.Resumer interface for CreateStats
