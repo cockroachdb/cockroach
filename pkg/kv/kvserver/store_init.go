@@ -84,6 +84,7 @@ func WriteInitialClusterData(
 	numStores int,
 	splits []roachpb.RKey,
 	nowNanos int64,
+	knobs StoreTestingKnobs,
 ) error {
 	// Bootstrap version information. We'll add the "bootstrap version" to the
 	// list of initialValues, so that we don't have to handle it specially
@@ -234,6 +235,9 @@ func WriteInitialClusterData(
 		}
 
 		truncStateType := stateloader.TruncatedStateUnreplicated
+		if tt := knobs.TruncatedStateTypeOverride; tt != nil {
+			truncStateType = *tt
+		}
 		lease := roachpb.Lease{}
 		_, err := stateloader.WriteInitialState(
 			ctx, batch,

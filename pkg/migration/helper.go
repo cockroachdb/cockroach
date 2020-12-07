@@ -221,6 +221,12 @@ func (h *Helper) DB() *kv.DB {
 	return h.c.db()
 }
 
+// ClusterVersion exposes the cluster version associated with the ongoing
+// migration.
+func (h *Helper) ClusterVersion() clusterversion.ClusterVersion {
+	return h.cv
+}
+
 type clusterImpl struct {
 	nl     nodeLiveness
 	exec   sqlutil.InternalExecutor

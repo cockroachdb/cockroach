@@ -217,6 +217,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		1, /* numStores */
 		splits,
 		ltc.Clock.PhysicalNow(),
+		cfg.TestingKnobs,
 	); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}

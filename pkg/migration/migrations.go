@@ -11,9 +11,15 @@
 package migration
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/logtags"
 )
 
 // registry defines the global mapping between a cluster version and the
@@ -25,6 +31,8 @@ func init() {
 	// TODO(irfansharif): We'll want to register individual migrations with
 	// specific internal cluster versions here.
 	_ = register // register(clusterversion.WhateverMigration, WhateverMigration, "whatever migration")
+	register(clusterversion.TruncatedAndRangeAppliedStateMigration, TruncatedStateMigration,
+		"use unreplicated TruncatedState and RangeAppliedState for all ranges")
 }
 
 // Migration defines a program to be executed once every node in the cluster is
@@ -70,9 +78,57 @@ type migrationFn func(context.Context, *Helper) error
 //
 // TODO(irfansharif): Introduce a `system.migrations` table, and populate it here.
 func (m *Migration) Run(ctx context.Context, h *Helper) (err error) {
+	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", h.ClusterVersion()), nil)
+
 	if err := m.fn(ctx, h); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+// defaultPageSize controls how many ranges are paged in by default when
+// iterating through all ranges in a cluster during any given migration. We
+// pulled this number out of thin air(-ish). Let's consider a cluster with 50k
+// ranges, with each range taking ~200ms. We're being somewhat conservative with
+// the duration, but in a wide-area cluster with large hops between the manager
+// and the replicas, it could be true. Here's how long it'll take for various
+// block sizes:
+//
+//   block size == 1    ~   2h 46m
+//   block size == 50   ~   3m 20s
+//   block size == 200  ~   50s
+const defaultPageSize = 200
+
+func TruncatedStateMigration(ctx context.Context, h *Helper) error {
+	var batchIdx, numMigratedRanges int
+	init := func() { batchIdx, numMigratedRanges = 1, 0 }
+	if err := h.IterateRangeDescriptors(ctx, defaultPageSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
+		for _, desc := range descriptors {
+			// This is a bit of a wart. We want to reach the first range, but we
+			// can't address the (local) StartKey. However, keys.LocalMax is on
+			// r1, so we'll just use that instead to target r1.
+			start, end := desc.StartKey, desc.EndKey
+			if bytes.Compare(desc.StartKey, keys.LocalMax) < 0 {
+				start, _ = keys.Addr(keys.LocalMax)
+			}
+			if err := h.DB().Migrate(ctx, start, end, h.ClusterVersion().Version); err != nil {
+				return err
+			}
+		}
+
+		// TODO(irfansharif): Instead of logging this to the debug log, we
+		// should insert these into a `system.migrations` table for external
+		// observability.
+		numMigratedRanges += len(descriptors)
+		log.Infof(ctx, "[batch %d/??] migrated %d ranges", batchIdx, numMigratedRanges)
+		batchIdx++
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	log.Infof(ctx, "[batch %d/%d] migrated %d ranges", batchIdx, batchIdx, numMigratedRanges)
 	return nil
 }

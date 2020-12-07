@@ -193,6 +193,35 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 		if err := migration.Run(ctx, h); err != nil {
 			return err
 		}
+
+		{
+			// GC all gc-able replicas, which makes for a useful invariant for
+			// the migrations infrastructure to provide. For below-raft
+			// migrations, this ensures that there are no extant replicas that
+			// have not processed the corresponding Migrate command.
+			req := &serverpb.GCReplicasRequest{}
+			op := fmt.Sprint("gc-replicas")
+			if err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+				_, err := client.GCReplicas(ctx, req)
+				return err
+			}); err != nil {
+				return err
+			}
+		}
+		{
+			// Make sure that all stores have synced, which makes for a useful
+			// invariant for the migrations infrastructure to provide. For
+			// below-raft migrations, this ensures that the applied state is
+			// flushed to disk disk.
+			req := &serverpb.FlushAllEnginesRequest{}
+			op := fmt.Sprint("flush-stores")
+			if err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+				_, err := client.FlushAllEngines(ctx, req)
+				return err
+			}); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil

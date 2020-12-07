@@ -754,7 +754,6 @@ func (b *Batch) addSSTable(
 }
 
 // migrate is only exported on DB.
-//lint:ignore U1001 unused
 func (b *Batch) migrate(s, e interface{}, version roachpb.Version) {
 	begin, err := marshalKey(s)
 	if err != nil {

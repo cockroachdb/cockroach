@@ -256,7 +256,7 @@ func createTestStoreWithoutStart(
 	if err := WriteInitialClusterData(
 		context.Background(), eng, kvs, /* initialValues */
 		clusterversion.TestingBinaryVersion,
-		1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
+		1 /* numStores */, splits, cfg.Clock.PhysicalNow(), cfg.TestingKnobs,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +472,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 		if err := WriteInitialClusterData(
 			ctx, eng, kvs /* initialValues */, clusterversion.TestingBinaryVersion,
-			1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
+			1 /* numStores */, splits, cfg.Clock.PhysicalNow(), cfg.TestingKnobs,
 		); err != nil {
 			t.Errorf("failure to create first range: %+v", err)
 		}

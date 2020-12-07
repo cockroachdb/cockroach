@@ -212,7 +212,9 @@ func createTestStoreWithOpts(
 			eng,
 			kvs, /* initialValues */
 			clusterversion.TestingBinaryVersion,
-			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow())
+			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow(),
+			storeCfg.TestingKnobs,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -958,7 +960,9 @@ func (m *multiTestContext) addStore(idx int) {
 			eng,
 			kvs, /* initialValues */
 			clusterversion.TestingBinaryVersion,
-			len(m.engines), splits, cfg.Clock.PhysicalNow())
+			len(m.engines), splits, cfg.Clock.PhysicalNow(),
+			cfg.TestingKnobs,
+		)
 		if err != nil {
 			m.t.Fatal(err)
 		}
