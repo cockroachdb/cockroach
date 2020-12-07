@@ -853,7 +853,7 @@ func (cf *changeFrontier) maybeProtectTimestamp(
 
 	jobID := cf.spec.JobID
 	targets := cf.spec.Feed.Targets
-	return createProtectedTimestampRecord(ctx, pts, txn, jobID, targets, resolved, progress)
+	return createProtectedTimestampRecord(ctx, cf.flowCtx.Codec(), pts, txn, jobID, targets, resolved, progress)
 }
 
 func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {

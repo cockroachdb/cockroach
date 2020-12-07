@@ -335,7 +335,7 @@ func changefeedPlanHook(
 			var spansToProtect []roachpb.Span
 			if hasInitialScan := initialScanFromOptions(details.Opts); hasInitialScan {
 				protectedTimestampID = uuid.MakeV4()
-				spansToProtect = makeSpansToProtect(details.Targets)
+				spansToProtect = makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
 				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
 			}
 
@@ -729,7 +729,8 @@ func (b *changefeedResumer) OnPauseRequest(
 		return nil
 	}
 
-	pts := jobExec.(sql.JobExecContext).ExecCfg().ProtectedTimestampProvider
-	return createProtectedTimestampRecord(ctx, pts, txn, *b.job.ID(),
+	execCfg := jobExec.(sql.JobExecContext).ExecCfg()
+	pts := execCfg.ProtectedTimestampProvider
+	return createProtectedTimestampRecord(ctx, execCfg.Codec, pts, txn, *b.job.ID(),
 		details.Targets, *resolved, cp)
 }
