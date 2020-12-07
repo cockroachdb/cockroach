@@ -820,23 +820,40 @@ func populateTableConstraints(
 			condef = tree.NewDString(buf.String())
 
 		case descpb.ConstraintTypeUnique:
-			oid = h.UniqueConstraintOid(db.GetID(), scName, table.GetID(), con.Index.ID)
 			contype = conTypeUnique
-			conindid = h.IndexOid(table.GetID(), con.Index.ID)
-			var err error
-			if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
-				return err
-			}
 			f := tree.NewFmtCtx(tree.FmtSimple)
-			f.WriteString("UNIQUE (")
-			con.Index.ColNamesFormat(f)
-			f.WriteByte(')')
-			if con.Index.IsPartial() {
-				pred, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Index.Predicate, p.SemaCtx(), tree.FmtPGCatalog)
+			if con.Index != nil {
+				oid = h.UniqueConstraintOid(db.GetID(), scName, table.GetID(), con.Index.ID)
+				conindid = h.IndexOid(table.GetID(), con.Index.ID)
+				var err error
+				if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+					return err
+				}
+				f.WriteString("UNIQUE (")
+				con.Index.ColNamesFormat(f)
+				f.WriteByte(')')
+				if con.Index.IsPartial() {
+					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Index.Predicate, p.SemaCtx(), tree.FmtPGCatalog)
+					if err != nil {
+						return err
+					}
+					f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
+				}
+			} else if con.UniqueWithoutIndexConstraint != nil {
+				oid = h.UniqueWithoutIndexConstraintOid(
+					db.GetID(), scName, table.GetID(), con.UniqueWithoutIndexConstraint,
+				)
+				f.WriteString("UNIQUE WITHOUT INDEX (")
+				colNames, err := table.NamesForColumnIDs(con.UniqueWithoutIndexConstraint.ColumnIDs)
 				if err != nil {
 					return err
 				}
-				f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
+				f.WriteString(strings.Join(colNames, ", "))
+				f.WriteByte(')')
+			} else {
+				return errors.AssertionFailedf(
+					"Index or UniqueWithoutIndexConstraint must be non-nil for a unique constraint",
+				)
 			}
 			condef = tree.NewDString(f.CloseAndGetString())
 
@@ -2738,6 +2755,11 @@ func (h oidHasher) writeIndex(indexID descpb.IndexID) {
 	h.writeUInt32(uint32(indexID))
 }
 
+func (h oidHasher) writeUniqueConstraint(uc *descpb.UniqueWithoutIndexConstraint) {
+	h.writeUInt32(uint32(uc.TableID))
+	h.writeStr(uc.Name)
+}
+
 func (h oidHasher) writeCheckConstraint(check *descpb.TableDescriptor_CheckConstraint) {
 	h.writeStr(check.Name)
 	h.writeStr(check.Expr)
@@ -2799,6 +2821,17 @@ func (h oidHasher) ForeignKeyConstraintOid(
 	h.writeSchema(scName)
 	h.writeTable(tableID)
 	h.writeForeignKeyConstraint(fk)
+	return h.getOid()
+}
+
+func (h oidHasher) UniqueWithoutIndexConstraintOid(
+	dbID descpb.ID, scName string, tableID descpb.ID, uc *descpb.UniqueWithoutIndexConstraint,
+) *tree.DOid {
+	h.writeTypeTag(uniqueConstraintTypeTag)
+	h.writeDB(dbID)
+	h.writeSchema(scName)
+	h.writeTable(tableID)
+	h.writeUniqueConstraint(uc)
 	return h.getOid()
 }
 

@@ -102,6 +102,19 @@ message ForeignKeyConstraint {
   reserved 10, 11, 12, 13;
 }
 
+// UniqueWithoutIndexConstraint is the representation of a unique constraint
+// that is not enforced by an index. It is stored on the TableDescriptor.
+message UniqueWithoutIndexConstraint {
+  option (gogoproto.equal) = true;
+  optional uint32 table_id = 1 [(gogoproto.nullable) = false,
+                                      (gogoproto.customname) = "TableID",
+                                      (gogoproto.casttype) = "ID"];
+  repeated uint32 column_ids = 2 [(gogoproto.customname) = "ColumnIDs",
+                                        (gogoproto.casttype) = "ColumnID"];
+  optional string name = 3 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
+}
+
 message ColumnDescriptor {
   option (gogoproto.equal) = true;
   optional string name = 1 [(gogoproto.nullable) = false];
@@ -506,6 +519,7 @@ message ConstraintToUpdate {
     // validation step, can occur. The check field contains the dummy
     // constraint.
     NOT_NULL = 2;
+    UNIQUE_WITHOUT_INDEX = 3;
   }
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
@@ -514,6 +528,7 @@ message ConstraintToUpdate {
   optional ForeignKeyConstraint foreign_key = 4 [(gogoproto.nullable) = false];
   reserved 5;
   optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  optional UniqueWithoutIndexConstraint unique_without_index_constraint = 7 [(gogoproto.nullable) = false];
 }
 
 // PrimaryKeySwap is a mutation corresponding to the atomic swap phase
@@ -1042,6 +1057,10 @@ message TableDescriptor {
   // inbound_fks contains all foreign key constraints that have this table as
   // the referenced table.
   repeated ForeignKeyConstraint inbound_fks = 37 [(gogoproto.nullable) = false, (gogoproto.customname) = "InboundFKs"];
+
+  // UniqueWithoutIndexConstraints contains all the unique constraints defined
+  // on this table that are not enforced by an index.
+  repeated UniqueWithoutIndexConstraint unique_without_index_constraints = 43 [(gogoproto.nullable) = false];
 
   // Temporary table support will be added to CRDB starting from 20.1. The temporary
   // flag is set to true for all temporary tables. All table descriptors created

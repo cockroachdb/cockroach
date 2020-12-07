@@ -91,7 +91,7 @@ const (
 	ConstraintTypePK ConstraintType = "PRIMARY KEY"
 	// ConstraintTypeFK identifies a FOREIGN KEY constraint.
 	ConstraintTypeFK ConstraintType = "FOREIGN KEY"
-	// ConstraintTypeUnique identifies a FOREIGN constraint.
+	// ConstraintTypeUnique identifies a UNIQUE constraint.
 	ConstraintTypeUnique ConstraintType = "UNIQUE"
 	// ConstraintTypeCheck identifies a CHECK constraint.
 	ConstraintTypeCheck ConstraintType = "CHECK"
@@ -107,8 +107,11 @@ type ConstraintDetail struct {
 	Details     string
 	Unvalidated bool
 
-	// Only populated for PK and Unique Constraints.
+	// Only populated for PK and Unique Constraints with an index.
 	Index *IndexDescriptor
+
+	// Only populated for Unique Constraints without an index.
+	UniqueWithoutIndexConstraint *UniqueWithoutIndexConstraint
 
 	// Only populated for FK Constraints.
 	FK              *ForeignKeyConstraint
