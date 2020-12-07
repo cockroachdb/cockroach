@@ -62,3 +62,24 @@ func TestUnsafeSetNat(t *testing.T) {
 	assert.Equal(t, b.Int64(), int64(2000))
 	assert.Equal(t, c.Int64(), int64(1000))
 }
+
+func TestDecimalColumnBasics(t *testing.T) {
+	colFactory := defaultColumnFactory{}
+	col := colFactory.MakeColumn(types.Decimal, 1024).(*Decimals)
+	for i := 0; i < col.Len(); i++ {
+		var d apd.Decimal
+		d.SetInt64(int64(i))
+		col.Set(i, d)
+	}
+
+	for i := 0; i < col.Len(); i++ {
+		d := col.Get(i)
+		dInt, err := d.Int64()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if int(dInt) != i {
+			t.Fatalf("ruhoh %d", i)
+		}
+	}
+}

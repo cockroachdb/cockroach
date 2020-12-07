@@ -71,13 +71,51 @@ func FlatDecimalLen(decimal *apd.Decimal) int {
 	return WordLen(decimal.Coeff.Bits())
 }
 
+const decimalSize = unsafe.Sizeof(apd.Decimal{})
+
+// UnsafeCastDecimal interprets an arbitrary byte slice as an apd.Decimal pointer.
+// Use with caution
+func UnsafeCastDecimal(b []byte) *apd.Decimal {
+	return (*apd.Decimal)(unsafe.Pointer(&b[0]))
+}
+
+// absOffset is essentially unsafe.OffsetOf(big.Int{}.abs).
+var absOffset uintptr
+
+func init() {
+	// Get the offset of the `abs` field on big.Int. We have to do this in in such
+	// a roundabout way because `abs` is an exported field, so we can't just use
+	// unsafe.OffsetOf as normal.
+	v := reflect.TypeOf(big.Int{})
+	y, ok := v.FieldByName("abs")
+	if !ok {
+		panic("uhoh, looks like big.Int changed its binary layout...")
+	}
+	absOffset = y.Offset
+}
+
+// UnsafeGetAbsPtr gets an unsafe.Pointer pointed at the `abs` field of a
+// big.Int
+func UnsafeGetAbsPtr(b *big.Int) unsafe.Pointer {
+	return unsafe.Pointer(uintptr(unsafe.Pointer(b)) + absOffset)
+}
+
 // EncodeFlatDecimal encodes the input decimal into the input byte slice.
 // A "Flat Decimal" is a bytes representation of an apd.Decimal. It is organized
 // as follows:
 //
-// |  Form   | Negative | Exponent | Length of coeff bytes | coeff bytes |
+// |  apd.Decimal | coeff bytes |
 //
-//   1 byte     1 byte     4 bytes      4 bytes: n            n bytes
+//    decimalSize   n bytes
+//
+// The point of this method is to take an arbitrary apd.Decimal pointer, which looks like this:
+// a: { scalar, fields, here, heapptr -> x}     x: [some bytes]
+//
+// and convert into a flat representation directly on appendTo, which will look
+// like this:
+//
+// a: { scalar, fields, here, heapptr -> a+sizeof(apd.Decimal{})}   a+sizeof(apd.Decimal{}): [some bytes]
+//
 func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	coeffWords := decimal.Coeff.Bits()
 	// Get the number of bytes that we'll need to reserve space for to store the
@@ -86,10 +124,31 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	// running off the end of the slice its handed.
 	nCoeffBytes := WordLen(coeffWords)
 
+	decimalPtr := unsafe.Pointer(decimal)
+	byteSlice := (*(*[decimalSize]byte)(decimalPtr))[:]
+
+	totalLen := int(decimalSize) + nCoeffBytes
+	origLen := len(appendTo)
+	if cap(appendTo) < len(appendTo)+totalLen {
+		appendTo = append(appendTo, make([]byte, totalLen)...)
+	}
+	appendTo = appendTo[:origLen]
+
+	appendTo = append(appendTo, byteSlice...)
+
 	if nCoeffBytes > 0 {
+		decimal := UnsafeCastDecimal(appendTo[origLen:])
+		coeffPtr := (*reflect.SliceHeader)(UnsafeGetAbsPtr(&decimal.Coeff))
 		coeffBytes := byteSliceFromWordSlice(coeffWords)
 		appendTo = append(appendTo, coeffBytes...)
+		coeffPtr.Data = uintptr(unsafe.Pointer(&appendTo[origLen+int(decimalSize)]))
 	}
+
+	/*
+		if !reflect.DeepEqual(returned, decimal) {
+			panic(fmt.Sprintf("Hmm... %v != %v", *returned, *decimal))
+		}
+	*/
 
 	return appendTo
 }
@@ -99,28 +158,7 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 // is serialized to the network or to disk, we can perform all slice accesses
 // without worrying about out-of-bounds, since we've indubitably allocated
 // sufficient space in the input byte slice in an earlier call to EncodeFlatDecimal.
-func DecodeFlatDecimal(bytes []byte, decodeInto *apd.Decimal) []byte {
-	if len(bytes) == 0 {
-		// When our decimal is actually NULL, in the vectorized engine this fact
-		// is stored in a separate bitmap, and the flat bytes representation
-		// might be of zero length. In such cases we simply short-circuit.
-		// TODO(yuzefovich): improve the comments.
-		return bytes
-	}
-	// Bounds check
-	_ = bytes[9]
-	decodeInto.Form = apd.Form(bytes[0])
-	if bytes[1] == 1 {
-		decodeInto.Negative = true
-	} else {
-		decodeInto.Negative = false
-	}
-	decodeInto.Exponent = int32(uint32(bytes[2]) | uint32(bytes[3])<<8 | uint32(bytes[4])<<16 | uint32(bytes[5])<<24)
-	nCoeffBytes := int32(uint32(bytes[6]) | uint32(bytes[7])<<8 | uint32(bytes[8])<<16 | uint32(bytes[9])<<24)
-	if nCoeffBytes > 0 {
-		b := bytes[10 : 10+nCoeffBytes]
-		slice := WordSliceFromByteSlice(b)
-		decodeInto.Coeff.SetBits(slice)
-	}
-	return bytes[10+nCoeffBytes:]
+func DecodeFlatDecimal(bytes []byte, decodeInto *apd.Decimal) {
+	d := UnsafeCastDecimal(bytes)
+	*decodeInto = *d
 }

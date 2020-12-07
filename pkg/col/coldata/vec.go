@@ -13,7 +13,6 @@ package coldata
 import (
 	"fmt"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -179,8 +178,7 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 		return make(Float64s, length)
 	case types.DecimalFamily:
 		return &Decimals{
-			Bytes:    makeBytes(length),
-			decimals: make([]apd.Decimal, length),
+			Bytes: makeBytes(length),
 		}
 	case types.TimestampTZFamily:
 		return make(Times, length)

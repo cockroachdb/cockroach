@@ -13,7 +13,6 @@ package coldata
 import (
 	"fmt"
 	"math/big"
-	"reflect"
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
@@ -24,15 +23,7 @@ import (
 // values from src into the receiver starting at destIdx.
 func (d *Decimals) AppendSlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int) {
 	d.Bytes.AppendSlice(&src.Bytes, destIdx, srcStartIdx, srcEndIdx)
-	d.decimals = append(d.decimals[:destIdx], src.decimals[srcStartIdx:srcEndIdx]...)
-	for i := range d.decimals[destIdx : destIdx+(srcEndIdx-srcStartIdx)] {
-		b := d.Bytes.Get(destIdx + i)
-		var slice []big.Word
-		if len(b) > 0 {
-			slice = encoding.WordSliceFromByteSlice(b)
-		}
-		unsafeSetNat(&d.decimals[destIdx+i].Coeff, slice)
-	}
+	d.reswizzleDecimalPointers(destIdx, destIdx+(srcEndIdx-srcStartIdx))
 }
 
 // AppendVal appends the given []byte value to the end of the receiver. A nil
@@ -42,42 +33,30 @@ func (d *Decimals) AppendVal(v apd.Decimal) {
 		panic("AppendVal is called on a window into Decimal")
 	}
 	d.maybeBackfillOffsets(d.Len())
-	n := len(d.data)
 	d.data = encoding.EncodeFlatDecimal(&v, d.data)
 	d.maxSetIndex = d.Len()
 	d.offsets = append(d.offsets, int32(len(d.data)))
-	var slice []big.Word
-	b := d.data[n:]
-	if len(b) > 0 {
-		slice = encoding.WordSliceFromByteSlice(b)
-	}
-	unsafeSetNat(&v.Coeff, slice)
-	d.decimals = append(d.decimals, v)
-}
-
-var sizeofbool = unsafe.Sizeof(false)
-
-var natOffset uintptr
-
-func init() {
-	v := reflect.TypeOf(big.Int{})
-	y, ok := v.FieldByName("abs")
-	if !ok {
-		panic(":(")
-	}
-	natOffset = y.Offset
 }
 
 // unsafeSetNat sets the backing slice of big.Word of the input big.Int to the
 // input []big.Word
 func unsafeSetNat(b *big.Int, words []big.Word) {
-	// Note that this horribly unsafe code depends on the memory layout of
-	// big.Int.
-	ptrTob := unsafe.Pointer(b)
-	ptrTob = unsafe.Pointer(uintptr(ptrTob) + natOffset)
-	ptrToWords := (*[]big.Word)(ptrTob)
-
+	ptrToWords := (*[]big.Word)(encoding.UnsafeGetAbsPtr(b))
 	*ptrToWords = words
+}
+
+func (d *Decimals) reswizzleDecimalPointers(startIdx, endIdx int) {
+	for i := startIdx; i < endIdx; i++ {
+		dec, coeffBytes := d.getDecimalAndCoeffbytes(i)
+		if dec == nil {
+			continue
+		}
+		var slice []big.Word
+		if len(coeffBytes) > 0 {
+			slice = encoding.WordSliceFromByteSlice(coeffBytes)
+		}
+		unsafeSetNat(&dec.Coeff, slice)
+	}
 }
 
 // CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive apd.Decimal values
@@ -85,16 +64,7 @@ func unsafeSetNat(b *big.Int, words []big.Word) {
 // Bytes.CopySlice for more information.
 func (d *Decimals) CopySlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int) {
 	d.Bytes.CopySlice(&src.Bytes, destIdx, srcStartIdx, srcEndIdx)
-	copy(d.decimals[destIdx:], src.decimals[srcStartIdx:srcEndIdx])
-	for i := range d.decimals[destIdx : destIdx+(srcEndIdx-srcStartIdx)] {
-		b := d.Bytes.Get(destIdx + i)
-		var slice []big.Word
-		if len(b) > 0 {
-			slice = encoding.WordSliceFromByteSlice(b)
-		}
-		coeff := d.decimals[destIdx+i].Coeff
-		unsafeSetNat(&coeff, slice)
-	}
+	d.reswizzleDecimalPointers(destIdx, destIdx+(srcEndIdx-srcStartIdx))
 }
 
 // Set sets the ith apd.Decimal in d. Overwriting a value that is not at the end
@@ -127,7 +97,6 @@ func (d *Decimals) Set(i int, v apd.Decimal) {
 		slice := encoding.WordSliceFromByteSlice(b)
 		unsafeSetNat(&v.Coeff, slice)
 	}
-	d.decimals[i] = v
 }
 
 // Window creates a "window" into the receiver. It behaves similarly to
@@ -137,8 +106,7 @@ func (d *Decimals) Set(i int, v apd.Decimal) {
 func (d *Decimals) Window(start, end int) *Decimals {
 	bytesWindow := d.Bytes.newWindow(start, end)
 	return &Decimals{
-		Bytes:    bytesWindow,
-		decimals: d.decimals[start:end],
+		Bytes: bytesWindow,
 	}
 }
 
@@ -146,7 +114,7 @@ var decimalSize = unsafe.Sizeof(apd.Decimal{})
 
 // Size returns the total size of the receiver in bytes.
 func (d *Decimals) Size() uintptr {
-	return d.Bytes.Size() + uintptr(len(d.decimals))*decimalSize
+	return d.Bytes.Size()
 }
 
 // SetLength sets the length of this Bytes. Note that it will panic if there is
@@ -157,5 +125,4 @@ func (d *Decimals) SetLength(l int) {
 	}
 	// We need +1 for an extra offset at the end.
 	d.offsets = d.offsets[:l+1]
-	d.decimals = d.decimals[:l]
 }

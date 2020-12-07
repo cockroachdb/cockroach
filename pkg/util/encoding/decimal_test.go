@@ -248,7 +248,7 @@ func assertFlatDecimalRoundtrips(t *testing.T, v *apd.Decimal) {
 	var decoded apd.Decimal
 	DecodeFlatDecimal(b, &decoded)
 	if decoded.Cmp(v) != 0 {
-		t.Errorf("unexpected mismatch for %v. got %v", v, decoded)
+		t.Errorf("unexpected mismatch for %v. got %v", *v, decoded)
 	}
 }
 
