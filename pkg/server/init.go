@@ -541,7 +541,7 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 type initServerCfg struct {
 	advertiseAddr             string
 	binaryMinSupportedVersion roachpb.Version
-	binaryVersion             roachpb.Version // This is what's used for bootstrap.
+	binaryVersion             roachpb.Version // the version used during bootstrap
 	defaultSystemZoneConfig   zonepb.ZoneConfig
 	defaultZoneConfig         zonepb.ZoneConfig
 
