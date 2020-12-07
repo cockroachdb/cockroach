@@ -265,6 +265,32 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 	}
 }
 
+// showCreateLocality creates the LOCALITY clauses for a CREATE statement, writing them
+// to tree.FmtCtx f.
+func showCreateLocality(desc catalog.TableDescriptor, f *tree.FmtCtx) error {
+	c := desc.TableDesc().LocalityConfig
+	if c != nil {
+		f.WriteString(" LOCALITY ")
+		switch v := c.Locality.(type) {
+		case *descpb.TableDescriptor_LocalityConfig_Global_:
+			f.WriteString("GLOBAL")
+		case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+			f.WriteString("REGIONAL BY TABLE IN ")
+			if v.RegionalByTable.Region != nil {
+				region := tree.Name(*v.RegionalByTable.Region)
+				f.FormatNode(&region)
+			} else {
+				f.WriteString("PRIMARY REGION")
+			}
+		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+			f.WriteString("REGIONAL BY ROW")
+		default:
+			return errors.Newf("unknown locality: %T", v)
+		}
+	}
+	return nil
+}
+
 // showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
 // index, if applicable.
 //
