@@ -583,6 +583,7 @@ type pgDumpReader struct {
 	opts       roachpb.PgDumpOptions
 	walltime   int64
 	colMap     map[*row.DatumRowConverter](map[string]int)
+	evalCtx    *tree.EvalContext
 }
 
 var _ inputConverter = &pgDumpReader{}
@@ -630,6 +631,7 @@ func newPgDumpReader(
 		opts:       opts,
 		walltime:   walltime,
 		colMap:     colMap,
+		evalCtx:    evalCtx,
 	}, nil
 }
 
@@ -894,7 +896,7 @@ func (m *pgDumpReader) readFile(
 				if seq == nil {
 					break
 				}
-				key, val, err := sql.MakeSequenceKeyVal(keys.TODOSQLCodec, seq, val, isCalled)
+				key, val, err := sql.MakeSequenceKeyVal(m.evalCtx.Codec, seq, val, isCalled)
 				if err != nil {
 					return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
 				}
