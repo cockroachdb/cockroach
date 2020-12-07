@@ -52,6 +52,13 @@ var (
 	)
 )
 
+// ExportRequestSSTTargetBytes is the maximum number of bytes an ExportRequest
+// is allowed to write to SSTs. This limit is only applied to ExportRequest's
+// that send their SSTs back to the processor as a means of preventing OOMs
+// resulting from buffering/copying large SST files.
+// TODO(adityamaru): tune this via experimentation.
+const ExportRequestSSTTargetBytes = 128<<20 /* 128 MiB */
+
 // TODO(pbardea): It would be nice if we could add some DistSQL processor tests
 // we would probably want to have a mock cloudStorage object that we could
 // verify with.
@@ -220,6 +227,13 @@ func runBackupProcessor(
 					// back to this range later.
 					header.WaitPolicy = lock.WaitPolicy_Error
 				}
+
+				// If we are asking for the SSTs to be returned, we must set the maximum
+				// size of returned SSTs before paginating to avoid OOMs.
+				if req.ReturnSST {
+					header.TargetBytes = ExportRequestSSTTargetBytes
+				}
+
 				log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",
 					span.span, span.attempts+1, header.UserPriority.String())
 				rawRes, pErr := kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, req)
@@ -260,6 +274,20 @@ func runBackupProcessor(
 				}
 				prog.ProgressDetails = *details
 				progCh <- prog
+
+				if req.ReturnSST && res.ResumeSpan != nil {
+					if !res.ResumeSpan.Valid() {
+						return errors.Errorf("invalid resume span: %s", res.ResumeSpan)
+					}
+					resumeSpan := spanAndTime{
+						span:      *res.ResumeSpan,
+						start:     span.start,
+						end:       span.end,
+						attempts:  span.attempts,
+						lastTried: span.lastTried,
+					}
+					todo <- resumeSpan
+				}
 			default:
 				// No work left to do, so we can exit. Note that another worker could
 				// still be running and may still push new work (a retry) on to todo but
