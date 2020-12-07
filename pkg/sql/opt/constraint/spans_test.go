@@ -179,7 +179,8 @@ func TestSpans_KeyCount(t *testing.T) {
 		},
 	}
 
-	for i, tc := range testCases {
+	for i := range testCases {
+		tc := &testCases[i]
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			toStr := func(keyCount int64, ok bool) string {
 				if !ok {
@@ -277,7 +278,8 @@ func TestSpans_ExtractSingleKeySpans(t *testing.T) {
 		},
 	}
 
-	for i, tc := range testCases {
+	for i := range testCases {
+		tc := &testCases[i]
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			toStr := func(spans *Spans, ok bool) string {
 				if !ok {

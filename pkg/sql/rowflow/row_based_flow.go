@@ -257,7 +257,8 @@ func (f *rowBasedFlow) setupInputSyncs(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
 ) ([][]execinfra.RowSource, error) {
 	inputSyncs := make([][]execinfra.RowSource, len(spec.Processors))
-	for pIdx, ps := range spec.Processors {
+	for pIdx := range spec.Processors {
+		ps := &spec.Processors[pIdx]
 		for _, is := range ps.Input {
 			if len(is.Streams) == 0 {
 				return nil, errors.Errorf("input sync with no streams")

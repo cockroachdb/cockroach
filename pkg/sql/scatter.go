@@ -144,7 +144,8 @@ func (n *scatterNode) startExec(params runParams) error {
 	n.run.rangeIdx = -1
 	n.run.ranges = make([]roachpb.Span, len(scatterRes.RangeInfos))
 	if len(scatterRes.RangeInfos) != 0 {
-		for i, rangeInfo := range scatterRes.RangeInfos {
+		for i := range scatterRes.RangeInfos {
+			rangeInfo := &scatterRes.RangeInfos[i]
 			n.run.ranges[i] = roachpb.Span{
 				Key:    rangeInfo.Desc.StartKey.AsRawKey(),
 				EndKey: rangeInfo.Desc.EndKey.AsRawKey(),

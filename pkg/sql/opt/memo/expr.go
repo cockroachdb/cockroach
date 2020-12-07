@@ -249,16 +249,18 @@ func (n FiltersExpr) RemoveFiltersItem(search *FiltersItem) FiltersExpr {
 func (n *FiltersExpr) RemoveCommonFilters(other FiltersExpr) {
 	// TODO(ridwanmsharif): Faster intersection using a map
 	common := (*n)[:0]
-	for _, filter := range *n {
+	for i := range *n {
+		filter := &(*n)[i]
 		found := false
-		for _, otherFilter := range other {
+		for j := range other {
+			otherFilter := &other[j]
 			if filter.Condition == otherFilter.Condition {
 				found = true
 				break
 			}
 		}
 		if !found {
-			common = append(common, filter)
+			common = append(common, *filter)
 		}
 	}
 	*n = common

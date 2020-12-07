@@ -130,9 +130,11 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			// TODO(mjibson): allow multiple inverted indexes on the same column (i.e.,
 			// with different configurations). See #50655.
 			col := s.columns[0]
-			for _, indexDesc := range desc.GetPublicNonPrimaryIndexes() {
+			indexes := desc.GetPublicNonPrimaryIndexes()
+			for i := range indexes {
+				indexDesc := &indexes[i]
 				if indexDesc.Type == descpb.IndexDescriptor_INVERTED && indexDesc.ColumnIDs[0] == col {
-					spec.Index = &indexDesc
+					spec.Index = indexDesc
 					break
 				}
 			}

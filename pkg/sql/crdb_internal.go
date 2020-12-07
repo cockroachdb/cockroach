@@ -1109,7 +1109,8 @@ CREATE TABLE crdb_internal.session_trace (
 		if err != nil {
 			return err
 		}
-		for _, r := range rows {
+		for i := range rows {
+			r := &rows[i]
 			if err := addRow(r[:]...); err != nil {
 				return err
 			}
@@ -2497,7 +2498,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				parents[id] = uint32(desc.ParentID)
 				tableNames[id] = desc.GetName()
 				indexNames[id] = make(map[uint32]string)
-				for _, idx := range desc.Indexes {
+				for i := range desc.Indexes {
+					idx := &desc.Indexes[i]
 					indexNames[id][uint32(idx.ID)] = idx.Name
 				}
 			case *dbdesc.Immutable:
@@ -2518,7 +2520,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			return nil, nil, err
 		}
 		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
-		for _, desc := range descriptors {
+		for i := range descriptors {
+			desc := &descriptors[i]
 			nodeIDToLocality[desc.NodeID] = desc.Locality
 		}
 
@@ -2938,7 +2941,8 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		}
 
 		alive := make(map[roachpb.NodeID]tree.DBool)
-		for _, d := range descriptors {
+		for i := range descriptors {
+			d := &descriptors[i]
 			if _, err := g.GetInfo(gossip.MakeGossipClientsKey(d.NodeID)); err == nil {
 				alive[d.NodeID] = true
 			}
@@ -3287,7 +3291,8 @@ func addPartitioningRows(
 		}
 		subzoneID := base.SubzoneID(0)
 		if subzone != nil {
-			for i, s := range zone.Subzones {
+			for i := range zone.Subzones {
+				s := &zone.Subzones[i]
 				if s.IndexID == subzone.IndexID && s.PartitionName == subzone.PartitionName {
 					subzoneID = base.SubzoneIDFromIndex(i)
 				}
@@ -3343,7 +3348,8 @@ func addPartitioningRows(
 		}
 		subzoneID := base.SubzoneID(0)
 		if subzone != nil {
-			for i, s := range zone.Subzones {
+			for i := range zone.Subzones {
+				s := &zone.Subzones[i]
 				if s.IndexID == subzone.IndexID && s.PartitionName == subzone.PartitionName {
 					subzoneID = base.SubzoneIDFromIndex(i)
 				}
@@ -3569,7 +3575,8 @@ CREATE TABLE crdb_internal.kv_store_status (
 			return err
 		}
 
-		for _, n := range response.Nodes {
+		for i := range response.Nodes {
+			n := &response.Nodes[i]
 			for _, s := range n.StoreStatuses {
 				attrs := json.NewArrayBuilder(len(s.Desc.Attrs.Attrs))
 				for _, a := range s.Desc.Attrs.Attrs {
