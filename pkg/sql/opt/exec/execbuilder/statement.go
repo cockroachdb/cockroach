@@ -117,34 +117,20 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		return b.buildExplainOpt(explain)
 	}
 
-	if explain.Options.Mode == tree.ExplainPlan {
-		node, err := b.factory.ConstructExplainPlan(
-			&explain.Options,
-			func(ef exec.ExplainFactory) (exec.Plan, error) {
-				// Create a separate builder for the explain query.
-				explainBld := New(ef, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit)
-				explainBld.disableTelemetry = true
-				return explainBld.Build()
-			},
-		)
-		if err != nil {
-			return execPlan{}, err
-		}
-		return planWithColumns(node, explain.ColList), nil
-	}
-
-	// Create a separate builder for the explain query.
-	explainBld := New(b.factory, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit)
-	explainBld.disableTelemetry = true
-	plan, err := explainBld.Build()
+	node, err := b.factory.ConstructExplain(
+		&explain.Options,
+		explain.Analyze,
+		explain.StmtType,
+		func(ef exec.ExplainFactory) (exec.Plan, error) {
+			// Create a separate builder for the explain query.
+			explainBld := New(ef, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit)
+			explainBld.disableTelemetry = true
+			return explainBld.Build()
+		},
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
-	node, err := b.factory.ConstructExplain(&explain.Options, explain.Analyze, explain.StmtType, plan)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	return planWithColumns(node, explain.ColList), nil
 }
 
