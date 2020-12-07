@@ -620,6 +620,16 @@ func TestBackupRestoreAppend(t *testing.T) {
 
 			sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 			sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts2, append(collections, fullBackup2)...)
+
+			if test.name != "userfile" {
+				// Cluster restores from userfile are not supported yet since the
+				// restoring cluster needs to be empty, which means it can't contain any
+				// userfile tables.
+
+				_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, MultiNode, tmpDir, InitNone, base.TestClusterArgs{})
+				defer cleanupEmptyCluster()
+				sqlDBRestore.Exec(t, "RESTORE FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts2, append(collections, fullBackup2)...)
+			}
 		}
 
 		if test.name == "userfile" {
