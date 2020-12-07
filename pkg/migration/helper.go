@@ -53,8 +53,8 @@ func (h *Helper) RequiredNodeIDs(ctx context.Context) ([]roachpb.NodeID, error) 
 }
 
 // EveryNode invokes the given closure (named by the informational parameter op)
-// across every node in the cluster. The mechanism for ensuring that we've done
-// so, while accounting for the possibility of new nodes being added to the
+// across every node in the cluster[*]. The mechanism for ensuring that we've
+// done so, while accounting for the possibility of new nodes being added to the
 // cluster in the interim, is provided by the following structure:
 //   (a) We'll retrieve the list of node IDs for all nodes in the system
 //   (b) For each node, we'll invoke the closure
@@ -64,8 +64,13 @@ func (h *Helper) RequiredNodeIDs(ctx context.Context) ([]roachpb.NodeID, error) 
 //       and (c), we'll invoke the closure each node again
 //   (e) We'll continue to loop around until the node ID list stabilizes
 //
-// By the time EveryNode returns, we'll have thus invoked the closure against
-// every node in the cluster.
+// [*]: We can be a bit more precise here. What EveryNode gives us is a strict
+// causal happened-before relation between running the given closure against
+// every node that's currently a member of the cluster, and the next node that
+// joins the cluster. Put another way: using EveryNode callers will have managed
+// to run something against all nodes without a new node joining half-way
+// through (which could have allowed it to pick up some state off one of the
+// existing nodes that hadn't heard from us yet).
 //
 // To consider one example of how this primitive is used, let's consider our use
 // of it to bump the cluster version. After we return, given all nodes in the
@@ -75,8 +80,8 @@ func (h *Helper) RequiredNodeIDs(ctx context.Context) ([]roachpb.NodeID, error) 
 // all nodes in the cluster, and will always be enabled for any new nodes in the
 // system.
 //
-// It may be possible however that right after we return, a new node may join.
-// This means that some migrations may have to be split up into two version
+// Given that it'll always be possible for new nodes to join after an EveryNode
+// round, it means that some migrations may have to be split up into two version
 // bumps: one that phases out the old version (i.e. stops creation of stale data
 // or behavior) and a clean-up version, which removes any vestiges of the stale
 // data/behavior, and which, when active, ensures that the old data has vanished
