@@ -99,9 +99,10 @@ message ResponseHeader {
   // The number of keys operated on.
   int64 num_keys = 5;
   // The number of bytes returned. Only populated for requests that support it
-  // (at the time of writing, Scan and ReverseScan). The number returned here
-  // corresponds to the (Header).TargetBytes field and loosely measures the
-  // bytes in the timestamps, keys, and values of the returned rows.
+  // (at the time of writing, Scan, ReverseScan and ExportRequest). The number
+  // returned here corresponds to the (Header).TargetBytes field and loosely
+  // measures the bytes in the timestamps, keys, and values of the returned
+  // rows.
   int64 num_bytes = 8;
   // Range or list of ranges used to execute the request. Multiple
   // ranges may be returned for Scan, ReverseScan or DeleteRange.

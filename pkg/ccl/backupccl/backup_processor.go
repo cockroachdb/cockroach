@@ -121,6 +121,8 @@ func (cp *backupDataProcessor) Run(ctx context.Context) {
 }
 
 type spanAndTime struct {
+	// spanIdx is a unique identifier of this object.
+	spanIdx    int
 	span       roachpb.Span
 	start, end hlc.Timestamp
 	attempts   int
@@ -136,11 +138,16 @@ func runBackupProcessor(
 	clusterSettings := flowCtx.Cfg.Settings
 
 	todo := make(chan spanAndTime, len(spec.Spans)+len(spec.IntroducedSpans))
+	var spanIdx int
 	for _, s := range spec.IntroducedSpans {
-		todo <- spanAndTime{span: s, start: hlc.Timestamp{}, end: spec.BackupStartTime}
+		todo <- spanAndTime{spanIdx: spanIdx, span: s, start: hlc.Timestamp{},
+			end: spec.BackupStartTime}
+		spanIdx++
 	}
 	for _, s := range spec.Spans {
-		todo <- spanAndTime{span: s, start: spec.BackupStartTime, end: spec.BackupEndTime}
+		todo <- spanAndTime{spanIdx: spanIdx, span: s, start: spec.BackupStartTime,
+			end: spec.BackupEndTime}
+		spanIdx++
 	}
 
 	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
@@ -196,6 +203,12 @@ func runBackupProcessor(
 		}
 	}
 
+	// spanIdxToProgress is a mapping from the unique identifier of the span being
+	// processed, to the progress recorded for that span.
+	// We wish to aggregate the progress for a particular span until it is
+	// complete i.e all resumeSpans have been processed, before we report it to
+	// the coordinator. This is required to keep progress logging accurate.
+	spanIdxToProgressDetails := make(map[int]BackupManifest_Progress)
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
 		readTime := spec.BackupEndTime.GoTime()
 
@@ -262,6 +275,19 @@ func runBackupProcessor(
 					// back to this range later.
 					header.WaitPolicy = lock.WaitPolicy_Error
 				}
+
+				// If we are asking for the SSTs to be returned, we set the DistSender
+				// response target bytes field to a sentinel value.
+				// The sentinel value of 1 forces the ExportRequest to paginate after
+				// creating a single SST. The max size of this SST can be controlled
+				// using the existing cluster settings, `kv.bulk_sst.target_size` and
+				// `kv.bulk_sst.max_allowed_overage`.
+				// This allows us to cap the size of the ExportRequest response (stored
+				// in memory) to the sum of the above cluster settings.
+				if req.ReturnSST {
+					header.TargetBytes = 1
+				}
+
 				log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",
 					span.span, span.attempts+1, header.UserPriority.String())
 				rawRes, pErr := kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, req)
@@ -284,9 +310,14 @@ func runBackupProcessor(
 					}
 				}
 
-				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+				// Check if we have a partial progress object for the current spanIdx.
+				// If we do that means that the current span is a resumeSpan of the
+				// original span, and we must update the existing progress object.
 				progDetails := BackupManifest_Progress{}
 				progDetails.RevStartTime = res.StartTime
+				if partialProg, ok := spanIdxToProgressDetails[span.spanIdx]; ok {
+					progDetails = partialProg
+				}
 
 				files := make([]BackupManifest_File, 0)
 				for _, file := range res.Files {
@@ -311,13 +342,36 @@ func runBackupProcessor(
 					files = append(files, f)
 				}
 
-				progDetails.Files = files
-				details, err := gogotypes.MarshalAny(&progDetails)
-				if err != nil {
-					return err
+				progDetails.Files = append(progDetails.Files, files...)
+
+				// The entire span has been processed so we can report the progress.
+				if res.ResumeSpan == nil {
+					var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+					details, err := gogotypes.MarshalAny(&progDetails)
+					if err != nil {
+						return err
+					}
+					prog.ProgressDetails = *details
+					progCh <- prog
+				} else {
+					// Update the partial progress as we still have a resumeSpan to
+					// process.
+					spanIdxToProgressDetails[span.spanIdx] = progDetails
 				}
-				prog.ProgressDetails = *details
-				progCh <- prog
+
+				if req.ReturnSST && res.ResumeSpan != nil {
+					if !res.ResumeSpan.Valid() {
+						return errors.Errorf("invalid resume span: %s", res.ResumeSpan)
+					}
+					resumeSpan := spanAndTime{
+						span:      *res.ResumeSpan,
+						start:     span.start,
+						end:       span.end,
+						attempts:  span.attempts,
+						lastTried: span.lastTried,
+					}
+					todo <- resumeSpan
+				}
 			default:
 				// No work left to do, so we can exit. Note that another worker could
 				// still be running and may still push new work (a retry) on to todo but
