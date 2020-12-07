@@ -46,6 +46,9 @@ import (
 
 type execFactory struct {
 	planner *planner
+	// isExplain is true if this factory is used to build a statement inside
+	// EXPLAIN or EXPLAIN ANALYZE.
+	isExplain bool
 }
 
 var _ exec.Factory = &execFactory{}
@@ -1852,10 +1855,14 @@ func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Nod
 	); err != nil {
 		return nil, err
 	}
+	// Don't run as a job if we are inside an EXPLAIN / EXPLAIN ANALYZE. That will
+	// allow us to get insight into the actual execution.
+	runAsJob := !ef.isExplain
 
 	return &createStatsNode{
 		CreateStats: *cs,
 		p:           ef.planner,
+		runAsJob:    runAsJob,
 	}, nil
 }
 
@@ -1870,7 +1877,10 @@ func (ef *execFactory) ConstructExplain(
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
 
-	explainFactory := explain.NewFactory(ef)
+	explainFactory := explain.NewFactory(&execFactory{
+		planner:   ef.planner,
+		isExplain: true,
+	})
 	plan, err := buildFn(explainFactory)
 	if err != nil {
 		return nil, err

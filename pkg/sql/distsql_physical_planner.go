@@ -17,6 +17,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -522,6 +523,12 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 	case *zigzagJoinNode:
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
+		}
+		return shouldDistribute, nil
+
+	case *createStatsNode:
+		if n.runAsJob {
+			return cannotDistribute, planNodeNotSupportedErr
 		}
 		return shouldDistribute, nil
 
@@ -2696,6 +2703,20 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *zigzagJoinNode:
 		plan, err = dsp.createPlanForZigzagJoin(planCtx, n)
+
+	case *createStatsNode:
+		if n.runAsJob {
+			plan, err = dsp.wrapPlan(planCtx, n)
+		} else {
+			// Create a job record but don't actually start the job.
+			var record *jobs.Record
+			record, err = n.makeJobRecord(planCtx.ctx)
+			if err != nil {
+				return nil, err
+			}
+			job := n.p.ExecCfg().JobRegistry.NewJob(*record)
+			plan, err = dsp.createPlanForCreateStats(planCtx, job)
+		}
 
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
