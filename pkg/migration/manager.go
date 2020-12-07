@@ -179,12 +179,19 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			}
 		}
 
-		// TODO(irfansharif): We'll want to retrieve the right migration off of
-		// our registry of migrations, if any, and execute it.
 		// TODO(irfansharif): We'll want to be able to override which migration
 		// is retrieved here within tests. We could make the registry be a part
 		// of the manager, and all tests to provide their own.
-		_ = Registry[clusterVersion]
+
+		// Finally, run the actual migration.
+		migration, ok := registry[clusterVersion]
+		if !ok {
+			log.Infof(ctx, "no migration registered for %s, skipping", clusterVersion)
+			continue
+		}
+		if err := migration.Run(ctx, h); err != nil {
+			return err
+		}
 	}
 
 	return nil
