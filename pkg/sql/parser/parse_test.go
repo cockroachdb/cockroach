@@ -1614,6 +1614,14 @@ func TestParse(t *testing.T) {
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4)`},
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
 
+		{`RESTORE FROM ($1, $2)`},
+		{`RESTORE FROM ($1, $2), $3`},
+		{`RESTORE FROM $1, ($2, $3)`},
+		{`RESTORE FROM ($1, $2), ($3, $4)`},
+		{`RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
+		{`RESTORE FROM $4 IN $1, $2, 'bar'`},
+		{`RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH skip_missing_foreign_keys`},
+
 		{`RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'`},
 
 		{`BACKUP TABLE foo TO 'bar' WITH revision_history, detached`},
