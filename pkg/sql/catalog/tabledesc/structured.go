@@ -447,6 +447,32 @@ func GetColumnFamilyForShard(desc *Mutable, idxColumns []string) string {
 	return ""
 }
 
+// AllActiveAndInactiveUniqueConstraints returns all unique constraints that
+// are not enforced by an index, including both "active" ones on the table
+// descriptor which are being enforced for all writes, and "inactive" ones
+// queued in the mutations list.
+func (desc *Immutable) AllActiveAndInactiveUniqueConstraints() []*descpb.UniqueConstraint {
+	ucs := make([]*descpb.UniqueConstraint, 0, len(desc.UniqueConstraints))
+	for i := range desc.UniqueConstraints {
+		uc := &desc.UniqueConstraints[i]
+		// While a constraint is being validated for existing rows or being dropped,
+		// the constraint is present both on the table descriptor and in the
+		// mutations list in the Validating or Dropping state, so those constraints
+		// are excluded here to avoid double-counting.
+		if uc.Validity != descpb.ConstraintValidity_Validating &&
+			uc.Validity != descpb.ConstraintValidity_Dropping {
+			ucs = append(ucs, uc)
+		}
+	}
+	for i := range desc.Mutations {
+		if c := desc.Mutations[i].GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE {
+			ucs = append(ucs, &c.UniqueConstraint)
+		}
+	}
+	return ucs
+}
+
 // AllActiveAndInactiveForeignKeys returns all foreign keys, including both
 // "active" ones on the index descriptor which are being enforced for all
 // writes, and "inactive" ones queued in the mutations list. An error is
@@ -3022,9 +3048,45 @@ func (desc *Mutable) DropConstraint(
 		return nil
 
 	case descpb.ConstraintTypeUnique:
-		return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
-			"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
-			tree.ErrNameStringP(&detail.Index.Name))
+		if detail.Index != nil {
+			return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
+				"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
+				tree.ErrNameStringP(&detail.Index.Name))
+		}
+		if detail.UniqueConstraint == nil {
+			return errors.AssertionFailedf(
+				"Index or UniqueConstraint must be non-nil for a unique constraint",
+			)
+		}
+		if detail.UniqueConstraint.Validity == descpb.ConstraintValidity_Validating {
+			return unimplemented.NewWithIssueDetailf(42844,
+				"drop-constraint-unique-validating",
+				"constraint %q in the middle of being added, try again later", name)
+		}
+		if detail.UniqueConstraint.Validity == descpb.ConstraintValidity_Dropping {
+			return unimplemented.NewWithIssueDetailf(42844,
+				"drop-constraint-unique-mutation",
+				"constraint %q in the middle of being dropped", name)
+		}
+		// Search through the descriptor's unique constraints and delete the
+		// one that we're supposed to be deleting.
+		for i := range desc.UniqueConstraints {
+			ref := &desc.UniqueConstraints[i]
+			if ref.Name == name {
+				// If the constraint is unvalidated, there's no assumption that it must
+				// hold for all rows, so it can be dropped immediately.
+				if detail.UniqueConstraint.Validity == descpb.ConstraintValidity_Unvalidated {
+					desc.UniqueConstraints = append(desc.UniqueConstraints[:i], desc.UniqueConstraints[i+1:]...)
+					return nil
+				}
+				// TODO(rytaft): set validity to Dropping and call AddUniqueMutation
+				// once supported.
+				return pgerror.New(pgcode.FeatureNotSupported,
+					"dropping valid unique constraints without an index is not yet supported",
+				)
+			}
+		}
+		return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
 
 	case descpb.ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == descpb.ConstraintValidity_Validating {
@@ -3101,7 +3163,7 @@ func (desc *Mutable) RenameConstraint(
 	renameFK func(*Mutable, *descpb.ForeignKeyConstraint, string) error,
 ) error {
 	switch detail.Kind {
-	case descpb.ConstraintTypePK, descpb.ConstraintTypeUnique:
+	case descpb.ConstraintTypePK:
 		for _, tableRef := range desc.DependedOnBy {
 			if tableRef.IndexID != detail.Index.ID {
 				continue
@@ -3109,6 +3171,32 @@ func (desc *Mutable) RenameConstraint(
 			return dependentViewRenameError("index", tableRef.ID)
 		}
 		return desc.RenameIndexDescriptor(detail.Index, newName)
+
+	case descpb.ConstraintTypeUnique:
+		if detail.Index != nil {
+			for _, tableRef := range desc.DependedOnBy {
+				if tableRef.IndexID != detail.Index.ID {
+					continue
+				}
+				return dependentViewRenameError("index", tableRef.ID)
+			}
+			if err := desc.RenameIndexDescriptor(detail.Index, newName); err != nil {
+				return err
+			}
+		} else if detail.UniqueConstraint != nil {
+			if detail.UniqueConstraint.Validity == descpb.ConstraintValidity_Validating {
+				return unimplemented.NewWithIssueDetailf(42844,
+					"rename-constraint-unique-mutation",
+					"constraint %q in the middle of being added, try again later",
+					tree.ErrNameStringP(&detail.UniqueConstraint.Name))
+			}
+			detail.UniqueConstraint.Name = newName
+		} else {
+			return errors.AssertionFailedf(
+				"Index or UniqueConstraint must be non-nil for a unique constraint",
+			)
+		}
+		return nil
 
 	case descpb.ConstraintTypeFK:
 		if detail.FK.Validity == descpb.ConstraintValidity_Validating {

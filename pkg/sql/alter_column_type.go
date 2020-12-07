@@ -197,6 +197,14 @@ func alterColumnTypeGeneral(
 		}
 	}
 
+	for _, uc := range tableDesc.AllActiveAndInactiveUniqueConstraints() {
+		for _, id := range uc.ColumnIDs {
+			if col.ID == id {
+				return colWithConstraintNotSupportedErr
+			}
+		}
+	}
+
 	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
 		for _, id := range append(fk.OriginColumnIDs, fk.ReferencedColumnIDs...) {
 			if col.ID == id {
