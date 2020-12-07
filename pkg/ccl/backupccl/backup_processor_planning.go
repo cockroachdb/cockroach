@@ -47,6 +47,8 @@ func distBackup(
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
 
+	// We don't return the compatible nodes here since PartitionSpans will
+	// filter out incompatible nodes.
 	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
 	if err != nil {
 		return err

@@ -75,12 +75,10 @@ func distRestore(
 		fileEncryption = &roachpb.FileEncryptionOptions{Key: encryption.Key}
 	}
 
-	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
 	if err != nil {
 		return err
 	}
-
-	nodes := getAllCompatibleNodes(planCtx)
 
 	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(nodes, chunks, rekeys)
 	if err != nil {
@@ -227,18 +225,6 @@ func distRestore(
 	evalCtxCopy := *evalCtx
 	dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 	return rowResultWriter.Err()
-}
-
-// getAllCompatibleNodes returns all nodes that are OK to use in the DistSQL
-// plan.
-func getAllCompatibleNodes(planCtx *sql.PlanningCtx) []roachpb.NodeID {
-	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeStatuses))
-	for node, status := range planCtx.NodeStatuses {
-		if status == sql.NodeOK {
-			nodes = append(nodes, node)
-		}
-	}
-	return nodes
 }
 
 // makeSplitAndScatterSpecs returns a map from nodeID to the SplitAndScatter
