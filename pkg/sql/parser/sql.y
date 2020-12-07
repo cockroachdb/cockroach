@@ -2574,6 +2574,16 @@ restore_stmt:
     Options: *($5.restoreOptions()),
     }
   }
+| RESTORE FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  {
+    $$.val = &tree.Restore{
+    DescriptorCoverage: tree.AllDescriptors,
+		Subdir: $3.expr(),
+		From: $5.listOfStringOrPlaceholderOptList(),
+		AsOf: $6.asOfClause(),
+		Options: *($7.restoreOptions()),
+    }
+  }
 | RESTORE targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
