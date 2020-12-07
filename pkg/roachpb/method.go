@@ -141,6 +141,9 @@ const (
 	AdminScatter
 	// AddSSTable links a file into the RocksDB log-structured merge-tree.
 	AddSSTable
+	// Migrate updates the range state to conform to a specified cluster
+	// version. It is our main mechanism for phasing out legacy code below Raft.
+	Migrate
 	// RecomputeStats applies a delta to a Range's MVCCStats to fix computational errors.
 	RecomputeStats
 	// Refresh verifies no writes to a key have occurred since the
