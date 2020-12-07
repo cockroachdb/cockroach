@@ -646,6 +646,11 @@ define CancelSessions {
     IfExists bool
 }
 
+# CreateStatistics implements CREATE STATISTICS.
+define CreateStatistics {
+    Cs *tree.CreateStats
+}
+
 # Export implements EXPORT.
 define Export {
     Input exec.Node

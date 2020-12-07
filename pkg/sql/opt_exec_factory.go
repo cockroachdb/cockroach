@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1837,6 +1838,24 @@ func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (
 	return &cancelSessionsNode{
 		rows:     input.(planNode),
 		ifExists: ifExists,
+	}, nil
+}
+
+// ConstructCreateStatistics is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Node, error) {
+	ctx := ef.planner.extendedEvalCtx.Context
+	if err := featureflag.CheckEnabled(
+		ctx,
+		featureStatsEnabled,
+		&ef.planner.ExecCfg().Settings.SV,
+		"ANALYZE/CREATE STATISTICS",
+	); err != nil {
+		return nil, err
+	}
+
+	return &createStatsNode{
+		CreateStats: *cs,
+		p:           ef.planner,
 	}, nil
 }
 

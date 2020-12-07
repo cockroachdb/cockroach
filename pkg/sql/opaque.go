@@ -75,8 +75,6 @@ func buildOpaque(
 		plan, err = p.AlterRole(ctx, n)
 	case *tree.AlterSequence:
 		plan, err = p.AlterSequence(ctx, n)
-	case *tree.Analyze:
-		plan, err = p.Analyze(ctx, n)
 	case *tree.CommentOnColumn:
 		plan, err = p.CommentOnColumn(ctx, n)
 	case *tree.CommentOnDatabase:
@@ -97,8 +95,6 @@ func buildOpaque(
 		plan, err = p.CreateRole(ctx, n)
 	case *tree.CreateSequence:
 		plan, err = p.CreateSequence(ctx, n)
-	case *tree.CreateStats:
-		plan, err = p.CreateStatistics(ctx, n)
 	case *tree.CreateExtension:
 		plan, err = p.CreateExtension(ctx, n)
 	case *tree.Deallocate:
@@ -213,7 +209,6 @@ func init() {
 		&tree.AlterType{},
 		&tree.AlterSequence{},
 		&tree.AlterRole{},
-		&tree.Analyze{},
 		&tree.CommentOnColumn{},
 		&tree.CommentOnDatabase{},
 		&tree.CommentOnIndex{},
@@ -223,7 +218,6 @@ func init() {
 		&tree.CreateIndex{},
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
-		&tree.CreateStats{},
 		&tree.CreateType{},
 		&tree.CreateRole{},
 		&tree.Deallocate{},

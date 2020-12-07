@@ -982,6 +982,12 @@ func (e *distSQLSpecExecFactory) ConstructCancelSessions(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: cancel sessions")
 }
 
+func (e *distSQLSpecExecFactory) ConstructCreateStatistics(
+	cs *tree.CreateStats,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create statistics")
+}
+
 func (e *distSQLSpecExecFactory) ConstructExport(
 	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {

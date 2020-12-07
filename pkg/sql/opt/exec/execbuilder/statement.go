@@ -272,6 +272,15 @@ func (b *Builder) buildCancelSessions(cancel *memo.CancelSessionsExpr) (execPlan
 	return execPlan{root: node}, nil
 }
 
+func (b *Builder) buildCreateStatistics(c *memo.CreateStatisticsExpr) (execPlan, error) {
+	node, err := b.factory.ConstructCreateStatistics(c.Syntax)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// CreateStatistics returns no columns.
+	return execPlan{root: node}, nil
+}
+
 func (b *Builder) buildExport(export *memo.ExportExpr) (execPlan, error) {
 	input, err := b.buildRelational(export.Input)
 	if err != nil {

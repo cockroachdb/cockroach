@@ -174,3 +174,15 @@ export
  └── k-v-options
       └── k-v-options-item foo
            └── $1
+
+build
+CREATE STATISTICS foo FROM ab
+----
+create-statistics
+ └── CREATE STATISTICS foo FROM ab
+
+build
+ANALYZE ab
+----
+create-statistics
+ └── CREATE STATISTICS "" FROM ab
