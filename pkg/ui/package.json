@@ -21,7 +21,7 @@
     "combokeys": "^2.4.6",
     "connected-react-router": "^6.6.1",
     "create-react-context": "^0.3.0",
-    "highlight.js": "^9.10.0",
+    "highlight.js": "^10.4.1",
     "lodash": "^4.17.19",
     "long": "^4.0.0",
     "mini-create-react-context": "^0.3.2",
