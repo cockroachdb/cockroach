@@ -199,6 +199,9 @@ const (
 	// EmptyArraysInInvertedIndexes is when empty arrays are added to array
 	// inverted indexes.
 	EmptyArraysInInvertedIndexes
+	// UniqueWithoutIndexConstraints is when adding UNIQUE WITHOUT INDEX
+	// constraints is supported.
+	UniqueWithoutIndexConstraints
 
 	// Step (1): Add new versions here.
 )
@@ -320,6 +323,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     EmptyArraysInInvertedIndexes,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     UniqueWithoutIndexConstraints,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 6},
 	},
 
 	// Step (2): Add new versions here.
