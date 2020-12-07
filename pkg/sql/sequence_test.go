@@ -32,30 +32,49 @@ import (
 )
 
 func BenchmarkSequenceIncrement(b *testing.B) {
-	cluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
-	defer cluster.Stopper().Stop(context.Background())
+	runSubBenchMark := func(b *testing.B, cacheSize int, parallelism int) {
+		subBenchMark := func(b *testing.B) {
+			cluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
+			defer cluster.Stopper().Stop(context.Background())
 
-	sqlDB := cluster.ServerConn(0)
+			sqlDB := cluster.ServerConn(0)
+			if _, err := sqlDB.Exec(fmt.Sprintf(`
+				CREATE SEQUENCE seq CACHE %d;
+				CREATE TABLE tbl (
+					id INT PRIMARY KEY DEFAULT nextval('seq'),
+					foo text
+				);
+			`, cacheSize)); err != nil {
+				b.Fatal(err)
+			}
 
-	if _, err := sqlDB.Exec(`
-		CREATE DATABASE test;
-		USE test;
-		CREATE SEQUENCE seq;
-		CREATE TABLE tbl (
-			id INT PRIMARY KEY DEFAULT nextval('seq'),
-			foo text
-		);
-	`); err != nil {
-		b.Fatal(err)
+			b.SetParallelism(parallelism)
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				session, err := sqlDB.Conn(context.Background())
+				if err != nil {
+					b.Fatal(err)
+				}
+				conn := sqlutils.MakeSQLRunner(session)
+				for pb.Next() {
+					conn.Exec(b, "INSERT INTO tbl (foo) VALUES ('foo')")
+				}
+				if err = session.Close(); err != nil {
+					b.Fatal(err)
+				}
+			})
+		}
+		b.Run(fmt.Sprintf("Cache-%d-P-%d", cacheSize, parallelism), subBenchMark)
 	}
 
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		if _, err := sqlDB.Exec("INSERT INTO tbl (foo) VALUES ('foo')"); err != nil {
-			b.Fatal(err)
+	cacheSizes := []int{1, 32, 64, 128, 256, 512}
+	parallelism := []int{1, 2, 4, 8}
+
+	for _, cacheSize := range cacheSizes {
+		for _, p := range parallelism {
+			runSubBenchMark(b, cacheSize, p)
 		}
 	}
-	b.StopTimer()
 }
 
 func BenchmarkUniqueRowID(b *testing.B) {
