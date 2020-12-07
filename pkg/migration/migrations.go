@@ -34,18 +34,46 @@ func init() {
 //
 // Each migration is associated with a specific internal cluster version and is
 // idempotent in nature. When setting the cluster version (via `SET CLUSTER
-// SETTING version`), a manager process determines the set of migrations needed
-// to bridge the gap between the current active cluster version, and the target
-// one.
+// SETTING version`), the manager process determines the set of migrations
+// needed to bridge the gap between the current active cluster version, and the
+// target one. See [1] for where that happens.
 //
-// To introduce a migration, introduce a version key in pkg/clusterversion, and
-// introduce a corresponding internal cluster version for it. See [1] for
-// details. Following that, define a Migration in this package and add it to the
-// Registry. Be sure to key it in with the new cluster version we just added.
-// During cluster upgrades, once the operator is able to set a cluster version
-// setting that's past the version that was introduced (typically the major
-// release version the migration was introduced in), the manager will execute
-// the defined migration before letting the upgrade finalize.
+// To introduce a migration, start by adding version key to pkg/clusterversion
+// and introducing a corresponding internal cluster version for it. See [2] for
+// more details. Following that, define a Migration in this package and add it
+// to the registry. Be sure to key it in with the new cluster version we just
+// added. During cluster upgrades, once the operator is able to set a cluster
+// version setting that's past the version that was introduced (typically the
+// major release version the migration was introduced in), the manager will
+// execute the defined migration before letting the upgrade finalize.
 //
-// [1]: pkg/clusterversion/cockroach_versions.go
-type Migration func(context.Context, *Helper) error
+// If the migration requires below-Raft level changes ([3] is one example),
+// you'll need to add a version switch and the relevant KV-level migration in
+// [4]. See IterateRangeDescriptors and the Migrate KV request for more details.
+//
+// [1]: `(*Manager).Migrate`
+// [2]: pkg/clusterversion/cockroach_versions.go
+// [3]: TruncatedStateMigration
+// [4]: pkg/kv/kvserver/batch_eval/cmd_migrate.go
+//
+// TODO(irfansharif): [3] and [4] are currently referring to what was prototyped
+// in #57445. Once that makes its way into master, this TODO can be removed.
+type Migration struct {
+	cv   clusterversion.ClusterVersion
+	fn   migrationFn
+	desc string
+}
+
+type migrationFn func(context.Context, *Helper) error
+
+// Run kickstarts the actual migration process. It's responsible for recording
+// the ongoing status of the migration into a system table.
+//
+// TODO(irfansharif): Introduce a `system.migrations` table, and populate it here.
+func (m *Migration) Run(ctx context.Context, h *Helper) (err error) {
+	if err := m.fn(ctx, h); err != nil {
+		return err
+	}
+
+	return nil
+}
