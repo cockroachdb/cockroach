@@ -628,7 +628,7 @@ func getAllDescChanges(
 	var res []BackupManifest_DescriptorRevision
 
 	for _, revs := range allRevs {
-		id, err := keys.TODOSQLCodec.DecodeDescMetadataID(revs.Key)
+		id, err := codec.DecodeDescMetadataID(revs.Key)
 		if err != nil {
 			return nil, err
 		}
