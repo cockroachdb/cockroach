@@ -6354,3 +6354,70 @@ SELECT job_id FROM crdb_internal.jobs
 		}
 	}
 }
+
+// TestRollbackForeignKeyAddition tests that rolling back a schema change to add
+// a foreign key before the backreference on the other table has been installed
+// works correctly (#57596).
+func TestRollbackForeignKeyAddition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	// Track whether we've attempted the backfill already, since there's a second
+	// backfill during the schema change rollback.
+	attemptedBackfill := false
+	// Closed when we enter the RunBeforeBackfill knob (which is before
+	// backreferences for foreign keys are added).
+	beforeBackfillNotification := make(chan struct{})
+	// Closed when we're ready to continue with the schema change.
+	continueNotification := make(chan struct{})
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				if !attemptedBackfill {
+					attemptedBackfill = true
+					close(beforeBackfillNotification)
+					<-continueNotification
+				}
+				return nil
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+	tdb.Exec(t, `CREATE TABLE db.t2 (a INT)`)
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, err := sqlDB.ExecContext(ctx, `ALTER TABLE db.t2 ADD FOREIGN KEY (a) REFERENCES db.t`)
+		require.Regexp(t, "job canceled by user", err)
+		return nil
+	})
+
+	<-beforeBackfillNotification
+
+	var jobID int64
+
+	// We filter by descriptor_ids because there's a bug where we create an extra
+	// no-op job for the referenced table (#57624).
+	require.NoError(t, sqlDB.QueryRow(`
+SELECT job_id FROM crdb_internal.jobs WHERE description LIKE '%ALTER TABLE%'
+AND descriptor_ids[1] = 'db.t2'::regclass::int`,
+	).Scan(&jobID))
+	tdb.Exec(t, "CANCEL JOB $1", jobID)
+
+	close(continueNotification)
+	require.NoError(t, g.Wait())
+
+	var status jobs.Status
+	var error string
+	tdb.QueryRow(t, "SELECT status, error FROM crdb_internal.jobs WHERE job_id = $1", jobID).
+		Scan(&status, &error)
+	require.Equal(t, status, jobs.StatusCanceled)
+	require.Equal(t, error, "job canceled by user")
+}
