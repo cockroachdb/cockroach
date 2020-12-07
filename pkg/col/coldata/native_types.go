@@ -33,9 +33,6 @@ type Int64s []int64
 // Float64s is a slice of float64.
 type Float64s []float64
 
-// Float64s is a slice of float64.
-type OldDecimals []apd.Decimal
-
 // Decimals is a flat representation of apd.Decimal objects.
 type Decimals struct {
 	tmp apd.Decimal
