@@ -466,6 +466,14 @@ func (sc *SchemaChanger) addConstraints(
 					if !ok {
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 					}
+					// Check that a unique constraint for the FK still exists on the
+					// referenced table. It's possible for the unique index found during
+					// planning to have been dropped in the meantime, since only the
+					// presence of the backreference prevents it.
+					_, err := sqlbase.FindFKReferencedIndex(backrefTable.TableDesc(), constraint.ForeignKey.ReferencedColumnIDs)
+					if err != nil {
+						return err
+					}
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
 				}
 			}
