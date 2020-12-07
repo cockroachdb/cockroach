@@ -7,38 +7,38 @@ postgres   root  NULL  {}  NULL
 system     node  NULL  {}  NULL
 test       root  NULL  {}  NULL
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM system
 ----
-public  comments                         table  NULL  NULL
-public  descriptor                       table  NULL  NULL
-public  eventlog                         table  NULL  NULL
-public  jobs                             table  NULL  NULL
-public  lease                            table  NULL  NULL
-public  locations                        table  NULL  NULL
-public  namespace                        table  NULL  NULL
-public  namespace2                       table  NULL  NULL
-public  protected_ts_meta                table  NULL  NULL
-public  protected_ts_records             table  NULL  NULL
-public  rangelog                         table  NULL  NULL
-public  replication_constraint_stats     table  NULL  NULL
-public  replication_critical_localities  table  NULL  NULL
-public  replication_stats                table  NULL  NULL
-public  reports_meta                     table  NULL  NULL
-public  role_members                     table  NULL  NULL
-public  role_options                     table  NULL  NULL
-public  scheduled_jobs                   table  NULL  NULL
-public  settings                         table  NULL  NULL
-public  sqlliveness                      table  NULL  NULL
-public  statement_bundle_chunks          table  NULL  NULL
-public  statement_diagnostics            table  NULL  NULL
-public  statement_diagnostics_requests   table  NULL  NULL
-public  table_statistics                 table  NULL  NULL
-public  tenants                          table  NULL  NULL
-public  ui                               table  NULL  NULL
-public  users                            table  NULL  NULL
-public  web_sessions                     table  NULL  NULL
-public  zones                            table  NULL  NULL
+public  comments                         table  NULL  NULL  NULL
+public  descriptor                       table  NULL  NULL  NULL
+public  eventlog                         table  NULL  NULL  NULL
+public  jobs                             table  NULL  NULL  NULL
+public  lease                            table  NULL  NULL  NULL
+public  locations                        table  NULL  NULL  NULL
+public  namespace                        table  NULL  NULL  NULL
+public  namespace2                       table  NULL  NULL  NULL
+public  protected_ts_meta                table  NULL  NULL  NULL
+public  protected_ts_records             table  NULL  NULL  NULL
+public  rangelog                         table  NULL  NULL  NULL
+public  replication_constraint_stats     table  NULL  NULL  NULL
+public  replication_critical_localities  table  NULL  NULL  NULL
+public  replication_stats                table  NULL  NULL  NULL
+public  reports_meta                     table  NULL  NULL  NULL
+public  role_members                     table  NULL  NULL  NULL
+public  role_options                     table  NULL  NULL  NULL
+public  scheduled_jobs                   table  NULL  NULL  NULL
+public  settings                         table  NULL  NULL  NULL
+public  sqlliveness                      table  NULL  NULL  NULL
+public  statement_bundle_chunks          table  NULL  NULL  NULL
+public  statement_diagnostics            table  NULL  NULL  NULL
+public  statement_diagnostics_requests   table  NULL  NULL  NULL
+public  table_statistics                 table  NULL  NULL  NULL
+public  tenants                          table  NULL  NULL  NULL
+public  ui                               table  NULL  NULL  NULL
+public  users                            table  NULL  NULL  NULL
+public  web_sessions                     table  NULL  NULL  NULL
+public  zones                            table  NULL  NULL  NULL
 
 query I rowsort
 SELECT id FROM system.descriptor
