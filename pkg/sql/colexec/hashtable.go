@@ -325,47 +325,48 @@ func (ht *hashTable) buildFromBufferedTuples(ctx context.Context) {
 	ht.unlimitedSlicesNumUint64AccountedFor = newUint64Count
 }
 
-// build executes the entirety of the hash table build phase using the input
-// as the build source. The input is entirely consumed in the process.
-func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
-	switch ht.buildMode {
-	case hashTableFullBuildMode:
-		// We're using the hash table with the full build mode in which we will
-		// fully buffer all tuples from the input first and only then we'll
-		// build the hash table. Such approach allows us to compute the desired
-		// number of hash buckets for the target load factor (this is done in
-		// buildFromBufferedTuples()).
-		for {
-			batch := input.Next(ctx)
-			if batch.Length() == 0 {
-				break
-			}
-			ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
-				ht.vals.append(batch, 0 /* startIdx */, batch.Length())
-			})
+// fullBuild executes the entirety of the hash table build phase using the input
+// as the build source. The input is entirely consumed in the process. Note that
+// the hash table is assumed to operate in hashTableFullBuildMode.
+func (ht *hashTable) fullBuild(ctx context.Context, input colexecbase.Operator) {
+	if ht.buildMode != hashTableFullBuildMode {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"hashTable.fullBuild is called in unexpected build mode %d", ht.buildMode,
+		))
+	}
+	// We're using the hash table with the full build mode in which we will
+	// fully buffer all tuples from the input first and only then we'll build
+	// the hash table. Such approach allows us to compute the desired number of
+	// hash buckets for the target load factor (this is done in
+	// buildFromBufferedTuples()).
+	for {
+		batch := input.Next(ctx)
+		if batch.Length() == 0 {
+			break
 		}
-		ht.buildFromBufferedTuples(ctx)
+		ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
+			ht.vals.append(batch, 0 /* startIdx */, batch.Length())
+		})
+	}
+	ht.buildFromBufferedTuples(ctx)
+}
 
-	case hashTableDistinctBuildMode:
-		for {
-			batch := input.Next(ctx)
-			if batch.Length() == 0 {
-				break
-			}
-			ht.computeHashAndBuildChains(ctx, batch)
-			ht.removeDuplicates(batch, ht.keys, ht.probeScratch.first, ht.probeScratch.next, ht.checkProbeForDistinct)
-			// We only check duplicates when there is at least one buffered
-			// tuple.
-			if ht.vals.Length() > 0 {
-				ht.removeDuplicates(batch, ht.keys, ht.buildScratch.first, ht.buildScratch.next, ht.checkBuildForDistinct)
-			}
-			if batch.Length() > 0 {
-				ht.appendAllDistinct(ctx, batch)
-			}
-		}
-
-	default:
-		colexecerror.InternalError(errors.AssertionFailedf("hashTable in unhandled state"))
+// distinctBuild appends all distinct tuples from batch to the hash table. Note
+// that the hash table is assumed to operate in hashTableDistinctBuildMode.
+func (ht *hashTable) distinctBuild(ctx context.Context, batch coldata.Batch) {
+	if ht.buildMode != hashTableDistinctBuildMode {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"hashTable.distinctBuild is called in unexpected build mode %d", ht.buildMode,
+		))
+	}
+	ht.computeHashAndBuildChains(ctx, batch)
+	ht.removeDuplicates(batch, ht.keys, ht.probeScratch.first, ht.probeScratch.next, ht.checkProbeForDistinct)
+	// We only check duplicates when there is at least one buffered tuple.
+	if ht.vals.Length() > 0 {
+		ht.removeDuplicates(batch, ht.keys, ht.buildScratch.first, ht.buildScratch.next, ht.checkBuildForDistinct)
+	}
+	if batch.Length() > 0 {
+		ht.appendAllDistinct(ctx, batch)
 	}
 }
 
