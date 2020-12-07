@@ -86,18 +86,11 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	// running off the end of the slice its handed.
 	nCoeffBytes := WordLen(coeffWords)
 
-	l := len(appendTo)
-	if cap(appendTo) < len(appendTo)+nCoeffBytes {
-		appendTo = append(appendTo, make([]byte, nCoeffBytes)...)
-	} else {
-		appendTo = appendTo[:len(appendTo)+nCoeffBytes]
-	}
-	decimalSlice := appendTo[l:]
-
 	if nCoeffBytes > 0 {
 		coeffBytes := byteSliceFromWordSlice(coeffWords)
-		copy(decimalSlice, coeffBytes)
+		appendTo = append(appendTo, coeffBytes...)
 	}
+
 	return appendTo
 }
 
