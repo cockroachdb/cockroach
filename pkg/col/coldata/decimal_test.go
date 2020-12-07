@@ -11,10 +11,12 @@
 package coldata
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/stretchr/testify/assert"
 )
 
 // Res is around just to make sure that the benchmark has to do some work.
@@ -45,4 +47,18 @@ func BenchmarkSumDecimals(b *testing.B) {
 		}
 		Res = sum
 	}
+}
+
+func TestUnsafeSetNat(t *testing.T) {
+	b := big.NewInt(1000)
+	c := big.NewInt(2000)
+
+	bSlice := b.Bits()
+	cSlice := c.Bits()
+
+	unsafeSetNat(b, cSlice)
+	unsafeSetNat(c, bSlice)
+
+	assert.Equal(t, b.Int64(), int64(2000))
+	assert.Equal(t, c.Int64(), int64(1000))
 }

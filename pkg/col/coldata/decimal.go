@@ -13,6 +13,7 @@ package coldata
 import (
 	"fmt"
 	"math/big"
+	"reflect"
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
@@ -30,7 +31,7 @@ func (d *Decimals) AppendSlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx in
 		if len(b) > 0 {
 			slice = encoding.WordSliceFromByteSlice(b)
 		}
-		d.decimals[destIdx+i].Coeff.SetBits(slice)
+		unsafeSetNat(&d.decimals[destIdx+i].Coeff, slice)
 	}
 }
 
@@ -50,8 +51,33 @@ func (d *Decimals) AppendVal(v apd.Decimal) {
 	if len(b) > 0 {
 		slice = encoding.WordSliceFromByteSlice(b)
 	}
-	v.Coeff.SetBits(slice)
+	unsafeSetNat(&v.Coeff, slice)
 	d.decimals = append(d.decimals, v)
+}
+
+var sizeofbool = unsafe.Sizeof(false)
+
+var natOffset uintptr
+
+func init() {
+	v := reflect.TypeOf(big.Int{})
+	y, ok := v.FieldByName("abs")
+	if !ok {
+		panic(":(")
+	}
+	natOffset = y.Offset
+}
+
+// unsafeSetNat sets the backing slice of big.Word of the input big.Int to the
+// input []big.Word
+func unsafeSetNat(b *big.Int, words []big.Word) {
+	// Note that this horribly unsafe code depends on the memory layout of
+	// big.Int.
+	ptrTob := unsafe.Pointer(b)
+	ptrTob = unsafe.Pointer(uintptr(ptrTob) + natOffset)
+	ptrToWords := (*[]big.Word)(ptrTob)
+
+	*ptrToWords = words
 }
 
 // CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive apd.Decimal values
@@ -66,7 +92,8 @@ func (d *Decimals) CopySlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int)
 		if len(b) > 0 {
 			slice = encoding.WordSliceFromByteSlice(b)
 		}
-		d.decimals[destIdx+i].Coeff.SetBits(slice)
+		coeff := d.decimals[destIdx+i].Coeff
+		unsafeSetNat(&coeff, slice)
 	}
 }
 
@@ -98,7 +125,7 @@ func (d *Decimals) Set(i int, v apd.Decimal) {
 	if len(v.Coeff.Bits()) > 0 {
 		b := d.data[n:]
 		slice := encoding.WordSliceFromByteSlice(b)
-		v.Coeff.SetBits(slice)
+		unsafeSetNat(&v.Coeff, slice)
 	}
 	d.decimals[i] = v
 }
