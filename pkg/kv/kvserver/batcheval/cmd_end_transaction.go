@@ -905,7 +905,7 @@ func splitTriggerHelper(
 	// initial state. Additionally, since bothDeltaMS is tracking writes to
 	// both sides, we need to update it as well.
 	{
-		// Various pieces of code rely on a replica's lease never being unitialized,
+		// Various pieces of code rely on a replica's lease never being uninitialized,
 		// but it's more than that - it ensures that we properly initialize the
 		// timestamp cache, which is only populated on the lease holder, from that
 		// of the original Range.  We found out about a regression here the hard way
@@ -1002,9 +1002,13 @@ func splitTriggerHelper(
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
 
+		var replicaVersion roachpb.Version
+		if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.ReplicaVersions) {
+			replicaVersion = rec.ClusterSettings().Version.ActiveVersion(ctx).Version
+		}
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
-			*gcThreshold, truncStateType,
+			*gcThreshold, truncStateType, replicaVersion,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")

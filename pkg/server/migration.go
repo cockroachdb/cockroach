@@ -143,3 +143,39 @@ func (m *migrationServer) BumpClusterVersion(
 	resp := &serverpb.BumpClusterVersionResponse{}
 	return resp, nil
 }
+
+// FlushAllEngines implements the MigrationServer interface.
+func (m *migrationServer) FlushAllEngines(
+	ctx context.Context, _ *serverpb.FlushAllEnginesRequest,
+) (*serverpb.FlushAllEnginesResponse, error) {
+	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "flush-all-engines")
+	defer span.Finish()
+	ctx = logtags.AddTag(ctx, "flush-all-engines", nil)
+
+	for _, eng := range m.server.engines {
+		if err := eng.Flush(); err != nil {
+			return nil, err
+		}
+	}
+
+	resp := &serverpb.FlushAllEnginesResponse{}
+	return resp, nil
+}
+
+// PurgeOutdatedReplicas implements the MigrationServer interface.
+func (m *migrationServer) PurgeOutdatedReplicas(
+	ctx context.Context, req *serverpb.PurgeOutdatedReplicasRequest,
+) (*serverpb.PurgeOutdatedReplicasResponse, error) {
+	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "purged-outdated-replicas")
+	defer span.Finish()
+	ctx = logtags.AddTag(ctx, "purge-outdated-replicas", nil)
+
+	if err := m.server.node.stores.VisitStores(func(s *kvserver.Store) error {
+		return s.PurgeOutdatedReplicas(ctx, *req.Version)
+	}); err != nil {
+		return nil, err
+	}
+
+	resp := &serverpb.PurgeOutdatedReplicasResponse{}
+	return resp, nil
+}

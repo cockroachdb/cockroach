@@ -258,10 +258,14 @@ func bootstrapCluster(
 				return splits[i].Less(splits[j])
 			})
 
+			var storeKnobs kvserver.StoreTestingKnobs
+			if kn, ok := initCfg.testingKnobs.Store.(*kvserver.StoreTestingKnobs); ok {
+				storeKnobs = *kn
+			}
 			if err := kvserver.WriteInitialClusterData(
 				ctx, eng, initialValues,
 				bootstrapVersion.Version, len(engines), splits,
-				hlc.UnixNano(),
+				hlc.UnixNano(), storeKnobs,
 			); err != nil {
 				return nil, err
 			}

@@ -1672,6 +1672,7 @@ func handleTruncatedStateBelowRaft(
 	oldTruncatedState, newTruncatedState *roachpb.RaftTruncatedState,
 	loader stateloader.StateLoader,
 	readWriter storage.ReadWriter,
+	assertNoLegacy bool,
 ) (_apply bool, _ error) {
 	// If this is a log truncation, load the resulting unreplicated or legacy
 	// replicated truncated state (in that order). If the migration is happening
@@ -1684,6 +1685,10 @@ func handleTruncatedStateBelowRaft(
 	truncStatePostApply, truncStateIsLegacy, err := loader.LoadRaftTruncatedState(ctx, readWriter)
 	if err != nil {
 		return false, errors.Wrap(err, "loading truncated state")
+	}
+
+	if assertNoLegacy && truncStateIsLegacy {
+		log.Fatalf(ctx, "found legacy truncated state which should no longer exist")
 	}
 
 	// Truncate the Raft log from the entry after the previous

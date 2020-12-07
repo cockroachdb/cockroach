@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -2795,6 +2796,66 @@ func (s *Store) ManuallyEnqueue(
 	processed, processErr := queue.process(ctx, repl, sysCfg)
 	log.Eventf(ctx, "processed: %t", processed)
 	return collect(), processErr, nil
+}
+
+// PurgeOutdatedReplicas purges all replicas with a version less than the one
+// specified. This entails clearing out replicas in the replica GC queue that
+// fit the bill.
+func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Version) error {
+	if interceptor := s.TestingKnobs().PurgeOutdatedReplicasInterceptor; interceptor != nil {
+		interceptor()
+	}
+
+	cfg := s.cfg.Gossip.GetSystemConfig()
+	if cfg == nil {
+		return errors.Errorf("system config not available in gossip")
+	}
+
+	var retErr error
+	// Let's set a reasonable bound on the number of replicas being processed in
+	// parallel.
+	qp := quotapool.NewIntPool("purge-outdated-replicas", 50)
+	g := ctxgroup.WithContext(ctx)
+	s.VisitReplicas(func(repl *Replica) (wantMore bool) {
+		if !repl.Version().Less(version) {
+			// Nothing to do here.
+			return true
+		}
+
+		alloc, err := qp.Acquire(ctx, 1)
+		if err != nil {
+			retErr = err
+			return false
+		}
+
+		g.GoCtx(func(ctx context.Context) error {
+			defer alloc.Release()
+
+			processed, err := s.replicaGCQueue.process(ctx, repl, cfg)
+			if err != nil {
+				return err
+			}
+			if !processed {
+				// We're either still part of the raft group, in which same
+				// something has gone horribly wrong, or more likely (though
+				// still very unlikely in practice): this range has been merged
+				// away, and this store has the replica of the subsuming range
+				// where we're unable to determine if it has applied the merge
+				// trigger. See replicaGCQueue.process for more details. Either
+				// way, we error out.
+				return errors.Newf("unable to gc %s", repl.Desc())
+			}
+			return nil
+		})
+
+		return true
+	})
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	return retErr
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local
