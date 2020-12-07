@@ -2756,6 +2756,31 @@ WHERE
 ----
 'howdy'::STRING
 
+# Regression test for array formatting logic, #55320.
+statement ok
+CREATE TABLE default_arrays (
+  id INT8 NOT NULL PRIMARY KEY,
+  string_array text[] DEFAULT '{cat, dog}',
+  weird_array text[] DEFAULT '{a,"", "b,c", "a''::string","''::string", "a''::string, ''::string",null}',
+  int_array int[] default '{1, 2}'
+);
+
+query TTTBOI
+SELECT a.attname, format_type(a.atttypid, a.atttypmod),
+  pg_get_expr(d.adbin, d.adrelid), a.attnotnull, a.atttypid, a.atttypmod
+ FROM pg_attribute a
+ LEFT JOIN pg_attrdef d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+ LEFT JOIN pg_type t ON a.atttypid = t.oid
+ LEFT JOIN pg_collation c ON a.attcollation = c.oid AND a.attcollation <> t.typcollation
+WHERE a.attrelid = 'default_arrays'::regclass
+  AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum;
+----
+id            bigint    NULL                                                                            true   20    -1
+string_array  text[]    '{cat,dog}'::STRING[]                                                           false  1009  -1
+weird_array   text[]    '{a,"","b,c",a''::string,''::string,"a''::string, ''::string",NULL}'::STRING[]  false  1009  -1
+int_array     bigint[]  '{1,2}'::INT8[]                                                                 false  1016  -1
+
 # Regression test for limits on virtual index scans. (#53522)
 
 let $testid
