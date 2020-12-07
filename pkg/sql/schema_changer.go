@@ -1219,7 +1219,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			scDesc.Mutations[i], columns = sc.reverseMutation(mutation, false /*notStarted*/, columns)
 
 			// If the mutation is for validating a constraint that is being added,
-			// drop the constraint because validation has failed
+			// drop the constraint because validation has failed.
 			if constraint := mutation.GetConstraint(); constraint != nil &&
 				mutation.Direction == sqlbase.DescriptorMutation_ADD {
 				log.Warningf(ctx, "dropping constraint %+v", constraint)
@@ -1234,7 +1234,11 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 					}
 					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scDesc.TableDesc()); err != nil {
-						return err
+						// The function being called will return an assertion error if the
+						// backreference was not found, but it may not have been installed
+						// during the incomplete schema change, so we swallow the error.
+						log.Infof(ctx,
+							"error attempting to remove backreference %s during rollback: %s", fk.Name, err)
 					}
 				}
 			}
