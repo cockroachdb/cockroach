@@ -304,6 +304,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.CancelSessionsExpr:
 		ep, err = b.buildCancelSessions(t)
 
+	case *memo.CreateStatisticsExpr:
+		ep, err = b.buildCreateStatistics(t)
+
 	case *memo.ExportExpr:
 		ep, err = b.buildExport(t)
 

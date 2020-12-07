@@ -124,3 +124,11 @@ func (b *Builder) buildControlSchedules(
 	)
 	return outScope
 }
+
+func (b *Builder) buildCreateStatistics(n *tree.CreateStats, inScope *scope) (outScope *scope) {
+	outScope = inScope.push()
+	outScope.expr = b.factory.ConstructCreateStatistics(&memo.CreateStatisticsPrivate{
+		Syntax: n,
+	})
+	return outScope
+}

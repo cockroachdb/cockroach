@@ -2874,6 +2874,7 @@ col_qualification_elem ::=
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| generated_as '(' a_expr ')' 'STORED'
+	| generated_as '(' a_expr ')' 'VIRTUAL'
 
 family_name ::=
 	name

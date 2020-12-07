@@ -306,7 +306,11 @@ func formatColumn(col *Column, buf *bytes.Buffer) {
 		fmt.Fprintf(buf, " not null")
 	}
 	if col.IsComputed() {
-		fmt.Fprintf(buf, " as (%s) stored", col.ComputedExprStr())
+		if col.Kind() == VirtualComputed {
+			fmt.Fprintf(buf, " as (%s) virtual", col.ComputedExprStr())
+		} else {
+			fmt.Fprintf(buf, " as (%s) stored", col.ComputedExprStr())
+		}
 	}
 	if col.HasDefault() {
 		fmt.Fprintf(buf, " default (%s)", col.DefaultExprStr())
@@ -322,7 +326,7 @@ func formatColumn(col *Column, buf *bytes.Buffer) {
 	case VirtualInverted:
 		fmt.Fprintf(buf, " [virtual-inverted]")
 	case VirtualComputed:
-		fmt.Fprintf(buf, " [virtual-computed]")
+		// No need to show anything more (it already shows up as virtual).
 	}
 }
 

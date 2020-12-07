@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -45,6 +46,9 @@ import (
 
 type execFactory struct {
 	planner *planner
+	// isExplain is true if this factory is used to build a statement inside
+	// EXPLAIN or EXPLAIN ANALYZE.
+	isExplain bool
 }
 
 var _ exec.Factory = &execFactory{}
@@ -1116,13 +1120,6 @@ func (ef *execFactory) ConstructExplainOpt(
 	}, nil
 }
 
-// ConstructExplain is part of the exec.Factory interface.
-func (ef *execFactory) ConstructExplain(
-	options *tree.ExplainOptions, analyze bool, stmtType tree.StatementType, plan exec.Plan,
-) (exec.Node, error) {
-	return constructExplainDistSQLOrVecNode(options, analyze, stmtType, plan.(*planComponents), ef.planner)
-}
-
 // ConstructShowTrace is part of the exec.Factory interface.
 func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) (exec.Node, error) {
 	var node planNode = ef.planner.makeShowTraceNode(compact, typ == tree.ShowTraceKV)
@@ -1847,20 +1844,52 @@ func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (
 	}, nil
 }
 
-func (ef *execFactory) ConstructExplainPlan(
-	options *tree.ExplainOptions, buildFn exec.BuildPlanForExplainFn,
+// ConstructCreateStatistics is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Node, error) {
+	ctx := ef.planner.extendedEvalCtx.Context
+	if err := featureflag.CheckEnabled(
+		ctx,
+		featureStatsEnabled,
+		&ef.planner.ExecCfg().Settings.SV,
+		"ANALYZE/CREATE STATISTICS",
+	); err != nil {
+		return nil, err
+	}
+	// Don't run as a job if we are inside an EXPLAIN / EXPLAIN ANALYZE. That will
+	// allow us to get insight into the actual execution.
+	runAsJob := !ef.isExplain && ef.planner.instrumentation.ShouldUseJobForCreateStats()
+
+	return &createStatsNode{
+		CreateStats: *cs,
+		p:           ef.planner,
+		runAsJob:    runAsJob,
+	}, nil
+}
+
+// ConstructExplain is part of the exec.Factory interface.
+func (ef *execFactory) ConstructExplain(
+	options *tree.ExplainOptions,
+	analyze bool,
+	stmtType tree.StatementType,
+	buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
 
-	flags := explain.MakeFlags(options)
-
-	explainFactory := explain.NewFactory(ef)
+	explainFactory := explain.NewFactory(&execFactory{
+		planner:   ef.planner,
+		isExplain: true,
+	})
 	plan, err := buildFn(explainFactory)
 	if err != nil {
 		return nil, err
 	}
+	if options.Mode != tree.ExplainPlan {
+		wrappedPlan := plan.(*explain.Plan).WrappedPlan.(*planComponents)
+		return constructExplainDistSQLOrVecNode(options, analyze, stmtType, wrappedPlan, ef.planner)
+	}
+	flags := explain.MakeFlags(options)
 	n := &explainPlanNode{
 		flags: flags,
 		plan:  plan.(*explain.Plan),

@@ -13,6 +13,7 @@ CREATE TABLE product_information (
     date_added           DATE DEFAULT current_date(),
     misc                 JSONB,
     full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+    virt_col INT AS (product_id * 10) VIRTUAL,
     INDEX date_added_idx (date_added),
     INDEX supp_id_prod_status_idx (supplier_id, product_status),
     customer_id INT REFERENCES customers_2(id) MATCH FULL ON UPDATE CASCADE ON DELETE CASCADE,

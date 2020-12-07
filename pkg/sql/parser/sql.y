@@ -6123,11 +6123,11 @@ col_qualification_elem:
  }
 | generated_as '(' a_expr ')' STORED
  {
-    $$.val = &tree.ColumnComputedDef{Expr: $3.expr()}
+    $$.val = &tree.ColumnComputedDef{Expr: $3.expr(), Virtual: false}
  }
 | generated_as '(' a_expr ')' VIRTUAL
  {
-    return unimplemented(sqllex, "virtual computed columns")
+    $$.val = &tree.ColumnComputedDef{Expr: $3.expr(), Virtual: true}
  }
 | generated_as error
  {

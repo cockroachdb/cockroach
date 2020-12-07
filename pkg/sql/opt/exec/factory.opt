@@ -323,19 +323,13 @@ define ExplainOpt {
 }
 
 # Explain implements EXPLAIN, showing information about the given plan.
+#
+# When the operator is created, it creates an ExplainFactory and calls BuildFn
+# to construct the plan against that factory.
 define Explain {
     Options *tree.ExplainOptions
     Analyze bool
     StmtType tree.StatementType
-    Plan exec.Plan
-}
-
-# ExplainPlan implements EXPLAIN (PLAN).
-#
-# When the operator is created, it creates an ExplainFactory and calls BuildFn
-# to construct the plan against that factory.
-define ExplainPlan {
-    Options *tree.ExplainOptions
     BuildFn exec.BuildPlanForExplainFn
 }
 
@@ -650,6 +644,11 @@ define CancelQueries {
 define CancelSessions {
     Input exec.Node
     IfExists bool
+}
+
+# CreateStatistics implements CREATE STATISTICS.
+define CreateStatistics {
+    Cs *tree.CreateStats
 }
 
 # Export implements EXPORT.

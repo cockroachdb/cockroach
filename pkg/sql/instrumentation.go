@@ -258,6 +258,14 @@ func (ih *instrumentationHelper) ShouldCollectBundle() bool {
 	return ih.collectBundle
 }
 
+// ShouldUseJobForCreateStats indicates if we should run CREATE STATISTICS as a
+// job (normally true). It is false if we are running a statement under
+// EXPLAIN ANALYZE, in which case we want to run the CREATE STATISTICS plan
+// directly.
+func (ih *instrumentationHelper) ShouldUseJobForCreateStats() bool {
+	return ih.outputMode != explainAnalyzePlanOutput && ih.outputMode != explainAnalyzeDebugOutput
+}
+
 // ShouldBuildExplainPlan returns true if we should build an explain plan and
 // call RecordExplainPlan.
 func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
