@@ -15,6 +15,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/settings/cluster",
+        "//pkg/storage",
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
