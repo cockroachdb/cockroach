@@ -405,7 +405,7 @@ func checkForExistingBackupsInCollection(
 	if err != nil {
 		return err
 	}
-	defaultStore.Close()
+	defer defaultStore.Close()
 
 	r, err := defaultStore.ReadFile(ctx, latestFileName)
 	if err == nil {
