@@ -186,7 +186,8 @@ func alterColumnTypeGeneral(
 		return colOwnsSequenceNotSupportedErr
 	}
 
-	// Disallow ALTER COLUMN TYPE general for columns that have a constraint.
+	// Disallow ALTER COLUMN TYPE general for columns that have a check
+	// constraint.
 	for i := range tableDesc.Checks {
 		uses, err := tableDesc.CheckConstraintUsesColumn(tableDesc.Checks[i], col.ID)
 		if err != nil {
@@ -197,6 +198,18 @@ func alterColumnTypeGeneral(
 		}
 	}
 
+	// Disallow ALTER COLUMN TYPE general for columns that have a
+	// UNIQUE WITHOUT INDEX constraint.
+	for _, uc := range tableDesc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
+		for _, id := range uc.ColumnIDs {
+			if col.ID == id {
+				return colWithConstraintNotSupportedErr
+			}
+		}
+	}
+
+	// Disallow ALTER COLUMN TYPE general for columns that have a foreign key
+	// constraint.
 	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
 		for _, id := range append(fk.OriginColumnIDs, fk.ReferencedColumnIDs...) {
 			if col.ID == id {

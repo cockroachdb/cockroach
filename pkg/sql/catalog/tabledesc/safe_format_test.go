@@ -90,6 +90,9 @@ func TestSafeMessage(t *testing.T) {
 				`Checks: [` +
 				`{Columns: [2], Validity: Validated}` +
 				`], ` +
+				`Unique Without Index Constraints: [` +
+				`{TableID: 12, Columns: [2], Validity: Validated}` +
+				`], ` +
 				`InboundFKs: [` +
 				`{OriginTableID: 2, OriginColumns: [3], ReferencedTableID: 12, ReferencedColumnIDs: [2], Validity: Validated}` +
 				`], ` +
@@ -97,14 +100,22 @@ func TestSafeMessage(t *testing.T) {
 				`{OriginTableID: 12, OriginColumns: [2], ReferencedTableID: 3, ReferencedColumnIDs: [1], Validity: Validated}` +
 				`]}`,
 			f: func(mutable *tabledesc.Mutable) catalog.TableDescriptor {
-				// Add foreign key constraints and foreign key constraints and
-				// various mutations.
+				// Add check constraints, unique without index constraints, foreign key
+				// constraints and various mutations.
 				mutable.Checks = append(mutable.Checks, &descpb.TableDescriptor_CheckConstraint{
 					Name:      "check",
 					Expr:      "j > 0",
 					Validity:  descpb.ConstraintValidity_Validated,
 					ColumnIDs: []descpb.ColumnID{2},
 				})
+				mutable.UniqueWithoutIndexConstraints = append(
+					mutable.UniqueWithoutIndexConstraints, descpb.UniqueWithoutIndexConstraint{
+						Name:      "unique",
+						TableID:   12,
+						Validity:  descpb.ConstraintValidity_Validated,
+						ColumnIDs: []descpb.ColumnID{2},
+					},
+				)
 				mutable.InboundFKs = append(mutable.InboundFKs, descpb.ForeignKeyConstraint{
 					Name:                "inbound_fk",
 					OriginTableID:       2,

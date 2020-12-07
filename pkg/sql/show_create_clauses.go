@@ -442,6 +442,24 @@ func showConstraintClause(
 			f.WriteString(" NOT VALID")
 		}
 	}
+	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
+		f.WriteString(",\n\t")
+		if len(c.Name) > 0 {
+			f.WriteString("CONSTRAINT ")
+			formatQuoteNames(&f.Buffer, c.Name)
+			f.WriteString(" ")
+		}
+		f.WriteString("UNIQUE WITHOUT INDEX (")
+		colNames, err := desc.NamesForColumnIDs(c.ColumnIDs)
+		if err != nil {
+			return err
+		}
+		f.WriteString(strings.Join(colNames, ", "))
+		f.WriteString(")")
+		if c.Validity != descpb.ConstraintValidity_Validated {
+			f.WriteString(" NOT VALID")
+		}
+	}
 	f.WriteString("\n)")
 	return nil
 }
