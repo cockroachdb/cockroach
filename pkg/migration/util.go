@@ -12,31 +12,76 @@ package migration
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
-// identical returns whether or not two lists of node IDs are identical as sets.
-func identical(a, b []roachpb.NodeID) bool {
+// node captures the relevant bits of each node as it pertains to the migration
+// infrastructure.
+type node struct {
+	id    roachpb.NodeID
+	epoch int64
+}
+
+// nodes is a collection of node objects.
+type nodes []node
+
+// identical returns whether or not two lists of nodes are identical as sets,
+// and if not, what changed. The textual diff is only to be used for logging
+// purposes.
+func (ns nodes) identical(other nodes) (ok bool, diff string) {
+	a, b := ns, other
 	if len(a) != len(b) {
-		return false
+		if len(a) < len(b) {
+			diff = "node added to the cluster"
+		} else {
+			diff = "node removed from the cluster"
+		}
+		return false, diff
 	}
+
+	// Sort by node IDs.
 	sort.Slice(a, func(i, j int) bool {
-		return a[i] < a[j]
+		return a[i].id < a[j].id
 	})
 	sort.Slice(b, func(i, j int) bool {
-		return b[i] < b[j]
+		return b[i].id < b[j].id
 	})
 
-	for i, v := range a {
-		if v != b[i] {
-			return false
+	for i := 0; i < len(a); i++ {
+		if a[i].id != b[i].id {
+			return false, "found different set of nodes"
+		}
+		if a[i].epoch != b[i].epoch {
+			return false, fmt.Sprintf("n%d was restarted", a[i].id)
 		}
 	}
-	return true
+	return true, ""
+}
+
+func (ns nodes) String() string {
+	var b strings.Builder
+	b.WriteString("n{")
+	if len(ns) > 0 {
+		b.WriteString(fmt.Sprintf("%d", ns[0].id))
+		for _, node := range ns[1:] {
+			b.WriteString(fmt.Sprintf(",%d", node.id))
+		}
+	}
+	b.WriteString("}")
+
+	return b.String()
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (ns nodes) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.SafeString(redact.SafeString(ns.String()))
 }
 
 // fenceVersionFor constructs the appropriate "fence version" for the given

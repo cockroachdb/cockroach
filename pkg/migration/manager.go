@@ -99,7 +99,8 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
 
 	for _, clusterVersion := range clusterVersions {
-		h := &Helper{Manager: m}
+		cluster := &clusterImpl{nl: m.nl, dialer: m.dialer, exec: m.executor, kvDB: m.db}
+		h := newHelper(cluster, clusterVersion)
 
 		// Push out the version gate to every node in the cluster. Each node
 		// will persist the version, bump the local version gates, and then

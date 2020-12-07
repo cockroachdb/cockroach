@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "migration",
@@ -19,8 +19,33 @@ go_library(
         "//pkg/rpc/nodedialer",
         "//pkg/server/serverpb",
         "//pkg/sql",
+        "//pkg/sql/sqlutil",
         "//pkg/util/log",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/logtags",
+        "//vendor/github.com/cockroachdb/redact",
+        "//vendor/google.golang.org/grpc",
+    ],
+)
+
+go_test(
+    name = "migration_test",
+    srcs = [
+        "helper_test.go",
+        "util_test.go",
+    ],
+    embed = [":migration"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/kv",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/server/serverpb",
+        "//pkg/sql/sqlutil",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/google.golang.org/grpc",
     ],
 )
