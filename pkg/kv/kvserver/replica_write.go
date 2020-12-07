@@ -598,7 +598,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
-	batch, opLogger := r.newBatchedEngine(latchSpans)
+	batch, opLogger := r.newBatchedEngine(latchSpans, ba.Header.DistinctSpans)
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
@@ -614,8 +614,15 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // are enabled, it also returns an engine.OpLoggerBatch. If non-nil, then this
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
-func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (storage.Batch, *storage.OpLoggerBatch) {
-	batch := r.store.Engine().NewBatch()
+func (r *Replica) newBatchedEngine(
+	spans *spanset.SpanSet, distinctSpans bool,
+) (storage.Batch, *storage.OpLoggerBatch) {
+	var batch storage.Batch
+	if distinctSpans {
+		batch = r.store.Engine().NewWriteOnlyBatch()
+	} else {
+		batch = r.store.Engine().NewBatch()
+	}
 	var opLogger *storage.OpLoggerBatch
 	if r.isSystemRange() || RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled

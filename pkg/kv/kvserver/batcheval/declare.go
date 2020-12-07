@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 )
 
@@ -113,5 +114,6 @@ type CommandArgs struct {
 	Header  roachpb.Header
 	Args    roachpb.Request
 	// *Stats should be mutated to reflect any writes made by the command.
-	Stats *enginepb.MVCCStats
+	Stats            *enginepb.MVCCStats
+	PreDistinctBatch storage.Batch
 }

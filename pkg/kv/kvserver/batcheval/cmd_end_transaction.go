@@ -356,8 +356,15 @@ func EndTxn(
 
 	// Run the rest of the commit triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
+		// TODO(sumeer): is there any good reason to confirm that we have
+		// a batch. We don't want the batch for RunCommitTrigger since it
+		// may be a write-only batch.
+		batch := cArgs.PreDistinctBatch
+		if batch == nil {
+			batch = readWriter.(storage.Batch)
+		}
 		triggerResult, err := RunCommitTrigger(
-			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
+			ctx, cArgs.EvalCtx, readWriter, ms, args, reply.Txn,
 		)
 		if err != nil {
 			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
@@ -565,7 +572,7 @@ func updateFinalizedTxn(
 func RunCommitTrigger(
 	ctx context.Context,
 	rec EvalContext,
-	batch storage.Batch,
+	batch storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
@@ -805,7 +812,7 @@ func RunCommitTrigger(
 func splitTrigger(
 	ctx context.Context,
 	rec EvalContext,
-	batch storage.Batch,
+	batch storage.ReadWriter,
 	bothDeltaMS enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
@@ -850,7 +857,7 @@ func splitTrigger(
 func splitTriggerHelper(
 	ctx context.Context,
 	rec EvalContext,
-	batch storage.Batch,
+	batch storage.ReadWriter,
 	statsInput splitStatsHelperInput,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
@@ -1029,7 +1036,7 @@ func splitTriggerHelper(
 func mergeTrigger(
 	ctx context.Context,
 	rec EvalContext,
-	batch storage.Batch,
+	batch storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
 	ts hlc.Timestamp,
@@ -1075,7 +1082,7 @@ func mergeTrigger(
 }
 
 func changeReplicasTrigger(
-	_ context.Context, rec EvalContext, _ storage.Batch, change *roachpb.ChangeReplicasTrigger,
+	_ context.Context, rec EvalContext, _ storage.ReadWriter, change *roachpb.ChangeReplicasTrigger,
 ) result.Result {
 	var pd result.Result
 	// After a successful replica addition or removal check to see if the
