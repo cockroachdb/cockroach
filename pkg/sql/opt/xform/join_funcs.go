@@ -182,6 +182,12 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		return
 	}
 
+	// Generate implicit filters from CHECK constraints and computed columns as
+	// optional filters to help generate lookup join keys.
+	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
+	computedColFilters := c.computedColFilters(scanPrivate.Table, on, optionalFilters)
+	optionalFilters = append(optionalFilters, computedColFilters...)
+
 	var pkCols opt.ColList
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
@@ -191,6 +197,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		numIndexKeyCols := index.LaxKeyColumnCount()
 
 		var constFilters memo.FiltersExpr
+		allFilters := append(onFilters, optionalFilters...)
 
 		// Check if the first column in the index has an equality constraint, or if
 		// it is constrained to a constant value. This check doesn't guarantee that
@@ -198,7 +205,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// in most cases.
 		firstIdxCol := scanPrivate.Table.IndexColumnID(index, 0)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			if _, _, ok := c.findJoinFilterConstants(onFilters, firstIdxCol); !ok {
+			if _, _, ok := c.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
 				return
 			}
 		}
@@ -226,7 +233,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// constant values. We cannot use a NULL value because the lookup
 			// join implements logic equivalent to simple equality between
 			// columns (where NULL never equals anything).
-			foundVals, onIdx, ok := c.findJoinFilterConstants(onFilters, idxCol)
+			foundVals, allIdx, ok := c.findJoinFilterConstants(allFilters, idxCol)
 			if !ok {
 				break
 			}
@@ -261,7 +268,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
-			constFilters = append(constFilters, onFilters[onIdx])
+			constFilters = append(constFilters, allFilters[allIdx])
 		}
 
 		if len(lookupJoin.KeyCols) == 0 {
