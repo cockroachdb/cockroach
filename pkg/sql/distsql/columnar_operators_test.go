@@ -386,9 +386,15 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 						return cmp < 0
 					})
 
+					var outputOrdering execinfrapb.Ordering
+					if rng.Float64() < 0.5 {
+						outputOrdering = execinfrapb.Ordering{Columns: ordCols}
+					}
+
 					spec := &execinfrapb.DistinctSpec{
 						DistinctColumns: distinctCols,
 						OrderedColumns:  orderedCols,
+						OutputOrdering:  outputOrdering,
 					}
 					pspec := &execinfrapb.ProcessorSpec{
 						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
