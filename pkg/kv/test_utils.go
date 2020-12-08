@@ -53,7 +53,7 @@ func IsExpectedRelocateError(err error) bool {
 		"unable to add replica .* which is already present",
 		"received invalid ChangeReplicasTrigger .* to remove self",
 		"failed to apply snapshot: raft group deleted",
-		"snapshot failed:",
+		"snapshot failed",
 		"breaker open",
 		"unable to select removal target", // https://github.com/cockroachdb/cockroach/issues/49513
 		"cannot up-replicate to .*; missing gossiped StoreDescriptor",
