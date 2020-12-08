@@ -147,10 +147,11 @@ define ScalarGroupBy {
 }
 
 # Distinct filters out rows such that only the first row is kept for each set of
-# values along the distinct columns.  The orderedCols are a subset of
+# values along the distinct columns. The orderedCols are a subset of
 # distinctCols; the input is required to be ordered along these columns (i.e.
 # all rows with the same values on these columns are a contiguous part of the
-# input).
+# input). reqOrdering specifies the required output ordering, and if not empty,
+# the input is already ordered according to it.
 define Distinct {
     Input exec.Node
     DistinctCols exec.NodeColumnOrdinalSet

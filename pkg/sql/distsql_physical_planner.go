@@ -1515,10 +1515,13 @@ func (dsp *DistSQLPlanner) planAggregators(
 			sort.Slice(orderedColumns, func(i, j int) bool { return orderedColumns[i] < orderedColumns[j] })
 			sort.Slice(distinctColumns, func(i, j int) bool { return distinctColumns[i] < distinctColumns[j] })
 			distinctSpec := execinfrapb.ProcessorCoreUnion{
-				Distinct: &execinfrapb.DistinctSpec{
-					OrderedColumns:  orderedColumns,
-					DistinctColumns: distinctColumns,
-				},
+				Distinct: dsp.createDistinctSpec(
+					distinctColumns,
+					orderedColumns,
+					false, /* nullsAreDistinct */
+					"",    /* errorOnDup */
+					p.MergeOrdering,
+				),
 			}
 			// Add distinct processors local to each existing current result
 			// processor.
@@ -2396,10 +2399,11 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 	if !distributable {
 		return nil, errors.Errorf("expected distributable inverted filterer")
 	}
+	reqOrdering := execinfrapb.Ordering{}
 	// Instantiate one inverted filterer for every stream.
 	plan.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{InvertedFilterer: invertedFiltererSpec},
-		execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), execinfrapb.Ordering{},
+		execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), reqOrdering,
 	)
 	// De-duplicate the PKs. Note that the inverted filterer output includes
 	// the inverted column always set to NULL, so we exclude it from the
@@ -2414,7 +2418,13 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 	plan.AddSingleGroupStage(
 		dsp.gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{
-			Distinct: &execinfrapb.DistinctSpec{DistinctColumns: distinctColumns},
+			Distinct: dsp.createDistinctSpec(
+				distinctColumns,
+				[]uint32{}, /* orderedColumns */
+				false,      /* nullsAreDistinct */
+				"",         /* errorOnDup */
+				reqOrdering,
+			),
 		},
 		execinfrapb.PostProcessSpec{},
 		plan.GetResultTypes(),
@@ -2972,42 +2982,19 @@ func (dsp *DistSQLPlanner) createPlanForZero(
 	return dsp.createValuesPlan(planCtx, spec, types)
 }
 
-func createDistinctSpec(
-	distinctOnColIdxs util.FastIntSet,
-	columnsInOrder util.FastIntSet,
+func (dsp *DistSQLPlanner) createDistinctSpec(
+	distinctColumns []uint32,
+	orderedColumns []uint32,
 	nullsAreDistinct bool,
 	errorOnDup string,
-	cols []int,
+	outputOrdering execinfrapb.Ordering,
 ) *execinfrapb.DistinctSpec {
-	var orderedColumns []uint32
-	if !columnsInOrder.Empty() {
-		orderedColumns = make([]uint32, 0, columnsInOrder.Len())
-		for i, ok := columnsInOrder.Next(0); ok; i, ok = columnsInOrder.Next(i + 1) {
-			orderedColumns = append(orderedColumns, uint32(cols[i]))
-		}
-	}
-
-	var distinctColumns []uint32
-	if !distinctOnColIdxs.Empty() {
-		for planCol, streamCol := range cols {
-			if streamCol != -1 && distinctOnColIdxs.Contains(planCol) {
-				distinctColumns = append(distinctColumns, uint32(streamCol))
-			}
-		}
-	} else {
-		// If no distinct columns were specified, run distinct on the entire row.
-		for _, streamCol := range cols {
-			if streamCol != -1 {
-				distinctColumns = append(distinctColumns, uint32(streamCol))
-			}
-		}
-	}
-
 	return &execinfrapb.DistinctSpec{
 		OrderedColumns:   orderedColumns,
 		DistinctColumns:  distinctColumns,
 		NullsAreDistinct: nullsAreDistinct,
 		ErrorOnDup:       errorOnDup,
+		OutputOrdering:   outputOrdering,
 	}
 }
 
@@ -3018,26 +3005,23 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	if err != nil {
 		return nil, err
 	}
-	spec := createDistinctSpec(
-		n.distinctOnColIdxs,
-		n.columnsInOrder,
+	spec := dsp.createDistinctSpec(
+		convertFastIntSetToUint32Slice(n.distinctOnColIdxs),
+		convertFastIntSetToUint32Slice(n.columnsInOrder),
 		n.nullsAreDistinct,
 		n.errorOnDup,
-		plan.PlanToStreamColMap,
+		dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap),
 	)
-	dsp.addDistinctProcessors(plan, spec, n.reqOrdering)
+	dsp.addDistinctProcessors(plan, spec)
 	return plan, nil
 }
 
 func (dsp *DistSQLPlanner) addDistinctProcessors(
-	plan *PhysicalPlan, spec *execinfrapb.DistinctSpec, reqOrdering ReqOrdering,
+	plan *PhysicalPlan, spec *execinfrapb.DistinctSpec,
 ) {
 	distinctSpec := execinfrapb.ProcessorCoreUnion{
 		Distinct: spec,
 	}
-	defer func() {
-		plan.SetMergeOrdering(dsp.convertOrdering(reqOrdering, plan.PlanToStreamColMap))
-	}()
 
 	// Add distinct processors local to each existing current result processor.
 	plan.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), plan.MergeOrdering)
@@ -3051,6 +3035,7 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 		distinctSpec.Distinct.DistinctColumns, plan.GetResultTypes(),
 		plan.GetResultTypes(), plan.MergeOrdering, plan.ResultRouters,
 	)
+	plan.SetMergeOrdering(spec.OutputOrdering)
 }
 
 func (dsp *DistSQLPlanner) createPlanForOrdinality(
@@ -3252,15 +3237,17 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			for i, ord := range distinctOrds[side].Columns {
 				sortCols[i] = ord.ColIdx
 			}
-			distinctSpec := &distinctSpecs[side]
-			distinctSpec.Distinct = &execinfrapb.DistinctSpec{
-				DistinctColumns: streamCols,
-				OrderedColumns:  sortCols,
-			}
+			distinctSpecs[side].Distinct = dsp.createDistinctSpec(
+				streamCols,
+				sortCols,
+				false, /* nullsAreDistinct */
+				"",    /* errorOnDup */
+				distinctOrds[side],
+			)
 			if !dsp.isOnlyOnGateway(plan) {
 				// TODO(solon): We could skip this stage if there is a strong key on
 				// the result columns.
-				plan.AddNoGroupingStage(*distinctSpec, execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), distinctOrds[side])
+				plan.AddNoGroupingStage(distinctSpecs[side], execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), distinctOrds[side])
 				plan.AddProjection(streamCols)
 			}
 		}
@@ -3312,7 +3299,13 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			// OrderingColumns field in DistinctSpec once the unused columns
 			// are projected out.
 			distinctSpec := execinfrapb.ProcessorCoreUnion{
-				Distinct: &execinfrapb.DistinctSpec{DistinctColumns: streamCols},
+				Distinct: dsp.createDistinctSpec(
+					streamCols,
+					[]uint32{}, /* orderedColumns */
+					false,      /* nullsAreDistinct */
+					"",         /* errorOnDup */
+					mergeOrdering,
+				),
 			}
 			p.AddSingleGroupStage(dsp.gatewayNodeID, distinctSpec, execinfrapb.PostProcessSpec{}, resultTypes)
 		} else {
