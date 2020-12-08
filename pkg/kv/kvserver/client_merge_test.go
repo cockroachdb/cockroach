@@ -132,10 +132,16 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 
 func getEngineKeySet(t *testing.T, e storage.Engine) map[string]struct{} {
 	t.Helper()
-	kvs, err := storage.Scan(e, roachpb.KeyMin, roachpb.KeyMax, 0 /* max */)
+	// Have to scan local and global keys separately.
+	kvs, err := storage.Scan(e, roachpb.KeyMin, keys.LocalMax, 0 /* max */)
 	if err != nil {
 		t.Fatal(err)
 	}
+	globalKVs, err := storage.Scan(e, keys.LocalMax, roachpb.KeyMax, 0 /* max */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kvs = append(kvs, globalKVs...)
 	out := map[string]struct{}{}
 	for _, kv := range kvs {
 		out[string(kv.Key.Key)] = struct{}{}
