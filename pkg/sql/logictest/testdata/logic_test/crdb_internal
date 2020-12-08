@@ -635,6 +635,32 @@ SELECT
 FROM
 	table41834;
 
+# Compact a range at this node, store.
+query II colnames
+SELECT node_id, store_id FROM crdb_internal.kv_store_status ORDER BY (node_id, store_id) LIMIT 1
+----
+node_id  store_id
+1        1
+
+# Do the compaction.
+query B colnames
+SELECT crdb_internal.compact_engine_span(1, 1, start_key, end_key)
+FROM crdb_internal.ranges_no_leases WHERE table_name = 'foo' LIMIT 1
+----
+crdb_internal.compact_engine_span
+true
+
+# Failed compaction due to unknown node.
+query error could not dial node ID 153
+SELECT crdb_internal.compact_engine_span(153, 1, decode('c08989', 'hex'), decode('c0898a', 'hex'))
+
+# Failed compaction due to unknown store.
+query error store 23 was not found
+SELECT crdb_internal.compact_engine_span(1, 23, decode('c08989', 'hex'), decode('c0898a', 'hex'))
+
+# Failed compaction due to invalid range.
+query error is not less than end
+SELECT crdb_internal.compact_engine_span(1, 1, decode('c0898a', 'hex'), decode('c08989', 'hex'))
 
 subtest builtin_is_admin
 
