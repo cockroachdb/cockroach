@@ -555,6 +555,7 @@ func init() {
 	clientCmds = append(clientCmds, nodeLocalCmds...)
 	clientCmds = append(clientCmds, userFileCmds...)
 	clientCmds = append(clientCmds, stmtDiagCmds...)
+	clientCmds = append(clientCmds, debugResetQuorumCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		varFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
