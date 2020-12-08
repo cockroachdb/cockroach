@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build all-keywords
-
 // all-keywords generates sql/lex/keywords.go from sql.y.
 //
 // It is generically structured with Go templates to allow for quick
@@ -22,6 +20,7 @@
 // (~65k entries) that the mph package never returned from its Build call.
 //
 // A `KeywordsTokens = map[string]int32` map from string -> token id.
+// +build all-keywords
 package main
 
 import (
