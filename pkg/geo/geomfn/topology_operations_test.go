@@ -490,3 +490,44 @@ func TestUnaryUnion(t *testing.T) {
 		})
 	}
 }
+
+func TestMinimumRotatedRectangle(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  geo.Geometry
+		want geo.Geometry
+	}{
+		{
+			"empty multipoint",
+			geo.MustParseGeometry("MULTIPOINT EMPTY"),
+			geo.MustParseGeometry("POLYGON EMPTY"),
+		},
+		{
+			"multipoint",
+			geo.MustParseGeometry("MULTIPOINT ((0 0), (-1 -1), (3 2))"),
+			geo.MustParseGeometry("POLYGON((3 2,2.88 2.16,-1.12 -0.84,-1 -1,3 2))"),
+		},
+		{
+			"multipoint, must give linestring in case of degenerate input",
+			geo.MustParseGeometry("MULTIPOINT ((0 0), (-2 0), (1 0))"),
+			geo.MustParseGeometry("LINESTRING (-2 0, 1 0)"),
+		},
+		{
+			"multipoint, must give point in case of degenerate input",
+			geo.MustParseGeometry("MULTIPOINT ((0 0), (0 0), (0 0))"),
+			geo.MustParseGeometry("POINT (0 0)"),
+		},
+		{
+			"multipoint",
+			geo.MustParseGeometry("MULTIPOINT ((0 0), (1 1), (1 2))"),
+			geo.MustParseGeometry("POLYGON ((0 0, 0.4 -0.2, 1.4 1.8, 1 2, 0 0))"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := MinimumRotatedRectangle(tt.arg)
+			require.NoError(t, err)
+			require.Equal(t, true, EqualsExact(got, tt.want, 1e-6))
+		})
+	}
+}
