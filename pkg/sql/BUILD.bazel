@@ -238,6 +238,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangecache",
+        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",

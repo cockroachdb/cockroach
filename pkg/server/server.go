@@ -555,6 +555,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	lateBoundNode = node
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
+	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
 	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpcServer.Server)
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor)
