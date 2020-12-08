@@ -5853,6 +5853,7 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 	})
 
 	t.Run("last-index-gced", func(t *testing.T) {
+		skip.WithIssue(t, 57546, "flaky test")
 		runner.Exec(t, "CREATE DATABASE test; USE test;")
 		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
 		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'test')")
