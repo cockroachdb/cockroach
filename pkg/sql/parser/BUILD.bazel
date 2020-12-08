@@ -1,5 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+exports_files(["reserved_keywords.awk", "sql.y"])
+
 go_library(
     name = "parser",
     # We intentionally elide sql.go here (that's done through an exclude
