@@ -74,25 +74,33 @@ func (s *Store) Send(
 		}
 	}
 
-	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
+	skipClockUpdate := false
+	if isNow, err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
 		return nil, roachpb.NewError(err)
+	} else if isNow {
+		// If the request timestamp gets set to the current time, we can skip
+		// updating the clock below.
+		skipClockUpdate = true
 	}
 
 	if s.cfg.TestingKnobs.ClockBeforeSend != nil {
 		s.cfg.TestingKnobs.ClockBeforeSend(s.cfg.Clock, ba)
+		skipClockUpdate = false
 	}
 
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted.
-	if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
-		s.cfg.Clock.Update(ba.Timestamp)
-	} else {
-		// If the command appears to come from a node with a bad clock,
-		// reject it now before we reach that point.
-		var err error
-		if err = s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Timestamp); err != nil {
-			return nil, roachpb.NewError(err)
+	if !skipClockUpdate {
+		if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
+			s.cfg.Clock.Update(ba.Timestamp)
+		} else {
+			// If the command appears to come from a node with a bad clock,
+			// reject it now before we reach that point.
+			var err error
+			if err = s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Timestamp); err != nil {
+				return nil, roachpb.NewError(err)
+			}
 		}
 	}
 
