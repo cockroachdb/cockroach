@@ -23,14 +23,14 @@ import (
 // Returns an error if any non-immutable operators are found.
 //
 // Note: This function should only be used to build partial index or arbiter
-// predicate expressions that have only a table's columns in scope and that are
-// not part of the relational expression tree. For example, this is used to
-// populate the TableMeta.PartialIndexPredicates cache and for determining
-// arbiter indexes in UPSERT and INSERT ON CONFLICT mutations. But it is not
-// used for building synthesized mutation columns that determine whether or not
-// to PUT or DEL a partial index entry for a row; these synthesized columns are
-// projected as part of the opt expression tree and they reference columns
-// beyond a table's base scope.
+// predicate expressions that have only a table's ordinary columns in scope and
+// that are not part of the relational expression tree. For example, this is
+// used to populate the TableMeta.PartialIndexPredicates cache and for
+// determining arbiter indexes in UPSERT and INSERT ON CONFLICT mutations. But
+// it is not used for building synthesized mutation columns that determine
+// whether to issue PUT or DEL operations on a partial index for a mutated row;
+// these synthesized columns are projected as part of the opt expression tree
+// and they can reference columns not part of a table's ordinary columns.
 func (b *Builder) buildPartialIndexPredicate(
 	tableScope *scope, expr tree.Expr, context string,
 ) (memo.FiltersExpr, error) {
