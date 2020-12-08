@@ -1287,8 +1287,6 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 			enableMode = false
 		case "kv":
 			traceKV = true
-		case "local":
-			recordingType = tracing.SingleNodeRecording
 		case "cluster":
 			recordingType = tracing.SnowballRecording
 		default:
