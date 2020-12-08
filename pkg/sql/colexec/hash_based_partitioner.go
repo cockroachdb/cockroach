@@ -620,8 +620,13 @@ func (op *hashBasedPartitioner) Close(ctx context.Context) error {
 			retErr = err
 		}
 	}
-	if err := op.diskBackedFallbackOp.(colexecbase.Closer).Close(ctx); err != nil && retErr == nil {
-		retErr = err
+	// Note that it is ok if the disk-backed fallback operator is not a Closer -
+	// it will still be closed appropriately because we accumulate all closers
+	// in NewColOperatorResult.
+	if c, ok := op.diskBackedFallbackOp.(colexecbase.Closer); ok {
+		if err := c.Close(ctx); err != nil {
+			retErr = err
+		}
 	}
 	if !op.testingKnobs.delegateFDAcquisitions && op.fdState.acquiredFDs > 0 {
 		op.fdState.fdSemaphore.Release(op.fdState.acquiredFDs)

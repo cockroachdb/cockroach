@@ -21,11 +21,9 @@ import (
 
 // NewUnorderedDistinct creates an unordered distinct on the given distinct
 // columns.
-// numHashBuckets determines the number of buckets that the hash table is
-// created with.
 func NewUnorderedDistinct(
 	allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) colexecbase.Operator {
+) ResettableOperator {
 	// These numbers were chosen after running the micro-benchmarks.
 	const hashTableLoadFactor = 2.0
 	const hashTableNumBuckets = 128
@@ -53,10 +51,12 @@ func NewUnorderedDistinct(
 type unorderedDistinct struct {
 	OneInputNode
 
-	ht *hashTable
+	ht             *hashTable
+	lastInputBatch coldata.Batch
 }
 
-var _ colexecbase.Operator = &unorderedDistinct{}
+var _ colexecbase.BufferingInMemoryOperator = &unorderedDistinct{}
+var _ ResettableOperator = &unorderedDistinct{}
 
 func (op *unorderedDistinct) Init() {
 	op.input.Init()
@@ -64,19 +64,36 @@ func (op *unorderedDistinct) Init() {
 
 func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := op.input.Next(ctx)
-		if batch.Length() == 0 {
+		op.lastInputBatch = op.input.Next(ctx)
+		if op.lastInputBatch.Length() == 0 {
 			return coldata.ZeroBatch
 		}
-		op.ht.distinctBuild(ctx, batch)
-		if batch.Length() > 0 {
+		// Note that distinctBuild might panic with a memory budget exceeded
+		// error, in which case no tuples from the last input batch are output.
+		// In such scenario, we don't know at which point of distinctBuild that
+		// happened, but it doesn't matter - we will export the last input batch
+		// when falling back to disk.
+		op.ht.distinctBuild(ctx, op.lastInputBatch)
+		if op.lastInputBatch.Length() > 0 {
 			// We've just appended some distinct tuples to the hash table, so we
 			// will emit all of them as the output. Note that the selection
 			// vector on batch is set in such a manner that only the distinct
 			// tuples are selected, so we can just emit batch directly.
-			return batch
+			return op.lastInputBatch
 		}
 	}
+}
+
+func (op *unorderedDistinct) ExportBuffered(colexecbase.Operator) coldata.Batch {
+	// We have output all the distinct tuples except for the ones that are part
+	// of the last input batch, so we only need to export that batch, and then
+	// we're done exporting.
+	if op.lastInputBatch != nil {
+		batch := op.lastInputBatch
+		op.lastInputBatch = nil
+		return batch
+	}
+	return coldata.ZeroBatch
 }
 
 // reset resets the unorderedDistinct.

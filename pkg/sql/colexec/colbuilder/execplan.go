@@ -860,24 +860,44 @@ func NewColOperator(
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
 				result.Op, err = colexec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
 			} else {
-				distinctMemAccount := streamingMemAccount
-				if !useStreamingMemAccountForBuffering {
-					// Create an unlimited mem account explicitly even though there is no
-					// disk spilling because the memory usage of an unordered distinct
-					// operator is proportional to the number of distinct tuples, not the
-					// number of input tuples.
-					// The row execution engine also gives an unlimited amount (that still
-					// needs to be approved by the upstream monitor, so not really
-					// "unlimited") amount of memory to the unordered distinct operator.
-					distinctMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "distinct")
-				}
+				// We have separate unit tests that instantiate in-memory
+				// distinct operators, so we don't need to look at
+				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
+				// a disk-backed one here.
+				distinctMemMonitorName := fmt.Sprintf("distinct-%d", spec.ProcessorID)
+				distinctMemAccount := result.createMemAccountForSpillStrategy(
+					ctx, flowCtx, distinctMemMonitorName,
+				)
 				// TODO(yuzefovich): we have an implementation of partially ordered
 				// distinct, and we should plan it when we have non-empty ordered
 				// columns and we think that the probability of distinct tuples in the
 				// input is about 0.01 or less.
-				result.Op = colexec.NewUnorderedDistinct(
-					colmem.NewAllocator(ctx, distinctMemAccount, factory), inputs[0],
-					core.Distinct.DistinctColumns, result.ColumnTypes,
+				allocator := colmem.NewAllocator(ctx, distinctMemAccount, factory)
+				inMemoryUnorderedDistinct := colexec.NewUnorderedDistinct(
+					allocator, inputs[0], core.Distinct.DistinctColumns, result.ColumnTypes,
+				)
+				diskAccount := result.createDiskAccount(ctx, flowCtx, distinctMemMonitorName)
+				result.Op = colexec.NewOneInputDiskSpiller(
+					inputs[0], inMemoryUnorderedDistinct.(colexecbase.BufferingInMemoryOperator),
+					distinctMemMonitorName,
+					func(input colexecbase.Operator) colexecbase.Operator {
+						monitorNamePrefix := "external-distinct"
+						unlimitedAllocator := colmem.NewAllocator(
+							ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, monitorNamePrefix), factory,
+						)
+						ed := colexec.NewExternalDistinct(
+							unlimitedAllocator,
+							flowCtx,
+							args,
+							input,
+							result.ColumnTypes,
+							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, monitorNamePrefix, factory),
+							diskAccount,
+						)
+						result.ToClose = append(result.ToClose, ed.(colexecbase.Closer))
+						return ed
+					},
+					args.TestingKnobs.SpillingCallbackFn,
 				)
 			}
 
