@@ -4248,7 +4248,27 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if err := ctx.Planner.UnsafeUpsertDescriptor(ctx.Context,
 					int64(*args[0].(*tree.DInt)),
-					[]byte(*args[1].(*tree.DBytes))); err != nil {
+					[]byte(*args[1].(*tree.DBytes)),
+					false /* force */); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"desc", types.Bytes},
+				{"force", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+					[]byte(*args[1].(*tree.DBytes)),
+					bool(*args[2].(*tree.DBool))); err != nil {
 					return nil, err
 				}
 				return tree.DBoolTrue, nil
@@ -4271,6 +4291,25 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if err := ctx.Planner.UnsafeDeleteDescriptor(ctx.Context,
 					int64(*args[0].(*tree.DInt)),
+					false, /* force */
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"force", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+					bool(*args[1].(*tree.DBool)),
 				); err != nil {
 					return nil, err
 				}
@@ -4356,7 +4395,33 @@ may increase either contention or retry errors, or both.`,
 					int64(*args[0].(*tree.DInt)),     // parentID
 					int64(*args[1].(*tree.DInt)),     // parentSchemaID
 					string(*args[2].(*tree.DString)), // name
-					int64(*args[3].(*tree.DInt)),     // descID
+					int64(*args[3].(*tree.DInt)),     // id
+					false,                            // force
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+				{"force", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // id
+					bool(*args[4].(*tree.DBool)),     // force
 				); err != nil {
 					return nil, err
 				}
