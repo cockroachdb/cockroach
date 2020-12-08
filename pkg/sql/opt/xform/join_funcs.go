@@ -162,6 +162,45 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //     "sides" (in this example x,y on the left and z on the right) but there is
 //     no overlap.
 //
+// A lookup join can be created when the ON condition or implicit filters from
+// CHECK constraints and computed columns constrain a prefix of the index
+// columns to non-ranging constant values. To support this, the constant values
+// are cross-joined with the input and used as key columns for the parent lookup
+// join.
+//
+// For example, consider the tables and query below.
+//
+//   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+//   CREATE TABLE xyz (
+//     x INT PRIMARY KEY,
+//     y INT,
+//     z INT NOT NULL,
+//     CHECK z IN (1, 2, 3),
+//     INDEX (z, y)
+//   )
+//   SELECT a, x FROM abc JOIN xyz ON a=y
+//
+// GenerateLookupJoins will perform the following transformation.
+//
+//         Join                       LookupJoin(t@idx)
+//         /   \                           |
+//        /     \            ->            |
+//      Input  Scan(t)                   Join
+//                                       /   \
+//                                      /     \
+//                                    Input  Values(1, 2, 3)
+//
+// If a column is constrained to a single constant value, inlining normalization
+// rules will reduce the cross join into a project.
+//
+//         Join                       LookupJoin(t@idx)
+//         /   \                           |
+//        /     \            ->            |
+//      Input  Scan(t)                  Project
+//                                         |
+//                                         |
+//                                       Input
+//
 func (c *CustomFuncs) GenerateLookupJoins(
 	grp memo.RelExpr,
 	joinType opt.Operator,
@@ -182,6 +221,12 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		return
 	}
 
+	// Generate implicit filters from CHECK constraints and computed columns as
+	// optional filters to help generate lookup join keys.
+	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
+	computedColFilters := c.computedColFilters(scanPrivate.Table, on, optionalFilters)
+	optionalFilters = append(optionalFilters, computedColFilters...)
+
 	var pkCols opt.ColList
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
@@ -191,6 +236,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		numIndexKeyCols := index.LaxKeyColumnCount()
 
 		var constFilters memo.FiltersExpr
+		allFilters := append(onFilters, optionalFilters...)
 
 		// Check if the first column in the index has an equality constraint, or if
 		// it is constrained to a constant value. This check doesn't guarantee that
@@ -198,7 +244,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// in most cases.
 		firstIdxCol := scanPrivate.Table.IndexColumnID(index, 0)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			if _, _, ok := c.findJoinFilterConstants(onFilters, firstIdxCol); !ok {
+			if _, _, ok := c.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
 				return
 			}
 		}
@@ -226,7 +272,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// constant values. We cannot use a NULL value because the lookup
 			// join implements logic equivalent to simple equality between
 			// columns (where NULL never equals anything).
-			foundVals, onIdx, ok := c.findJoinFilterConstants(onFilters, idxCol)
+			foundVals, allIdx, ok := c.findJoinFilterConstants(allFilters, idxCol)
 			if !ok {
 				break
 			}
@@ -261,7 +307,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
-			constFilters = append(constFilters, onFilters[onIdx])
+			constFilters = append(constFilters, allFilters[allIdx])
 		}
 
 		if len(lookupJoin.KeyCols) == 0 {
