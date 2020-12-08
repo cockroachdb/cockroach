@@ -33,6 +33,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # - A testdata "repo" that looks like a go package, but isn't
 #   (testdata/src/example.com)
 #
+# Excluding all SQLPARSER_TARGETS to avoid gazelle removing them
 # gazelle:exclude c-deps/protobuf
 # gazelle:exclude artifacts
 # gazelle:exclude **/zcgo_flags.go
@@ -40,7 +41,11 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude **/*.og.go
 # gazelle:exclude **/*.eg.go
 # gazelle:exclude pkg/sql/parser/sql.go
-# gazelle:exclude pkg/sql/opt/rule_name_string.go
+# gazelle:exclude pkg/sql/parser/helpmap_test.go
+# gazelle:exclude pkg/sql/parser/help_messages.go
+# gazelle:exclude pkg/sql/lex/keywords.go
+# gazelle:exclude pkg/sql/lex/tokens.go
+# gazelle:exclude pkg/sql/lexbase/reserved_keywords.go
 # gazelle:exclude pkg/sql/opt/rule_name_string.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
 

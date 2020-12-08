@@ -9,19 +9,6 @@
 // licenses/APL.txt.
 
 // +build all-keywords
-
-// all-keywords generates sql/lex/keywords.go from sql.y.
-//
-// It is generically structured with Go templates to allow for quick
-// prototyping of different code generation structures for keyword token
-// lookup. Previous attempts:
-//
-// Using github.com/cespare/mph to generate a perfect hash function. Was 10%
-// slower. Also attempted to populate the mph.Table with a sparse array where
-// the index correlated to the token id. This generated such a large array
-// (~65k entries) that the mph package never returned from its Build call.
-//
-// A `KeywordsTokens = map[string]int32` map from string -> token id.
 package main
 
 import (
