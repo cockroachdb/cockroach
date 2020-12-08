@@ -11,6 +11,7 @@
 package constraint
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -347,32 +348,34 @@ func TestExtractConstCols(t *testing.T) {
 	}
 }
 
-func TestIsSingleColumnConstValue(t *testing.T) {
+func TestHasSingleColumnConstValues(t *testing.T) {
 	type testCase struct {
 		constraints []string
 		col         opt.ColumnID
-		val         int
+		vals        []int
 	}
 	cases := []testCase{
-		{[]string{`/1: [/10 - /10]`}, 1, 10},
-		{[]string{`/-1: [/10 - /10]`}, 1, 10},
-		{[]string{`/1: [/10 - /11]`}, 0, 0},
-		{[]string{`/1: [/10 - /10] [/11 - /11]`}, 0, 0},
-		{[]string{`/1/2: [/10/2 - /10/4]`}, 0, 0},
-		{[]string{`/1/2: [/10/2 - /10/2]`}, 0, 0},
+		{[]string{`/1: [/10 - /10]`}, 1, []int{10}},
+		{[]string{`/-1: [/10 - /10]`}, 1, []int{10}},
+		{[]string{`/1: [/10 - /11]`}, 0, nil},
+		{[]string{`/1: [/10 - /10] [/11 - /11]`}, 1, []int{10, 11}},
+		{[]string{`/1: [/10 - /10] [/11 - /11] [/12 - /12]`}, 1, []int{10, 11, 12}},
+		{[]string{`/1: [/10 - /10] [/11 - /11] [/12 - /13]`}, 0, nil},
+		{[]string{`/1/2: [/10/2 - /10/4]`}, 0, nil},
+		{[]string{`/1/2: [/10/2 - /10/2]`}, 0, nil},
 		{
 			[]string{
 				`/1: [/10 - /10]`,
 				`/2: [/8 - /8]`,
 			},
-			0, 0,
+			0, nil,
 		},
 		{
 			[]string{
 				`/1: [/10 - /10]`,
 				`/1/2: [/10/8 - /10/8]`,
 			},
-			0, 0,
+			0, nil,
 		},
 	}
 	evalCtx := tree.NewTestingEvalContext(nil)
@@ -382,13 +385,13 @@ func TestIsSingleColumnConstValue(t *testing.T) {
 			constraint := ParseConstraint(evalCtx, constraint)
 			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
 		}
-		col, val, ok := cs.IsSingleColumnConstValue(evalCtx)
-		intVal := 0
-		if ok {
-			intVal = int(*val.(*tree.DInt))
+		col, vals, _ := cs.HasSingleColumnConstValues(evalCtx)
+		var intVals []int
+		for _, val := range vals {
+			intVals = append(intVals, int(*val.(*tree.DInt)))
 		}
-		if tc.col != col || tc.val != intVal {
-			t.Errorf("%s: expected %d,%d got %d,%d", cs, tc.col, tc.val, col, intVal)
+		if tc.col != col || !reflect.DeepEqual(tc.vals, intVals) {
+			t.Errorf("%s: expected %d,%d got %d,%d", cs, tc.col, tc.vals, col, intVals)
 		}
 	}
 }
