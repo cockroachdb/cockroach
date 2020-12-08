@@ -66,7 +66,7 @@ func TestTrace(t *testing.T) {
 
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
-	sp.StartRecording(tracing.SingleNodeRecording)
+	sp.StartRecording(tracing.SnowballRecording)
 	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 	Event(ctxWithSpan, "test1")
 	VEvent(ctxWithSpan, noLogV(), "test2")
@@ -80,6 +80,7 @@ func TestTrace(t *testing.T) {
 
 	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
 		Span s:
+		  tags: sb=1
 		  event: test1
 		  event: test2
 		  event: testerr
@@ -96,7 +97,7 @@ func TestTraceWithTags(t *testing.T) {
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
 	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
-	sp.StartRecording(tracing.SingleNodeRecording)
+	sp.StartRecording(tracing.SnowballRecording)
 
 	Event(ctxWithSpan, "test1")
 	VEvent(ctxWithSpan, noLogV(), "test2")
@@ -106,6 +107,7 @@ func TestTraceWithTags(t *testing.T) {
 	sp.Finish()
 	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
 		Span s:
+		  tags: sb=1
 		  event: [tag=1] test1
 		  event: [tag=1] test2
 		  event: [tag=1] testerr
@@ -181,7 +183,7 @@ func TestEventLogAndTrace(t *testing.T) {
 
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
-	sp.StartRecording(tracing.SingleNodeRecording)
+	sp.StartRecording(tracing.SnowballRecording)
 	ctxWithBoth := tracing.ContextWithSpan(ctxWithEventLog, sp)
 	// Events should only go to the trace.
 	Event(ctxWithBoth, "test3")
@@ -196,6 +198,7 @@ func TestEventLogAndTrace(t *testing.T) {
 
 	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
 		Span s:
+		  tags: sb=1
 		  event: test3
 		  event: test4
 		  event: test5err

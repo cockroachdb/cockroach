@@ -12570,7 +12570,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	tracedCtx := tracing.ContextWithSpan(ctx, sp)
 	// Go out of our way to enable recording so that expensive logging is enabled
 	// for this context.
-	sp.StartRecording(tracing.SingleNodeRecording)
+	sp.StartRecording(tracing.SnowballRecording)
 	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
 	if pErr != nil {
 		t.Fatal(pErr)

@@ -4119,7 +4119,7 @@ set_exprs_internal:
 // SET [SESSION] <var> { TO | = } <values...>
 // SET [SESSION] TIME ZONE <tz>
 // SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
-// SET [SESSION] TRACING { TO | = } { on | off | cluster | local | kv | results } [,...]
+// SET [SESSION] TRACING { TO | = } { on | off | cluster | kv | results } [,...]
 //
 // %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
 // WEBDOCS/set-vars.html
