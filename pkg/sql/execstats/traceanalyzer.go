@@ -90,12 +90,15 @@ func NewFlowMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowMetada
 //     bytesGroupedByNode, err := analyzer.GetNetworkBytesSent()
 type TraceAnalyzer struct {
 	*FlowMetadata
+	NetworkBytesSentGroupedByNode map[roachpb.NodeID]int64
+	MaxMemoryUsageFromFlowStats   int64
+	MaxMemoryUsageFromStreamStats int64
 }
 
 // MakeTraceAnalyzer creates a TraceAnalyzer with the corresponding physical
 // plan. Call AddTrace to calculate meaningful stats.
-func MakeTraceAnalyzer(flowMetadata *FlowMetadata) TraceAnalyzer {
-	a := TraceAnalyzer{
+func MakeTraceAnalyzer(flowMetadata *FlowMetadata) *TraceAnalyzer {
+	a := &TraceAnalyzer{
 		FlowMetadata: flowMetadata,
 	}
 
@@ -106,7 +109,7 @@ func MakeTraceAnalyzer(flowMetadata *FlowMetadata) TraceAnalyzer {
 //
 // If makeDeterministic is set, statistics that can vary from run to run are set
 // to fixed values; see ComponentStats.MakeDeterministic.
-func (a TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterministic bool) error {
+func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterministic bool) error {
 	// Annotate the maps with stats extracted from the trace.
 	for _, span := range trace {
 		if span.Stats == nil {
@@ -162,6 +165,59 @@ func (a TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterministi
 	return nil
 }
 
+// ProcessStats calculates all the stats for the trace and stores them in TraceAnalyzer.
+// ProcessStats tries to calculate as many stats as possible. If errors occur
+// while calculating stats, ProcessStats adds the error to a slice to be returned
+// to the caller, but continues calculating other stats.
+func (a *TraceAnalyzer) ProcessStats() []error {
+	a.NetworkBytesSentGroupedByNode = make(map[roachpb.NodeID]int64)
+	var errs []error
+
+	// Process streamStats.
+	for _, stats := range a.streamStats {
+		if stats.stats == nil {
+			continue
+		}
+
+		// Set networkBytesSentGroupedByNode.
+		bytes, err := getNetworkBytesFromComponentStats(stats.stats)
+		if err != nil {
+			errs = append(errs, errors.Wrap(err, "error calculating network bytes sent"))
+		} else {
+			a.NetworkBytesSentGroupedByNode[stats.originNodeID] += bytes
+		}
+
+		// Set maxMemoryUsageFromStreamStats.
+		// The row execution flow attaches this stat to a stream stat with the last outbox, so we need to check
+		// stream stats for max memory usage.
+		if memUsage := int64(stats.stats.FlowStats.MaxMemUsage.Value()); memUsage > a.MaxMemoryUsageFromStreamStats {
+			a.MaxMemoryUsageFromStreamStats = memUsage
+		}
+	}
+
+	// Process flowStats.
+	for _, stats := range a.flowStats {
+		if stats.stats == nil {
+			continue
+		}
+
+		// Set maxMemoryUsageFromFlowStats.
+		// The vectorized flow attaches the MaxMemUsage stat to a flow level span, so we need to check
+		// flow stats for max memory usage.
+		// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that are associated with streams,
+		// since it's a flow level stat. However, due to the row exec engine infrastructure, it is too
+		// complicated to attach this to a flow level span. If the row exec engine gets removed, getting
+		// maxMemUsage from streamStats should be removed as well.
+		for _, v := range stats.stats {
+			if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.MaxMemoryUsageFromFlowStats {
+				a.MaxMemoryUsageFromFlowStats = memUsage
+			}
+		}
+	}
+
+	return errs
+}
+
 func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) (int64, error) {
 	// We expect exactly one of BytesReceived and BytesSent to be set.
 	// It may seem like we are double-counting everything (from both the send and
@@ -180,73 +236,6 @@ func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) (int64, er
 	return 0, errors.Errorf("could not get network bytes; neither BytesReceived and BytesSent is set")
 }
 
-// GetNetworkBytesSent returns the number of bytes sent over the network the
-// trace reports, grouped by NodeID.
-func (a TraceAnalyzer) GetNetworkBytesSent() (map[roachpb.NodeID]int64, error) {
-	result := make(map[roachpb.NodeID]int64)
-	for _, stats := range a.streamStats {
-		if stats.stats == nil {
-			continue
-		}
-		bytes, err := getNetworkBytesFromComponentStats(stats.stats)
-		if err != nil {
-			return nil, err
-		}
-		result[stats.originNodeID] += bytes
-	}
-	return result, nil
-}
-
-func getMaxMemoryUsageFromFlowStats(flowStats map[execinfrapb.FlowID]*flowStats) int64 {
-	var maxMemUsage int64
-	for _, stats := range flowStats {
-		if stats.stats == nil {
-			continue
-		}
-		for _, v := range stats.stats {
-			if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > maxMemUsage {
-				maxMemUsage = memUsage
-			}
-		}
-	}
-	return maxMemUsage
-}
-
-func getMaxMemoryUsageFromStreamStats(streamStats map[execinfrapb.StreamID]*streamStats) int64 {
-	var maxMemUsage int64
-	for _, stats := range streamStats {
-		if stats.stats == nil {
-			continue
-		}
-		if memUsage := int64(stats.stats.FlowStats.MaxMemUsage.Value()); memUsage > maxMemUsage {
-			maxMemUsage = memUsage
-		}
-	}
-	return maxMemUsage
-}
-
-// GetMaxMemoryUsage returns the maximum memory used by the trace.
-func (a TraceAnalyzer) GetMaxMemoryUsage() int64 {
-	// The vectorized flow attaches the MaxMemUsage stat to a flow level span, so we check flow stats
-	// for MaxMemUsage.
-	maxMemUsage := getMaxMemoryUsageFromFlowStats(a.flowStats)
-
-	// If maxMemUsage is greater than 0, the vectorized flow was used and we can return this value without
-	// checking stream stats.
-	if maxMemUsage > 0 {
-		return maxMemUsage
-	}
-
-	// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that are associated with streams,
-	// since it's a flow level stat. However, due to the row exec engine infrastructure, it is too
-	// complicated to attach this to a flow level span. If the row exec engine gets removed, getting
-	// maxMemUsage from streamStats should be removed as well.
-
-	// The row execution flow attaches this stat to a stream stat with the last outbox, so we need to check
-	// stream stats for MaxMemUsage.
-	return getMaxMemoryUsageFromStreamStats(a.streamStats)
-}
-
 // QueryLevelStats returns all the top level stats that correspond to the given traces and flow metadata.
 type QueryLevelStats struct {
 	NetworkBytesSent int64
@@ -254,9 +243,9 @@ type QueryLevelStats struct {
 }
 
 // GetQueryLevelStats returns all the top-level stats in a QueryLevelStats struct.
-// GetQueryLevelStats tries to calculate as many stats as possible. If errors occur
-// while calculating stats, GetQueryLevelStats adds the error to a slice to be returned
-// to the caller, but continues calculating other stats.
+// GetQueryLevelStats tries to process as many stats as possible. If errors occur
+// while processing stats, GetQueryLevelStats adds the error to a slice to be returned
+// to the caller.
 func GetQueryLevelStats(
 	trace []tracingpb.RecordedSpan, deterministicExplainAnalyze bool, flowMetadata []*FlowMetadata,
 ) (QueryLevelStats, []error) {
@@ -271,16 +260,20 @@ func GetQueryLevelStats(
 			continue
 		}
 
-		networkBytesSentGroupedByNode, err := analyzer.GetNetworkBytesSent()
-		if err != nil {
-			errs = append(errs, errors.Wrap(err, "error calculating network bytes sent"))
+		if err := analyzer.ProcessStats(); err != nil {
+			errs = append(errs, err...)
 			continue
 		}
-		for _, bytesSentByNode := range networkBytesSentGroupedByNode {
+
+		for _, bytesSentByNode := range analyzer.NetworkBytesSentGroupedByNode {
 			networkBytesSent += bytesSentByNode
 		}
-		if flowMaxMemUsage := analyzer.GetMaxMemoryUsage(); flowMaxMemUsage > queryMaxMemUsage {
-			queryMaxMemUsage = flowMaxMemUsage
+		if analyzer.MaxMemoryUsageFromFlowStats > queryMaxMemUsage {
+			// The vectorized flow was used.
+			queryMaxMemUsage = analyzer.MaxMemoryUsageFromFlowStats
+		} else if analyzer.MaxMemoryUsageFromStreamStats > queryMaxMemUsage {
+			// The row based flow was used.
+			queryMaxMemUsage = analyzer.MaxMemoryUsageFromStreamStats
 		}
 	}
 	queryLevelStats = QueryLevelStats{
