@@ -268,6 +268,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 // and a range, replicating the range to the second store, and reading its data there.
 func TestReplicateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 57560, "flaky test")
 	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
