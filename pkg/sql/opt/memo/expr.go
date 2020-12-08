@@ -622,7 +622,7 @@ func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
 	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
 		s.InvertedConstraint == nil &&
 		s.HardLimit == 0 &&
-		!s.UsesPartialIndex(md)
+		s.PartialIndexPredicate(md) == nil
 }
 
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
@@ -633,23 +633,15 @@ func (s *ScanPrivate) IsLocking() bool {
 	return s.Locking != nil
 }
 
-// UsesPartialIndex returns true if the ScanPrivate indicates a scan over a
-// partial index.
-func (s *ScanPrivate) UsesPartialIndex(md *opt.Metadata) bool {
-	_, isPartialIndex := md.Table(s.Table).Index(s.Index).Predicate()
-	return isPartialIndex
-}
-
 // PartialIndexPredicate returns the FiltersExpr representing the predicate of
 // the partial index that the scan uses. If the scan does not use a partial
-// index or if a partial index predicate was not built for this index, this
-// function panics. UsesPartialIndex should be called first to determine if the
-// scan operates over a partial index.
+// index, nil is returned.
 func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 	tabMeta := md.TableMeta(s.Table)
 	pred, ok := PartialIndexPredicate(tabMeta, s.Index)
 	if !ok {
-		panic(errors.AssertionFailedf("partial index predicate not found for %s", tabMeta.Table.Index(s.Index).Name()))
+		// The index is not a partial index.
+		return nil
 	}
 	return pred
 }

@@ -1252,7 +1252,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
 			f.Buffer.WriteString(",rev")
 		}
-		if t.UsesPartialIndex(f.Memo.Metadata()) {
+		if t.PartialIndexPredicate(f.Memo.Metadata()) != nil {
 			f.Buffer.WriteString(",partial")
 		}
 

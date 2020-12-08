@@ -140,7 +140,7 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			continue
 		}
 
-		_, isPartialIndex := index.Predicate()
+		pred, isPartialIndex := it.tabMeta.PartialIndexPredicates[ord]
 
 		// Skip over partial indexes if rejectPartialIndexes is set.
 		if it.hasRejectFlag(rejectPartialIndexes) && isPartialIndex {
@@ -154,26 +154,19 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 
 		filters := it.originalFilters
 
-		// If the index is a partial index, check whether or not the
-		// originalFilters imply the predicate.
+		// If the index is a partial index, check whether the filters imply the
+		// predicate.
 		if isPartialIndex {
-			pred, ok := memo.PartialIndexPredicate(it.tabMeta, ord)
-			if !ok {
-				// A partial index predicate expression was not built for the
-				// partial index. See Builder.buildScan for details on when this
-				// can occur. Implication cannot be proven so it must be
-				// skipped.
-				continue
-			}
+			predFilters := *pred.(*memo.FiltersExpr)
 
-			// If there are no originalFilters, then skip over any partial
-			// indexes that are not pseudo-partial indexes.
-			if filters == nil && !pred.IsTrue() {
+			// If there are no filters, then skip over any partial indexes that
+			// are not pseudo-partial indexes.
+			if filters == nil && !predFilters.IsTrue() {
 				continue
 			}
 
 			if filters != nil {
-				remainingFilters, ok := it.im.FiltersImplyPredicate(filters, pred)
+				remainingFilters, ok := it.im.FiltersImplyPredicate(filters, predFilters)
 				if !ok {
 					// The originalFilters do not imply the predicate, so skip
 					// over the partial index.
