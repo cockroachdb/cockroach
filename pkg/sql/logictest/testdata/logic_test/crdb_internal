@@ -634,6 +634,30 @@ SELECT
 FROM
 	table41834;
 
+# Compact a range at this node, store.
+query II colnames
+SELECT node_id, store_id FROM crdb_internal.kv_store_status ORDER BY (node_id, store_id) LIMIT 1
+----
+node_id  store_id
+1        1
+
+# Do the compaction.
+query TTB colnames
+SELECT start_pretty, end_pretty,
+ crdb_internal.compact_engine_span(1, 1, to_hex(start_key), to_hex(end_key))
+FROM crdb_internal.ranges_no_leases WHERE table_name = 'foo' LIMIT 1
+----
+start_pretty   end_pretty     crdb_internal.compact_engine_span
+/Table/56/1/1  /Table/56/1/2  true
+
+# Failed compaction due to unknown node.
+query error could not dial node ID 153
+SELECT crdb_internal.compact_engine_span(153, 1, 'c08989', 'c0898a')
+
+# Failed compaction due to unparseable start_key.
+query error encoding/hex: odd length hex string
+SELECT crdb_internal.compact_engine_span(1, 1, 'c0898', 'c0898a')
+
 
 subtest builtin_is_admin
 
