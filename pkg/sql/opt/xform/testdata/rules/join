@@ -2933,12 +2933,12 @@ inner-join (lookup abcde)
  │    ├── key columns: [1 12] = [5 6]
  │    ├── fd: ()-->(6), (10)-->(5,7), (1)==(5), (5)==(1)
  │    ├── project
- │    │    ├── columns: "project_const_col_@6":12!null m:1 n:2
+ │    │    ├── columns: "lookup_join_const_col_@6":12!null m:1 n:2
  │    │    ├── fd: ()-->(12)
  │    │    ├── scan small
  │    │    │    └── columns: m:1 n:2
  │    │    └── projections
- │    │         └── 10 [as="project_const_col_@6":12]
+ │    │         └── 10 [as="lookup_join_const_col_@6":12]
  │    └── filters (true)
  └── filters (true)
 
@@ -2975,13 +2975,111 @@ inner-join (lookup abcde)
  │    ├── key columns: [1 12 13] = [5 6 7]
  │    ├── fd: ()-->(6,7), (10)-->(5), (1)==(5), (5)==(1)
  │    ├── project
- │    │    ├── columns: "project_const_col_@6":12!null "project_const_col_@7":13!null m:1 n:2
+ │    │    ├── columns: "lookup_join_const_col_@7":13!null "lookup_join_const_col_@6":12!null m:1 n:2
  │    │    ├── fd: ()-->(12,13)
  │    │    ├── scan small
  │    │    │    └── columns: m:1 n:2
  │    │    └── projections
- │    │         ├── 10 [as="project_const_col_@6":12]
- │    │         └── 10 [as="project_const_col_@7":13]
+ │    │         ├── 10 [as="lookup_join_const_col_@7":13]
+ │    │         └── 10 [as="lookup_join_const_col_@6":12]
+ │    └── filters (true)
+ └── filters (true)
+
+# Column constrained to multiple constants used by lookup joiner.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM small INNER JOIN abcde ON a=m AND b IN (10, 20, 30)
+----
+inner-join (lookup abcde)
+ ├── columns: m:1!null n:2 a:5!null b:6!null c:7 d:8 e:9
+ ├── key columns: [10] = [10]
+ ├── lookup columns are key
+ ├── fd: (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcde@secondary)
+ │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7 abcde.rowid:10!null
+ │    ├── key columns: [1 12] = [5 6]
+ │    ├── fd: (10)-->(5-7), (1)==(5), (5)==(1)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: m:1 n:2 "lookup_join_const_col_@6":12!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1 n:2
+ │    │    ├── values
+ │    │    │    ├── columns: "lookup_join_const_col_@6":12!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── (10,)
+ │    │    │    ├── (20,)
+ │    │    │    └── (30,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── filters (true)
+
+# One column constrained to multiple constants and another constrained to a
+# single constant used by lookup joiner.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM small INNER JOIN abcde ON a=m AND b IN (10, 20, 30) AND c=10
+----
+inner-join (lookup abcde)
+ ├── columns: m:1!null n:2 a:5!null b:6!null c:7!null d:8 e:9
+ ├── key columns: [10] = [10]
+ ├── lookup columns are key
+ ├── fd: ()-->(7), (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcde@secondary)
+ │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7!null abcde.rowid:10!null
+ │    ├── key columns: [1 12 13] = [5 6 7]
+ │    ├── fd: ()-->(7), (10)-->(5,6), (1)==(5), (5)==(1)
+ │    ├── project
+ │    │    ├── columns: "lookup_join_const_col_@7":13!null m:1 n:2 "lookup_join_const_col_@6":12!null
+ │    │    ├── fd: ()-->(13)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: m:1 n:2 "lookup_join_const_col_@6":12!null
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    │    ├── scan small
+ │    │    │    │    └── columns: m:1 n:2
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: "lookup_join_const_col_@6":12!null
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── (10,)
+ │    │    │    │    ├── (20,)
+ │    │    │    │    └── (30,)
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── 10 [as="lookup_join_const_col_@7":13]
+ │    └── filters (true)
+ └── filters (true)
+
+# Multiple columns constrained to multiple constants used by lookup joiner.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM small INNER JOIN abcde ON a=m AND b IN (10, 20) AND c IN (30, 40)
+----
+inner-join (lookup abcde)
+ ├── columns: m:1!null n:2 a:5!null b:6!null c:7!null d:8 e:9
+ ├── key columns: [10] = [10]
+ ├── lookup columns are key
+ ├── fd: (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcde@secondary)
+ │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7!null abcde.rowid:10!null
+ │    ├── key columns: [1 12 13] = [5 6 7]
+ │    ├── fd: (10)-->(5-7), (1)==(5), (5)==(1)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: m:1 n:2 "lookup_join_const_col_@6":12!null "lookup_join_const_col_@7":13!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: m:1 n:2 "lookup_join_const_col_@6":12!null
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    │    ├── scan small
+ │    │    │    │    └── columns: m:1 n:2
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: "lookup_join_const_col_@6":12!null
+ │    │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    │    ├── (10,)
+ │    │    │    │    └── (20,)
+ │    │    │    └── filters (true)
+ │    │    ├── values
+ │    │    │    ├── columns: "lookup_join_const_col_@7":13!null
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── (30,)
+ │    │    │    └── (40,)
+ │    │    └── filters (true)
  │    └── filters (true)
  └── filters (true)
 
@@ -2999,13 +3097,13 @@ inner-join (lookup abcde)
  │    ├── key columns: [1 12 13] = [5 6 7]
  │    ├── fd: ()-->(6,7), (10)-->(5), (1)==(5), (5)==(1)
  │    ├── project
- │    │    ├── columns: "project_const_col_@6":12!null "project_const_col_@7":13!null m:1 n:2
+ │    │    ├── columns: "lookup_join_const_col_@7":13!null "lookup_join_const_col_@6":12!null m:1 n:2
  │    │    ├── fd: ()-->(12,13)
  │    │    ├── scan small
  │    │    │    └── columns: m:1 n:2
  │    │    └── projections
- │    │         ├── 10 [as="project_const_col_@6":12]
- │    │         └── 10 [as="project_const_col_@7":13]
+ │    │         ├── 10 [as="lookup_join_const_col_@7":13]
+ │    │         └── 10 [as="lookup_join_const_col_@6":12]
  │    └── filters (true)
  └── filters
       └── d:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
@@ -3043,13 +3141,13 @@ project
       ├── key columns: [12 1 13] = [5 6 7]
       ├── fd: ()-->(5,7), (1)==(6), (6)==(1)
       ├── project
-      │    ├── columns: "project_const_col_@5":12!null "project_const_col_@7":13!null m:1
+      │    ├── columns: "lookup_join_const_col_@7":13!null "lookup_join_const_col_@5":12!null m:1
       │    ├── fd: ()-->(12,13)
       │    ├── scan small
       │    │    └── columns: m:1
       │    └── projections
-      │         ├── 10 [as="project_const_col_@5":12]
-      │         └── 10 [as="project_const_col_@7":13]
+      │         ├── 10 [as="lookup_join_const_col_@7":13]
+      │         └── 10 [as="lookup_join_const_col_@5":12]
       └── filters (true)
 
 # Projection of constant columns work with non const expressions as well.
@@ -3071,13 +3169,13 @@ inner-join (lookup bool_col)
  │    ├── key columns: [1 12 13] = [5 6 7]
  │    ├── fd: ()-->(6,7), (10)-->(5), (1)==(5), (5)==(1)
  │    ├── project
- │    │    ├── columns: "project_const_col_@6":12!null "project_const_col_@7":13!null m:1 n:2
+ │    │    ├── columns: "lookup_join_const_col_@7":13!null "lookup_join_const_col_@6":12!null m:1 n:2
  │    │    ├── fd: ()-->(12,13)
  │    │    ├── scan small
  │    │    │    └── columns: m:1 n:2
  │    │    └── projections
- │    │         ├── 10 [as="project_const_col_@6":12]
- │    │         └── true [as="project_const_col_@7":13]
+ │    │         ├── true [as="lookup_join_const_col_@7":13]
+ │    │         └── 10 [as="lookup_join_const_col_@6":12]
  │    └── filters (true)
  └── filters (true)
 
@@ -3094,13 +3192,13 @@ inner-join (lookup bool_col)
  │    ├── key columns: [1 12 13] = [5 6 7]
  │    ├── fd: ()-->(6,7), (10)-->(5), (1)==(5), (5)==(1)
  │    ├── project
- │    │    ├── columns: "project_const_col_@6":12!null "project_const_col_@7":13!null m:1 n:2
+ │    │    ├── columns: "lookup_join_const_col_@7":13!null "lookup_join_const_col_@6":12!null m:1 n:2
  │    │    ├── fd: ()-->(12,13)
  │    │    ├── scan small
  │    │    │    └── columns: m:1 n:2
  │    │    └── projections
- │    │         ├── 10 [as="project_const_col_@6":12]
- │    │         └── true [as="project_const_col_@7":13]
+ │    │         ├── true [as="lookup_join_const_col_@7":13]
+ │    │         └── 10 [as="lookup_join_const_col_@6":12]
  │    └── filters (true)
  └── filters (true)
 
@@ -3117,13 +3215,13 @@ inner-join (lookup bool_col)
  │    ├── key columns: [1 12 13] = [5 6 7]
  │    ├── fd: ()-->(6,7), (10)-->(5), (1)==(5), (5)==(1)
  │    ├── project
- │    │    ├── columns: "project_const_col_@6":12!null "project_const_col_@7":13!null m:1 n:2
+ │    │    ├── columns: "lookup_join_const_col_@7":13!null "lookup_join_const_col_@6":12!null m:1 n:2
  │    │    ├── fd: ()-->(12,13)
  │    │    ├── scan small
  │    │    │    └── columns: m:1 n:2
  │    │    └── projections
- │    │         ├── 10 [as="project_const_col_@6":12]
- │    │         └── false [as="project_const_col_@7":13]
+ │    │         ├── false [as="lookup_join_const_col_@7":13]
+ │    │         └── 10 [as="lookup_join_const_col_@6":12]
  │    └── filters (true)
  └── filters (true)
 
