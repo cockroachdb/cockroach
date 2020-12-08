@@ -623,11 +623,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	inputStats := sb.makeTableStatistics(scan.Table)
 	s.RowCount = inputStats.RowCount
-
-	var pred FiltersExpr
-	if scan.UsesPartialIndex(sb.md) {
-		pred = scan.PartialIndexPredicate(sb.md)
-	}
+	pred := scan.PartialIndexPredicate(sb.md)
 
 	// If the constraints and pred are nil, then this scan is an unconstrained
 	// scan on a non-partial index. The stats of the scan are the same as the
