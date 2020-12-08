@@ -2165,10 +2165,8 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 		"expected one of racing AdminChangeReplicasRequests to fail but neither did")
 	// It is possible that an error can occur due to a rejected snapshot from the
 	// target range. We don't want to fail the test if we got one of those.
-	isSnapshotErr := func(err error) bool {
-		return testutils.IsError(err, "snapshot failed:")
-	}
-	atLeastOneIsSnapshotErr := isSnapshotErr(err1) || isSnapshotErr(err2)
+	atLeastOneIsSnapshotErr := kvserver.IsRetriableReplicationChangeError(err1) ||
+		kvserver.IsRetriableReplicationChangeError(err2)
 	assert.Falsef(t, err1 != nil && err2 != nil && !atLeastOneIsSnapshotErr,
 		"expected only one of racing AdminChangeReplicasRequests to fail but both "+
 			"had errors and neither were snapshot: %v %v", err1, err2)
