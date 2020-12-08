@@ -4521,6 +4521,32 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.compact_engine_span": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"node_id", types.Int},
+				{"store_id", types.Int},
+				{"range_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.CompactEngineSpan(
+					ctx.Context, int32(*args[0].(*tree.DInt)), int32(*args[1].(*tree.DInt)),
+					int64(*args[2].(*tree.DInt))); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for restoring engine health.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"num_nulls": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     categoryComparison,
