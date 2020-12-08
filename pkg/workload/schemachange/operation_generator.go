@@ -476,11 +476,6 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 		}
 
 		if !tableExists {
-			// If a duplicate sequence exists, then a new sequence will not be created. In this case,
-			// a pgcode.UndefinedTable will not occur.
-			if !sequenceExists {
-				og.expectedExecErrors.add(pgcode.UndefinedTable)
-			}
 			seqOptions = append(
 				seqOptions,
 				tree.SequenceOption{
