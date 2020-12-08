@@ -192,7 +192,8 @@ func (p *planner) canDropTable(
 	// error if we tried to check for ownership on the schema.
 	if checkOwnership {
 		// If the user owns the schema the table is part of, they can drop the table.
-		hasOwnership, err = p.HasOwnershipOnSchema(ctx, tableDesc.GetParentSchemaID())
+		hasOwnership, err = p.HasOwnershipOnSchema(
+			ctx, tableDesc.GetParentSchemaID(), tableDesc.GetParentID())
 		if err != nil {
 			return err
 		}
