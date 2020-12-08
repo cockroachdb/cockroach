@@ -734,6 +734,7 @@ message AggregatorSpec {
     REGR_SXY = 42;
     REGR_COUNT = 43;
     REGR_AVGX = 44;
+    REGR_AVGY = 45;
   }
 
   enum Type {
