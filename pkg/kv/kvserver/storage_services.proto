@@ -26,3 +26,7 @@ service PerReplica {
     rpc WaitForApplication(cockroach.kv.kvserver.WaitForApplicationRequest) returns (cockroach.kv.kvserver.WaitForApplicationResponse) {}
     rpc WaitForReplicaInit(cockroach.kv.kvserver.WaitForReplicaInitRequest) returns (cockroach.kv.kvserver.WaitForReplicaInitResponse) {}
 }
+
+service PerStore {
+    rpc CompactEngineSpan(cockroach.kv.kvserver.CompactEngineSpanRequest) returns (cockroach.kv.kvserver.CompactEngineSpanResponse) {}
+}

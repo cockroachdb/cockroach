@@ -4630,6 +4630,43 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.compact_engine_span": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"node_id", types.Int},
+				{"store_id", types.Int},
+				{"start_key", types.Bytes},
+				{"end_key", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				nodeID := int32(tree.MustBeDInt(args[0]))
+				storeID := int32(tree.MustBeDInt(args[1]))
+				startKey := []byte(tree.MustBeDBytes(args[2]))
+				endKey := []byte(tree.MustBeDBytes(args[3]))
+				if err := ctx.Planner.CompactEngineSpan(
+					ctx.Context, nodeID, storeID, startKey, endKey); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: "This function is used only by CockroachDB's developers for restoring engine health. " +
+				"It is used to compact a span of the engine at the given node and store. The start and " +
+				"end keys are bytes. To compact a particular rangeID, one can do: " +
+				"SELECT crdb_internal.compact_engine_span(<node>, <store>, start_key, end_key) " +
+				"FROM crdb_internal.ranges_no_leases WHERE range_id=<value>. If one has hex or escape " +
+				"formatted bytea, one can use decode(<key string>, 'hex'|'escape') as the parameter. " +
+				"The compaction is run synchronously, so this function may take a long time to return. " +
+				"One can use the logs at the node to confirm that a compaction has started.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"num_nulls": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     categoryComparison,
