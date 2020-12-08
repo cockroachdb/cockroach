@@ -1213,6 +1213,7 @@ func (mb *mutationBuilder) arbiterIndexes(
 	tabMeta := mb.md.TableMeta(mb.tabID)
 	var tableScope *scope
 	var im *partialidx.Implicator
+	var arbiterFilters memo.FiltersExpr
 	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 		index := mb.tab.Index(idx)
 
@@ -1280,16 +1281,20 @@ func (mb *mutationBuilder) arbiterIndexes(
 				im.Init(mb.b.factory, mb.md, mb.b.evalCtx)
 			}
 
-			arbiterFilter, err := mb.b.buildPartialIndexPredicate(
-				tableScope, arbiterPredicate, "arbiter predicate",
-			)
-			if err != nil {
-				// The error is due to a non-immutable operator in the arbiter
-				// predicate. Continue on to see if a matching non-partial or
-				// pseudo-partial index exists.
-				continue
+			// Build the arbiter filters once.
+			if arbiterFilters == nil {
+				arbiterFilters, err = mb.b.buildPartialIndexPredicate(
+					tableScope, arbiterPredicate, "arbiter predicate",
+				)
+				if err != nil {
+					// The error is due to a non-immutable operator in the arbiter
+					// predicate. Continue on to see if a matching non-partial or
+					// pseudo-partial index exists.
+					continue
+				}
 			}
-			if _, ok := im.FiltersImplyPredicate(arbiterFilter, predFilter); ok {
+
+			if _, ok := im.FiltersImplyPredicate(arbiterFilters, predFilter); ok {
 				arbiters.Add(idx)
 			}
 		}
