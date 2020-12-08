@@ -3304,6 +3304,150 @@ SELECT regr_count('foo', v) FROM kv
 ----
 error (22P02): regr_count(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
 
+# Tests for regr_avgx.
+
+build
+SELECT regr_avgx(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_avgx:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── regression-avg-x [as=regr_avgx:6]
+           ├── k:1
+           └── v:2
+
+build
+SELECT regr_avgx(k) FROM kv
+----
+error (42883): unknown signature: regr_avgx(int)
+
+build
+SELECT regr_avgx(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: regr_avgx(int, string, string)
+
+build
+SELECT regr_avgx(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_avgx:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=regr_avgx:6]
+           └── regression-avg-x
+                ├── k:1
+                └── v:2
+
+build
+SELECT max(s), regr_avgx(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 regr_avgx:7 min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── regression-avg-x [as=regr_avgx:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+build
+SELECT regr_avgx(k, NULL) FROM kv
+----
+error (42725): ambiguous call: regr_avgx(int, unknown), candidates are:
+regr_avgx(int, int) -> float
+regr_avgx(int, float) -> float
+regr_avgx(int, decimal) -> float
+
+build
+SELECT regr_avgx('foo', v) FROM kv
+----
+error (22P02): regr_avgx(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+# Tests for regr_avgy.
+
+build
+SELECT regr_avgy(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_avgy:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── regression-avg-y [as=regr_avgy:6]
+           ├── k:1
+           └── v:2
+
+build
+SELECT regr_avgy(k) FROM kv
+----
+error (42883): unknown signature: regr_avgy(int)
+
+build
+SELECT regr_avgy(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: regr_avgy(int, string, string)
+
+build
+SELECT regr_avgy(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: regr_avgy:6
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      └── agg-distinct [as=regr_avgy:6]
+           └── regression-avg-y
+                ├── k:1
+                └── v:2
+
+build
+SELECT max(s), regr_avgy(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:6 regr_avgy:7 min:8
+ ├── project
+ │    ├── columns: k:1!null v:2 s:4
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+ └── aggregations
+      ├── max [as=max:6]
+      │    └── s:4
+      ├── regression-avg-y [as=regr_avgy:7]
+      │    ├── k:1
+      │    └── v:2
+      └── min [as=min:8]
+           └── s:4
+
+build
+SELECT regr_avgy(k, NULL) FROM kv
+----
+error (42725): ambiguous call: regr_avgy(int, unknown), candidates are:
+regr_avgy(int, int) -> float
+regr_avgy(int, float) -> float
+regr_avgy(int, decimal) -> float
+
+build
+SELECT regr_avgy('foo', v) FROM kv
+----
+error (22P02): regr_avgy(): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
 # Tests for string_agg.
 
 build

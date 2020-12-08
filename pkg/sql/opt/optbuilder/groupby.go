@@ -811,6 +811,8 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructCovarSamp(args[0], args[1])
 	case "regr_avgx":
 		return b.factory.ConstructRegressionAvgX(args[0], args[1])
+	case "regr_avgy":
+		return b.factory.ConstructRegressionAvgY(args[0], args[1])
 	case "regr_intercept":
 		return b.factory.ConstructRegressionIntercept(args[0], args[1])
 	case "regr_r2":
