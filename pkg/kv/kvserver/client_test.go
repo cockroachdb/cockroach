@@ -971,8 +971,9 @@ func (m *multiTestContext) addStore(idx int) {
 
 	sender := kvserver.NewStores(ambient, clock)
 	sender.AddStore(store)
-	perReplicaServer := kvserver.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
-	kvserver.RegisterPerReplicaServer(grpcServer, perReplicaServer)
+	server := kvserver.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
+	kvserver.RegisterPerReplicaServer(grpcServer, server)
+	kvserver.RegisterPerStoreServer(grpcServer, server)
 
 	ln, err := netutil.ListenAndServeGRPC(m.transportStopper, grpcServer, util.TestAddr)
 	if err != nil {
