@@ -21,6 +21,7 @@ func registerAcceptance(r *testRegistry) {
 		fn         func(ctx context.Context, t *test, c *cluster)
 		skip       string
 		minVersion string
+		numNodes   int
 		timeout    time.Duration
 	}{
 		// Sorted. Please keep it that way.
@@ -56,6 +57,7 @@ func registerAcceptance(r *testRegistry) {
 			fn:         runAcceptanceMultitenant,
 		},
 		{name: "rapid-restart", fn: runRapidRestart},
+		{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
 		{
 			name: "many-splits", fn: runManySplits,
 			minVersion: "v19.2.0", // SQL syntax unsupported on 19.1.x
@@ -76,7 +78,6 @@ func registerAcceptance(r *testRegistry) {
 		},
 	}
 	tags := []string{"default", "quick"}
-	const numNodes = 4
 	specTemplate := testSpec{
 		// NB: teamcity-post-failures.py relies on the acceptance tests
 		// being named acceptance/<testname> and will avoid posting a
@@ -88,12 +89,17 @@ func registerAcceptance(r *testRegistry) {
 		Owner:   OwnerKV,
 		Timeout: 10 * time.Minute,
 		Tags:    tags,
-		Cluster: makeClusterSpec(numNodes),
 	}
 
 	for _, tc := range testCases {
 		tc := tc // copy for closure
+		numNodes := 4
+		if tc.numNodes != 0 {
+			numNodes = tc.numNodes
+		}
+
 		spec := specTemplate
+		spec.Cluster = makeClusterSpec(numNodes)
 		spec.Skip = tc.skip
 		spec.Name = specTemplate.Name + "/" + tc.name
 		spec.MinVersion = tc.minVersion
