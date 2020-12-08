@@ -28,6 +28,7 @@ type Server struct {
 }
 
 var _ PerReplicaServer = Server{}
+var _ PerStoreServer = Server{}
 
 // MakeServer returns a new instance of Server.
 func MakeServer(descriptor *roachpb.NodeDescriptor, stores *Stores) Server {
@@ -150,5 +151,18 @@ func (is Server) WaitForReplicaInit(
 		}
 		return ctx.Err()
 	})
+	return resp, err
+}
+
+// CompactEngineSpan implements PerStoreServer. It blocks until the compaction
+// is done, so it can be a long-lived RPC.
+func (is Server) CompactEngineSpan(
+	ctx context.Context, req *CompactEngineSpanRequest,
+) (*CompactEngineSpanResponse, error) {
+	resp := &CompactEngineSpanResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			return s.Engine().CompactRange(req.Span.Key, req.Span.EndKey, true /* forceBottommost */)
+		})
 	return resp, err
 }
