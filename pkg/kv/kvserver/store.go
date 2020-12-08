@@ -2156,7 +2156,34 @@ func ReadMaxHLCUpperBound(ctx context.Context, engines []storage.Engine) (int64,
 // checkCanInitializeEngine ensures that the engine is empty except for a
 // cluster version, which must be present.
 func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
-	kvs, err := storage.Scan(eng, roachpb.KeyMin, roachpb.KeyMax, 10)
+	// We use an EngineIterator to ensure that there are no non-MVCC keys
+	// in the engine.
+	const maxKeys = 10
+	var kvs []storage.MVCCKeyValue
+	iter := eng.NewEngineIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+	defer iter.Close()
+	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+	for valid {
+		var k storage.EngineKey
+		k, err = iter.EngineKey()
+		if err != nil {
+			break
+		}
+		if !k.IsMVCCKey() {
+			err = errors.Errorf("found non-mvcc key: %s", k)
+			break
+		}
+		var key storage.MVCCKey
+		key, err = k.ToMVCCKey()
+		if err != nil {
+			break
+		}
+		kvs = append(kvs, storage.MVCCKeyValue{Key: key, Value: iter.Value()})
+		if len(kvs) >= maxKeys {
+			break
+		}
+		valid, err = iter.NextEngineKey()
+	}
 	if err != nil {
 		return err
 	}
