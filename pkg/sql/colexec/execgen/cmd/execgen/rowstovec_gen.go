@@ -90,7 +90,6 @@ var rowsToVecConversionTmpls = map[familyWidthPair]string{
 	{types.IntFamily, anyWidth}:                      `int64(*%[1]s.(*tree.DInt))`,
 	{types.DateFamily, anyWidth}:                     `%[1]s.(*tree.DDate).UnixEpochDaysWithOrig()`,
 	{types.FloatFamily, anyWidth}:                    `float64(*%[1]s.(*tree.DFloat))`,
-	{types.OidFamily, anyWidth}:                      `int64(%[1]s.(*tree.DOid).DInt)`,
 	{types.StringFamily, anyWidth}:                   `encoding.UnsafeConvertStringToBytes(string(*%[1]s.(*tree.DString)))`,
 	{types.DecimalFamily, anyWidth}:                  `%[1]s.(*tree.DDecimal).Decimal`,
 	{types.UuidFamily, anyWidth}:                     `%[1]s.(*tree.DUuid).UUID.GetBytesMut()`,

@@ -39,7 +39,7 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 		return types.BytesFamily
 	case types.DecimalFamily:
 		return types.DecimalFamily
-	case types.IntFamily, types.DateFamily, types.OidFamily:
+	case types.IntFamily, types.DateFamily:
 		return types.IntFamily
 	case types.FloatFamily:
 		return types.FloatFamily

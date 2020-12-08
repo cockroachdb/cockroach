@@ -1174,8 +1174,7 @@ VALUES
     (4, 1, NULL),
     (5, 1, NULL),
     (6, NULL, NULL),
-    (7, NULL, NULL),
-    (3, 3, 3)
+    (7, NULL, NULL)
 
 statement ok
 INSERT INTO target SELECT * FROM source ON CONFLICT DO NOTHING

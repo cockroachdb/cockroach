@@ -26,21 +26,21 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
+users       foo         true        1             name         ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       primary     false       1             id           ASC        false    false
 
 query TTBITTBB colnames
 SHOW INDEXES FROM users_dupe
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users_dupe  primary     false       1             id           ASC        false    false
-users_dupe  foo         true        1             name         ASC        false    false
-users_dupe  foo         true        2             id           ASC        false    true
 users_dupe  bar         false       1             id           ASC        false    false
 users_dupe  bar         false       2             name         ASC        false    false
+users_dupe  foo         true        1             name         ASC        false    false
+users_dupe  foo         true        2             id           ASC        false    true
+users_dupe  primary     false       1             id           ASC        false    false
 
 statement error pgcode 42P07 index name "bar" already exists
 ALTER INDEX users@foo RENAME TO bar
@@ -80,11 +80,11 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+users       bar         false       1             id           ASC        false    false
+users       bar         false       2             name         ASC        false    false
 users       primary     false       1             id           ASC        false    false
 users       ufo         true        1             name         ASC        false    false
 users       ufo         true        2             id           ASC        false    true
-users       bar         false       1             id           ASC        false    false
-users       bar         false       2             name         ASC        false    false
 
 user testuser
 
@@ -106,10 +106,10 @@ SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
-users       ufo         true        1             name         ASC        false    false
-users       ufo         true        2             id           ASC        false    true
 users       rar         false       1             id           ASC        false    false
 users       rar         false       2             name         ASC        false    false
+users       ufo         true        1             name         ASC        false    false
+users       ufo         true        2             id           ASC        false    true
 
 user root
 

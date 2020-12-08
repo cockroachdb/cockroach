@@ -45,9 +45,9 @@ query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-t           primary     false       1             a            ASC        false    false
 t           foo         true        1             b            ASC        false    false
 t           foo         true        2             a            ASC        false    true
+t           primary     false       1             a            ASC        false    false
 
 statement ok
 INSERT INTO t VALUES (2,1)
@@ -59,9 +59,9 @@ query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-t           primary     false       1             a            ASC        false    false
 t           foo         true        1             b            ASC        false    false
 t           foo         true        2             a            ASC        false    true
+t           primary     false       1             a            ASC        false    false
 
 # test for DESC index
 
@@ -88,12 +88,12 @@ query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-t           primary     false       1             a            ASC        false    false
-t           b_desc      true        1             b            DESC       false    false
-t           b_desc      true        2             a            ASC        false    true
 t           b_asc       true        1             b            ASC        false    false
 t           b_asc       true        2             c            DESC       false    false
 t           b_asc       true        3             a            ASC        false    true
+t           b_desc      true        1             b            DESC       false    false
+t           b_desc      true        2             a            ASC        false    true
+t           primary     false       1             a            ASC        false    false
 
 statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
@@ -132,9 +132,9 @@ query TTBITTBB colnames
 SHOW INDEXES FROM privs
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-privs       primary     false       1             a            ASC        false    false
 privs       foo         true        1             b            ASC        false    false
 privs       foo         true        2             a            ASC        false    true
+privs       primary     false       1             a            ASC        false    false
 
 
 user root
