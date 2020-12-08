@@ -3225,6 +3225,120 @@ inner-join (lookup bool_col)
  │    └── filters (true)
  └── filters (true)
 
+# Use constant CHECK constraints to generate lookup join keys.
+exec-ddl
+CREATE TABLE abcd_check (a INT, b INT NOT NULL, c INT, d INT, CHECK (b IN (10, 20)), INDEX (a, b, c))
+----
+
+opt expect=GenerateLookupJoins
+SELECT * FROM small INNER JOIN abcd_check ON a=m
+----
+inner-join (lookup abcd_check)
+ ├── columns: m:1!null n:2 a:5!null b:6!null c:7 d:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── fd: (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcd_check@secondary)
+ │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7 abcd_check.rowid:9!null
+ │    ├── key columns: [1 11] = [5 6]
+ │    ├── fd: (9)-->(5-7), (1)==(5), (5)==(1)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: m:1 n:2 "lookup_join_const_col_@6":11!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1 n:2
+ │    │    ├── values
+ │    │    │    ├── columns: "lookup_join_const_col_@6":11!null
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── (10,)
+ │    │    │    └── (20,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── filters (true)
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM small INNER JOIN abcd_check ON a=m AND c=30
+----
+inner-join (lookup abcd_check)
+ ├── columns: m:1!null n:2 a:5!null b:6!null c:7!null d:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── fd: ()-->(7), (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcd_check@secondary)
+ │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7!null abcd_check.rowid:9!null
+ │    ├── key columns: [1 11 12] = [5 6 7]
+ │    ├── fd: ()-->(7), (9)-->(5,6), (1)==(5), (5)==(1)
+ │    ├── project
+ │    │    ├── columns: "lookup_join_const_col_@7":12!null m:1 n:2 "lookup_join_const_col_@6":11!null
+ │    │    ├── fd: ()-->(12)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: m:1 n:2 "lookup_join_const_col_@6":11!null
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    │    ├── scan small
+ │    │    │    │    └── columns: m:1 n:2
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: "lookup_join_const_col_@6":11!null
+ │    │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    │    ├── (10,)
+ │    │    │    │    └── (20,)
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── 30 [as="lookup_join_const_col_@7":12]
+ │    └── filters (true)
+ └── filters (true)
+
+# Use computed column expressions to generate lookup join keys.
+exec-ddl
+CREATE TABLE abcd_comp (a INT, b INT AS (d % 4) STORED, c INT, d INT, INDEX (a, b, c))
+----
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM small INNER JOIN abcd_comp ON a=m AND d=5
+----
+inner-join (lookup abcd_comp)
+ ├── columns: m:1!null n:2 a:5!null b:6 c:7 d:8!null
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── fd: ()-->(8), (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcd_comp@secondary)
+ │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7 abcd_comp.rowid:9!null
+ │    ├── key columns: [1 11] = [5 6]
+ │    ├── fd: ()-->(6), (9)-->(5,7), (1)==(5), (5)==(1)
+ │    ├── project
+ │    │    ├── columns: "lookup_join_const_col_@6":11!null m:1 n:2
+ │    │    ├── fd: ()-->(11)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1 n:2
+ │    │    └── projections
+ │    │         └── 1 [as="lookup_join_const_col_@6":11]
+ │    └── filters (true)
+ └── filters
+      └── d:8 = 5 [outer=(8), constraints=(/8: [/5 - /5]; tight), fd=()-->(8)]
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM small INNER JOIN abcd_comp ON a=m AND d=5 AND c=30
+----
+inner-join (lookup abcd_comp)
+ ├── columns: m:1!null n:2 a:5!null b:6 c:7!null d:8!null
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── fd: ()-->(7,8), (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcd_comp@secondary)
+ │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7!null abcd_comp.rowid:9!null
+ │    ├── key columns: [1 11 12] = [5 6 7]
+ │    ├── fd: ()-->(6,7), (9)-->(5), (1)==(5), (5)==(1)
+ │    ├── project
+ │    │    ├── columns: "lookup_join_const_col_@7":12!null "lookup_join_const_col_@6":11!null m:1 n:2
+ │    │    ├── fd: ()-->(11,12)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1 n:2
+ │    │    └── projections
+ │    │         ├── 30 [as="lookup_join_const_col_@7":12]
+ │    │         └── 1 [as="lookup_join_const_col_@6":11]
+ │    └── filters (true)
+ └── filters
+      └── d:8 = 5 [outer=(8), constraints=(/8: [/5 - /5]; tight), fd=()-->(8)]
+
 exec-ddl
 CREATE TABLE t(pk INT PRIMARY KEY, col0 INT, col1 INT, col2 INT, col4 INT, UNIQUE INDEX (col2))
 ----

@@ -1550,7 +1550,7 @@ project
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(3)
  │    │    ├── project
- │    │    │    ├── columns: "project_const_col_@6":10!null tx_id:1!null tx_rate:3!null
+ │    │    │    ├── columns: "lookup_join_const_col_@6":10!null tx_id:1!null tx_rate:3!null
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: ()-->(10), (1)-->(3)
  │    │    │    ├── scan taxrate
@@ -1560,7 +1560,7 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(3)
  │    │    │    └── projections
- │    │    │         └── 0 [as="project_const_col_@6":10]
+ │    │    │         └── 0 [as="lookup_join_const_col_@6":10]
  │    │    └── filters (true)
  │    └── aggregations
  │         └── sum [as=sum:8, outer=(3)]
@@ -2526,7 +2526,7 @@ project
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(3)
  │    │    ├── project
- │    │    │    ├── columns: "project_const_col_@6":10!null tx_id:1!null tx_rate:3!null
+ │    │    │    ├── columns: "lookup_join_const_col_@6":10!null tx_id:1!null tx_rate:3!null
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: ()-->(10), (1)-->(3)
  │    │    │    ├── scan taxrate
@@ -2536,7 +2536,7 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(3)
  │    │    │    └── projections
- │    │    │         └── 0 [as="project_const_col_@6":10]
+ │    │    │         └── 0 [as="lookup_join_const_col_@6":10]
  │    │    └── filters (true)
  │    └── aggregations
  │         └── sum [as=sum:8, outer=(3)]
@@ -4156,7 +4156,7 @@ update watch_item
  │    │    ├── key: (7)
  │    │    ├── fd: ()-->(5,8), (7)-->(9), (4)==(7), (7)==(4)
  │    │    ├── project
- │    │    │    ├── columns: "project_const_col_@5":29!null wl_id:7!null wl_c_id:8!null watch_list.crdb_internal_mvcc_timestamp:9
+ │    │    │    ├── columns: "lookup_join_const_col_@5":29!null wl_id:7!null wl_c_id:8!null watch_list.crdb_internal_mvcc_timestamp:9
  │    │    │    ├── key: (7)
  │    │    │    ├── fd: ()-->(8,29), (7)-->(9)
  │    │    │    ├── select
@@ -4170,7 +4170,7 @@ update watch_item
  │    │    │    │    └── filters
  │    │    │    │         └── wl_c_id:8 = 0 [outer=(8), constraints=(/8: [/0 - /0]; tight), fd=()-->(8)]
  │    │    │    └── projections
- │    │    │         └── 'SYMB' [as="project_const_col_@5":29]
+ │    │    │         └── 'SYMB' [as="lookup_join_const_col_@5":29]
  │    │    └── filters (true)
  │    └── projections
  │         └── 'SYMB' [as=wi_s_symb_new:10]

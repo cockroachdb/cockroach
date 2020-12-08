@@ -406,14 +406,14 @@ inner-join (lookup wxyz)
  │    ├── stats: [rows=19.8, distinct(1)=19.8, null(1)=0, distinct(6)=19.8, null(6)=0, distinct(7)=1, null(7)=0, distinct(11)=1, null(11)=0]
  │    ├── fd: ()-->(7), (9)-->(6,8), (1)==(6), (6)==(1)
  │    ├── project
- │    │    ├── columns: "project_const_col_@7":11(int!null) m:1(int) n:2(int)
+ │    │    ├── columns: "lookup_join_const_col_@7":11(int!null) m:1(int) n:2(int)
  │    │    ├── stats: [rows=40, distinct(1)=40, null(1)=0, distinct(11)=1, null(11)=0]
  │    │    ├── fd: ()-->(11)
  │    │    ├── scan medium
  │    │    │    ├── columns: m:1(int) n:2(int)
  │    │    │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
  │    │    └── projections
- │    │         └── 10 [as="project_const_col_@7":11, type=int]
+ │    │         └── 10 [as="lookup_join_const_col_@7":11, type=int]
  │    └── filters (true)
  └── filters (true)
 
