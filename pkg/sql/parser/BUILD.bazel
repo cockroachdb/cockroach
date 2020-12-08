@@ -8,12 +8,12 @@ go_library(
     # during BUILD file re-generation.
     srcs = [
         "help.go",
-        "help_messages.go",  # keep
         "lexer.go",
         "parse.go",
         "scan.go",
         "show_syntax.go",
-        ":sql-goyacc",  # keep
+        ":help-messages-go",  #keep
+        ":sql-goyacc",  #keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/parser",
     visibility = ["//visibility:public"],
@@ -42,11 +42,11 @@ go_test(
     name = "parser_test",
     srcs = [
         "help_test.go",
-        "helpmap_test.go",  # keep
         "lexer_test.go",
         "parse_internal_test.go",
         "parse_test.go",
         "scan_test.go",
+        ":helpmap-test-go",  #keep
     ],
     data = glob(["testdata/**"]),
     embed = [":parser"],
@@ -89,4 +89,49 @@ genrule(
         "//vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
         "//vendor/golang.org/x/tools/cmd/goyacc",
     ],
+    visibility = ["//visibility:public"],
 )
+
+sh_binary(
+    name = "help-gen-test",
+    srcs = ["help_gen_test.sh"],
+    data = ["help_gen_test.sh"],
+)
+
+# Define the target to auto-generate helpmap_test.go from the grammar file.
+genrule(
+    name = "helpmap-test-go",
+    srcs = [
+        ":sql-goyacc",
+    ],
+    outs = ["helpmap_test.go"],
+    cmd = """
+      $(location :help-gen-test) < $< >$@.tmp || rm $@.tmp
+      mv -f $@.tmp $@
+      gofmt -s -w $@
+    """,
+    tools = [
+        ":help-gen-test",
+    ],
+)
+
+# Define the target to auto-generate help_messages.go from the grammar file.
+genrule(
+    name = "help-messages-go",
+    srcs = [
+        ":sql.y",
+        ":help.awk",
+    ],
+    outs = ["help_messages.go"],
+    cmd = """
+      awk -f $(location :help.awk) < $(location :sql.y) > $@.tmp || rm $@.tmp
+      mv -f $@.tmp $@
+      gofmt -s -w $@
+    """,
+)
+
+exports_files(
+    ["reserved_keywords.awk", "sql.y", "help.awk"],
+    visibility = ["//visibility:public"],
+)
+
