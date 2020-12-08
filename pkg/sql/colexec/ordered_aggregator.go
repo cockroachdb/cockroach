@@ -154,7 +154,12 @@ func NewOrderedAggregator(
 			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
 		}
 	}
-	op, groupCol, err := OrderedDistinctColsToOperators(input, spec.GroupCols, inputTypes)
+	var (
+		op       colexecbase.Operator
+		groupCol []bool
+		err      error
+	)
+	op, groupCol, err = OrderedDistinctColsToOperators(input, spec.GroupCols, inputTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +170,8 @@ func NewOrderedAggregator(
 	// value in groupCol. In order to satisfy that requirement we plan a
 	// oneShotOp that explicitly sets groupCol for the very first tuple it
 	// sees to 'false' and then deletes itself from the operator tree.
+	// TODO(yuzefovich): this is pretty annoying, consider refactoring the
+	// contract and removing this.
 	op = &oneShotOp{
 		OneInputNode: NewOneInputNode(op),
 		fn: func(batch coldata.Batch) {

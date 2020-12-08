@@ -2972,12 +2972,13 @@ func (dsp *DistSQLPlanner) createPlanForZero(
 	return dsp.createValuesPlan(planCtx, spec, types)
 }
 
-func createDistinctSpec(
+func (dsp *DistSQLPlanner) createDistinctSpec(
 	distinctOnColIdxs util.FastIntSet,
 	columnsInOrder util.FastIntSet,
 	nullsAreDistinct bool,
 	errorOnDup string,
 	cols []int,
+	reqOrderding ReqOrdering,
 ) *execinfrapb.DistinctSpec {
 	var orderedColumns []uint32
 	if !columnsInOrder.Empty() {
@@ -3008,6 +3009,7 @@ func createDistinctSpec(
 		DistinctColumns:  distinctColumns,
 		NullsAreDistinct: nullsAreDistinct,
 		ErrorOnDup:       errorOnDup,
+		OutputOrdering:   dsp.convertOrdering(reqOrderding, cols),
 	}
 }
 
@@ -3018,26 +3020,24 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	if err != nil {
 		return nil, err
 	}
-	spec := createDistinctSpec(
+	spec := dsp.createDistinctSpec(
 		n.distinctOnColIdxs,
 		n.columnsInOrder,
 		n.nullsAreDistinct,
 		n.errorOnDup,
 		plan.PlanToStreamColMap,
+		n.reqOrdering,
 	)
-	dsp.addDistinctProcessors(plan, spec, n.reqOrdering)
+	dsp.addDistinctProcessors(plan, spec)
 	return plan, nil
 }
 
 func (dsp *DistSQLPlanner) addDistinctProcessors(
-	plan *PhysicalPlan, spec *execinfrapb.DistinctSpec, reqOrdering ReqOrdering,
+	plan *PhysicalPlan, spec *execinfrapb.DistinctSpec,
 ) {
 	distinctSpec := execinfrapb.ProcessorCoreUnion{
 		Distinct: spec,
 	}
-	defer func() {
-		plan.SetMergeOrdering(dsp.convertOrdering(reqOrdering, plan.PlanToStreamColMap))
-	}()
 
 	// Add distinct processors local to each existing current result processor.
 	plan.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), plan.MergeOrdering)
@@ -3051,6 +3051,7 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 		distinctSpec.Distinct.DistinctColumns, plan.GetResultTypes(),
 		plan.GetResultTypes(), plan.MergeOrdering, plan.ResultRouters,
 	)
+	plan.SetMergeOrdering(spec.OutputOrdering)
 }
 
 func (dsp *DistSQLPlanner) createPlanForOrdinality(

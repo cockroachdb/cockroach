@@ -571,14 +571,15 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 	errorOnDup string,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
-	spec := createDistinctSpec(
+	spec := e.dsp.createDistinctSpec(
 		distinctCols,
 		orderedCols,
 		nullsAreDistinct,
 		errorOnDup,
 		physPlan.PlanToStreamColMap,
+		ReqOrdering(reqOrdering),
 	)
-	e.dsp.addDistinctProcessors(physPlan, spec, ReqOrdering(reqOrdering))
+	e.dsp.addDistinctProcessors(physPlan, spec)
 	// Since addition of distinct processors doesn't change any properties of
 	// the physical plan, we don't need to update any of those.
 	return plan, nil
