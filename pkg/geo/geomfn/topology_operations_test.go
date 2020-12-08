@@ -490,3 +490,69 @@ func TestUnaryUnion(t *testing.T) {
 		})
 	}
 }
+
+func TestMinimumRotatedRectangle(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  geo.Geometry
+		want geo.Geometry
+	}{
+		{
+			"empty multipoint",
+			geo.MustParseGeometry("MULTIPOINT EMPTY"),
+			geo.MustParseGeometry("POLYGON EMPTY"),
+		},
+		{
+			"multipoint, must return the valid polygon",
+			geo.MustParseGeometry("MULTIPOINT ((0 0), (-1 -1), (3 2))"),
+			geo.MustParseGeometry("POLYGON((3 2,2.88 2.16,-1.12 -0.84,-1 -1,3 2))"),
+		},
+		{
+			"multipoint, must give linestring in case of degenerate input",
+			geo.MustParseGeometry("MULTIPOINT ((0 0), (-2 0), (1 0))"),
+			geo.MustParseGeometry("LINESTRING (-2 0, 1 0)"),
+		},
+		{
+			"multipoint, must give point in case of degenerate input",
+			geo.MustParseGeometry("MULTIPOINT ((0 0), (0 0), (0 0))"),
+			geo.MustParseGeometry("POINT (0 0)"),
+		},
+		{
+			"point, must return the valid point",
+			geo.MustParseGeometry("POINT (1 1)"),
+			geo.MustParseGeometry("POINT (1 1)"),
+		},
+		{
+			"linestring, must return the valid polygon",
+			geo.MustParseGeometry("LINESTRING (0 0, 50 200, 100 0)"),
+			geo.MustParseGeometry("POLYGON ((0 0,94.1176470588235 -23.5294117647059,144.117647058824 176.470588235294,50 200,0 0))"),
+		},
+		{
+			"polygon, must return the valid polygon",
+			geo.MustParseGeometry("POLYGON ((0 0,1 -2,1 1,5 2,0 0))"),
+			geo.MustParseGeometry("POLYGON ((-0.5 -0.5,1 -2,5 2,3.5 3.5,-0.5 -0.5))"),
+		},
+		{
+			"multilinestring, must give linestring in case of degenerate input",
+			geo.MustParseGeometry("MULTILINESTRING ((1 1, 2 2))"),
+			geo.MustParseGeometry("LINESTRING (1 1,2 2)"),
+		},
+		{
+			"multipolygon, must give linestring in case of degenerate input",
+			geo.MustParseGeometry("MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)))"),
+			geo.MustParseGeometry("LINESTRING (1 2,5 6)"),
+		},
+		{
+			"multilinestring, must give linestring in case of degenerate input",
+			geo.MustParseGeometry("GEOMETRYCOLLECTION (MULTIPOINT (1 1, 2 2))"),
+			geo.MustParseGeometry("LINESTRING (1 1,2 2)"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := MinimumRotatedRectangle(tt.arg)
+			require.NoError(t, err)
+			require.Equal(t, true, EqualsExact(got, tt.want, 1e-6))
+		})
+	}
+}

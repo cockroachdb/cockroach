@@ -167,6 +167,8 @@ typedef CR_GEOS_Geometry (*CR_GEOS_VoronoiDiagram_r)(CR_GEOS_Handle, CR_GEOS_Geo
 typedef char (*CR_GEOS_EqualsExact_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                   CR_GEOS_Geometry, double);
 
+typedef CR_GEOS_Geometry (*CR_GEOS_MinimumRotatedRectangle_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
 }  // namespace
@@ -267,6 +269,7 @@ struct CR_GEOS {
   CR_GEOS_SharedPaths_r GEOSSharedPaths_r;
   CR_GEOS_VoronoiDiagram_r GEOSVoronoiDiagram_r;
   CR_GEOS_EqualsExact_r GEOSEqualsExact_r;
+  CR_GEOS_MinimumRotatedRectangle_r GEOSMinimumRotatedRectangle_r;
 
   CR_GEOS_Node_r GEOSNode_r;
 
@@ -351,6 +354,7 @@ struct CR_GEOS {
     INIT(GEOSRelate_r);
     INIT(GEOSVoronoiDiagram_r);
     INIT(GEOSEqualsExact_r);
+    INIT(GEOSMinimumRotatedRectangle_r);
     INIT(GEOSRelateBoundaryNodeRule_r);
     INIT(GEOSRelatePattern_r);
     INIT(GEOSSharedPaths_r);
@@ -1416,6 +1420,25 @@ CR_GEOS_Status CR_GEOS_EqualsExact(CR_GEOS* lib, CR_GEOS_Slice lhs, CR_GEOS_Slic
   if (rhsGeom != nullptr) {
     lib->GEOSGeom_destroy_r(handle, rhsGeom);
   }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_MinimumRotatedRectangle(CR_GEOS* lib, CR_GEOS_Slice g, CR_GEOS_String* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto gGeom = CR_GEOS_GeometryFromSlice(lib, handle, g);
+  *ret = {.data = NULL, .len = 0};
+  if (gGeom != nullptr) {
+    auto r = lib->GEOSMinimumRotatedRectangle_r(handle, gGeom);
+    if (r != NULL) {
+      auto srid = lib->GEOSGetSRID_r(handle, r);
+      CR_GEOS_writeGeomToEWKB(lib, handle, r, ret, srid);
+      lib->GEOSGeom_destroy_r(handle, r);
+    }
+    lib->GEOSGeom_destroy_r(handle, gGeom);
+  }
+
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
 }
