@@ -400,29 +400,30 @@ EXPLAIN SHOW COLUMNS FROM foo
 distribution: local
 vectorized: false
 ·
-• render
+• sort
+│ order: +ordinal_position,+column_name,+crdb_sql_type,+is_nullable,+column_default,+generation_expression,+indices,+is_hidden
 │
-└── • group
-    │ group by: column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
-    │ ordered: +ordinal_position
+└── • render
     │
-    └── • sort
-        │ order: +ordinal_position
+    └── • group
+        │ group by: column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
         │
-        └── • hash join (left outer)
-            │ equality: (column_name) = (column_name)
+        └── • window
             │
-            ├── • filter
-            │   │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-            │   │
-            │   └── • virtual table
-            │         table: columns@primary
-            │
-            └── • filter
-                │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+            └── • hash join (left outer)
+                │ equality: (column_name) = (column_name)
                 │
-                └── • virtual table
-                      table: statistics@primary
+                ├── • filter
+                │   │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                │   │
+                │   └── • virtual table
+                │         table: columns@primary
+                │
+                └── • filter
+                    │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                    │
+                    └── • virtual table
+                          table: statistics@primary
 
 query T
 SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE info NOT LIKE '%size%'
@@ -445,13 +446,16 @@ EXPLAIN SHOW INDEX FROM foo
 distribution: local
 vectorized: false
 ·
-• render
+• sort
+│ order: +index_name,+non_unique,+seq_in_index,+column_name,+direction,+storing,+implicit
 │
-└── • filter
-    │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+└── • render
     │
-    └── • virtual table
-          table: statistics@primary
+    └── • filter
+        │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+        │
+        └── • virtual table
+              table: statistics@primary
 
 query T
 EXPLAIN SHOW CONSTRAINTS FROM foo
@@ -460,7 +464,7 @@ distribution: local
 vectorized: false
 ·
 • sort
-│ order: +conname
+│ order: +conname,+constraint_type,+condef,+convalidated
 │
 └── • render
     │

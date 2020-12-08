@@ -500,21 +500,21 @@ COMMENT ON INDEX t@i2 IS 'comm''ent3'
 query TTBITTBBT
 SHOW INDEXES FROM t WITH COMMENT
 ----
-t  primary  false  1  rowid  ASC  false  false  NULL
 t  i1       true   1  x      ASC  false  false  NULL
 t  i1       true   2  rowid  ASC  false  true   NULL
 t  i2       true   1  y      ASC  false  false  comm'ent3
 t  i2       true   2  rowid  ASC  false  true   comm'ent3
 t  i3       true   1  z      ASC  false  false  NULL
 t  i3       true   2  rowid  ASC  false  true   NULL
+t  primary  false  1  rowid  ASC  false  false  NULL
 
 query TTBITTBBT
 SHOW INDEXES FROM t2 WITH COMMENT
 ----
-t2  primary  false  1  rowid  ASC  false  false  NULL
 t2  i1       true   1  x      ASC  false  false  NULL
 t2  i1       true   2  rowid  ASC  false  true   NULL
 t2  i2       true   1  y      ASC  false  false  NULL
 t2  i2       true   2  rowid  ASC  false  true   NULL
 t2  i3       true   1  z      ASC  false  false  NULL
 t2  i3       true   2  rowid  ASC  false  true   NULL
+t2  primary  false  1  rowid  ASC  false  false  NULL

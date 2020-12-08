@@ -47,11 +47,11 @@ query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           foo         false       1             b            ASC        false    false
+t           foo         false       2             a            ASC        false    true
 t           primary     false       1             a            ASC        false    false
 t           t_f_idx     true        1             f            ASC        false    false
 t           t_f_idx     true        2             a            ASC        false    true
-t           foo         false       1             b            ASC        false    false
-t           foo         false       2             a            ASC        false    true
 
 query III
 SELECT * FROM t
@@ -359,9 +359,9 @@ query TTBITTBB colnames
 SHOW INDEXES FROM o
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-o           primary     false       1             rowid        ASC        false    false
 o           oi          true        1             i            ASC        false    false
 o           oi          true        2             rowid        ASC        false    true
+o           primary     false       1             rowid        ASC        false    false
 
 statement ok
 ALTER TABLE t ADD f INT CHECK (f > 1)
@@ -677,7 +677,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices        is_hidden
-a            INT8       false        NULL            ·                      {primary,foo}  false
+a            INT8       false        NULL            ·                      {foo,primary}  false
 b            INT8       true         NULL            ·                      {foo}          false
 c            INT8       true         NULL            ·                      {}             false
 
