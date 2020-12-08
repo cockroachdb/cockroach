@@ -933,8 +933,8 @@ func backupAndRestore(
 			}
 			backupDetails := backupPayload.Backup
 			found = true
-			if err := protoutil.Unmarshal(backupDetails.BackupManifest, backupManifest); err != nil {
-				t.Fatal("cannot unmarshal backup descriptor from job payload from system.jobs")
+			if backupDetails.DeprecatedBackupManifest != nil {
+				t.Fatal("expected backup_manifest field of backup descriptor payload to be nil")
 			}
 			if backupManifest.DeprecatedStatistics != nil {
 				t.Fatal("expected statistics field of backup descriptor payload to be nil")
@@ -1540,9 +1540,8 @@ func TestBackupRestoreResume(t *testing.T) {
 		createAndWaitForJob(
 			t, sqlDB, []descpb.ID{backupTableDesc.ID},
 			jobspb.BackupDetails{
-				EndTime:        tc.Servers[0].Clock().Now(),
-				URI:            "nodelocal://0/backup",
-				BackupManifest: mockManifest,
+				EndTime: tc.Servers[0].Clock().Now(),
+				URI:     "nodelocal://0/backup",
 			},
 			jobspb.BackupProgress{},
 		)
