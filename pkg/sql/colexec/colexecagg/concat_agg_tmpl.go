@@ -148,23 +148,26 @@ func _ACCUMULATE_CONCAT(a *concat_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 	// {{define "accumulateConcat" }}
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			a.col.Set(a.curIdx, a.curAgg)
-		}
-		a.curIdx++
-		a.curAgg = zeroBytesValue
+		if !a.isFirstGroup {
+			// If we encounter a new group, and we haven't found any non-nulls for the
+			// current group, the output for this group should be null.
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				a.col.Set(a.curIdx, a.curAgg)
+			}
+			a.curIdx++
+			a.curAgg = zeroBytesValue
 
-		// {{/*
-		// We only need to reset this flag if there are nulls. If there are no
-		// nulls, this will be updated unconditionally below.
-		// */}}
-		// {{if .HasNulls}}
-		a.foundNonNullForCurrentGroup = false
-		// {{end}}
+			// {{/*
+			// We only need to reset this flag if there are nulls. If there are no
+			// nulls, this will be updated unconditionally below.
+			// */}}
+			// {{if .HasNulls}}
+			a.foundNonNullForCurrentGroup = false
+			// {{end}}
+		}
+		a.isFirstGroup = false
 	}
 	// {{end}}
 
