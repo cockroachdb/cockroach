@@ -25,10 +25,10 @@ statement ok
 CREATE TABLE bar (k INT PRIMARY KEY)
 
 # Verify that the table is indeed in "foo".
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM foo
 ----
-public  bar  table  root  0
+public  bar  table  root  0  NULL
 
 # Verify set to empty string.
 statement ok
@@ -44,10 +44,10 @@ statement error no database or schema specified
 SHOW TABLES
 
 # Verify SHOW TABLES FROM works when there is no current database.
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM foo
 ----
-public  bar  table  root  0
+public  bar  table  root  0  NULL
 
 # SET statement succeeds, CREATE TABLE fails.
 statement error pgcode 42P07 relation \"bar\" already exists
@@ -60,10 +60,10 @@ database
 foo
 
 # SET succeeds
-query TTTTI
+query TTTTIT
 SHOW TABLES from foo
 ----
-public  bar  table  root  0
+public  bar  table  root  0  NULL
 
 statement error invalid variable name: ""
 SET ROW (1, TRUE, NULL)

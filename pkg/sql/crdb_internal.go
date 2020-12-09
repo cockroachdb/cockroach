@@ -285,7 +285,8 @@ CREATE TABLE crdb_internal.tables (
   drop_time                TIMESTAMP,
   audit_mode               STRING NOT NULL,
   schema_name              STRING NOT NULL,
-  parent_schema_id         INT NOT NULL
+  parent_schema_id         INT NOT NULL,
+  locality                 TEXT
 )`,
 	generator: func(ctx context.Context, p *planner, dbDesc *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
@@ -328,6 +329,14 @@ CREATE TABLE crdb_internal.tables (
 						return err
 					}
 				}
+				locality := tree.DNull
+				if c := table.TableDesc().LocalityConfig; c != nil {
+					f := tree.NewFmtCtx(tree.FmtSimple)
+					if err := tabledesc.FormatTableLocalityConfig(c, f); err != nil {
+						return err
+					}
+					locality = tree.NewDString(f.String())
+				}
 				row = row[:0]
 				row = append(row,
 					tree.NewDInt(tree.DInt(int64(table.GetID()))),
@@ -345,6 +354,7 @@ CREATE TABLE crdb_internal.tables (
 					tree.NewDString(table.GetAuditMode().String()),
 					tree.NewDString(scName),
 					tree.NewDInt(tree.DInt(int64(table.GetParentSchemaID()))),
+					locality,
 				)
 				return pusher.pushRow(row...)
 			}

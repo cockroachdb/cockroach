@@ -14,61 +14,61 @@ CREATE TABLE pg_catalog.t (x INT)
 query error database "pg_catalog" does not exist
 DROP DATABASE pg_catalog
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM pg_catalog
 ----
-pg_catalog  pg_aggregate             table  NULL  NULL
-pg_catalog  pg_am                    table  NULL  NULL
-pg_catalog  pg_attrdef               table  NULL  NULL
-pg_catalog  pg_attribute             table  NULL  NULL
-pg_catalog  pg_auth_members          table  NULL  NULL
-pg_catalog  pg_authid                table  NULL  NULL
-pg_catalog  pg_available_extensions  table  NULL  NULL
-pg_catalog  pg_cast                  table  NULL  NULL
-pg_catalog  pg_class                 table  NULL  NULL
-pg_catalog  pg_collation             table  NULL  NULL
-pg_catalog  pg_constraint            table  NULL  NULL
-pg_catalog  pg_conversion            table  NULL  NULL
-pg_catalog  pg_database              table  NULL  NULL
-pg_catalog  pg_default_acl           table  NULL  NULL
-pg_catalog  pg_depend                table  NULL  NULL
-pg_catalog  pg_description           table  NULL  NULL
-pg_catalog  pg_enum                  table  NULL  NULL
-pg_catalog  pg_event_trigger         table  NULL  NULL
-pg_catalog  pg_extension             table  NULL  NULL
-pg_catalog  pg_foreign_data_wrapper  table  NULL  NULL
-pg_catalog  pg_foreign_server        table  NULL  NULL
-pg_catalog  pg_foreign_table         table  NULL  NULL
-pg_catalog  pg_index                 table  NULL  NULL
-pg_catalog  pg_indexes               table  NULL  NULL
-pg_catalog  pg_inherits              table  NULL  NULL
-pg_catalog  pg_language              table  NULL  NULL
-pg_catalog  pg_locks                 table  NULL  NULL
-pg_catalog  pg_matviews              table  NULL  NULL
-pg_catalog  pg_namespace             table  NULL  NULL
-pg_catalog  pg_opclass               table  NULL  NULL
-pg_catalog  pg_operator              table  NULL  NULL
-pg_catalog  pg_prepared_statements   table  NULL  NULL
-pg_catalog  pg_prepared_xacts        table  NULL  NULL
-pg_catalog  pg_proc                  table  NULL  NULL
-pg_catalog  pg_range                 table  NULL  NULL
-pg_catalog  pg_rewrite               table  NULL  NULL
-pg_catalog  pg_roles                 table  NULL  NULL
-pg_catalog  pg_seclabel              table  NULL  NULL
-pg_catalog  pg_seclabels             table  NULL  NULL
-pg_catalog  pg_sequence              table  NULL  NULL
-pg_catalog  pg_settings              table  NULL  NULL
-pg_catalog  pg_shdepend              table  NULL  NULL
-pg_catalog  pg_shdescription         table  NULL  NULL
-pg_catalog  pg_shseclabel            table  NULL  NULL
-pg_catalog  pg_stat_activity         table  NULL  NULL
-pg_catalog  pg_tables                table  NULL  NULL
-pg_catalog  pg_tablespace            table  NULL  NULL
-pg_catalog  pg_trigger               table  NULL  NULL
-pg_catalog  pg_type                  table  NULL  NULL
-pg_catalog  pg_user                  table  NULL  NULL
-pg_catalog  pg_user_mapping          table  NULL  NULL
-pg_catalog  pg_views                 table  NULL  NULL
+pg_catalog  pg_aggregate             table  NULL  NULL  NULL
+pg_catalog  pg_am                    table  NULL  NULL  NULL
+pg_catalog  pg_attrdef               table  NULL  NULL  NULL
+pg_catalog  pg_attribute             table  NULL  NULL  NULL
+pg_catalog  pg_auth_members          table  NULL  NULL  NULL
+pg_catalog  pg_authid                table  NULL  NULL  NULL
+pg_catalog  pg_available_extensions  table  NULL  NULL  NULL
+pg_catalog  pg_cast                  table  NULL  NULL  NULL
+pg_catalog  pg_class                 table  NULL  NULL  NULL
+pg_catalog  pg_collation             table  NULL  NULL  NULL
+pg_catalog  pg_constraint            table  NULL  NULL  NULL
+pg_catalog  pg_conversion            table  NULL  NULL  NULL
+pg_catalog  pg_database              table  NULL  NULL  NULL
+pg_catalog  pg_default_acl           table  NULL  NULL  NULL
+pg_catalog  pg_depend                table  NULL  NULL  NULL
+pg_catalog  pg_description           table  NULL  NULL  NULL
+pg_catalog  pg_enum                  table  NULL  NULL  NULL
+pg_catalog  pg_event_trigger         table  NULL  NULL  NULL
+pg_catalog  pg_extension             table  NULL  NULL  NULL
+pg_catalog  pg_foreign_data_wrapper  table  NULL  NULL  NULL
+pg_catalog  pg_foreign_server        table  NULL  NULL  NULL
+pg_catalog  pg_foreign_table         table  NULL  NULL  NULL
+pg_catalog  pg_index                 table  NULL  NULL  NULL
+pg_catalog  pg_indexes               table  NULL  NULL  NULL
+pg_catalog  pg_inherits              table  NULL  NULL  NULL
+pg_catalog  pg_language              table  NULL  NULL  NULL
+pg_catalog  pg_locks                 table  NULL  NULL  NULL
+pg_catalog  pg_matviews              table  NULL  NULL  NULL
+pg_catalog  pg_namespace             table  NULL  NULL  NULL
+pg_catalog  pg_opclass               table  NULL  NULL  NULL
+pg_catalog  pg_operator              table  NULL  NULL  NULL
+pg_catalog  pg_prepared_statements   table  NULL  NULL  NULL
+pg_catalog  pg_prepared_xacts        table  NULL  NULL  NULL
+pg_catalog  pg_proc                  table  NULL  NULL  NULL
+pg_catalog  pg_range                 table  NULL  NULL  NULL
+pg_catalog  pg_rewrite               table  NULL  NULL  NULL
+pg_catalog  pg_roles                 table  NULL  NULL  NULL
+pg_catalog  pg_seclabel              table  NULL  NULL  NULL
+pg_catalog  pg_seclabels             table  NULL  NULL  NULL
+pg_catalog  pg_sequence              table  NULL  NULL  NULL
+pg_catalog  pg_settings              table  NULL  NULL  NULL
+pg_catalog  pg_shdepend              table  NULL  NULL  NULL
+pg_catalog  pg_shdescription         table  NULL  NULL  NULL
+pg_catalog  pg_shseclabel            table  NULL  NULL  NULL
+pg_catalog  pg_stat_activity         table  NULL  NULL  NULL
+pg_catalog  pg_tables                table  NULL  NULL  NULL
+pg_catalog  pg_tablespace            table  NULL  NULL  NULL
+pg_catalog  pg_trigger               table  NULL  NULL  NULL
+pg_catalog  pg_type                  table  NULL  NULL  NULL
+pg_catalog  pg_user                  table  NULL  NULL  NULL
+pg_catalog  pg_user_mapping          table  NULL  NULL  NULL
+pg_catalog  pg_views                 table  NULL  NULL  NULL
 
 # Verify "pg_catalog" is a regular db name
 
@@ -92,61 +92,61 @@ SELECT * FROM pg_catalog.pg_class c WHERE nonexistent_function()
 
 # Verify pg_catalog handles reflection correctly.
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM test.pg_catalog
 ----
-pg_catalog  pg_aggregate             table  NULL  NULL
-pg_catalog  pg_am                    table  NULL  NULL
-pg_catalog  pg_attrdef               table  NULL  NULL
-pg_catalog  pg_attribute             table  NULL  NULL
-pg_catalog  pg_auth_members          table  NULL  NULL
-pg_catalog  pg_authid                table  NULL  NULL
-pg_catalog  pg_available_extensions  table  NULL  NULL
-pg_catalog  pg_cast                  table  NULL  NULL
-pg_catalog  pg_class                 table  NULL  NULL
-pg_catalog  pg_collation             table  NULL  NULL
-pg_catalog  pg_constraint            table  NULL  NULL
-pg_catalog  pg_conversion            table  NULL  NULL
-pg_catalog  pg_database              table  NULL  NULL
-pg_catalog  pg_default_acl           table  NULL  NULL
-pg_catalog  pg_depend                table  NULL  NULL
-pg_catalog  pg_description           table  NULL  NULL
-pg_catalog  pg_enum                  table  NULL  NULL
-pg_catalog  pg_event_trigger         table  NULL  NULL
-pg_catalog  pg_extension             table  NULL  NULL
-pg_catalog  pg_foreign_data_wrapper  table  NULL  NULL
-pg_catalog  pg_foreign_server        table  NULL  NULL
-pg_catalog  pg_foreign_table         table  NULL  NULL
-pg_catalog  pg_index                 table  NULL  NULL
-pg_catalog  pg_indexes               table  NULL  NULL
-pg_catalog  pg_inherits              table  NULL  NULL
-pg_catalog  pg_language              table  NULL  NULL
-pg_catalog  pg_locks                 table  NULL  NULL
-pg_catalog  pg_matviews              table  NULL  NULL
-pg_catalog  pg_namespace             table  NULL  NULL
-pg_catalog  pg_opclass               table  NULL  NULL
-pg_catalog  pg_operator              table  NULL  NULL
-pg_catalog  pg_prepared_statements   table  NULL  NULL
-pg_catalog  pg_prepared_xacts        table  NULL  NULL
-pg_catalog  pg_proc                  table  NULL  NULL
-pg_catalog  pg_range                 table  NULL  NULL
-pg_catalog  pg_rewrite               table  NULL  NULL
-pg_catalog  pg_roles                 table  NULL  NULL
-pg_catalog  pg_seclabel              table  NULL  NULL
-pg_catalog  pg_seclabels             table  NULL  NULL
-pg_catalog  pg_sequence              table  NULL  NULL
-pg_catalog  pg_settings              table  NULL  NULL
-pg_catalog  pg_shdepend              table  NULL  NULL
-pg_catalog  pg_shdescription         table  NULL  NULL
-pg_catalog  pg_shseclabel            table  NULL  NULL
-pg_catalog  pg_stat_activity         table  NULL  NULL
-pg_catalog  pg_tables                table  NULL  NULL
-pg_catalog  pg_tablespace            table  NULL  NULL
-pg_catalog  pg_trigger               table  NULL  NULL
-pg_catalog  pg_type                  table  NULL  NULL
-pg_catalog  pg_user                  table  NULL  NULL
-pg_catalog  pg_user_mapping          table  NULL  NULL
-pg_catalog  pg_views                 table  NULL  NULL
+pg_catalog  pg_aggregate             table  NULL  NULL  NULL
+pg_catalog  pg_am                    table  NULL  NULL  NULL
+pg_catalog  pg_attrdef               table  NULL  NULL  NULL
+pg_catalog  pg_attribute             table  NULL  NULL  NULL
+pg_catalog  pg_auth_members          table  NULL  NULL  NULL
+pg_catalog  pg_authid                table  NULL  NULL  NULL
+pg_catalog  pg_available_extensions  table  NULL  NULL  NULL
+pg_catalog  pg_cast                  table  NULL  NULL  NULL
+pg_catalog  pg_class                 table  NULL  NULL  NULL
+pg_catalog  pg_collation             table  NULL  NULL  NULL
+pg_catalog  pg_constraint            table  NULL  NULL  NULL
+pg_catalog  pg_conversion            table  NULL  NULL  NULL
+pg_catalog  pg_database              table  NULL  NULL  NULL
+pg_catalog  pg_default_acl           table  NULL  NULL  NULL
+pg_catalog  pg_depend                table  NULL  NULL  NULL
+pg_catalog  pg_description           table  NULL  NULL  NULL
+pg_catalog  pg_enum                  table  NULL  NULL  NULL
+pg_catalog  pg_event_trigger         table  NULL  NULL  NULL
+pg_catalog  pg_extension             table  NULL  NULL  NULL
+pg_catalog  pg_foreign_data_wrapper  table  NULL  NULL  NULL
+pg_catalog  pg_foreign_server        table  NULL  NULL  NULL
+pg_catalog  pg_foreign_table         table  NULL  NULL  NULL
+pg_catalog  pg_index                 table  NULL  NULL  NULL
+pg_catalog  pg_indexes               table  NULL  NULL  NULL
+pg_catalog  pg_inherits              table  NULL  NULL  NULL
+pg_catalog  pg_language              table  NULL  NULL  NULL
+pg_catalog  pg_locks                 table  NULL  NULL  NULL
+pg_catalog  pg_matviews              table  NULL  NULL  NULL
+pg_catalog  pg_namespace             table  NULL  NULL  NULL
+pg_catalog  pg_opclass               table  NULL  NULL  NULL
+pg_catalog  pg_operator              table  NULL  NULL  NULL
+pg_catalog  pg_prepared_statements   table  NULL  NULL  NULL
+pg_catalog  pg_prepared_xacts        table  NULL  NULL  NULL
+pg_catalog  pg_proc                  table  NULL  NULL  NULL
+pg_catalog  pg_range                 table  NULL  NULL  NULL
+pg_catalog  pg_rewrite               table  NULL  NULL  NULL
+pg_catalog  pg_roles                 table  NULL  NULL  NULL
+pg_catalog  pg_seclabel              table  NULL  NULL  NULL
+pg_catalog  pg_seclabels             table  NULL  NULL  NULL
+pg_catalog  pg_sequence              table  NULL  NULL  NULL
+pg_catalog  pg_settings              table  NULL  NULL  NULL
+pg_catalog  pg_shdepend              table  NULL  NULL  NULL
+pg_catalog  pg_shdescription         table  NULL  NULL  NULL
+pg_catalog  pg_shseclabel            table  NULL  NULL  NULL
+pg_catalog  pg_stat_activity         table  NULL  NULL  NULL
+pg_catalog  pg_tables                table  NULL  NULL  NULL
+pg_catalog  pg_tablespace            table  NULL  NULL  NULL
+pg_catalog  pg_trigger               table  NULL  NULL  NULL
+pg_catalog  pg_type                  table  NULL  NULL  NULL
+pg_catalog  pg_user                  table  NULL  NULL  NULL
+pg_catalog  pg_user_mapping          table  NULL  NULL  NULL
+pg_catalog  pg_views                 table  NULL  NULL  NULL
 
 query TT colnames
 SHOW CREATE TABLE pg_catalog.pg_namespace

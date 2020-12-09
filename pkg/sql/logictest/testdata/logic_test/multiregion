@@ -236,6 +236,16 @@ CREATE TABLE public.global_table (
                    FAMILY "primary" (a, rowid)
 ) LOCALITY GLOBAL
 
+query TTTTIT colnames
+SHOW TABLES
+----
+schema_name  table_name                              type   owner  estimated_row_count  locality
+public       global_table                            table  root   0                    GLOBAL
+public       regional_by_row_table                   table  root   0                    REGIONAL BY ROW
+public       regional_implicit_primary_region_table  table  root   0                    REGIONAL BY TABLE IN PRIMARY REGION
+public       regional_primary_region_table           table  root   0                    REGIONAL BY TABLE IN PRIMARY REGION
+public       regional_test3_table                    table  root   0                    REGIONAL BY TABLE IN test3
+
 statement ok
 CREATE DATABASE new_db
 
