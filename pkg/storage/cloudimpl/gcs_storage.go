@@ -201,9 +201,9 @@ func (r *resumingGoogleStorageReader) Read(p []byte) (int, error) {
 
 		if lastErr == nil {
 			n, readErr := r.data.Read(p)
-			if readErr == nil {
+			if readErr == nil || readErr == io.EOF {
 				r.pos += int64(n)
-				return n, nil
+				return n, readErr
 			}
 			lastErr = readErr
 		}
@@ -222,6 +222,10 @@ func (r *resumingGoogleStorageReader) Read(p []byte) (int, error) {
 		}
 	}
 
+	// NB: Go says Read() callers need to expect n > 0 *and* non-nil error, and do
+	// something with what was read before the error, but this mostly applies to
+	// err = EOF case which we handle above, so likely OK that we're discarding n
+	// here and pretending it was zero.
 	return 0, lastErr
 }
 
