@@ -344,7 +344,7 @@ workload were to be shifted entirely such that all requests were forced to go to
 leaseholders it would not be capable of acceptably serving the traffic. If then,
 a burst of load or some other cluster event were to lead one or more replicas to
 fall behind in its ability to publish closed timestamps, all traffic which was
-spread over all of the replicas would begin recieving all of the load that had
+spread over all of the replicas would begin receiving all of the load that had
 been going to followers. It is possible that this concern is not realistic in
 most common cases.  Furthermore it seems straightforward to mitigate by
 increasing the target multiple. The problem seems worse as the replication
