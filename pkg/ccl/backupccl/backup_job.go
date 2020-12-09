@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -68,23 +67,6 @@ func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) RowCount {
 	return res
 }
 
-func allRangeDescriptors(ctx context.Context, txn *kv.Txn) ([]roachpb.RangeDescriptor, error) {
-	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
-	if err != nil {
-		return nil, errors.Wrapf(err,
-			"unable to scan range descriptors")
-	}
-
-	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
-	for i, row := range rows {
-		if err := row.ValueProto(&rangeDescs[i]); err != nil {
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"%s: unable to unmarshal range descriptor", row.Key)
-		}
-	}
-	return rangeDescs, nil
-}
-
 // coveringFromSpans creates an interval.Covering with a fixed payload from a
 // slice of roachpb.Spans.
 func coveringFromSpans(spans []roachpb.Span, payload interface{}) covering.Covering {
@@ -99,28 +81,17 @@ func coveringFromSpans(spans []roachpb.Span, payload interface{}) covering.Cover
 	return c
 }
 
-// splitAndFilterSpans returns the spans that represent the set difference
-// (includes - excludes) while also guaranteeing that each output span does not
-// cross the endpoint of a RangeDescriptor in ranges.
-func splitAndFilterSpans(
-	includes []roachpb.Span, excludes []roachpb.Span, ranges []roachpb.RangeDescriptor,
-) []roachpb.Span {
+// filterSpans returns the spans that represent the set difference
+// (includes - excludes).
+func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Span {
 	type includeMarker struct{}
 	type excludeMarker struct{}
 
 	includeCovering := coveringFromSpans(includes, includeMarker{})
 	excludeCovering := coveringFromSpans(excludes, excludeMarker{})
 
-	var rangeCovering covering.Covering
-	for _, rangeDesc := range ranges {
-		rangeCovering = append(rangeCovering, covering.Range{
-			Start: []byte(rangeDesc.StartKey),
-			End:   []byte(rangeDesc.EndKey),
-		})
-	}
-
 	splits := covering.OverlapCoveringMerge(
-		[]covering.Covering{includeCovering, excludeCovering, rangeCovering},
+		[]covering.Covering{includeCovering, excludeCovering},
 	)
 
 	var out []roachpb.Span
@@ -196,25 +167,6 @@ func backup(
 
 	var lastCheckpoint time.Time
 
-	var ranges []roachpb.RangeDescriptor
-
-	// TODO(dt): we should really get a RangeDescriptor iterator and do this the
-	// right way, just iterate the spans we need, in a tenant or not. For now
-	// though tenants aren't allowed to just go read all ranges so we'll skip this
-	// and let distsender just split our ExportRequest for us.
-	if execCtx.ExecCfg().Codec.ForSystemTenant() {
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			var err error
-			// TODO(benesch): limit the range descriptors we fetch to the ranges that
-			// are actually relevant in the backup to speed up small backups on large
-			// clusters.
-			ranges, err = allRangeDescriptors(ctx, txn)
-			return err
-		}); err != nil {
-			return RowCount{}, err
-		}
-	}
-
 	var completedSpans, completedIntroducedSpans []roachpb.Span
 	// TODO(benesch): verify these files, rather than accepting them as truth
 	// blindly.
@@ -227,11 +179,9 @@ func backup(
 		}
 	}
 
-	// Subtract out any completed spans and split the remaining spans into
-	// range-sized pieces so that we can use the number of completed requests as a
-	// rough measure of progress.
-	spans := splitAndFilterSpans(backupManifest.Spans, completedSpans, ranges)
-	introducedSpans := splitAndFilterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans, ranges)
+	// Subtract out any completed spans.
+	spans := filterSpans(backupManifest.Spans, completedSpans)
+	introducedSpans := filterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
 
 	g := ctxgroup.WithContext(ctx)
 	pkIDs := make(map[uint64]bool)

@@ -35,17 +35,20 @@ build/builder.sh env "${env[@]}" bash <<'EOF'
 set -euxo pipefail
 go install github.com/cockroachdb/stress
 go install ./pkg/cmd/github-post
-mkdir -p artifacts/meta
+ARTIFACTS_DIR=`pwd`/artifacts/meta
+mkdir -p $ARTIFACTS_DIR
 
 # We've set pipefail, so the exit status is going to come from stress if there
 # are test failures.
 # Use an `if` so that the `-e` option doesn't stop the script on error.
+pushd ./vendor/github.com/cockroachdb/pebble/internal/metamorphic
 if ! stdbuf -oL -eL \
   go test -mod=vendor -exec "stress ${STRESSFLAGS}" -run 'TestMeta$$' \
-  -timeout 0 -tags 'invariants' -test.v ./vendor/github.com/cockroachdb/pebble/internal/metamorphic \
-  -dir artifacts/meta -ops "uniform:5000-25000" 2>&1 | tee artifacts/meta/metamorphic.log; then
+  -timeout 0 -tags 'invariants' -test.v \
+  -dir $ARTIFACTS_DIR -ops "uniform:5000-25000" 2>&1 | tee $ARTIFACTS_DIR/metamorphic.log; then
     exit_status=${PIPESTATUS[0]}
-    go tool test2json -t -p "${PKG}" < artifacts/meta/metamorphic.log | github-post --formatter=pebble-metamorphic
+    go tool test2json -t -p "${PKG}" < $ARTIFACTS_DIR/metamorphic.log | github-post --formatter=pebble-metamorphic
     exit $exit_status
   fi
+popd
 EOF
