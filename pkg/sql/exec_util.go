@@ -157,6 +157,15 @@ var traceTxnThreshold = settings.RegisterPublicDurationSetting(
 	"duration beyond which all transactions are traced (set to 0 to disable)", 0,
 )
 
+// traceStmtThreshold is identical to traceTxnThreshold except it applies to
+// individual statements in a transaction. The motivation for this setting is
+// to be able to reduce the noise associated with a larger transaction (e.g.
+// round trips to client).
+var traceStmtThreshold = settings.RegisterPublicDurationSetting(
+	"sql.trace.stmt.enable_threshold",
+	"duration beyond which all statements are traced (set to 0 to disable)", 0,
+)
+
 // traceSessionEventLogEnabled can be used to enable the event log
 // that is normally kept for every SQL connection. The event log has a
 // non-trivial performance impact and also reveals SQL statements

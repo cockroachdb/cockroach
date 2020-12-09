@@ -619,9 +619,26 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+
+	var stmtThresholdSpan *tracing.Span
+	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
+	stmtTraceThreshold := traceStmtThreshold.Get(&ex.planner.execCfg.Settings.SV)
+	if !alreadyRecording && stmtTraceThreshold > 0 {
+		// If the statement trace threshold is enabled, create a span and start
+		// recording. The trace will only be logged once we determine the execution
+		// time of this statement.
+		ctx, stmtThresholdSpan = createRootOrChildSpan(ctx, "trace-stmt-threshold", ex.transitionCtx.tracer)
+		stmtThresholdSpan.StartRecording(tracing.SnowballRecording)
+	}
+
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 		return nil, nil, err
 	}
+
+	if stmtThresholdSpan != nil {
+		logTraceAboveThreshold(ctx, stmtThresholdSpan, fmt.Sprintf("SQL stmt %s", stmt.AST.String()), stmtTraceThreshold, timeutil.Since(ex.phaseTimes[sessionQueryReceived]))
+	}
+
 	if err := res.Err(); err != nil {
 		return makeErrEvent(err)
 	}
@@ -1442,4 +1459,51 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 		commitLat,
 		ex.extraTxnState.numRows,
 	)
+}
+
+// createRootOrChildSpan is a helper function used to create spans for txns and
+// stmts. It inspects parentCtx for an existing span and creates a root span if
+// none is found, or a child span if one is found. A context derived from
+// parentCtx which additionally contains the new span is also returned.
+func createRootOrChildSpan(
+	parentCtx context.Context, opName string, tracer *tracing.Tracer,
+) (context.Context, *tracing.Span) {
+	var sp *tracing.Span
+	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {
+		// Create a child span for this operation.
+		sp = parentSp.Tracer().StartSpan(
+			opName,
+			tracing.WithParentAndAutoCollection(parentSp),
+			tracing.WithCtxLogTags(parentCtx),
+			// WithForceRealSpan is used to support the use of session tracing, which
+			// may start recording on this span.
+			tracing.WithForceRealSpan(),
+		)
+	} else {
+		// Create a root span for this operations.
+		sp = tracer.StartSpan(
+			opName, tracing.WithCtxLogTags(parentCtx), tracing.WithForceRealSpan(),
+		)
+	}
+	return tracing.ContextWithSpan(parentCtx, sp), sp
+}
+
+// logTraceAboveThreshold is a helper function used when txn or stmt threshold
+// tracing is enabled. This function assumes that sp is non-nil and threshold
+// tracing was enabled.
+func logTraceAboveThreshold(
+	ctx context.Context, sp *tracing.Span, opName string, threshold, elapsed time.Duration,
+) {
+	if r := sp.GetRecording(); r != nil {
+		if elapsed >= threshold {
+			dump := r.String()
+			if len(dump) > 0 {
+				log.Infof(
+					ctx, "%s took %s, exceeding threshold of %s:\n%s", opName, elapsed, threshold, dump,
+				)
+			}
+		}
+	} else {
+		log.Warning(ctx, "missing trace when threshold tracing was enabled")
+	}
 }
