@@ -3,8 +3,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "sqlproxyccl",
     srcs = [
+        "backend_dialer.go",
         "error.go",
         "errorcode_string.go",
+        "idle_disconnect_connection.go",
+        "keep_alive_overlay.go",
         "metrics.go",
         "proxy.go",
         "server.go",
@@ -26,6 +29,7 @@ go_library(
 go_test(
     name = "sqlproxyccl_test",
     srcs = [
+        "idle_disconnect_connection_test.go",
         "main_test.go",
         "proxy_test.go",
         "server_test.go",

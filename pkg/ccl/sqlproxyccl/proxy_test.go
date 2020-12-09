@@ -517,3 +517,48 @@ func TestProxyKeepAlive(t *testing.T) {
 		"unexpected error received: %v", err,
 	)
 }
+
+func TestProxyAgainstSecureCRDBWithIdleTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	outgoingTLSConfig, err := tc.Server(0).RPCContext().GetClientTLSConfig()
+	require.NoError(t, err)
+	outgoingTLSConfig.InsecureSkipVerify = true
+
+	idleTimeout, _ := time.ParseDuration("1s")
+	var connSuccess bool
+	opts := Options{
+		BackendConfigFromParams: func(params map[string]string, _ *Conn) (*BackendConfig, error) {
+			return &BackendConfig{
+				OutgoingAddress:     tc.Server(0).ServingSQLAddr(),
+				TLSConf:             outgoingTLSConfig,
+				OnConnectionSuccess: func() { connSuccess = true },
+				IdleTimeout:         idleTimeout,
+			}, nil
+		},
+	}
+	s, addr, done := setupTestProxyWithCerts(t, &opts)
+	defer done()
+
+	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require", addr)
+	conn, err := pgx.Connect(context.Background(), url)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+	defer func() {
+		require.NoError(t, conn.Close(ctx))
+		require.True(t, connSuccess)
+		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+	}()
+
+	var n int
+	err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	time.Sleep(idleTimeout * 2)
+	err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
+	require.EqualError(t, err, "FATAL: terminating connection due to idle timeout (SQLSTATE 57P01)")
+}

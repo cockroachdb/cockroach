@@ -66,6 +66,10 @@ const (
 	// CodeExpiredClientConnection indicates that proxy connection to the client
 	// has expired and should be closed.
 	CodeExpiredClientConnection
+
+	// CodeIdleDisconnect indicates that the connection was disconnected for
+	// being idle for longer than the specified timeout.
+	CodeIdleDisconnect
 )
 
 type codeError struct {
