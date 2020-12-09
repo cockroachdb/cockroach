@@ -26,10 +26,7 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// distBackup is used to plan the processors for a distributed backup. It
-// streams back progress updates over progCh, which is used to incrementally
-// build up the BulkOpSummary.
-func distBackup(
+func distBackupPlanSpecs(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	spans roachpb.Spans,
@@ -40,7 +37,43 @@ func distBackup(
 	encryption *jobspb.BackupEncryptionOptions,
 	mvccFilter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
+) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
+	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
+
+	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
+
+	// We don't return the compatible nodes here since PartitionSpans will
+	// filter out incompatible nodes.
+	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to determine nodes on which to run")
+	}
+
+	return makeBackupDataProcessorSpecs(
+		planCtx,
+		dsp,
+		spans,
+		introducedSpans,
+		pkIDs,
+		defaultURI,
+		urisByLocalityKV,
+		mvccFilter,
+		encryption,
+		startTime, endTime,
+		execCtx.User(),
+		execCtx.ExecCfg(),
+	)
+}
+
+// distBackup is used to plan the processors for a distributed backup. It
+// streams back progress updates over progCh, which is used to incrementally
+// build up the BulkOpSummary.
+func distBackup(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	backupSpecs map[roachpb.NodeID]*execinfrapb.BackupDataSpec,
 ) error {
 	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
 	var noTxn *kv.Txn
@@ -55,30 +88,10 @@ func distBackup(
 		return errors.Wrap(err, "failed to determine nodes on which to run")
 	}
 
-	backupSpecs, err := makeBackupDataProcessorSpecs(
-		planCtx,
-		dsp,
-		spans,
-		introducedSpans,
-		pkIDs,
-		defaultURI,
-		urisByLocalityKV,
-		mvccFilter,
-		encryption,
-		startTime, endTime,
-		execCtx.User(),
-		execCtx.ExecCfg(),
-	)
-	if err != nil {
-		return errors.Wrap(err, "failed to determine backup execution plan")
-	}
-
 	if len(backupSpecs) == 0 {
 		close(progCh)
 		return nil
 	}
-
-	p := planCtx.NewPhysicalPlan()
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
@@ -89,6 +102,7 @@ func distBackup(
 		i++
 	}
 
+	p := planCtx.NewPhysicalPlan()
 	// All of the progress information is sent through the metadata stream, so we
 	// have an empty result stream.
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
