@@ -79,14 +79,14 @@ var _ Startable = &Outbox{}
 func NewOutbox(
 	flowCtx *execinfra.FlowCtx,
 	nodeID roachpb.NodeID,
-	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
 	numOutboxes *int32,
 ) *Outbox {
 	m := &Outbox{flowCtx: flowCtx, nodeID: nodeID}
-	m.encoder.SetHeaderFields(flowID, streamID)
+	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
 	m.streamID = streamID
 	m.numOutboxes = numOutboxes
+	m.stats.Component = flowCtx.StreamComponentID(streamID)
 	return m
 }
 
