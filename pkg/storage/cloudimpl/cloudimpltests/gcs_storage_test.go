@@ -161,3 +161,43 @@ func TestFileDoesNotExist(t *testing.T) {
 		require.True(t, errors.Is(err, cloudimpl.ErrFileDoesNotExist))
 	}
 }
+
+func TestCompressedGCS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
+		// This test requires valid GS credential file.
+		skip.IgnoreLint(t, "GOOGLE_APPLICATION_CREDENTIALS env var must be set")
+	}
+
+	user := security.RootUser
+	ctx := context.Background()
+
+	// gsutil cp /usr/share/dict/words gs://cockroach-fixtures/words-compressed.txt
+	gsFile1 := "gs://cockroach-fixtures/words.txt?AUTH=implicit"
+
+	// gsutil cp -Z /usr/share/dict/words gs://cockroach-fixtures/words-compressed.txt
+	gsFile2 := "gs://cockroach-fixtures/words-compressed.txt?AUTH=implicit"
+
+	conf1, err := cloudimpl.ExternalStorageConfFromURI(gsFile1, user)
+	require.NoError(t, err)
+	conf2, err := cloudimpl.ExternalStorageConfFromURI(gsFile2, user)
+	require.NoError(t, err)
+
+	s1, err := cloudimpl.MakeExternalStorage(ctx, conf1, base.ExternalIODirConfig{}, testSettings, nil, nil, nil)
+	require.NoError(t, err)
+	s2, err := cloudimpl.MakeExternalStorage(ctx, conf2, base.ExternalIODirConfig{}, testSettings, nil, nil, nil)
+	require.NoError(t, err)
+
+	reader1, err := s1.ReadFile(context.Background(), "")
+	require.NoError(t, err)
+	reader2, err := s2.ReadFile(context.Background(), "")
+	require.NoError(t, err)
+
+	content1, err := ioutil.ReadAll(reader1)
+	require.NoError(t, err)
+	content2, err := ioutil.ReadAll(reader2)
+	require.NoError(t, err)
+
+	require.Equal(t, string(content1), string(content2))
+}
