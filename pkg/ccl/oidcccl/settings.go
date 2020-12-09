@@ -33,7 +33,7 @@ const (
 	OIDCAutoLoginSettingName      = baseOIDCSettingName + "autologin"
 )
 
-// OIDCEnabled enables or disabled OIDC login for the DB Console
+// OIDCEnabled enables or disabled OIDC login for the DB Console.
 var OIDCEnabled = func() *settings.BoolSetting {
 	s := settings.RegisterPublicBoolSetting(
 		OIDCEnabledSettingName,
@@ -44,7 +44,7 @@ var OIDCEnabled = func() *settings.BoolSetting {
 	return s
 }()
 
-// OIDCClientID is the OIDC client id
+// OIDCClientID is the OIDC client id.
 var OIDCClientID = func() *settings.StringSetting {
 	s := settings.RegisterPublicStringSetting(
 		OIDCClientIDSettingName,
@@ -55,7 +55,7 @@ var OIDCClientID = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCClientSecret is the OIDC client secret
+// OIDCClientSecret is the OIDC client secret.
 var OIDCClientSecret = func() *settings.StringSetting {
 	s := settings.RegisterPublicStringSetting(
 		OIDCClientSecretSettingName,
@@ -66,12 +66,19 @@ var OIDCClientSecret = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCRedirectURL is the cluster URL to redirect to after OIDC auth completes
+// OIDCRedirectURL is the cluster URL to redirect to after OIDC auth completes.
+//
+// If this setting is set to the empty string "", that will signal to the OIDC
+// auth endpoint to compute the redirect URL automatically based on the request
+// `Host` HTTP header and request path.
 var OIDCRedirectURL = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		OIDCRedirectURLSettingName,
-		"sets OIDC redirect URL (base HTTP URL, likely your load balancer, must route to the path /oidc/v1/callback) (this feature is experimental)",
-		"https://localhost:8080/oidc/v1/callback",
+		"sets OIDC redirect URL, "+
+			"an empty string value lets CRDB set redirect URL automatically based on auth request Host header "+
+			"(base HTTP URL, likely your load balancer, must route to the path /oidc/v1/callback) "+
+			"(this feature is experimental)",
+		"",
 		func(values *settings.Values, s string) error {
 			_, err := url.Parse(s)
 			if err != nil {
@@ -85,7 +92,7 @@ var OIDCRedirectURL = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCProviderURL is the location of the OIDC discovery document for the auth provider
+// OIDCProviderURL is the location of the OIDC discovery document for the auth provider.
 var OIDCProviderURL = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		OIDCProviderURLSettingName,
@@ -104,7 +111,7 @@ var OIDCProviderURL = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCScopes contains the list of scopes to request from the auth provider
+// OIDCScopes contains the list of scopes to request from the auth provider.
 var OIDCScopes = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		OIDCScopesSettingName,
@@ -123,7 +130,7 @@ var OIDCScopes = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCClaimJSONKey is the key of the claim to extract from the OIDC id_token
+// OIDCClaimJSONKey is the key of the claim to extract from the OIDC id_token.
 var OIDCClaimJSONKey = func() *settings.StringSetting {
 	s := settings.RegisterPublicStringSetting(
 		OIDCClaimJSONKeySettingName,
@@ -134,8 +141,8 @@ var OIDCClaimJSONKey = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCPrincipalRegex is a regular expression to apply to the OIDC id_token claim value to conver
-// it to a DB principal
+// OIDCPrincipalRegex is a regular expression to apply to the OIDC id_token claim value to convert
+// it to a DB principal.
 var OIDCPrincipalRegex = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		OIDCPrincipalRegexSettingName,
@@ -155,7 +162,7 @@ var OIDCPrincipalRegex = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCButtonText is a string to display on the button in the DB Console to login with OIDC
+// OIDCButtonText is a string to display on the button in the DB Console to log in with OIDC.
 var OIDCButtonText = func() *settings.StringSetting {
 	s := settings.RegisterPublicStringSetting(
 		OIDCButtonTextSettingName,
@@ -166,7 +173,7 @@ var OIDCButtonText = func() *settings.StringSetting {
 	return s
 }()
 
-// OIDCAutoLogin is a boolean that enables automatic redirection to OIDC auth in the DB Console
+// OIDCAutoLogin is a boolean that enables automatic redirection to OIDC auth in the DB Console.
 var OIDCAutoLogin = func() *settings.BoolSetting {
 	s := settings.RegisterPublicBoolSetting(
 		OIDCAutoLoginSettingName,

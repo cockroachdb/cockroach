@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/coreos/go-oidc"
 	"golang.org/x/oauth2"
 )
@@ -365,6 +367,17 @@ var ConfigureOIDC = func(
 			return
 		}
 
+		if oidcAuthentication.oauth2Config.RedirectURL == "" {
+			redirectURL, err := newRedirectURL(r)
+			if err != nil {
+				log.Errorf(ctx, "OIDC: unable to generate redirect URL: %v", err)
+				http.Error(w, genericLoginHTTPError, http.StatusInternalServerError)
+				return
+			}
+			oidcAuthentication.oauth2Config.RedirectURL = redirectURL.String()
+			log.Infof(r.Context(), "OIDC: setting redirect URL to: %s", redirectURL.String())
+		}
+
 		http.SetCookie(w, kast.secretKeyCookie)
 		http.Redirect(
 			w, r, oidcAuthentication.oauth2Config.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound,
@@ -445,6 +458,20 @@ var ConfigureOIDC = func(
 	})
 
 	return oidcAuthentication, nil
+}
+
+func newRedirectURL(r *http.Request) (*url.URL, error) {
+	if r.Host == "" {
+		return nil, errors.New("missing Host header in request")
+	}
+	if !strings.Contains(r.URL.Path, oidcLoginPath) {
+		return nil, errors.New("request path missing expected OIDC route")
+	}
+	return &url.URL{
+		Scheme: "https",
+		Host:   r.Host,
+		Path:   strings.Replace(r.URL.Path, oidcLoginPath, oidcCallbackPath, 1),
+	}, nil
 }
 
 func init() {

@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -187,48 +188,59 @@ func TestOIDCEnabled(t *testing.T) {
 	client, err := testCertsContext.GetHTTPClient()
 	require.NoError(t, err)
 
-	// Don't follow redirects so we can inspect the 302
+	// Don't follow redirects so we can inspect the 302 response.
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
 
 	t.Run("login redirect", func(t *testing.T) {
 		resp, err := client.Get(s.AdminURL() + "/oidc/v1/login")
-		if err != nil {
-			t.Fatalf("could not issue GET request to admin server: %s", err)
-		}
+		require.NoError(t, err)
+
 		defer resp.Body.Close()
 
-		if resp.StatusCode != 302 {
-			t.Fatalf("expected 302 status code but got: %d", resp.StatusCode)
-		}
-		if resp.Cookies()[0].Name != secretCookieName {
-			t.Fatal("Missing cookie")
-		}
+		require.Equal(t, resp.StatusCode, 302)
+		require.Equal(t, resp.Cookies()[0].Name, secretCookieName)
+
 		authURL, err := url.Parse(resp.Header.Get("Location"))
 		require.NoError(t, err)
-		if authURL.Query().Get("client_id") != "fake_client_id" {
-			t.Fatal("expected fake client_id", authURL)
-		}
+		require.Equal(t, authURL.Query().Get("client_id"), "fake_client_id")
+
 		const expectedRedirectURL = "https://cockroachlabs.com/oidc/v1/callback"
-		if authURL.Query().Get("redirect_uri") != expectedRedirectURL {
-			t.Fatal("expected fake redirect_url", authURL)
-		}
+		require.Equal(t, authURL.Query().Get("redirect_uri"), expectedRedirectURL)
 
 		state, err := decodeOIDCState(authURL.Query().Get("state"))
 		require.NoError(t, err)
 		// If we use hmac.Sum with the Message, it gets prepended to the hash.
-		if strings.Contains(string(state.TokenMAC), string(state.Token)) {
-			t.Fatal("HMAC generated incorrectly.")
-		}
+		require.False(t,
+			strings.Contains(string(state.TokenMAC), string(state.Token)),
+			"HMAC generated incorrectly.",
+		)
 
 		key, err := base64.URLEncoding.DecodeString(resp.Cookies()[0].Value)
 		require.NoError(t, err)
 		mac := hmac.New(sha256.New, key)
 		mac.Write(state.Token)
-		if !hmac.Equal(mac.Sum(nil), state.TokenMAC) {
-			t.Fatal("HMAC hash doesn't match TokenMAC")
+		require.True(t,
+			hmac.Equal(mac.Sum(nil), state.TokenMAC),
+			"HMAC hash doesn't match TokenMAC",
+		)
+	})
+
+	t.Run("redirectURL generation", func(t *testing.T) {
+		sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = ""`)
+
+		resp, err := client.Get(s.AdminURL() + "/oidc/v1/login")
+		if err != nil {
+			t.Fatalf("could not issue GET request to admin server: %s", err)
 		}
+		defer resp.Body.Close()
+
+		authURL, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
+
+		expectedRedirectURL := fmt.Sprintf("https://%s/oidc/v1/callback", s.HTTPAddr())
+		require.Equal(t, authURL.Query().Get("redirect_uri"), expectedRedirectURL)
 	})
 }
 
@@ -274,7 +286,7 @@ func TestKeyAndSignedTokenIsValid(t *testing.T) {
 }
 
 func TestOIDCStateEncodeDecode(t *testing.T) {
-	testString := "abc-123-@~~" // This string produces discrepancy when base46 URL is used vs Std
+	testString := "abc-123-@~~" // This string produces discrepancy when base46 URL is used vs Std.
 	encoded, err := encodeOIDCState(serverpb.OIDCState{
 		Token:    []byte(testString),
 		TokenMAC: []byte(testString),
@@ -285,5 +297,34 @@ func TestOIDCStateEncodeDecode(t *testing.T) {
 
 	if string(state.Token) != testString || string(state.TokenMAC) != testString {
 		t.Fatal("state didn't match when decoded")
+	}
+}
+
+func TestNewRedirectURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *http.Request
+		want    *url.URL
+		wantErr bool
+	}{
+		{"simple URL", &http.Request{URL: &url.URL{Path: "/oidc/v1/login"}, Host: "example.com"},
+			&url.URL{Scheme: "https", Host: "example.com", Path: "/oidc/v1/callback"}, false},
+		{"path prefix", &http.Request{URL: &url.URL{Path: "stuff/before/the/path/oidc/v1/login"}, Host: "example.com"},
+			&url.URL{Scheme: "https", Host: "example.com", Path: "stuff/before/the/path/oidc/v1/callback"}, false},
+		{"empty path", &http.Request{URL: &url.URL{Path: ""}, Host: "example.com"},
+			nil, true},
+		{"empty host", &http.Request{URL: &url.URL{Path: "/oidc/v1/login"}, Host: ""},
+			nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := newRedirectURL(tt.r)
+			if tt.wantErr {
+				require.Error(t, err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("newRedirectURL() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
