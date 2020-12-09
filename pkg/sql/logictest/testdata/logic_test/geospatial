@@ -5015,6 +5015,11 @@ SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
 NULL
 
 query T
+SELECT ST_AsText(ST_MakeLine(geom ORDER BY geom)) FROM geo_table
+----
+LINESTRING (1 1, 2 2, 2.22 -2.445)
+
+query T
 SELECT ST_Extent(g::geometry) FROM ( VALUES
   (NULL),
   ('POINT(-10.5 10.5)'),
@@ -5090,6 +5095,16 @@ query T
 SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES ('GEOMETRYCOLLECTION (POINT (1 1))'), ('GEOMETRYCOLLECTION (POINT (2 2))')) tbl(g)
 ----
 GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (1 1)), GEOMETRYCOLLECTION (POINT (2 2)))
+
+query T
+SELECT ST_AsText(ST_Collect(geom ORDER BY geom)) FROM geo_table
+----
+MULTIPOINT (1 1, 2 2, 2.22 -2.445)
+
+query T
+SELECT ST_AsText(ST_MemCollect(geom ORDER BY geom)) FROM geo_table
+----
+MULTIPOINT (1 1, 2 2, 2.22 -2.445)
 
 query T
 SELECT ST_AsEWKT(ST_MemCollect(g::geometry)) FROM ( VALUES (NULL), ('POINT (1 1)'), ('POINT EMPTY'), ('POINT (2 2)')) tbl(g)
