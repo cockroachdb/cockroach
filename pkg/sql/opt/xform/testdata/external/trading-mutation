@@ -1128,6 +1128,11 @@ limit
  │         │    │    │    │    ├── cardinality: [10 - 10]
  │         │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │         │    │    │    │    ├── values
+ │         │    │    │    │    │    ├── columns: id:6!null quantity:7!null
+ │         │    │    │    │    │    ├── cardinality: [2 - 2]
+ │         │    │    │    │    │    ├── (42948, 3)
+ │         │    │    │    │    │    └── (24924, 4)
+ │         │    │    │    │    ├── values
  │         │    │    │    │    │    ├── columns: "lookup_join_const_col_@8":18!null
  │         │    │    │    │    │    ├── cardinality: [5 - 5]
  │         │    │    │    │    │    ├── (1,)
@@ -1135,11 +1140,6 @@ limit
  │         │    │    │    │    │    ├── (3,)
  │         │    │    │    │    │    ├── (4,)
  │         │    │    │    │    │    └── (5,)
- │         │    │    │    │    ├── values
- │         │    │    │    │    │    ├── columns: id:6!null quantity:7!null
- │         │    │    │    │    │    ├── cardinality: [2 - 2]
- │         │    │    │    │    │    ├── (42948, 3)
- │         │    │    │    │    │    └── (24924, 4)
  │         │    │    │    │    └── filters (true)
  │         │    │    │    ├── values
  │         │    │    │    │    ├── columns: "lookup_join_const_col_@10":19!null

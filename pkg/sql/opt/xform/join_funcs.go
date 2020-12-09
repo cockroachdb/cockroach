@@ -303,7 +303,13 @@ func (c *CustomFuncs) GenerateLookupJoins(
 					ID:   md.NextUniqueID(),
 				},
 			)
-			lookupJoin.Input = c.e.f.ConstructInnerJoin(lookupJoin.Input, values, nil /* on */, joinPrivate)
+
+			// Create a new JoinPrivate with WasReordered set to true to prevent
+			// the ReorderJoins rule from trying to reorder the join. The join
+			// is a cross-join which will not benefit from reordering, so
+			// attempting to reorder it is unnecessary computation.
+			crossJoinPrivate := &memo.JoinPrivate{WasReordered: true}
+			lookupJoin.Input = c.e.f.ConstructInnerJoin(lookupJoin.Input, values, nil /* on */, crossJoinPrivate)
 
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
