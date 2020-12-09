@@ -233,11 +233,51 @@ func backup(
 	spans := splitAndFilterSpans(backupManifest.Spans, completedSpans, ranges)
 	introducedSpans := splitAndFilterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans, ranges)
 
-	progressLogger := jobs.NewChunkProgressLogger(job, len(spans), job.FractionCompleted(), jobs.ProgressUpdateOnly)
-
-	requestFinishedCh := make(chan struct{}, len(spans)) // enough buffer to never block
 	g := ctxgroup.WithContext(ctx)
-	if len(spans) > 0 {
+	pkIDs := make(map[uint64]bool)
+	for i := range backupManifest.Descriptors {
+		if t := descpb.TableFromDescriptor(&backupManifest.Descriptors[i], hlc.Timestamp{}); t != nil {
+			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
+		}
+	}
+
+	evalCtx := execCtx.ExtendedEvalContext()
+	dsp := execCtx.DistSQLPlanner()
+
+	// We don't return the compatible nodes here since PartitionSpans will
+	// filter out incompatible nodes.
+	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	if err != nil {
+		return RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
+	}
+
+	backupSpecs, err := distBackupPlanSpecs(
+		planCtx,
+		execCtx,
+		dsp,
+		spans,
+		introducedSpans,
+		pkIDs,
+		defaultURI,
+		urisByLocalityKV,
+		encryption,
+		roachpb.MVCCFilter(backupManifest.MVCCFilter),
+		backupManifest.StartTime,
+		backupManifest.EndTime,
+	)
+	if err != nil {
+		return RowCount{}, err
+	}
+
+	numTotalSpans := 0
+	for _, spec := range backupSpecs {
+		numTotalSpans += len(spec.IntroducedSpans) + len(spec.Spans)
+	}
+
+	progressLogger := jobs.NewChunkProgressLogger(job, numTotalSpans, job.FractionCompleted(), jobs.ProgressUpdateOnly)
+
+	requestFinishedCh := make(chan struct{}, numTotalSpans) // enough buffer to never block
+	if numTotalSpans > 0 {
 		g.GoCtx(func(ctx context.Context) error {
 			// Currently the granularity of backup progress is the % of spans
 			// exported. Would improve accuracy if we tracked the actual size of each
@@ -279,32 +319,19 @@ func backup(
 		return nil
 	})
 
-	pkIDs := make(map[uint64]bool)
-	for i := range backupManifest.Descriptors {
-		if t := descpb.TableFromDescriptor(&backupManifest.Descriptors[i], hlc.Timestamp{}); t != nil {
-			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
-		}
-	}
-
 	if err := distBackup(
 		ctx,
 		execCtx,
-		spans,
-		introducedSpans,
-		pkIDs,
-		defaultURI,
-		urisByLocalityKV,
-		encryption,
-		roachpb.MVCCFilter(backupManifest.MVCCFilter),
-		backupManifest.StartTime,
-		backupManifest.EndTime,
+		planCtx,
+		dsp,
 		progCh,
+		backupSpecs,
 	); err != nil {
 		return RowCount{}, err
 	}
 
 	if err := g.Wait(); err != nil {
-		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(len(spans)))
+		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
 	backupID := uuid.MakeV4()
