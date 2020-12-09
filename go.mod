@@ -60,7 +60,7 @@ require (
 	github.com/elazarl/go-bindata-assetfs v1.0.0
 	github.com/emicklei/dot v0.15.0
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
-	github.com/frankban/quicktest v1.7.3 // indirect
+	github.com/frankban/quicktest v1.11.2 // indirect
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
 	github.com/go-ole/go-ole v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
@@ -76,7 +76,7 @@ require (
 	github.com/golang/snappy v0.0.2
 	github.com/google/btree v1.0.0
 	github.com/google/flatbuffers v1.11.0
-	github.com/google/go-cmp v0.4.0
+	github.com/google/go-cmp v0.5.2
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/martian v2.1.0+incompatible // indirect
 	github.com/google/pprof v0.0.0-20190109223431-e84dfd68c163

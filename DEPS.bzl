@@ -746,6 +746,14 @@ def go_deps():
         version = "v1.0.0",
     )
     go_repository(
+        name = "com_github_emicklei_dot",
+        build_file_proto_mode = "disable",
+        importpath = "github.com/emicklei/dot",
+        sum = "h1:XDBW0Xco1QNyRb33cqLe10cT04yMWL1XpCZfa98Q6Og=",
+        version = "v0.15.0",
+    )
+
+    go_repository(
         name = "com_github_envoyproxy_go_control_plane",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/envoyproxy/go-control-plane",
@@ -812,8 +820,8 @@ def go_deps():
         name = "com_github_frankban_quicktest",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/frankban/quicktest",
-        sum = "h1:kV0lw0TH1j1hozahVmcpFCsbV5hcS4ZalH+U7UoeTow=",
-        version = "v1.7.3",
+        sum = "h1:mjwHjStlXWibxOohM7HYieIViKyh56mmt3+6viyhDDI=",
+        version = "v1.11.2",
     )
     go_repository(
         name = "com_github_fsnotify_fsnotify",
@@ -1094,8 +1102,8 @@ def go_deps():
         name = "com_github_google_go_cmp",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/go-cmp",
-        sum = "h1:xsAVV57WRhGj6kEIi8ReJzQlHHqcBYCElAvkovg3B/4=",
-        version = "v0.4.0",
+        sum = "h1:X2ev0eStA3AbceY54o37/0PQ/UWqKEiiO2dKL5OPaFM=",
+        version = "v0.5.2",
     )
     go_repository(
         name = "com_github_google_go_github",
