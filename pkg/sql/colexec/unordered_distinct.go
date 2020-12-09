@@ -35,9 +35,6 @@ func NewUnorderedDistinct(
 		hashTableNumBuckets,
 		typs,
 		distinctCols,
-		// Store all columns from the source since the unordered distinct
-		// doesn't change the schema.
-		nil,  /* colsToStore */
 		true, /* allowNullEquality */
 		hashTableDistinctBuildMode,
 		hashTableDefaultProbeMode,
@@ -45,9 +42,7 @@ func NewUnorderedDistinct(
 
 	return &unorderedDistinct{
 		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
 		ht:           ht,
-		typs:         typs,
 	}
 }
 
@@ -58,14 +53,7 @@ func NewUnorderedDistinct(
 type unorderedDistinct struct {
 	OneInputNode
 
-	allocator *colmem.Allocator
-	ht        *hashTable
-	typs      []*types.T
-
-	output coldata.Batch
-	// htIdx indicates the number of tuples from ht we have already emitted in
-	// the output.
-	htIdx int
+	ht *hashTable
 }
 
 var _ colexecbase.Operator = &unorderedDistinct{}
@@ -81,28 +69,12 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 			return coldata.ZeroBatch
 		}
 		op.ht.distinctBuild(ctx, batch)
-		if op.ht.vals.Length() > op.htIdx {
+		if batch.Length() > 0 {
 			// We've just appended some distinct tuples to the hash table, so we
-			// will emit all of them as the output.
-			outputLength := op.ht.vals.Length() - op.htIdx
-			op.output, _ = op.allocator.ResetMaybeReallocate(op.typs, op.output, outputLength)
-			op.allocator.PerformOperation(op.output.ColVecs(), func() {
-				for colIdx, fromCol := range op.ht.vals.ColVecs() {
-					toCol := op.output.ColVec(colIdx)
-					toCol.Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:         fromCol,
-								SrcStartIdx: op.htIdx,
-								SrcEndIdx:   op.htIdx + outputLength,
-							},
-						},
-					)
-				}
-				op.output.SetLength(outputLength)
-			})
-			op.htIdx += outputLength
-			return op.output
+			// will emit all of them as the output. Note that the selection
+			// vector on batch is set in such a manner that only the distinct
+			// tuples are selected, so we can just emit batch directly.
+			return batch
 		}
 	}
 }
@@ -113,5 +85,4 @@ func (op *unorderedDistinct) reset(ctx context.Context) {
 		r.reset(ctx)
 	}
 	op.ht.reset(ctx)
-	op.htIdx = 0
 }

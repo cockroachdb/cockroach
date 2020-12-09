@@ -179,12 +179,6 @@ func NewHashAggregator(
 
 func (op *hashAggregator) Init() {
 	op.input.Init()
-	// The hash table only needs to store the grouping columns to be able to
-	// perform the equality check.
-	colsToStore := make([]int, len(op.spec.GroupCols))
-	for i := range colsToStore {
-		colsToStore[i] = int(op.spec.GroupCols[i])
-	}
 	// These numbers were chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
 	const hashTableLoadFactor = 0.1
@@ -195,7 +189,6 @@ func (op *hashAggregator) Init() {
 		hashTableNumBuckets,
 		op.inputTypes,
 		op.spec.GroupCols,
-		colsToStore,
 		true, /* allowNullEquality */
 		hashTableDistinctBuildMode,
 		hashTableDefaultProbeMode,
