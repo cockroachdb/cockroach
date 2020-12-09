@@ -774,3 +774,45 @@ ALTER TABLE public_table_to_rename RENAME TO public.renamed_public_table;
 
 statement error pq: relation "public_table_exists" already exists
 ALTER TABLE renamed_public_table RENAME TO public_table_exists;
+
+subtest show_tables
+
+statement ok
+CREATE DATABASE for_show;
+
+statement ok;
+USE for_show;
+
+statement ok;
+CREATE TABLE t1 (i INT PRIMARY KEY);
+
+statement ok;
+CREATE SCHEMA sc1;
+
+statement ok;
+CREATE TABLE sc1.t1 (i INT PRIMARY KEY);
+
+query TT
+SELECT schema_name, table_name FROM [SHOW TABLES]
+----
+public t1
+sc1    t1
+
+query TT
+SELECT schema_name, table_name FROM [SHOW TABLES FROM sc1]
+----
+sc1    t1
+
+statement ok
+USE test
+
+query TT
+SELECT schema_name, table_name FROM [SHOW TABLES FROM for_show]
+----
+public t1
+sc1    t1
+
+query TT
+SELECT schema_name, table_name FROM [SHOW TABLES FROM for_show.sc1]
+----
+sc1    t1

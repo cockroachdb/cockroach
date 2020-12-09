@@ -29,9 +29,17 @@ func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, erro
 	if err != nil {
 		return nil, err
 	}
-
+	// If we're resolved a one-part name into <db>.public (which is the behavior
+	// of ResolveSchema, not for any obviously good reason), rework the resolved
+	// name to have an explicit catalog but no explicit schema. This would arise
+	// when doing SHOW TABLES FROM <db>. Without this logic, we would not show the
+	// tables from other schemas than public.
+	if name.ExplicitSchema && name.ExplicitCatalog && name.SchemaName == tree.PublicSchemaName &&
+		n.ExplicitSchema && !n.ExplicitCatalog && n.SchemaName == name.CatalogName {
+		name.SchemaName, name.ExplicitSchema = "", false
+	}
 	var schemaClause string
-	if n.ExplicitSchema {
+	if name.ExplicitSchema {
 		schema := lex.EscapeSQLString(name.Schema())
 		if name.Schema() == sessiondata.PgTempSchemaName {
 			schema = lex.EscapeSQLString(d.evalCtx.SessionData.SearchPath.GetTemporarySchemaName())
