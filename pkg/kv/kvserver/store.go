@@ -2770,11 +2770,12 @@ func (s *Store) ManuallyEnqueue(
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local
-// cluster version key.
+// cluster version key. We only accept a raw engine to ensure we're persisting
+// the write durably.
 func WriteClusterVersion(
-	ctx context.Context, writer storage.ReadWriter, cv clusterversion.ClusterVersion,
+	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
-	return storage.MVCCPutProto(ctx, writer, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+	return storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
 }
 
 // ReadClusterVersion reads the cluster version from the store-local version
