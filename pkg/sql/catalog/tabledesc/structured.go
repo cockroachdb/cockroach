@@ -301,11 +301,11 @@ func (desc *Immutable) IsPhysicalTable() bool {
 // Must return a pointer to the IndexDescriptor in the TableDescriptor, so that
 // callers can use returned values to modify the TableDesc.
 func (desc *Immutable) FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error) {
-	if desc.PrimaryIndex.ID == id {
+	if desc.GetPrimaryIndexID() == id {
 		return desc.GetPrimaryIndex(), nil
 	}
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		idx := &desc.GetPublicNonPrimaryIndexes()[i]
 		if idx.ID == id {
 			return idx, nil
 		}
@@ -328,7 +328,7 @@ func (desc *Immutable) FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor
 // has one k/v pair, but if it stores some columns, it can return up to one
 // k/v pair per family in the table, just like a primary index.
 func (desc *Immutable) KeysPerRow(indexID descpb.IndexID) (int, error) {
-	if desc.PrimaryIndex.ID == indexID {
+	if desc.GetPrimaryIndexID() == indexID {
 		return len(desc.Families), nil
 	}
 	idx, err := desc.FindIndexByID(indexID)
@@ -386,12 +386,12 @@ func allocateIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) {
 // AllNonDropIndexes returns all the indexes, including those being added
 // in the mutations.
 func (desc *Immutable) AllNonDropIndexes() []*descpb.IndexDescriptor {
-	indexes := make([]*descpb.IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
+	indexes := make([]*descpb.IndexDescriptor, 0, 1+len(desc.GetPublicNonPrimaryIndexes())+len(desc.Mutations))
 	if desc.IsPhysicalTable() {
-		indexes = append(indexes, &desc.PrimaryIndex)
+		indexes = append(indexes, desc.GetPrimaryIndex())
 	}
-	for i := range desc.Indexes {
-		indexes = append(indexes, &desc.Indexes[i])
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		indexes = append(indexes, &desc.GetPublicNonPrimaryIndexes()[i])
 	}
 	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {
@@ -517,12 +517,12 @@ func (desc *Immutable) ForeachIndex(
 	opts catalog.IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error,
 ) error {
 	if desc.IsPhysicalTable() || opts.NonPhysicalPrimaryIndex {
-		if err := f(&desc.PrimaryIndex, true /* isPrimary */); err != nil {
+		if err := f(desc.GetPrimaryIndex(), true /* isPrimary */); err != nil {
 			return err
 		}
 	}
-	for i := range desc.Indexes {
-		if err := f(&desc.Indexes[i], false /* isPrimary */); err != nil {
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		if err := f(&desc.GetPublicNonPrimaryIndexes()[i], false /* isPrimary */); err != nil {
 			return err
 		}
 	}
@@ -628,7 +628,7 @@ func maybeFillInDescriptor(
 	return changes, nil
 }
 
-func indexHasDeprecatedForeignKeyRepresentation(idx *descpb.IndexDescriptor) bool {
+func indexHasDeprecatedForeignKeyRepresentation(idx descpb.IndexDescriptor) bool {
 	return idx.ForeignKey.IsSet() || len(idx.ReferencedBy) > 0
 }
 
@@ -639,11 +639,11 @@ func TableHasDeprecatedForeignKeyRepresentation(desc *descpb.TableDescriptor) bo
 	if desc.Dropped() {
 		return false
 	}
-	if indexHasDeprecatedForeignKeyRepresentation(&desc.PrimaryIndex) {
+	if indexHasDeprecatedForeignKeyRepresentation(desc.PrimaryIndex) {
 		return true
 	}
 	for i := range desc.Indexes {
-		if indexHasDeprecatedForeignKeyRepresentation(&desc.Indexes[i]) {
+		if indexHasDeprecatedForeignKeyRepresentation(desc.Indexes[i]) {
 			return true
 		}
 	}
@@ -941,11 +941,11 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 	}
 
 	// Process indexes.
-	if err := doIndex(&desc.PrimaryIndex); err != nil {
+	if err := doIndex(desc.GetPrimaryIndex()); err != nil {
 		return err
 	}
-	for i := range desc.Indexes {
-		if err := doIndex(&desc.Indexes[i]); err != nil {
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		if err := doIndex(&desc.GetPublicNonPrimaryIndexes()[i]); err != nil {
 			return err
 		}
 	}
@@ -1115,7 +1115,7 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 }
 
 func (desc *Mutable) ensurePrimaryKey() error {
-	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
+	if len(desc.GetPrimaryIndex().ColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
 		nameExists := func(name string) bool {
 			_, _, err := desc.FindColumnByName(tree.Name(name))
@@ -1148,19 +1148,19 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	}
 
 	// Keep track of unnamed indexes.
-	anonymousIndexes := make([]*descpb.IndexDescriptor, 0, len(desc.Indexes)+len(desc.Mutations))
+	anonymousIndexes := make([]*descpb.IndexDescriptor, 0, len(desc.GetPublicNonPrimaryIndexes())+len(desc.Mutations))
 
 	// Create a slice of modifiable index descriptors.
-	indexes := make([]*descpb.IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
-	indexes = append(indexes, &desc.PrimaryIndex)
+	indexes := make([]*descpb.IndexDescriptor, 0, 1+len(desc.GetPublicNonPrimaryIndexes())+len(desc.Mutations))
+	indexes = append(indexes, desc.GetPrimaryIndex())
 	collectIndexes := func(index *descpb.IndexDescriptor) {
 		if len(index.Name) == 0 {
 			anonymousIndexes = append(anonymousIndexes, index)
 		}
 		indexes = append(indexes, index)
 	}
-	for i := range desc.Indexes {
-		collectIndexes(&desc.Indexes[i])
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		collectIndexes(&desc.GetPublicNonPrimaryIndexes()[i])
 	}
 	for _, m := range desc.Mutations {
 		if index := m.GetIndex(); index != nil {
@@ -1198,14 +1198,14 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			}
 		}
 
-		if index != &desc.PrimaryIndex && index.EncodingType == descpb.SecondaryIndexEncoding {
+		if index != desc.GetPrimaryIndex() && index.EncodingType == descpb.SecondaryIndexEncoding {
 			indexHasOldStoredColumns := index.HasOldStoredColumns()
 			// Need to clear ExtraColumnIDs and StoreColumnIDs because they are used
 			// by ContainsColumnID.
 			index.ExtraColumnIDs = nil
 			index.StoreColumnIDs = nil
 			var extraColumnIDs []descpb.ColumnID
-			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
+			for _, primaryColID := range desc.GetPrimaryIndex().ColumnIDs {
 				if !index.ContainsColumnID(primaryColID) {
 					extraColumnIDs = append(extraColumnIDs, primaryColID)
 				}
@@ -1217,7 +1217,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				if err != nil {
 					return err
 				}
-				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
+				if desc.GetPrimaryIndex().ContainsColumnID(col.ID) {
 					// If the primary index contains a stored column, we don't need to
 					// store it - it's already part of the index.
 					err = pgerror.Newf(
@@ -1285,7 +1285,7 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 	}
 
 	var primaryIndexColIDs catalog.TableColSet
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+	for _, colID := range desc.GetPrimaryIndex().ColumnIDs {
 		primaryIndexColIDs.Add(colID)
 	}
 
@@ -2124,7 +2124,7 @@ func (desc *Immutable) validateCheckConstraints(columnIDs map[descpb.ColumnID]st
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
 func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.ColumnID) error {
-	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
+	if len(desc.GetPrimaryIndex().ColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
 
@@ -2139,8 +2139,8 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 		}
 
 		if _, indexNameExists := indexNames[index.Name]; indexNameExists {
-			for i := range desc.Indexes {
-				if desc.Indexes[i].Name == index.Name {
+			for i := range desc.GetPublicNonPrimaryIndexes() {
+				if desc.GetPublicNonPrimaryIndexes()[i].Name == index.Name {
 					// This error should be caught in MakeIndexDescriptor.
 					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", index.Name))
 				}
@@ -2241,12 +2241,12 @@ func (desc *Immutable) ensureShardedIndexNotComputed(index *descpb.IndexDescript
 func (desc *Immutable) PrimaryKeyString() string {
 	var primaryKeyString strings.Builder
 	primaryKeyString.WriteString("PRIMARY KEY (%s)")
-	if desc.PrimaryIndex.IsSharded() {
+	if desc.GetPrimaryIndex().IsSharded() {
 		fmt.Fprintf(&primaryKeyString, " USING HASH WITH BUCKET_COUNT = %v",
-			desc.PrimaryIndex.Sharded.ShardBuckets)
+			desc.GetPrimaryIndex().Sharded.ShardBuckets)
 	}
 	return fmt.Sprintf(primaryKeyString.String(),
-		desc.PrimaryIndex.ColNamesString(),
+		desc.GetPrimaryIndex().ColNamesString(),
 	)
 }
 
@@ -2535,24 +2535,24 @@ func (desc *Mutable) AddIndex(idx descpb.IndexDescriptor, primary bool) error {
 
 		if primary {
 			// PrimaryIndex is unset.
-			if desc.PrimaryIndex.Name == "" {
+			if desc.GetPrimaryIndex().Name == "" {
 				if idx.Name == "" {
 					// Only override the index name if it hasn't been set by the user.
 					idx.Name = PrimaryKeyIndexName
 				}
-				desc.PrimaryIndex = idx
+				desc.SetPrimaryIndex(idx)
 			} else {
 				return fmt.Errorf("multiple primary keys for table %q are not allowed", desc.Name)
 			}
 		} else {
-			desc.Indexes = append(desc.Indexes, idx)
+			desc.AddPublicNonPrimaryIndex(idx)
 		}
 
 	} else {
 		if err := checkColumnsValidForInvertedIndex(desc, idx.ColumnNames); err != nil {
 			return err
 		}
-		desc.Indexes = append(desc.Indexes, idx)
+		desc.AddPublicNonPrimaryIndex(idx)
 	}
 
 	return nil
@@ -2641,9 +2641,9 @@ func (desc *Mutable) RenameColumnDescriptor(column *descpb.ColumnDescriptor, new
 			}
 		}
 	}
-	renameColumnInIndex(&desc.PrimaryIndex)
-	for i := range desc.Indexes {
-		renameColumnInIndex(&desc.Indexes[i])
+	renameColumnInIndex(desc.GetPrimaryIndex())
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		renameColumnInIndex(&desc.GetPublicNonPrimaryIndexes()[i])
 	}
 	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {
@@ -2860,11 +2860,11 @@ func (desc *Immutable) FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyD
 func (desc *Immutable) FindIndexByName(
 	name string,
 ) (_ *descpb.IndexDescriptor, dropped bool, _ error) {
-	if desc.IsPhysicalTable() && desc.PrimaryIndex.Name == name {
-		return &desc.PrimaryIndex, false, nil
+	if desc.IsPhysicalTable() && desc.GetPrimaryIndex().Name == name {
+		return desc.GetPrimaryIndex(), false, nil
 	}
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		idx := &desc.GetPublicNonPrimaryIndexes()[i]
 		if idx.Name == name {
 			return idx, false, nil
 		}
@@ -2897,13 +2897,13 @@ func (desc *Immutable) NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
 // RenameIndexDescriptor renames an index descriptor.
 func (desc *Mutable) RenameIndexDescriptor(index *descpb.IndexDescriptor, name string) error {
 	id := index.ID
-	if id == desc.PrimaryIndex.ID {
-		desc.PrimaryIndex.Name = name
+	if id == desc.GetPrimaryIndexID() {
+		desc.GetPrimaryIndex().Name = name
 		return nil
 	}
-	for i := range desc.Indexes {
-		if desc.Indexes[i].ID == id {
-			desc.Indexes[i].Name = name
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		if desc.GetPublicNonPrimaryIndexes()[i].ID == id {
+			desc.GetPublicNonPrimaryIndexes()[i].Name = name
 			return nil
 		}
 	}
@@ -2927,7 +2927,9 @@ func (desc *Mutable) DropConstraint(
 ) error {
 	switch detail.Kind {
 	case descpb.ConstraintTypePK:
-		desc.PrimaryIndex.Disabled = true
+		primaryIndex := *desc.GetPrimaryIndex()
+		primaryIndex.Disabled = true
+		desc.SetPrimaryIndex(primaryIndex)
 		return nil
 
 	case descpb.ConstraintTypeUnique:
@@ -3057,11 +3059,11 @@ func (desc *Mutable) RenameConstraint(
 // FindActiveIndexByID returns the index with the specified ID, or nil if it
 // does not exist. It only searches active indexes.
 func (desc *Immutable) FindActiveIndexByID(id descpb.IndexID) *descpb.IndexDescriptor {
-	if desc.PrimaryIndex.ID == id {
-		return &desc.PrimaryIndex
+	if desc.GetPrimaryIndexID() == id {
+		return desc.GetPrimaryIndex()
 	}
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		idx := &desc.GetPublicNonPrimaryIndexes()[i]
 		if idx.ID == id {
 			return idx
 		}
@@ -3079,15 +3081,15 @@ func (desc *Immutable) FindIndexByIndexIdx(
 ) (index *descpb.IndexDescriptor, isSecondary bool, err error) {
 	// indexIdx is 0 for the primary index, or 1 to <num-indexes> for a
 	// secondary index.
-	if indexIdx < 0 || indexIdx > len(desc.Indexes) {
+	if indexIdx < 0 || indexIdx > len(desc.GetPublicNonPrimaryIndexes()) {
 		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
 
 	if indexIdx > 0 {
-		return &desc.Indexes[indexIdx-1], true, nil
+		return &desc.GetPublicNonPrimaryIndexes()[indexIdx-1], true, nil
 	}
 
-	return &desc.PrimaryIndex, false, nil
+	return desc.GetPrimaryIndex(), false, nil
 }
 
 // GetIndexMutationCapabilities returns:
@@ -3132,10 +3134,10 @@ func (desc *Immutable) IsInterleaved() bool {
 // IsPrimaryIndexDefaultRowID returns whether or not the table's primary
 // index is the default primary key on the hidden rowid column.
 func (desc *Immutable) IsPrimaryIndexDefaultRowID() bool {
-	if len(desc.PrimaryIndex.ColumnIDs) != 1 {
+	if len(desc.GetPrimaryIndex().ColumnIDs) != 1 {
 		return false
 	}
-	col, err := desc.FindColumnByID(desc.PrimaryIndex.ColumnIDs[0])
+	col, err := desc.FindColumnByID(desc.GetPrimaryIndex().ColumnIDs[0])
 	if err != nil {
 		// Should never be in this case.
 		panic(err)
@@ -3219,7 +3221,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 		case *descpb.DescriptorMutation_PrimaryKeySwap:
 			args := t.PrimaryKeySwap
 			getIndexIdxByID := func(id descpb.IndexID) (int, error) {
-				for i, idx := range desc.Indexes {
+				for i, idx := range desc.GetPublicNonPrimaryIndexes() {
 					if idx.ID == id {
 						return i, nil
 					}
@@ -3231,7 +3233,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			// index encoding and stores all columns. This ensures that it will be properly
 			// encoded and decoded when it is accessed after it is no longer the primary key
 			// but before it is dropped entirely during the index drop process.
-			primaryIndexCopy := protoutil.Clone(&desc.PrimaryIndex).(*descpb.IndexDescriptor)
+			primaryIndexCopy := protoutil.Clone(desc.GetPrimaryIndex()).(*descpb.IndexDescriptor)
 			primaryIndexCopy.EncodingType = descpb.PrimaryIndexEncoding
 			for _, col := range desc.Columns {
 				containsCol := false
@@ -3259,15 +3261,16 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				return err
 			}
 			newIndex.Name = "primary"
-			desc.PrimaryIndex = *protoutil.Clone(newIndex).(*descpb.IndexDescriptor)
+			primaryIndex := *protoutil.Clone(newIndex).(*descpb.IndexDescriptor)
 			// The primary index "implicitly" stores all columns in the table.
 			// Explicitly including them in the stored columns list is incorrect.
-			desc.PrimaryIndex.StoreColumnNames, desc.PrimaryIndex.StoreColumnIDs = nil, nil
+			primaryIndex.StoreColumnNames, primaryIndex.StoreColumnIDs = nil, nil
+			desc.SetPrimaryIndex(primaryIndex)
 			idx, err := getIndexIdxByID(newIndex.ID)
 			if err != nil {
 				return err
 			}
-			desc.Indexes = append(desc.Indexes[:idx], desc.Indexes[idx+1:]...)
+			desc.RemovePublicNonPrimaryIndex(idx)
 
 			// Swap out the old indexes with their rewritten versions.
 			for j := range args.OldIndexes {
@@ -3283,10 +3286,10 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				if err != nil {
 					return err
 				}
-				oldIndex := protoutil.Clone(&desc.Indexes[oldIndexIndex]).(*descpb.IndexDescriptor)
+				oldIndex := protoutil.Clone(&desc.GetPublicNonPrimaryIndexes()[oldIndexIndex]).(*descpb.IndexDescriptor)
 				newIndex.Name = oldIndex.Name
 				// Splice out old index from the indexes list.
-				desc.Indexes = append(desc.Indexes[:oldIndexIndex], desc.Indexes[oldIndexIndex+1:]...)
+				desc.RemovePublicNonPrimaryIndex(oldIndexIndex)
 				// Add a drop mutation for the old index. The code that calls this function will schedule
 				// a schema change job to pick up all of these index drop mutations.
 				if err := desc.AddIndexMutation(oldIndex, descpb.DescriptorMutation_DROP); err != nil {
@@ -3301,8 +3304,9 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 		case *descpb.DescriptorMutation_MaterializedViewRefresh:
 			// Completing a refresh mutation just means overwriting the table's
 			// indexes with the new indexes that have been backfilled already.
-			desc.PrimaryIndex = t.MaterializedViewRefresh.NewPrimaryIndex
-			desc.Indexes = t.MaterializedViewRefresh.NewIndexes
+			desc.SetPrimaryIndex(t.MaterializedViewRefresh.NewPrimaryIndex)
+			desc.RemoveAllPublicNonPrimaryIndexes()
+			desc.AddPublicNonPrimaryIndex(t.MaterializedViewRefresh.NewIndexes...)
 		}
 
 	case descpb.DescriptorMutation_DROP:
@@ -3643,7 +3647,7 @@ func ColumnNeedsBackfill(desc *descpb.ColumnDescriptor) bool {
 
 // HasPrimaryKey returns true if the table has a primary key.
 func (desc *Immutable) HasPrimaryKey() bool {
-	return !desc.PrimaryIndex.Disabled
+	return !desc.GetPrimaryIndex().Disabled
 }
 
 // HasColumnBackfillMutation returns whether the table has any queued column
@@ -3751,7 +3755,7 @@ func (desc *Immutable) AllIndexSpans(codec keys.SQLCodec) roachpb.Spans {
 // PrimaryIndexSpan returns the Span that corresponds to the entire primary
 // index; can be used for a full table scan.
 func (desc *Immutable) PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span {
-	return desc.IndexSpan(codec, desc.PrimaryIndex.ID)
+	return desc.IndexSpan(codec, desc.GetPrimaryIndexID())
 }
 
 // IndexSpan returns the Span that corresponds to an entire index; can be used
@@ -3941,7 +3945,7 @@ func (desc *Immutable) MutationColumns() []descpb.ColumnDescriptor {
 
 // WritableIndexes returns a list of public and write-only mutation indexes.
 func (desc *Immutable) WritableIndexes() []descpb.IndexDescriptor {
-	return desc.publicAndNonPublicIndexes[:len(desc.Indexes)+desc.writeOnlyIndexCount]
+	return desc.publicAndNonPublicIndexes[:len(desc.GetPublicNonPrimaryIndexes())+desc.writeOnlyIndexCount]
 }
 
 // DeletableIndexes returns a list of public and non-public indexes.
@@ -3951,7 +3955,7 @@ func (desc *Immutable) DeletableIndexes() []descpb.IndexDescriptor {
 
 // DeleteOnlyIndexes returns a list of delete-only mutation indexes.
 func (desc *Immutable) DeleteOnlyIndexes() []descpb.IndexDescriptor {
-	return desc.publicAndNonPublicIndexes[len(desc.Indexes)+desc.writeOnlyIndexCount:]
+	return desc.publicAndNonPublicIndexes[len(desc.GetPublicNonPrimaryIndexes())+desc.writeOnlyIndexCount:]
 }
 
 // PartialIndexOrds returns a set containing the ordinal of each partial index

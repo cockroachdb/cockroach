@@ -82,12 +82,12 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 
 // GetPrimaryIndexID returns the ID of the primary index.
 func (desc *Immutable) GetPrimaryIndexID() descpb.IndexID {
-	return desc.PrimaryIndex.ID
+	return desc.GetPrimaryIndex().ID
 }
 
 // GetPublicNonPrimaryIndexes returns the public non-primary indexes of the descriptor.
 func (desc *Immutable) GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor {
-	return desc.GetIndexes()
+	return desc.Indexes
 }
 
 // IsTemporary returns true if this is a temporary table.
@@ -122,4 +122,24 @@ func (desc *Mutable) IsUncommittedVersion() bool {
 // SetDrainingNames implements the MutableDescriptor interface.
 func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
+}
+
+// RemovePublicNonPrimaryIndex removes a secondary index by ordinal
+func (desc *Mutable) RemovePublicNonPrimaryIndex(indexOrdinal int) {
+	desc.Indexes = append(desc.Indexes[:indexOrdinal], desc.Indexes[indexOrdinal+1:]...)
+}
+
+// RemoveAllPublicNonPrimaryIndexes removes all secondary indexes
+func (desc *Mutable) RemoveAllPublicNonPrimaryIndexes() {
+	desc.Indexes = desc.Indexes[:0]
+}
+
+// AddPublicNonPrimaryIndex adds one or several secondary indexes
+func (desc *Mutable) AddPublicNonPrimaryIndex(index ...descpb.IndexDescriptor) {
+	desc.Indexes = append(desc.Indexes, index...)
+}
+
+// SetPrimaryIndex sets the primary index
+func (desc *Mutable) SetPrimaryIndex(index descpb.IndexDescriptor) {
+	desc.PrimaryIndex = index
 }

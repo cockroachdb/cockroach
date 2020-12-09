@@ -217,7 +217,7 @@ func (desc *Immutable) collectConstraintInfo(
 	// Indexes provide PK and Unique constraints.
 	indexes := desc.AllNonDropIndexes()
 	for _, index := range indexes {
-		if index.ID == desc.PrimaryIndex.ID {
+		if index.ID == desc.GetPrimaryIndexID() {
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
@@ -379,12 +379,12 @@ func FindFKOriginIndexInTxn(
 ) (*descpb.IndexDescriptor, error) {
 	// Search for an index on the origin table that matches our foreign
 	// key columns.
-	if originTable.PrimaryIndex.IsValidOriginIndex(originColIDs) {
-		return &originTable.PrimaryIndex, nil
+	if originTable.GetPrimaryIndex().IsValidOriginIndex(originColIDs) {
+		return originTable.GetPrimaryIndex(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
-	for i := range originTable.Indexes {
-		idx := &originTable.Indexes[i]
+	for i := range originTable.GetPublicNonPrimaryIndexes() {
+		idx := &originTable.GetPublicNonPrimaryIndexes()[i]
 		if idx.IsValidOriginIndex(originColIDs) {
 			return idx, nil
 		}

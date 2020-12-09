@@ -49,7 +49,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	tableKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
-	tableDesc.PrimaryIndex.Partitioning = descpb.PartitioningDescriptor{
+	tableDesc.GetPrimaryIndex().Partitioning = descpb.PartitioningDescriptor{
 		NumColumns: 1,
 		Range: []descpb.PartitioningDescriptor_Range{{
 			Name:          "p1",
@@ -57,7 +57,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),
 		}},
 	}
-	tableDesc.Indexes[0].Partitioning = descpb.PartitioningDescriptor{
+	tableDesc.GetPublicNonPrimaryIndexes()[0].Partitioning = descpb.PartitioningDescriptor{
 		NumColumns: 1,
 		Range: []descpb.PartitioningDescriptor_Range{{
 			Name:          "p2",
@@ -95,12 +95,12 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	zoneConfig := zonepb.ZoneConfig{
 		Subzones: []zonepb.Subzone{
 			{
-				IndexID:       uint32(tableDesc.PrimaryIndex.ID),
+				IndexID:       uint32(tableDesc.GetPrimaryIndexID()),
 				PartitionName: "p1",
 				Config:        s.(*server.TestServer).Cfg.DefaultZoneConfig,
 			},
 			{
-				IndexID:       uint32(tableDesc.Indexes[0].ID),
+				IndexID:       uint32(tableDesc.GetPublicNonPrimaryIndexes()[0].ID),
 				PartitionName: "p2",
 				Config:        s.(*server.TestServer).Cfg.DefaultZoneConfig,
 			},

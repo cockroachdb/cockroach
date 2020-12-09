@@ -194,7 +194,7 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 	// * We have all of the lookup columns of the index.
 	// * We don't need all of the families.
 	return s.index.Unique && len(s.table.Families) > 1 &&
-		(s.index.ID == s.table.PrimaryIndex.ID ||
+		(s.index.ID == s.table.GetPrimaryIndexID() ||
 			// Secondary index specific checks.
 			(s.index.Version >= descpb.SecondaryIndexFamilyFormatVersion &&
 				!containsNull &&

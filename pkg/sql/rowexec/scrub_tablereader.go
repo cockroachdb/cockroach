@@ -114,7 +114,7 @@ func newScrubTableReader(
 		}
 	} else {
 		colIdxMap := tr.tableDesc.ColumnIdxMap()
-		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id descpb.ColumnID) error {
+		err := (&spec.Table.Indexes[spec.IndexIdx-1]).RunOverAllColumns(func(id descpb.ColumnID) error {
 			neededColumns.Add(colIdxMap.GetDefault(id))
 			return nil
 		})
@@ -151,9 +151,9 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	details := make(map[string]interface{})
 	var index *descpb.IndexDescriptor
 	if tr.indexIdx == 0 {
-		index = &tr.tableDesc.PrimaryIndex
+		index = tr.tableDesc.GetPrimaryIndex()
 	} else {
-		index = &tr.tableDesc.Indexes[tr.indexIdx-1]
+		index = &tr.tableDesc.GetPublicNonPrimaryIndexes()[tr.indexIdx-1]
 	}
 	// Collect all the row values into JSON
 	rowDetails := make(map[string]interface{})
