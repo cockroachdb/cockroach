@@ -118,6 +118,7 @@ type hashAggregator struct {
 	toClose     colexecbase.Closers
 }
 
+var _ ResettableOperator = &hashAggregator{}
 var _ closableOperator = &hashAggregator{}
 
 // hashAggregatorAllocSize determines the allocation size used by the hash
@@ -131,7 +132,7 @@ const hashAggregatorAllocSize = 128
 // NewOrderedAggregator function.
 // memAccount should be the same as the one used by allocator and will be used
 // by aggregatorHelper to handle DISTINCT clause.
-func NewHashAggregator(args *colexecagg.NewAggregatorArgs) (colexecbase.Operator, error) {
+func NewHashAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		args, hashAggregatorAllocSize, true, /* isHashAgg */
 	)
@@ -218,8 +219,6 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			op.inputArgsConverter.ConvertBatch(op.bufferingState.tuples)
 			op.onlineAgg(ctx, op.bufferingState.tuples)
 			if op.bufferingState.pendingBatch.Length() == 0 {
-				// TODO(yuzefovich): we no longer need the hash table, so we
-				// could be releasing its memory here.
 				if len(op.buckets) == 0 {
 					op.state = hashAggregatorDone
 				} else {
@@ -393,6 +392,12 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			// so we'll create a new bucket and make sure that the head of this
 			// equality chain is appended to the hash table in the
 			// corresponding position.
+			// TODO(yuzefovich): we could change the behavior so that we don't
+			// lose the references to the old buckets in the outputting stage,
+			// and then we could reset an old bucket if we still have some
+			// unused ones instead of always allocating a new bucket here. This
+			// will be beneficial for the external hash aggregator (but probably
+			// the difference won't be that big).
 			bucket := op.hashAlloc.newAggBucket()
 			op.buckets = append(op.buckets, bucket)
 			// We know that all selected tuples belong to the same single
@@ -419,6 +424,19 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 		b.SetLength(newGroupCount)
 		op.ht.appendAllDistinct(ctx, b)
 	}
+}
+
+func (op *hashAggregator) reset(ctx context.Context) {
+	if r, ok := op.input.(resetter); ok {
+		r.reset(ctx)
+	}
+	op.bufferingState.tuples.ResetInternalBatch()
+	op.bufferingState.tuples.SetLength(0)
+	op.bufferingState.pendingBatch = nil
+	op.bufferingState.unprocessedIdx = 0
+	op.buckets = op.buckets[:0]
+	op.ht.reset(ctx)
+	op.state = hashAggregatorBuffering
 }
 
 func (op *hashAggregator) Close(ctx context.Context) error {

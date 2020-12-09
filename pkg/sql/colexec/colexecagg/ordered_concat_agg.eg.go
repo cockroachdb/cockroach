@@ -183,6 +183,12 @@ func (a *concatOrderedAgg) Flush(outputIdx int) {
 	a.curAgg = nil
 }
 
+func (a *concatOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = nil
+	a.foundNonNullForCurrentGroup = false
+}
+
 type concatOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []concatOrderedAgg

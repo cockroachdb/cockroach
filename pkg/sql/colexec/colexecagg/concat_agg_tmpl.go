@@ -122,6 +122,14 @@ func (a *concat_AGGKINDAgg) Flush(outputIdx int) {
 	a.curAgg = nil
 }
 
+func (a *concat_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{end}}
+	a.curAgg = nil
+	a.foundNonNullForCurrentGroup = false
+}
+
 type concat_AGGKINDAggAlloc struct {
 	aggAllocBase
 	aggFuncs []concat_AGGKINDAgg

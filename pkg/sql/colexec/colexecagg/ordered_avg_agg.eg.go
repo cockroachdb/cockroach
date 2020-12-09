@@ -287,6 +287,13 @@ func (a *avgInt16OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *avgInt16OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curSum = zeroDecimalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
+}
+
 type avgInt16OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []avgInt16OrderedAgg
@@ -545,6 +552,13 @@ func (a *avgInt32OrderedAgg) Flush(outputIdx int) {
 			colexecerror.InternalError(err)
 		}
 	}
+}
+
+func (a *avgInt32OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curSum = zeroDecimalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
 }
 
 type avgInt32OrderedAggAlloc struct {
@@ -807,6 +821,13 @@ func (a *avgInt64OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *avgInt64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curSum = zeroDecimalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
+}
+
 type avgInt64OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []avgInt64OrderedAgg
@@ -1059,6 +1080,13 @@ func (a *avgDecimalOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *avgDecimalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curSum = zeroDecimalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
+}
+
 type avgDecimalOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []avgDecimalOrderedAgg
@@ -1279,6 +1307,13 @@ func (a *avgFloat64OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *avgFloat64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curSum = zeroFloat64Value
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
+}
+
 type avgFloat64OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []avgFloat64OrderedAgg
@@ -1477,6 +1512,13 @@ func (a *avgIntervalOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curSum.Div(int64(a.curCount))
 	}
+}
+
+func (a *avgIntervalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curSum = zeroIntervalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
 }
 
 type avgIntervalOrderedAggAlloc struct {
