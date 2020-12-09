@@ -1593,7 +1593,7 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 	}
 
 	var configs configSet
-	if util.MetamorphicBuild {
+	if util.IsMetamorphicBuild() {
 		for c := range blocklist {
 			if c == "metamorphic" {
 				// We have a metamorphic build and the file has !metamorphic
