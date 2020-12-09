@@ -174,16 +174,19 @@ func _ACCUMULATE_BOOLEAN(a *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		if !a.sawNonNull {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			a.col[a.curIdx] = a.curAgg
+		if !a.isFirstGroup {
+			if !a.sawNonNull {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				a.col[a.curIdx] = a.curAgg
+			}
+			a.curIdx++
+			// {{with .Global}}
+			a.curAgg = _DEFAULT_VAL
+			// {{end}}
+			a.sawNonNull = false
 		}
-		a.curIdx++
-		// {{with .Global}}
-		a.curAgg = _DEFAULT_VAL
-		// {{end}}
-		a.sawNonNull = false
+		a.isFirstGroup = false
 	}
 	// {{end}}
 

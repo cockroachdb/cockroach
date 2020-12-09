@@ -54,17 +54,20 @@ func (a *defaultOrderedAgg) Compute(
 		if sel == nil {
 			for tupleIdx := 0; tupleIdx < inputLen; tupleIdx++ {
 				if a.groups[tupleIdx] {
-					res, err := a.fn.Result()
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					if !a.isFirstGroup {
+						res, err := a.fn.Result()
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						if res == tree.DNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
+						}
+						a.curIdx++
+						a.fn.Reset(a.ctx)
 					}
-					if res == tree.DNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
-					}
-					a.curIdx++
-					a.fn.Reset(a.ctx)
+					a.isFirstGroup = false
 				}
 				// Note that the only function that takes no arguments is COUNT_ROWS, and
 				// it has an optimized implementation, so we don't need to check whether
@@ -83,17 +86,20 @@ func (a *defaultOrderedAgg) Compute(
 			// the original ones.
 			for _, tupleIdx := range sel[:inputLen] {
 				if a.groups[tupleIdx] {
-					res, err := a.fn.Result()
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					if !a.isFirstGroup {
+						res, err := a.fn.Result()
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						if res == tree.DNull {
+							a.nulls.SetNull(a.curIdx)
+						} else {
+							coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
+						}
+						a.curIdx++
+						a.fn.Reset(a.ctx)
 					}
-					if res == tree.DNull {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
-					}
-					a.curIdx++
-					a.fn.Reset(a.ctx)
+					a.isFirstGroup = false
 				}
 				// Note that the only function that takes no arguments is COUNT_ROWS, and
 				// it has an optimized implementation, so we don't need to check whether

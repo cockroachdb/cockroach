@@ -93,17 +93,16 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 ├ Node 1
 │ └ *colexec.Materializer
 │   └ *colexec.orderedAggregator
-│     └ *colexec.oneShotOp
-│       └ *colexec.distinctChainOps
-│         └ *colexec.ParallelUnorderedSynchronizer
-│           ├ *colexec.countOp
-│           │ └ *colexec.simpleProjectOp
-│           │   └ *colexec.CancelChecker
-│           │     └ *colfetcher.ColBatchScan
-│           ├ *colrpc.Inbox
-│           ├ *colrpc.Inbox
-│           ├ *colrpc.Inbox
-│           └ *colrpc.Inbox
+│     └ *colexec.distinctChainOps
+│       └ *colexec.ParallelUnorderedSynchronizer
+│         ├ *colexec.countOp
+│         │ └ *colexec.simpleProjectOp
+│         │   └ *colexec.CancelChecker
+│         │     └ *colfetcher.ColBatchScan
+│         ├ *colrpc.Inbox
+│         ├ *colrpc.Inbox
+│         ├ *colrpc.Inbox
+│         └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *colexec.deselectorOp
@@ -140,40 +139,39 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 ├ Node 1
 │ └ *colexec.Materializer
 │   └ *colexec.orderedAggregator
-│     └ *colexec.oneShotOp
-│       └ *colexec.distinctChainOps
-│         └ *colexec.ParallelUnorderedSynchronizer
-│           ├ *colexec.countOp
-│           │ └ *colexec.simpleProjectOp
-│           │   └ *colexec.diskSpillerBase
-│           │     ├ *colexec.hashJoiner
-│           │     │ ├ *colexec.ParallelUnorderedSynchronizer
-│           │     │ │ ├ *colexec.routerOutputOp
-│           │     │ │ │ └ *colexec.HashRouter
-│           │     │ │ │   └ *colexec.CancelChecker
-│           │     │ │ │     └ *colfetcher.ColBatchScan
-│           │     │ │ ├ *colrpc.Inbox
-│           │     │ │ ├ *colrpc.Inbox
-│           │     │ │ ├ *colrpc.Inbox
-│           │     │ │ └ *colrpc.Inbox
-│           │     │ └ *colexec.ParallelUnorderedSynchronizer
-│           │     │   ├ *colexec.routerOutputOp
-│           │     │   │ └ *colexec.HashRouter
-│           │     │   │   └ *colexec.CancelChecker
-│           │     │   │     └ *colfetcher.ColBatchScan
-│           │     │   ├ *colrpc.Inbox
-│           │     │   ├ *colrpc.Inbox
-│           │     │   ├ *colrpc.Inbox
-│           │     │   └ *colrpc.Inbox
-│           │     ├ *colexec.ParallelUnorderedSynchronizer
-│           │     ├ *colexec.ParallelUnorderedSynchronizer
-│           │     └ *colexec.hashBasedPartitioner
-│           │       ├ *colexec.bufferExportingOperator
-│           │       └ *colexec.bufferExportingOperator
-│           ├ *colrpc.Inbox
-│           ├ *colrpc.Inbox
-│           ├ *colrpc.Inbox
-│           └ *colrpc.Inbox
+│     └ *colexec.distinctChainOps
+│       └ *colexec.ParallelUnorderedSynchronizer
+│         ├ *colexec.countOp
+│         │ └ *colexec.simpleProjectOp
+│         │   └ *colexec.diskSpillerBase
+│         │     ├ *colexec.hashJoiner
+│         │     │ ├ *colexec.ParallelUnorderedSynchronizer
+│         │     │ │ ├ *colexec.routerOutputOp
+│         │     │ │ │ └ *colexec.HashRouter
+│         │     │ │ │   └ *colexec.CancelChecker
+│         │     │ │ │     └ *colfetcher.ColBatchScan
+│         │     │ │ ├ *colrpc.Inbox
+│         │     │ │ ├ *colrpc.Inbox
+│         │     │ │ ├ *colrpc.Inbox
+│         │     │ │ └ *colrpc.Inbox
+│         │     │ └ *colexec.ParallelUnorderedSynchronizer
+│         │     │   ├ *colexec.routerOutputOp
+│         │     │   │ └ *colexec.HashRouter
+│         │     │   │   └ *colexec.CancelChecker
+│         │     │   │     └ *colfetcher.ColBatchScan
+│         │     │   ├ *colrpc.Inbox
+│         │     │   ├ *colrpc.Inbox
+│         │     │   ├ *colrpc.Inbox
+│         │     │   └ *colrpc.Inbox
+│         │     ├ *colexec.ParallelUnorderedSynchronizer
+│         │     ├ *colexec.ParallelUnorderedSynchronizer
+│         │     └ *colexec.hashBasedPartitioner
+│         │       ├ *colexec.bufferExportingOperator
+│         │       └ *colexec.bufferExportingOperator
+│         ├ *colrpc.Inbox
+│         ├ *colrpc.Inbox
+│         ├ *colrpc.Inbox
+│         └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *colexec.deselectorOp

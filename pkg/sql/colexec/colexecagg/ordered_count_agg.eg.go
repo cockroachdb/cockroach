@@ -50,9 +50,12 @@ func (a *countRowsOrderedAgg) Compute(
 			{
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -64,9 +67,12 @@ func (a *countRowsOrderedAgg) Compute(
 			{
 				for _, i := range sel[:inputLen] {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -156,9 +162,12 @@ func (a *countOrderedAgg) Compute(
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -171,9 +180,12 @@ func (a *countOrderedAgg) Compute(
 			} else {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -185,9 +197,12 @@ func (a *countOrderedAgg) Compute(
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel[:inputLen] {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -200,9 +215,12 @@ func (a *countOrderedAgg) Compute(
 			} else {
 				for _, i := range sel[:inputLen] {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64

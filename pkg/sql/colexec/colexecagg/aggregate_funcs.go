@@ -48,16 +48,16 @@ func IsAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
 
 // AggregateFunc is an aggregate function that performs computation on a batch
 // when Compute(batch) is called and writes the output to the Vec passed in
-// in Init. The AggregateFunc performs an aggregation per group and outputs the
-// aggregation once the start of the new group is reached. If the end of the
+// in SetOutput. The AggregateFunc performs an aggregation per group and outputs
+// the aggregation once the start of the new group is reached. If the end of the
 // group is not reached before the batch is finished, the AggregateFunc will
 // store a carry value itself that it will use next time Compute is called to
 // continue the aggregation of the last group.
 type AggregateFunc interface {
 	// Init sets the groups for the aggregation. Each index in groups
 	// corresponds to a column value in the input batch. true represents the
-	// start of a new group. Note that the very first group in the whole input
-	// should *not* be marked as a start of a new group.
+	// start of a new group (the first group must also have 'true' set for the
+	// very first tuple).
 	Init(groups []bool)
 
 	// SetOutput sets the output vector to write the results of aggregation
@@ -102,10 +102,14 @@ type orderedAggregateFuncBase struct {
 	vec coldata.Vec
 	// nulls is the nulls vector of the output vector of this function.
 	nulls *coldata.Nulls
+	// isFirstGroup tracks whether the new group (indicated by 'true' in
+	// 'groups') is actually the first group in the whole input.
+	isFirstGroup bool
 }
 
 func (o *orderedAggregateFuncBase) Init(groups []bool) {
 	o.groups = groups
+	o.isFirstGroup = true
 }
 
 func (o *orderedAggregateFuncBase) SetOutput(vec coldata.Vec) {

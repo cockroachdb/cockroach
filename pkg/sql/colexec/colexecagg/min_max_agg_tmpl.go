@@ -257,17 +257,20 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _H
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			// {{with .Global}}
-			execgen.SET(a.col, a.curIdx, a.curAgg)
-			// {{end}}
+		if !a.isFirstGroup {
+			// If we encounter a new group, and we haven't found any non-nulls for the
+			// current group, the output for this group should be null.
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				// {{with .Global}}
+				execgen.SET(a.col, a.curIdx, a.curAgg)
+				// {{end}}
+			}
+			a.curIdx++
+			a.foundNonNullForCurrentGroup = false
 		}
-		a.curIdx++
-		a.foundNonNullForCurrentGroup = false
+		a.isFirstGroup = false
 	}
 	// {{end}}
 
