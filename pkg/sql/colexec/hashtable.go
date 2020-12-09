@@ -34,7 +34,9 @@ const (
 	hashTableFullBuildMode hashTableBuildMode = iota
 
 	// hashTableDistinctBuildMode is the mode where hashTable only buffers
-	// distinct tuples and discards the duplicates.
+	// distinct tuples and discards the duplicates. In this mode the hash table
+	// actually stores only the equality columns, so the columns with positions
+	// not present in eqCols will remain zero-capacity vectors in vals.
 	hashTableDistinctBuildMode
 )
 
@@ -212,18 +214,12 @@ var _ resetter = &hashTable{}
 // using the vast of majority of the buckets on the input with small number
 // of tuples (a downside) while not gaining much in the case of the input
 // with large number of tuples.
-//
-// - colsToStore indicates the positions of columns to actually store in this
-// batch. All columns are stored if colsToStore is nil, but when it is non-nil,
-// then columns with positions not present in colsToStore will remain
-// zero-capacity vectors in vals.
 func newHashTable(
 	allocator *colmem.Allocator,
 	loadFactor float64,
 	initialNumHashBuckets uint64,
 	sourceTypes []*types.T,
 	eqCols []uint32,
-	colsToStore []int,
 	allowNullEquality bool,
 	buildMode hashTableBuildMode,
 	probeMode hashTableProbeMode,
@@ -238,6 +234,28 @@ func newHashTable(
 	// logic test configs (our disk-spilling infrastructure doesn't know how to
 	// fallback to disk when a memory limit is hit in the constructor methods
 	// of the operators or in Init() implementations).
+
+	// colsToStore indicates the positions of columns to actually store in the
+	// hash table depending on the build mode:
+	// - all columns are stored in the full build mode
+	// - only columns with indices in eqCols are stored in the distinct build
+	// mode (columns with other indices will remain zero-capacity vectors in
+	// vals).
+	var colsToStore []int
+	switch buildMode {
+	case hashTableFullBuildMode:
+		colsToStore = make([]int, len(sourceTypes))
+		for i := range colsToStore {
+			colsToStore[i] = i
+		}
+	case hashTableDistinctBuildMode:
+		colsToStore = make([]int, len(eqCols))
+		for i := range colsToStore {
+			colsToStore[i] = int(eqCols[i])
+		}
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unknown hashTableBuildMode %d", buildMode))
+	}
 	ht := &hashTable{
 		allocator: allocator,
 		buildScratch: hashTableBuildBuffer{
@@ -353,6 +371,7 @@ func (ht *hashTable) fullBuild(ctx context.Context, input colexecbase.Operator) 
 
 // distinctBuild appends all distinct tuples from batch to the hash table. Note
 // that the hash table is assumed to operate in hashTableDistinctBuildMode.
+// batch is updated to include only the distinct tuples.
 func (ht *hashTable) distinctBuild(ctx context.Context, batch coldata.Batch) {
 	if ht.buildMode != hashTableDistinctBuildMode {
 		colexecerror.InternalError(errors.AssertionFailedf(
