@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -378,7 +379,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		if err := params.p.applyZoneConfigFromTableLocalityConfig(
 			params.ctx,
 			n.n.Table,
-			*desc.LocalityConfig,
+			desc.TableDesc(),
 			*dbDesc.RegionConfig,
 		); err != nil {
 			return err
@@ -1341,6 +1342,45 @@ func NewTableDesc(
 		}
 	}
 
+	locality := n.Locality
+	if locality != nil && locality.LocalityLevel == tree.LocalityLevelRow {
+		if n.PartitionBy != nil {
+			return nil, unimplemented.NewWithIssue(
+				57731,
+				"creating a REGIONAL BY ROW table with partition clauses is not supported",
+			)
+		}
+		dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
+		if err != nil {
+			return nil, err
+		}
+		if !dbDesc.IsMultiRegion() {
+			return nil, pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"cannot set LOCALITY on a database that is not multi-region enabled",
+			)
+		}
+		// Add crdb_internal_region column.
+		c := &tree.ColumnTableDef{
+			Name: tree.Name("crdb_region"), // TODO(XXX): make constant
+			Type: &tree.OIDTypeReference{OID: typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID)},
+		}
+		c.Nullable.Nullability = tree.NotNull
+		n.Defs = append(n.Defs, c)
+		columnDefaultExprs = append(columnDefaultExprs, nil)
+		listPartition := make([]tree.ListPartition, len(dbDesc.RegionConfig.Regions))
+		for i, region := range dbDesc.RegionConfig.Regions {
+			listPartition[i] = tree.ListPartition{
+				Name:  tree.UnrestrictedName(region),
+				Exprs: tree.Exprs{tree.NewStrVal(string(region))},
+			}
+		}
+		n.PartitionBy = &tree.PartitionBy{
+			Fields: tree.NameList{"crdb_region"},
+			List:   listPartition,
+		}
+	}
+
 	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			// NewTableDesc is called sometimes with a nil SemaCtx (for example
@@ -1412,7 +1452,7 @@ func NewTableDesc(
 				}
 			}
 
-			col, idx, expr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
+			col, idx, expr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx, locality)
 			if err != nil {
 				return nil, err
 			}
@@ -1546,6 +1586,29 @@ func NewTableDesc(
 					idx.GeoConfig = *config
 				case types.GeographyFamily:
 					idx.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+				}
+			}
+			// TODO: deduplicate.
+			if !d.Inverted && locality != nil && locality.LocalityLevel == tree.LocalityLevelRow {
+				// TODO(XXX): hash sharded indexes
+				idx.ColumnNames = append([]string{"crdb_region"}, idx.ColumnNames...)
+				idx.ColumnDirections = append([]descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}, idx.ColumnDirections...)
+
+				// TODO: deduplicate and check
+				dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
+				if err != nil {
+					return nil, err
+				}
+				listPartition := make([]tree.ListPartition, len(dbDesc.RegionConfig.Regions))
+				for i, region := range dbDesc.RegionConfig.Regions {
+					listPartition[i] = tree.ListPartition{
+						Name:  tree.UnrestrictedName(region),
+						Exprs: tree.Exprs{tree.NewStrVal(string(region))},
+					}
+				}
+				d.PartitionBy = &tree.PartitionBy{
+					Fields: tree.NameList{"crdb_region"},
+					List:   listPartition,
 				}
 			}
 			if d.PartitionBy != nil {

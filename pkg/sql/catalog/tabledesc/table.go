@@ -44,7 +44,11 @@ import (
 // The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
 // sequence dependencies).
 func MakeColumnDefDescs(
-	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+	ctx context.Context,
+	d *tree.ColumnTableDef,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	locality *tree.Locality,
 ) (*descpb.ColumnDescriptor, *descpb.IndexDescriptor, tree.TypedExpr, error) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
@@ -114,6 +118,11 @@ func MakeColumnDefDescs(
 				Unique:           true,
 				ColumnNames:      []string{string(d.Name)},
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			}
+			if locality != nil && locality.LocalityLevel == tree.LocalityLevelRow {
+				// TODO(XXX): hash sharded indexes
+				idx.ColumnNames = append([]string{"crdb_region"}, idx.ColumnNames...)
+				idx.ColumnDirections = append([]descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}, idx.ColumnDirections...)
 			}
 		} else {
 			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)

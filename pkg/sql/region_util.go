@@ -222,17 +222,10 @@ func (p *planner) applyZoneConfigForMultiRegion(
 func (p *planner) applyZoneConfigFromTableLocalityConfig(
 	ctx context.Context,
 	tblName tree.TableName,
-	localityConfig descpb.TableDescriptor_LocalityConfig,
+	desc *descpb.TableDescriptor,
 	regionConfig descpb.DatabaseDescriptor_RegionConfig,
 ) error {
-	localityZoneConfig, err := zoneConfigFromTableLocalityConfig(localityConfig, regionConfig)
-	if err != nil {
-		return err
-	}
-	// If we do not have to configure anything, exit early.
-	if localityZoneConfig == nil {
-		return nil
-	}
+	localityConfig := desc.LocalityConfig
 	// Construct an explicit name so that CONFIGURE ZONE has the fully qualified name.
 	// Without this, the table may fail to resolve.
 	explicitTblName := tree.MakeTableNameWithSchema(
@@ -240,6 +233,62 @@ func (p *planner) applyZoneConfigFromTableLocalityConfig(
 		tblName.SchemaName,
 		tblName.ObjectName,
 	)
+	switch localityConfig.Locality.(type) {
+	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+		for _, region := range regionConfig.Regions {
+			zc := zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(zoneConfigNumReplicasFromRegionConfig(regionConfig)),
+				LeasePreferences: []zonepb.LeasePreference{
+					{Constraints: []zonepb.Constraint{makeRequiredZoneConstraintForRegion(region)}},
+				},
+			}
+			var err error
+			if zc.Constraints, err = constraintsConjunctionForRegionalLocality(region, regionConfig); err != nil {
+				return err
+			}
+
+			for _, idx := range desc.Indexes {
+				if err := p.applyZoneConfigForMultiRegion(
+					ctx,
+					tree.ZoneSpecifier{
+						TableOrIndex: tree.TableIndexName{
+							Table: explicitTblName,
+							Index: tree.UnrestrictedName(idx.Name),
+						},
+						Partition: tree.Name(region),
+					},
+					&zc,
+					"index-multiregion-set-zone-config",
+				); err != nil {
+					return err
+				}
+			}
+
+			if err := p.applyZoneConfigForMultiRegion(
+				ctx,
+				tree.ZoneSpecifier{
+					TableOrIndex: tree.TableIndexName{
+						Table: explicitTblName,
+						Index: tree.UnrestrictedName(desc.PrimaryIndex.Name),
+					},
+					Partition: tree.Name(region),
+				},
+				&zc,
+				"primary-index-multiregion-set-zone-config",
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	localityZoneConfig, err := zoneConfigFromTableLocalityConfig(*localityConfig, regionConfig)
+	if err != nil {
+		return err
+	}
+	// If we do not have to configure anything, exit early.
+	if localityZoneConfig == nil {
+		return nil
+	}
 	return p.applyZoneConfigForMultiRegion(
 		ctx,
 		tree.ZoneSpecifier{TableOrIndex: tree.TableIndexName{Table: explicitTblName}},

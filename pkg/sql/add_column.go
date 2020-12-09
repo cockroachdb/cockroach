@@ -66,7 +66,7 @@ func (p *planner) addColumnImpl(
 	}
 	d = newDef
 
-	col, idx, expr, err := tabledesc.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext())
+	col, idx, expr, err := tabledesc.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext(), nil /* TODO(XXX) */)
 	if err != nil {
 		return err
 	}
