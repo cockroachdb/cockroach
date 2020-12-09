@@ -303,7 +303,12 @@ func (c *CustomFuncs) GenerateLookupJoins(
 					ID:   md.NextUniqueID(),
 				},
 			)
-			lookupJoin.Input = c.e.f.ConstructInnerJoin(lookupJoin.Input, values, nil /* on */, joinPrivate)
+
+			// We purposefully do not propagate the join flags from joinPrivate.
+			// If a LOOKUP join hint was propagated to this cross join, the cost
+			// of the cross join would be artificially inflated and the lookup
+			// join would not be selected as the optimal plan.
+			lookupJoin.Input = c.e.f.ConstructInnerJoin(lookupJoin.Input, values, nil /* on */, &memo.JoinPrivate{})
 
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
