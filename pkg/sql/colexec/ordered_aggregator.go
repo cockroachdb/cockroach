@@ -127,13 +127,14 @@ type orderedAggregator struct {
 	toClose           colexecbase.Closers
 }
 
+var _ ResettableOperator = &orderedAggregator{}
 var _ closableOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping
 // columns. aggCols is a slice where each index represents a new aggregation
 // function. The slice at that index specifies the columns of the input batch
 // that the aggregate function should work on.
-func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) (colexecbase.Operator, error) {
+func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
 	for _, aggFn := range args.Spec.Aggregations {
 		if aggFn.FilterColIdx != nil {
 			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
@@ -361,6 +362,20 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unexpected orderedAggregatorState %d", a.state))
 		}
+	}
+}
+
+func (a *orderedAggregator) reset(ctx context.Context) {
+	if r, ok := a.input.(resetter); ok {
+		r.reset(ctx)
+	}
+	a.state = orderedAggregatorAggregating
+	a.scratch.shouldResetInternalBatch = true
+	a.scratch.resumeIdx = 0
+	a.lastReadBatch = nil
+	a.seenNonEmptyBatch = false
+	for _, fn := range a.bucket.fns {
+		fn.Reset()
 	}
 }
 

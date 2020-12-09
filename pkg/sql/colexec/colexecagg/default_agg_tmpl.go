@@ -110,6 +110,13 @@ func (a *default_AGGKINDAgg) HandleEmptyInputScalar() {
 
 // {{end}}
 
+func (a *default_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{end}}
+	a.fn.Reset(a.ctx)
+}
+
 func newDefault_AGGKINDAggAlloc(
 	allocator *colmem.Allocator,
 	constructor execinfrapb.AggregateConstructor,

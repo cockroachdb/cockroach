@@ -91,6 +91,10 @@ type AggregateFunc interface {
 	// when the aggregate function is in scalar context. The output must always
 	// be a single value (either null or zero, depending on the function).
 	HandleEmptyInputScalar()
+
+	// Reset resets the aggregate function which allows for reusing the same
+	// instance for computation without the need to create a new instance.
+	Reset()
 }
 
 type orderedAggregateFuncBase struct {
@@ -109,7 +113,7 @@ type orderedAggregateFuncBase struct {
 
 func (o *orderedAggregateFuncBase) Init(groups []bool) {
 	o.groups = groups
-	o.isFirstGroup = true
+	o.Reset()
 }
 
 func (o *orderedAggregateFuncBase) SetOutput(vec coldata.Vec) {
@@ -130,6 +134,11 @@ func (o *orderedAggregateFuncBase) HandleEmptyInputScalar() {
 	// in the scalar context (the exceptions are COUNT aggregates which need
 	// to overwrite this method).
 	o.nulls.SetNull(0)
+}
+
+func (o *orderedAggregateFuncBase) Reset() {
+	o.curIdx = 0
+	o.isFirstGroup = true
 }
 
 type hashAggregateFuncBase struct {

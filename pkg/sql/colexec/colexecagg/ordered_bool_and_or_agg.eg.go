@@ -175,6 +175,11 @@ func (a *boolAndOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *boolAndOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = true
+}
+
 type boolAndOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []boolAndOrderedAgg
@@ -192,8 +197,8 @@ func (a *boolAndOrderedAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator
+	f.Reset()
 	a.aggFuncs = a.aggFuncs[1:]
-	f.curAgg = true
 	return f
 }
 
@@ -352,6 +357,11 @@ func (a *boolOrOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *boolOrOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = false
+}
+
 type boolOrOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []boolOrOrderedAgg
@@ -369,7 +379,7 @@ func (a *boolOrOrderedAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator
+	f.Reset()
 	a.aggFuncs = a.aggFuncs[1:]
-	f.curAgg = false
 	return f
 }

@@ -177,6 +177,10 @@ func (a *anyNotNullBoolHashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *anyNotNullBoolHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullBoolHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullBoolHashAgg
@@ -293,6 +297,10 @@ func (a *anyNotNullBytesHashAgg) Flush(outputIdx int) {
 	a.curAgg = nil
 }
 
+func (a *anyNotNullBytesHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullBytesHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullBytesHashAgg
@@ -404,6 +412,10 @@ func (a *anyNotNullDecimalHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx].Set(&a.curAgg)
 	}
+}
+
+func (a *anyNotNullDecimalHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullDecimalHashAggAlloc struct {
@@ -519,6 +531,10 @@ func (a *anyNotNullInt16HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *anyNotNullInt16HashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullInt16HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullInt16HashAgg
@@ -630,6 +646,10 @@ func (a *anyNotNullInt32HashAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *anyNotNullInt32HashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullInt32HashAggAlloc struct {
@@ -745,6 +765,10 @@ func (a *anyNotNullInt64HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *anyNotNullInt64HashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullInt64HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullInt64HashAgg
@@ -856,6 +880,10 @@ func (a *anyNotNullFloat64HashAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *anyNotNullFloat64HashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullFloat64HashAggAlloc struct {
@@ -971,6 +999,10 @@ func (a *anyNotNullTimestampHashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *anyNotNullTimestampHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullTimestampHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullTimestampHashAgg
@@ -1082,6 +1114,10 @@ func (a *anyNotNullIntervalHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *anyNotNullIntervalHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullIntervalHashAggAlloc struct {
@@ -1207,6 +1243,10 @@ func (a *anyNotNullDatumHashAgg) Flush(outputIdx int) {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}
 	a.curAgg = nil
+}
+
+func (a *anyNotNullDatumHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullDatumHashAggAlloc struct {

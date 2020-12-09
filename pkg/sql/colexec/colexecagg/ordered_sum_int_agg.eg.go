@@ -239,6 +239,12 @@ func (a *sumIntInt16OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumIntInt16OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = zeroInt64Value
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumIntInt16OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumIntInt16OrderedAgg
@@ -459,6 +465,12 @@ func (a *sumIntInt32OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumIntInt32OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = zeroInt64Value
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumIntInt32OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumIntInt32OrderedAgg
@@ -677,6 +689,12 @@ func (a *sumIntInt64OrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *sumIntInt64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = zeroInt64Value
+	a.foundNonNullForCurrentGroup = false
 }
 
 type sumIntInt64OrderedAggAlloc struct {

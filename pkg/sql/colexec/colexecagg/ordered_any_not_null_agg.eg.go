@@ -255,6 +255,11 @@ func (a *anyNotNullBoolOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *anyNotNullBoolOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullBoolOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullBoolOrderedAgg
@@ -449,6 +454,11 @@ func (a *anyNotNullBytesOrderedAgg) Flush(outputIdx int) {
 	a.curAgg = nil
 }
 
+func (a *anyNotNullBytesOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullBytesOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullBytesOrderedAgg
@@ -638,6 +648,11 @@ func (a *anyNotNullDecimalOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx].Set(&a.curAgg)
 	}
+}
+
+func (a *anyNotNullDecimalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullDecimalOrderedAggAlloc struct {
@@ -831,6 +846,11 @@ func (a *anyNotNullInt16OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *anyNotNullInt16OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullInt16OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullInt16OrderedAgg
@@ -1020,6 +1040,11 @@ func (a *anyNotNullInt32OrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *anyNotNullInt32OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullInt32OrderedAggAlloc struct {
@@ -1213,6 +1238,11 @@ func (a *anyNotNullInt64OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *anyNotNullInt64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullInt64OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullInt64OrderedAgg
@@ -1402,6 +1432,11 @@ func (a *anyNotNullFloat64OrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *anyNotNullFloat64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullFloat64OrderedAggAlloc struct {
@@ -1595,6 +1630,11 @@ func (a *anyNotNullTimestampOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *anyNotNullTimestampOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNullTimestampOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNullTimestampOrderedAgg
@@ -1784,6 +1824,11 @@ func (a *anyNotNullIntervalOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *anyNotNullIntervalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullIntervalOrderedAggAlloc struct {
@@ -1987,6 +2032,11 @@ func (a *anyNotNullDatumOrderedAgg) Flush(outputIdx int) {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}
 	a.curAgg = nil
+}
+
+func (a *anyNotNullDatumOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type anyNotNullDatumOrderedAggAlloc struct {

@@ -138,6 +138,18 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *bool_OP_TYPE_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{end}}
+	// {{/*
+	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR
+	// aggregate. For bool_and the _DEFAULT_VAL is true and for bool_or the
+	// _DEFAULT_VAL is false.
+	// */}}
+	a.curAgg = _DEFAULT_VAL
+}
+
 type bool_OP_TYPE_AGGKINDAggAlloc struct {
 	aggAllocBase
 	aggFuncs []bool_OP_TYPE_AGGKINDAgg
@@ -155,13 +167,8 @@ func (a *bool_OP_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator
+	f.Reset()
 	a.aggFuncs = a.aggFuncs[1:]
-	// {{/*
-	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR
-	// aggregate. For bool_and the _DEFAULT_VAL is true and for bool_or the
-	// _DEFAULT_VAL is false.
-	// */}}
-	f.curAgg = _DEFAULT_VAL
 	return f
 }
 

@@ -103,6 +103,11 @@ func (a *countRowsOrderedAgg) HandleEmptyInputScalar() {
 	a.col[0] = 0
 }
 
+func (a *countRowsOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = 0
+}
+
 type countRowsOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []countRowsOrderedAgg
@@ -249,6 +254,11 @@ func (a *countOrderedAgg) HandleEmptyInputScalar() {
 	// COUNT aggregates are special because they return zero in case of an
 	// empty input in the scalar context.
 	a.col[0] = 0
+}
+
+func (a *countOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = 0
 }
 
 type countOrderedAggAlloc struct {

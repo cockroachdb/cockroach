@@ -67,7 +67,7 @@ type aggregatorTestCase struct {
 // aggType is a helper struct that allows tests to test both the ordered and
 // hash aggregators at the same time.
 type aggType struct {
-	new  func(*colexecagg.NewAggregatorArgs) (colexecbase.Operator, error)
+	new  func(*colexecagg.NewAggregatorArgs) (ResettableOperator, error)
 	name string
 }
 

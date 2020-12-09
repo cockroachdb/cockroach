@@ -89,6 +89,11 @@ func (a *concatHashAgg) Flush(outputIdx int) {
 	a.curAgg = nil
 }
 
+func (a *concatHashAgg) Reset() {
+	a.curAgg = nil
+	a.foundNonNullForCurrentGroup = false
+}
+
 type concatHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []concatHashAgg
