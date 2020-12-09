@@ -2,7 +2,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "targets",
-    srcs = ["state_string.go"],
+    srcs = [
+        "state_string.go",
+        "targets.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/catalog/descpb"],
 )
