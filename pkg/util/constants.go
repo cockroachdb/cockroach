@@ -18,10 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-// ConstantWithMetamorphicTestValue should be used to initialize "magic constants" that
-// should be varied during test scenarios to check for bugs at boundary
-// conditions. When built with the test_constants build tag, the test value
-// will be used. In all other cases, the production value will be used.
+const metamorphicValueProbability = 0.75
+
+// ConstantWithMetamorphicTestValue should be used to initialize "magic
+// constants" that should be varied during test scenarios to check for bugs at
+// boundary conditions. When built with the 'crdb_test' build tag, the test
+// value will be used with metamorphicValueProbability probability. In all
+// other cases, the production ("default") value will be used.
 // The constant must be a "metamorphic variable": changing it cannot affect the
 // output of any SQL DMLs. It can only affect the way in which the data is
 // retrieved or processed, because otherwise the main test corpus would fail if
@@ -40,12 +43,14 @@ import (
 //
 // var batchSize = util.ConstantWithMetamorphicTestValue(64, 1)
 //
-// This will give your code a batch size of 1 in the test_constants build
+// This will often give your code a batch size of 1 in the crdb_test build
 // configuration, increasing the amount of exercise the edge conditions get.
 func ConstantWithMetamorphicTestValue(defaultValue, metamorphicValue int) int {
 	if MetamorphicBuild {
-		logMetamorphicValue(metamorphicValue)
-		return metamorphicValue
+		if rng.Float64() < metamorphicValueProbability {
+			logMetamorphicValue(metamorphicValue)
+			return metamorphicValue
+		}
 	}
 	return defaultValue
 }
@@ -64,12 +69,14 @@ func init() {
 // random test value in a range.
 func ConstantWithMetamorphicTestRange(defaultValue, min, max int) int {
 	if MetamorphicBuild {
-		ret := min
-		if max > min {
-			ret = int(rng.Int31())%(max-min) + min
+		if rng.Float64() < metamorphicValueProbability {
+			ret := min
+			if max > min {
+				ret = int(rng.Int31())%(max-min) + min
+			}
+			logMetamorphicValue(ret)
+			return ret
 		}
-		logMetamorphicValue(ret)
-		return ret
 	}
 	return defaultValue
 }
