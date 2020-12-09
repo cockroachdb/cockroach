@@ -10,6 +10,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvclient/rangecache",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

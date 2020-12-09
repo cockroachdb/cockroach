@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -658,7 +658,7 @@ type StoreConfig struct {
 	Transport               *RaftTransport
 	NodeDialer              *nodedialer.Dialer
 	RPCContext              *rpc.Context
-	RangeDescriptorCache    kvbase.RangeDescriptorCache
+	RangeDescriptorCache    *rangecache.RangeCache
 
 	ClosedTimestamp *container.Container
 
@@ -1420,6 +1420,12 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Create the intent resolver.
+	var intentResolverRangeCache intentresolver.RangeCache
+	rngCache := s.cfg.RangeDescriptorCache
+	if s.cfg.RangeDescriptorCache != nil {
+		intentResolverRangeCache = rngCache
+	}
+
 	s.intentResolver = intentresolver.New(intentresolver.Config{
 		Clock:                s.cfg.Clock,
 		DB:                   s.db,
@@ -1427,7 +1433,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		TaskLimit:            s.cfg.IntentResolverTaskLimit,
 		AmbientCtx:           s.cfg.AmbientCtx,
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
-		RangeDescriptorCache: s.cfg.RangeDescriptorCache,
+		RangeDescriptorCache: intentResolverRangeCache,
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 

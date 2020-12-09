@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -797,7 +798,7 @@ func (m *multiTestContext) makeStoreConfig(i int) kvserver.StoreConfig {
 	return cfg
 }
 
-var _ kvcoord.RangeDescriptorDB = mtcRangeDescriptorDB{}
+var _ rangecache.RangeDescriptorDB = mtcRangeDescriptorDB{}
 
 type mtcRangeDescriptorDB struct {
 	*multiTestContext

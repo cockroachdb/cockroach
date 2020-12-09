@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -714,7 +715,7 @@ type ExecutorConfig struct {
 
 	// RangeDescriptorCache is updated by DistSQL when it finds out about
 	// misplanned spans.
-	RangeDescriptorCache *kvcoord.RangeDescriptorCache
+	RangeDescriptorCache *rangecache.RangeCache
 
 	// Role membership cache.
 	RoleMemberCache *MembershipCache

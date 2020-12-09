@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -50,7 +51,7 @@ type Connector interface {
 	// Metadata keys directly. Instead, the RangeLookup requests are proxied
 	// through existing KV nodes while being subject to additional validation
 	// (e.g. is the Range being requested owned by the requesting tenant?).
-	kvcoord.RangeDescriptorDB
+	rangecache.RangeDescriptorDB
 
 	// Connector is capable of providing a filtered view of the SystemConfig
 	// containing only information applicable to secondary tenants. This
