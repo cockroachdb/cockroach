@@ -256,6 +256,12 @@ func (a *sumInt16OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumInt16OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = zeroDecimalValue
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumInt16OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumInt16OrderedAgg
@@ -482,6 +488,12 @@ func (a *sumInt32OrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *sumInt32OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = zeroDecimalValue
+	a.foundNonNullForCurrentGroup = false
 }
 
 type sumInt32OrderedAggAlloc struct {
@@ -712,6 +724,12 @@ func (a *sumInt64OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumInt64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = zeroDecimalValue
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumInt64OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumInt64OrderedAgg
@@ -932,6 +950,12 @@ func (a *sumDecimalOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumDecimalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = zeroDecimalValue
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumDecimalOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumDecimalOrderedAgg
@@ -1140,6 +1164,12 @@ func (a *sumFloat64OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumFloat64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = zeroFloat64Value
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumFloat64OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumFloat64OrderedAgg
@@ -1326,6 +1356,12 @@ func (a *sumIntervalOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *sumIntervalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.curAgg = zeroIntervalValue
+	a.foundNonNullForCurrentGroup = false
 }
 
 type sumIntervalOrderedAggAlloc struct {

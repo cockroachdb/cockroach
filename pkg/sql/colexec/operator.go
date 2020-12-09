@@ -109,6 +109,20 @@ type ResettableOperator interface {
 	resetter
 }
 
+// isOperatorChainResettable traverses the whole operator tree rooted at op and
+// returns true if all nodes are resetters.
+func isOperatorChainResettable(op execinfra.OpNode) bool {
+	if _, resettable := op.(resetter); !resettable {
+		return false
+	}
+	for i := 0; i < op.ChildCount(true /* verbose */); i++ {
+		if !isOperatorChainResettable(op.Child(i, true /* verbose */)) {
+			return false
+		}
+	}
+	return true
+}
+
 // CallbackCloser is a utility struct that implements the Closer interface by
 // calling a provided callback.
 type CallbackCloser struct {

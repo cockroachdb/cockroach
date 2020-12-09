@@ -143,6 +143,11 @@ func (a *sumInt16HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumInt16HashAgg) Reset() {
+	a.curAgg = zeroDecimalValue
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumInt16HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumInt16HashAgg
@@ -256,6 +261,11 @@ func (a *sumInt32HashAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *sumInt32HashAgg) Reset() {
+	a.curAgg = zeroDecimalValue
+	a.foundNonNullForCurrentGroup = false
 }
 
 type sumInt32HashAggAlloc struct {
@@ -373,6 +383,11 @@ func (a *sumInt64HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumInt64HashAgg) Reset() {
+	a.curAgg = zeroDecimalValue
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumInt64HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumInt64HashAgg
@@ -482,6 +497,11 @@ func (a *sumDecimalHashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumDecimalHashAgg) Reset() {
+	a.curAgg = zeroDecimalValue
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumDecimalHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumDecimalHashAgg
@@ -585,6 +605,11 @@ func (a *sumFloat64HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumFloat64HashAgg) Reset() {
+	a.curAgg = zeroFloat64Value
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumFloat64HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumFloat64HashAgg
@@ -676,6 +701,11 @@ func (a *sumIntervalHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *sumIntervalHashAgg) Reset() {
+	a.curAgg = zeroIntervalValue
+	a.foundNonNullForCurrentGroup = false
 }
 
 type sumIntervalHashAggAlloc struct {

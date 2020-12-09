@@ -349,6 +349,11 @@ func (a *minBoolOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *minBoolOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type minBoolOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []minBoolOrderedAgg
@@ -601,6 +606,11 @@ func (a *minBytesOrderedAgg) Flush(outputIdx int) {
 	a.curAgg = nil
 }
 
+func (a *minBytesOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type minBytesOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []minBytesOrderedAgg
@@ -846,6 +856,11 @@ func (a *minDecimalOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx].Set(&a.curAgg)
 	}
+}
+
+func (a *minDecimalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type minDecimalOrderedAggAlloc struct {
@@ -1139,6 +1154,11 @@ func (a *minInt16OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *minInt16OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type minInt16OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []minInt16OrderedAgg
@@ -1430,6 +1450,11 @@ func (a *minInt32OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *minInt32OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type minInt32OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []minInt32OrderedAgg
@@ -1719,6 +1744,11 @@ func (a *minInt64OrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *minInt64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type minInt64OrderedAggAlloc struct {
@@ -2044,6 +2074,11 @@ func (a *minFloat64OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *minFloat64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type minFloat64OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []minFloat64OrderedAgg
@@ -2319,6 +2354,11 @@ func (a *minTimestampOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *minTimestampOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type minTimestampOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []minTimestampOrderedAgg
@@ -2564,6 +2604,11 @@ func (a *minIntervalOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *minIntervalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type minIntervalOrderedAggAlloc struct {
@@ -2832,6 +2877,11 @@ func (a *minDatumOrderedAgg) Flush(outputIdx int) {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}
 	a.curAgg = nil
+}
+
+func (a *minDatumOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type minDatumOrderedAggAlloc struct {
@@ -3113,6 +3163,11 @@ func (a *maxBoolOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *maxBoolOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type maxBoolOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []maxBoolOrderedAgg
@@ -3365,6 +3420,11 @@ func (a *maxBytesOrderedAgg) Flush(outputIdx int) {
 	a.curAgg = nil
 }
 
+func (a *maxBytesOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type maxBytesOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []maxBytesOrderedAgg
@@ -3610,6 +3670,11 @@ func (a *maxDecimalOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx].Set(&a.curAgg)
 	}
+}
+
+func (a *maxDecimalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type maxDecimalOrderedAggAlloc struct {
@@ -3903,6 +3968,11 @@ func (a *maxInt16OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *maxInt16OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type maxInt16OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []maxInt16OrderedAgg
@@ -4194,6 +4264,11 @@ func (a *maxInt32OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *maxInt32OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type maxInt32OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []maxInt32OrderedAgg
@@ -4483,6 +4558,11 @@ func (a *maxInt64OrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *maxInt64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type maxInt64OrderedAggAlloc struct {
@@ -4808,6 +4888,11 @@ func (a *maxFloat64OrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *maxFloat64OrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type maxFloat64OrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []maxFloat64OrderedAgg
@@ -5083,6 +5168,11 @@ func (a *maxTimestampOrderedAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *maxTimestampOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
 type maxTimestampOrderedAggAlloc struct {
 	aggAllocBase
 	aggFuncs []maxTimestampOrderedAgg
@@ -5328,6 +5418,11 @@ func (a *maxIntervalOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *maxIntervalOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type maxIntervalOrderedAggAlloc struct {
@@ -5596,6 +5691,11 @@ func (a *maxDatumOrderedAgg) Flush(outputIdx int) {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}
 	a.curAgg = nil
+}
+
+func (a *maxDatumOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
 }
 
 type maxDatumOrderedAggAlloc struct {

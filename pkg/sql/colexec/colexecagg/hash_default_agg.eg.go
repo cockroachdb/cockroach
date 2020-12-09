@@ -86,6 +86,10 @@ func (a *defaultHashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *defaultHashAgg) Reset() {
+	a.fn.Reset(a.ctx)
+}
+
 func newDefaultHashAggAlloc(
 	allocator *colmem.Allocator,
 	constructor execinfrapb.AggregateConstructor,
