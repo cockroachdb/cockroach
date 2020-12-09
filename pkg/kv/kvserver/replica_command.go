@@ -1348,7 +1348,7 @@ func (r *Replica) atomicReplicationChange(
 	descriptorOK := false
 	start := timeutil.Now()
 	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
-	for re := retry.StartWithCtx(ctx, retOpts); ; re.Next() {
+	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
 		rDesc := r.Desc()
 		if rDesc.Generation >= desc.Generation {
 			descriptorOK = true
@@ -2275,7 +2275,7 @@ func (s *Store) AdminRelocateRange(
 	// out.
 	every := log.Every(time.Minute)
 	for {
-		for re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second}); ; re.Next() {
+		for re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second}); re.Next(); {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
