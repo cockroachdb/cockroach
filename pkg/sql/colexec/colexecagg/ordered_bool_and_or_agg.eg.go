@@ -57,14 +57,17 @@ func (a *boolAndOrderedAgg) Compute(
 			if nulls.MaybeHasNulls() {
 				for i := range col {
 					if groups[i] {
-						if !a.sawNonNull {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col[a.curIdx] = a.curAgg
+						if !a.isFirstGroup {
+							if !a.sawNonNull {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = true
+							a.sawNonNull = false
 						}
-						a.curIdx++
-						a.curAgg = true
-						a.sawNonNull = false
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -78,14 +81,17 @@ func (a *boolAndOrderedAgg) Compute(
 			} else {
 				for i := range col {
 					if groups[i] {
-						if !a.sawNonNull {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col[a.curIdx] = a.curAgg
+						if !a.isFirstGroup {
+							if !a.sawNonNull {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = true
+							a.sawNonNull = false
 						}
-						a.curIdx++
-						a.curAgg = true
-						a.sawNonNull = false
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -102,14 +108,17 @@ func (a *boolAndOrderedAgg) Compute(
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 					if groups[i] {
-						if !a.sawNonNull {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col[a.curIdx] = a.curAgg
+						if !a.isFirstGroup {
+							if !a.sawNonNull {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = true
+							a.sawNonNull = false
 						}
-						a.curIdx++
-						a.curAgg = true
-						a.sawNonNull = false
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -123,14 +132,17 @@ func (a *boolAndOrderedAgg) Compute(
 			} else {
 				for _, i := range sel {
 					if groups[i] {
-						if !a.sawNonNull {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col[a.curIdx] = a.curAgg
+						if !a.isFirstGroup {
+							if !a.sawNonNull {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = true
+							a.sawNonNull = false
 						}
-						a.curIdx++
-						a.curAgg = true
-						a.sawNonNull = false
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -222,14 +234,17 @@ func (a *boolOrOrderedAgg) Compute(
 			if nulls.MaybeHasNulls() {
 				for i := range col {
 					if groups[i] {
-						if !a.sawNonNull {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col[a.curIdx] = a.curAgg
+						if !a.isFirstGroup {
+							if !a.sawNonNull {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = false
+							a.sawNonNull = false
 						}
-						a.curIdx++
-						a.curAgg = false
-						a.sawNonNull = false
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -243,14 +258,17 @@ func (a *boolOrOrderedAgg) Compute(
 			} else {
 				for i := range col {
 					if groups[i] {
-						if !a.sawNonNull {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col[a.curIdx] = a.curAgg
+						if !a.isFirstGroup {
+							if !a.sawNonNull {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = false
+							a.sawNonNull = false
 						}
-						a.curIdx++
-						a.curAgg = false
-						a.sawNonNull = false
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -267,14 +285,17 @@ func (a *boolOrOrderedAgg) Compute(
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
 					if groups[i] {
-						if !a.sawNonNull {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col[a.curIdx] = a.curAgg
+						if !a.isFirstGroup {
+							if !a.sawNonNull {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = false
+							a.sawNonNull = false
 						}
-						a.curIdx++
-						a.curAgg = false
-						a.sawNonNull = false
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -288,14 +309,17 @@ func (a *boolOrOrderedAgg) Compute(
 			} else {
 				for _, i := range sel {
 					if groups[i] {
-						if !a.sawNonNull {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col[a.curIdx] = a.curAgg
+						if !a.isFirstGroup {
+							if !a.sawNonNull {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = false
+							a.sawNonNull = false
 						}
-						a.curIdx++
-						a.curAgg = false
-						a.sawNonNull = false
+						a.isFirstGroup = false
 					}
 
 					var isNull bool

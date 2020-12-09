@@ -214,17 +214,20 @@ func _FIND_ANY_NOT_NULL(
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		// If this is a new group, check if any non-nulls have been found for the
-		// current group.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			// {{with .Global}}
-			execgen.SET(a.col, a.curIdx, a.curAgg)
-			// {{end}}
+		if !a.isFirstGroup {
+			// If this is a new group, check if any non-nulls have been found for the
+			// current group.
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				// {{with .Global}}
+				execgen.SET(a.col, a.curIdx, a.curAgg)
+				// {{end}}
+			}
+			a.curIdx++
+			a.foundNonNullForCurrentGroup = false
 		}
-		a.curIdx++
-		a.foundNonNullForCurrentGroup = false
+		a.isFirstGroup = false
 	}
 	// {{end}}
 

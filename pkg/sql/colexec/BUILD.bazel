@@ -33,7 +33,6 @@ go_library(
         "mergejoiner.go",
         "mergejoiner_util.go",
         "offset.go",
-        "one_shot.go",
         "op_creation.go",
         "operator.go",
         "ordered_aggregator.go",

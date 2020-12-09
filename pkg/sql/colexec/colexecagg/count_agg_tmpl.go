@@ -174,9 +174,12 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		a.col[a.curIdx] = a.curAgg
-		a.curIdx++
-		a.curAgg = int64(0)
+		if !a.isFirstGroup {
+			a.col[a.curIdx] = a.curAgg
+			a.curIdx++
+			a.curAgg = int64(0)
+		}
+		a.isFirstGroup = false
 	}
 	// {{end}}
 
