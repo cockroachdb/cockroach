@@ -21,9 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -133,20 +131,9 @@ const hashAggregatorAllocSize = 128
 // NewOrderedAggregator function.
 // memAccount should be the same as the one used by allocator and will be used
 // by aggregatorHelper to handle DISTINCT clause.
-func NewHashAggregator(
-	allocator *colmem.Allocator,
-	memAccount *mon.BoundAccount,
-	input colexecbase.Operator,
-	inputTypes []*types.T,
-	spec *execinfrapb.AggregatorSpec,
-	evalCtx *tree.EvalContext,
-	constructors []execinfrapb.AggregateConstructor,
-	constArguments []tree.Datums,
-	outputTypes []*types.T,
-) (colexecbase.Operator, error) {
+func NewHashAggregator(args *colexecagg.NewAggregatorArgs) (colexecbase.Operator, error) {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-		allocator, inputTypes, spec, evalCtx, constructors, constArguments,
-		outputTypes, hashAggregatorAllocSize, true, /* isHashAgg */
+		args, hashAggregatorAllocSize, true, /* isHashAgg */
 	)
 	// We want this number to be coldata.MaxBatchSize, but then we would lose
 	// some test coverage due to disabling of the randomization of the batch
@@ -159,21 +146,21 @@ func NewHashAggregator(
 		maxBuffered = coldata.MaxBatchSize
 	}
 	hashAgg := &hashAggregator{
-		OneInputNode:       NewOneInputNode(input),
-		allocator:          allocator,
-		spec:               spec,
+		OneInputNode:       NewOneInputNode(args.Input),
+		allocator:          args.Allocator,
+		spec:               args.Spec,
 		state:              hashAggregatorBuffering,
-		inputTypes:         inputTypes,
-		outputTypes:        outputTypes,
+		inputTypes:         args.InputTypes,
+		outputTypes:        args.OutputTypes,
 		inputArgsConverter: inputArgsConverter,
 		maxBuffered:        maxBuffered,
 		toClose:            toClose,
 		aggFnsAlloc:        aggFnsAlloc,
-		hashAlloc:          aggBucketAlloc{allocator: allocator},
+		hashAlloc:          aggBucketAlloc{allocator: args.Allocator},
 	}
-	hashAgg.bufferingState.tuples = newAppendOnlyBufferedBatch(allocator, inputTypes, nil /* colsToStore */)
+	hashAgg.bufferingState.tuples = newAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
-	hashAgg.aggHelper = newAggregatorHelper(allocator, memAccount, inputTypes, spec, &hashAgg.datumAlloc, true /* isHashAgg */, hashAgg.maxBuffered)
+	hashAgg.aggHelper = newAggregatorHelper(args, &hashAgg.datumAlloc, true /* isHashAgg */, hashAgg.maxBuffered)
 	return hashAgg, err
 }
 
