@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -486,6 +487,15 @@ type vectorizedFlowCreator struct {
 	numOutboxes       int32
 	materializerAdded bool
 
+	// numOutboxesExited is an atomic that keeps track of how many outboxes have exited.
+	// When numOutboxesExited equals numOutboxes, the cancellation function for the flow
+	// is called.
+	numOutboxesExited int32
+	// numOutboxesDrained is an atomic that keeps track of how many outboxes have
+	// been drained. When numOutboxesDrained equals numOutboxes, flow-level metadata is
+	// added to a flow-level span.
+	numOutboxesDrained int32
+
 	// procIdxQueue is a queue of indices into processorSpecs (the argument to
 	// setupFlow), for topologically ordered processing.
 	procIdxQueue []int
@@ -684,7 +694,6 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 			outboxCancelFn,
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
 		)
-		currentOutboxes := atomic.AddInt32(&s.numOutboxes, -1)
 		// When the last Outbox on this node exits, we want to make sure that
 		// everything is shutdown; namely, we need to call cancelFn if:
 		// - it is the last Outbox
@@ -693,7 +702,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		// - cancelFn is non-nil (it can be nil in tests).
 		// Calling cancelFn will cancel the context that all infrastructure on this
 		// node is listening on, so it will shut everything down.
-		if currentOutboxes == 0 && !s.materializerAdded && cancelFn != nil {
+		if atomic.AddInt32(&s.numOutboxesExited, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.materializerAdded && cancelFn != nil {
 			cancelFn()
 		}
 	}
@@ -975,6 +984,16 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanRemote(ctx, "")
+						if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) {
+							// At the last outbox, we can accurately retrieve stats for the whole flow from parent monitors.
+							// These stats are added to a flow-level span.
+							span.SetTag(execinfrapb.FlowIDTagKey, flowCtx.ID)
+							span.SetSpanStats(&execinfrapb.ComponentStats{
+								FlowStats: execinfrapb.FlowStats{
+									MaxMemUsage: optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
+								},
+							})
+						}
 						finishVectorizedStatsCollectors(ctx, flowCtx.ID, vscs)
 						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
 					},

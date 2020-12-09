@@ -267,10 +267,8 @@ var _ planNodeSpooled = &spoolNode{}
 type flowInfo struct {
 	typ     planComponentType
 	diagram execinfrapb.FlowDiagram
-	// analyzer is a TraceAnalyzer that has been initialized with the
-	// corresponding flow. Users of this field will want to add a corresponding
-	// trace in order to calculate statistics.
-	analyzer *execstats.TraceAnalyzer
+	// FlowMetadata stores metadata from flows that will be used by TraceAnalyzer.
+	flowMetadata *execstats.FlowMetadata
 }
 
 // planTop is the struct that collects the properties
