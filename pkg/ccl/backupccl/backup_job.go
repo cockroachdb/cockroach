@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -48,6 +49,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 )
+
+var presplitByRange = settings.RegisterBoolSetting(
+	"bulkio.backup.presplit_by_range",
+	"when enabled, backup will presplit the spans to backup by range to enable better work distribution",
+	true)
 
 // BackupCheckpointInterval is the interval at which backup progress is saved
 // to durable storage.
@@ -203,15 +209,17 @@ func backup(
 	var lastCheckpoint time.Time
 
 	var ranges []roachpb.RangeDescriptor
-	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		// TODO(benesch): limit the range descriptors we fetch to the ranges that
-		// are actually relevant in the backup to speed up small backups on large
-		// clusters.
-		ranges, err = allRangeDescriptors(ctx, txn)
-		return err
-	}); err != nil {
-		return RowCount{}, err
+	if presplitByRange.Get(&settings.SV) {
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			var err error
+			// TODO(benesch): limit the range descriptors we fetch to the ranges that
+			// are actually relevant in the backup to speed up small backups on large
+			// clusters.
+			ranges, err = allRangeDescriptors(ctx, txn)
+			return err
+		}); err != nil {
+			return RowCount{}, err
+		}
 	}
 
 	var completedSpans, completedIntroducedSpans []roachpb.Span
