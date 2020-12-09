@@ -65,6 +65,10 @@ func (a *countRowsHashAgg) Flush(outputIdx int) {
 	a.col[outputIdx] = a.curAgg
 }
 
+func (a *countRowsHashAgg) Reset() {
+	a.curAgg = 0
+}
+
 type countRowsHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []countRowsHashAgg
@@ -147,6 +151,10 @@ func (a *countHashAgg) Compute(
 
 func (a *countHashAgg) Flush(outputIdx int) {
 	a.col[outputIdx] = a.curAgg
+}
+
+func (a *countHashAgg) Reset() {
+	a.curAgg = 0
 }
 
 type countHashAggAlloc struct {

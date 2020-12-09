@@ -143,6 +143,13 @@ func (a *count_COUNTKIND_AGGKINDAgg) HandleEmptyInputScalar() {
 
 // {{end}}
 
+func (a *count_COUNTKIND_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{end}}
+	a.curAgg = 0
+}
+
 type count_COUNTKIND_AGGKINDAggAlloc struct {
 	aggAllocBase
 	aggFuncs []count_COUNTKIND_AGGKINDAgg

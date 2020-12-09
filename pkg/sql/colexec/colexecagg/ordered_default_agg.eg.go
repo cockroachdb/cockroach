@@ -145,6 +145,11 @@ func (a *defaultOrderedAgg) HandleEmptyInputScalar() {
 	}
 }
 
+func (a *defaultOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.fn.Reset(a.ctx)
+}
+
 func newDefaultOrderedAggAlloc(
 	allocator *colmem.Allocator,
 	constructor execinfrapb.AggregateConstructor,
