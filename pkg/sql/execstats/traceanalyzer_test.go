@@ -41,7 +41,7 @@ func TestTraceAnalyzer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
-		testStmt = "SELECT * FROM test.foo"
+		testStmt = "SELECT * FROM test.foo ORDER BY v"
 		numNodes = 3
 	)
 
@@ -58,8 +58,9 @@ func TestTraceAnalyzer(t *testing.T) {
 							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error { return nil }
 						}
 						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-							analyzer := execstats.NewTraceAnalyzer(flows)
-							analyzerChan <- analyzer
+							flowMetadata := execstats.NewFlowMetadata(flows)
+							analyzer := execstats.MakeTraceAnalyzer(flowMetadata)
+							analyzerChan <- &analyzer
 							return nil
 						}
 					},
@@ -149,6 +150,26 @@ func TestTraceAnalyzer(t *testing.T) {
 			// based on the number of tuples. In this test 21 tuples flow over the
 			// network.
 			require.Equal(t, actualBytes, int64(21*8))
+		}
+	})
+
+	t.Run("MaxMemoryUsage", func(t *testing.T) {
+		for _, tc := range []struct {
+			analyzer            *execstats.TraceAnalyzer
+			expectedMaxMemUsage int64
+		}{
+			{
+				analyzer:            rowexecTraceAnalyzer,
+				expectedMaxMemUsage: int64(20480),
+			},
+			{
+				analyzer:            colexecTraceAnalyzer,
+				expectedMaxMemUsage: int64(30720),
+			},
+		} {
+			actualMaxMemUsage := tc.analyzer.GetMaxMemoryUsage()
+
+			require.Equal(t, tc.expectedMaxMemUsage, actualMaxMemUsage)
 		}
 	})
 }
