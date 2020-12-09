@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -71,21 +72,33 @@ func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) RowCount {
 	return res
 }
 
-func allRangeDescriptors(ctx context.Context, txn *kv.Txn) ([]roachpb.RangeDescriptor, error) {
-	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
-	if err != nil {
-		return nil, errors.Wrapf(err,
-			"unable to scan range descriptors")
-	}
+func allRangeSpans(
+	ctx context.Context, ds *kvcoord.DistSender, spans []roachpb.Span,
+) ([]roachpb.Span, error) {
 
-	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
-	for i, row := range rows {
-		if err := row.ValueProto(&rangeDescs[i]); err != nil {
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"%s: unable to unmarshal range descriptor", row.Key)
+	ranges := make([]roachpb.Span, 0, len(spans))
+
+	it := kvcoord.NewRangeIterator(ds)
+
+	for i := range spans {
+		rSpan, err := keys.SpanAddr(spans[i])
+		if err != nil {
+			return nil, err
+		}
+		for it.Seek(ctx, rSpan.Key, kvcoord.Ascending); ; it.Next(ctx) {
+			if !it.Valid() {
+				return nil, it.Error()
+			}
+			ranges = append(ranges, roachpb.Span{
+				Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
+			})
+			if !it.NeedAnother(rSpan) {
+				break
+			}
 		}
 	}
-	return rangeDescs, nil
+
+	return ranges, nil
 }
 
 // coveringFromSpans creates an interval.Covering with a fixed payload from a
@@ -106,7 +119,7 @@ func coveringFromSpans(spans []roachpb.Span, payload interface{}) covering.Cover
 // (includes - excludes) while also guaranteeing that each output span does not
 // cross the endpoint of a RangeDescriptor in ranges.
 func splitAndFilterSpans(
-	includes []roachpb.Span, excludes []roachpb.Span, ranges []roachpb.RangeDescriptor,
+	includes []roachpb.Span, excludes []roachpb.Span, rangeSpans []roachpb.Span,
 ) []roachpb.Span {
 	type includeMarker struct{}
 	type excludeMarker struct{}
@@ -115,9 +128,9 @@ func splitAndFilterSpans(
 	excludeCovering := coveringFromSpans(excludes, excludeMarker{})
 
 	var rangeCovering covering.Covering
-	for _, rangeDesc := range ranges {
+	for _, rangeDesc := range rangeSpans {
 		rangeCovering = append(rangeCovering, covering.Range{
-			Start: []byte(rangeDesc.StartKey),
+			Start: []byte(rangeDesc.Key),
 			End:   []byte(rangeDesc.EndKey),
 		})
 	}
@@ -202,24 +215,12 @@ func backup(
 	var exported RowCount
 	var lastCheckpoint time.Time
 
-	var ranges []roachpb.RangeDescriptor
-
-	// TODO(dt): we should really get a RangeDescriptor iterator and do this the
-	// right way, just iterate the spans we need, in a tenant or not. For now
-	// though tenants aren't allowed to just go read all ranges so we'll skip this
-	// and let distsender just split our ExportRequest for us.
-	if execCtx.ExecCfg().Codec.ForSystemTenant() {
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			var err error
-			// TODO(benesch): limit the range descriptors we fetch to the ranges that
-			// are actually relevant in the backup to speed up small backups on large
-			// clusters.
-			ranges, err = allRangeDescriptors(ctx, txn)
-			return err
-		}); err != nil {
-			return RowCount{}, err
-		}
+	ranges, err := allRangeSpans(ctx, execCtx.ExecCfg().DistSender, backupManifest.Spans)
+	if err != nil {
+		return RowCount{}, err
 	}
+
+	log.Infof(ctx, "Backing up data from %d spans on %d ranges", len(backupManifest.Spans), len(ranges))
 
 	var completedSpans, completedIntroducedSpans []roachpb.Span
 	if checkpointDesc != nil {
