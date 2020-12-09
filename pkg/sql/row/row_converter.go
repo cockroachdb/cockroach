@@ -230,12 +230,13 @@ var kvDatumRowConverterBatchSize = util.ConstantWithMetamorphicTestValue(
 	1,    /* metamorphicValue */
 )
 
-// TestingSetDatumRowConverterBatchSize sets kvDatumRowConverterBatchSize and returns function to
-// reset this setting back to its old value.
+// TestingSetDatumRowConverterBatchSize sets kvDatumRowConverterBatchSize and
+// returns function to reset this setting back to its old value.
 func TestingSetDatumRowConverterBatchSize(newSize int) func() {
+	oldSize := kvDatumRowConverterBatchSize
 	kvDatumRowConverterBatchSize = newSize
 	return func() {
-		kvDatumRowConverterBatchSize = 5000
+		kvDatumRowConverterBatchSize = oldSize
 	}
 }
 
