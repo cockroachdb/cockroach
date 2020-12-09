@@ -126,7 +126,7 @@ func (p *planner) createDatabase(
 		); err != nil {
 			return nil, false, err
 		}
-		if err := p.applyZoneConfigFromRegionConfigForDatabase(ctx, database.Name, *regionConfig); err != nil {
+		if err := p.applyZoneConfigFromDatabaseRegionConfig(ctx, database.Name, *regionConfig); err != nil {
 			return nil, true, err
 		}
 	}

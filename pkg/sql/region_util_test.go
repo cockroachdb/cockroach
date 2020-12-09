@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGenZoneConfigFromRegionConfigForDatabase(t *testing.T) {
+func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -145,8 +145,179 @@ func TestGenZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			res := genZoneConfigFromRegionConfigForDatabase(tc.regionConfig)
+			res := zoneConfigFromRegionConfigForDatabase(tc.regionConfig)
 			require.Equal(t, tc.expected, res)
+		})
+	}
+}
+
+func protoRegion(region descpb.Region) *descpb.Region {
+	return &region
+}
+
+func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		desc           string
+		localityConfig descpb.TableDescriptor_LocalityConfig
+		regionConfig   descpb.DatabaseDescriptor_RegionConfig
+		expected       *zonepb.ZoneConfig
+	}{
+		{
+			desc: "4-region global table with zone survival",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_Global_{
+					Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+				},
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+			},
+			expected: &zonepb.ZoneConfig{
+				NumReplicas:               proto.Int32(4),
+				InheritedConstraints:      true,
+				InheritedLeasePreferences: true,
+			},
+		},
+		{
+			desc: "4-region global table with region survival",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_Global_{
+					Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+				},
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+			},
+			expected: &zonepb.ZoneConfig{
+				NumReplicas:               proto.Int32(4),
+				InheritedConstraints:      true,
+				InheritedLeasePreferences: true,
+			},
+		},
+		{
+			desc: "4-region regional by row table with zone survival",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+					RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+				},
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+			},
+			expected: &zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(4),
+			},
+		},
+		{
+			desc: "4-region regional by row table with region survival",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+					RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+				},
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+			},
+			expected: &zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(4),
+			},
+		},
+		{
+			desc: "4-region regional by table with zone survival on primary region",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+						Region: nil,
+					},
+				},
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+			},
+			expected: nil,
+		},
+		{
+			desc: "4-region regional by table with regional survival on primary region",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+						Region: nil,
+					},
+				},
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
+			},
+			expected: nil,
+		},
+		{
+			desc: "4-region regional by table with zone survival on non primary region",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+						Region: protoRegion("region_c"),
+					},
+				},
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+			},
+			expected: &zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(4),
+				LeasePreferences: []zonepb.LeasePreference{
+					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
+				},
+				Constraints: []zonepb.ConstraintsConjunction{
+					{NumReplicas: 4, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
+				},
+			},
+		},
+		{
+			desc: "4-region regional by table with regional survival on non primary region",
+			localityConfig: descpb.TableDescriptor_LocalityConfig{
+				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+						Region: protoRegion("region_c"),
+					},
+				},
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
+			},
+			expected: &zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(4),
+				LeasePreferences: []zonepb.LeasePreference{
+					{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
+				},
+				Constraints: []zonepb.ConstraintsConjunction{
+					{NumReplicas: 1, Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"}}},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			zc, err := zoneConfigFromTableLocalityConfig(tc.localityConfig, tc.regionConfig)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, zc)
 		})
 	}
 }

@@ -362,6 +362,28 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	// TODO(otan): for MR databases with no locality set, set a default locality
+	// and add a notice.
+	if desc.LocalityConfig != nil {
+		dbDesc, err := params.p.Descriptors().GetDatabaseVersionByID(
+			params.ctx,
+			params.p.txn,
+			desc.ParentID,
+			tree.DatabaseLookupFlags{Required: true},
+		)
+		if err != nil {
+			return errors.Wrap(err, "error resolving database for multi-region")
+		}
+		if err := params.p.applyZoneConfigFromTableLocalityConfig(
+			params.ctx,
+			n.n.Table,
+			*desc.LocalityConfig,
+			*dbDesc.RegionConfig,
+		); err != nil {
+			return err
+		}
+	}
+
 	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
 	if err := desc.Validate(params.ctx, dg); err != nil {
 		return err
