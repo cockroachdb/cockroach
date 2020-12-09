@@ -5015,6 +5015,21 @@ SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
 NULL
 
 query T
+EXPLAIN SELECT ST_MakeLine(geom ORDER BY geom) FROM geo_table
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • window
+    │
+    └── • scan
+          missing stats
+          table: geo_table@primary
+          spans: FULL SCAN
+
+query T
 SELECT ST_Extent(g::geometry) FROM ( VALUES
   (NULL),
   ('POINT(-10.5 10.5)'),
@@ -5090,6 +5105,36 @@ query T
 SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES ('GEOMETRYCOLLECTION (POINT (1 1))'), ('GEOMETRYCOLLECTION (POINT (2 2))')) tbl(g)
 ----
 GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (1 1)), GEOMETRYCOLLECTION (POINT (2 2)))
+
+query T
+EXPLAIN SELECT ST_Collect(geom ORDER BY geom) FROM geo_table
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • window
+    │
+    └── • scan
+          missing stats
+          table: geo_table@primary
+          spans: FULL SCAN
+
+query T
+EXPLAIN SELECT ST_MemCollect(geom ORDER BY geom) FROM geo_table
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • window
+    │
+    └── • scan
+          missing stats
+          table: geo_table@primary
+          spans: FULL SCAN
 
 query T
 SELECT ST_AsEWKT(ST_MemCollect(g::geometry)) FROM ( VALUES (NULL), ('POINT (1 1)'), ('POINT EMPTY'), ('POINT (2 2)')) tbl(g)
