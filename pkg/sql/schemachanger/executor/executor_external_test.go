@@ -23,68 +23,92 @@ import (
 func TestExecutorDescriptorMutationOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	type testCase struct {
+		name      string
+		orig, exp func() *tabledesc.Immutable
+		ops       func() []ops.Op
+	}
+	var table *tabledesc.Mutable
+	makeTable := func(f func(mutable *tabledesc.Mutable)) func() *tabledesc.Immutable {
+		return func() *tabledesc.Immutable {
+			cpy := tabledesc.NewExistingMutable(
+				*table.ImmutableCopy().(*tabledesc.Immutable).TableDesc())
+			if f != nil {
+				f(cpy)
+			}
+			return cpy.ImmutableCopy().(*tabledesc.Immutable)
+		}
+	}
+	run := func(t *testing.T, c testCase) {
+		ctx := context.Background()
 
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	tdb.Exec(t, `CREATE DATABASE db`)
-	tdb.Exec(t, `
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		defer tc.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		tdb.Exec(t, `CREATE DATABASE db`)
+		tdb.Exec(t, `
 CREATE TABLE db.t (
    i INT PRIMARY KEY 
 )`)
 
-	settings := tc.Server(0).ClusterSettings()
-	ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
-	db := tc.Server(0).DB()
-	lm := tc.Server(0).LeaseManager().(*lease.Manager)
-	var table *tabledesc.Mutable
-	mutFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			Required:       true,
-			RequireMutable: true,
-			AvoidCached:    true,
-		},
-	}
-	immFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			Required:    true,
-			AvoidCached: true,
-		},
-	}
-	tn := tree.MakeTableName("db", "t")
-	require.NoError(t, descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		settings := tc.Server(0).ClusterSettings()
+		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
+		db := tc.Server(0).DB()
+		lm := tc.Server(0).LeaseManager().(*lease.Manager)
+		mutFlags := tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required:       true,
+				RequireMutable: true,
+				AvoidCached:    true,
+			},
+		}
+		immFlags := tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required:    true,
+				AvoidCached: true,
+			},
+		}
+		tn := tree.MakeTableName("db", "t")
+		require.NoError(t, descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 
-		td, err := descriptors.GetTableByName(ctx, txn, &tn, mutFlags)
-		if err != nil {
-			return err
-		}
-		table = td.(*tabledesc.Mutable)
-		return nil
-	}))
-	makeTable := func(f func(mutable *tabledesc.Mutable)) *tabledesc.Immutable {
-		cpy := tabledesc.NewExistingMutable(
-			*table.ImmutableCopy().(*tabledesc.Immutable).TableDesc())
-		if f != nil {
-			f(cpy)
-		}
-		return cpy.ImmutableCopy().(*tabledesc.Immutable)
+			td, err := descriptors.GetTableByName(ctx, txn, &tn, mutFlags)
+			if err != nil {
+				return err
+			}
+			table = td.(*tabledesc.Mutable)
+			return nil
+		}))
+
+		require.NoError(t, descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			ex := executor.New(txn, descriptors)
+			orig, err := descriptors.GetTableByName(ctx, txn, &tn, immFlags)
+			require.NoError(t, err)
+			require.Equal(t, c.orig(), orig)
+			require.NoError(t, ex.ExecuteOps(ctx, c.ops()))
+			after, err := descriptors.GetTableByName(ctx, txn, &tn, immFlags)
+			require.NoError(t, err)
+			require.Equal(t, c.exp(), after)
+			return nil
+		}))
 	}
+
 	indexToAdd := descpb.IndexDescriptor{
-		ID:        2,
-		Name:      "foo",
-		ColumnIDs: []descpb.ColumnID{1},
+		ID:          2,
+		Name:        "foo",
+		ColumnIDs:   []descpb.ColumnID{1},
+		ColumnNames: []string{"i"},
+		ColumnDirections: []descpb.IndexDescriptor_Direction{
+			descpb.IndexDescriptor_ASC,
+		},
 	}
-	for _, tc := range []struct {
-		name      string
-		orig, exp *tabledesc.Immutable
-		ops       []ops.Op
-	}{
+	for _, tc := range []testCase{
 		{
 			name: "add index",
 			orig: makeTable(nil),
 			exp: makeTable(func(mutable *tabledesc.Mutable) {
 				mutable.MaybeIncrementVersion()
+				mutable.NextIndexID++
 				mutable.Mutations = append(mutable.Mutations, descpb.DescriptorMutation{
 					Descriptor_: &descpb.DescriptorMutation_Index{
 						Index: &indexToAdd,
@@ -95,34 +119,45 @@ CREATE TABLE db.t (
 				})
 				mutable.NextMutationID++
 			}),
-			ops: []ops.Op{
-				ops.AddIndexDescriptor{
-					TableID: table.ID,
-					Index:   indexToAdd,
-				},
+			ops: func() []ops.Op {
+				return []ops.Op{
+					ops.AddIndexDescriptor{
+						TableID: table.ID,
+						Index:   indexToAdd,
+					},
+				}
 			},
 		},
 		{
 			name: "add check constraint",
 			orig: makeTable(nil),
 			exp: makeTable(func(mutable *tabledesc.Mutable) {
-
+				mutable.MaybeIncrementVersion()
+				mutable.Checks = append(mutable.Checks, &descpb.TableDescriptor_CheckConstraint{
+					Expr:                "i > 1",
+					Name:                "check_foo",
+					Validity:            descpb.ConstraintValidity_Validating,
+					ColumnIDs:           []descpb.ColumnID{1},
+					IsNonNullConstraint: false,
+					Hidden:              false,
+				})
 			}),
+			ops: func() []ops.Op {
+				return []ops.Op{
+					ops.AddCheckConstraint{
+						TableID:     table.GetID(),
+						Name:        "check_foo",
+						Expr:        "i > 1",
+						ColumnIDs:   []descpb.ColumnID{1},
+						Unvalidated: false,
+						Hidden:      false,
+					},
+				}
+			},
 		},
 	} {
-
 		t.Run(tc.name, func(t *testing.T) {
-			require.NoError(t, descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-				ex := executor.New(txn, descriptors)
-				orig, err := descriptors.GetTableByName(ctx, txn, &tn, immFlags)
-				require.NoError(t, err)
-				require.Equal(t, tc.orig, orig)
-				require.NoError(t, ex.ExecuteOps(ctx, tc.ops))
-				after, err := descriptors.GetTableByName(ctx, txn, &tn, immFlags)
-				require.NoError(t, err)
-				require.Equal(t, tc.exp, after)
-				return nil
-			}))
+			run(t, tc)
 		})
 
 	}
