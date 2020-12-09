@@ -12,10 +12,12 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -94,5 +96,104 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 		}
 
 		s.Stopper().Stop(context.Background())
+	}
+}
+
+// TestBumpClusterVersion verifies that the BumpClusterVersion RPC correctly
+// persists the cluster version to disk and updates the active in-memory
+// version.
+func TestBumpClusterVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	v := func(major, minor int32) roachpb.Version {
+		return roachpb.Version{Major: major, Minor: minor}
+	}
+	cv := func(major, minor int32) clusterversion.ClusterVersion {
+		return clusterversion.ClusterVersion{Version: v(major, minor)}
+	}
+
+	var tests = []struct {
+		binaryVersion        roachpb.Version
+		activeClusterVersion clusterversion.ClusterVersion // akin to min supported binary version
+		bumpClusterVersion   clusterversion.ClusterVersion
+		expClusterVersion    clusterversion.ClusterVersion
+	}{
+		{
+			binaryVersion:        v(21, 1),
+			activeClusterVersion: cv(20, 2),
+			bumpClusterVersion:   cv(20, 2),
+			expClusterVersion:    cv(20, 2),
+		},
+		{
+			binaryVersion:        v(21, 1),
+			activeClusterVersion: cv(20, 2),
+			bumpClusterVersion:   cv(21, 1),
+			expClusterVersion:    cv(21, 1),
+		},
+		{
+			binaryVersion:        v(21, 1),
+			activeClusterVersion: cv(21, 1),
+			bumpClusterVersion:   cv(20, 2),
+			expClusterVersion:    cv(21, 1),
+		},
+	}
+
+	ctx := context.Background()
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("config=%d", i), func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettingsWithVersions(
+				test.binaryVersion,
+				test.activeClusterVersion.Version,
+				false, /* initializeVersion */
+			)
+
+			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					Server: &TestingKnobs{
+						// This test wants to bootstrap at the previously active
+						// cluster version, so we can actually bump the cluster
+						// version to the binary version. Think a cluster with
+						// active cluster version v20.1, but running v20.2 binaries.
+						BinaryVersionOverride: test.activeClusterVersion.Version,
+						// We're bumping cluster versions manually ourselves. We
+						// want avoid racing with the auto-upgrade process.
+						DisableAutomaticVersionUpgrade: 1,
+					},
+				},
+			})
+			defer s.Stopper().Stop(context.Background())
+
+			// Check to see our pre-bump active cluster version is what we expect.
+			if got := s.ClusterSettings().Version.ActiveVersion(ctx); got != test.activeClusterVersion {
+				t.Fatalf("expected active cluster version %s, got %s", test.activeClusterVersion, got)
+			}
+
+			migrationServer := s.MigrationServer().(*migrationServer)
+			req := &serverpb.BumpClusterVersionRequest{
+				ClusterVersion: &test.bumpClusterVersion,
+			}
+			if _, err := migrationServer.BumpClusterVersion(ctx, req); err != nil {
+				t.Fatal(err)
+			}
+
+			// Check to see if our post-bump active cluster version is what we
+			// expect.
+			if got := s.ClusterSettings().Version.ActiveVersion(ctx); got != test.expClusterVersion {
+				t.Fatalf("expected active cluster version %s, got %s", test.expClusterVersion, got)
+			}
+
+			// Check to see that our bumped cluster version was persisted to disk.
+			synthesizedCV, err := kvserver.SynthesizeClusterVersionFromEngines(
+				ctx, s.Engines(), test.binaryVersion,
+				test.activeClusterVersion.Version,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if synthesizedCV != test.expClusterVersion {
+				t.Fatalf("expected synthesized cluster version %s, got %s", test.expClusterVersion, synthesizedCV)
+			}
+		})
 	}
 }
