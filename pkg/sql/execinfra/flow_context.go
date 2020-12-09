@@ -98,3 +98,14 @@ func (ctx *FlowCtx) Stopper() *stop.Stopper {
 func (ctx *FlowCtx) Codec() keys.SQLCodec {
 	return ctx.EvalCtx.Codec
 }
+
+// ProcessorComponentID returns a ComponentID for the given processor in this
+// flow.
+func (ctx *FlowCtx) ProcessorComponentID(procID int32) execinfrapb.ComponentID {
+	return execinfrapb.ProcessorComponentID(ctx.ID, procID)
+}
+
+// StreamComponentID returns a ComponentID for the given stream in this flow.
+func (ctx *FlowCtx) StreamComponentID(streamID execinfrapb.StreamID) execinfrapb.ComponentID {
+	return execinfrapb.StreamComponentID(ctx.ID, streamID)
+}

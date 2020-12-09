@@ -2738,11 +2738,14 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 	}
 
 	if planCtx.traceMetadata != nil {
-		processors := make([]processorTraceMetadata, len(plan.ResultRouters))
+		processors := make(execComponents, len(plan.ResultRouters))
 		for i := range plan.ResultRouters {
-			processors[i].id = execinfrapb.ProcessorID(plan.ResultRouters[i])
+			processors[i] = execinfrapb.ProcessorComponentID(
+				execinfrapb.FlowID{UUID: planCtx.infra.FlowID},
+				int32(plan.ResultRouters[i]),
+			)
 		}
-		planCtx.traceMetadata.associateNodeWithProcessors(node, planCtx.infra.FlowID, processors)
+		planCtx.traceMetadata.associateNodeWithComponents(node, processors)
 	}
 
 	if dsp.shouldPlanTestMetadata() {

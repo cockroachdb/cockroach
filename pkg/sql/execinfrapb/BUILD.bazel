@@ -41,7 +41,6 @@ go_library(
         "processors_changefeeds.pb.go",
         "processors_sql.pb.go",
         "processors_table_stats.pb.go",
-        "stats.go",
         "testutils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb",

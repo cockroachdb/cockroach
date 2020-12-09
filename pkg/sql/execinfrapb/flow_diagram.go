@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
-	"github.com/gogo/protobuf/types"
 )
 
 // DiagramFlags contains diagram settings.
@@ -594,14 +592,19 @@ func (d diagramData) ToURL() (string, url.URL, error) {
 
 // AddSpans implements the FlowDiagram interface.
 func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
-	processorStats, streamStats := extractStatsFromSpans(d.flowID, spans, d.flags)
+	statsMap := ExtractStatsFromSpans(spans, d.flags.MakeDeterministic)
 	for i := range d.Processors {
-		if statDetails, ok := processorStats[int(d.Processors[i].processorID)]; ok {
-			d.Processors[i].Core.Details = append(d.Processors[i].Core.Details, statDetails...)
+		p := &d.Processors[i]
+		component := ProcessorComponentID(d.flowID, p.processorID)
+		if compStats := statsMap[component]; compStats != nil {
+			p.Core.Details = append(p.Core.Details, compStats.StatsForQueryPlan()...)
 		}
 	}
 	for i := range d.Edges {
-		d.Edges[i].Stats = streamStats[int(d.Edges[i].streamID)]
+		component := StreamComponentID(d.flowID, d.Edges[i].streamID)
+		if compStats := statsMap[component]; compStats != nil {
+			d.Edges[i].Stats = compStats.StatsForQueryPlan()
+		}
 	}
 }
 
@@ -795,54 +798,4 @@ func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
 		Fragment: compressed.String(),
 	}
 	return jsonStr, url, nil
-}
-
-// extractStatsFromSpans extracts stats from spans tagged with a processor id
-// and returns a map from that processor id to a slice of stat descriptions
-// that can be added to a plan.
-func extractStatsFromSpans(
-	flowID FlowID, spans []tracingpb.RecordedSpan, flags DiagramFlags,
-) (processorStats, streamStats map[int][]string) {
-	processorStats = make(map[int][]string)
-	streamStats = make(map[int][]string)
-	for _, span := range spans {
-		// The trace can contain spans from multiple flows; make sure we select the
-		// right ones.
-		if fid, ok := span.Tags[FlowIDTagKey]; !ok || fid != flowID.String() {
-			continue
-		}
-
-		var id string
-		var stats map[int][]string
-
-		// Get the processor or stream id for this span. If neither exists, this
-		// span doesn't belong to a processor or stream.
-		if pid, ok := span.Tags[ProcessorIDTagKey]; ok {
-			id = pid
-			stats = processorStats
-		} else if sid, ok := span.Tags[StreamIDTagKey]; ok {
-			id = sid
-			stats = streamStats
-		} else {
-			continue
-		}
-		i, err := strconv.Atoi(id)
-		if err != nil {
-			continue
-		}
-
-		if span.Stats == nil {
-			continue
-		}
-
-		var compStats ComponentStats
-		if err := types.UnmarshalAny(span.Stats, &compStats); err != nil {
-			continue
-		}
-		if flags.MakeDeterministic {
-			compStats.MakeDeterministic()
-		}
-		stats[i] = append(stats[i], compStats.StatsForQueryPlan()...)
-	}
-	return processorStats, streamStats
 }

@@ -16,6 +16,28 @@ import "gogoproto/gogo.proto";
 
 import "util/optional/optional.proto";
 
+// ComponentID identifies a component in a flow. There are multiple types of
+// components (e.g. processors, streams); each component of a certain type has
+// an integer identifier.
+message ComponentID {
+  enum Type {
+    UNSET = 0;
+    PROCESSOR = 1;
+    STREAM = 2;
+  }
+
+  optional bytes flow_id = 1 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "FlowID",
+                              (gogoproto.customtype) = "FlowID"];
+
+  optional Type type = 2 [(gogoproto.nullable) = false];
+
+  // Identifier of this component, within the domain of components of the same
+  // type.
+  optional int32 id = 3 [(gogoproto.nullable) = false,
+                         (gogoproto.customname) = "ID"];
+}
+
 // ComponentStats contains statistics for an execution component. A component is
 // an arbitrary unit in the execution infrastructure; it can correspond to an
 // operator or a stream.
@@ -23,8 +45,7 @@ import "util/optional/optional.proto";
 // Depending on the component, not all statistics apply. For all fields, the zero
 // value indicates that the particular stat is not available.
 message ComponentStats {
-  optional int32 component_id = 1 [(gogoproto.customname) = "ComponentID",
-                                   (gogoproto.nullable) = false];
+  optional ComponentID component = 1 [(gogoproto.nullable) = false];
 
   optional NetworkRxStats net_rx = 2 [(gogoproto.nullable) = false];
   optional NetworkTxStats net_tx = 3 [(gogoproto.nullable) = false];
@@ -36,6 +57,9 @@ message ComponentStats {
   repeated InputStats inputs = 7 [(gogoproto.nullable) = false];
 
   optional FlowStats flow_stats = 8 [(gogoproto.nullable) = false];
+
+  // WARNING! If any new fields are added, corresponding code must be added in
+  // Union() and possibly MakeDeterminstic().
 }
 
 // InputStats contains statistics about the rows received as an input to a

@@ -65,15 +65,15 @@ func TestOutbox(t *testing.T) {
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
 			Settings:   st,
 			Stopper:    stopper,
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 		},
 	}
-	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	streamID := execinfrapb.StreamID(42)
-	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, nil /* numOutboxes */)
+	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */)
 	outbox.Init(rowenc.OneIntCol)
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
@@ -221,15 +221,15 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
 			Settings:   st,
 			Stopper:    stopper,
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 		},
 	}
-	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	streamID := execinfrapb.StreamID(42)
-	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, nil /* numOutboxes */)
+	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */)
 
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
@@ -248,7 +248,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	if producerMsg.Header == nil {
 		t.Fatal("missing header")
 	}
-	if producerMsg.Header.FlowID != flowID || producerMsg.Header.StreamID != streamID {
+	if producerMsg.Header.FlowID != flowCtx.ID || producerMsg.Header.StreamID != streamID {
 		t.Fatalf("wrong header: %v", producerMsg)
 	}
 
@@ -295,13 +295,13 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
+				ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 				Cfg: &execinfra.ServerConfig{
 					Settings:   st,
 					Stopper:    stopper,
 					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 				},
 			}
-			flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 			streamID := execinfrapb.StreamID(42)
 			var outbox *Outbox
 			var wg sync.WaitGroup
@@ -310,7 +310,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			if tc.outboxIsClient {
-				outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, nil /* numOutboxes */)
+				outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */)
 				outbox.Init(rowenc.OneIntCol)
 				outbox.Start(ctx, &wg, cancel)
 
@@ -431,13 +431,13 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
 			Settings:   st,
 			Stopper:    stopper,
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 		},
 	}
-	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	streamID := execinfrapb.StreamID(42)
 	var outbox *Outbox
 	var wg sync.WaitGroup
@@ -450,7 +450,8 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	mockCancel := func() {
 		ctxCanceled = true
 	}
-	outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, nil /* numOutboxes */)
+
+	outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */)
 	outbox.Init(rowenc.OneIntCol)
 	outbox.Start(ctx, &wg, mockCancel)
 
@@ -482,6 +483,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 			Stopper:  stopper,
@@ -489,14 +491,13 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 			NodeDialer: nil,
 		},
 	}
-	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	streamID := execinfrapb.StreamID(42)
 	var outbox *Outbox
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, nil /* numOutboxes */)
+	outbox = NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */)
 	outbox.Init(rowenc.OneIntCol)
 
 	// Fill up the outbox.
@@ -546,7 +547,6 @@ func BenchmarkOutbox(b *testing.B) {
 			row = append(row, rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(2))))
 		}
 		b.Run(fmt.Sprintf("numCols=%d", numCols), func(b *testing.B) {
-			flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 			streamID := execinfrapb.StreamID(42)
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
@@ -554,13 +554,14 @@ func BenchmarkOutbox(b *testing.B) {
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
+				ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 				Cfg: &execinfra.ServerConfig{
 					Settings:   st,
 					Stopper:    stopper,
 					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 				},
 			}
-			outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, flowID, streamID, nil /* numOutboxes */)
+			outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */)
 			outbox.Init(rowenc.MakeIntCols(numCols))
 			var outboxWG sync.WaitGroup
 			ctx, cancel := context.WithCancel(context.Background())

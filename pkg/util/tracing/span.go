@@ -66,17 +66,15 @@ type SpanMeta struct {
 const (
 	// TagPrefix is prefixed to all tags that should be output in SHOW TRACE.
 	TagPrefix = "cockroach."
-	// StatTagPrefix is prefixed to all stats output in Span tags.
-	StatTagPrefix = TagPrefix + "stat."
 )
 
 // SpanStats are stats that can be added to a Span.
 type SpanStats interface {
 	proto.Message
-	// Stats returns the stats that the object represents as a map from stat name
-	// to value to be added to Span tags. The keys will be prefixed with
-	// StatTagPrefix.
-	Stats() map[string]string
+	// StatsTags returns the stats that the object represents as a map of
+	// key/value tags that will be added to the Span tags. The tag keys should
+	// start with TagPrefix.
+	StatsTags() map[string]string
 }
 
 type crdbSpanMu struct {
@@ -369,8 +367,8 @@ func (s *Span) SetSpanStats(stats SpanStats) {
 	}
 	s.crdb.mu.Lock()
 	s.crdb.mu.stats = stats
-	for name, value := range stats.Stats() {
-		s.setTagInner(StatTagPrefix+name, value, true /* locked */)
+	for name, value := range stats.StatsTags() {
+		s.setTagInner(name, value, true /* locked */)
 	}
 	s.crdb.mu.Unlock()
 }
