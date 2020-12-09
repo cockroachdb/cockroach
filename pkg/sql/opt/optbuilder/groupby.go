@@ -252,7 +252,8 @@ func (a aggregateInfo) isOrderingSensitive() bool {
 		return true
 	}
 	switch a.def.Name {
-	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg", "json_object_agg", "jsonb_object_agg":
+	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg", "json_object_agg", "jsonb_object_agg",
+		"st_makeline", "st_collect", "st_memcollect":
 		return true
 	default:
 		return false
