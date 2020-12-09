@@ -3013,6 +3013,37 @@ inner-join (lookup abcde)
  │    └── filters (true)
  └── filters (true)
 
+# Test that a LOOKUP join hint does not propagate to the cross join. If it was,
+# the cross join would have an artificially high cost and the lookup join would
+# not be selected as the optimal plan.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM small INNER LOOKUP JOIN abcde ON a=m AND b IN (10, 20, 30)
+----
+inner-join (lookup abcde)
+ ├── columns: m:1!null n:2 a:5!null b:6!null c:7 d:8 e:9
+ ├── key columns: [10] = [10]
+ ├── lookup columns are key
+ ├── fd: (1)==(5), (5)==(1)
+ ├── inner-join (lookup abcde@secondary)
+ │    ├── columns: m:1!null n:2 a:5!null b:6!null c:7 abcde.rowid:10!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1 12] = [5 6]
+ │    ├── fd: (10)-->(5-7), (1)==(5), (5)==(1)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: m:1 n:2 "lookup_join_const_col_@6":12!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1 n:2
+ │    │    ├── values
+ │    │    │    ├── columns: "lookup_join_const_col_@6":12!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── (10,)
+ │    │    │    ├── (20,)
+ │    │    │    └── (30,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── filters (true)
+
 # One column constrained to multiple constants and another constrained to a
 # single constant used by lookup joiner.
 opt expect=GenerateLookupJoinsWithFilter
