@@ -93,7 +93,7 @@ func (ex *Executor) executeAddCheckConstraint(
 	} else {
 		ck.Validity = descpb.ConstraintValidity_Validating
 	}
-	table.Checks = append(table.Checks)
+	table.Checks = append(table.Checks, ck)
 	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
 
@@ -117,6 +117,10 @@ func (ex *Executor) executeAddIndexDescriptor(
 		return err
 	}
 	table.MaybeIncrementVersion()
+
+	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
+	// or what-not.
+	table.NextIndexID++
 	table.AddIndexMutation(&op.Index, descpb.DescriptorMutation_ADD)
 	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
