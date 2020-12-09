@@ -13,35 +13,35 @@ CREATE TABLE information_schema.t (x INT)
 query error database "information_schema" does not exist
 DROP DATABASE information_schema
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM information_schema
 ----
-information_schema  administrable_role_authorizations      table  NULL  NULL
-information_schema  applicable_roles                       table  NULL  NULL
-information_schema  character_sets                         table  NULL  NULL
-information_schema  check_constraints                      table  NULL  NULL
-information_schema  collation_character_set_applicability  table  NULL  NULL
-information_schema  collations                             table  NULL  NULL
-information_schema  column_privileges                      table  NULL  NULL
-information_schema  column_udt_usage                       table  NULL  NULL
-information_schema  columns                                table  NULL  NULL
-information_schema  constraint_column_usage                table  NULL  NULL
-information_schema  enabled_roles                          table  NULL  NULL
-information_schema  key_column_usage                       table  NULL  NULL
-information_schema  parameters                             table  NULL  NULL
-information_schema  referential_constraints                table  NULL  NULL
-information_schema  role_table_grants                      table  NULL  NULL
-information_schema  routines                               table  NULL  NULL
-information_schema  schema_privileges                      table  NULL  NULL
-information_schema  schemata                               table  NULL  NULL
-information_schema  sequences                              table  NULL  NULL
-information_schema  statistics                             table  NULL  NULL
-information_schema  table_constraints                      table  NULL  NULL
-information_schema  table_privileges                       table  NULL  NULL
-information_schema  tables                                 table  NULL  NULL
-information_schema  type_privileges                        table  NULL  NULL
-information_schema  user_privileges                        table  NULL  NULL
-information_schema  views                                  table  NULL  NULL
+information_schema  administrable_role_authorizations      table  NULL  NULL  NULL
+information_schema  applicable_roles                       table  NULL  NULL  NULL
+information_schema  character_sets                         table  NULL  NULL  NULL
+information_schema  check_constraints                      table  NULL  NULL  NULL
+information_schema  collation_character_set_applicability  table  NULL  NULL  NULL
+information_schema  collations                             table  NULL  NULL  NULL
+information_schema  column_privileges                      table  NULL  NULL  NULL
+information_schema  column_udt_usage                       table  NULL  NULL  NULL
+information_schema  columns                                table  NULL  NULL  NULL
+information_schema  constraint_column_usage                table  NULL  NULL  NULL
+information_schema  enabled_roles                          table  NULL  NULL  NULL
+information_schema  key_column_usage                       table  NULL  NULL  NULL
+information_schema  parameters                             table  NULL  NULL  NULL
+information_schema  referential_constraints                table  NULL  NULL  NULL
+information_schema  role_table_grants                      table  NULL  NULL  NULL
+information_schema  routines                               table  NULL  NULL  NULL
+information_schema  schema_privileges                      table  NULL  NULL  NULL
+information_schema  schemata                               table  NULL  NULL  NULL
+information_schema  sequences                              table  NULL  NULL  NULL
+information_schema  statistics                             table  NULL  NULL  NULL
+information_schema  table_constraints                      table  NULL  NULL  NULL
+information_schema  table_privileges                       table  NULL  NULL  NULL
+information_schema  tables                                 table  NULL  NULL  NULL
+information_schema  type_privileges                        table  NULL  NULL  NULL
+information_schema  user_privileges                        table  NULL  NULL  NULL
+information_schema  views                                  table  NULL  NULL  NULL
 
 # Verify that the name is not special for databases.
 
@@ -158,35 +158,35 @@ postgres   root  NULL  {}  NULL
 system     node  NULL  {}  NULL
 test       root  NULL  {}  NULL
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM test.information_schema
 ----
-information_schema  administrable_role_authorizations      table  NULL  NULL
-information_schema  applicable_roles                       table  NULL  NULL
-information_schema  character_sets                         table  NULL  NULL
-information_schema  check_constraints                      table  NULL  NULL
-information_schema  collation_character_set_applicability  table  NULL  NULL
-information_schema  collations                             table  NULL  NULL
-information_schema  column_privileges                      table  NULL  NULL
-information_schema  column_udt_usage                       table  NULL  NULL
-information_schema  columns                                table  NULL  NULL
-information_schema  constraint_column_usage                table  NULL  NULL
-information_schema  enabled_roles                          table  NULL  NULL
-information_schema  key_column_usage                       table  NULL  NULL
-information_schema  parameters                             table  NULL  NULL
-information_schema  referential_constraints                table  NULL  NULL
-information_schema  role_table_grants                      table  NULL  NULL
-information_schema  routines                               table  NULL  NULL
-information_schema  schema_privileges                      table  NULL  NULL
-information_schema  schemata                               table  NULL  NULL
-information_schema  sequences                              table  NULL  NULL
-information_schema  statistics                             table  NULL  NULL
-information_schema  table_constraints                      table  NULL  NULL
-information_schema  table_privileges                       table  NULL  NULL
-information_schema  tables                                 table  NULL  NULL
-information_schema  type_privileges                        table  NULL  NULL
-information_schema  user_privileges                        table  NULL  NULL
-information_schema  views                                  table  NULL  NULL
+information_schema  administrable_role_authorizations      table  NULL  NULL  NULL
+information_schema  applicable_roles                       table  NULL  NULL  NULL
+information_schema  character_sets                         table  NULL  NULL  NULL
+information_schema  check_constraints                      table  NULL  NULL  NULL
+information_schema  collation_character_set_applicability  table  NULL  NULL  NULL
+information_schema  collations                             table  NULL  NULL  NULL
+information_schema  column_privileges                      table  NULL  NULL  NULL
+information_schema  column_udt_usage                       table  NULL  NULL  NULL
+information_schema  columns                                table  NULL  NULL  NULL
+information_schema  constraint_column_usage                table  NULL  NULL  NULL
+information_schema  enabled_roles                          table  NULL  NULL  NULL
+information_schema  key_column_usage                       table  NULL  NULL  NULL
+information_schema  parameters                             table  NULL  NULL  NULL
+information_schema  referential_constraints                table  NULL  NULL  NULL
+information_schema  role_table_grants                      table  NULL  NULL  NULL
+information_schema  routines                               table  NULL  NULL  NULL
+information_schema  schema_privileges                      table  NULL  NULL  NULL
+information_schema  schemata                               table  NULL  NULL  NULL
+information_schema  sequences                              table  NULL  NULL  NULL
+information_schema  statistics                             table  NULL  NULL  NULL
+information_schema  table_constraints                      table  NULL  NULL  NULL
+information_schema  table_privileges                       table  NULL  NULL  NULL
+information_schema  tables                                 table  NULL  NULL  NULL
+information_schema  type_privileges                        table  NULL  NULL  NULL
+information_schema  user_privileges                        table  NULL  NULL  NULL
+information_schema  views                                  table  NULL  NULL  NULL
 
 query TT colnames
 SHOW CREATE TABLE information_schema.tables

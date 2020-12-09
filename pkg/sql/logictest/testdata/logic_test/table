@@ -40,11 +40,11 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 statement ok
 COMMENT ON TABLE a IS 'a_comment'
 
-query TTTTI colnames
+query TTTTIT colnames
 SHOW TABLES FROM test
 ----
-schema_name  table_name  type   owner  estimated_row_count
-public       a           table  root   0
+schema_name  table_name  type   owner  estimated_row_count  locality
+public       a           table  root   0                    NULL
 
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
@@ -133,15 +133,16 @@ a            INT8       false        NULL            ·                      {pr
 b            INT8       false        NULL            ·                      {primary}  false
 c            INT8       false        NULL            ·                      {primary}  false
 
-query TTTTIT
+query TTTTITT colnames
 SHOW TABLES FROM test WITH COMMENT
 ----
-public  a  table  root  0  a_comment
-public  b  table  root  0  ·
-public  c  table  root  0  ·
-public  d  table  root  0  ·
-public  e  table  root  0  ·
-public  f  table  root  0  ·
+schema_name  table_name  type   owner  estimated_row_count  locality  comment
+public       a           table  root   0                    NULL      a_comment
+public       b           table  root   0                    NULL      ·
+public       c           table  root   0                    NULL      ·
+public       d           table  root   0                    NULL      ·
+public       e           table  root   0                    NULL      ·
+public       f           table  root   0                    NULL      ·
 
 statement ok
 SET DATABASE = ""
@@ -522,10 +523,10 @@ statement ok
 INSERT INTO t1 SELECT a FROM generate_series(1, 1024) AS a(a)
 
 # only tables from current database
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  t1  table  testuser  0
+public  t1  table  testuser  0  NULL
 
 # see only virtual tables (estimated_row_count is NULL)
 # and tables testuser has access to (estimated_row_count >= 0)

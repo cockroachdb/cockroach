@@ -1033,26 +1033,26 @@ statement ok
 DROP INDEX refers@another_idx
 
 # refers is not visible because it is in the ADD state.
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM test
 ----
-public  bar                   table  root  0
-public  child                 table  root  0
-public  customers             table  root  0
-public  delivery              table  root  0
-public  domain_modules        table  root  0
-public  domains               table  root  0
-public  foo                   table  root  0
-public  grandchild            table  root  0
-public  modules               table  root  0
-public  pairs                 table  root  0
-public  referee               table  root  0
-public  refpairs              table  root  0
-public  refpairs_c_between    table  root  0
-public  refpairs_wrong_order  table  root  0
-public  tx                    table  root  0
-public  tx_leg                table  root  0
-public  unindexed             table  root  0
+public  bar                   table  root  0  NULL
+public  child                 table  root  0  NULL
+public  customers             table  root  0  NULL
+public  delivery              table  root  0  NULL
+public  domain_modules        table  root  0  NULL
+public  domains               table  root  0  NULL
+public  foo                   table  root  0  NULL
+public  grandchild            table  root  0  NULL
+public  modules               table  root  0  NULL
+public  pairs                 table  root  0  NULL
+public  referee               table  root  0  NULL
+public  refpairs              table  root  0  NULL
+public  refpairs_c_between    table  root  0  NULL
+public  refpairs_wrong_order  table  root  0  NULL
+public  tx                    table  root  0  NULL
+public  tx_leg                table  root  0  NULL
+public  unindexed             table  root  0  NULL
 
 statement ok
 COMMIT

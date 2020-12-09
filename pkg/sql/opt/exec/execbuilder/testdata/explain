@@ -208,42 +208,41 @@ vectorized: false
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column59) = (table_id)
+        │ equality: (column72) = (table_id)
         │
         ├── • render
         │   │
-        │   └── • hash join (right outer)
-        │       │ equality: (oid) = (relowner)
+        │   └── • hash join (left outer)
+        │       │ equality: (column54) = (table_id)
         │       │
-        │       ├── • virtual table
-        │       │     table: pg_roles@primary
+        │       ├── • render
+        │       │   │
+        │       │   └── • hash join (right outer)
+        │       │       │ equality: (oid) = (relowner)
+        │       │       │
+        │       │       ├── • virtual table
+        │       │       │     table: pg_roles@primary
+        │       │       │
+        │       │       └── • hash join
+        │       │           │ equality: (oid) = (relnamespace)
+        │       │           │
+        │       │           ├── • filter
+        │       │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+        │       │           │   │
+        │       │           │   └── • virtual table
+        │       │           │         table: pg_namespace@primary
+        │       │           │
+        │       │           └── • filter
+        │       │               │ filter: relkind IN ('S', 'm', 'r', 'v')
+        │       │               │
+        │       │               └── • virtual table
+        │       │                     table: pg_class@primary
         │       │
-        │       └── • hash join
-        │           │ equality: (oid) = (relnamespace)
-        │           │
-        │           ├── • filter
-        │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
-        │           │   │
-        │           │   └── • virtual table
-        │           │         table: pg_namespace@primary
-        │           │
-        │           └── • hash join (left outer)
-        │               │ equality: (oid) = (objoid)
-        │               │
-        │               ├── • filter
-        │               │   │ filter: relkind IN ('S', 'm', 'r', 'v')
-        │               │   │
-        │               │   └── • virtual table
-        │               │         table: pg_class@primary
-        │               │
-        │               └── • filter
-        │                   │ filter: objsubid = 0
-        │                   │
-        │                   └── • virtual table
-        │                         table: pg_description@primary
+        │       └── • virtual table
+        │             table: table_row_statistics@primary
         │
         └── • virtual table
-              table: table_row_statistics@primary
+              table: tables@primary
 
 
 query T
@@ -258,42 +257,50 @@ vectorized: false
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column59) = (table_id)
+        │ equality: (column77) = (table_id)
         │
         ├── • render
         │   │
-        │   └── • hash join (right outer)
-        │       │ equality: (oid) = (relowner)
+        │   └── • hash join (left outer)
+        │       │ equality: (column59) = (table_id)
         │       │
-        │       ├── • virtual table
-        │       │     table: pg_roles@primary
+        │       ├── • render
+        │       │   │
+        │       │   └── • hash join (right outer)
+        │       │       │ equality: (oid) = (relowner)
+        │       │       │
+        │       │       ├── • virtual table
+        │       │       │     table: pg_roles@primary
+        │       │       │
+        │       │       └── • hash join
+        │       │           │ equality: (oid) = (relnamespace)
+        │       │           │
+        │       │           ├── • filter
+        │       │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+        │       │           │   │
+        │       │           │   └── • virtual table
+        │       │           │         table: pg_namespace@primary
+        │       │           │
+        │       │           └── • hash join (left outer)
+        │       │               │ equality: (oid) = (objoid)
+        │       │               │
+        │       │               ├── • filter
+        │       │               │   │ filter: relkind IN ('S', 'm', 'r', 'v')
+        │       │               │   │
+        │       │               │   └── • virtual table
+        │       │               │         table: pg_class@primary
+        │       │               │
+        │       │               └── • filter
+        │       │                   │ filter: objsubid = 0
+        │       │                   │
+        │       │                   └── • virtual table
+        │       │                         table: pg_description@primary
         │       │
-        │       └── • hash join
-        │           │ equality: (oid) = (relnamespace)
-        │           │
-        │           ├── • filter
-        │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
-        │           │   │
-        │           │   └── • virtual table
-        │           │         table: pg_namespace@primary
-        │           │
-        │           └── • hash join (left outer)
-        │               │ equality: (oid) = (objoid)
-        │               │
-        │               ├── • filter
-        │               │   │ filter: relkind IN ('S', 'm', 'r', 'v')
-        │               │   │
-        │               │   └── • virtual table
-        │               │         table: pg_class@primary
-        │               │
-        │               └── • filter
-        │                   │ filter: objsubid = 0
-        │                   │
-        │                   └── • virtual table
-        │                         table: pg_description@primary
+        │       └── • virtual table
+        │             table: table_row_statistics@primary
         │
         └── • virtual table
-              table: table_row_statistics@primary
+              table: tables@primary
 
 query T
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE info NOT LIKE '%size%'
