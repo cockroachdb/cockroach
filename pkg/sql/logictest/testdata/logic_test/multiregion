@@ -189,6 +189,17 @@ CREATE TABLE public.regional_primary_region_table (
                                                 FAMILY "primary" (a, rowid)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_primary_region_table
+----
+DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 90000,
+                               num_replicas = 3,
+                               constraints = '{+region=test1: 1, +region=test2: 1, +region=test3: 1}',
+                               lease_preferences = '[[+region=test2]]'
+
 statement ok
 CREATE TABLE regional_implicit_primary_region_table (a int) LOCALITY REGIONAL BY TABLE
 
@@ -200,6 +211,17 @@ CREATE TABLE public.regional_implicit_primary_region_table (
                                                 FAMILY "primary" (a, rowid)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_implicit_primary_region_table
+----
+DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 90000,
+                               num_replicas = 3,
+                               constraints = '{+region=test1: 1, +region=test2: 1, +region=test3: 1}',
+                               lease_preferences = '[[+region=test2]]'
+
 statement ok
 CREATE TABLE regional_test3_table (a int) LOCALITY REGIONAL BY TABLE IN "test3"
 
@@ -210,6 +232,17 @@ CREATE TABLE public.regional_test3_table (
                                        a INT8 NULL,
                                        FAMILY "primary" (a, rowid)
 ) LOCALITY REGIONAL BY TABLE IN test3
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_test3_table
+----
+TABLE regional_test3_table  ALTER TABLE regional_test3_table CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 90000,
+                            num_replicas = 3,
+                            constraints = '{+region=test3: 1}',
+                            lease_preferences = '[[+region=test3]]'
 
 statement error region "test4" has not been added to database "multi_region_test_db"\nHINT: available regions: test1, test2, test3
 CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
@@ -225,6 +258,17 @@ CREATE TABLE public.regional_by_row_table (
                             FAMILY "primary" (a, rowid)
 ) LOCALITY REGIONAL BY ROW
 
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row_table
+----
+TABLE regional_by_row_table  ALTER TABLE regional_by_row_table CONFIGURE ZONE USING
+                             range_min_bytes = 134217728,
+                             range_max_bytes = 536870912,
+                             gc.ttlseconds = 90000,
+                             num_replicas = 3,
+                             constraints = '[]',
+                             lease_preferences = '[]'
+
 statement ok
 CREATE TABLE global_table (a int) LOCALITY GLOBAL
 
@@ -235,6 +279,17 @@ CREATE TABLE public.global_table (
                    a INT8 NULL,
                    FAMILY "primary" (a, rowid)
 ) LOCALITY GLOBAL
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE global_table
+----
+TABLE global_table  ALTER TABLE global_table CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 90000,
+                    num_replicas = 3,
+                    constraints = '{+region=test1: 1, +region=test2: 1, +region=test3: 1}',
+                    lease_preferences = '[[+region=test2]]'
 
 query TTTTIT colnames
 SHOW TABLES
