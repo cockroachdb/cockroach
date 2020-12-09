@@ -2929,29 +2929,40 @@ may increase either contention or retry errors, or both.`,
 	"tsvector_update_trigger_column": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
 
 	// Fuzzy String Matching
-	"soundex": makeBuiltin(defProps(),
+	"soundex": makeBuiltin(
+		tree.FunctionProperties{NullableArgs: true, Category: categoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"source", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.NewDString(""), nil
+				}
 				s := string(tree.MustBeDString(args[0]))
 				t := fuzzystrmatch.Soundex(s)
 				return tree.NewDString(t), nil
 			},
-			Info:       "Converts a string to its Soundex code.",
+			Info:       "Convert a string to its Soundex code.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
-	"difference": makeBuiltin(defProps(),
+	// The function is confusingly named, `similarity` would have been a better name,
+	// but this name matches the name in PostgreSQL.
+	// See https://www.postgresql.org/docs/current/fuzzystrmatch.html"
+	"difference": makeBuiltin(
+		tree.FunctionProperties{NullableArgs: true, Category: categoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"source", types.String}, {"target", types.String}},
-			ReturnType: tree.FixedReturnType(types.Int),
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull {
+					return tree.NewDString(""), nil
+				}
 				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
-				ld := fuzzystrmatch.Difference(s, t)
-				return tree.NewDInt(tree.DInt(ld)), nil
+				diff := fuzzystrmatch.Difference(s, t)
+				return tree.NewDString(strconv.Itoa(diff)), nil
 			},
-			Info:       "Converts two strings to their Soundex codes and then reports the number of matching code positions.",
+			Info:       "Convert two strings to their Soundex codes and then reports the number of matching code positions.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),

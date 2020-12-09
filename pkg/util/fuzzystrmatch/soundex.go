@@ -15,6 +15,7 @@ import (
 	"unicode"
 )
 
+// The soundex code consists of four characters.
 const soundexLen = 4
 
 //                    ABCDEFGHIJKLMNOPQRSTUVWXYZ
@@ -36,14 +37,14 @@ func soundex(source string) string {
 		}
 		return false
 	})
-	// No string left
 	code := make([]byte, soundexLen, soundexLen)
+	// No string left
 	if len(source) == 0 {
 		return string(code)
 	}
 	runes := []rune(source)
 	if unicode.IsUpper(runes[0]) || unicode.IsLower(runes[0]) {
-		// Take the first letter as is
+		// Convert the first character to upper case.
 		code[0] = byte(unicode.ToUpper(runes[0]))
 	}
 	j := 1
@@ -63,7 +64,7 @@ func soundex(source string) string {
 			break
 		}
 	}
-	// Fill with 0's
+	// Fill with 0's at the end
 	for j < soundexLen {
 		code[j] = '0'
 		j++
@@ -71,7 +72,7 @@ func soundex(source string) string {
 	return string(code)
 }
 
-// Soundex converts source to its Soundex code.
+// Soundex convert source to its Soundex code.
 func Soundex(source string) string {
 	code := soundex(source)
 	resCode := make([]byte, 0)
@@ -83,7 +84,7 @@ func Soundex(source string) string {
 	return string(resCode)
 }
 
-// Difference converts source and target to their Soundex codes
+// Difference convert source and target to their Soundex codes
 // and then reports the number of matching code positions.
 func Difference(source, target string) int {
 	sourceCode := soundex(source)
