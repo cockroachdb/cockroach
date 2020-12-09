@@ -25,12 +25,10 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// distBackup is used to plan the processors for a distributed backup. It
-// streams back progress updates over progCh, which is used to incrementally
-// build up the BulkOpSummary.
-func distBackup(
-	ctx context.Context,
+func distBackupPlanSpecs(
+	planCtx *sql.PlanningCtx,
 	phs sql.PlanHookState,
+	dsp *sql.DistSQLPlanner,
 	spans roachpb.Spans,
 	introducedSpans roachpb.Spans,
 	pkIDs map[uint64]bool,
@@ -39,22 +37,8 @@ func distBackup(
 	encryption *jobspb.BackupEncryptionOptions,
 	mvccFilter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
-	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-) error {
-	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
-	var noTxn *kv.Txn
-
-	dsp := phs.DistSQLPlanner()
-	evalCtx := phs.ExtendedEvalContext()
-
-	// We don't return the compatible nodes here since PartitionSpans will
-	// filter out incompatible nodes.
-	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
-	if err != nil {
-		return err
-	}
-
-	backupSpecs, err := makeBackupDataProcessorSpecs(
+) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
+	return makeBackupDataProcessorSpecs(
 		planCtx,
 		dsp,
 		spans,
@@ -68,20 +52,27 @@ func distBackup(
 		phs.User(),
 		phs.ExecCfg(),
 	)
-	if err != nil {
-		return err
-	}
+}
+
+// distBackup is used to plan the processors for a distributed backup. It
+// streams back progress updates over progCh, which is used to incrementally
+// build up the BulkOpSummary.
+func distBackup(
+	ctx context.Context,
+	phs sql.PlanHookState,
+	planCtx *sql.PlanningCtx,
+	dsp *sql.DistSQLPlanner,
+	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	backupSpecs map[roachpb.NodeID]*execinfrapb.BackupDataSpec,
+) error {
+	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
+	evalCtx := phs.ExtendedEvalContext()
+	var noTxn *kv.Txn
 
 	if len(backupSpecs) == 0 {
 		close(progCh)
 		return nil
 	}
-
-	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
-	if err != nil {
-		return err
-	}
-	p := sql.MakePhysicalPlan(gatewayNodeID)
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
@@ -92,6 +83,11 @@ func distBackup(
 		i++
 	}
 
+	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
+	if err != nil {
+		return err
+	}
+	p := sql.MakePhysicalPlan(gatewayNodeID)
 	// All of the progress information is sent through the metadata stream, so we
 	// have an empty result stream.
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
