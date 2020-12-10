@@ -255,8 +255,8 @@ func (p *planner) AlterPrimaryKey(
 		return shouldRewrite || !idx.Unique || idx.Type == descpb.IndexDescriptor_INVERTED
 	}
 	var indexesToRewrite []*descpb.IndexDescriptor
-	for i := range tableDesc.Indexes {
-		idx := &tableDesc.Indexes[i]
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		idx := &tableDesc.GetPublicNonPrimaryIndexes()[i]
 		if idx.ID != newPrimaryIndexDesc.ID && shouldRewriteIndex(idx) {
 			indexesToRewrite = append(indexesToRewrite, idx)
 		}

@@ -965,7 +965,7 @@ func (ot *optTable) getColDesc(i int) *descpb.ColumnDescriptor {
 // IndexCount is part of the cat.Table interface.
 func (ot *optTable) IndexCount() int {
 	// Primary index is always present, so count is always >= 1.
-	return 1 + len(ot.desc.Indexes)
+	return 1 + len(ot.desc.GetPublicNonPrimaryIndexes())
 }
 
 // WritableIndexCount is part of the cat.Table interface.
@@ -1642,7 +1642,7 @@ func newOptVirtualTable(
 
 	// Build the indexes (add 1 to account for lack of primary index in
 	// indexes slice).
-	ot.indexes = make([]optVirtualIndex, 1+len(ot.desc.Indexes))
+	ot.indexes = make([]optVirtualIndex, 1+len(ot.desc.GetPublicNonPrimaryIndexes()))
 	// Set up the primary index.
 	ot.indexes[0] = optVirtualIndex{
 		tab:          ot,
@@ -1655,8 +1655,8 @@ func newOptVirtualTable(
 		},
 	}
 
-	for i := range ot.desc.Indexes {
-		idxDesc := &ot.desc.Indexes[i]
+	for i := range ot.desc.GetPublicNonPrimaryIndexes() {
+		idxDesc := &ot.desc.GetPublicNonPrimaryIndexes()[i]
 		if len(idxDesc.ColumnIDs) > 1 {
 			panic(errors.AssertionFailedf("virtual indexes with more than 1 col not supported"))
 		}
@@ -1737,7 +1737,7 @@ func (ot *optVirtualTable) getColDesc(i int) *descpb.ColumnDescriptor {
 // IndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) IndexCount() int {
 	// Primary index is always present, so count is always >= 1.
-	return 1 + len(ot.desc.Indexes)
+	return 1 + len(ot.desc.GetPublicNonPrimaryIndexes())
 }
 
 // WritableIndexCount is part of the cat.Table interface.

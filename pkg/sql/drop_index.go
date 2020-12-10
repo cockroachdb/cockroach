@@ -313,10 +313,10 @@ func (p *planner) dropIndexByName(
 	// Construct a list of all the remaining indexes, so that we can see if there
 	// is another index that could replace the one we are deleting for a given
 	// foreign key constraint.
-	remainingIndexes := make([]*descpb.IndexDescriptor, 0, len(tableDesc.Indexes)+1)
+	remainingIndexes := make([]*descpb.IndexDescriptor, 0, len(tableDesc.GetPublicNonPrimaryIndexes())+1)
 	remainingIndexes = append(remainingIndexes, tableDesc.GetPrimaryIndex())
-	for i := range tableDesc.Indexes {
-		index := &tableDesc.Indexes[i]
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		index := &tableDesc.GetPublicNonPrimaryIndexes()[i]
 		if index.ID != idx.ID {
 			remainingIndexes = append(remainingIndexes, index)
 		}
@@ -459,7 +459,7 @@ func (p *planner) dropIndexByName(
 	}
 
 	found := false
-	for i, idxEntry := range tableDesc.Indexes {
+	for i, idxEntry := range tableDesc.GetPublicNonPrimaryIndexes() {
 		if idxEntry.ID == idx.ID {
 			// Unsplit all manually split ranges in the index so they can be
 			// automatically merged by the merge queue. Gate this on being the

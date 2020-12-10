@@ -898,7 +898,7 @@ func addIndexForFK(
 		if err := tbl.AllocateIDs(ctx); err != nil {
 			return 0, err
 		}
-		added := tbl.Indexes[len(tbl.Indexes)-1]
+		added := tbl.GetPublicNonPrimaryIndexes()[len(tbl.GetPublicNonPrimaryIndexes())-1]
 		return added.ID, nil
 	}
 
@@ -1607,8 +1607,8 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		idx := &desc.GetPublicNonPrimaryIndexes()[i]
 		// Increment the counter if this index could be storing data across multiple column families.
 		if len(idx.StoreColumnNames) > 1 && len(desc.Families) > 1 {
 			telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)

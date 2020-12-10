@@ -1274,9 +1274,9 @@ func BenchmarkJoinReader(b *testing.B) {
 							// the expected match ratio.
 							tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 							indexIdx := uint32(0)
-							for i := range tableDesc.Indexes {
-								require.Equal(b, 1, len(tableDesc.Indexes[i].ColumnNames), "all indexes created in this benchmark should only contain one column")
-								if tableDesc.Indexes[i].ColumnNames[0] == columnDef.name {
+							for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+								require.Equal(b, 1, len(tableDesc.GetPublicNonPrimaryIndexes()[i].ColumnNames), "all indexes created in this benchmark should only contain one column")
+								if tableDesc.GetPublicNonPrimaryIndexes()[i].ColumnNames[0] == columnDef.name {
 									// Found indexIdx.
 									indexIdx = uint32(i + 1)
 									break
