@@ -33,10 +33,7 @@ import {
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsReportAction } from "src/redux/statements";
-import { trustIcon } from "src/util/trust";
-
 import { DiagnosticStatusBadge } from "./diagnosticStatusBadge";
-import DownloadIcon from "!!url-loader!assets/download.svg";
 import EmptyListIcon from "!!url-loader!assets/emptyState/empty-list-results.svg";
 import styles from "./diagnosticsView.module.styl";
 import { cockroach } from "src/js/protos";
@@ -47,6 +44,7 @@ import { statementDiagnostics } from "src/util/docs";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { trackActivateDiagnostics, trackDownloadDiagnosticsBundle } from "src/util/analytics";
 import { EmptyTable } from "@cockroachlabs/admin-ui-components";
+import { Download } from "@cockroachlabs/icons";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
@@ -98,22 +96,17 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
         if (record.completed) {
           return (
             <div className={cx("crl-statements-diagnostics-view__actions-column")}>
-              <a href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
+              <Anchor href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
                  onClick={() => trackDownloadDiagnosticsBundle(record.statement_fingerprint)}>
                 <Button
                   size="small"
                   type="flat"
                   iconPosition="left"
-                  icon={() => (
-                    <span
-                      className={cx("crl-statements-diagnostics-view__icon")}
-                      dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
-                    />
-                  )}
+                  icon={() => <Download className={cx("crl-statements-diagnostics-view__icon")} />}
                 >
                   Bundle (.zip)
                 </Button>
-              </a>
+              </Anchor>
             </div>
           );
         }
