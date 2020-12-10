@@ -10,7 +10,6 @@
 
 import React from "react";
 import { connect } from "react-redux";
-import { Link } from "react-router-dom";
 import moment from "moment";
 import Long from "long";
 import emptyTracingBackground from "assets/statementsPage/emptyTracingBackground.svg";
@@ -24,6 +23,7 @@ import {
   ColumnsConfig,
   DownloadFile,
   DownloadFileRef,
+  Link,
 } from "src/components";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
