@@ -20,11 +20,12 @@ func _() {
 	_ = x[CodeClientDisconnected-10]
 	_ = x[CodeProxyRefusedConnection-11]
 	_ = x[CodeExpiredClientConnection-12]
+	_ = x[CodeIdleDisconnect-13]
 }
 
-const _ErrorCode_name = "CodeClientReadFailedCodeClientWriteFailedCodeUnexpectedInsecureStartupMessageCodeSNIRoutingFailedCodeUnexpectedStartupMessageCodeParamsRoutingFailedCodeBackendDownCodeBackendRefusedTLSCodeBackendDisconnectedCodeClientDisconnectedCodeProxyRefusedConnectionCodeExpiredClientConnection"
+const _ErrorCode_name = "CodeClientReadFailedCodeClientWriteFailedCodeUnexpectedInsecureStartupMessageCodeSNIRoutingFailedCodeUnexpectedStartupMessageCodeParamsRoutingFailedCodeBackendDownCodeBackendRefusedTLSCodeBackendDisconnectedCodeClientDisconnectedCodeProxyRefusedConnectionCodeExpiredClientConnectionCodeIdleDisconnect"
 
-var _ErrorCode_index = [...]uint16{0, 20, 41, 77, 97, 125, 148, 163, 184, 207, 229, 255, 282}
+var _ErrorCode_index = [...]uint16{0, 20, 41, 77, 97, 125, 148, 163, 184, 207, 229, 255, 282, 300}
 
 func (i ErrorCode) String() string {
 	i -= 1
