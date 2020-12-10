@@ -5,8 +5,12 @@ go_library(
     srcs = [
         "state_string.go",
         "targets.go",
+        "targets.pb.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/sql/catalog/descpb"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//vendor/github.com/gogo/protobuf/proto",
+    ],
 )
