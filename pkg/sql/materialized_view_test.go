@@ -73,7 +73,7 @@ REFRESH MATERIALIZED VIEW t.v;
 
 	// The data should be deleted.
 	testutils.SucceedsSoon(t, func() error {
-		indexPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(descBeforeRefresh.ID), uint32(descBeforeRefresh.PrimaryIndex.ID))
+		indexPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(descBeforeRefresh.ID), uint32(descBeforeRefresh.GetPrimaryIndexID()))
 		indexEnd := indexPrefix.PrefixEnd()
 		if kvs, err := kvDB.Scan(ctx, indexPrefix, indexEnd, 0); err != nil {
 			t.Fatal(err)

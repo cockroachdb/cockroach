@@ -224,7 +224,7 @@ func (p *planner) truncateTable(
 
 	// Construct a mapping from old index ID's to new index ID's.
 	indexIDMapping := make(map[descpb.IndexID]descpb.IndexID, len(oldIndexes))
-	indexIDMapping[oldIndexes[0].ID] = tableDesc.PrimaryIndex.ID
+	indexIDMapping[oldIndexes[0].ID] = tableDesc.GetPrimaryIndexID()
 	for i := range tableDesc.Indexes {
 		indexIDMapping[oldIndexes[i+1].ID] = tableDesc.Indexes[i].ID
 	}
@@ -301,7 +301,7 @@ func (p *planner) truncateTable(
 	swapInfo := &descpb.PrimaryKeySwap{
 		OldPrimaryIndexId: oldIndexes[0].ID,
 		OldIndexes:        oldIndexIDs,
-		NewPrimaryIndexId: tableDesc.PrimaryIndex.ID,
+		NewPrimaryIndexId: tableDesc.GetPrimaryIndexID(),
 		NewIndexes:        newIndexIDs,
 	}
 	if err := maybeUpdateZoneConfigsForPKChange(ctx, p.txn, p.ExecCfg(), tableDesc, swapInfo); err != nil {

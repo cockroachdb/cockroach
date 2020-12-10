@@ -450,7 +450,7 @@ func (p *planner) dropIndexByName(
 
 	// Currently, a replacement primary index must be specified when dropping the primary index,
 	// and this cannot be done with DROP INDEX.
-	if idx.ID == tableDesc.PrimaryIndex.ID {
+	if idx.ID == tableDesc.GetPrimaryIndexID() {
 		return errors.WithHint(
 			pgerror.Newf(pgcode.FeatureNotSupported, "cannot drop the primary index of a table using DROP INDEX"),
 			"instead, use ALTER TABLE ... ALTER PRIMARY KEY or"+

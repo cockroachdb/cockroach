@@ -950,7 +950,7 @@ func addInterleave(
 
 	// typeOfIndex is used to give more informative error messages.
 	var typeOfIndex string
-	if index.ID == desc.PrimaryIndex.ID {
+	if index.ID == desc.GetPrimaryIndexID() {
 		typeOfIndex = "primary key"
 	} else {
 		typeOfIndex = "index"
@@ -1989,7 +1989,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				}
 				var def tree.TableDef = &indexDef
 				if idx.Unique {
-					isPK := idx.ID == td.PrimaryIndex.ID
+					isPK := idx.ID == td.GetPrimaryIndexID()
 					if isPK && td.IsPrimaryIndexDefaultRowID() {
 						continue
 					}

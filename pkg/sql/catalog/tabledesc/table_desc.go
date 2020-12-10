@@ -82,7 +82,7 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 
 // GetPrimaryIndexID returns the ID of the primary index.
 func (desc *Immutable) GetPrimaryIndexID() descpb.IndexID {
-	return desc.PrimaryIndex.ID
+	return desc.GetPrimaryIndex().ID
 }
 
 // GetPublicNonPrimaryIndexes returns the public non-primary indexes of the descriptor.

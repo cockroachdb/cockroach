@@ -957,7 +957,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 }
 
 func getIndexIdx(index *descpb.IndexDescriptor, desc *tabledesc.Immutable) (uint32, error) {
-	if index.ID == desc.PrimaryIndex.ID {
+	if index.ID == desc.GetPrimaryIndexID() {
 		return 0, nil
 	}
 	for i := range desc.Indexes {
