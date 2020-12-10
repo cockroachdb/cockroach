@@ -14,6 +14,7 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 // operations.
 type Metrics struct {
 	BackendDisconnectCount *metric.Counter
+	IdleDisconnectCount    *metric.Counter
 	BackendDownCount       *metric.Counter
 	ClientDisconnectCount  *metric.Counter
 	CurConnCount           *metric.Gauge
@@ -53,6 +54,12 @@ var (
 		Measurement: "Disconnects",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaIdleDisconnectCount = metric.Metadata{
+		Name:        "proxy.err.idle_disconnect",
+		Help:        "Number of disconnects due to idle timeout",
+		Measurement: "Disconnects",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaClientDisconnectCount = metric.Metadata{
 		Name:        "proxy.err.client_disconnect",
 		Help:        "Number of disconnects initiated by clients",
@@ -83,6 +90,7 @@ var (
 func MakeProxyMetrics() Metrics {
 	return Metrics{
 		BackendDisconnectCount: metric.NewCounter(metaBackendDisconnectCount),
+		IdleDisconnectCount:    metric.NewCounter(metaIdleDisconnectCount),
 		BackendDownCount:       metric.NewCounter(metaBackendDownCount),
 		ClientDisconnectCount:  metric.NewCounter(metaClientDisconnectCount),
 		CurConnCount:           metric.NewGauge(metaCurConnCount),
