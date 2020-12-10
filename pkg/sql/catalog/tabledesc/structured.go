@@ -2753,19 +2753,19 @@ func (desc *Mutable) AddIndex(idx descpb.IndexDescriptor, primary bool) error {
 					// Only override the index name if it hasn't been set by the user.
 					idx.Name = PrimaryKeyIndexName
 				}
-				desc.PrimaryIndex = idx
+				desc.SetPrimaryIndex(idx)
 			} else {
 				return fmt.Errorf("multiple primary keys for table %q are not allowed", desc.Name)
 			}
 		} else {
-			desc.Indexes = append(desc.Indexes, idx)
+			desc.AddPublicNonPrimaryIndex(idx)
 		}
 
 	} else {
 		if err := checkColumnsValidForInvertedIndex(desc, idx.ColumnNames); err != nil {
 			return err
 		}
-		desc.Indexes = append(desc.Indexes, idx)
+		desc.AddPublicNonPrimaryIndex(idx)
 	}
 
 	return nil
@@ -3112,12 +3112,15 @@ func (desc *wrapper) NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error) {
 func (desc *Mutable) RenameIndexDescriptor(index *descpb.IndexDescriptor, name string) error {
 	id := index.ID
 	if id == desc.PrimaryIndex.ID {
-		desc.PrimaryIndex.Name = name
+		idx := desc.PrimaryIndex
+		idx.Name = name
+		desc.SetPrimaryIndex(idx)
 		return nil
 	}
-	for i := range desc.Indexes {
-		if desc.Indexes[i].ID == id {
-			desc.Indexes[i].Name = name
+	for i, idx := range desc.Indexes {
+		if idx.ID == id {
+			idx.Name = name
+			desc.SetPublicNonPrimaryIndex(i+1, idx)
 			return nil
 		}
 	}
@@ -3141,7 +3144,11 @@ func (desc *Mutable) DropConstraint(
 ) error {
 	switch detail.Kind {
 	case descpb.ConstraintTypePK:
-		desc.PrimaryIndex.Disabled = true
+		{
+			primaryIndex := desc.PrimaryIndex
+			primaryIndex.Disabled = true
+			desc.SetPrimaryIndex(primaryIndex)
+		}
 		return nil
 
 	case descpb.ConstraintTypeUnique:
@@ -3499,7 +3506,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			getIndexIdxByID := func(id descpb.IndexID) (int, error) {
 				for i, idx := range desc.Indexes {
 					if idx.ID == id {
-						return i, nil
+						return i + 1, nil
 					}
 				}
 				return 0, errors.New("index was not in list of indexes")
@@ -3541,15 +3548,20 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			} else {
 				newIndex.Name = args.NewPrimaryIndexName
 			}
-			desc.PrimaryIndex = *protoutil.Clone(newIndex).(*descpb.IndexDescriptor)
-			// The primary index "implicitly" stores all columns in the table.
-			// Explicitly including them in the stored columns list is incorrect.
-			desc.PrimaryIndex.StoreColumnNames, desc.PrimaryIndex.StoreColumnIDs = nil, nil
+
+			{
+				primaryIndex := *protoutil.Clone(newIndex).(*descpb.IndexDescriptor)
+				// The primary index "implicitly" stores all columns in the table.
+				// Explicitly including them in the stored columns list is incorrect.
+				primaryIndex.StoreColumnNames, primaryIndex.StoreColumnIDs = nil, nil
+				desc.SetPrimaryIndex(primaryIndex)
+			}
+
 			idx, err := getIndexIdxByID(newIndex.ID)
 			if err != nil {
 				return err
 			}
-			desc.Indexes = append(desc.Indexes[:idx], desc.Indexes[idx+1:]...)
+			desc.RemovePublicNonPrimaryIndex(idx)
 
 			// Swap out the old indexes with their rewritten versions.
 			for j := range args.OldIndexes {
@@ -3561,17 +3573,21 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				if err != nil {
 					return err
 				}
-				oldIndexIndex, err := getIndexIdxByID(oldID)
+				oldIndexIdx, err := getIndexIdxByID(oldID)
 				if err != nil {
 					return err
 				}
-				oldIndex := protoutil.Clone(&desc.Indexes[oldIndexIndex]).(*descpb.IndexDescriptor)
-				newIndex.Name = oldIndex.Name
+				oldIndex, _, err := desc.FindIndexByIndexIdx(oldIndexIdx)
+				if err != nil {
+					return err
+				}
+				oldIndexCopy := protoutil.Clone(oldIndex).(*descpb.IndexDescriptor)
+				newIndex.Name = oldIndexCopy.Name
 				// Splice out old index from the indexes list.
-				desc.Indexes = append(desc.Indexes[:oldIndexIndex], desc.Indexes[oldIndexIndex+1:]...)
+				desc.RemovePublicNonPrimaryIndex(oldIndexIdx)
 				// Add a drop mutation for the old index. The code that calls this function will schedule
 				// a schema change job to pick up all of these index drop mutations.
-				if err := desc.AddIndexMutation(oldIndex, descpb.DescriptorMutation_DROP); err != nil {
+				if err := desc.AddIndexMutation(oldIndexCopy, descpb.DescriptorMutation_DROP); err != nil {
 					return err
 				}
 			}
@@ -3583,8 +3599,8 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 		case *descpb.DescriptorMutation_MaterializedViewRefresh:
 			// Completing a refresh mutation just means overwriting the table's
 			// indexes with the new indexes that have been backfilled already.
-			desc.PrimaryIndex = t.MaterializedViewRefresh.NewPrimaryIndex
-			desc.Indexes = t.MaterializedViewRefresh.NewIndexes
+			desc.SetPrimaryIndex(t.MaterializedViewRefresh.NewPrimaryIndex)
+			desc.SetPublicNonPrimaryIndexes(t.MaterializedViewRefresh.NewIndexes)
 		}
 
 	case descpb.DescriptorMutation_DROP:

@@ -176,8 +176,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	if err != nil {
 		return mutDesc.TableDescriptor, err
 	}
-	for i := range mutDesc.Indexes {
-		idx := &mutDesc.Indexes[i]
+	for i, idx := range mutDesc.GetPublicNonPrimaryIndexes() {
 		if len(idx.ColumnIDs) > 1 {
 			panic("we don't know how to deal with virtual composite indexes yet")
 		}
@@ -199,6 +198,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 			idx.StoreColumnNames[outputIdx] = mutDesc.Columns[j].Name
 			outputIdx++
 		}
+		mutDesc.SetPublicNonPrimaryIndex(i+1, idx)
 	}
 	return mutDesc.TableDescriptor, nil
 }
