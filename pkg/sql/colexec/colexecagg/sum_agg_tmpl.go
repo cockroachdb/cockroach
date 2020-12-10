@@ -121,6 +121,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
 	// {{end}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -162,6 +163,10 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
@@ -214,25 +219,28 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			a.col[a.curIdx] = a.curAgg
-		}
-		a.curIdx++
-		// {{with .Global}}
-		a.curAgg = zero_RET_TYPEValue
-		// {{end}}
+		if !a.isFirstGroup {
+			// If we encounter a new group, and we haven't found any non-nulls for the
+			// current group, the output for this group should be null.
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				a.col[a.curIdx] = a.curAgg
+			}
+			a.curIdx++
+			// {{with .Global}}
+			a.curAgg = zero_RET_TYPEValue
+			// {{end}}
 
-		// {{/*
-		// We only need to reset this flag if there are nulls. If there are no
-		// nulls, this will be updated unconditionally below.
-		// */}}
-		// {{if .HasNulls}}
-		a.foundNonNullForCurrentGroup = false
-		// {{end}}
+			// {{/*
+			// We only need to reset this flag if there are nulls. If there are no
+			// nulls, this will be updated unconditionally below.
+			// */}}
+			// {{if .HasNulls}}
+			a.foundNonNullForCurrentGroup = false
+			// {{end}}
+		}
+		a.isFirstGroup = false
 	}
 	// {{end}}
 

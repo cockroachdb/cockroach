@@ -164,29 +164,6 @@ func NewOrderedAggregator(
 		return nil, err
 	}
 
-	a := &orderedAggregator{}
-	// The contract of AggregateFunc.Init requires that the very first group in
-	// the whole input is not marked as a start of a new group with 'true'
-	// value in groupCol. In order to satisfy that requirement we plan a
-	// oneShotOp that explicitly sets groupCol for the very first tuple it
-	// sees to 'false' and then deletes itself from the operator tree.
-	// TODO(yuzefovich): this is pretty annoying, consider refactoring the
-	// contract and removing this.
-	op = &oneShotOp{
-		OneInputNode: NewOneInputNode(op),
-		fn: func(batch coldata.Batch) {
-			if batch.Length() == 0 {
-				return
-			}
-			if sel := batch.Selection(); sel != nil {
-				groupCol[sel[0]] = false
-			} else {
-				groupCol[0] = false
-			}
-		},
-		outputSourceRef: &a.input,
-	}
-
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
 	funcsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
@@ -199,7 +176,7 @@ func NewOrderedAggregator(
 		)
 	}
 
-	*a = orderedAggregator{
+	a := &orderedAggregator{
 		OneInputNode:       NewOneInputNode(op),
 		allocator:          allocator,
 		spec:               spec,

@@ -127,6 +127,7 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
 	// {{end}}
+	execgen.SETVARIABLESIZE(oldCurSumSize, a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -168,6 +169,10 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	execgen.SETVARIABLESIZE(newCurSumSize, a.curSum)
+	if newCurSumSize != oldCurSumSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+	}
 }
 
 func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
@@ -220,28 +225,31 @@ func _ACCUMULATE_AVG(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
+		if !a.isFirstGroup {
+			// If we encounter a new group, and we haven't found any non-nulls for the
+			// current group, the output for this group should be null.
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				// {{with .Global}}
+				_ASSIGN_DIV_INT64(a.col[a.curIdx], a.curSum, a.curCount, a.col, _, _)
+				// {{end}}
+			}
+			a.curIdx++
 			// {{with .Global}}
-			_ASSIGN_DIV_INT64(a.col[a.curIdx], a.curSum, a.curCount, a.col, _, _)
+			a.curSum = zero_RET_TYPEValue
+			// {{end}}
+			a.curCount = 0
+
+			// {{/*
+			// We only need to reset this flag if there are nulls. If there are no
+			// nulls, this will be updated unconditionally below.
+			// */}}
+			// {{if .HasNulls}}
+			a.foundNonNullForCurrentGroup = false
 			// {{end}}
 		}
-		a.curIdx++
-		// {{with .Global}}
-		a.curSum = zero_RET_TYPEValue
-		// {{end}}
-		a.curCount = 0
-
-		// {{/*
-		// We only need to reset this flag if there are nulls. If there are no
-		// nulls, this will be updated unconditionally below.
-		// */}}
-		// {{if .HasNulls}}
-		a.foundNonNullForCurrentGroup = false
-		// {{end}}
+		a.isFirstGroup = false
 	}
 	// {{end}}
 
