@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -19,6 +20,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
+
+type testInfra struct {
+	tc       *testcluster.TestCluster
+	settings *cluster.Settings
+	ie       sqlutil.InternalExecutor
+	db       *kv.DB
+	lm       *lease.Manager
+	tsql     *sqlutils.SQLRunner
+}
+
+func setupTestInfra(t testing.TB) *testInfra {
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	return &testInfra{
+		tc:       tc,
+		settings: tc.Server(0).ClusterSettings(),
+		ie:       tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		db:       tc.Server(0).DB(),
+		lm:       tc.Server(0).LeaseManager().(*lease.Manager),
+		tsql:     sqlutils.MakeSQLRunner(tc.ServerConn(0)),
+	}
+}
+
+func (ti *testInfra) txn(
+	ctx context.Context,
+	f func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
+) error {
+	return descs.Txn(ctx, ti.settings, ti.lm, ti.ie, ti.db, f)
+}
 
 func TestExecutorDescriptorMutationOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -39,39 +68,34 @@ func TestExecutorDescriptorMutationOps(t *testing.T) {
 			return cpy.ImmutableCopy().(*tabledesc.Immutable)
 		}
 	}
+	mutFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{
+			Required:       true,
+			RequireMutable: true,
+			AvoidCached:    true,
+		},
+	}
+	immFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{
+			Required:    true,
+			AvoidCached: true,
+		},
+	}
 	run := func(t *testing.T, c testCase) {
 		ctx := context.Background()
+		ti := setupTestInfra(t)
+		defer ti.tc.Stopper().Stop(ctx)
 
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-		defer tc.Stopper().Stop(ctx)
-
-		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-		tdb.Exec(t, `CREATE DATABASE db`)
-		tdb.Exec(t, `
+		ti.tsql.Exec(t, `CREATE DATABASE db`)
+		ti.tsql.Exec(t, `
 CREATE TABLE db.t (
    i INT PRIMARY KEY 
 )`)
 
-		settings := tc.Server(0).ClusterSettings()
-		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
-		db := tc.Server(0).DB()
-		lm := tc.Server(0).LeaseManager().(*lease.Manager)
-		mutFlags := tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required:       true,
-				RequireMutable: true,
-				AvoidCached:    true,
-			},
-		}
-		immFlags := tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required:    true,
-				AvoidCached: true,
-			},
-		}
 		tn := tree.MakeTableName("db", "t")
-		require.NoError(t, descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-
+		require.NoError(t, ti.txn(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			td, err := descriptors.GetTableByName(ctx, txn, &tn, mutFlags)
 			if err != nil {
 				return err
@@ -80,7 +104,9 @@ CREATE TABLE db.t (
 			return nil
 		}))
 
-		require.NoError(t, descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		require.NoError(t, ti.txn(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			ex := executor.New(txn, descriptors)
 			orig, err := descriptors.GetTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
