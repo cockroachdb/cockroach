@@ -24,3 +24,4 @@ export * from "./select";
 export * from "./downloadFile";
 export * from "./modal";
 export * from "./rangeCalendar";
+export * from "./link";

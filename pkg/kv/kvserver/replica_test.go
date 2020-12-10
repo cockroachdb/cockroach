@@ -6518,7 +6518,9 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 			tc := testContext{}
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.Background())
-			tc.Start(t, stopper)
+			cfg := TestStoreConfig(nil)
+			cfg.TestingKnobs.DisableReplicateQueue = true
+			tc.StartWithStoreConfig(t, stopper, cfg)
 			// We now allow adding a replica to the same node, to support rebalances
 			// within the same node when replication is 1x, so add another replica to the
 			// range descriptor to avoid this case.

@@ -35,6 +35,8 @@ run_counter=-1
 function run_json_test() {
   run_counter=$((run_counter+1))
   tc_start_block "prep"
+  # TODO(tbg): better to go through builder for all of this.
+  go install github.com/cockroachdb/cockroach/pkg/cmd/github-post
   mkdir -p artifacts
   tmpfile="artifacts/raw.${run_counter}.json.txt"
   tc_end_block "prep"
