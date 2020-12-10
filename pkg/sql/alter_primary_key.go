@@ -305,7 +305,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	swapArgs := &descpb.PrimaryKeySwap{
-		OldPrimaryIndexId:   tableDesc.PrimaryIndex.ID,
+		OldPrimaryIndexId:   tableDesc.GetPrimaryIndexID(),
 		NewPrimaryIndexId:   newPrimaryIndexDesc.ID,
 		NewIndexes:          newIndexIDs,
 		OldIndexes:          oldIndexIDs,

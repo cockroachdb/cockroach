@@ -276,7 +276,7 @@ func (ddk DeprecatedDatabaseKey) Name() string {
 func MakeNameMetadataKey(
 	codec keys.SQLCodec, parentID, parentSchemaID descpb.ID, name string,
 ) roachpb.Key {
-	k := codec.IndexPrefix(uint32(systemschema.NamespaceTable.ID), uint32(systemschema.NamespaceTable.PrimaryIndex.ID))
+	k := codec.IndexPrefix(uint32(systemschema.NamespaceTable.ID), uint32(systemschema.NamespaceTable.GetPrimaryIndexID()))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentSchemaID))
 	if name != "" {
@@ -301,8 +301,8 @@ func DecodeNameMetadataKey(
 	if err != nil {
 		return 0, 0, "", err
 	}
-	if buf != uint64(systemschema.NamespaceTable.PrimaryIndex.ID) {
-		return 0, 0, "", errors.Newf("tried get table %d, but got %d", systemschema.NamespaceTable.PrimaryIndex.ID, buf)
+	if buf != uint64(systemschema.NamespaceTable.GetPrimaryIndexID()) {
+		return 0, 0, "", errors.Newf("tried get table %d, but got %d", systemschema.NamespaceTable.GetPrimaryIndexID(), buf)
 	}
 
 	k, buf, err = encoding.DecodeUvarintAscending(k)
@@ -334,7 +334,7 @@ func MakeDeprecatedNameMetadataKey(
 	codec keys.SQLCodec, parentID descpb.ID, name string,
 ) roachpb.Key {
 	k := codec.IndexPrefix(
-		uint32(systemschema.DeprecatedNamespaceTable.ID), uint32(systemschema.DeprecatedNamespaceTable.PrimaryIndex.ID))
+		uint32(systemschema.DeprecatedNamespaceTable.ID), uint32(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))

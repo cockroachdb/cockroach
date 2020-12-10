@@ -60,7 +60,7 @@ CREATE INDEX bc ON test.t(b, c);
 			cID = c.ID
 		}
 	}
-	pkID := tableDesc.PrimaryIndex.ID
+	pkID := tableDesc.GetPrimaryIndexID()
 	secID := tableDesc.Indexes[0].ID
 
 	// Retrieve the numeric descriptors.
