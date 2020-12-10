@@ -87,7 +87,7 @@ func (desc *Immutable) GetPrimaryIndexID() descpb.IndexID {
 
 // GetPublicNonPrimaryIndexes returns the public non-primary indexes of the descriptor.
 func (desc *Immutable) GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor {
-	return desc.GetIndexes()
+	return desc.Indexes
 }
 
 // IsTemporary returns true if this is a temporary table.

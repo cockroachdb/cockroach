@@ -1172,8 +1172,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						return err
 					}
 					childJobs = append(childJobs, pkJob)
-					for i := range scTable.Indexes {
-						idxJob, err := sc.createIndexGCJob(ctx, &scTable.Indexes[i], txn, desc)
+					for i := range scTable.GetPublicNonPrimaryIndexes() {
+						idxJob, err := sc.createIndexGCJob(ctx, &scTable.GetPublicNonPrimaryIndexes()[i], txn, desc)
 						if err != nil {
 							return err
 						}

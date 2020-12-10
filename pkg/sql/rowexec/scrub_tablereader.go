@@ -153,7 +153,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	if tr.indexIdx == 0 {
 		index = tr.tableDesc.GetPrimaryIndex()
 	} else {
-		index = &tr.tableDesc.Indexes[tr.indexIdx-1]
+		index = &tr.tableDesc.GetPublicNonPrimaryIndexes()[tr.indexIdx-1]
 	}
 	// Collect all the row values into JSON
 	rowDetails := make(map[string]interface{})

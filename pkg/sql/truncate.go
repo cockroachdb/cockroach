@@ -200,10 +200,10 @@ func (p *planner) truncateTable(
 	}
 
 	// Collect all of the old indexes.
-	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.Indexes)+1)
+	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.GetPublicNonPrimaryIndexes())+1)
 	oldIndexes[0] = *protoutil.Clone(tableDesc.GetPrimaryIndex()).(*descpb.IndexDescriptor)
-	for i := range tableDesc.Indexes {
-		oldIndexes[i+1] = *protoutil.Clone(&tableDesc.Indexes[i]).(*descpb.IndexDescriptor)
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		oldIndexes[i+1] = *protoutil.Clone(&tableDesc.GetPublicNonPrimaryIndexes()[i]).(*descpb.IndexDescriptor)
 	}
 
 	// Reset all of the index IDs.
@@ -225,8 +225,8 @@ func (p *planner) truncateTable(
 	// Construct a mapping from old index ID's to new index ID's.
 	indexIDMapping := make(map[descpb.IndexID]descpb.IndexID, len(oldIndexes))
 	indexIDMapping[oldIndexes[0].ID] = tableDesc.GetPrimaryIndexID()
-	for i := range tableDesc.Indexes {
-		indexIDMapping[oldIndexes[i+1].ID] = tableDesc.Indexes[i].ID
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		indexIDMapping[oldIndexes[i+1].ID] = tableDesc.GetPublicNonPrimaryIndexes()[i].ID
 	}
 
 	// Resolve all outstanding mutations. Make all new schema elements
@@ -294,9 +294,9 @@ func (p *planner) truncateTable(
 	for i := range oldIndexIDs {
 		oldIndexIDs[i] = oldIndexes[i+1].ID
 	}
-	newIndexIDs := make([]descpb.IndexID, len(tableDesc.Indexes))
+	newIndexIDs := make([]descpb.IndexID, len(tableDesc.GetPublicNonPrimaryIndexes()))
 	for i := range newIndexIDs {
-		newIndexIDs[i] = tableDesc.Indexes[i].ID
+		newIndexIDs[i] = tableDesc.GetPublicNonPrimaryIndexes()[i].ID
 	}
 	swapInfo := &descpb.PrimaryKeySwap{
 		OldPrimaryIndexId: oldIndexes[0].ID,

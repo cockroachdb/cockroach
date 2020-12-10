@@ -383,8 +383,8 @@ func FindFKOriginIndexInTxn(
 		return originTable.GetPrimaryIndex(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
-	for i := range originTable.Indexes {
-		idx := &originTable.Indexes[i]
+	for i := range originTable.GetPublicNonPrimaryIndexes() {
+		idx := &originTable.GetPublicNonPrimaryIndexes()[i]
 		if idx.IsValidOriginIndex(originColIDs) {
 			return idx, nil
 		}

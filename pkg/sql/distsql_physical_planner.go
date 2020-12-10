@@ -960,8 +960,8 @@ func getIndexIdx(index *descpb.IndexDescriptor, desc *tabledesc.Immutable) (uint
 	if index.ID == desc.GetPrimaryIndexID() {
 		return 0, nil
 	}
-	for i := range desc.Indexes {
-		if index.ID == desc.Indexes[i].ID {
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		if index.ID == desc.GetPublicNonPrimaryIndexes()[i].ID {
 			// IndexIdx is 1 based (0 means primary index).
 			return uint32(i + 1), nil
 		}
