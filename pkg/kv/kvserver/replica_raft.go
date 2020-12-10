@@ -890,6 +890,12 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	r.unreachablesMu.remotes = nil
 	r.unreachablesMu.Unlock()
 
+	// We need the current HLC time to check whether we should quiesce the
+	// replica or transfer leadership. A slightly stale timestamp is fine
+	// according to #37278, so we can obtain a single timestamp before grabbing
+	// raftMu and use it for both operations to alleviate HLC contention.
+	now := r.Clock().Now()
+
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -907,11 +913,11 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	if r.mu.quiescent {
 		return false, nil
 	}
-	if r.maybeQuiesceLocked(ctx, livenessMap) {
+	if r.maybeQuiesceLocked(ctx, livenessMap, now) {
 		return false, nil
 	}
 
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, now)
 
 	// For followers, we update lastUpdateTimes when we step a message from them
 	// into the local Raft group. The leader won't hit that path, so we update

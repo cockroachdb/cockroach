@@ -1576,9 +1576,9 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 	return err
 }
 
-func (r *Replica) maybeTransferRaftLeadershipToLeaseholder(ctx context.Context) {
+func (r *Replica) maybeTransferRaftLeadershipToLeaseholder(ctx context.Context, now hlc.Timestamp) {
 	r.mu.Lock()
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, now)
 	r.mu.Unlock()
 }
 
@@ -1591,12 +1591,17 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholder(ctx context.Context) 
 // facilitates quick command application (requests generally need to make it to
 // both the lease holder and the raft leader before being applied by other
 // replicas).
-func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(ctx context.Context) {
+//
+// The current time is passed as a parameter in order to reduce HLC contention,
+// by obtaining a single timestamp and reusing it across operations.
+func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
+	ctx context.Context, now hlc.Timestamp,
+) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
 	lease := *r.mu.state.Lease
-	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(ctx, lease, r.Clock().Now()) {
+	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(ctx, lease, now) {
 		return
 	}
 	raftStatus := r.raftStatusRLocked()
