@@ -706,8 +706,8 @@ func ResolveFK(
 	referencedColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(referencedColNames) == 0 {
-		referencedColNames = make(tree.NameList, len(target.PrimaryIndex.ColumnNames))
-		for i, n := range target.PrimaryIndex.ColumnNames {
+		referencedColNames = make(tree.NameList, len(target.GetPrimaryIndex().ColumnNames))
+		for i, n := range target.GetPrimaryIndex().ColumnNames {
 			referencedColNames[i] = tree.Name(n)
 		}
 	}
@@ -946,7 +946,7 @@ func addInterleave(
 	if err != nil {
 		return err
 	}
-	parentIndex := parentTable.PrimaryIndex
+	parentIndex := parentTable.GetPrimaryIndex()
 
 	// typeOfIndex is used to give more informative error messages.
 	var typeOfIndex string
@@ -1555,7 +1555,7 @@ func NewTableDesc(
 	}
 
 	// If explicit primary keys are required, error out since a primary key was not supplied.
-	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
+	if len(desc.GetPrimaryIndex().ColumnNames) == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
 		evalCtx.SessionData != nil && evalCtx.SessionData.RequireExplicitPrimaryKeys {
 		return nil, errors.Errorf(
 			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
@@ -1616,14 +1616,14 @@ func NewTableDesc(
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
+		if err := addInterleave(ctx, txn, vt, &desc, desc.GetPrimaryIndex(), n.Interleave); err != nil {
 			return nil, err
 		}
 	}
 
 	if n.PartitionBy != nil {
 		partitioning, err := CreatePartitioning(
-			ctx, st, evalCtx, &desc, &desc.PrimaryIndex, n.PartitionBy)
+			ctx, st, evalCtx, &desc, desc.GetPrimaryIndex(), n.PartitionBy)
 		if err != nil {
 			return nil, err
 		}

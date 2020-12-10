@@ -379,8 +379,8 @@ func FindFKOriginIndexInTxn(
 ) (*descpb.IndexDescriptor, error) {
 	// Search for an index on the origin table that matches our foreign
 	// key columns.
-	if originTable.PrimaryIndex.IsValidOriginIndex(originColIDs) {
-		return &originTable.PrimaryIndex, nil
+	if originTable.GetPrimaryIndex().IsValidOriginIndex(originColIDs) {
+		return originTable.GetPrimaryIndex(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
 	for i := range originTable.Indexes {

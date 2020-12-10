@@ -57,7 +57,7 @@ func MakeDeleter(
 		}
 		return nil
 	}
-	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
+	for _, colID := range tableDesc.GetPrimaryIndex().ColumnIDs {
 		if err := maybeAddCol(colID); err != nil {
 			return Deleter{}
 		}

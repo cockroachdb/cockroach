@@ -56,7 +56,7 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 			index = &entry.tableDesc.Indexes[entry.indexIdx-1]
 			isSecondaryIndex = true
 		} else {
-			index = &entry.tableDesc.PrimaryIndex
+			index = entry.tableDesc.GetPrimaryIndex()
 		}
 
 		fetcherArgs[i] = FetcherTableArgs{
@@ -203,7 +203,7 @@ func TestNextRowSingle(t *testing.T) {
 				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.PrimaryIndex.Name,
+						tableDesc.Name, tableDesc.GetPrimaryIndex().Name,
 						desc.GetName(), index.Name,
 					)
 				}
@@ -323,7 +323,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.PrimaryIndex.Name,
+						tableDesc.Name, tableDesc.GetPrimaryIndex().Name,
 						desc.GetName(), index.Name,
 					)
 				}
