@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/assert"
@@ -788,7 +790,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		}
 	}
 
-	rng := rand.New(rand.NewSource(123))
+	rng, _ := randutil.NewPseudoRand()
 
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
@@ -825,11 +827,22 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 						setColVal(vec, outputIdx, duration.MakeDuration(rng.Int63(), rng.Int63(), rng.Int63()), s.evalCtx)
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch vec.Type().Family() {
+						case types.CollatedStringFamily:
+							collatedStringType := types.MakeCollatedString(types.String, *rowenc.RandCollationLocale(rng))
+							randomBytes := make([]byte, rng.Intn(16)+1)
+							rng.Read(randomBytes)
+							d, err := tree.NewDCollatedString(string(randomBytes), collatedStringType.Locale(), &tree.CollationEnvironment{})
+							if err != nil {
+								colexecerror.InternalError(err)
+							}
+							setColVal(vec, outputIdx, d, s.evalCtx)
 						case types.JsonFamily:
 							newBytes := make([]byte, rng.Intn(16)+1)
 							rng.Read(newBytes)
 							j := json.FromString(string(newBytes))
 							setColVal(vec, outputIdx, j, s.evalCtx)
+						case types.TimeTZFamily:
+							setColVal(vec, outputIdx, tree.NewDTimeTZFromOffset(timeofday.FromInt(rng.Int63()), rng.Int31()), s.evalCtx)
 						case types.TupleFamily:
 							setColVal(vec, outputIdx, stringToDatum("(NULL)", vec.Type(), s.evalCtx), s.evalCtx)
 						default:
