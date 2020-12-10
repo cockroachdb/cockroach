@@ -743,10 +743,7 @@ func (e *distSQLSpecExecFactory) ConstructExplainOpt(
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplain(
-	options *tree.ExplainOptions,
-	analyze bool,
-	stmtType tree.StatementType,
-	buildFn exec.BuildPlanForExplainFn,
+	options *tree.ExplainOptions, stmtType tree.StatementType, buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
@@ -767,7 +764,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// TODO(yuzefovich): make sure to return the same nice error in some
 	// variants of EXPLAIN when subqueries are present as we do in the old path.
 	p := plan.(*explain.Plan).WrappedPlan.(*planComponents)
-	explain, err := constructExplainDistSQLOrVecNode(options, analyze, stmtType, p, e.planner)
+	explain, err := constructExplainDistSQLOrVecNode(options, stmtType, p, e.planner)
 	if err != nil {
 		return nil, err
 	}
