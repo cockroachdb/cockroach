@@ -146,6 +146,12 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			desc, err := tc.LookupRange(tablePrefix)
 			require.NoError(t, err)
+			// Temporarily turn off queues as we're about to make a manual
+			// replication change. We don't want to turn it off throughout
+			// these tests as sometimes we change zone configs and expect
+			// replicas to move according to them.
+			tc.ToggleReplicateQueues(false)
+			defer tc.ToggleReplicateQueues(true)
 			voters := desc.Replicas().Voters()
 			if len(voters) == 1 && voters[0].NodeID == tc.Server(1).NodeID() {
 				return nil

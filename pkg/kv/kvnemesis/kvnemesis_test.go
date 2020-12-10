@@ -57,7 +57,7 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	const numNodes = 4
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
 	defer tc.Stopper().Stop(ctx)
 	dbs, sqlDBs := make([]*kv.DB, numNodes), make([]*gosql.DB, numNodes)
 	for i := 0; i < numNodes; i++ {
