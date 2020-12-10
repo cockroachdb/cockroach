@@ -259,6 +259,10 @@ type StoreTestingKnobs struct {
 	// in execChangeReplicasTxn that prevent moving
 	// to a configuration that cannot make progress.
 	AllowDangerousReplicationChanges bool
+	// AllowUnsynchronizedReplicationChanges allows calls to ChangeReplicas
+	// even when the replicate queue is enabled. This often results in flaky
+	// tests, so by default, it is prevented.
+	AllowUnsynchronizedReplicationChanges bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
