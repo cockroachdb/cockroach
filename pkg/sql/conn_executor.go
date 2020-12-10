@@ -1033,6 +1033,9 @@ type connExecutor struct {
 		// still need the statementID hash to disambiguate beyond the capped
 		// statements.
 		transactionStatementsHash util.FNV64
+
+		// useNewSchemaChanger is set to true to enable the new schema changer.
+		useNewSchemaChanger bool
 	}
 
 	// sessionData contains the user-configurable connection variables.
@@ -1219,6 +1222,7 @@ func (ns *prepStmtNamespace) resetTo(
 // commits, rolls back or restarts.
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
+	ex.extraTxnState.useNewSchemaChanger = ex.sessionData.UseNewSchemaChanger
 
 	for k := range ex.extraTxnState.schemaChangeJobsCache {
 		delete(ex.extraTxnState.schemaChangeJobsCache, k)

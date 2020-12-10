@@ -238,6 +238,9 @@ type LocalOnlySessionData struct {
 	// TODO(rytaft): remove this once unique without index constraints are fully
 	// supported.
 	EnableUniqueWithoutIndexConstraints bool
+
+	// UseNewSchemaChanger indicates whether to use the new schema changer.
+	UseNewSchemaChanger bool
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //
