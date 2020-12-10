@@ -3,8 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "sqlproxyccl",
     srcs = [
+        "backend_dialer.go",
         "error.go",
         "errorcode_string.go",
+        "idle_disconnect_connection.go",
         "metrics.go",
         "proxy.go",
         "server.go",
@@ -26,6 +28,7 @@ go_library(
 go_test(
     name = "sqlproxyccl_test",
     srcs = [
+        "idle_disconnect_connection_test.go",
         "main_test.go",
         "proxy_test.go",
         "server_test.go",
@@ -43,6 +46,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/jackc/pgproto3/v2:pgproto3",
         "//vendor/github.com/jackc/pgx/v4:pgx",
         "//vendor/github.com/stretchr/testify/require",
     ],
