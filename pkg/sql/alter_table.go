@@ -160,6 +160,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
+			if t.ColumnDef.Unique.WithoutIndex {
+				return pgerror.New(pgcode.FeatureNotSupported,
+					"unique constraints without an index are not yet supported",
+				)
+			}
 			var err error
 			params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
 				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t)
@@ -289,7 +294,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						err = scanErr
 						return
 					}
-					var tableState FKTableState
+					var tableState TableState
 					if len(kvs) == 0 {
 						tableState = EmptyTable
 					} else {
@@ -513,6 +518,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
+			// Drop unique constraints that reference the column.
+			sliceIdx := 0
+			for i := range n.tableDesc.UniqueWithoutIndexConstraints {
+				constraint := &n.tableDesc.UniqueWithoutIndexConstraints[i]
+				n.tableDesc.UniqueWithoutIndexConstraints[sliceIdx] = *constraint
+				sliceIdx++
+				if descpb.ColumnIDs(constraint.ColumnIDs).Contains(colToDrop.ID) {
+					sliceIdx--
+				}
+			}
+			n.tableDesc.UniqueWithoutIndexConstraints = n.tableDesc.UniqueWithoutIndexConstraints[:sliceIdx]
+
 			// Drop check constraints which reference the column.
 			validChecks := n.tableDesc.Checks[:0]
 			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
@@ -629,7 +646,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				found := false
 				var ck *descpb.TableDescriptor_CheckConstraint
 				for _, c := range n.tableDesc.Checks {
-					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
+					// If the constraint is still being validated, don't allow
+					// VALIDATE CONSTRAINT to run.
 					if c.Name == name && c.Validity != descpb.ConstraintValidity_Validating {
 						found = true
 						ck = c
@@ -651,7 +669,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				var foundFk *descpb.ForeignKeyConstraint
 				for i := range n.tableDesc.OutboundFKs {
 					fk := &n.tableDesc.OutboundFKs[i]
-					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
+					// If the constraint is still being validated, don't allow
+					// VALIDATE CONSTRAINT to run.
 					if fk.Name == name && fk.Validity != descpb.ConstraintValidity_Validating {
 						foundFk = fk
 						break
@@ -668,10 +687,36 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				foundFk.Validity = descpb.ConstraintValidity_Validated
 
+			case descpb.ConstraintTypeUnique:
+				if constraint.Index == nil {
+					var foundUnique *descpb.UniqueWithoutIndexConstraint
+					for i := range n.tableDesc.UniqueWithoutIndexConstraints {
+						uc := &n.tableDesc.UniqueWithoutIndexConstraints[i]
+						// If the constraint is still being validated, don't allow
+						// VALIDATE CONSTRAINT to run.
+						if uc.Name == name && uc.Validity != descpb.ConstraintValidity_Validating {
+							foundUnique = uc
+							break
+						}
+					}
+					if foundUnique == nil {
+						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+							"constraint %q in the middle of being added, try again later", t.Constraint)
+					}
+					// TODO(rytaft): Call validateUniqueConstraint once supported.
+					return pgerror.New(pgcode.FeatureNotSupported,
+						"validation of unique constraints without an index are not yet supported",
+					)
+				}
+
+				// This unique constraint is enforced by an index, so fall through to
+				// the error below.
+				fallthrough
+
 			default:
 				return pgerror.Newf(pgcode.WrongObjectType,
-					"constraint %q of relation %q is not a foreign key or check constraint",
-					tree.ErrString(&t.Constraint), tree.ErrString(n.n.Table))
+					"constraint %q of relation %q is not a foreign key, check, or unique without index"+
+						" constraint", tree.ErrString(&t.Constraint), tree.ErrString(n.n.Table))
 			}
 			descriptorChanged = true
 
