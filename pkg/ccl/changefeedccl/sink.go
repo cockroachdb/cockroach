@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -68,7 +67,7 @@ type Sink interface {
 func getSink(
 	ctx context.Context,
 	sinkURI string,
-	nodeID roachpb.NodeID,
+	srcID base.SQLInstanceID,
 	opts map[string]string,
 	targets jobspb.ChangefeedTargets,
 	settings *cluster.Settings,
@@ -196,7 +195,7 @@ func getSink(
 		q = url.Values{}
 		makeSink = func() (Sink, error) {
 			return makeCloudStorageSink(
-				ctx, u.String(), nodeID, fileSize, settings,
+				ctx, u.String(), srcID, fileSize, settings,
 				opts, timestampOracle, makeExternalStorageFromURI, user,
 			)
 		}

@@ -300,13 +300,9 @@ func changefeedPlanHook(
 		// the CREATE CHANGEFEED statement. To do this, we create a "canary" sink,
 		// which will be immediately closed, only to check for errors.
 		{
-			nodeID, err := p.ExtendedEvalContext().NodeID.OptionalNodeIDErr(48274)
-			if err != nil {
-				return err
-			}
 			var nilOracle timestampLowerBoundOracle
 			canarySink, err := getSink(
-				ctx, details.SinkURI, nodeID, details.Opts, details.Targets,
+				ctx, details.SinkURI, p.ExecCfg().NodeID.SQLInstanceID(), details.Opts, details.Targets,
 				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User(),
 			)
 			if err != nil {
