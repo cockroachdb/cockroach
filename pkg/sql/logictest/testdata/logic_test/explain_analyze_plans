@@ -234,3 +234,69 @@ vectorized: <hidden>
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFKw0AQhu8-xTBeV5JcF4SiRCxVK2mpB8lhmx1qSLq77k6KJeSxfAGfTJItFBHB4__9M__wT4_hvUWJq_whv11DA3fF8hGaA7zc50UODVxDigKN1fSk9hRQvmKGpUDnbUUhWD-ifhqY6w-UqcDauI5HXAqsrCeUPXLNLaHEtdq2VJDS5JMxWBOrup1im8PM-Xqv_BEFrpwyQUKSXiVpcokClx1LmGUocLEBrvckIf36DFFX1jAZrq35ZXHnWgrgSWk5VVlsYHvkM4IbFLhVXL1RANuxGw-Ng6fNMyoHgVGdygVWO0KZDeL_DygoOGsC_ej-V3I6lAJJ7yg-OdjOV_TsbTWdiXI57U1AU-DoZlHMTbSGcrj4DgAA__8CVp2C
 ·
 WARNING: this statement is experimental!
+
+# Test a query that has a subquery and a postquery.
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY);
+INSERT INTO parent VALUES (1), (2);
+CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p))
+
+query T
+EXPLAIN ANALYZE (DISTSQL) INSERT INTO child VALUES (1, (SELECT MIN(p) FROM parent))
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• root
+│
+├── • insert
+│   │ into: child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: (SELECT min(p) FROM parent)
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │ actual row count: 1
+│       │
+│       └── • scan
+│             actual row count: 1
+│             KV rows read: 1
+│             KV bytes read: 8 B
+│             missing stats
+│             table: parent@primary
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+└── • fk-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ actual row count: 0
+            │ KV rows read: 1
+            │ table: parent@primary
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │
+            └── • filter
+                │ actual row count: 1
+                │ filter: column2 IS NOT NULL
+                │
+                └── • scan buffer
+                      label: buffer 1
+·
+Diagram 1 (subquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0UtGK2zoQfb9fIeYpAS2xs1woetq0pBA2dUriDZRiFkUevKK2pErj7qYhn9Uf6JcV2-sQszRlKX2cMzqac2bOAcLXEgQsks18nbJFkq6YetBlzraz5d18w0YxZ6PNfDl_l7JKm5Ebs_fr1QfmpEdD4zFwMDbHRFYYQHyGGDj8DxkH563CEKxv4EP7aJE_gYg4aONqauCMg7IeQRyANJUIAhJ7Zd1kChxyJKnL9lN8QlWTtoaRrlCw6OePABx2ktQDBmZrcjUJFgEHql15BsWQHTl01fPEQLJAENdHfqYqvqwqlbsS1yhz9JNoqK1bxI3zupJ-Dxw2Tpog2BVwWOpKE2tWcrsdSr_dMmUNoXnpqnnamfAoc9HTd3s6QW_Y27-1H7_G_qwoPBaSrJ_EQ_ez5NN9skrvk7vlcnQTN3H4F8eaDtT-IUJrDM6agAOlv_s5OmYcMC-wi2mwtVf40VvVjunKVctrgRwDdd3rrliYrtUIPCfHF8nTy-TpRXI0JLdWWldgkB6t_8JKSWjU_rT7Hn-UmoZXyTGg17LU3-XLk_W0UxwV6m_4HMm-2eey770qm9nxv18BAAD__1R7fzs=
+Diagram 2 (main-query): https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj8FqtEAQhO__UzR1Uhj49Tq3EAwIGw1qcgkeZKbZCLPTZmaEgPjuYfWQ6x7rq6ouekP8dtCom77qBqqboSXzNTtLH0-X96qnrFSU9dWleh7oNvtsyemla19pmQL7lOdQ8GK5mW4coT9RYlRYghiOUcIdbUegtj_QhcLslzXd8ahgJDD0hjQnx9BwYiZHRlafqPhfQMFymmZ3xHcFWdNfOabpytDlrh4f6Dgu4iM_dLnYRwW2Vz6fiLIGw29BzDFzyvboHcByTKdbnqL2p7WP-7_fAAAA__93xnPL
+Diagram 3 (postquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU01u2zwQ3X-nGMzKBghYtLPiysEHGVCqSoWtZFNowUrjlC1NqiSFNjB8rF6gJyskBm2dwEK8nMd5P3wSj-i_aRSYFbt0W0FWVCU0n5Vu4eE2v093MOMMZrs0T_-v4KDMrJvDZlu-h046MmE-R4bGtlTIA3kUH5FjzbBztiHvrRug47iQtT9QJAyV6fowwDXDxjpCccSggiYUqG0jNfhGGvjU7_fkIFkkyLClIJUe5cs-CFgvsT4xtH34q-WDfCQU_MTe7rdROpAjt-DnJhEXsOaQ7aAoKyju8xyfxSD0nSYvgP9BfJBaQ1AHEpD8-umRYVyCmHHYvZR4eU3iO6vMlmRLbrE8z1w9dSQgTzcV3BZVBndlViDD-JnWnVMH6Z6QYW7t176DL1YZsGa4I7LnVvl1N3z38GpurAlkgrLm9Wrsw5Fso-6LgpKLBa2uKSj-QuScdaD24Ox3D3yxOuvqktHNNUZb8p01nt6knJxqhtQ-UnwP3vauoQ_ONqNNHMuRNwIt-RBPeRwyE4-GgP-S-SR5OU1eTpJX0-TVJPnmBbk-_fc7AAD__yVxcZc=
+·
+WARNING: this statement is experimental!
