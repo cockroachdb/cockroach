@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "allkeywords_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/lex/allkeywords",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "allkeywords",
+    embed = [":allkeywords_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -34,7 +34,7 @@ func TestNumBatches(t *testing.T) {
 	nBatches := 10
 	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
 	vsc := NewVectorizedStatsCollector(
-		noop, nil /* kvReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey, false, /* omitNumTuples */
+		noop, nil /* kvReader */, execinfrapb.ComponentID{},
 		timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
 		nil, /* inputStatsCollectors */
 	)
@@ -57,7 +57,7 @@ func TestNumTuples(t *testing.T) {
 	for _, batchSize := range []int{1, 16, 1024} {
 		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
 		vsc := NewVectorizedStatsCollector(
-			noop, nil /* kvReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey, false, /* omitNumTuples */
+			noop, nil /* kvReader */, execinfrapb.ComponentID{},
 			timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
@@ -90,7 +90,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeSource:   timeSource,
 		}
 		leftInput := NewVectorizedStatsCollector(
-			leftSource, nil /* kvReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey, false, /* omitNumTuples */
+			leftSource, nil /* kvReader */, execinfrapb.ComponentID{ID: 0},
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
@@ -99,7 +99,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeSource:   timeSource,
 		}
 		rightInput := NewVectorizedStatsCollector(
-			rightSource, nil /* kvReader */, 1 /* id */, execinfrapb.ProcessorIDTagKey, false, /* omitNumTuples */
+			rightSource, nil /* kvReader */, execinfrapb.ComponentID{ID: 1},
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
@@ -120,7 +120,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		}
 
 		mjStatsCollector := NewVectorizedStatsCollector(
-			timeAdvancingMergeJoiner, nil /* kvReader */, 2 /* id */, execinfrapb.ProcessorIDTagKey, false, /* omitNumTuples */
+			timeAdvancingMergeJoiner, nil /* kvReader */, execinfrapb.ComponentID{ID: 2},
 			mjInputWatch, nil /* memMonitors */, nil, /* diskMonitors */
 			[]ChildStatsCollector{leftInput.(ChildStatsCollector), rightInput.(ChildStatsCollector)},
 		)

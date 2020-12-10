@@ -469,12 +469,11 @@ type ProcessorBase struct {
 
 	// ExecStatsForTrace, if set, will be called before getting the trace data from
 	// the span and adding the recording to the trailing metadata. The returned
-	// ComponentStats are associated with the processor's span. Note that
-	// MakeDeterministic might get called on the returned stats.
+	// ComponentStats are associated with the processor's span. The Component
+	// field of the returned stats will be set by the calling code.
 	//
 	// Can return nil.
 	ExecStatsForTrace func() *execinfrapb.ComponentStats
-
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
 	// (including calling InternalClose()) and generate the trailing meta that
@@ -704,6 +703,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	if pb.span != nil {
 		if pb.ExecStatsForTrace != nil {
 			if stats := pb.ExecStatsForTrace(); stats != nil {
+				stats.Component = pb.FlowCtx.ProcessorComponentID(pb.processorID)
 				pb.span.SetSpanStats(stats)
 			}
 		}

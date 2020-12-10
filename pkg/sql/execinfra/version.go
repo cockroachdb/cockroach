@@ -39,17 +39,20 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 43
+const Version execinfrapb.DistSQLVersion = 44
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 43
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 44
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 44 (MinAcceptedVersion: 44)
+  - Changes to the component statistics proto.
 
 - Version: 43 (MinAcceptedVersion: 43)
 	- Filter was removed from PostProcessSpec and a new Filterer processor was

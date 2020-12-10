@@ -37,7 +37,7 @@ type NetworkReader interface {
 // VectorizedStatsCollector is the common interface implemented by collectors.
 type VectorizedStatsCollector interface {
 	colexecbase.Operator
-	OutputStats(ctx context.Context, flowID string)
+	OutputStats(ctx context.Context)
 }
 
 // ChildStatsCollector gives access to the stopwatches of a
@@ -54,7 +54,7 @@ type ChildStatsCollector interface {
 type batchInfoCollector struct {
 	colexecbase.Operator
 	NonExplainable
-	operatorID int32
+	componentID execinfrapb.ComponentID
 
 	numBatches, numTuples uint64
 
@@ -73,7 +73,7 @@ var _ colexecbase.Operator = &batchInfoCollector{}
 
 func makeBatchInfoCollector(
 	op colexecbase.Operator,
-	id int32,
+	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
 	childStatsCollectors []ChildStatsCollector,
 ) batchInfoCollector {
@@ -82,7 +82,7 @@ func makeBatchInfoCollector(
 	}
 	return batchInfoCollector{
 		Operator:             op,
-		operatorID:           id,
+		componentID:          id,
 		stopwatch:            inputWatch,
 		childStatsCollectors: childStatsCollectors,
 	}
@@ -123,15 +123,10 @@ func (bic *batchInfoCollector) getElapsedTime() time.Duration {
 // (with 'idTagKey' distinguishing between the two). 'kvReader' is a component
 // (either an operator or a wrapped processor) that performs KV reads that is
 // present in the chain of operators rooted at 'op'.
-//
-// If omitNumTuples is set, the Output.NumTuples stat will not be set. This is
-// used for operators that wrap row processors which already emit the same stat.
 func NewVectorizedStatsCollector(
 	op colexecbase.Operator,
 	kvReader execinfra.KVReader,
-	id int32,
-	idTagKey string,
-	omitNumTuples bool,
+	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
@@ -141,8 +136,6 @@ func NewVectorizedStatsCollector(
 	// memory/disk stats and IO operators.
 	return &vectorizedStatsCollectorImpl{
 		batchInfoCollector: makeBatchInfoCollector(op, id, inputWatch, inputStatsCollectors),
-		idTagKey:           idTagKey,
-		omitNumTuples:      omitNumTuples,
 		kvReader:           kvReader,
 		memMonitors:        memMonitors,
 		diskMonitors:       diskMonitors,
@@ -154,20 +147,16 @@ func NewVectorizedStatsCollector(
 type vectorizedStatsCollectorImpl struct {
 	batchInfoCollector
 
-	// idTagKey is the span tag key that will be set to ComponentID.
-	idTagKey string
-
-	omitNumTuples bool
-	kvReader      execinfra.KVReader
-	memMonitors   []*mon.BytesMonitor
-	diskMonitors  []*mon.BytesMonitor
+	kvReader     execinfra.KVReader
+	memMonitors  []*mon.BytesMonitor
+	diskMonitors []*mon.BytesMonitor
 }
 
 // finish returns the collected stats.
 func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := vsc.batchInfoCollector.finish()
 
-	s := &execinfrapb.ComponentStats{ComponentID: vsc.operatorID}
+	s := &execinfrapb.ComponentStats{Component: vsc.componentID}
 
 	for _, memMon := range vsc.memMonitors {
 		s.Exec.MaxAllocatedMem.Add(memMon.MaximumBytes())
@@ -205,16 +194,14 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	}
 
 	s.Output.NumBatches.Set(numBatches)
-	if !vsc.omitNumTuples {
-		s.Output.NumTuples.Set(numTuples)
-	}
+	s.Output.NumTuples.Set(numTuples)
 	return s
 }
 
 // OutputStats is part of the VectorizedStatsCollector interface.
-func (vsc *vectorizedStatsCollectorImpl) OutputStats(ctx context.Context, flowID string) {
+func (vsc *vectorizedStatsCollectorImpl) OutputStats(ctx context.Context) {
 	s := vsc.finish()
-	createStatsSpan(ctx, fmt.Sprintf("%T", vsc.Operator), flowID, vsc.idTagKey, s)
+	createStatsSpan(ctx, fmt.Sprintf("%T", vsc.Operator), s)
 }
 
 // NewNetworkVectorizedStatsCollector creates a new VectorizedStatsCollector
@@ -222,7 +209,7 @@ func (vsc *vectorizedStatsCollectorImpl) OutputStats(ctx context.Context, flowID
 // collects the network latency for a stream.
 func NewNetworkVectorizedStatsCollector(
 	op colexecbase.Operator,
-	id int32,
+	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
 	networkReader NetworkReader,
 	latency time.Duration,
@@ -247,7 +234,7 @@ type networkVectorizedStatsCollectorImpl struct {
 func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := nvsc.batchInfoCollector.finish()
 
-	s := &execinfrapb.ComponentStats{ComponentID: nvsc.operatorID}
+	s := &execinfrapb.ComponentStats{Component: nvsc.componentID}
 
 	s.NetRx.Latency.Set(nvsc.latency)
 	s.NetRx.WaitTime.Set(time)
@@ -262,25 +249,17 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 }
 
 // OutputStats is part of the VectorizedStatsCollector interface.
-func (nvsc *networkVectorizedStatsCollectorImpl) OutputStats(ctx context.Context, flowID string) {
+func (nvsc *networkVectorizedStatsCollectorImpl) OutputStats(ctx context.Context) {
 	s := nvsc.finish()
-	createStatsSpan(ctx, fmt.Sprintf("%T", nvsc.Operator), flowID, execinfrapb.StreamIDTagKey, s)
+	createStatsSpan(ctx, fmt.Sprintf("%T", nvsc.Operator), s)
 }
 
-func createStatsSpan(
-	ctx context.Context,
-	opName string,
-	flowID string,
-	idTagKey string,
-	stats *execinfrapb.ComponentStats,
-) {
+func createStatsSpan(ctx context.Context, opName string, stats *execinfrapb.ComponentStats) {
 	// We're creating a new span for every component setting the appropriate
 	// tag so that it is displayed correctly on the flow diagram.
 	// TODO(yuzefovich): these spans are created and finished right away which
 	// is not the way they are supposed to be used, so this should be fixed.
 	_, span := tracing.ChildSpan(ctx, opName)
-	span.SetTag(execinfrapb.FlowIDTagKey, flowID)
-	span.SetTag(idTagKey, stats.ComponentID)
 	span.SetSpanStats(stats)
 	span.Finish()
 }
