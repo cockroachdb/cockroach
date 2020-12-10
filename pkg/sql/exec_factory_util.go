@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -314,4 +315,12 @@ func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {
 		return nil, errors.AssertionFailedf("unexpected OpaqueMetadata object type %T", metadata)
 	}
 	return o.plan, nil
+}
+
+func convertFastIntSetToUint32Slice(colIdxs util.FastIntSet) []uint32 {
+	cols := make([]uint32, 0, colIdxs.Len())
+	for i, ok := colIdxs.Next(0); ok; i, ok = colIdxs.Next(i + 1) {
+		cols = append(cols, uint32(i))
+	}
+	return cols
 }

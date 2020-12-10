@@ -390,6 +390,10 @@ message DistinctSpec {
   // UPSERT and INSERT..ON CONFLICT statements, both of which prohibit the same
   // row from being changed twice.
   optional string error_on_dup = 4 [(gogoproto.nullable) = false];
+  // OutputOrdering specifies the required ordering of the output produced by
+  // the distinct. The input to the processor *must* already be ordered
+  // according to it.
+  optional Ordering output_ordering = 5 [(gogoproto.nullable) = false];
 }
 
 // The specification for a WITH ORDINALITY processor. It adds a new column to
