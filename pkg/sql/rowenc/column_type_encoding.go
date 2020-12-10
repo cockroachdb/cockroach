@@ -521,11 +521,13 @@ func DecodeTableValue(a *DatumAlloc, valType *types.T, b []byte) (tree.Datum, []
 	return DecodeUntaggedDatum(a, valType, b)
 }
 
-// DecodeUntaggedDatum is used to decode a Datum whose type is known,
-// and which doesn't have a value tag (either due to it having been
-// consumed already or not having one in the first place).
+// DecodeUntaggedDatum is used to decode a Datum whose type is known, and which
+// doesn't have a value tag (either due to it having been consumed already or
+// not having one in the first place).
 //
-// This is used to decode datums encoded using value encoding.
+// This is used to decode datums encoded using value encoding. The caller
+// relinquishes ownership over the portion of the byte slice that isn't returned
+// back to it.
 //
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
@@ -542,7 +544,7 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDString(tree.DString(data)), b, nil
+		return a.NewDString(tree.DString(encoding.UnsafeConvertBytesToString(data))), b, nil
 	case types.CollatedStringFamily:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
@@ -578,7 +580,7 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDBytes(tree.DBytes(data)), b, nil
+		return a.NewDBytes(tree.DBytes(encoding.UnsafeConvertBytesToString(data))), b, nil
 	case types.DateFamily:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
