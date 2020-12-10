@@ -164,17 +164,17 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		)
 		defer recv.Release()
 
+		diagramFlags := execinfrapb.DiagramFlags{
+			ShowInputTypes:    n.options.Flags[tree.ExplainFlagTypes],
+			MakeDeterministic: execCfg.TestingKnobs.DeterministicExplainAnalyze,
+		}
 		planCtx.saveFlows = func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-			d, err := planCtx.flowSpecsToDiagram(ctx, flows)
+			d, err := planCtx.flowSpecsToDiagram(ctx, flows, diagramFlags)
 			if err != nil {
 				return err
 			}
 			diagram = d
 			return nil
-		}
-		planCtx.saveDiagramFlags = execinfrapb.DiagramFlags{
-			ShowInputTypes:    n.options.Flags[tree.ExplainFlagTypes],
-			MakeDeterministic: execCfg.TestingKnobs.DeterministicExplainAnalyze,
 		}
 
 		distSQLPlanner.Run(
