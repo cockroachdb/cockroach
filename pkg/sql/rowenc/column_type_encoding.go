@@ -542,7 +542,8 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDString(tree.DString(data)), b, nil
+
+		return a.NewDString(tree.DString(encoding.UnsafeConvertBytesToString(data))), b, nil
 	case types.CollatedStringFamily:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
