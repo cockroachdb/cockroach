@@ -79,6 +79,18 @@ type SpanStats interface {
 	Stats() map[string]string
 }
 
+type atomicRecordingType RecordingType
+
+// load returns the recording type.
+func (art *atomicRecordingType) load() RecordingType {
+	return RecordingType(atomic.LoadInt32((*int32)(art)))
+}
+
+// swap stores the new recording type and returns the old one.
+func (art *atomicRecordingType) swap(recType RecordingType) RecordingType {
+	return RecordingType(atomic.SwapInt32((*int32)(art), int32(recType)))
+}
+
 type crdbSpanMu struct {
 	syncutil.Mutex
 	// duration is initialized to -1 and set on Finish().
@@ -86,7 +98,10 @@ type crdbSpanMu struct {
 
 	// recording maintains state once StartRecording() is called.
 	recording struct {
-		recordingType RecordingType
+		// recordingType is the recording type of the ongoing recording, if any.
+		// Its 'load' method may be called without holding the surrounding mutex,
+		// but its 'swap' method requires the mutex.
+		recordingType atomicRecordingType
 		recordedLogs  []opentracing.LogRecord
 		// children contains the list of child spans started after this Span
 		// started recording.
@@ -129,14 +144,14 @@ type crdbSpan struct {
 	// tag's key to a user.
 	logTags *logtags.Buffer
 
-	// Atomic flag used to avoid taking the mutex in the hot path.
-	recording int32
-
 	mu crdbSpanMu
 }
 
-func (s *crdbSpan) isRecording() bool {
-	return s != nil && atomic.LoadInt32(&s.recording) != 0
+func (s *crdbSpan) recordingType() RecordingType {
+	if s == nil {
+		return NoRecording
+	}
+	return s.mu.recording.recordingType.load()
 }
 
 // otSpan is a span for an external opentracing compatible tracer
@@ -187,7 +202,7 @@ type Span struct {
 }
 
 func (s *Span) isBlackHole() bool {
-	return !s.crdb.isRecording() && s.netTr == nil && s.ot == (otSpan{})
+	return s.crdb.recordingType() == NoRecording && s.netTr == nil && s.ot == (otSpan{})
 }
 
 func (s *Span) isNoop() bool {
@@ -196,7 +211,7 @@ func (s *Span) isNoop() bool {
 
 // IsRecording returns true if the Span is recording its events.
 func (s *Span) IsRecording() bool {
-	return s.crdb.isRecording()
+	return s.crdb.recordingType() != NoRecording
 }
 
 // enableRecording start recording on the Span. From now on, log events and child spans
@@ -209,8 +224,7 @@ func (s *Span) IsRecording() bool {
 func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	atomic.StoreInt32(&s.recording, 1)
-	s.mu.recording.recordingType = recType
+	s.mu.recording.recordingType.swap(recType)
 	if parent != nil {
 		parent.addChild(s)
 	}
@@ -247,7 +261,7 @@ func (s *Span) StartRecording(recType RecordingType) {
 
 	// If we're already recording (perhaps because the parent was recording when
 	// this Span was created), there's nothing to do.
-	if !s.crdb.isRecording() {
+	if recType != s.crdb.recordingType() {
 		s.crdb.enableRecording(nil /* parent */, recType)
 	}
 }
@@ -269,11 +283,11 @@ func (s *Span) StopRecording() {
 func (s *crdbSpan) disableRecording() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	atomic.StoreInt32(&s.recording, 0)
+	oldRecType := s.mu.recording.recordingType.swap(NoRecording)
 	// We test the duration as a way to check if the Span has been finished. If it
 	// has, we don't want to do the call below as it might crash (at least if
 	// there's a netTr).
-	if (s.mu.duration == -1) && (s.mu.recording.recordingType == SnowballRecording) {
+	if (s.mu.duration == -1) && (oldRecType == SnowballRecording) {
 		// Clear the Snowball baggage item, assuming that it was set by
 		// enableRecording().
 		s.setBaggageItemLocked(Snowball, "")
@@ -288,7 +302,9 @@ func (s *Span) GetRecording() Recording {
 }
 
 func (s *crdbSpan) getRecording() Recording {
-	if !s.isRecording() {
+	if s.recordingType() == NoRecording {
+		// TODO(tbg): is this desired? If a span is not currently recording,
+		// it can still hold a recording.
 		return nil
 	}
 	s.mu.Lock()
@@ -314,12 +330,6 @@ func (s *crdbSpan) getRecording() Recording {
 	return result
 }
 
-func (s *crdbSpan) getRecordingType() RecordingType {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.recording.recordingType
-}
-
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
@@ -328,7 +338,7 @@ func (s *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
 }
 
 func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
-	if !s.isRecording() {
+	if s.recordingType() == NoRecording {
 		return errors.AssertionFailedf("adding Raw Spans to a Span that isn't recording")
 	}
 	// Change the root of the remote recording to be a child of this Span. This is
@@ -417,9 +427,7 @@ func (s *Span) Meta() *SpanMeta {
 		for k, v := range s.crdb.mu.Baggage {
 			baggage[k] = v
 		}
-		if s.crdb.isRecording() {
-			recordingType = s.crdb.mu.recording.recordingType
-		}
+		recordingType = s.crdb.mu.recording.recordingType.load()
 	}
 
 	var shadowTrTyp string
@@ -492,7 +500,7 @@ func (s *Span) setTagInner(key string, value interface{}, locked bool) *Span {
 
 // LogFields is part of the opentracing.Span interface.
 func (s *Span) LogFields(fields ...otlog.Field) {
-	if s.isNoop() {
+	if !s.hasVerboseSink() {
 		return
 	}
 	if s.ot.shadowSpan != nil {
@@ -520,7 +528,7 @@ func (s *Span) LogFields(fields ...otlog.Field) {
 }
 
 func (s *crdbSpan) LogFields(fields ...otlog.Field) {
-	if !s.isRecording() {
+	if s.recordingType() != SnowballRecording {
 		return
 	}
 	s.mu.Lock()
@@ -533,9 +541,19 @@ func (s *crdbSpan) LogFields(fields ...otlog.Field) {
 	}
 }
 
+// hasVerboseSink returns false if there is no
+// reason to even evaluate LogKV and LogData calls
+// because the result wouldn't be used for anything.
+func (s *Span) hasVerboseSink() bool {
+	if s.netTr == nil && s.ot == (otSpan{}) && s.crdb.recordingType() != SnowballRecording {
+		return false
+	}
+	return true
+}
+
 // LogKV is part of the opentracing.Span interface.
 func (s *Span) LogKV(alternatingKeyValues ...interface{}) {
-	if s.isNoop() {
+	if !s.hasVerboseSink() {
 		return
 	}
 	fields, err := otlog.InterleavedKVToFields(alternatingKeyValues...)
