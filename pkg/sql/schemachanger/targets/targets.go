@@ -23,6 +23,24 @@ type target struct {
 
 func (t target) ID() ID { return t.id }
 
+type CreateTable struct {
+	target
+	Table descpb.TableDescriptor
+}
+
+type AddSequenceDependency struct {
+	target
+	TableID    descpb.ID
+	ColumnID   descpb.ColumnID
+	SequenceID descpb.ID
+}
+
+type AddColumnFamilyDependency struct {
+	target
+	TableID descpb.ID
+	Family  descpb.ColumnFamilyDescriptor
+}
+
 type AddIndex struct {
 	target
 	TableID descpb.ID
@@ -39,7 +57,9 @@ type DropIndex struct {
 	IndexID descpb.IndexID
 
 	ReplacedBy descpb.IndexID
-	ColumnIDs  []descpb.ColumnID
+	// TODO (lucy): This should probably just have the entire index descriptor for
+	// rollbacks.
+	ColumnIDs []descpb.ColumnID
 }
 
 type AddColumn struct {
