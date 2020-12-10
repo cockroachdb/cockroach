@@ -49,7 +49,7 @@ func (opts *spanOptions) parentSpanID() uint64 {
 func (opts *spanOptions) recordingType() RecordingType {
 	recordingType := NoRecording
 	if opts.Parent != nil && !opts.Parent.isNoop() {
-		recordingType = opts.Parent.crdb.getRecordingType()
+		recordingType = opts.Parent.crdb.recordingType()
 	} else if opts.RemoteParent != nil {
 		recordingType = opts.RemoteParent.recordingType
 	}
