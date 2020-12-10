@@ -222,8 +222,8 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 	if indexFlags.Index != "" {
 		// Search index by name.
 		indexName := string(indexFlags.Index)
-		if indexName == n.desc.PrimaryIndex.Name {
-			n.specifiedIndex = &n.desc.PrimaryIndex
+		if indexName == n.desc.GetPrimaryIndex().Name {
+			n.specifiedIndex = n.desc.GetPrimaryIndex()
 		} else {
 			for i := range n.desc.Indexes {
 				if indexName == n.desc.Indexes[i].Name {
@@ -238,7 +238,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
 		if n.desc.GetPrimaryIndexID() == descpb.IndexID(indexFlags.IndexID) {
-			n.specifiedIndex = &n.desc.PrimaryIndex
+			n.specifiedIndex = n.desc.GetPrimaryIndex()
 		} else {
 			for i := range n.desc.Indexes {
 				if n.desc.Indexes[i].ID == descpb.IndexID(indexFlags.IndexID) {
@@ -315,7 +315,7 @@ func initColsForScan(
 // Initializes the column structures.
 func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	n.colCfg = colCfg
-	n.index = &n.desc.PrimaryIndex
+	n.index = n.desc.GetPrimaryIndex()
 
 	var err error
 	n.cols, err = initColsForScan(n.desc, n.colCfg)

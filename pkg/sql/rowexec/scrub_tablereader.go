@@ -151,7 +151,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	details := make(map[string]interface{})
 	var index *descpb.IndexDescriptor
 	if tr.indexIdx == 0 {
-		index = &tr.tableDesc.PrimaryIndex
+		index = tr.tableDesc.GetPrimaryIndex()
 	} else {
 		index = &tr.tableDesc.Indexes[tr.indexIdx-1]
 	}
