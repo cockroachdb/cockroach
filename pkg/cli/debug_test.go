@@ -99,14 +99,6 @@ func TestOpenExistingStore(t *testing.T) {
 func TestOpenReadOnlyStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-
-	baseDir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
-
-	storePath := filepath.Join(baseDir, "store")
-	createStore(t, storePath)
 
 	for _, test := range []struct {
 		readOnly bool
@@ -122,6 +114,15 @@ func TestOpenReadOnlyStore(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("readOnly=%t", test.readOnly), func(t *testing.T) {
+			baseDir, dirCleanupFn := testutils.TempDir(t)
+			defer dirCleanupFn()
+
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
+
+			storePath := filepath.Join(baseDir, "store")
+			createStore(t, storePath)
+
 			db, err := OpenExistingStore(storePath, stopper, test.readOnly)
 			if err != nil {
 				t.Fatal(err)
