@@ -108,8 +108,8 @@ func formatSafeColumn(
 
 func formatSafeTableIndexes(w *redact.StringBuilder, desc catalog.TableDescriptor) {
 	td := desc.TableDesc()
-	w.Printf(", PrimaryIndex: %d", td.PrimaryIndex.ID)
-	w.Printf(", NextIndexID: %d", td.NextIndexID)
+	w.Printf(", PrimaryIndex: %d", desc.GetPrimaryIndexID())
+	w.Printf(", NextIndexID: %d", desc.TableDesc().NextIndexID)
 	w.Printf(", Indexes: [")
 	formatSafeIndex(w, &td.PrimaryIndex, nil)
 	for i := range td.Indexes {

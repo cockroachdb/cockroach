@@ -1332,7 +1332,7 @@ func TestRepartitioning(t *testing.T) {
 				}
 
 				var repartition bytes.Buffer
-				if testIndex.ID == test.new.parsed.tableDesc.PrimaryIndex.ID {
+				if testIndex.ID == test.new.parsed.tableDesc.GetPrimaryIndexID() {
 					fmt.Fprintf(&repartition, `ALTER TABLE %s `, test.new.parsed.tableName)
 				} else {
 					fmt.Fprintf(&repartition, `ALTER INDEX %s@%s `, test.new.parsed.tableName, testIndex.Name)

@@ -224,7 +224,7 @@ func TestIndexKey(t *testing.T) {
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
 		codec := keys.SystemSQLCodec
-		primaryKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.PrimaryIndex.ID)
+		primaryKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
 		primaryKey, _, err := EncodeIndexKey(tableDesc, &tableDesc.PrimaryIndex, colMap, testValues, primaryKeyPrefix)
 		if err != nil {
 			t.Fatal(err)
@@ -939,7 +939,7 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, colMap := makeTableDescForTest(tc.table.indexKeyArgs)
-			primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
+			primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndexID())
 			primaryKey, _, err := EncodeIndexKey(
 				desc, &desc.PrimaryIndex, colMap, tc.table.values, primaryKeyPrefix)
 			if err != nil {
@@ -1080,7 +1080,7 @@ func TestEquivSignature(t *testing.T) {
 
 				// Setup descriptors and form an index key.
 				desc, colMap := makeTableDescForTest(table.indexKeyArgs)
-				primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
+				primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndexID())
 				primaryKey, _, err := EncodeIndexKey(
 					desc, &desc.PrimaryIndex, colMap, table.values, primaryKeyPrefix)
 				if err != nil {
