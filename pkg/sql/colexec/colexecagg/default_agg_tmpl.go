@@ -212,17 +212,20 @@ func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupl
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if a.groups[tupleIdx] {
-		res, err := a.fn.Result()
-		if err != nil {
-			colexecerror.ExpectedError(err)
+		if !a.isFirstGroup {
+			res, err := a.fn.Result()
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			if res == tree.DNull {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
+			}
+			a.curIdx++
+			a.fn.Reset(a.ctx)
 		}
-		if res == tree.DNull {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
-		}
-		a.curIdx++
-		a.fn.Reset(a.ctx)
+		a.isFirstGroup = false
 	}
 	// {{end}}
 	// Note that the only function that takes no arguments is COUNT_ROWS, and

@@ -17,10 +17,12 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 type booleanAggTmplInfo struct {
+	aggTmplInfoBase
 	IsAnd bool
 }
 
@@ -73,12 +75,23 @@ func genBooleanAgg(inputFileContents string, wr io.Writer) error {
 	assignBoolRe := makeFunctionRegex("_ASSIGN_BOOL_OP", 3)
 	s = assignBoolRe.ReplaceAllString(s, makeTemplateFunctionCall(`AssignBoolOp`, 3))
 
+	s = replaceManipulationFuncs(s)
+
 	tmpl, err := template.New("bool_and_or_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
 
-	return tmpl.Execute(wr, []booleanAggTmplInfo{{IsAnd: true}, {IsAnd: false}})
+	return tmpl.Execute(wr, []booleanAggTmplInfo{
+		{
+			aggTmplInfoBase: aggTmplInfoBase{canonicalTypeFamily: types.BoolFamily},
+			IsAnd:           true,
+		},
+		{
+			aggTmplInfoBase: aggTmplInfoBase{canonicalTypeFamily: types.BoolFamily},
+			IsAnd:           false,
+		},
+	})
 }
 
 func init() {

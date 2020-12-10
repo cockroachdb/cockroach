@@ -42,6 +42,7 @@ func (a *countRowsOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *countRowsOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		groups := a.groups
 		if sel == nil {
@@ -49,9 +50,12 @@ func (a *countRowsOrderedAgg) Compute(
 			{
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -63,9 +67,12 @@ func (a *countRowsOrderedAgg) Compute(
 			{
 				for _, i := range sel[:inputLen] {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -76,6 +83,10 @@ func (a *countRowsOrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *countRowsOrderedAgg) Flush(outputIdx int) {
@@ -139,6 +150,7 @@ func (a *countOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *countOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
@@ -150,9 +162,12 @@ func (a *countOrderedAgg) Compute(
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -165,9 +180,12 @@ func (a *countOrderedAgg) Compute(
 			} else {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -179,9 +197,12 @@ func (a *countOrderedAgg) Compute(
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel[:inputLen] {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -194,9 +215,12 @@ func (a *countOrderedAgg) Compute(
 			} else {
 				for _, i := range sel[:inputLen] {
 					if groups[i] {
-						a.col[a.curIdx] = a.curAgg
-						a.curIdx++
-						a.curAgg = int64(0)
+						if !a.isFirstGroup {
+							a.col[a.curIdx] = a.curAgg
+							a.curIdx++
+							a.curAgg = int64(0)
+						}
+						a.isFirstGroup = false
 					}
 
 					var y int64
@@ -207,6 +231,10 @@ func (a *countOrderedAgg) Compute(
 		}
 	},
 	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *countOrderedAgg) Flush(outputIdx int) {

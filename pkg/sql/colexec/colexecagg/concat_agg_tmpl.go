@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 )
 
@@ -60,7 +61,7 @@ func (a *concat_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 func (a *concat_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
-	oldCurAggSize := len(a.curAgg)
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -98,8 +99,10 @@ func (a *concat_AGGKINDAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := len(a.curAgg)
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *concat_AGGKINDAgg) Flush(outputIdx int) {
@@ -145,23 +148,26 @@ func _ACCUMULATE_CONCAT(a *concat_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 	// {{define "accumulateConcat" }}
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			a.col.Set(a.curIdx, a.curAgg)
-		}
-		a.curIdx++
-		a.curAgg = zeroBytesValue
+		if !a.isFirstGroup {
+			// If we encounter a new group, and we haven't found any non-nulls for the
+			// current group, the output for this group should be null.
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				a.col.Set(a.curIdx, a.curAgg)
+			}
+			a.curIdx++
+			a.curAgg = zeroBytesValue
 
-		// {{/*
-		// We only need to reset this flag if there are nulls. If there are no
-		// nulls, this will be updated unconditionally below.
-		// */}}
-		// {{if .HasNulls}}
-		a.foundNonNullForCurrentGroup = false
-		// {{end}}
+			// {{/*
+			// We only need to reset this flag if there are nulls. If there are no
+			// nulls, this will be updated unconditionally below.
+			// */}}
+			// {{if .HasNulls}}
+			a.foundNonNullForCurrentGroup = false
+			// {{end}}
+		}
+		a.isFirstGroup = false
 	}
 	// {{end}}
 

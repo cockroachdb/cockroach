@@ -146,15 +146,7 @@ func (a *_AGG_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
-	// {{if eq .VecMethod "Bytes"}}
-	oldCurAggSize := len(a.curAgg)
-	// {{end}}
-	// {{if eq .VecMethod "Datum"}}
-	var oldCurAggSize uintptr
-	if a.curAgg != nil {
-		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
-	}
-	// {{end}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec._TYPE(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -196,18 +188,10 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 		}
 	},
 	)
-	// {{if eq .VecMethod "Bytes"}}
-	newCurAggSize := len(a.curAgg)
-	// {{end}}
-	// {{if eq .VecMethod "Datum"}}
-	var newCurAggSize uintptr
-	if a.curAgg != nil {
-		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
-	// {{end}}
-	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	// {{end}}
 }
 
 func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
@@ -273,17 +257,20 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _H
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			// {{with .Global}}
-			execgen.SET(a.col, a.curIdx, a.curAgg)
-			// {{end}}
+		if !a.isFirstGroup {
+			// If we encounter a new group, and we haven't found any non-nulls for the
+			// current group, the output for this group should be null.
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				// {{with .Global}}
+				execgen.SET(a.col, a.curIdx, a.curAgg)
+				// {{end}}
+			}
+			a.curIdx++
+			a.foundNonNullForCurrentGroup = false
 		}
-		a.curIdx++
-		a.foundNonNullForCurrentGroup = false
+		a.isFirstGroup = false
 	}
 	// {{end}}
 
