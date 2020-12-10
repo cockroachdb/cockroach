@@ -201,7 +201,7 @@ func (p *planner) truncateTable(
 
 	// Collect all of the old indexes.
 	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.Indexes)+1)
-	oldIndexes[0] = *protoutil.Clone(&tableDesc.PrimaryIndex).(*descpb.IndexDescriptor)
+	oldIndexes[0] = *protoutil.Clone(tableDesc.GetPrimaryIndex()).(*descpb.IndexDescriptor)
 	for i := range tableDesc.Indexes {
 		oldIndexes[i+1] = *protoutil.Clone(&tableDesc.Indexes[i]).(*descpb.IndexDescriptor)
 	}

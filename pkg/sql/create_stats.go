@@ -347,16 +347,16 @@ func createStatsDefaultColumns(
 	}
 
 	// Add column stats for the primary key.
-	for i := range desc.PrimaryIndex.ColumnIDs {
+	for i := range desc.GetPrimaryIndex().ColumnIDs {
 		// Generate stats for each column in the primary key.
-		addIndexColumnStatsIfNotExists(desc.PrimaryIndex.ColumnIDs[i], false /* isInverted */)
+		addIndexColumnStatsIfNotExists(desc.GetPrimaryIndex().ColumnIDs[i], false /* isInverted */)
 
 		// Only collect multi-column stats if enabled.
 		if i == 0 || !multiColEnabled {
 			continue
 		}
 
-		colIDs := desc.PrimaryIndex.ColumnIDs[: i+1 : i+1]
+		colIDs := desc.GetPrimaryIndex().ColumnIDs[: i+1 : i+1]
 
 		// Remember the requested stats so we don't request duplicates.
 		trackStatsIfNotExists(colIDs)

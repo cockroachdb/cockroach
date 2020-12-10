@@ -3078,7 +3078,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		if len(tableDesc.Mutations) != 0 {
 			return errors.Errorf("expected 0 mutations after cancellation, found %d", len(tableDesc.Mutations))
 		}
-		if len(tableDesc.PrimaryIndex.ColumnNames) != 1 || tableDesc.PrimaryIndex.ColumnNames[0] != "rowid" {
+		if len(tableDesc.GetPrimaryIndex().ColumnNames) != 1 || tableDesc.GetPrimaryIndex().ColumnNames[0] != "rowid" {
 			return errors.Errorf("expected primary key change to not succeed after cancellation")
 		}
 		return nil

@@ -57,9 +57,9 @@ func MakeInserter(
 		marshaled:             make([]roachpb.Value, len(insertCols)),
 	}
 
-	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
+	for i, col := range tableDesc.GetPrimaryIndex().ColumnIDs {
 		if _, ok := ri.InsertColIDtoRowIndex.Get(col); !ok {
-			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
+			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().ColumnNames[i])
 		}
 	}
 
