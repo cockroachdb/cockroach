@@ -155,7 +155,22 @@ var allowCrossDatabaseSeqOwner = settings.RegisterPublicBoolSetting(
 // if they are not output.
 var traceTxnThreshold = settings.RegisterPublicDurationSetting(
 	"sql.trace.txn.enable_threshold",
-	"duration beyond which all transactions are traced (set to 0 to disable)", 0,
+	"duration beyond which all transactions are traced (set to 0 to "+
+		"disable). This setting is coarser grained than"+
+		"sql.trace.stmt.enable_threshold because it applies to all statements "+
+		"within a transaction as well as client communication (e.g. retries).", 0,
+)
+
+// traceStmtThreshold is identical to traceTxnThreshold except it applies to
+// individual statements in a transaction. The motivation for this setting is
+// to be able to reduce the noise associated with a larger transaction (e.g.
+// round trips to client).
+var traceStmtThreshold = settings.RegisterPublicDurationSetting(
+	"sql.trace.stmt.enable_threshold",
+	"duration beyond which all statements are traced (set to 0 to disable). "+
+		"This applies to individual statements within a transaction and is therefore "+
+		"finer-grained than sql.trace.txn.enable_threshold.",
+	0,
 )
 
 // traceSessionEventLogEnabled can be used to enable the event log
