@@ -1736,13 +1736,13 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │
     └── • lookup join (semi)
-        │ columns: ("project_const_col_@15", pk, col0, col3)
+        │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
         │ table: tab4@tab4_col3_col4_key
-        │ equality: (col0, project_const_col_@15) = (col3,col4)
+        │ equality: (col0, lookup_join_const_col_@15) = (col3,col4)
         │ equality cols are key
         │
         └── • render
-            │ columns: ("project_const_col_@15", pk, col0, col3)
+            │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
             │ estimated row count: 10 (missing stats)
             │ render 0: 495.6
             │ render 1: pk
