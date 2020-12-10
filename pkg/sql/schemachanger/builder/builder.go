@@ -27,7 +27,7 @@ type Builder struct {
 	semaCtx *tree.SemaContext
 	evalCtx *tree.EvalContext
 
-	targetStates []*targets.TargetState
+	targetStates []targets.TargetState
 }
 
 func NewBuilder(
@@ -41,8 +41,8 @@ func NewBuilder(
 }
 
 func (b *Builder) AlterTable(
-	ctx context.Context, ts []*targets.TargetState, n *tree.AlterTable,
-) ([]*targets.TargetState, error) {
+	ctx context.Context, ts []targets.TargetState, n *tree.AlterTable,
+) ([]targets.TargetState, error) {
 	// TODO (lucy): Clean this up.
 	b.targetStates = ts
 	defer func() {
@@ -62,7 +62,7 @@ func (b *Builder) AlterTable(
 		}
 	}
 
-	result := make([]*targets.TargetState, len(b.targetStates))
+	result := make([]targets.TargetState, len(b.targetStates))
 	for i := range b.targetStates {
 		result[i] = b.targetStates[i]
 	}
@@ -441,7 +441,7 @@ func (b *Builder) nextFamilyID(table *tabledesc.Immutable) descpb.FamilyID {
 }
 
 func (b *Builder) addTargetState(t targets.Target, s targets.State) {
-	b.targetStates = append(b.targetStates, &targets.TargetState{
+	b.targetStates = append(b.targetStates, targets.TargetState{
 		Target: t,
 		State:  s,
 	})

@@ -6,16 +6,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/builder"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -318,5 +324,75 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, err)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
+	t.Run("with builder", func(t *testing.T) {
+		ti := setupTestInfra(t)
+		defer ti.tc.Stopper().Stop(ctx)
+		ti.tsql.Exec(t, `CREATE DATABASE db`)
+		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
+		var id descpb.ID
+		var ts []targets.TargetState
+		require.NoError(t, ti.txn(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) (err error) {
+			tn := tree.MakeTableName("db", "foo")
+			fooTable, err := descriptors.GetTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+			require.NoError(t, err)
+			id = fooTable.GetID()
+
+			execCfg := ti.tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+			ip, cleanup := sql.NewInternalPlanner(
+				"foo",
+				kv.NewTxn(context.Background(), ti.db, ti.tc.Server(0).NodeID()),
+				security.RootUserName(),
+				&sql.MemoryMetrics{},
+				&execCfg,
+				sessiondatapb.SessionData{},
+			)
+			planner := ip.(interface {
+				resolver.SchemaResolver
+				SemaCtx() *tree.SemaContext
+				EvalContext() *tree.EvalContext
+			})
+			defer cleanup()
+			b := builder.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext())
+			parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
+			require.NoError(t, err)
+			require.Len(t, parsed, 1)
+			targetStates, err := b.AlterTable(ctx, nil, parsed[0].AST.(*tree.AlterTable))
+			require.NoError(t, err)
+
+			for _, phase := range []compiler.ExecutionPhase{
+				compiler.PostStatementPhase,
+				compiler.PreCommitPhase,
+			} {
+				stages, err := compiler.Compile(targetStates, compiler.CompileFlags{
+					ExecutionPhase: phase,
+				})
+				require.NoError(t, err)
+				for _, s := range stages {
+					require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
+					ts = s.NextTargets
+				}
+			}
+			return nil
+		}))
+		//var after []targets.TargetState
+		ti.txn(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			stages, err := compiler.Compile(ts, compiler.CompileFlags{
+				ExecutionPhase: compiler.PostCommitPhase,
+			})
+			require.NoError(t, err)
+			for _, s := range stages {
+				require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
+				//after = s.NextTargets
+			}
+			return nil
+		})
+		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
+		require.NoError(t, err)
+		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
+	})
 }

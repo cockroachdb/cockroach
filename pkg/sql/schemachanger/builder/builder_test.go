@@ -59,12 +59,12 @@ func TestBuilder(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		stmt     string
-		expected []*targets.TargetState
+		expected []targets.TargetState
 	}{
 		{
 			"add column",
 			"ALTER TABLE db.public.foo ADD COLUMN j INT",
-			[]*targets.TargetState{
+			[]targets.TargetState{
 				{
 					&targets.AddColumn{
 						TableID: tableID,
