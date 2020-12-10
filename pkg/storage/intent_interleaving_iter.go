@@ -103,9 +103,17 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	var intentKeyBuf []byte
 	if opts.LowerBound != nil {
 		intentOpts.LowerBound, intentKeyBuf = keys.LockTableSingleKey(opts.LowerBound, nil)
+	} else {
+		// Sometimes callers iterate backwards without having a lower bound.
+		// Make sure we don't step outside the lock table key space.
+		intentOpts.LowerBound = keys.LockTableSingleKeyStart
 	}
 	if opts.UpperBound != nil {
 		intentOpts.UpperBound, _ = keys.LockTableSingleKey(opts.UpperBound, nil)
+	} else {
+		// Sometimes callers iterate forwards without having an upper bound.
+		// Make sure we don't step outside the lock table key space.
+		intentOpts.UpperBound = keys.LockTableSingleKeyEnd
 	}
 	// Note that we can reuse intentKeyBuf after NewEngineIterator returns.
 	intentIter := reader.NewEngineIterator(intentOpts)
@@ -682,8 +690,14 @@ func (i *intentInterleavingIter) CheckForKeyCollisions(
 func (i *intentInterleavingIter) SetUpperBound(key roachpb.Key) {
 	i.iter.SetUpperBound(key)
 	var intentUpperBound roachpb.Key
-	intentUpperBound, i.intentKeyBuf = keys.LockTableSingleKey(key, i.intentKeyBuf)
-	// Note that we can reuse intentKeyBuf after SetUpperBound returns.
+	if key != nil {
+		intentUpperBound, i.intentKeyBuf = keys.LockTableSingleKey(key, i.intentKeyBuf)
+		// Note that we can reuse intentKeyBuf after SetUpperBound returns.
+	} else {
+		// Sometimes callers iterate forwards without having an upper bound.
+		// Make sure we don't step outside the lock table key space.
+		intentUpperBound = keys.LockTableSingleKeyEnd
+	}
 	i.intentIter.SetUpperBound(intentUpperBound)
 	i.hasUpperBound = key != nil
 }
