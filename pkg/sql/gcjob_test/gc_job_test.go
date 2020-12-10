@@ -115,7 +115,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					},
 					ParentID: myTableID,
 				}
-				myTableDesc.Indexes = myTableDesc.Indexes[:0]
+				myTableDesc.SetPublicNonPrimaryIndexes([]descpb.IndexDescriptor{})
 				myTableDesc.GCMutations = append(myTableDesc.GCMutations, descpb.TableDescriptor_GCDescriptorMutation{
 					IndexID: descpb.IndexID(2),
 				})
