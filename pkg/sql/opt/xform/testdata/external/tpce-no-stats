@@ -1269,7 +1269,7 @@ limit
  │              ├── fd: ()-->(7), (1,2)-->(3,4), (1)==(6), (6)==(1)
  │              ├── limit hint: 20.00
  │              ├── project
- │              │    ├── columns: "project_const_col_@7":12!null hh_h_t_id:1!null hh_t_id:2!null hh_before_qty:3!null hh_after_qty:4!null
+ │              │    ├── columns: "lookup_join_const_col_@7":12!null hh_h_t_id:1!null hh_t_id:2!null hh_before_qty:3!null hh_after_qty:4!null
  │              │    ├── key: (1,2)
  │              │    ├── fd: ()-->(12), (1,2)-->(3,4)
  │              │    ├── limit hint: 200.00
@@ -1279,7 +1279,7 @@ limit
  │              │    │    ├── fd: (1,2)-->(3,4)
  │              │    │    └── limit hint: 200.00
  │              │    └── projections
- │              │         └── 0 [as="project_const_col_@7":12]
+ │              │         └── 0 [as="lookup_join_const_col_@7":12]
  │              └── filters (true)
  └── 20
 

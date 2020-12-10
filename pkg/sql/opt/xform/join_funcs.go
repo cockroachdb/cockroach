@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -161,6 +162,45 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //     "sides" (in this example x,y on the left and z on the right) but there is
 //     no overlap.
 //
+// A lookup join can be created when the ON condition or implicit filters from
+// CHECK constraints and computed columns constrain a prefix of the index
+// columns to non-ranging constant values. To support this, the constant values
+// are cross-joined with the input and used as key columns for the parent lookup
+// join.
+//
+// For example, consider the tables and query below.
+//
+//   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+//   CREATE TABLE xyz (
+//     x INT PRIMARY KEY,
+//     y INT,
+//     z INT NOT NULL,
+//     CHECK z IN (1, 2, 3),
+//     INDEX (z, y)
+//   )
+//   SELECT a, x FROM abc JOIN xyz ON a=y
+//
+// GenerateLookupJoins will perform the following transformation.
+//
+//         Join                       LookupJoin(t@idx)
+//         /   \                           |
+//        /     \            ->            |
+//      Input  Scan(t)                   Join
+//                                       /   \
+//                                      /     \
+//                                    Input  Values(1, 2, 3)
+//
+// If a column is constrained to a single constant value, inlining normalization
+// rules will reduce the cross join into a project.
+//
+//         Join                       LookupJoin(t@idx)
+//         /   \                           |
+//        /     \            ->            |
+//      Input  Scan(t)                  Project
+//                                         |
+//                                         |
+//                                       Input
+//
 func (c *CustomFuncs) GenerateLookupJoins(
 	grp memo.RelExpr,
 	joinType opt.Operator,
@@ -181,6 +221,12 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		return
 	}
 
+	// Generate implicit filters from CHECK constraints and computed columns as
+	// optional filters to help generate lookup join keys.
+	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
+	computedColFilters := c.computedColFilters(scanPrivate.Table, on, optionalFilters)
+	optionalFilters = append(optionalFilters, computedColFilters...)
+
 	var pkCols opt.ColList
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
@@ -189,8 +235,8 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// an equality with another column or a constant.
 		numIndexKeyCols := index.LaxKeyColumnCount()
 
-		var projections memo.ProjectionsExpr
 		var constFilters memo.FiltersExpr
+		allFilters := append(onFilters, optionalFilters...)
 
 		// Check if the first column in the index has an equality constraint, or if
 		// it is constrained to a constant value. This check doesn't guarantee that
@@ -198,7 +244,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// in most cases.
 		firstIdxCol := scanPrivate.Table.IndexColumnID(index, 0)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			if _, _, ok := c.findConstantFilter(onFilters, firstIdxCol); !ok {
+			if _, _, ok := c.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
 				return
 			}
 		}
@@ -211,7 +257,6 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
 		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
-		needProjection := false
 
 		// All the lookup conditions must apply to the prefix of the index and so
 		// the projected columns created must be created in order.
@@ -223,36 +268,51 @@ func (c *CustomFuncs) GenerateLookupJoins(
 				continue
 			}
 
-			// Try to find a filter that constrains this column to a non-NULL constant
-			// value. We cannot use a NULL value because the lookup join implements
-			// logic equivalent to simple equality between columns (where NULL never
-			// equals anything).
-			foundVal, onIdx, ok := c.findConstantFilter(onFilters, idxCol)
-			if !ok || foundVal == tree.DNull {
+			// Try to find a filter that constrains this column to non-NULL
+			// constant values. We cannot use a NULL value because the lookup
+			// join implements logic equivalent to simple equality between
+			// columns (where NULL never equals anything).
+			foundVals, allIdx, ok := c.findJoinFilterConstants(allFilters, idxCol)
+			if !ok {
 				break
 			}
 
-			// We will project this constant value in the input to make it an equality
-			// column.
-			if projections == nil {
-				projections = make(memo.ProjectionsExpr, 0, numIndexKeyCols-j)
+			// We will join these constant values with the input to make
+			// equality columns for the lookup join.
+			if constFilters == nil {
 				constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
 			}
 
 			idxColType := c.e.f.Metadata().ColumnMeta(idxCol).Type
+			tupleType := types.MakeTuple([]*types.T{idxColType})
+			constRows := make(memo.ScalarListExpr, len(foundVals))
 			constColID := c.e.f.Metadata().AddColumn(
-				fmt.Sprintf("project_const_col_@%d", idxCol),
+				fmt.Sprintf("lookup_join_const_col_@%d", idxCol),
 				idxColType,
 			)
-			projections = append(projections, c.e.f.ConstructProjectionsItem(
-				c.e.f.ConstructConst(foundVal, idxColType),
-				constColID,
-			))
+			for i := range constRows {
+				constRows[i] = c.e.f.ConstructTuple(
+					memo.ScalarListExpr{c.e.f.ConstructConst(foundVals[i], idxColType)},
+					tupleType,
+				)
+			}
+			values := c.e.f.ConstructValues(
+				constRows,
+				&memo.ValuesPrivate{
+					Cols: opt.ColList{constColID},
+					ID:   md.NextUniqueID(),
+				},
+			)
 
-			needProjection = true
+			// We purposefully do not propagate the join flags from joinPrivate.
+			// If a LOOKUP join hint was propagated to this cross join, the cost
+			// of the cross join would be artificially inflated and the lookup
+			// join would not be selected as the optimal plan.
+			lookupJoin.Input = c.e.f.ConstructInnerJoin(lookupJoin.Input, values, nil /* on */, &memo.JoinPrivate{})
+
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
-			constFilters = append(constFilters, onFilters[onIdx])
+			constFilters = append(constFilters, allFilters[allIdx])
 		}
 
 		if len(lookupJoin.KeyCols) == 0 {
@@ -264,11 +324,6 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// A lookup join will drop any input row which contains NULLs, so a lax key
 		// is sufficient.
 		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(rightSideCols.ToSet())
-
-		// Construct the projections for the constant columns.
-		if needProjection {
-			lookupJoin.Input = c.e.f.ConstructProject(input, projections, input.Relational().OutputCols)
-		}
 
 		// Remove the redundant filters and update the lookup condition.
 		lookupJoin.On = memo.ExtractRemainingJoinFilters(onFilters, lookupJoin.KeyCols, rightSideCols)
@@ -548,18 +603,30 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	})
 }
 
-// findConstantFilter tries to find a filter that is exactly equivalent to
-// constraining the given column to a constant value. Note that the constant
-// value can be NULL (for an `x IS NULL` filter).
-func (c *CustomFuncs) findConstantFilter(
+// findJoinFilterConstants tries to find a filter that is exactly equivalent to
+// constraining the given column to a constant value or a set of constant
+// values. If successful, the constant values and the index of the constraining
+// FiltersItem are returned. Note that the returned constant values do not
+// contain NULL.
+func (c *CustomFuncs) findJoinFilterConstants(
 	filters memo.FiltersExpr, col opt.ColumnID,
-) (value tree.Datum, filterIdx int, ok bool) {
+) (values tree.Datums, filterIdx int, ok bool) {
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
 		if props.TightConstraints {
-			constCol, constVal, ok := props.Constraints.IsSingleColumnConstValue(c.e.evalCtx)
-			if ok && constCol == col {
-				return constVal, filterIdx, true
+			constCol, constVals, ok := props.Constraints.HasSingleColumnConstValues(c.e.evalCtx)
+			if !ok || constCol != col {
+				continue
+			}
+			hasNull := false
+			for i := range constVals {
+				if constVals[i] == tree.DNull {
+					hasNull = true
+					break
+				}
+			}
+			if !hasNull {
+				return constVals, filterIdx, true
 			}
 		}
 	}

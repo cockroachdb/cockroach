@@ -2047,7 +2047,7 @@ distinct-on
       ├── fd: ()-->(7), (1)==(4,8), (4)==(1,8), (8)==(1,4)
       ├── ordering: +(1|4|8) opt(7) [actual: +1]
       ├── project
-      │    ├── columns: "project_const_col_@7":11!null a:1!null b:4!null
+      │    ├── columns: "lookup_join_const_col_@7":11!null a:1!null b:4!null
       │    ├── fd: ()-->(11), (1)==(4), (4)==(1)
       │    ├── ordering: +(1|4) [actual: +1]
       │    ├── inner-join (lookup t44469_b@secondary)
@@ -2061,7 +2061,7 @@ distinct-on
       │    │    │    └── ordering: +1
       │    │    └── filters (true)
       │    └── projections
-      │         └── 1 [as="project_const_col_@7":11]
+      │         └── 1 [as="lookup_join_const_col_@7":11]
       └── filters (true)
 
 # Regression test for #47041: factor check constraints into the (canonical)
