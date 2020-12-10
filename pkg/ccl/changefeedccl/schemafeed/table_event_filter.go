@@ -121,5 +121,5 @@ func tableTruncated(e TableEvent) bool {
 	// A table was truncated if the primary index has changed, but an ALTER
 	// PRIMARY KEY statement was not performed. TRUNCATE operates by creating
 	// a new set of indexes for the table, including a new primary index.
-	return e.Before.PrimaryIndex.ID != e.After.PrimaryIndex.ID && !pkChangeMutationExists(e.Before)
+	return e.Before.GetPrimaryIndexID() != e.After.GetPrimaryIndexID() && !pkChangeMutationExists(e.Before)
 }

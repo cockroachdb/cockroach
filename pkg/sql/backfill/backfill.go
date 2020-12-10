@@ -564,7 +564,7 @@ func (ib *IndexBackfiller) initIndexes(desc *tabledesc.Immutable) util.FastIntSe
 			for i := range ib.cols {
 				id := ib.cols[i].ID
 				if idx.ContainsColumnID(id) ||
-					idx.GetEncodingType(desc.PrimaryIndex.ID) == descpb.PrimaryIndexEncoding {
+					idx.GetEncodingType(desc.GetPrimaryIndexID()) == descpb.PrimaryIndexEncoding {
 					valNeededForCol.Add(i)
 				}
 			}

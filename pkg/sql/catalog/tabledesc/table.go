@@ -217,7 +217,7 @@ func (desc *Immutable) collectConstraintInfo(
 	// Indexes provide PK and Unique constraints.
 	indexes := desc.AllNonDropIndexes()
 	for _, index := range indexes {
-		if index.ID == desc.PrimaryIndex.ID {
+		if index.ID == desc.GetPrimaryIndexID() {
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)

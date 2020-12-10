@@ -301,7 +301,7 @@ func (desc *Immutable) IsPhysicalTable() bool {
 // Must return a pointer to the IndexDescriptor in the TableDescriptor, so that
 // callers can use returned values to modify the TableDesc.
 func (desc *Immutable) FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error) {
-	if desc.PrimaryIndex.ID == id {
+	if desc.GetPrimaryIndexID() == id {
 		return desc.GetPrimaryIndex(), nil
 	}
 	for i := range desc.Indexes {
@@ -328,7 +328,7 @@ func (desc *Immutable) FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor
 // has one k/v pair, but if it stores some columns, it can return up to one
 // k/v pair per family in the table, just like a primary index.
 func (desc *Immutable) KeysPerRow(indexID descpb.IndexID) (int, error) {
-	if desc.PrimaryIndex.ID == indexID {
+	if desc.GetPrimaryIndexID() == indexID {
 		return len(desc.Families), nil
 	}
 	idx, err := desc.FindIndexByID(indexID)
@@ -3154,7 +3154,7 @@ func (desc *Mutable) RenameConstraint(
 // FindActiveIndexByID returns the index with the specified ID, or nil if it
 // does not exist. It only searches active indexes.
 func (desc *Immutable) FindActiveIndexByID(id descpb.IndexID) *descpb.IndexDescriptor {
-	if desc.PrimaryIndex.ID == id {
+	if desc.GetPrimaryIndexID() == id {
 		return &desc.PrimaryIndex
 	}
 	for i := range desc.Indexes {
@@ -3850,7 +3850,7 @@ func (desc *Immutable) AllIndexSpans(codec keys.SQLCodec) roachpb.Spans {
 // PrimaryIndexSpan returns the Span that corresponds to the entire primary
 // index; can be used for a full table scan.
 func (desc *Immutable) PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span {
-	return desc.IndexSpan(codec, desc.PrimaryIndex.ID)
+	return desc.IndexSpan(codec, desc.GetPrimaryIndexID())
 }
 
 // IndexSpan returns the Span that corresponds to an entire index; can be used

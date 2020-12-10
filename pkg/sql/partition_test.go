@@ -100,7 +100,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	zoneConfig := zonepb.ZoneConfig{
 		Subzones: []zonepb.Subzone{
 			{
-				IndexID:       uint32(tableDesc.PrimaryIndex.ID),
+				IndexID:       uint32(tableDesc.GetPrimaryIndexID()),
 				PartitionName: "p1",
 				Config:        s.(*server.TestServer).Cfg.DefaultZoneConfig,
 			},
