@@ -176,6 +176,11 @@ func (dsp *DistSQLPlanner) SetNodeInfo(desc roachpb.NodeDescriptor) {
 	}
 }
 
+// GatewayID returns the ID of the gateway.
+func (dsp *DistSQLPlanner) GatewayID() roachpb.NodeID {
+	return dsp.gatewayNodeID
+}
+
 // SetSpanResolver switches to a different SpanResolver. It is the caller's
 // responsibility to make sure the DistSQLPlanner is not in use.
 func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver physicalplan.SpanResolver) {
