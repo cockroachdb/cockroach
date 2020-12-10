@@ -934,7 +934,7 @@ func (r *Replica) ChangeReplicas(
 	// replication queue is active. Such tests are often flaky.
 	if knobs := r.store.TestingKnobs(); knobs != nil &&
 		!knobs.DisableReplicateQueue &&
-		!knobs.AllowDangerousReplicationChanges {
+		!knobs.AllowUnsynchronizedReplicationChanges {
 		bq := r.store.replicateQueue.baseQueue
 		bq.mu.Lock()
 		disabled := bq.mu.disabled

@@ -252,6 +252,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
 		// This test was written before the multiTestContext started creating many
