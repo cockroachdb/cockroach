@@ -115,6 +115,12 @@ input stall time: 0µs`,
 			if result != expected {
 				t.Errorf("Expected:\n%s\ngot:\n%s\n", expected, result)
 			}
+			// Verify that making it deterministic again is a no-op.
+			c.MakeDeterministic()
+			result = strings.Join(c.StatsForQueryPlan(), "\n")
+			if result != expected {
+				t.Errorf("Expected:\n%s\ngot:\n%s\n", expected, result)
+			}
 		})
 	}
 }
