@@ -345,8 +345,8 @@ func createPhysicalCheckOperations(
 	tableDesc *tabledesc.Immutable, tableName *tree.TableName,
 ) (checks []checkOperation) {
 	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, tableDesc.GetPrimaryIndex()))
-	for i := range tableDesc.Indexes {
-		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.Indexes[i]))
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.GetPublicNonPrimaryIndexes()[i]))
 	}
 	return checks
 }
@@ -366,11 +366,11 @@ func createIndexCheckOperations(
 	if indexNames == nil {
 		// Populate results with all secondary indexes of the
 		// table.
-		for i := range tableDesc.Indexes {
+		for i := range tableDesc.GetPublicNonPrimaryIndexes() {
 			results = append(results, newIndexCheckOperation(
 				tableName,
 				tableDesc,
-				&tableDesc.Indexes[i],
+				&tableDesc.GetPublicNonPrimaryIndexes()[i],
 				asOf,
 			))
 		}
@@ -382,15 +382,15 @@ func createIndexCheckOperations(
 	for _, idxName := range indexNames {
 		names[idxName.String()] = struct{}{}
 	}
-	for i := range tableDesc.Indexes {
-		if _, ok := names[tableDesc.Indexes[i].Name]; ok {
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		if _, ok := names[tableDesc.GetPublicNonPrimaryIndexes()[i].Name]; ok {
 			results = append(results, newIndexCheckOperation(
 				tableName,
 				tableDesc,
-				&tableDesc.Indexes[i],
+				&tableDesc.GetPublicNonPrimaryIndexes()[i],
 				asOf,
 			))
-			delete(names, tableDesc.Indexes[i].Name)
+			delete(names, tableDesc.GetPublicNonPrimaryIndexes()[i].Name)
 		}
 	}
 	if len(names) > 0 {

@@ -422,7 +422,7 @@ func (z *zigzagJoiner) setupInfo(
 	if indexOrdinal == 0 {
 		info.index = info.table.GetPrimaryIndex()
 	} else {
-		info.index = &info.table.Indexes[indexOrdinal-1]
+		info.index = &info.table.GetPublicNonPrimaryIndexes()[indexOrdinal-1]
 	}
 
 	var columnIDs []descpb.ColumnID

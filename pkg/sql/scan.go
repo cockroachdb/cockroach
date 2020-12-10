@@ -225,9 +225,9 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 		if indexName == n.desc.GetPrimaryIndex().Name {
 			n.specifiedIndex = n.desc.GetPrimaryIndex()
 		} else {
-			for i := range n.desc.Indexes {
-				if indexName == n.desc.Indexes[i].Name {
-					n.specifiedIndex = &n.desc.Indexes[i]
+			for i := range n.desc.GetPublicNonPrimaryIndexes() {
+				if indexName == n.desc.GetPublicNonPrimaryIndexes()[i].Name {
+					n.specifiedIndex = &n.desc.GetPublicNonPrimaryIndexes()[i]
 					break
 				}
 			}
@@ -240,9 +240,9 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 		if n.desc.GetPrimaryIndexID() == descpb.IndexID(indexFlags.IndexID) {
 			n.specifiedIndex = n.desc.GetPrimaryIndex()
 		} else {
-			for i := range n.desc.Indexes {
-				if n.desc.Indexes[i].ID == descpb.IndexID(indexFlags.IndexID) {
-					n.specifiedIndex = &n.desc.Indexes[i]
+			for i := range n.desc.GetPublicNonPrimaryIndexes() {
+				if n.desc.GetPublicNonPrimaryIndexes()[i].ID == descpb.IndexID(indexFlags.IndexID) {
+					n.specifiedIndex = &n.desc.GetPublicNonPrimaryIndexes()[i]
 					break
 				}
 			}

@@ -487,8 +487,8 @@ func (mt mutationTest) writeIndexMutation(
 	// The rewrite below potentially invalidates the original object with an overwrite.
 	// Clarify what's going on.
 	idxCopy := *idx
-	for i := range tableDesc.Indexes {
-		if idxCopy.ID == tableDesc.Indexes[i].ID {
+	for i, index := range tableDesc.GetPublicNonPrimaryIndexes() {
+		if idxCopy.ID == index.ID {
 			tableDesc.RemovePublicNonPrimaryIndex(i + 1)
 			break
 		}
@@ -648,8 +648,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 
 	// Check that a mutation can only be inserted with an explicit mutation state.
 	tableDesc = mTest.tableDesc
-	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Index{Index: &tableDesc.Indexes[len(tableDesc.Indexes)-1]}}}
-	tableDesc.RemovePublicNonPrimaryIndex(len(tableDesc.GetPublicNonPrimaryIndexes()))
+	indexIdx := len(tableDesc.GetPublicNonPrimaryIndexes())
+	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Index{Index: &tableDesc.GetPublicNonPrimaryIndexes()[indexIdx-1]}}}
+	tableDesc.RemovePublicNonPrimaryIndex(indexIdx)
 	if err := tableDesc.ValidateTable(ctx); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
 	}

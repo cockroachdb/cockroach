@@ -53,7 +53,7 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 		var isSecondaryIndex bool
 
 		if entry.indexIdx > 0 {
-			index = &entry.tableDesc.Indexes[entry.indexIdx-1]
+			index = &entry.tableDesc.GetPublicNonPrimaryIndexes()[entry.indexIdx-1]
 			isSecondaryIndex = true
 		} else {
 			index = entry.tableDesc.GetPrimaryIndex()
@@ -655,7 +655,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			if err := rf.StartScan(
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
-				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.Indexes[0].ID)},
+				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPublicNonPrimaryIndexes()[0].ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
@@ -677,10 +677,10 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 				count++
 
-				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.Indexes[0].ID {
+				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPublicNonPrimaryIndexes()[0].ID {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.Indexes[0].Name,
+						tableDesc.Name, tableDesc.GetPublicNonPrimaryIndexes()[0].Name,
 						desc.GetName(), index.Name,
 					)
 				}
@@ -991,7 +991,7 @@ func TestNextRowInterleaved(t *testing.T) {
 				if entry.indexIdx == 0 {
 					indexID = tableDesc.GetPrimaryIndexID()
 				} else {
-					indexID = tableDesc.Indexes[entry.indexIdx-1].ID
+					indexID = tableDesc.GetPublicNonPrimaryIndexes()[entry.indexIdx-1].ID
 				}
 				idLookups[idLookupKey(tableDesc.ID, indexID)] = entry
 

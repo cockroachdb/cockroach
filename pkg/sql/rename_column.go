@@ -178,8 +178,8 @@ func (p *planner) renameColumn(
 	}
 
 	// Rename the column in partial index predicates.
-	for i := range tableDesc.Indexes {
-		if index := &tableDesc.Indexes[i]; index.IsPartial() {
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		if index := &tableDesc.GetPublicNonPrimaryIndexes()[i]; index.IsPartial() {
 			newExpr, err := schemaexpr.RenameColumn(index.Predicate, *oldName, *newName)
 			if err != nil {
 				return false, err
