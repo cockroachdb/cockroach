@@ -155,16 +155,13 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 
 	spans, sf := ca.setupSpans()
 	timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf, initialInclusiveLowerBound: ca.spec.Feed.StatementTime}
-	nodeID, err := ca.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(48274)
-	if err != nil {
-		ca.MoveToDraining(err)
-		return ctx
-	}
 
-	if ca.sink, err = getSink(
-		ctx, ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
+	var err error
+	ca.sink, err = getSink(
+		ctx, ca.spec.Feed.SinkURI, ca.flowCtx.EvalCtx.NodeID.SQLInstanceID(), ca.spec.Feed.Opts, ca.spec.Feed.Targets,
 		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User(),
-	); err != nil {
+	)
+	if err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
@@ -538,18 +535,15 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
 
-	nodeID, err := cf.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(48274)
-	if err != nil {
-		cf.MoveToDraining(err)
-		return ctx
-	}
 	// Pass a nil oracle because this sink is only used to emit resolved timestamps
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
-	if cf.sink, err = getSink(
-		ctx, cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets,
+	var err error
+	cf.sink, err = getSink(
+		ctx, cf.spec.Feed.SinkURI, cf.flowCtx.EvalCtx.NodeID.SQLInstanceID(), cf.spec.Feed.Opts, cf.spec.Feed.Targets,
 		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI, cf.spec.User(),
-	); err != nil {
+	)
+	if err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)
 		return ctx
