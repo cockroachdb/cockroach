@@ -47,6 +47,8 @@ type IndexDescriptorStateChange struct {
 	descriptorMutationOp
 	TableID   descpb.ID
 	IndexID   descpb.IndexID
+	IsPrimary bool
+	State     targets.State
 	NextState targets.State
 }
 
@@ -65,14 +67,16 @@ type UniqueIndexValidation struct {
 
 type AddColumnDescriptor struct {
 	descriptorMutationOp
-	TableID descpb.ID
-	Column  descpb.ColumnDescriptor
+	TableID      descpb.ID
+	ColumnFamily descpb.FamilyID
+	Column       descpb.ColumnDescriptor
 }
 
 type ColumnDescriptorStateChange struct {
 	descriptorMutationOp
 	TableID   descpb.ID
 	ColumnID  descpb.ColumnID
+	State     targets.State
 	NextState targets.State
 }
 

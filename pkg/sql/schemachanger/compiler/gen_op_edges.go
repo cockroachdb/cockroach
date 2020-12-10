@@ -13,7 +13,7 @@ import (
 // in the current transaction.
 
 func generateOpEdges(
-	g *targetStateGraph, t targets.Target, s targets.State, flags compileFlags,
+	g *targetStateGraph, t targets.Target, s targets.State, flags CompileFlags,
 ) error {
 	switch t := t.(type) {
 	case *targets.AddColumn:
@@ -32,7 +32,7 @@ func generateOpEdges(
 }
 
 func generateDropColumnOpEdges(
-	g *targetStateGraph, t *targets.DropColumn, s targets.State, flags compileFlags,
+	g *targetStateGraph, t *targets.DropColumn, s targets.State, flags CompileFlags,
 ) error {
 	for {
 		switch s {
@@ -42,6 +42,7 @@ func generateDropColumnOpEdges(
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.ColumnID,
+					State:     s,
 					NextState: targets.StateDeleteAndWriteOnly,
 				})
 		case targets.StateDeleteAndWriteOnly:
@@ -55,6 +56,7 @@ func generateDropColumnOpEdges(
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.ColumnID,
+					State:     s,
 					NextState: targets.StateDeleteOnly,
 				})
 		case targets.StateDeleteOnly:
@@ -63,6 +65,7 @@ func generateDropColumnOpEdges(
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.ColumnID,
+					State:     s,
 					NextState: targets.StateAbsent,
 				})
 		case targets.StateAbsent:
@@ -74,7 +77,7 @@ func generateDropColumnOpEdges(
 }
 
 func generateAddIndexOpEdges(
-	g *targetStateGraph, t *targets.AddIndex, s targets.State, flags compileFlags,
+	g *targetStateGraph, t *targets.AddIndex, s targets.State, flags CompileFlags,
 ) error {
 	for {
 		switch s {
@@ -100,6 +103,8 @@ func generateAddIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.Index.ID,
+					IsPrimary: t.Primary,
+					State:     s,
 					NextState: targets.StateDeleteAndWriteOnly,
 				})
 		case targets.StateDeleteAndWriteOnly:
@@ -130,6 +135,8 @@ func generateAddIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.Index.ID,
+					IsPrimary: t.Primary,
+					State:     s,
 					NextState: targets.StatePublic,
 				})
 		case targets.StatePublic:
@@ -141,7 +148,7 @@ func generateAddIndexOpEdges(
 }
 
 func generateDropIndexOpEdges(
-	g *targetStateGraph, t *targets.DropIndex, s targets.State, flags compileFlags,
+	g *targetStateGraph, t *targets.DropIndex, s targets.State, flags CompileFlags,
 ) error {
 	for {
 		switch s {
@@ -155,6 +162,8 @@ func generateDropIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.IndexID,
+					IsPrimary: t.ReplacedBy != 0,
+					State:     s,
 					NextState: targets.StateDeleteAndWriteOnly,
 				})
 		case targets.StateDeleteAndWriteOnly:
@@ -167,6 +176,8 @@ func generateDropIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.IndexID,
+					IsPrimary: t.ReplacedBy != 0,
+					State:     s,
 					NextState: targets.StateDeleteOnly,
 				})
 		case targets.StateDeleteOnly:
@@ -175,6 +186,8 @@ func generateDropIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.IndexID,
+					IsPrimary: t.ReplacedBy != 0,
+					State:     s,
 					NextState: targets.StateAbsent,
 				})
 		case targets.StateAbsent:
@@ -186,13 +199,13 @@ func generateDropIndexOpEdges(
 }
 
 func generateAddCheckConstraintOpEdges(
-	g *targetStateGraph, t *targets.AddCheckConstraint, s targets.State, flags compileFlags,
+	g *targetStateGraph, t *targets.AddCheckConstraint, s targets.State, flags CompileFlags,
 ) error {
 	panic("unimplemented")
 }
 
 func generateAddColumnOpEdges(
-	g *targetStateGraph, t *targets.AddColumn, s targets.State, flags compileFlags,
+	g *targetStateGraph, t *targets.AddColumn, s targets.State, flags CompileFlags,
 ) (_ error) {
 	for {
 		switch s {
@@ -217,6 +230,7 @@ func generateAddColumnOpEdges(
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.Column.ID,
+					State:     s,
 					NextState: targets.StateDeleteAndWriteOnly,
 				})
 		case targets.StateDeleteAndWriteOnly:
@@ -225,6 +239,7 @@ func generateAddColumnOpEdges(
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.Column.ID,
+					State:     s,
 					NextState: targets.StatePublic,
 				})
 		case targets.StatePublic:

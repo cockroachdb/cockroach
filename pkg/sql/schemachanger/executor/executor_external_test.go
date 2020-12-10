@@ -11,13 +11,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,6 +189,134 @@ CREATE TABLE db.t (
 		t.Run(tc.name, func(t *testing.T) {
 			run(t, tc)
 		})
-
 	}
+}
+
+// TODO(ajwerner): Move this out into the schemachanger_test package once that
+// is fixed up.
+func TestSchemaChanger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	t.Run("add column", func(t *testing.T) {
+		ti := setupTestInfra(t)
+		defer ti.tc.Stopper().Stop(ctx)
+		ti.tsql.Exec(t, `CREATE DATABASE db`)
+		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
+
+		var id descpb.ID
+		var ts []targets.TargetState
+		var targetSlice []targets.Target
+		require.NoError(t, ti.txn(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) (err error) {
+			tn := tree.MakeTableName("db", "foo")
+			fooTable, err := descriptors.GetTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+			require.NoError(t, err)
+			id = fooTable.GetID()
+
+			// Corresponds to:
+			//
+			//  ALTER TABLE foo ADD COLUMN j INT;
+			//
+			targetSlice = []targets.Target{
+				&targets.AddIndex{
+					TableID: fooTable.GetID(),
+					Index: descpb.IndexDescriptor{
+						Name:             "primary 2",
+						ID:               2,
+						ColumnIDs:        []descpb.ColumnID{1},
+						ColumnNames:      []string{"i"},
+						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						StoreColumnIDs:   []descpb.ColumnID{2},
+						StoreColumnNames: []string{"j"},
+						Unique:           true,
+						Type:             descpb.IndexDescriptor_FORWARD,
+					},
+					PrimaryIndex:   fooTable.GetPrimaryIndexID(),
+					ReplacementFor: fooTable.GetPrimaryIndexID(),
+					Primary:        true,
+				},
+				&targets.AddColumn{
+					TableID:      fooTable.GetID(),
+					ColumnFamily: descpb.FamilyID(1),
+					Column: descpb.ColumnDescriptor{
+						Name:           "j",
+						ID:             2,
+						Type:           types.Int,
+						Nullable:       true,
+						PGAttributeNum: 2,
+					},
+				},
+				&targets.DropIndex{
+					TableID:    fooTable.GetID(),
+					IndexID:    fooTable.GetPrimaryIndexID(),
+					ReplacedBy: 2,
+					ColumnIDs:  []descpb.ColumnID{1},
+				},
+			}
+
+			targetStates := []targets.TargetState{
+				{
+					Target: targetSlice[0],
+					State:  targets.StateAbsent,
+				},
+				{
+					Target: targetSlice[1],
+					State:  targets.StateAbsent,
+				},
+				{
+					Target: targetSlice[2],
+					State:  targets.StatePublic,
+				},
+			}
+
+			for _, phase := range []compiler.ExecutionPhase{
+				compiler.PostStatementPhase,
+				compiler.PreCommitPhase,
+			} {
+				stages, err := compiler.Compile(targetStates, compiler.CompileFlags{
+					ExecutionPhase: phase,
+				})
+				require.NoError(t, err)
+				for _, s := range stages {
+					require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
+					ts = s.NextTargets
+				}
+			}
+			return nil
+		}))
+		var after []targets.TargetState
+		ti.txn(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			stages, err := compiler.Compile(ts, compiler.CompileFlags{
+				ExecutionPhase: compiler.PostCommitPhase,
+			})
+			require.NoError(t, err)
+			for _, s := range stages {
+				require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
+				after = s.NextTargets
+			}
+			return nil
+		})
+		require.Equal(t, []targets.TargetState{
+			{
+				targetSlice[0],
+				targets.StatePublic,
+			},
+			{
+				targetSlice[1],
+				targets.StatePublic,
+			},
+			{
+				targetSlice[2],
+				targets.StateAbsent,
+			},
+		}, after)
+		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
+		require.NoError(t, err)
+		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
+	})
+
 }

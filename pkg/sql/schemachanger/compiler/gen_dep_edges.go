@@ -4,6 +4,8 @@ import "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 
 func generateTargetStateDepEdges(g *targetStateGraph, t targets.Target, s targets.State) (_ error) {
 	switch t := t.(type) {
+	case *targets.AddColumn:
+		generateAddColumnDepEdges(g, t, s)
 	case *targets.DropColumn:
 		generateDropColumnDepEdges(g, t, s)
 	case *targets.AddIndex:
@@ -12,6 +14,24 @@ func generateTargetStateDepEdges(g *targetStateGraph, t targets.Target, s target
 		generateDropIndexDepEdges(g, t, s)
 	}
 	return nil
+}
+
+func generateAddColumnDepEdges(g *targetStateGraph, t *targets.AddColumn, s targets.State) {
+	switch s {
+	case targets.StateDeleteAndWriteOnly, targets.StatePublic:
+		for _, ot := range g.targets {
+			switch ot := ot.(type) {
+			case *targets.AddIndex:
+				if t.TableID != ot.TableID ||
+					(!columnsContainsID(ot.Index.ColumnIDs, t.Column.ID) &&
+						!columnsContainsID(ot.Index.StoreColumnIDs, t.Column.ID) &&
+						!columnsContainsID(ot.Index.ExtraColumnIDs, t.Column.ID)) {
+					continue
+				}
+				g.addDepEdge(t, s, ot, s)
+			}
+		}
+	}
 }
 
 func generateDropIndexDepEdges(g *targetStateGraph, t *targets.DropIndex, s targets.State) {

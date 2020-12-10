@@ -449,7 +449,7 @@ func (tc *Collection) getObjectByName(
 // provided lookup flags.
 func (tc *Collection) GetTableByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (_ catalog.Descriptor, err error) {
+) (_ catalog.TableDescriptor, err error) {
 	desc, found, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
 	if err != nil {
 		return nil, err
@@ -477,7 +477,7 @@ func (tc *Collection) GetTableByName(
 			// IncludeAdding flag and pull the special case handling up into the
 			// callers. Figure that out after we clean up the name resolution layers
 			// and it becomes more clear what the callers should be.
-			return desc, nil
+			return table, nil
 		}
 		if flags.Required {
 			return nil, err
@@ -495,7 +495,7 @@ func (tc *Collection) GetTableByName(
 // provided lookup flags.
 func (tc *Collection) GetTypeByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (_ catalog.Descriptor, err error) {
+) (_ catalog.TypeDescriptor, err error) {
 	desc, found, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
 	if err != nil {
 		return nil, err
