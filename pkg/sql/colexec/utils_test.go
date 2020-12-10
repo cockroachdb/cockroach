@@ -71,7 +71,7 @@ func (t tuple) String() string {
 	return sb.String()
 }
 
-func (t tuple) less(other tuple, evalCtx *tree.EvalContext) bool {
+func (t tuple) less(other tuple, evalCtx *tree.EvalContext, tupleFromOtherSet tuple) bool {
 	for i := range t {
 		// If either side is nil, we short circuit the comparison. For nil, we
 		// define: nil < {any_none_nil}
@@ -137,7 +137,22 @@ func (t tuple) less(other tuple, evalCtx *tree.EvalContext) bool {
 		case "bool":
 			return lhsVal.Bool() == false && rhsVal.Bool() == true
 		case "string":
-			return lhsVal.String() < rhsVal.String()
+			lString, rString := lhsVal.String(), rhsVal.String()
+			if tupleFromOtherSet != nil && len(tupleFromOtherSet) > i {
+				if d, ok := tupleFromOtherSet[i].(tree.Datum); ok {
+					// The tuple from the other set has a datum value, so we
+					// will convert the string to datum. See the comment on
+					// tuples.sort for more details.
+					d1 := stringToDatum(lString, d.ResolvedType(), evalCtx)
+					d2 := stringToDatum(rString, d.ResolvedType(), evalCtx)
+					cmp := d1.Compare(evalCtx, d2)
+					if cmp == 0 {
+						continue
+					}
+					return cmp < 0
+				}
+			}
+			return lString < rString
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("Unhandled comparison type: %s", typ))
 		}
@@ -178,8 +193,15 @@ func (t tuples) String() string {
 	return sb.String()
 }
 
-// sort returns a copy of sorted tuples.
-func (t tuples) sort(evalCtx *tree.EvalContext) tuples {
+// sort returns a copy of sorted tuples. tupleFromOtherSet is any tuple that
+// comes from other tuples and is used to determine the desired types.
+//
+// Currently, this function is only used in order to speed up the comparison of
+// the expected tuple set with the actual one, and it is possible that we have
+// tree.Datum in the latter but strings in the former. In order to use the same
+// ordering when sorting the strings, we need to peek into the actual tuple to
+// determine whether we want to convert the string to datum before comparison.
+func (t tuples) sort(evalCtx *tree.EvalContext, tupleFromOtherSet tuple) tuples {
 	b := make(tuples, len(t))
 	for i := range b {
 		b[i] = make(tuple, len(t[i]))
@@ -188,7 +210,7 @@ func (t tuples) sort(evalCtx *tree.EvalContext) tuples {
 	sort.SliceStable(b, func(i, j int) bool {
 		lhs := b[i]
 		rhs := b[j]
-		return lhs.less(rhs, evalCtx)
+		return lhs.less(rhs, evalCtx, tupleFromOtherSet)
 	})
 	return b
 }
@@ -1147,8 +1169,15 @@ func assertTuplesSetsEqual(expected tuples, actual tuples, evalCtx *tree.EvalCon
 	if len(expected) != len(actual) {
 		return makeError(expected, actual)
 	}
-	actual = actual.sort(evalCtx)
-	expected = expected.sort(evalCtx)
+	var tupleFromOtherSet tuple
+	if len(expected) > 0 {
+		tupleFromOtherSet = expected[0]
+	}
+	actual = actual.sort(evalCtx, tupleFromOtherSet)
+	if len(actual) > 0 {
+		tupleFromOtherSet = actual[0]
+	}
+	expected = expected.sort(evalCtx, tupleFromOtherSet)
 	return assertTuplesOrderedEqual(expected, actual, evalCtx)
 }
 
@@ -1412,10 +1441,13 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	if lastIdx > c.len {
 		lastIdx = c.len
 	}
-	for i, vec := range c.batch.ColVecs() {
-		vec.SetCol(c.cols[i].Window(c.curIdx, lastIdx).Col())
+	for i := range c.typs {
+		// Note that new vectors could be appended to the batch, but we are not
+		// responsible for updating those, so we iterate only up to len(c.typs)
+		// as per out initialization.
+		c.batch.ColVec(i).SetCol(c.cols[i].Window(c.curIdx, lastIdx).Col())
 		nullsSlice := c.cols[i].Nulls().Slice(c.curIdx, lastIdx)
-		vec.SetNulls(&nullsSlice)
+		c.batch.ColVec(i).SetNulls(&nullsSlice)
 	}
 	c.batch.SetLength(lastIdx - c.curIdx)
 	c.curIdx = lastIdx

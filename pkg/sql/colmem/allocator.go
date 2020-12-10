@@ -242,22 +242,40 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 		colexecerror.InternalError(errors.AssertionFailedf("trying to add a column to zero length batch"))
 	}
 	width := b.Width()
+	desiredCapacity := b.Capacity()
+	if desiredCapacity == 0 {
+		// In some cases (like when we have a windowed batch), the capacity
+		// might be set to zero, yet we want to make sure that the vectors have
+		// enough space to accommodate the length of the batch.
+		desiredCapacity = b.Length()
+	}
 	if colIdx < width {
 		presentVec := b.ColVec(colIdx)
 		presentType := presentVec.Type()
+		if presentType.Family() == types.UnknownFamily {
+			// We already have an unknown vector in place. If this is expected,
+			// then it will not be accessed and we're good; if this is not
+			// expected, then an error will occur later.
+			return
+		}
 		if presentType.Identical(t) {
 			// We already have the vector of the desired type in place.
+			if presentVec.Capacity() < desiredCapacity {
+				// Unfortunately, the present vector is not of sufficient
+				// capacity, so we need to replace it.
+				oldMemUsage := getVecMemoryFootprint(presentVec)
+				newEstimatedMemoryUsage := int64(EstimateBatchSizeBytes([]*types.T{t}, desiredCapacity))
+				if err := a.acc.Grow(a.ctx, newEstimatedMemoryUsage-oldMemUsage); err != nil {
+					colexecerror.InternalError(err)
+				}
+				b.ReplaceCol(a.NewMemColumn(t, desiredCapacity), colIdx)
+				return
+			}
 			if presentVec.CanonicalTypeFamily() == types.BytesFamily {
 				// Flat bytes vector needs to be reset before the vector can be
 				// reused.
 				presentVec.Bytes().Reset()
 			}
-			return
-		}
-		if presentType.Family() == types.UnknownFamily {
-			// We already have an unknown vector in place. If this is expected,
-			// then it will not be accessed and we're good; if this is not
-			// expected, then an error will occur later.
 			return
 		}
 		// We have a vector with an unexpected type, so we panic.
@@ -273,11 +291,11 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 			t, colIdx, width,
 		))
 	}
-	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]*types.T{t}, b.Capacity()))
+	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]*types.T{t}, desiredCapacity))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	b.AppendCol(a.NewMemColumn(t, b.Capacity()))
+	b.AppendCol(a.NewMemColumn(t, desiredCapacity))
 }
 
 // PerformOperation executes 'operation' (that somehow modifies 'destVecs') and
