@@ -2932,11 +2932,11 @@ func TestCountRanges(t *testing.T) {
 	for i := range descriptors {
 		startKey := testMetaEndKey
 		if i > 0 {
-			startKey = roachpb.RKey(string(firstKeyBoundary + i - 1))
+			startKey = roachpb.RKey(string(rune(firstKeyBoundary + i - 1)))
 		}
 		endKey := roachpb.RKeyMax
 		if i < len(descriptors)-1 {
-			endKey = roachpb.RKey(string(firstKeyBoundary + i))
+			endKey = roachpb.RKey(string(rune(firstKeyBoundary + i)))
 		}
 
 		descriptors[i] = roachpb.RangeDescriptor{
