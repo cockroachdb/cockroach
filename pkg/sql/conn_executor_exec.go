@@ -682,6 +682,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		log.VEventf(ctx, 2, "push detected for non-refreshable txn but auto-retry not possible")
 	}
+	// TODO(ajwerner): Figure out the above event.
+	if err := ex.runPostStatementStages(ctx); err != nil {
+		return makeErrEvent(err)
+	}
+
 	// No event was generated.
 	return nil, nil, nil
 }
@@ -730,6 +735,12 @@ func (ex *connExecutor) commitSQLTransaction(
 func (ex *connExecutor) commitSQLTransactionInternal(
 	ctx context.Context, ast tree.Statement,
 ) error {
+	if ex.extraTxnState.newSchemaChanger.inUse {
+		if err := ex.runPreCommitStages(ctx); err != nil {
+			return err
+		}
+	}
+
 	if err := validatePrimaryKeys(&ex.extraTxnState.descCollection); err != nil {
 		return err
 	}

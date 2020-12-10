@@ -35,6 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1035,7 +1038,11 @@ type connExecutor struct {
 		transactionStatementsHash util.FNV64
 
 		// useNewSchemaChanger is set to true to enable the new schema changer.
-		useNewSchemaChanger bool
+		newSchemaChanger struct {
+			inUse               bool
+			targetStatesChanged bool
+			targetStates        []targets.TargetState
+		}
 	}
 
 	// sessionData contains the user-configurable connection variables.
@@ -1222,7 +1229,9 @@ func (ns *prepStmtNamespace) resetTo(
 // commits, rolls back or restarts.
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
-	ex.extraTxnState.useNewSchemaChanger = ex.sessionData.UseNewSchemaChanger
+	ex.extraTxnState.newSchemaChanger.inUse = ex.sessionData.UseNewSchemaChanger
+	ex.extraTxnState.newSchemaChanger.targetStatesChanged = false
+	ex.extraTxnState.newSchemaChanger.targetStates = nil
 
 	for k := range ex.extraTxnState.schemaChangeJobsCache {
 		delete(ex.extraTxnState.schemaChangeJobsCache, k)
@@ -2304,7 +2313,11 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			}
 		}
 		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
-
+		if ex.extraTxnState.newSchemaChanger.inUse {
+			if err := ex.runPostCommitStages(ex.Ctx()); err != nil {
+				handleErr(err)
+			}
+		}
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
@@ -2501,6 +2514,75 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 				NotifyMutation(desc.ID, math.MaxInt32 /* rowsAffected */)
 		}
 	}
+}
+
+// runPreCommitStages is part of the new schema changer infrastructure to
+// mutate descriptors prior to committing a SQL transaction.
+func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
+	if len(ex.extraTxnState.newSchemaChanger.targetStates) == 0 {
+		return nil
+	}
+	return ex.runNewSchemaChanger(ctx, compiler.PreCommitPhase, ex.withNewSchemaChangeExecutorDuringTxn)
+}
+
+func (ex *connExecutor) runPostStatementStages(ctx context.Context) error {
+	if !ex.extraTxnState.newSchemaChanger.targetStatesChanged {
+		return nil
+	}
+	return ex.runNewSchemaChanger(ctx, compiler.PostStatementPhase, ex.withNewSchemaChangeExecutorDuringTxn)
+}
+
+func (ex *connExecutor) runPostCommitStages(ctx context.Context) error {
+	if !ex.extraTxnState.newSchemaChanger.targetStatesChanged {
+		return nil
+	}
+	return ex.runNewSchemaChanger(ctx, compiler.PostStatementPhase, ex.withNewSchemaChangeExecutorDuringAfterTxn)
+}
+
+func (ex *connExecutor) runNewSchemaChanger(
+	ctx context.Context,
+	phase compiler.ExecutionPhase,
+	executorRunner func(context.Context, func(context.Context, *executor.Executor) error) error,
+) error {
+	stages, err := compiler.Compile(ex.extraTxnState.newSchemaChanger.targetStates, compiler.CompileFlags{
+		ExecutionPhase: phase,
+		// TODO(ajwerner): Populate the set of new descriptors
+	})
+	if err != nil {
+		return err
+	}
+	var after []targets.TargetState
+	for _, s := range stages {
+		if err := executorRunner(ctx, func(ctx context.Context, e *executor.Executor) error {
+			return e.ExecuteOps(ctx, s.Ops)
+		}); err != nil {
+			return err
+		}
+		after = s.NextTargets
+	}
+	ex.extraTxnState.newSchemaChanger.targetStates = after
+	ex.extraTxnState.newSchemaChanger.targetStatesChanged = false
+	return nil
+}
+
+func (ex *connExecutor) withNewSchemaChangeExecutorDuringTxn(
+	ctx context.Context, f func(context.Context, *executor.Executor) error,
+) error {
+	return f(ctx, executor.New(ex.planner.txn, &ex.extraTxnState.descCollection))
+}
+
+func (ex *connExecutor) withNewSchemaChangeExecutorDuringAfterTxn(
+	ctx context.Context, f func(context.Context, *executor.Executor) error,
+) error {
+	return descs.Txn(
+		ctx,
+		ex.server.cfg.Settings,
+		ex.server.cfg.LeaseManager,
+		ex.server.cfg.InternalExecutor,
+		ex.server.cfg.DB,
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			return f(ctx, executor.New(txn, descriptors))
+		})
 }
 
 // StatementCounters groups metrics for counting different types of
