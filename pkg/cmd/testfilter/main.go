@@ -151,16 +151,102 @@ func filter(in io.Reader, out io.Writer, mode modeT) error {
 		}
 
 		if ev.Test == "" {
-			// Skip all package output when omitting. Unfortunately package
-			// events aren't always well-formed. For example, if a test panics,
-			// the package will never receive a fail event (arguably a bug), so
-			// it's not trivial to print only failing packages. Besides, there's
-			// not much package output typically (only init functions), so not
-			// worth getting fancy about.
-			if mode == modeOmit {
+			if mode == modeOmit && ev.Action != "fail" {
+				// Skip all regular package output when omitting. There's not much
+				// package output typically (only init functions), so not worth
+				// getting fancy about.
 				continue
 			}
+
+			// Populate a fake test name. We need this because if a
+			// package fails but no test has been marked as failed before,
+			// TC simply omits the package entirely in the overview.
+			ev.Test = "PackageLevel"
+
+			const helpMessage = "\nCheck full_output.txt in artifacts for stray panics or other errors that broke the test process."
+			if ev.Action == "fail" {
+				// Populate a helper annotation, to guide the user towards the right place
+				ev.Output += helpMessage
+			}
+
+			pkey := tup{ev.Package, ev.Test}
+			if m[pkey] == nil {
+				// We are observing the first entry for a package. We are
+				// going to turn the package entry into a pseudo-test entry
+				// below. We also need to synthetize a "run" entry for the
+				// pseudo-test. We need this, because TC does not recognize a
+				// test unless it starts with a "run" entry.
+				evCopy := *ev
+				evCopy.Action = "run"
+				evCopy.Output = ""
+				b, err := json.Marshal(&evCopy)
+				if err != nil {
+					fmt.Fprintf(out, "ERROR: %v\n", err)
+				} else {
+					fakeLine := string(b)
+					buf := &ent{first: fakeLine}
+					if _, err := fmt.Fprintln(buf, fakeLine); err != nil {
+						return err
+					}
+					m[pkey] = buf
+				}
+			}
+
+			if ev.Action == "fail" {
+				// A package is terminating. Dump all the test scopes so far
+				// in this package, then forget about them. This ensures that
+				// the test failures are reported before the package failure
+				// in the final output.
+				var testReport strings.Builder
+				for key := range m {
+					if key.pkg == ev.Package && key.test != ev.Test {
+						// We only mention the test scopes without their sub-tests;
+						// otherwise we could get tens of thousands of output lines
+						// for a failed logic test run due to a panic.
+						if !strings.Contains(key.test, "/") {
+							buf := m[key]
+							// Remember the test's name to report in the
+							// package-level output.
+							testReport.WriteString("\n" + key.test)
+
+							// Synthetize a "skip" message.
+							//
+							// We use "skip" and not "fail" to ensure that no issue
+							// gets filed for the open-ended tests by the github
+							// auto-poster: we don't have confidence for any of them
+							// that they are the particular cause of the failure.
+							synthEv := testEvent{Time: ev.Time, Action: "skip", Package: ev.Package, Test: key.test, Elapsed: 0, Output: "unfinished due to package-level failure" + helpMessage}
+							b, err := json.Marshal(&synthEv)
+							if err != nil {
+								fmt.Fprintf(out, "ERROR: %v\n", err)
+							} else {
+								fmt.Fprintln(buf, string(b))
+							}
+							fmt.Fprintln(out, buf.String())
+						}
+						// In any case, remove the entries for all the tests
+						// "under" the package. We know they won't get any more
+						// output because the package fail entry can only appear
+						// after all tests have finalized.
+						delete(m, key)
+					}
+				}
+
+				// Report the list of open-ended tests.
+				if testReport.Len() > 0 {
+					ev.Output += "\nThe following tests have not completed and could be the cause of the failure:" + testReport.String()
+				}
+			}
+
+			// Re-populate the line from the JSON payload.
+			b, err := json.Marshal(ev)
+			if err != nil {
+				fmt.Fprintf(out, "ERROR: %v\n", err)
+			} else {
+				line = string(b)
+			}
 		}
+
 		key := tup{ev.Package, ev.Test}
 		buf := m[key]
 		if buf == nil {

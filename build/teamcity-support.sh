@@ -35,9 +35,6 @@ run_counter=-1
 function run_json_test() {
   run_counter=$((run_counter+1))
   tc_start_block "prep"
-  # TODO(tbg): better to go through builder for all of this.
-  go install github.com/cockroachdb/cockroach/pkg/cmd/testfilter
-  go install github.com/cockroachdb/cockroach/pkg/cmd/github-post
   mkdir -p artifacts
   tmpfile="artifacts/raw.${run_counter}.json.txt"
   tc_end_block "prep"
@@ -46,7 +43,7 @@ function run_json_test() {
   set +e
   run "$@" 2>&1 \
     | tee "${tmpfile}" \
-    | testfilter -mode=strip \
+    | (cd "$root"/pkg/cmd/testfilter && go run main.go -mode=strip) \
     | tee artifacts/stripped.txt
   status=$?
   set -e
@@ -77,7 +74,8 @@ function run_json_test() {
 
   tc_start_block "artifacts"
   # Create (or append to) failures.txt artifact and delete stripped.txt.
-  testfilter -mode=omit < artifacts/stripped.txt | testfilter -mode convert >> artifacts/failures.txt
+  (cd "$root"/pkg/cmd/testfilter && go run main.go -mode=omit) < artifacts/stripped.txt | \
+      (cd "$root"/pkg/cmd/testfilter && go run main.go -mode=convert) >> artifacts/failures.txt
 
   if [ $status -ne 0 ]; then
     # Keep the debug file around for failed builds. Compress it to avoid
@@ -89,7 +87,7 @@ function run_json_test() {
     # around in $tmpfile itself when anything else we don't handle well happens,
     # whatever that may be.
     fullfile=artifacts/full_output.txt
-    testfilter -mode convert < "${tmpfile}" >> "${fullfile}"
+    (cd "$root"/pkg/cmd/testfilter && go run main.go -mode=convert) < "${tmpfile}" >> "${fullfile}"
     tar --strip-components 1 -czf "${tmpfile}.tgz" "${tmpfile}" "${fullfile}"
     rm -f "${fullfile}"
   fi
