@@ -57,11 +57,11 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 	child := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
 	grandchild := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
 
-	parentDescIdx := parent.Indexes[0]
-	childDescIdx := child.Indexes[0]
-	childNonUniqueIdx := child.Indexes[1]
-	childUniqueIdx := child.Indexes[2]
-	grandchildDescIdx := grandchild.Indexes[0]
+	parentDescIdx := parent.GetPublicNonPrimaryIndexes()[0]
+	childDescIdx := child.GetPublicNonPrimaryIndexes()[0]
+	childNonUniqueIdx := child.GetPublicNonPrimaryIndexes()[1]
+	childUniqueIdx := child.GetPublicNonPrimaryIndexes()[2]
+	grandchildDescIdx := grandchild.GetPublicNonPrimaryIndexes()[0]
 
 	testCases := []struct {
 		index *descpb.IndexDescriptor
@@ -269,11 +269,11 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 	child := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
 	grandchild := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
 
-	parentDescIdx := parent.Indexes[0]
-	childDescIdx := child.Indexes[0]
-	childNonUniqueIdx := child.Indexes[1]
-	childUniqueIdx := child.Indexes[2]
-	grandchildDescIdx := grandchild.Indexes[0]
+	parentDescIdx := parent.GetPublicNonPrimaryIndexes()[0]
+	childDescIdx := child.GetPublicNonPrimaryIndexes()[0]
+	childNonUniqueIdx := child.GetPublicNonPrimaryIndexes()[1]
+	childUniqueIdx := child.GetPublicNonPrimaryIndexes()[2]
+	grandchildDescIdx := grandchild.GetPublicNonPrimaryIndexes()[0]
 
 	testCases := []struct {
 		table catalog.TableDescriptor
