@@ -207,9 +207,14 @@ func (p *planner) truncateTable(
 	}
 
 	// Reset all of the index IDs.
-	tableDesc.PrimaryIndex.ID = descpb.IndexID(0)
-	for i := range tableDesc.Indexes {
-		tableDesc.Indexes[i].ID = descpb.IndexID(0)
+	primaryIndex := *tableDesc.GetPrimaryIndex()
+	primaryIndex.ID = descpb.IndexID(0)
+	tableDesc.SetPrimaryIndex(primaryIndex)
+
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		index := tableDesc.GetPublicNonPrimaryIndexes()[i]
+		index.ID = descpb.IndexID(0)
+		tableDesc.SetPublicNonPrimaryIndex(i, index)
 	}
 	// Create new ID's for all of the indexes in the table.
 	if err := tableDesc.AllocateIDs(ctx); err != nil {

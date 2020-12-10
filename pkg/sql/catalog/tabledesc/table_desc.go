@@ -123,3 +123,28 @@ func (desc *Mutable) IsUncommittedVersion() bool {
 func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }
+
+// RemovePublicNonPrimaryIndex removes a secondary index by ordinal
+func (desc *Mutable) RemovePublicNonPrimaryIndex(indexOrdinal int) {
+	desc.Indexes = append(desc.Indexes[:indexOrdinal], desc.Indexes[indexOrdinal+1:]...)
+}
+
+// RemoveAllPublicNonPrimaryIndexes removes all secondary indexes
+func (desc *Mutable) RemoveAllPublicNonPrimaryIndexes() {
+	desc.Indexes = desc.Indexes[:0]
+}
+
+// AddPublicNonPrimaryIndex adds one or several secondary indexes
+func (desc *Mutable) AddPublicNonPrimaryIndex(index ...descpb.IndexDescriptor) {
+	desc.Indexes = append(desc.Indexes, index...)
+}
+
+// SetPrimaryIndex sets the primary index
+func (desc *Mutable) SetPrimaryIndex(index descpb.IndexDescriptor) {
+	desc.PrimaryIndex = index
+}
+
+// SetPublicNonPrimaryIndex sets one of the secondary indexes
+func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.IndexDescriptor) {
+	desc.Indexes[indexOrdinal] = index
+}

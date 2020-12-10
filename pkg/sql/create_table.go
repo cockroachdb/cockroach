@@ -1627,7 +1627,9 @@ func NewTableDesc(
 		if err != nil {
 			return nil, err
 		}
-		desc.PrimaryIndex.Partitioning = partitioning
+		newPrimaryIndex := *desc.GetPrimaryIndex()
+		newPrimaryIndex.Partitioning = partitioning
+		desc.SetPrimaryIndex(newPrimaryIndex)
 	}
 
 	// Once all the IDs have been allocated, we can add the Sequence dependencies

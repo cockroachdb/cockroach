@@ -49,7 +49,8 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	tableKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
-	tableDesc.PrimaryIndex.Partitioning = descpb.PartitioningDescriptor{
+	primaryIndex := *tableDesc.GetPrimaryIndex()
+	primaryIndex.Partitioning = descpb.PartitioningDescriptor{
 		NumColumns: 1,
 		Range: []descpb.PartitioningDescriptor_Range{{
 			Name:          "p1",
@@ -57,7 +58,10 @@ func TestRemovePartitioningOSS(t *testing.T) {
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),
 		}},
 	}
-	tableDesc.Indexes[0].Partitioning = descpb.PartitioningDescriptor{
+	tableDesc.SetPrimaryIndex(primaryIndex)
+
+	secondaryIndex := tableDesc.GetPublicNonPrimaryIndexes()[0]
+	secondaryIndex.Partitioning = descpb.PartitioningDescriptor{
 		NumColumns: 1,
 		Range: []descpb.PartitioningDescriptor_Range{{
 			Name:          "p2",
@@ -65,6 +69,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),
 		}},
 	}
+	tableDesc.SetPublicNonPrimaryIndex(0, secondaryIndex)
 	// Note that this is really a gross hack - it breaks planner caches, which
 	// assume that nothing is going to change out from under them like this. We
 	// "fix" the issue by altering the table's name to refresh the cache, below.

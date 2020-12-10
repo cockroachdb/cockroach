@@ -322,7 +322,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc.PrimaryIndex = descpb.IndexDescriptor{}
+	desc.SetPrimaryIndex(descpb.IndexDescriptor{})
 
 	err = desc.ValidateTable(ctx)
 	if !testutils.IsError(err, tabledesc.ErrMissingPrimaryKey.Error()) {
