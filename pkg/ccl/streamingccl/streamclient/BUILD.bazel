@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "streamclient",
+    srcs = [
+        "client.go",
+        "event.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/roachpb"],
+)
+
+go_test(
+    name = "streamclient_test",
+    srcs = ["client_test.go"],
+    embed = [":streamclient"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
