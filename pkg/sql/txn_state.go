@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -157,25 +156,8 @@ func (ts *txnState) resetForNewSQLTxn(
 	// (automatic or user-directed) retries. The span is closed by finishSQLTxn().
 	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
 	// into a larger discussion about how to drain SQL and rollback open txns.
-	var sp *tracing.Span
 	opName := sqlTxnName
-
-	// Create a span for the new txn. The span is always WithForceRealSpan to support the
-	// use of session tracing, which may start recording on it.
-	if parentSp := tracing.SpanFromContext(connCtx); parentSp != nil {
-		// Create a child span for this SQL txn.
-		sp = parentSp.Tracer().StartSpan(
-			opName,
-			tracing.WithParentAndAutoCollection(parentSp),
-			tracing.WithCtxLogTags(connCtx),
-			tracing.WithForceRealSpan(),
-		)
-	} else {
-		// Create a root span for this SQL txn.
-		sp = tranCtx.tracer.StartSpan(
-			opName, tracing.WithCtxLogTags(connCtx), tracing.WithForceRealSpan())
-	}
-
+	txnCtx, sp := createRootOrChildSpan(connCtx, opName, tranCtx.tracer)
 	if txnType == implicitTxn {
 		sp.SetTag("implicit", "true")
 	}
@@ -187,9 +169,6 @@ func (ts *txnState) resetForNewSQLTxn(
 		ts.recordingThreshold = duration
 		ts.recordingStart = timeutil.Now()
 	}
-
-	// Put the new span in the context.
-	txnCtx := tracing.ContextWithSpan(connCtx, sp)
 
 	ts.sp = sp
 	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
@@ -233,17 +212,7 @@ func (ts *txnState) finishSQLTxn() {
 	}
 
 	if ts.recordingThreshold > 0 {
-		if r := ts.sp.GetRecording(); r != nil {
-			if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
-				dump := r.String()
-				if len(dump) > 0 {
-					log.Infof(ts.Ctx, "SQL txn took %s, exceeding tracing threshold of %s:\n%s",
-						elapsed, ts.recordingThreshold, dump)
-				}
-			}
-		} else {
-			log.Warning(ts.Ctx, "missing trace when sampled was enabled")
-		}
+		logTraceAboveThreshold(ts.Ctx, ts.sp.GetRecording(), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
 	}
 
 	ts.sp.Finish()
