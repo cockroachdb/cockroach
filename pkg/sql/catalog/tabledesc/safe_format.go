@@ -111,7 +111,7 @@ func formatSafeTableIndexes(w *redact.StringBuilder, desc catalog.TableDescripto
 	w.Printf(", PrimaryIndex: %d", desc.GetPrimaryIndexID())
 	w.Printf(", NextIndexID: %d", desc.TableDesc().NextIndexID)
 	w.Printf(", Indexes: [")
-	formatSafeIndex(w, &td.PrimaryIndex, nil)
+	formatSafeIndex(w, desc.GetPrimaryIndex(), nil)
 	for i := range td.Indexes {
 		w.Printf(", ")
 		formatSafeIndex(w, &td.Indexes[i], nil)

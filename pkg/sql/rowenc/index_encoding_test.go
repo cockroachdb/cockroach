@@ -225,7 +225,7 @@ func TestIndexKey(t *testing.T) {
 
 		codec := keys.SystemSQLCodec
 		primaryKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
-		primaryKey, _, err := EncodeIndexKey(tableDesc, &tableDesc.PrimaryIndex, colMap, testValues, primaryKeyPrefix)
+		primaryKey, _, err := EncodeIndexKey(tableDesc, tableDesc.GetPrimaryIndex(), colMap, testValues, primaryKeyPrefix)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -275,8 +275,7 @@ func TestIndexKey(t *testing.T) {
 			}
 		}
 
-		checkEntry(&tableDesc.PrimaryIndex, primaryIndexKV)
-		checkEntry(&tableDesc.Indexes[0], secondaryIndexKV)
+		checkEntry(tableDesc.GetPrimaryIndex(), primaryIndexKV)
 	}
 }
 
@@ -941,7 +940,7 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 			desc, colMap := makeTableDescForTest(tc.table.indexKeyArgs)
 			primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndexID())
 			primaryKey, _, err := EncodeIndexKey(
-				desc, &desc.PrimaryIndex, colMap, tc.table.values, primaryKeyPrefix)
+				desc, desc.GetPrimaryIndex(), colMap, tc.table.values, primaryKeyPrefix)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -962,7 +961,7 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 
 			// Column values should be at the beginning of the
 			// remaining bytes of the key.
-			colVals, null, err := EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
+			colVals, null, err := EncodeColumns(desc.GetPrimaryIndex().ColumnIDs, desc.GetPrimaryIndex().ColumnDirections, colMap, tc.table.values, nil /*key*/)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -997,7 +996,7 @@ func TestTableEquivSignatures(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, _ := makeTableDescForTest(tc.table.indexKeyArgs)
-			equivSigs, err := TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
+			equivSigs, err := TableEquivSignatures(&desc.TableDescriptor, desc.GetPrimaryIndex())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1082,13 +1081,13 @@ func TestEquivSignature(t *testing.T) {
 				desc, colMap := makeTableDescForTest(table.indexKeyArgs)
 				primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndexID())
 				primaryKey, _, err := EncodeIndexKey(
-					desc, &desc.PrimaryIndex, colMap, table.values, primaryKeyPrefix)
+					desc, desc.GetPrimaryIndex(), colMap, table.values, primaryKeyPrefix)
 				if err != nil {
 					t.Fatal(err)
 				}
 
 				// Extract out the table's equivalence signature.
-				tempEquivSigs, err := TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
+				tempEquivSigs, err := TableEquivSignatures(&desc.TableDescriptor, desc.GetPrimaryIndex())
 				if err != nil {
 					t.Fatal(err)
 				}

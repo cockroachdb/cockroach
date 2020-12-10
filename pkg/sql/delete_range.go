@@ -96,13 +96,13 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	allTables := make([]row.FetcherTableArgs, len(d.interleavedDesc)+1)
 	allTables[0] = row.FetcherTableArgs{
 		Desc:  d.desc,
-		Index: &d.desc.PrimaryIndex,
+		Index: d.desc.GetPrimaryIndex(),
 		Spans: d.spans,
 	}
 	for i, interleaved := range d.interleavedDesc {
 		allTables[i+1] = row.FetcherTableArgs{
 			Desc:  interleaved,
-			Index: &interleaved.PrimaryIndex,
+			Index: interleaved.GetPrimaryIndex(),
 			Spans: d.spans,
 		}
 	}

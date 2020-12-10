@@ -124,7 +124,7 @@ func (cb *ColumnBackfiller) init(
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
-		Index:           &desc.PrimaryIndex,
+		Index:           desc.GetPrimaryIndex(),
 		ColIdxMap:       desc.ColumnIdxMap(),
 		Cols:            desc.Columns,
 		ValNeededForCol: valNeededForCol,
@@ -601,7 +601,7 @@ func (ib *IndexBackfiller) init(
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
-		Index:           &desc.PrimaryIndex,
+		Index:           desc.GetPrimaryIndex(),
 		ColIdxMap:       ib.colIdxMap,
 		Cols:            ib.cols,
 		ValNeededForCol: valNeededForCol,
