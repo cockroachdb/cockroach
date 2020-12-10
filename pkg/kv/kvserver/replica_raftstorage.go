@@ -1095,10 +1095,10 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		}
 	}
 
-	// We might have to create SSTs for the range local keys and user keys
-	// depending on if the subsumed replicas are not fully contained by the
-	// replica in our snapshot. The following is an example to this case
-	// happening.
+	// We might have to create SSTs for the range local keys, lock table keys,
+	// and user keys depending on if the subsumed replicas are not fully
+	// contained by the replica in our snapshot. The following is an example to
+	// this case happening.
 	//
 	// a       b       c       d
 	// |---1---|-------2-------|  S1

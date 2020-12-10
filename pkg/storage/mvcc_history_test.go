@@ -92,6 +92,12 @@ func TestMVCCHistories(t *testing.T) {
 			span := roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
 
 			datadriven.Walk(t, "testdata/mvcc_histories", func(t *testing.T, path string) {
+				if strings.Contains(path, "_disallow_separated") && !DisallowSeparatedIntents {
+					return
+				}
+				if strings.Contains(path, "_allow_separated") && DisallowSeparatedIntents {
+					return
+				}
 				// We start from a clean slate in every test file.
 				engine := engineImpl.create()
 				defer engine.Close()

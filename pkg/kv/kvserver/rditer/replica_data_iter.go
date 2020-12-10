@@ -173,7 +173,15 @@ func makeRangeLockTableKeyRanges(d *roachpb.RangeDescriptor) [2]KeyRange {
 	// is a range local key that can have a replicated lock acquired on it.
 	startRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(d.StartKey), nil)
 	endRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(d.EndKey), nil)
-	startGlobal, _ := keys.LockTableSingleKey(roachpb.Key(d.StartKey), nil)
+	// The first range in the global keyspace can start earlier than LocalMax,
+	// at RKeyMin, but the actual data starts at LocalMax. We need to make this
+	// adjustment here to prevent [startRangeLocal, endRangeLocal) and
+	// [startGlobal, endGlobal) from overlapping.
+	globalStartKey := d.StartKey.AsRawKey()
+	if d.StartKey.Equal(roachpb.RKeyMin) {
+		globalStartKey = keys.LocalMax
+	}
+	startGlobal, _ := keys.LockTableSingleKey(globalStartKey, nil)
 	endGlobal, _ := keys.LockTableSingleKey(roachpb.Key(d.EndKey), nil)
 	return [2]KeyRange{
 		{
