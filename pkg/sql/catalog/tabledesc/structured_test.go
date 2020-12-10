@@ -705,6 +705,105 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
+		{`TableID mismatch for unique without index constraint "bar_unique": "1" doesn't match descriptor: "2"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1},
+						ColumnNames: []string{"bar"},
+					},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				UniqueWithoutIndexConstraints: []descpb.UniqueWithoutIndexConstraint{
+					{
+						TableID:   1,
+						ColumnIDs: []descpb.ColumnID{1},
+						Name:      "bar_unique",
+					},
+				},
+			}},
+		{`column-id "2" does not exist`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1},
+						ColumnNames: []string{"bar"},
+					},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				UniqueWithoutIndexConstraints: []descpb.UniqueWithoutIndexConstraint{
+					{
+						TableID:   2,
+						ColumnIDs: []descpb.ColumnID{1, 2},
+						Name:      "bar_unique",
+					},
+				},
+			}},
+		{`unique without index constraint "bar_unique" contains duplicate column "1"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1},
+						ColumnNames: []string{"bar"},
+					},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				UniqueWithoutIndexConstraints: []descpb.UniqueWithoutIndexConstraint{
+					{
+						TableID:   2,
+						ColumnIDs: []descpb.ColumnID{1, 1},
+						Name:      "bar_unique",
+					},
+				},
+			}},
+		{`empty unique without index constraint name`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1},
+						ColumnNames: []string{"bar"},
+					},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				UniqueWithoutIndexConstraints: []descpb.UniqueWithoutIndexConstraint{
+					{
+						TableID:   2,
+						ColumnIDs: []descpb.ColumnID{1},
+					},
+				},
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {

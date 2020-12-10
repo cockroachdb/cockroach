@@ -1411,13 +1411,80 @@ ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT "primary" TO
 subtest unique_without_index
 
 statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
 CREATE TABLE unique_without_index (
   a INT,
-  b INT
+  b INT UNIQUE WITHOUT INDEX,
+  c INT UNIQUE,
+  UNIQUE WITHOUT INDEX (b),
+  UNIQUE WITHOUT INDEX (a, b),
+  UNIQUE WITHOUT INDEX (c)
 )
 
-statement error unique constraints without an index are not yet supported
-ALTER TABLE unique_without_index ADD COLUMN c INT UNIQUE WITHOUT INDEX
+# We don't yet support adding unique constraints without an index after a table
+# is created.
+statement error pgcode 0A000 unique constraints without an index are not yet supported
+ALTER TABLE unique_without_index ADD COLUMN d INT UNIQUE WITHOUT INDEX
 
-statement error unique constraints without an index are not yet supported
-ALTER TABLE unique_without_index ADD CONSTRAINT ab UNIQUE WITHOUT INDEX (a, b)
+statement error pgcode 0A000 unique constraints without an index are not yet supported
+ALTER TABLE unique_without_index ADD CONSTRAINT ab UNIQUE WITHOUT INDEX (a, c) NOT VALID
+
+# All constraints are already valid, so validation should succeed.
+statement ok
+ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
+ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;
+ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_without_index_c_key
+
+query TTTTB
+SHOW CONSTRAINTS FROM unique_without_index
+----
+unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (a, b)  true
+unique_without_index  unique_b                    UNIQUE  UNIQUE WITHOUT INDEX (b)     true
+unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)     true
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)     true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)               true
+
+statement ok
+ALTER TABLE unique_without_index RENAME COLUMN a TO aa
+
+statement error pgcode 42704 constraint \"unique_b_2\" does not exist
+ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b_2 TO unique_b_3
+
+statement error pgcode 42710 duplicate constraint name: \"unique_b_1\"
+ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_1
+
+statement ok
+ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_2
+
+query TTTTB
+SHOW CONSTRAINTS FROM unique_without_index
+----
+unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)  true
+unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
+unique_without_index  unique_b_2                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)      true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                true
+
+statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
+ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
+
+statement error pgcode 42704 constraint \"unique_b\" does not exist
+ALTER TABLE unique_without_index DROP CONSTRAINT unique_b
+
+statement error pgcode 0A000 dropping valid unique constraints without an index is not yet supported
+ALTER TABLE unique_without_index DROP CONSTRAINT unique_b_2
+
+# Dropping a column in a unique constraint drops the constraint.
+statement ok
+ALTER TABLE unique_without_index DROP COLUMN b
+
+query TTTTB
+SHOW CONSTRAINTS FROM unique_without_index
+----
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)  true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)            true
+
+# TODO(rytaft): Add test cases for dropping both a valid and not-valid
+# unique constraint once supported.

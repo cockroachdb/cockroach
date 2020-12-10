@@ -312,6 +312,70 @@ func TestMakeTableDescIndexes(t *testing.T) {
 	}
 }
 
+func TestMakeTableDescUniqueConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testData := []struct {
+		sql         string
+		constraints []descpb.UniqueWithoutIndexConstraint
+	}{
+		{
+			"a INT UNIQUE",
+			nil,
+		},
+		{
+			"a INT UNIQUE WITHOUT INDEX, b INT PRIMARY KEY",
+			[]descpb.UniqueWithoutIndexConstraint{
+				{
+					TableID:   100,
+					ColumnIDs: []descpb.ColumnID{1},
+					Name:      "unique_a",
+				},
+			},
+		},
+		{
+			"a INT, b INT, CONSTRAINT c UNIQUE WITHOUT INDEX (b), UNIQUE (a, b)",
+			[]descpb.UniqueWithoutIndexConstraint{
+				{
+					TableID:   100,
+					ColumnIDs: []descpb.ColumnID{2},
+					Name:      "c",
+				},
+			},
+		},
+		{
+			"a INT, b INT, c INT, UNIQUE WITHOUT INDEX (a, b), UNIQUE WITHOUT INDEX (c)",
+			[]descpb.UniqueWithoutIndexConstraint{
+				{
+					TableID:   100,
+					ColumnIDs: []descpb.ColumnID{1, 2},
+					Name:      "unique_a_b",
+				},
+				{
+					TableID:   100,
+					ColumnIDs: []descpb.ColumnID{3},
+					Name:      "unique_c",
+				},
+			},
+		},
+	}
+	for i, d := range testData {
+		s := "CREATE TABLE foo.test (" + d.sql + ")"
+		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
+			descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()))
+		if err != nil {
+			t.Fatalf("%d (%s): %v", i, d.sql, err)
+		}
+		if !reflect.DeepEqual(d.constraints, schema.UniqueWithoutIndexConstraints) {
+			t.Fatalf(
+				"%d (%s): constraints mismatch: expected %+v, but got %+v",
+				i, d.sql, d.constraints, schema.UniqueWithoutIndexConstraints,
+			)
+		}
+	}
+}
+
 func TestPrimaryKeyUnspecified(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

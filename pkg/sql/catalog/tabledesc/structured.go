@@ -447,6 +447,32 @@ func GetColumnFamilyForShard(desc *Mutable, idxColumns []string) string {
 	return ""
 }
 
+// AllActiveAndInactiveUniqueWithoutIndexConstraints returns all unique
+// constraints that are not enforced by an index, including both "active"
+// ones on the table descriptor which are being enforced for all writes, and
+// "inactive" ones queued in the mutations list.
+func (desc *Immutable) AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint {
+	ucs := make([]*descpb.UniqueWithoutIndexConstraint, 0, len(desc.UniqueWithoutIndexConstraints))
+	for i := range desc.UniqueWithoutIndexConstraints {
+		uc := &desc.UniqueWithoutIndexConstraints[i]
+		// While a constraint is being validated for existing rows or being dropped,
+		// the constraint is present both on the table descriptor and in the
+		// mutations list in the Validating or Dropping state, so those constraints
+		// are excluded here to avoid double-counting.
+		if uc.Validity != descpb.ConstraintValidity_Validating &&
+			uc.Validity != descpb.ConstraintValidity_Dropping {
+			ucs = append(ucs, uc)
+		}
+	}
+	for i := range desc.Mutations {
+		if c := desc.Mutations[i].GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX {
+			ucs = append(ucs, &c.UniqueWithoutIndexConstraint)
+		}
+	}
+	return ucs
+}
+
 // AllActiveAndInactiveForeignKeys returns all foreign keys, including both
 // "active" ones on the index descriptor which are being enforced for all
 // writes, and "inactive" ones queued in the mutations list. An error is
@@ -1971,7 +1997,7 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 
 	// TODO(dt): Validate each column only appears at-most-once in any FKs.
 
-	// Only validate column families, check constraints, and indexes if this is
+	// Only validate column families, constraints, and indexes if this is
 	// actually a table, not if it's just a view.
 	if desc.IsPhysicalTable() {
 		if err := desc.validateColumnFamilies(columnIDs); err != nil {
@@ -1979,6 +2005,10 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 		}
 
 		if err := desc.validateCheckConstraints(columnIDs); err != nil {
+			return err
+		}
+
+		if err := desc.validateUniqueWithoutIndexConstraints(columnIDs); err != nil {
 			return err
 		}
 
@@ -2206,6 +2236,46 @@ func (desc *Immutable) validateCheckConstraints(columnIDs map[descpb.ColumnID]st
 				chk.Name, chk.Expr)
 		}
 	}
+	return nil
+}
+
+// validateUniqueWithoutIndexConstraints validates that unique without index
+// constraints are well formed. Checks include validating the column IDs and
+// column names.
+func (desc *Immutable) validateUniqueWithoutIndexConstraints(
+	columnIDs map[descpb.ColumnID]string,
+) error {
+	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
+		if err := catalog.ValidateName(c.Name, "unique without index constraint"); err != nil {
+			return err
+		}
+
+		// Verify that the table ID is valid.
+		if c.TableID != desc.ID {
+			return fmt.Errorf(
+				"TableID mismatch for unique without index constraint %q: \"%d\" doesn't match descriptor: \"%d\"",
+				c.Name, c.TableID, desc.ID,
+			)
+		}
+
+		// Verify that the constraint's column IDs are valid and unique.
+		var seen util.FastIntSet
+		for _, colID := range c.ColumnIDs {
+			_, ok := columnIDs[colID]
+			if !ok {
+				return fmt.Errorf(
+					"unique without index constraint %q contains unknown column \"%d\"", c.Name, colID,
+				)
+			}
+			if seen.Contains(int(colID)) {
+				return fmt.Errorf(
+					"unique without index constraint %q contains duplicate column \"%d\"", c.Name, colID,
+				)
+			}
+			seen.Add(int(colID))
+		}
+	}
+
 	return nil
 }
 
@@ -3022,9 +3092,47 @@ func (desc *Mutable) DropConstraint(
 		return nil
 
 	case descpb.ConstraintTypeUnique:
-		return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
-			"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
-			tree.ErrNameStringP(&detail.Index.Name))
+		if detail.Index != nil {
+			return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
+				"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
+				tree.ErrNameStringP(&detail.Index.Name))
+		}
+		if detail.UniqueWithoutIndexConstraint == nil {
+			return errors.AssertionFailedf(
+				"Index or UniqueWithoutIndexConstraint must be non-nil for a unique constraint",
+			)
+		}
+		if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
+			return unimplemented.NewWithIssueDetailf(42844,
+				"drop-constraint-unique-validating",
+				"constraint %q in the middle of being added, try again later", name)
+		}
+		if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Dropping {
+			return unimplemented.NewWithIssueDetailf(42844,
+				"drop-constraint-unique-mutation",
+				"constraint %q in the middle of being dropped", name)
+		}
+		// Search through the descriptor's unique constraints and delete the
+		// one that we're supposed to be deleting.
+		for i := range desc.UniqueWithoutIndexConstraints {
+			ref := &desc.UniqueWithoutIndexConstraints[i]
+			if ref.Name == name {
+				// If the constraint is unvalidated, there's no assumption that it must
+				// hold for all rows, so it can be dropped immediately.
+				if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Unvalidated {
+					desc.UniqueWithoutIndexConstraints = append(
+						desc.UniqueWithoutIndexConstraints[:i], desc.UniqueWithoutIndexConstraints[i+1:]...,
+					)
+					return nil
+				}
+				// TODO(rytaft): set validity to Dropping and call AddUniqueMutation
+				// once supported.
+				return pgerror.New(pgcode.FeatureNotSupported,
+					"dropping valid unique constraints without an index is not yet supported",
+				)
+			}
+		}
+		return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
 
 	case descpb.ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == descpb.ConstraintValidity_Validating {
@@ -3101,7 +3209,7 @@ func (desc *Mutable) RenameConstraint(
 	renameFK func(*Mutable, *descpb.ForeignKeyConstraint, string) error,
 ) error {
 	switch detail.Kind {
-	case descpb.ConstraintTypePK, descpb.ConstraintTypeUnique:
+	case descpb.ConstraintTypePK:
 		for _, tableRef := range desc.DependedOnBy {
 			if tableRef.IndexID != detail.Index.ID {
 				continue
@@ -3109,6 +3217,32 @@ func (desc *Mutable) RenameConstraint(
 			return dependentViewRenameError("index", tableRef.ID)
 		}
 		return desc.RenameIndexDescriptor(detail.Index, newName)
+
+	case descpb.ConstraintTypeUnique:
+		if detail.Index != nil {
+			for _, tableRef := range desc.DependedOnBy {
+				if tableRef.IndexID != detail.Index.ID {
+					continue
+				}
+				return dependentViewRenameError("index", tableRef.ID)
+			}
+			if err := desc.RenameIndexDescriptor(detail.Index, newName); err != nil {
+				return err
+			}
+		} else if detail.UniqueWithoutIndexConstraint != nil {
+			if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
+				return unimplemented.NewWithIssueDetailf(42844,
+					"rename-constraint-unique-mutation",
+					"constraint %q in the middle of being added, try again later",
+					tree.ErrNameStringP(&detail.UniqueWithoutIndexConstraint.Name))
+			}
+			detail.UniqueWithoutIndexConstraint.Name = newName
+		} else {
+			return errors.AssertionFailedf(
+				"Index or UniqueWithoutIndexConstraint must be non-nil for a unique constraint",
+			)
+		}
+		return nil
 
 	case descpb.ConstraintTypeFK:
 		if detail.FK.Validity == descpb.ConstraintValidity_Validating {

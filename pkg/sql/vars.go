@@ -1146,6 +1146,27 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(experimentalMultiColumnInvertedIndexesMode.Get(sv))
 		},
 	},
+
+	// CockroachDB extension.
+	// TODO(rytaft): remove this once unique without index constraints are fully
+	// supported.
+	`experimental_enable_unique_without_index_constraints`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_unique_without_index_constraints`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`experimental_enable_unique_without_index_constraints`, s)
+			if err != nil {
+				return err
+			}
+			m.SetUniqueWithoutIndexConstraints(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.EnableUniqueWithoutIndexConstraints)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(experimentalUniqueWithoutIndexConstraintsMode.Get(sv))
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

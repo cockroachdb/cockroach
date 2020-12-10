@@ -302,6 +302,15 @@ var experimentalMultiColumnInvertedIndexesMode = settings.RegisterBoolSetting(
 	false,
 )
 
+// TODO(rytaft): remove this once unique without index constraints are fully
+// supported.
+var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_enable_unique_without_index_constraints.enabled",
+	"default value for experimental_enable_unique_without_index_constraints session setting;"+
+		"disables unique without index constraints by default",
+	false,
+)
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -2177,6 +2186,12 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 // supported.
 func (m *sessionDataMutator) SetMutliColumnInvertedIndexes(val bool) {
 	m.data.EnableMultiColumnInvertedIndexes = val
+}
+
+// TODO(rytaft): remove this once unique without index constraints are fully
+// supported.
+func (m *sessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {
+	m.data.EnableUniqueWithoutIndexConstraints = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented
