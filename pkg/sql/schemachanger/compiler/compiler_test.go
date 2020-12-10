@@ -6,17 +6,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/emicklei/dot"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCompiler(t *testing.T) {
 	for _, tc := range []struct {
-		ts    []*targets.TargetState
-		flags compileFlags
+		ts    []targets.TargetState
+		flags CompileFlags
 	}{
 		{
-			[]*targets.TargetState{
+			[]targets.TargetState{
 				{
 					&targets.DropColumn{
 						TableID:  1,
@@ -47,7 +49,7 @@ func TestCompiler(t *testing.T) {
 					targets.StatePublic,
 				},
 			},
-			compileFlags{
+			CompileFlags{
 				ExecutionPhase: PostCommitPhase,
 			},
 		},
@@ -68,8 +70,8 @@ func TestCompile(t *testing.T) {
 	type compileIteration struct {
 		// Must be set for the first Statement. If nil, use the most previously
 		// generated targets.
-		initial  []*targets.TargetState
-		flags    compileFlags
+		initial  []targets.TargetState
+		flags    CompileFlags
 		expected []Stage
 	}
 
@@ -98,16 +100,16 @@ func TestCompile(t *testing.T) {
 			name: "add column without backfill",
 			compileIterations: []compileIteration{
 				{
-					initial: []*targets.TargetState{
+					initial: []targets.TargetState{
 						{&addColTarget, targets.StateAbsent},
 					},
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
 					},
 					expected: []Stage{},
 				},
 				{
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PreCommitPhase,
 					},
 					expected: []Stage{
@@ -127,7 +129,7 @@ func TestCompile(t *testing.T) {
 					},
 				},
 				{
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostCommitPhase,
 					},
 					expected: []Stage{
@@ -180,16 +182,16 @@ func TestCompile(t *testing.T) {
 			name: "add non-unique index",
 			compileIterations: []compileIteration{
 				{
-					initial: []*targets.TargetState{
+					initial: []targets.TargetState{
 						{&addIdxTarget, targets.StateAbsent},
 					},
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
 					},
 					expected: []Stage{},
 				},
 				{
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PreCommitPhase,
 					},
 					expected: []Stage{
@@ -211,7 +213,7 @@ func TestCompile(t *testing.T) {
 					},
 				},
 				{
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostCommitPhase,
 					},
 					expected: []Stage{
@@ -290,18 +292,18 @@ func TestCompile(t *testing.T) {
 			name: "add column with default value",
 			compileIterations: []compileIteration{
 				{
-					initial: []*targets.TargetState{
+					initial: []targets.TargetState{
 						{&addColTarget, targets.StateAbsent},
 						{&addIdxTarget, targets.StateAbsent},
 						{&dropIdxTarget, targets.StatePublic},
 					},
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
 					},
 					expected: []Stage{},
 				},
 				{
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PreCommitPhase,
 					},
 					expected: []Stage{
@@ -332,7 +334,7 @@ func TestCompile(t *testing.T) {
 					},
 				},
 				{
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostCommitPhase,
 					},
 					expected: []Stage{
@@ -514,12 +516,12 @@ func TestCompile(t *testing.T) {
 			name: "drop column and add column with unique index and default value",
 			compileIterations: []compileIteration{
 				{
-					initial: []*targets.TargetState{
+					initial: []targets.TargetState{
 						{&addPrimaryIdxTargetStmt1, targets.StateAbsent},
 						{&dropPrimaryIdxTargetStmt1, targets.StatePublic},
 						{&dropColTarget, targets.StatePublic},
 					},
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
 					},
 					expected: []Stage{
@@ -540,7 +542,7 @@ func TestCompile(t *testing.T) {
 					},
 				},
 				{
-					initial: []*targets.TargetState{
+					initial: []targets.TargetState{
 						{&addPrimaryIdxTarget, targets.StateAbsent},
 						{&dropPrimaryIdxTarget, targets.StatePublic},
 						{&dropColTarget, targets.StateDeleteAndWriteOnly},
@@ -548,13 +550,13 @@ func TestCompile(t *testing.T) {
 						{&addUniqueIdxTarget, targets.StateAbsent},
 						{&addUniqueConstraintTarget, targets.StateAbsent},
 					},
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
 					},
 					expected: []Stage{},
 				},
 				{
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PreCommitPhase,
 					},
 					expected: []Stage{
@@ -588,7 +590,7 @@ func TestCompile(t *testing.T) {
 					},
 				},
 				{
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostCommitPhase,
 					},
 					expected: []Stage{
@@ -775,10 +777,10 @@ func TestCompile(t *testing.T) {
 			name: "add check constraint",
 			compileIterations: []compileIteration{
 				{
-					initial: []*targets.TargetState{
+					initial: []targets.TargetState{
 						{&addCheckTarget, targets.StateAbsent},
 					},
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
 					},
 					expected: []Stage{
@@ -798,16 +800,16 @@ func TestCompile(t *testing.T) {
 					},
 				},
 				{
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PreCommitPhase,
 					},
 					expected: []Stage{},
 				},
 				{
-					initial: []*targets.TargetState{
+					initial: []targets.TargetState{
 						{&addCheckTarget, targets.StateDeleteAndWriteOnly},
 					},
-					flags: compileFlags{
+					flags: CompileFlags{
 						ExecutionPhase: PostCommitPhase,
 					},
 					expected: []Stage{
@@ -842,7 +844,7 @@ func TestCompile(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var prevTargetStates []*targets.TargetState
+			var prevTargetStates []targets.TargetState
 			for _, ci := range tc.compileIterations {
 				if len(ci.initial) > 0 {
 					prevTargetStates = prevTargetStates[:0]
@@ -857,7 +859,7 @@ func TestCompile(t *testing.T) {
 				require.NoError(t, err)
 				t.Log("\n" + dg.String())
 
-				stages, err := compile(prevTargetStates, ci.flags)
+				stages, err := Compile(prevTargetStates, ci.flags)
 				require.NoError(t, err)
 				// TODO (lucy): The ordering of ops in each state is currently
 				// unspecified, so the comparison should be order-insensitive.
@@ -867,10 +869,97 @@ func TestCompile(t *testing.T) {
 					lastTargetStates := stages[len(stages)-1].NextTargets
 					prevTargetStates = prevTargetStates[:0]
 					for i := range lastTargetStates {
-						prevTargetStates = append(prevTargetStates, &lastTargetStates[i])
+						prevTargetStates = append(prevTargetStates, lastTargetStates[i])
 					}
 				}
 			}
 		})
 	}
+}
+
+func TestDebugScratch(t *testing.T) {
+	targetSlice := []targets.Target{
+		&targets.AddIndex{
+			TableID: 10,
+			Index: descpb.IndexDescriptor{
+				Name:             "primary 2",
+				ID:               2,
+				ColumnIDs:        []descpb.ColumnID{1},
+				ColumnNames:      []string{"i"},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				StoreColumnIDs:   []descpb.ColumnID{2},
+				StoreColumnNames: []string{"j"},
+				Unique:           true,
+				Type:             descpb.IndexDescriptor_FORWARD,
+			},
+			PrimaryIndex:   1,
+			ReplacementFor: 1,
+			Primary:        true,
+		},
+		&targets.AddColumn{
+			TableID:      10,
+			ColumnFamily: descpb.FamilyID(1),
+			Column: descpb.ColumnDescriptor{
+				Name:           "j",
+				ID:             2,
+				Type:           types.Int,
+				Nullable:       true,
+				PGAttributeNum: 2,
+			},
+		},
+		&targets.DropIndex{
+			TableID:    10,
+			IndexID:    1,
+			ReplacedBy: 2,
+			ColumnIDs:  []descpb.ColumnID{1},
+		},
+	}
+
+	targetStates := []targets.TargetState{
+		{
+			Target: targetSlice[0],
+			State:  targets.StateDeleteOnly,
+		},
+		{
+			Target: targetSlice[1],
+			State:  targets.StateDeleteOnly,
+		},
+		{
+			Target: targetSlice[2],
+			State:  targets.StatePublic,
+		},
+	}
+
+	draw := func(t *testing.T, flag ExecutionPhase, f func(g *targetStateGraph) (*dot.Graph, error)) {
+		g, err := buildGraph(targetStates, CompileFlags{
+			ExecutionPhase: flag,
+		})
+		require.NoError(t, err)
+		d, err := f(g)
+		require.NoError(t, err)
+		t.Log("\n", d)
+	}
+	t.Run("deps", func(t *testing.T) {
+		t.Run("PostStatement", func(t *testing.T) {
+			draw(t, PostStatementPhase, (*targetStateGraph).drawDeps)
+		})
+		t.Run("PreCommit", func(t *testing.T) {
+			draw(t, PreCommitPhase, (*targetStateGraph).drawDeps)
+		})
+		t.Run("PostCommit", func(t *testing.T) {
+			draw(t, PostCommitPhase, (*targetStateGraph).drawDeps)
+		})
+	})
+	t.Run("stages", func(t *testing.T) {
+		t.Run("PostStatement", func(t *testing.T) {
+			draw(t, PostStatementPhase, (*targetStateGraph).drawStages)
+		})
+		t.Run("PreCommit", func(t *testing.T) {
+			draw(t, PreCommitPhase, (*targetStateGraph).drawStages)
+		})
+		t.Run("PostCommit", func(t *testing.T) {
+			draw(t, PostCommitPhase, (*targetStateGraph).drawStages)
+		})
+	})
+
 }

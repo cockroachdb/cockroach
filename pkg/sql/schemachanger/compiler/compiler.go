@@ -1,12 +1,19 @@
 package compiler
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
+
+// TODO(ajwerner): There are some ordering requirements between ops in
+// the same stage. Make sure to deal with that. In particular, we need
+// to move public things out before we can move non-public things in.
+// There's some hackery but it's just that.
 
 type Stage struct {
 	Ops         []ops.Op
@@ -21,7 +28,7 @@ const (
 	PostCommitPhase
 )
 
-type compileFlags struct {
+type CompileFlags struct {
 	ExecutionPhase       ExecutionPhase
 	CreatedDescriptorIDs descIDSet
 }
@@ -175,7 +182,7 @@ func (g *targetStateGraph) addDepEdge(
 }
 
 func buildGraph(
-	initialStates []*targets.TargetState, flags compileFlags,
+	initialStates []targets.TargetState, flags CompileFlags,
 ) (*targetStateGraph, error) {
 	g := targetStateGraph{
 		targetIdxMap:        map[targets.Target]int{},
@@ -215,7 +222,7 @@ type stage struct {
 	next []*targets.TargetState
 }
 
-func buildStages(g *targetStateGraph, flags compileFlags) error {
+func buildStages(g *targetStateGraph, flags CompileFlags) error {
 	// TODO(ajwerner): deal with the case where the target state was
 	// fulfilled by something that preceded the initial state.
 	fulfilled := map[*targets.TargetState]struct{}{}
@@ -296,6 +303,21 @@ func buildStages(g *targetStateGraph, flags compileFlags) error {
 					}
 				}
 			}
+			// TODO(ajwerner): Make this way better
+			sort.Slice(s.ops, func(i, j int) bool {
+				ii, iOk := s.ops[i].(ops.IndexDescriptorStateChange)
+				jj, jOk := s.ops[j].(ops.IndexDescriptorStateChange)
+				if iOk && !jOk {
+					return true
+				}
+				if jOk && !iOk {
+					return false
+				}
+				if !iOk && !jOk {
+					return false
+				}
+				return ii.State > jj.State
+			})
 			s.next = next
 			g.stages = append(g.stages, s)
 			cur = next
@@ -310,7 +332,7 @@ func buildStages(g *targetStateGraph, flags compileFlags) error {
 	return nil
 }
 
-func compile(t []*targets.TargetState, flags compileFlags) ([]Stage, error) {
+func Compile(t []targets.TargetState, flags CompileFlags) ([]Stage, error) {
 	// We want to create a sequence of TargetStates and ops along the edges.
 
 	// We'll start with a process of producing a graph of edges.

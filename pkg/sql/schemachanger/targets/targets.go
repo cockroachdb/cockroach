@@ -44,8 +44,9 @@ type DropIndex struct {
 
 type AddColumn struct {
 	target
-	TableID descpb.ID
-	Column  descpb.ColumnDescriptor
+	TableID      descpb.ID
+	ColumnFamily descpb.FamilyID
+	Column       descpb.ColumnDescriptor
 }
 
 type DropColumn struct {
@@ -100,10 +101,10 @@ type State int
 //go:generate stringer --type State
 
 const (
-	StateDeleteOnly State = iota
+	StateAbsent State = iota
+	StateDeleteOnly
 	StateDeleteAndWriteOnly
 	StateBackfilled
-	StatePublic
 	StateValidated
-	StateAbsent
+	StatePublic
 )

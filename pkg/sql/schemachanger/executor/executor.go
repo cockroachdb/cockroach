@@ -7,6 +7,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -57,6 +59,10 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, execute []
 			err = ex.executeAddCheckConstraint(ctx, op)
 		case ops.AddIndexDescriptor:
 			err = ex.executeAddIndexDescriptor(ctx, op)
+		case ops.AddColumnDescriptor:
+			err = ex.executeAddColumnDescriptor(ctx, op)
+		case ops.ColumnDescriptorStateChange:
+			err = ex.executeColumnDescriptorStateChange(ctx, op)
 		case ops.IndexDescriptorStateChange:
 			err = ex.executeIndexDescriptorStateChange(ctx, op)
 		default:
@@ -72,7 +78,83 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, execute []
 func (ex *Executor) executeIndexDescriptorStateChange(
 	ctx context.Context, op ops.IndexDescriptorStateChange,
 ) error {
-	panic("not implemented")
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+	// We want to find the index and then change its state.
+	if op.State == targets.StatePublic && op.NextState == targets.StateDeleteAndWriteOnly {
+		var idx descpb.IndexDescriptor
+		if op.IsPrimary {
+			if table.PrimaryIndex.ID != op.IndexID {
+				// TODO(ajwerner): Better error.
+				return errors.AssertionFailedf("expected index to be primary")
+			}
+			idx = table.PrimaryIndex
+			table.PrimaryIndex = descpb.IndexDescriptor{}
+		} else {
+			for i := range table.Indexes {
+				if table.Indexes[i].ID != op.IndexID {
+					continue
+				}
+				idx = table.Indexes[i]
+				table.Indexes = append(table.Indexes[:i], table.Indexes[i+1:]...)
+				break
+			}
+			if idx.ID == 0 {
+				return errors.AssertionFailedf("failed to find index")
+			}
+		}
+		table.AddIndexMutation(&idx, descpb.DescriptorMutation_DROP)
+	} else {
+		// Moving from a mutation to something.
+		mutations := table.GetMutations()
+		foundIdx := -1
+		for i := range mutations {
+			mut := &mutations[i]
+			idx := mut.GetIndex()
+			if idx != nil && idx.ID == op.IndexID {
+				foundIdx = i
+				break
+			}
+		}
+		if foundIdx == -1 {
+			return errors.AssertionFailedf("")
+		}
+		mut := &mutations[foundIdx]
+		idx := mut.GetIndex()
+		switch op.NextState {
+
+		case targets.StateAbsent:
+			// Can happen in revert or when removing an index.
+			if mut.State != descpb.DescriptorMutation_DELETE_ONLY {
+				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
+					descpb.DescriptorMutation_DELETE_ONLY, op.NextState, mut.State)
+			}
+			table.Mutations = append(mutations[:foundIdx], mutations[foundIdx+1:]...)
+		case targets.StateDeleteAndWriteOnly:
+			mut.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+		case targets.StateDeleteOnly:
+			mut.State = descpb.DescriptorMutation_DELETE_ONLY
+		case targets.StatePublic:
+			if mut.State != descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
+					descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY, op.NextState, mut.State)
+			}
+			if op.IsPrimary {
+				if table.PrimaryIndex.ID != 0 {
+					return errors.AssertionFailedf("expected primary index to be unset")
+				}
+				table.PrimaryIndex = *idx
+			} else {
+				table.Indexes = append(table.Indexes, *idx)
+			}
+			table.Mutations = append(mutations[:foundIdx], mutations[foundIdx+1:]...)
+		default:
+			return errors.AssertionFailedf("unknown transition for index to %s", op.NextState)
+		}
+	}
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
 
 func (ex *Executor) executeAddCheckConstraint(
@@ -97,16 +179,14 @@ func (ex *Executor) executeAddCheckConstraint(
 	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
 
-func (ex *Executor) executeDescriptorMutationOp(ctx context.Context, op ops.Op) {
-
-}
-
 func (ex *Executor) executeBackfillOps(ctx context.Context, execute []ops.Op) error {
-	panic("not implemented")
+	log.Errorf(ctx, "not implemented")
+	return nil
 }
 
 func (ex *Executor) executeValidationOps(ctx context.Context, execute []ops.Op) error {
-	panic("not implemented")
+	log.Errorf(ctx, "not implemented")
+	return nil
 }
 
 func (ex *Executor) executeAddIndexDescriptor(
@@ -116,12 +196,124 @@ func (ex *Executor) executeAddIndexDescriptor(
 	if err != nil {
 		return err
 	}
-	table.MaybeIncrementVersion()
 
 	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
 	// or what-not.
-	table.NextIndexID++
+	if op.Index.ID >= table.NextIndexID {
+		table.NextIndexID = op.Index.ID + 1
+	}
 	table.AddIndexMutation(&op.Index, descpb.DescriptorMutation_ADD)
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func (ex *Executor) executeAddColumnDescriptor(
+	ctx context.Context, op ops.AddColumnDescriptor,
+) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+
+	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
+	// or what-not.
+	if op.Column.ID >= table.NextColumnID {
+		table.NextColumnID = op.Column.ID + 1
+	}
+	var foundFamily bool
+	for i := range table.Families {
+		fam := &table.Families[i]
+		if foundFamily = fam.ID == op.ColumnFamily; foundFamily {
+			fam.ColumnIDs = append(fam.ColumnIDs, op.Column.ID)
+			fam.ColumnNames = append(fam.ColumnNames, op.Column.Name)
+			break
+		}
+	}
+	if !foundFamily {
+		return errors.AssertionFailedf("failed to find column family")
+	}
+	table.AddColumnMutation(&op.Column, descpb.DescriptorMutation_ADD)
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func (ex *Executor) executeColumnDescriptorStateChange(
+	ctx context.Context, op ops.ColumnDescriptorStateChange,
+) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+	// We want to find the index and then change its state.
+	if op.State == targets.StatePublic && op.NextState == targets.StateDeleteAndWriteOnly {
+		var col descpb.ColumnDescriptor
+
+		for i := range table.Columns {
+			if table.Columns[i].ID != op.ColumnID {
+				continue
+			}
+			col = table.Columns[i]
+			table.Columns = append(table.Columns[:i], table.Columns[i+1:]...)
+			break
+		}
+		if col.ID == 0 {
+			return errors.AssertionFailedf("failed to find column")
+		}
+		table.AddColumnMutation(&col, descpb.DescriptorMutation_DROP)
+	} else {
+		// Moving from a mutation to something.
+		mutations := table.GetMutations()
+		foundIdx := -1
+		for i := range mutations {
+			mut := &mutations[i]
+			col := mut.GetColumn()
+			if col != nil && col.ID == op.ColumnID {
+				foundIdx = i
+				break
+			}
+		}
+		if foundIdx == -1 {
+			return errors.AssertionFailedf("")
+		}
+		mut := &mutations[foundIdx]
+		col := mut.GetColumn()
+		switch op.NextState {
+
+		case targets.StateAbsent:
+			// Can happen in revert or when removing an index.
+			if mut.State != descpb.DescriptorMutation_DELETE_ONLY {
+				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
+					descpb.DescriptorMutation_DELETE_ONLY, op.NextState, mut.State)
+			}
+			for i := range table.Families {
+				fam := &table.Families[i]
+				famIdx := -1
+				for i, id := range fam.ColumnIDs {
+					if id == op.ColumnID {
+						famIdx = i
+						break
+					}
+				}
+				if famIdx == -1 {
+					return errors.AssertionFailedf("failed to find column family when removing column")
+				}
+				fam.ColumnIDs = append(fam.ColumnIDs[:famIdx], fam.ColumnIDs[famIdx+1:]...)
+				fam.ColumnNames = append(fam.ColumnNames[:famIdx], fam.ColumnNames[famIdx+1:]...)
+			}
+			table.Mutations = append(mutations[:foundIdx], mutations[foundIdx+1:]...)
+		case targets.StateDeleteAndWriteOnly:
+			mut.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+		case targets.StateDeleteOnly:
+			mut.State = descpb.DescriptorMutation_DELETE_ONLY
+		case targets.StatePublic:
+			if mut.State != descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+				return errors.AssertionFailedf("expected column to be in %v for %v, got %v",
+					descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY, op.NextState, mut.State)
+			}
+			table.Columns = append(table.Columns, *col)
+			table.Mutations = append(mutations[:foundIdx], mutations[foundIdx+1:]...)
+		default:
+			return errors.AssertionFailedf("unknown transition for index to %s", op.NextState)
+		}
+	}
 	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
 
