@@ -497,7 +497,7 @@ func (p *planner) dropIndexByName(
 			if err := tableDesc.AddIndexMutation(&idxEntry, descpb.DescriptorMutation_DROP); err != nil {
 				return err
 			}
-			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+			tableDesc.RemovePublicNonPrimaryIndex(i)
 			found = true
 			break
 		}

@@ -3672,7 +3672,7 @@ CREATE TABLE d.t (
 		}
 		index.ExtraColumnIDs = append(index.ExtraColumnIDs, index.StoreColumnIDs...)
 		index.StoreColumnIDs = nil
-		tableDesc.Indexes[i] = index
+		tableDesc.SetPublicNonPrimaryIndex(i, index)
 	}
 	if err := kvDB.Put(
 		context.Background(),

@@ -307,7 +307,11 @@ func (p *planner) AlterPrimaryKey(
 	tableDesc.AddPrimaryKeySwapMutation(swapArgs)
 
 	// Mark the primary key of the table as valid.
-	tableDesc.PrimaryIndex.Disabled = false
+	{
+		primaryIndex := *tableDesc.GetPrimaryIndex()
+		primaryIndex.Disabled = false
+		tableDesc.SetPrimaryIndex(primaryIndex)
+	}
 
 	// N.B. We don't schedule index deletions here because the existing
 	// indexes need to be visible to the user until the primary key swap

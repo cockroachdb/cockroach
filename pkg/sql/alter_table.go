@@ -708,7 +708,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			n.tableDesc.PrimaryIndex.Partitioning = partitioning
+			{
+				primaryIndex := *n.tableDesc.GetPrimaryIndex()
+				primaryIndex.Partitioning = partitioning
+				n.tableDesc.SetPrimaryIndex(primaryIndex)
+			}
 
 		case *tree.AlterTableSetAudit:
 			changed, err := params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
