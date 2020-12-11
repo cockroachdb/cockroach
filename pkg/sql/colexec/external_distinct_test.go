@@ -57,7 +57,7 @@ func TestExternalDistinct(t *testing.T) {
 		monitors []*mon.BytesMonitor
 	)
 	// Test the case in which the default memory is used as well as the case in
-	// which the joiner spills to disk.
+	// which the distinct spills to disk.
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for tcIdx, tc := range distinctTestCases {
