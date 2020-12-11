@@ -56,7 +56,7 @@ type SpanMeta struct {
 	// If set, all spans derived from this context are being recorded.
 	//
 	// NB: at the time of writing, this is only ever set to SnowballTracing
-	// and only if Baggage[Snowball] is set.
+	// and only if Baggage[verboseTracingBaggageKey] is set.
 	recordingType RecordingType
 
 	// The Span's associated baggage.
@@ -227,7 +227,7 @@ func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 		parent.addChild(s)
 	}
 	if recType == SnowballRecording {
-		s.setBaggageItemLocked(Snowball, "1")
+		s.setBaggageItemLocked(verboseTracingBaggageKey, "1")
 	}
 	// Clear any previously recorded info. This is needed by SQL SessionTracing,
 	// who likes to start and stop recording repeatedly on the same Span, and
@@ -286,9 +286,9 @@ func (s *crdbSpan) disableRecording() {
 	// has, we don't want to do the call below as it might crash (at least if
 	// there's a netTr).
 	if (s.mu.duration == -1) && (oldRecType == SnowballRecording) {
-		// Clear the Snowball baggage item, assuming that it was set by
+		// Clear the verboseTracingBaggageKey baggage item, assuming that it was set by
 		// enableRecording().
-		s.setBaggageItemLocked(Snowball, "")
+		s.setBaggageItemLocked(verboseTracingBaggageKey, "")
 	}
 }
 
