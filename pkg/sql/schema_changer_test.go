@@ -6123,7 +6123,7 @@ func TestPermanentErrorDuringRollback(t *testing.T) {
 	defer setTestJobsAdoptInterval()()
 	ctx := context.Background()
 
-	runTest := func(params base.TestServerArgs) {
+	runTest := func(params base.TestServerArgs, gcJobRecord bool) {
 		s, sqlDB, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 
@@ -6140,10 +6140,20 @@ CREATE UNIQUE INDEX i ON t.test(v);
 `)
 		require.Regexp(t, "violates unique constraint", err.Error())
 
+		var jobID int64
 		var jobErr string
-		row := sqlDB.QueryRow("SELECT error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
-		require.NoError(t, row.Scan(&jobErr))
+		row := sqlDB.QueryRow("SELECT job_id, error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
+		require.NoError(t, row.Scan(&jobID, &jobErr))
 		require.Regexp(t, "cannot be reverted, manual cleanup may be required: permanent error", jobErr)
+
+		if gcJobRecord {
+			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id = $1`, jobID)
+			require.NoError(t, err)
+		}
+
+		// Test that dropping the table is still possible.
+		_, err = sqlDB.Exec(`DROP TABLE t.test`)
+		require.NoError(t, err)
 	}
 
 	t.Run("error-before-backfill", func(t *testing.T) {
@@ -6168,7 +6178,9 @@ CREATE UNIQUE INDEX i ON t.test(v);
 				},
 			},
 		}
-		runTest(params)
+		// Don't GC the job record after the schema change, so we can test dropping
+		// the table with a failed mutation job.
+		runTest(params, false /* gcJobRecord */)
 	})
 
 	t.Run("error-before-reversing-mutations", func(t *testing.T) {
@@ -6193,7 +6205,9 @@ CREATE UNIQUE INDEX i ON t.test(v);
 				},
 			},
 		}
-		runTest(params)
+		// GC the job record after the schema change, so we can test dropping the
+		// table with a nonexistent mutation job.
+		runTest(params, true /* gcJobRecord */)
 	})
 }
 

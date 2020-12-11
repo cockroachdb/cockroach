@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -441,6 +443,12 @@ func (p *planner) initiateDropTable(
 	// subsequent schema changes in the transaction (ie. this drop table statement) do not get a cache hit
 	// and do not try to update succeeded jobs, which would raise an error. Instead, this drop table
 	// statement will create a new job to drop the table.
+	//
+	// Note that we still wait for jobs removed from the cache to finish running
+	// after the transaction, since they're not removed from the jobsCollection.
+	// Also, changes made here do not affect schema change jobs created in this
+	// transaction with no mutation ID; they remain in the cache, and will be
+	// updated when writing the job record to drop the table.
 	jobIDs := make(map[int64]struct{})
 	var id descpb.MutationID
 	for _, m := range tableDesc.Mutations {
@@ -454,9 +462,41 @@ func (p *planner) initiateDropTable(
 		}
 	}
 	for jobID := range jobIDs {
-		if err := p.ExecCfg().JobRegistry.Succeeded(ctx, p.txn, jobID); err != nil {
-			return errors.Wrapf(err,
-				"failed to mark job %d as as successful", errors.Safe(jobID))
+		// Mark jobs as succeeded when possible, but be defensive about jobs that
+		// are already in a terminal state or nonexistent. This could happen for
+		// schema change jobs that couldn't be successfully reverted and ended up in
+		// a failed state. Such jobs could have already been GCed from the jobs
+		// table by the time this code runs.
+		row, err := p.ExtendedEvalContext().InternalExecutor.(*InternalExecutor).QueryRowEx(
+			ctx, "query mutation job", p.txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			`SELECT status FROM system.jobs WHERE id = $1`, jobID,
+		)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			log.Warningf(ctx, "mutation job %d not found", jobID)
+			continue
+		}
+		status := jobs.Status(tree.MustBeDString(row[0]))
+		switch status {
+		case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed:
+			log.Warningf(ctx, "mutation job %d in unexpected state %s", status)
+			continue
+		case jobs.StatusRunning, jobs.StatusPending:
+			if err := p.ExecCfg().JobRegistry.Succeeded(ctx, p.txn, jobID); err != nil {
+				return errors.Wrapf(err,
+					"failed to mark job %d as as succeeded", errors.Safe(jobID))
+			}
+		default:
+			// We can only mark jobs as succeeded if they're in the running or pending
+			// state (the latter being obsolete). If this is, e.g., a reverting job,
+			// we'll have to mark it as failed.
+			if err := p.ExecCfg().JobRegistry.Failed(ctx, p.txn, jobID,
+				errors.Newf("table %d was dropped", tableDesc.ID)); err != nil {
+				return errors.Wrapf(err,
+					"failed to mark job %d as as failed", errors.Safe(jobID))
+			}
 		}
 		delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
 	}
