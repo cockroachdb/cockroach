@@ -83,8 +83,8 @@ var zipkinCollector = settings.RegisterPublicStringSetting(
 //    Span inside each of our spans.
 //
 // Even when tracing is disabled, we still use this Tracer (with x/net/trace and
-// lightstep disabled) because of its recording capability (snowball
-// tracing needs to work in all cases).
+// lightstep disabled) because of its recording capability (verbose tracing needs
+// to work in all cases).
 //
 // Tracer is currently stateless so we could have a single instance; however,
 // this won't be the case if the cluster settings move away from using global

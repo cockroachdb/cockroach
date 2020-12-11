@@ -231,7 +231,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	noop1.Finish()
 	noop2.Finish()
 
-	// Verify that snowball tracing is propagated and triggers recording on the
+	// Verify that verbose tracing is propagated and triggers verbosity on the
 	// remote side.
 
 	s1 := tr.StartSpan("a", WithForceRealSpan())
