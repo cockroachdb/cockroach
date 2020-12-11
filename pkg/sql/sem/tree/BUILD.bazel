@@ -87,6 +87,7 @@ go_library(
         "type_check.go",
         "type_name.go",
         "union.go",
+        "unsupported.go",
         "update.go",
         "values.go",
         "var_name.go",

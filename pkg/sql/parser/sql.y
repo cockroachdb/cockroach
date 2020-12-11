@@ -70,6 +70,8 @@ func unimplementedWithIssueDetail(sqllex sqlLexer, issue int, detail string) int
     sqllex.(*lexer).UnimplementedWithIssueDetail(issue, detail)
     return 1
 }
+
+
 %}
 
 %{
@@ -726,6 +728,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> stmt_block
 %type <tree.Statement> stmt
 
+
 %type <tree.Statement> alter_stmt
 %type <tree.Statement> alter_ddl_stmt
 %type <tree.Statement> alter_table_stmt
@@ -738,6 +741,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> alter_role_stmt
 %type <tree.Statement> alter_type_stmt
 %type <tree.Statement> alter_schema_stmt
+%type <tree.Statement> alter_unsupported_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -1328,6 +1332,7 @@ stmt:
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
+| alter_unsupported_stmt
 | ALTER error         // SHOW HELP: ALTER
 
 alter_ddl_stmt:
@@ -2710,6 +2715,13 @@ import_format:
     $$ = strings.ToUpper($1)
   }
 
+alter_unsupported_stmt:
+ ALTER FUNCTION error
+  {
+    return unimplemented(sqllex, "ALTER FUNCTION")
+  }
+
+
 // %Help: IMPORT - load data from file in a distributed manner
 // %Category: CCL
 // %Text:
@@ -3065,6 +3077,7 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnIndex{Index: $4.tableIndexName(), Comment: $6.strPtr()}
   }
+| COMMENT ON EXTENSION error { return unimplemented(sqllex, "comment on extension") }
 
 comment_text:
   SCONST
@@ -3104,6 +3117,7 @@ create_extension_stmt:
 | CREATE EXTENSION name {
     $$.val = &tree.CreateExtension{Name: $3}
   }
+| CREATE EXTENSION IF NOT EXISTS name WITH error { return unimplemented(sqllex, "create extension if not exists with") }
 | CREATE EXTENSION error // SHOW HELP: CREATE EXTENSION
 
 create_unsupported:
@@ -3125,7 +3139,7 @@ create_unsupported:
 | CREATE SUBSCRIPTION error { return unimplemented(sqllex, "create subscription") }
 | CREATE TABLESPACE error { return unimplementedWithIssueDetail(sqllex, 54113, "create tablespace") }
 | CREATE TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
-| CREATE TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create") }
+| CREATE TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create trigger") }
 
 opt_or_replace:
   OR REPLACE {}
@@ -3863,6 +3877,10 @@ grant_stmt:
       Grantees: $7.nameList(),
     }
   }
+| GRANT privileges ON SEQUENCE error
+  {
+    return unimplemented(sqllex, "GRANT ON SEQUENCE")
+  }
 | GRANT error // SHOW HELP: GRANT
 
 // %Help: REVOKE - remove access privileges and role memberships
@@ -3909,6 +3927,10 @@ revoke_stmt:
       },
       Grantees: $7.nameList(),
     }
+  }
+| REVOKE privileges ON SEQUENCE error
+  {
+    return unimplemented(sqllex, "REVOKE ON SEQUENCE")
   }
 | REVOKE error // SHOW HELP: REVOKE
 

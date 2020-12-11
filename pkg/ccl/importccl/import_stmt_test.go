@@ -1021,29 +1021,6 @@ END;
 			err:  `non-public schemas unsupported: s`,
 		},
 		{
-			name: "various create ignores",
-			typ:  "PGDUMP",
-			data: `
-				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
-				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM PUBLIC;
-				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM database;
-				GRANT ALL ON SEQUENCE knex_migrations_id_seq TO database;
-				GRANT SELECT ON SEQUENCE knex_migrations_id_seq TO opentrials_readonly;
-
-				CREATE FUNCTION public.isnumeric(text) RETURNS boolean
-				    LANGUAGE sql
-				    AS $_$
-				SELECT $1 ~ '^[0-9]+$'
-				$_$;
-				ALTER FUNCTION public.isnumeric(text) OWNER TO roland;
-
-				CREATE TABLE t (i INT8);
-			`,
-			query: map[string][][]string{
-				getTablesQuery: {{"public", "t", "table"}},
-			},
-		},
-		{
 			name: "many tables",
 			typ:  "PGDUMP",
 			data: func() string {
@@ -1597,7 +1574,8 @@ func TestImportRowLimit(t *testing.T) {
 		expectedRowLimit := 4
 
 		// Import a single table `second` and verify number of rows imported.
-		importQuery := fmt.Sprintf(`IMPORT TABLE second FROM PGDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
+		importQuery := fmt.Sprintf(`IMPORT TABLE second FROM PGDUMP ($1) WITH row_limit="%d",ignore_unsupported`,
+			expectedRowLimit)
 		sqlDB.Exec(t, importQuery, second...)
 
 		var numRows int
@@ -1608,7 +1586,7 @@ func TestImportRowLimit(t *testing.T) {
 
 		// Import multiple tables including `simple` and `second`.
 		expectedRowLimit = 3
-		importQuery = fmt.Sprintf(`IMPORT PGDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
+		importQuery = fmt.Sprintf(`IMPORT PGDUMP ($1) WITH row_limit="%d",ignore_unsupported`, expectedRowLimit)
 		sqlDB.Exec(t, importQuery, multitable...)
 		sqlDB.QueryRow(t, "SELECT count(*) FROM second").Scan(&numRows)
 		require.Equal(t, expectedRowLimit, numRows)
@@ -5536,9 +5514,9 @@ func TestImportPgDump(t *testing.T) {
 		},
 		{`single table dump`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1)`, simple},
 		{`second table dump`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1)`, second},
-		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1)`, multitable},
-		{`second from multi`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1)`, multitable},
-		{`all from multi`, expectAll, `IMPORT PGDUMP ($1)`, multitable},
+		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1) WITH ignore_unsupported`, multitable},
+		{`second from multi`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1) WITH ignore_unsupported`, multitable},
+		{`all from multi`, expectAll, `IMPORT PGDUMP ($1) WITH ignore_unsupported`, multitable},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second`)
@@ -5673,6 +5651,62 @@ func TestImportPgDump(t *testing.T) {
 		sqlDB.ExpectErr(t,
 			"PGDUMP file format is currently unsupported by IMPORT INTO",
 			fmt.Sprintf(`IMPORT INTO t (a, b) PGDUMP DATA (%q)`, srv.URL))
+	})
+}
+
+func TestImportPgDumpIgnoredStmts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	data := `
+				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
+				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM PUBLIC;
+				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM database;
+				GRANT ALL ON SEQUENCE knex_migrations_id_seq TO database;
+				GRANT SELECT ON SEQUENCE knex_migrations_id_seq TO opentrials_readonly;
+
+        CREATE TABLE foo (id INT);
+
+				CREATE FUNCTION public.isnumeric(text) RETURNS boolean
+				    LANGUAGE sql
+				    AS $_$
+				SELECT $1 ~ '^[0-9]+$'
+				$_$;
+				ALTER FUNCTION public.isnumeric(text) OWNER TO roland;
+
+        INSERT INTO foo VALUES (1), (2), (3);
+
+				CREATE TABLE t (i INT8);
+				COMMENT ON TABLE t IS 'This should be skipped';
+				COMMENT ON DATABASE t IS 'This should be skipped';
+				COMMENT ON COLUMN t IS 'This should be skipped';
+				COMMENT ON EXTENSION;
+				COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+				CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
+			`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+	t.Run("ignore-unsupported", func(t *testing.T) {
+		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", srv.URL)
+		// Check that statements which are not expected to be ignored, are still
+		// processed.
+		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1"}, {"2"}, {"3"}})
+		sqlDB.Exec(t, "DROP TABLE foo")
+	})
+
+	t.Run("dont-ignore-unsupported", func(t *testing.T) {
+		sqlDB.ExpectErr(t, "syntax error", "IMPORT PGDUMP ($1)", srv.URL)
 	})
 }
 
