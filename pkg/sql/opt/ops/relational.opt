@@ -392,6 +392,12 @@ define InvertedJoinPrivate {
     # IsFirstJoinInPairedJoiner is true.
     ContinuationCol ColumnID
 
+    # PrefixKeyCols are the columns (produced by the input) used to create
+    # lookup keys for the non-inverted prefix columns if the index is a
+    # multi-column inverted index. There must be a key column for each prefix
+    # column.
+    PrefixKeyCols ColList
+
     # Cols is the set of columns produced by the inverted join. This set can
     # contain columns from the input and columns from the index. Any columns
     # not in the input are retrieved from the index.
