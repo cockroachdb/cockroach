@@ -549,6 +549,14 @@ func (sc *SchemaChanger) addConstraints(
 					if err != nil {
 						return err
 					}
+					// Check that a unique constraint for the FK still exists on the
+					// referenced table. It's possible for the unique index found during
+					// planning to have been dropped in the meantime, since only the
+					// presence of the backreference prevents it.
+					_, err = tabledesc.FindFKReferencedIndex(backrefTable, constraint.ForeignKey.ReferencedColumnIDs)
+					if err != nil {
+						return err
+					}
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
 
 					// Note that this code may add the same descriptor to the batch

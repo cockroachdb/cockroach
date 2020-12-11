@@ -1897,3 +1897,28 @@ query TTTTB
 SHOW CONSTRAINTS FROM child_54265
 ----
 child_54265  fk_a_ref_parent_54265  FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a)  false
+
+# Test that dropping a unique index used by a foreign key reference causes the
+# foreign key addition to fail.
+subtest 57592
+
+statement ok
+CREATE TABLE t1_57592(a INT)
+
+statement ok
+CREATE UNIQUE INDEX idx ON t1_57592(a)
+
+statement ok
+CREATE TABLE t2_57592(a INT)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t2_57592 ADD FOREIGN KEY (a) REFERENCES t1_57592(a);
+
+statement ok
+DROP INDEX t1_57592@idx;
+
+statement error pgcode XXA00 there is no unique constraint matching given keys for referenced table t1_57592
+COMMIT
