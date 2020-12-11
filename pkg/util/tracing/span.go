@@ -256,7 +256,7 @@ func (s *Span) SetVerbose(to bool) {
 	// caveat that SetVerbose(true) is a panic on a noop span because there will be no
 	// noop span.
 	if s.isNoop() {
-		panic("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan")
+		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
 	if to {
 		// If we're already recording (perhaps because the parent was recording when
