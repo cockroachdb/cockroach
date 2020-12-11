@@ -130,8 +130,6 @@ const hashAggregatorAllocSize = 128
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
-// memAccount should be the same as the one used by allocator and will be used
-// by aggregatorHelper to handle DISTINCT clause.
 func NewHashAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		args, hashAggregatorAllocSize, true, /* isHashAgg */
