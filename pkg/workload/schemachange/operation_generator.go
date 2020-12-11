@@ -268,7 +268,7 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 
 	def := &tree.ColumnTableDef{
 		Name: tree.Name(columnName),
-		Type: typName.ToUnresolvedObjectName(),
+		Type: typName,
 	}
 	def.Nullable.Nullability = tree.Nullability(rand.Intn(1 + int(tree.SilentNull)))
 
@@ -1368,7 +1368,7 @@ func (og *operationGenerator) setColumnDefault(tx *pgx.Tx) (string, error) {
 		}
 		if !typeExists {
 			og.expectedExecErrors.add(pgcode.UndefinedObject)
-			return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`, tableName, column.name, newTypeName.String()), nil
+			return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`, tableName, column.name, newTypeName.SQLString()), nil
 		}
 
 		datumTyp, err = og.typeFromTypeName(tx, newTypeName.String())
@@ -1488,7 +1488,7 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
-		tableName, column.name, newTypeName), nil
+		tableName, column.name, newTypeName.SQLString()), nil
 }
 
 func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
