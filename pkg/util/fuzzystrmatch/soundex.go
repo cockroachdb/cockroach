@@ -24,7 +24,7 @@ const soundexTable = "01230120022455012623010202"
 func soundexCode(r rune) byte {
 	letter := byte(unicode.ToUpper(r))
 	if letter >= 'A' && letter <= 'Z' {
-		return byte(soundexTable[int(letter-'A')])
+		return soundexTable[int(letter-'A')]
 	}
 	return 0x0
 }
@@ -37,7 +37,7 @@ func soundex(source string) string {
 		}
 		return false
 	})
-	code := make([]byte, soundexLen, soundexLen)
+	code := make([]byte, soundexLen)
 	// No string left
 	if len(source) == 0 {
 		return string(code)
