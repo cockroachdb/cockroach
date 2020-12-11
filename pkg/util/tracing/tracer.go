@@ -27,8 +27,13 @@ import (
 	"golang.org/x/net/trace"
 )
 
-// Snowball is set as Baggage on traces which are used for snowball tracing.
-const Snowball = "sb"
+// verboseTracingBaggageKey is set as Baggage on traces which are used for verbose tracing,
+// meaning that a) spans derived from this one will not be no-op spans and b) they will
+// start recording.
+//
+// This is "sb" for historical reasons; this concept used to be called "[S]now[b]all" tracing
+// and since this string goes on the wire, it's a hassle to change it now.
+const verboseTracingBaggageKey = "sb"
 
 // maxLogsPerSpan limits the number of logs in a Span; use a comfortable limit.
 const maxLogsPerSpan = 1000
@@ -71,7 +76,7 @@ var zipkinCollector = settings.RegisterPublicStringSetting(
 //  - forwarding events to x/net/trace instances
 //
 //  - recording traces. Recording is started automatically for spans that have
-//    the Snowball baggage and can be started explicitly as well. Recorded
+//    the verboseTracingBaggageKey baggage and can be started explicitly as well. Recorded
 //    events can be retrieved at any time.
 //
 //  - lightstep traces. This is implemented by maintaining a "shadow" lightstep
@@ -465,7 +470,7 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, er
 	}
 
 	var recordingType RecordingType
-	if baggage[Snowball] != "" {
+	if baggage[verboseTracingBaggageKey] != "" {
 		recordingType = SnowballRecording
 	}
 
