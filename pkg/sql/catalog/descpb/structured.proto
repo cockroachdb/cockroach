@@ -544,6 +544,10 @@ message PrimaryKeySwap {
   // swapped out with the i'th index in new_indexes.
   repeated uint32 old_indexes = 2 [(gogoproto.casttype) = "IndexID"];
   repeated uint32 new_indexes = 3 [(gogoproto.casttype) = "IndexID"];
+  // new_primary_index_name is the name of the primary key when added as a
+  // new constraint to a table without a primary key. In other cases, it is
+  // the empty string.
+  optional string new_primary_index_name = 5 [(gogoproto.nullable) = false];
 }
 
 // ComputedColumnSwap is a mutation corresponding to the atomic swap phase
