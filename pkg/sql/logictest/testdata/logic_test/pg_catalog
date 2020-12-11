@@ -952,11 +952,16 @@ FROM pg_catalog.pg_depend
 ORDER BY objid
 ----
 classid     objid       objsubid  refclassid  refobjid   refobjsubid  deptype
+4294967216  58          0         4294967216  55         1            n
+4294967216  58          0         4294967216  55         2            n
+4294967216  58          0         4294967216  55         3            n
+4294967216  58          0         4294967216  55         4            n
 4294967214  2143281868  0         4294967216  450499961  0            n
 4294967214  4089604113  0         4294967216  450499960  0            n
 
-# All entries in pg_depend are dependency links from the pg_constraint system
-# table to the pg_class system table.
+# Some entries in pg_depend are dependency links from the pg_constraint system
+# table to the pg_class system table. Other entries are links to pg_class when it is
+# a table-view dependency.
 
 query OOTT colnames
 SELECT DISTINCT classid, refclassid, cla.relname AS tablename, refcla.relname AS reftablename
@@ -965,10 +970,11 @@ JOIN pg_class cla ON classid=cla.oid
 JOIN pg_class refcla ON refclassid=refcla.oid
 ----
 classid     refclassid  tablename      reftablename
+4294967216  4294967216  pg_class       pg_class
 4294967214  4294967216  pg_constraint  pg_class
 
-# All entries in pg_depend are foreign key constraints that reference an index
-# in pg_class.
+# Some entries in pg_depend are foreign key constraints that reference an index
+# in pg_class. Other entries are table-view dependencies
 
 query TT colnames
 SELECT relname, relkind
@@ -978,11 +984,15 @@ ORDER BY relname
 ----
 relname    relkind
 index_key  i
+t1         r
+t1         r
+t1         r
+t1         r
 t1_a_key   i
 
 
-# All entries are pg_depend are linked to a foreign key constraint whose
-# supporting index is the referenced object id.
+# Some entries in pg_depend are linked to a foreign key constraint whose
+# supporting index is the referenced object id. Other entries are table-view dependencies
 
 query T colnames
 SELECT DISTINCT pg_constraint.contype
@@ -991,6 +1001,40 @@ JOIN pg_constraint ON objid=pg_constraint.oid AND refobjid=pg_constraint.conindi
 ----
 contype
 f
+
+# Testing table-view dependencies in pg_depend, This query will not work the same way
+# In PostgreSQL as pg_depend.objid refers to pg_rewrite.oid, then pg_rewrite ev_class
+# refers to the dependent object, but cockroach db does not implements pg_rewrite yet
+# (Issue #57417: https://github.com/cockroachdb/cockroach/issues/57417)
+
+statement ok
+CREATE TABLE source_table(a INT PRIMARY KEY, b INT, c INT);
+CREATE VIEW depend_view AS SELECT b, c FROM source_table;
+CREATE VIEW view_dependingon_view AS SELECT b, c FROM depend_view;
+
+query TTTTTT colnames
+SELECT
+     depend_cat_class.relname depend_catalog,
+	   source_cat_class.relname source_catalog,
+	   source_class.relname source,
+	   depend_class.relname depend,
+	   pg_attribute.attname column_name,
+	   pg_depend.deptype
+  FROM pg_depend
+  JOIN pg_class depend_class ON pg_depend.objid = depend_class.oid
+  JOIN pg_class source_class ON pg_depend.refobjid = source_class.oid
+  JOIN pg_class depend_cat_class ON pg_depend.classid = depend_cat_class.oid
+  JOIN pg_class source_cat_class ON pg_depend.refclassid = source_cat_class.oid
+  JOIN pg_attribute ON pg_depend.refobjid    = pg_attribute.attrelid
+                   AND pg_depend.refobjsubid = pg_attribute.attnum
+  WHERE source_class.relname IN ('source_table', 'depend_view')
+  ORDER BY 3, 4, 5
+----
+depend_catalog  source_catalog  source        depend                 column_name  deptype
+pg_class        pg_class        depend_view   view_dependingon_view  b            n
+pg_class        pg_class        depend_view   view_dependingon_view  c            n
+pg_class        pg_class        source_table  depend_view            b            n
+pg_class        pg_class        source_table  depend_view            c            n
 
 ## pg_catalog.pg_enum
 statement ok
@@ -1001,10 +1045,10 @@ query OORT colnames
 SELECT * FROM pg_enum
 ----
 oid         enumtypid  enumsortorder  enumlabel
-1881906619  100065     0              v1
-1881906555  100065     1              v2
-1915461985  100067     0              v3
-1915462049  100067     1              v4
+1932239604  100068     0              v1
+1932239412  100068     1              v2
+1965794714  100070     0              v3
+1965794650  100070     1              v4
 
 ## pg_catalog.pg_type
 
@@ -1089,10 +1133,10 @@ oid     typname        typnamespace  typowner    typlen  typbyval  typtype
 90003   _geography     1307062959    NULL        -1      false     b
 90004   box2d          1307062959    NULL        32      true      b
 90005   _box2d         1307062959    NULL        -1      false     b
-100065  newtype1       2332901747    1546506610  -1      false     e
-100066  _newtype1      2332901747    1546506610  -1      false     b
-100067  newtype2       2332901747    1546506610  -1      false     e
-100068  _newtype2      2332901747    1546506610  -1      false     b
+100068  newtype1       2332901747    1546506610  -1      false     e
+100069  _newtype1      2332901747    1546506610  -1      false     b
+100070  newtype2       2332901747    1546506610  -1      false     e
+100071  _newtype2      2332901747    1546506610  -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -1175,10 +1219,10 @@ oid     typname        typcategory  typispreferred  typisdefined  typdelim  typr
 90003   _geography     A            false           true          ,         0         90002    0
 90004   box2d          U            false           true          ,         0         0        90005
 90005   _box2d         A            false           true          ,         0         90004    0
-100065  newtype1       E            false           true          ,         0         0        100066
-100066  _newtype1      A            false           true          ,         0         100065   0
-100067  newtype2       E            false           true          ,         0         0        100068
-100068  _newtype2      A            false           true          ,         0         100067   0
+100068  newtype1       E            false           true          ,         0         0        100069
+100069  _newtype1      A            false           true          ,         0         100068   0
+100070  newtype2       E            false           true          ,         0         0        100071
+100071  _newtype2      A            false           true          ,         0         100070   0
 
 query OTOOOOOOO colnames
 SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze
@@ -1261,10 +1305,10 @@ oid     typname        typinput        typoutput        typreceive        typsen
 90003   _geography     array_in        array_out        array_recv        array_send        0         0          0
 90004   box2d          box2d_in        box2d_out        box2d_recv        box2d_send        0         0          0
 90005   _box2d         array_in        array_out        array_recv        array_send        0         0          0
-100065  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
-100066  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
-100067  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
-100068  _newtype2      array_in        array_out        array_recv        array_send        0         0          0
+100068  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100069  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
+100070  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100071  _newtype2      array_in        array_out        array_recv        array_send        0         0          0
 
 query OTTTBOI colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
@@ -1347,10 +1391,10 @@ oid     typname        typalign  typstorage  typnotnull  typbasetype  typtypmod
 90003   _geography     NULL      NULL        false       0            -1
 90004   box2d          NULL      NULL        false       0            -1
 90005   _box2d         NULL      NULL        false       0            -1
-100065  newtype1       NULL      NULL        false       0            -1
-100066  _newtype1      NULL      NULL        false       0            -1
-100067  newtype2       NULL      NULL        false       0            -1
-100068  _newtype2      NULL      NULL        false       0            -1
+100068  newtype1       NULL      NULL        false       0            -1
+100069  _newtype1      NULL      NULL        false       0            -1
+100070  newtype2       NULL      NULL        false       0            -1
+100071  _newtype2      NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
 SELECT oid, typname, typndims, typcollation, typdefaultbin, typdefault, typacl
@@ -1433,10 +1477,10 @@ oid     typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 90003   _geography     0         0             NULL           NULL        NULL
 90004   box2d          0         0             NULL           NULL        NULL
 90005   _box2d         0         0             NULL           NULL        NULL
-100065  newtype1       0         0             NULL           NULL        NULL
-100066  _newtype1      0         0             NULL           NULL        NULL
-100067  newtype2       0         0             NULL           NULL        NULL
-100068  _newtype2      0         0             NULL           NULL        NULL
+100068  newtype1       0         0             NULL           NULL        NULL
+100069  _newtype1      0         0             NULL           NULL        NULL
+100070  newtype2       0         0             NULL           NULL        NULL
+100071  _newtype2      0         0             NULL           NULL        NULL
 
 user testuser
 
@@ -1462,10 +1506,10 @@ oid     typname        typnamespace  typowner  typlen  typbyval  typtype
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
-WHERE oid = 100065
+WHERE typname = 'newtype1'
 ----
 oid     typname   typnamespace  typowner    typlen  typbyval  typtype
-100065  newtype1  2332901747    1546506610  -1      false     e
+100068  newtype1  2332901747    1546506610  -1      false     e
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -2053,8 +2097,8 @@ query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-70        20        1         1             9223372036854775807  1       1         false
-71        20        6         2             10                   5       1         false
+73        20        1         1             9223372036854775807  1       1         false
+74        20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -2117,7 +2161,7 @@ SET DATABASE = 'constraint_db'
 query I
 SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'
 ----
-3
+4
 
 user root
 
@@ -2510,7 +2554,7 @@ CREATE INDEX regression_46450_idx ON regression_46450 USING gin(json)
 query TTTTTT
 select * from pg_indexes where indexname = 'regression_46450_idx'
 ----
-357708632  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
+617444901  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
 
 # Make sure that selecting from vtables with indexes in other dbs properly
 # hides descriptors that should be hidden.
@@ -2623,13 +2667,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-95  95  jt
+98  98  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1   NULL  NULL
-95  95    jt
+98  98    jt
 
 subtest regression_49207
 statement ok
