@@ -616,13 +616,12 @@ func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
 	return context.WithValue(ctx, activeSpanKey{}, sp)
 }
 
-// StartSnowballTrace takes in a context and returns a derived one with a
-// "snowball Span" in it. The caller takes ownership of this Span from the
-// returned context and is in charge of Finish()ing it. The Span has recording
-// enabled.
+// StartVerboseTrace takes in a context and returns a derived one with a
+// Span in it that is recording verbosely. The caller takes ownership of
+// this Span from the returned context and is in charge of Finish()ing it.
 //
 // TODO(andrei): remove this method once EXPLAIN(TRACE) is gone.
-func StartSnowballTrace(
+func StartVerboseTrace(
 	ctx context.Context, tracer *Tracer, opName string,
 ) (context.Context, *Span) {
 	var span *Span
