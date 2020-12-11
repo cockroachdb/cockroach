@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -289,13 +290,19 @@ func (s *crdbSpan) disableRecording() {
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
 func (s *Span) GetRecording() Recording {
-	return s.crdb.getRecording()
+	return s.crdb.getRecording(s.tracer.mode())
 }
 
-func (s *crdbSpan) getRecording() Recording {
-	if s.recordingType() == RecordingOff {
-		// TODO(tbg): is this desired? If a span is not currently recording,
-		// it can still hold a recording.
+func (s *crdbSpan) getRecording(m mode) Recording {
+	if s == nil {
+		return nil
+	}
+	if m == modeLegacy && s.recordingType() == RecordingOff {
+		// In legacy tracing (pre always-on), we avoid allocations when the
+		// Span is not actively recording.
+		//
+		// TODO(tbg): we could consider doing the same when background tracing
+		// is on but the current span contains "nothing of interest".
 		return nil
 	}
 	s.mu.Lock()
@@ -304,34 +311,55 @@ func (s *crdbSpan) getRecording() Recording {
 	result := make(Recording, 0, 1+len(s.mu.recording.children)+len(s.mu.recording.remoteSpans))
 	// Shallow-copy the children so we can process them without the lock.
 	children := s.mu.recording.children
-	result = append(result, s.getRecordingLocked())
+	result = append(result, s.getRecordingLocked(m))
 	result = append(result, s.mu.recording.remoteSpans...)
 	s.mu.Unlock()
 
 	for _, child := range children {
-		result = append(result, child.getRecording()...)
+		result = append(result, child.getRecording(m)...)
 	}
 
 	// Sort the spans by StartTime, except the first Span (the root of this
 	// recording) which stays in place.
-	toSort := result[1:]
-	sort.Slice(toSort, func(i, j int) bool {
-		return toSort[i].StartTime.Before(toSort[j].StartTime)
-	})
+	toSort := sortPool.Get().(*Recording) // avoids allocations in sort.Sort
+	*toSort = result[1:]
+	sort.Sort(toSort)
+	sortPool.Put(toSort)
 	return result
+}
+
+var sortPool = sync.Pool{
+	New: func() interface{} {
+		return &Recording{}
+	},
+}
+
+// Less implements sort.Interface.
+func (r Recording) Less(i, j int) bool {
+	return r[i].StartTime.Before(r[j].StartTime)
+}
+
+// Swap implements sort.Interface.
+func (r Recording) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
+// Len implements sort.Interface.
+func (r Recording) Len() int {
+	return len(r)
 }
 
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
 func (s *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
+	if s.tracer.mode() == modeLegacy && s.crdb.recordingType() == RecordingOff {
+		return nil
+	}
 	return s.crdb.ImportRemoteSpans(remoteSpans)
 }
 
 func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
-	if s.recordingType() == RecordingOff {
-		return errors.AssertionFailedf("adding Raw Spans to a Span that isn't recording")
-	}
 	// Change the root of the remote recording to be a child of this Span. This is
 	// usually already the case, except with DistSQL traces where remote
 	// processors run in spans that FollowFrom an RPC Span that we don't collect.
@@ -600,7 +628,7 @@ func (s *Span) Tracer() *Tracer {
 
 // getRecordingLocked returns the Span's recording. This does not include
 // children.
-func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
+func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 	rs := tracingpb.RecordedSpan{
 		TraceID:      s.traceID,
 		SpanID:       s.spanID,
@@ -617,15 +645,20 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 		rs.Tags[k] = v
 	}
 
-	if rs.Duration == -1 {
-		// -1 indicates an unfinished Span. For a recording it's better to put some
-		// duration in it, otherwise tools get confused. For example, we export
-		// recordings to Jaeger, and spans with a zero duration don't look nice.
-		rs.Duration = timeutil.Now().Sub(rs.StartTime)
-		addTag("_unfinished", "1")
-	}
-	if s.mu.recording.recordingType.load() == RecordingVerbose {
-		addTag("_verbose", "1")
+	// When nobody is configured to see our spans, skip some allocations
+	// related to Span UX improvements.
+	onlyBackgroundTracing := m == modeBackground && s.recordingType() == RecordingOff
+	if !onlyBackgroundTracing {
+		if rs.Duration == -1 {
+			// -1 indicates an unfinished Span. For a recording it's better to put some
+			// duration in it, otherwise tools get confused. For example, we export
+			// recordings to Jaeger, and spans with a zero duration don't look nice.
+			rs.Duration = timeutil.Now().Sub(rs.StartTime)
+			addTag("_unfinished", "1")
+		}
+		if s.mu.recording.recordingType.load() == RecordingVerbose {
+			addTag("_verbose", "1")
+		}
 	}
 
 	if s.mu.stats != nil {
@@ -642,7 +675,7 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 			rs.Baggage[k] = v
 		}
 	}
-	if s.logTags != nil {
+	if !onlyBackgroundTracing && s.logTags != nil {
 		setLogTags(s.logTags.Get(), func(remappedKey string, tag *logtags.Tag) {
 			addTag(remappedKey, tag.ValueStr())
 		})
