@@ -382,7 +382,7 @@ func (s *sampleAggregator) sampleRow(
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// Turn off tracing so these writes don't affect the results of EXPLAIN
 	// ANALYZE.
-	if span := tracing.SpanFromContext(ctx); span != nil && span.IsRecording() {
+	if span := tracing.SpanFromContext(ctx); span != nil && span.IsVerbose() {
 		// TODO(rytaft): this also hides writes in this function from SQL session
 		// traces.
 		ctx = tracing.ContextWithSpan(ctx, nil)

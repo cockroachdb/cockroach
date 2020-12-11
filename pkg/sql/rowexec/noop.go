@@ -56,7 +56,7 @@ func newNoopProcessor(
 		return nil, err
 	}
 	ctx := flowCtx.EvalCtx.Ctx()
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
 		n.input = newInputStatCollector(n.input)
 		n.ExecStatsForTrace = n.execStatsForTrace
 	}

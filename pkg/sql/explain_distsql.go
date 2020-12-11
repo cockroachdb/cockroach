@@ -125,7 +125,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		// don't get a noopSpan.
 		var sp *tracing.Span
 		if parentSp := tracing.SpanFromContext(params.ctx); parentSp != nil &&
-			!parentSp.IsRecording() {
+			!parentSp.IsVerbose() {
 			tracer := parentSp.Tracer()
 			sp = tracer.StartSpan(
 				"explain-distsql", tracing.WithForceRealSpan(),
