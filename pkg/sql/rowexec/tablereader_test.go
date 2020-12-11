@@ -315,7 +315,7 @@ func TestTableReaderDrain(t *testing.T) {
 
 	// Run the flow in a snowball trace so that we can test for tracing info.
 	tracer := tracing.NewTracer()
-	ctx, sp := tracing.StartSnowballTrace(context.Background(), tracer, "test flow ctx")
+	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test flow ctx")
 	defer sp.Finish()
 	st := s.ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

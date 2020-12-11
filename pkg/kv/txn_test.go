@@ -42,7 +42,7 @@ func TestTxnSnowballTrace(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tracer := tracing.NewTracer()
-	ctx, sp := tracing.StartSnowballTrace(context.Background(), tracer, "test-txn")
+	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test-txn")
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
