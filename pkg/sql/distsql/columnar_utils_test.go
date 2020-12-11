@@ -242,9 +242,11 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		procErr := procMetas[0].Err.Error()
 		colOpErr := colOpMetas[0].Err.Error()
 		if procErr != colOpErr {
+			//if !strings.HasPrefix(procErr, "geos error") || !strings.HasPrefix(colOpErr, "geos error") {
 			return errors.Errorf("different errors returned:\n"+
 				"processor returned\n%+v\ncolumnar operator returned\n%+v",
 				procMetas[0].Err, colOpMetas[0].Err)
+			//}
 		}
 		// The errors are the same, so the rows that were returned do not matter.
 		return nil

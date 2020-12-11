@@ -104,7 +104,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	nRuns := 20
 	nRows := 100
-	nAggFnsToTest := 5
+	nAggFnsToTest := 1
 	const (
 		maxNumGroupingCols = 3
 		nextGroupProb      = 0.2
@@ -125,6 +125,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 		found := false
 		for !found {
 			aggFn = execinfrapb.AggregatorSpec_Func(rng.Intn(numSupportedAggFns))
+			aggFn = execinfrapb.AggregatorSpec_JSON_AGG
 			if _, valid := aggregateFuncToNumArguments[aggFn]; !valid {
 				continue
 			}
@@ -143,8 +144,8 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 		}
 		aggregations = append(aggregations, execinfrapb.AggregatorSpec_Aggregation{Func: aggFn})
 	}
-	for _, spillForced := range []bool{false, true} {
-		for _, hashAgg := range []bool{false, true} {
+	for _, spillForced := range []bool{true} {
+		for _, hashAgg := range []bool{true} {
 			if !hashAgg && spillForced {
 				// There is no point in making the ordered aggregation spill to
 				// disk.
