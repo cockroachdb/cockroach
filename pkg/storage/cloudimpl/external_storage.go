@@ -122,6 +122,10 @@ var ErrListingUnsupported = errors.New("listing is not supported")
 // This error is raised by the ReadFile method.
 var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
+func init() {
+	cloud.AccessIsWithExplicitAuth = AccessIsWithExplicitAuth
+}
+
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
 func ExternalStorageConfFromURI(
 	path string, user security.SQLUsername,
@@ -302,6 +306,9 @@ func MakeExternalStorage(
 	switch dest.Provider {
 	case roachpb.ExternalStorageProvider_LocalFile:
 		telemetry.Count("external-io.nodelocal")
+		if blobClientFactory == nil {
+			return nil, errors.New("nodelocal storage is not available")
+		}
 		return makeLocalStorage(ctx, dest.LocalFile, settings, blobClientFactory, conf)
 	case roachpb.ExternalStorageProvider_Http:
 		if conf.DisableHTTP {

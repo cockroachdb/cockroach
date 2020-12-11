@@ -236,6 +236,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			failureTestCases := []func(){
 				func() { _ = ro.ApplyBatchRepr(nil, false) },
 				func() { _ = ro.ClearUnversioned(a.Key) },
+				func() { _ = ro.SingleClearEngineKey(EngineKey{Key: a.Key}) },
 				func() { _ = ro.ClearRawRange(a.Key, a.Key) },
 				func() { _ = ro.Merge(a, nil) },
 				func() { _ = ro.PutUnversioned(a.Key, nil) },
@@ -262,7 +263,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			if err := e.PutUnversioned(mvccKey("d").Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
-			if err := e.ClearUnversioned(mvccKey("d").Key); err != nil {
+			if err := e.SingleClearEngineKey(EngineKey{Key: mvccKey("d").Key}); err != nil {
 				t.Fatal(err)
 			}
 

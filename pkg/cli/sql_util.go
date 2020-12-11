@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -342,24 +341,6 @@ func (c *sqlConn) checkServerMetadata() error {
 	// supported by the server.
 	c.tryEnableServerExecutionTimings()
 
-	return nil
-}
-
-// requireServerVersion returns an error if the version of the connected server
-// is not at least the given version.
-func (c *sqlConn) requireServerVersion(required *version.Version) error {
-	_, versionString, _, err := c.getServerMetadata()
-	if err != nil {
-		return err
-	}
-	vers, err := version.Parse(versionString)
-	if err != nil {
-		return fmt.Errorf("unable to parse server version %q", versionString)
-	}
-	if !vers.AtLeast(required) {
-		return fmt.Errorf("incompatible client and server versions (detected server version: %s, required: %s)",
-			vers, required)
-	}
 	return nil
 }
 
@@ -976,7 +957,7 @@ func maybeShowTimes(
 		// No need to print if no one's watching.
 		if sqlCtx.isInteractive {
 			fmt.Fprintf(stderr, "\nNote: timings for multiple statements on a single line are not supported. See %s.\n",
-				unimplemented.MakeURL(48180))
+				build.MakeIssueURL(48180))
 		}
 		return
 	}
@@ -1164,4 +1145,16 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 	}
 
 	return fmt.Sprint(val)
+}
+
+// parseBool parses a boolean string for use in slash commands.
+func parseBool(s string) (bool, error) {
+	switch strings.TrimSpace(strings.ToLower(s)) {
+	case "true", "on", "yes", "1":
+		return true, nil
+	case "false", "off", "no", "0":
+		return false, nil
+	default:
+		return false, errors.Newf("invalid boolean value %q", s)
+	}
 }

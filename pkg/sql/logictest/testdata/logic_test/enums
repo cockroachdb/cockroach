@@ -433,10 +433,10 @@ FROM
 WHERE
   typname IN ('collision', '_collision', '__collision', '___collision')
 ----
-_collision    100082  0       100083
-__collision   100083  100082  0
-collision     100084  0       100085
-___collision  100085  100084  0
+_collision    100085  0       100086
+__collision   100086  100085  0
+collision     100087  0       100088
+___collision  100088  100087  0
 
 # Regression for #49756.
 query TT
@@ -447,7 +447,7 @@ FROM
 WHERE
   descriptor_name = 'enum_array' AND column_name = 'x'
 ----
-x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100064 array_contents:<InternalType:<family:EnumFamily width:0 precision:0 locale:"" visible_type:0 oid:100063 time_precision_is_set:false udt_metadata:<array_type_oid:100064 > > TypeMeta:<Version:0 > > time_precision_is_set:false
+x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100067 array_contents:<InternalType:<family:EnumFamily width:0 precision:0 locale:"" visible_type:0 oid:100066 time_precision_is_set:false udt_metadata:<array_type_oid:100067 > > TypeMeta:<Version:0 > > time_precision_is_set:false
 
 # Test tables using enums in DEFAULT expressions.
 statement ok
@@ -1235,3 +1235,51 @@ DROP DATABASE to_drop CASCADE;
 # the referenced type no longer exists.
 statement ok
 SELECT * FROM crdb_internal.tables
+
+statement ok
+create DATABASE test_57196;
+CREATE SCHEMA test_57196.sc;
+CREATE TYPE test_57196.public.greeting AS ENUM ('hi');
+CREATE TYPE test_57196.sc.greeting AS ENUM('hello');
+
+query TTTT colnames
+SHOW ENUMS FROM test_57196.public
+----
+schema  name      values  owner
+public  greeting  {hi}    root
+
+query TTTT colnames
+SHOW ENUMS FROM test_57196.sc
+----
+schema  name      values   owner
+sc      greeting  {hello}  root
+
+# In this context, test_57196 will be resolved to a database because of our
+# legacy name resolution compat. In other words, this is analogous to test_57196.public
+query TTTT colnames
+SHOW ENUMS FROM test_57196
+----
+schema  name      values  owner
+public  greeting  {hi}    root
+
+statement ok
+USE test_57196
+
+query TTTT colnames
+SHOW ENUMS
+----
+schema  name      values   owner
+public  greeting  {hi}     root
+sc      greeting  {hello}  root
+
+query TTTT colnames
+SHOW ENUMS FROM public
+----
+schema  name      values  owner
+public  greeting  {hi}    root
+
+query TTTT colnames
+SHOW ENUMS FROM sc
+----
+schema  name      values   owner
+sc      greeting  {hello}  root

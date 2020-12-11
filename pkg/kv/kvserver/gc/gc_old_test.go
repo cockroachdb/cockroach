@@ -50,8 +50,7 @@ func runGCOld(
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
 ) (Info, error) {
 
-	iter := rditer.NewReplicaMVCCDataIterator(desc, snap,
-		true /* replicatedOnly */, false /* seekEnd */)
+	iter := rditer.NewReplicaMVCCDataIterator(desc, snap, false /* seekEnd */)
 	defer iter.Close()
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
@@ -149,8 +148,6 @@ func runGCOld(
 
 							err := gcer.GC(ctx, batchGCKeys)
 
-							// Succeed or fail, allow releasing the memory backing batchGCKeys.
-							iter.ResetAllocator()
 							batchGCKeys = nil
 							batchGCKeysBytes = 0
 

@@ -19,15 +19,16 @@ import (
 )
 
 // SetupAllNodesPlanning creates a planCtx and sets up the planCtx.NodeStatuses
-// map for all nodes.
+// map for all nodes. It returns all nodes that can be used for planning.
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []roachpb.NodeID, error) {
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, true /* distribute */)
+	distribute := evalCtx.Codec.ForSystemTenant()
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, distribute)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
 	if err != nil {
-		return nil, nil, err
+		return planCtx, []roachpb.NodeID{dsp.gatewayNodeID}, nil //nolint:returnerrcheck
 	}
 	resp, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
@@ -40,8 +41,10 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 		_ /* NodeStatus */ = dsp.CheckNodeHealthAndVersion(planCtx, node.Desc.NodeID)
 	}
 	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeStatuses))
-	for nodeID := range planCtx.NodeStatuses {
-		nodes = append(nodes, nodeID)
+	for nodeID, status := range planCtx.NodeStatuses {
+		if status == NodeOK {
+			nodes = append(nodes, nodeID)
+		}
 	}
 	// Shuffle node order so that multiple IMPORTs done in parallel will not
 	// identically schedule CSV reading. For example, if there are 3 nodes and 4

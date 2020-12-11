@@ -311,7 +311,7 @@ func TestPanicWithNilStopper(t *testing.T) {
 	New(Config{Sender: make(chanSender)})
 }
 
-// TestBatchTimeout verifies the the RequestBatcher uses the context with the
+// TestBatchTimeout verifies the RequestBatcher uses the context with the
 // deadline from the latest call to send.
 func TestBatchTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()

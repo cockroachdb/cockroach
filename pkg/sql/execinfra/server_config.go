@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -142,7 +142,7 @@ type ServerConfig struct {
 	// the leaseholders of the data ranges that they're consuming. These
 	// processors query the cache to see if they should communicate updates to the
 	// gateway.
-	RangeCache *kvcoord.RangeDescriptorCache
+	RangeCache *rangecache.RangeCache
 
 	// HydratedTables is a node-level cache of table descriptors which utilize
 	// user-defined types.
@@ -197,9 +197,12 @@ type TestingKnobs struct {
 	// checked by a test receiver on the gateway.
 	MetadataTestLevel MetadataTestLevel
 
-	// DeterministicStats overrides stats which don't have reliable values, like
-	// stall time and bytes sent. It replaces them with a zero value.
-	DeterministicStats bool
+	// GenerateMockContentionEvents causes any kv fetcher used in the flow to
+	// generate mock contention events. See
+	// TestingEnableMockContentionEventGeneration for more details. This testing
+	// knob can also be enabled via a cluster setting.
+	// TODO(asubiotto): Remove once KV layer produces real contention events.
+	GenerateMockContentionEvents bool
 
 	// CheckVectorizedFlowIsClosedCorrectly checks that all components in a flow
 	// were closed explicitly in flow.Cleanup.
@@ -220,6 +223,9 @@ type TestingKnobs struct {
 
 	// JobsTestingKnobs is jobs infra specific testing knobs.
 	JobsTestingKnobs base.ModuleTestingKnobs
+
+	// BackupRestoreTestingKnobs are backup and restore specific testing knobs.
+	BackupRestoreTestingKnobs base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test

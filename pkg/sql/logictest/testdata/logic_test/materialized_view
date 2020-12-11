@@ -149,3 +149,15 @@ REFRESH MATERIALIZED VIEW with_options WITH NO DATA
 
 query I
 SELECT * FROM with_options
+
+# Regression test for null data in materialized views.
+statement ok
+CREATE TABLE t57108 (id INT PRIMARY KEY, a INT);
+INSERT INTO t57108 VALUES(1, 1), (2, NULL);
+CREATE MATERIALIZED VIEW t57108_v AS SELECT t57108.a from t57108;
+
+query I rowsort
+SELECT * FROM t57108_v
+----
+NULL
+1

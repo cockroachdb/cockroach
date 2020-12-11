@@ -13,13 +13,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -55,43 +51,9 @@ type explainDistSQLRun struct {
 	executedStatement bool
 }
 
-// distSQLExplainable is an interface used for local plan nodes that create
-// distributed jobs. The plan node should implement this interface so that
-// EXPLAIN (DISTSQL) will show the DistSQL plan instead of the local plan node.
-type distSQLExplainable interface {
-	// newPlanForExplainDistSQL returns the DistSQL physical plan that can be
-	// used by the explainDistSQLNode to generate flow specs (and run in the case
-	// of EXPLAIN ANALYZE).
-	newPlanForExplainDistSQL(*PlanningCtx, *DistSQLPlanner) (*PhysicalPlan, error)
-}
-
-// getPlanDistributionForExplainPurposes returns the PlanDistribution that plan
-// will have. It is similar to getPlanDistribution but also pays attention to
-// whether the logical plan will be handled as a distributed job. It should
-// *only* be used in EXPLAIN variants.
-func getPlanDistributionForExplainPurposes(
-	ctx context.Context,
-	p *planner,
-	nodeID *base.SQLIDContainer,
-	distSQLMode sessiondata.DistSQLExecMode,
-	plan planMaybePhysical,
-) physicalplan.PlanDistribution {
-	if plan.isPhysicalPlan() {
-		return plan.physPlan.Distribution
-	}
-	if _, ok := plan.planNode.(distSQLExplainable); ok {
-		// This is a special case for plans that will be actually distributed
-		// but are represented using local plan nodes (for example, "create
-		// statistics" is handled by the jobs framework which is responsible
-		// for setting up the correct DistSQL infrastructure).
-		return physicalplan.FullyDistributedPlan
-	}
-	return getPlanDistribution(ctx, p, nodeID, distSQLMode, plan)
-}
-
 func (n *explainDistSQLNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	distribution := getPlanDistributionForExplainPurposes(
+	distribution := getPlanDistribution(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
@@ -128,9 +90,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			params.p.txn,
-			func(ts hlc.Timestamp) {
-				execCfg.Clock.Update(ts)
-			},
+			execCfg.Clock,
 			params.extendedEvalCtx.Tracing,
 		)
 		if !distSQLPlanner.PlanAndRunSubqueries(
@@ -169,7 +129,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			tracer := parentSp.Tracer()
 			sp = tracer.StartSpan(
 				"explain-distsql", tracing.WithForceRealSpan(),
-				tracing.WithParent(parentSp),
+				tracing.WithParentAndAutoCollection(parentSp),
 				tracing.WithCtxLogTags(params.ctx))
 		} else {
 			tracer := params.extendedEvalCtx.ExecCfg.AmbientCtx.Tracer
@@ -199,9 +159,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			stmtType,
 			execCfg.RangeDescriptorCache,
 			newParams.p.txn,
-			func(ts hlc.Timestamp) {
-				execCfg.Clock.Update(ts)
-			},
+			execCfg.Clock,
 			newParams.extendedEvalCtx.Tracing,
 		)
 		defer recv.Release()
@@ -214,7 +172,10 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			diagram = d
 			return nil
 		}
-		planCtx.saveDiagramShowInputTypes = n.options.Flags[tree.ExplainFlagTypes]
+		planCtx.saveDiagramFlags = execinfrapb.DiagramFlags{
+			ShowInputTypes:    n.options.Flags[tree.ExplainFlagTypes],
+			MakeDeterministic: execCfg.TestingKnobs.DeterministicExplainAnalyze,
+		}
 
 		distSQLPlanner.Run(
 			planCtx, newParams.p.txn, physPlan, recv, newParams.extendedEvalCtx, nil, /* finishedSetupFn */
@@ -231,8 +192,10 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		diagram.AddSpans(spans)
 	} else {
 		flows := physPlan.GenerateFlowSpecs()
-		showInputTypes := n.options.Flags[tree.ExplainFlagTypes]
-		diagram, err = execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, showInputTypes)
+		flags := execinfrapb.DiagramFlags{
+			ShowInputTypes: n.options.Flags[tree.ExplainFlagTypes],
+		}
+		diagram, err = execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, flags)
 		if err != nil {
 			return err
 		}
@@ -256,9 +219,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			params.p.txn,
-			func(ts hlc.Timestamp) {
-				execCfg.Clock.Update(ts)
-			},
+			execCfg.Clock,
 			params.extendedEvalCtx.Tracing,
 		)
 		if !distSQLPlanner.PlanAndRunCascadesAndChecks(
@@ -307,15 +268,5 @@ func newPhysPlanForExplainPurposes(
 	if plan.isPhysicalPlan() {
 		return plan.physPlan.PhysicalPlan, nil
 	}
-	var physPlan *PhysicalPlan
-	var err error
-	if planNode, ok := plan.planNode.(distSQLExplainable); ok {
-		physPlan, err = planNode.newPlanForExplainDistSQL(planCtx, distSQLPlanner)
-	} else {
-		physPlan, err = distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return physPlan, nil
+	return distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
 }

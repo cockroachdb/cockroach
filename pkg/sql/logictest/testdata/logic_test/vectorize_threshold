@@ -4,9 +4,8 @@
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
-# Check that vectorize row count threshold is respected. The test relies on the
-# fact that DistSQL and vectorized execution engines output execution stats in
-# a different format.
+# Check that vectorize row count threshold is respected.
+
 statement ok
 CREATE TABLE small (a INT PRIMARY KEY)
 
@@ -117,7 +116,7 @@ vectorized: true
 • group (scalar)
 │
 └── • scan
-      estimated row count: 100000
+      estimated row count: 100,000
       table: large@primary
       spans: FULL SCAN
 
@@ -135,7 +134,7 @@ vectorized: false
 • group (scalar)
 │
 └── • scan
-      estimated row count: 100000
+      estimated row count: 100,000
       table: large@primary
       spans: FULL SCAN
 
@@ -161,6 +160,6 @@ vectorized: true
 │     spans: FULL SCAN
 │
 └── • scan
-      estimated row count: 100000
+      estimated row count: 100,000
       table: large@primary
       spans: FULL SCAN

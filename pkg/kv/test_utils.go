@@ -38,11 +38,14 @@ func OnlyFollowerReads(rec tracing.Recording) bool {
 // IsExpectedRelocateError maintains an allowlist of errors related to
 // atomic-replication-changes we want to ignore / retry on for tests.
 // See:
-// https://github.com/cockroachdb/cockroach/issues/33732
 // https://github.com/cockroachdb/cockroach/issues/33708
 // https://github.cm/cockroachdb/cockroach/issues/34012
 // https://github.com/cockroachdb/cockroach/issues/33683#issuecomment-454889149
 // for more failure modes not caught here.
+//
+// Note that whenever possible, callers should rely on
+// kvserver.Is{Retryable,Illegal}ReplicationChangeError,
+// which avoids string matching.
 func IsExpectedRelocateError(err error) bool {
 	allowlist := []string{
 		"descriptor changed",
@@ -50,9 +53,10 @@ func IsExpectedRelocateError(err error) bool {
 		"unable to add replica .* which is already present",
 		"received invalid ChangeReplicasTrigger .* to remove self",
 		"failed to apply snapshot: raft group deleted",
-		"snapshot failed:",
+		"snapshot failed",
 		"breaker open",
 		"unable to select removal target", // https://github.com/cockroachdb/cockroach/issues/49513
+		"cannot up-replicate to .*; missing gossiped StoreDescriptor",
 	}
 	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)

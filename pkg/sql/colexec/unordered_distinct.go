@@ -21,21 +21,18 @@ import (
 
 // NewUnorderedDistinct creates an unordered distinct on the given distinct
 // columns.
-// numHashBuckets determines the number of buckets that the hash table is
-// created with.
 func NewUnorderedDistinct(
 	allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) colexecbase.Operator {
-	// This number was chosen after running the micro-benchmarks.
+) ResettableOperator {
+	// These numbers were chosen after running the micro-benchmarks.
 	const hashTableLoadFactor = 2.0
+	const hashTableNumBuckets = 128
 	ht := newHashTable(
 		allocator,
 		hashTableLoadFactor,
+		hashTableNumBuckets,
 		typs,
 		distinctCols,
-		// Store all columns from the source since the unordered distinct
-		// doesn't change the schema.
-		nil,  /* colsToStore */
 		true, /* allowNullEquality */
 		hashTableDistinctBuildMode,
 		hashTableDefaultProbeMode,
@@ -43,82 +40,60 @@ func NewUnorderedDistinct(
 
 	return &unorderedDistinct{
 		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
 		ht:           ht,
-		typs:         typs,
 	}
 }
 
-// unorderedDistinct performs a DISTINCT operation using a hashTable. Once the
-// building of the hashTable is completed, this operator iterates over all of
-// the tuples to check whether the tuple is the "head" of a linked list that
-// contain all of the tuples that are equal on distinct columns. Only the
-// "head" is included into the big selection vector. Once the big selection
-// vector is populated, the operator proceeds to returning the batches
-// according to a chunk of the selection vector.
+// unorderedDistinct performs a DISTINCT operation using a hashTable. It
+// populates the hash table in an iterative fashion by appending only the
+// distinct tuples from each input batch. Once at least one tuple is appended,
+// all of the distinct tuples from the batch are emitted in the output.
 type unorderedDistinct struct {
 	OneInputNode
 
-	allocator     *colmem.Allocator
-	ht            *hashTable
-	typs          []*types.T
-	buildFinished bool
-
-	distinctCount int
-
-	output           coldata.Batch
-	outputBatchStart int
+	ht             *hashTable
+	lastInputBatch coldata.Batch
 }
 
-var _ colexecbase.Operator = &unorderedDistinct{}
+var _ colexecbase.BufferingInMemoryOperator = &unorderedDistinct{}
+var _ ResettableOperator = &unorderedDistinct{}
 
 func (op *unorderedDistinct) Init() {
 	op.input.Init()
 }
 
 func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
-	// First, build the hash table and populate the selection vector that
-	// includes only distinct tuples.
-	if !op.buildFinished {
-		op.buildFinished = true
-		op.ht.build(ctx, op.input)
-
-		// We're using the hashTable in distinct mode, so it buffers only distinct
-		// tuples, as a result, we will be simply returning all buffered tuples.
-		op.distinctCount = op.ht.vals.Length()
-	}
-	if op.outputBatchStart == op.distinctCount {
-		return coldata.ZeroBatch
-	}
-	op.output, _ = op.allocator.ResetMaybeReallocate(op.typs, op.output, op.distinctCount-op.outputBatchStart)
-
-	// Create and return the next batch of input to a maximum size equal to the
-	// capacity of the output batch.
-	nSelected := 0
-	batchEnd := op.outputBatchStart + op.output.Capacity()
-	if batchEnd > op.distinctCount {
-		batchEnd = op.distinctCount
-	}
-	nSelected = batchEnd - op.outputBatchStart
-
-	op.allocator.PerformOperation(op.output.ColVecs(), func() {
-		for colIdx, fromCol := range op.ht.vals.ColVecs() {
-			toCol := op.output.ColVec(colIdx)
-			toCol.Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						Src:         fromCol,
-						SrcStartIdx: op.outputBatchStart,
-						SrcEndIdx:   batchEnd,
-					},
-				},
-			)
+	for {
+		op.lastInputBatch = op.input.Next(ctx)
+		if op.lastInputBatch.Length() == 0 {
+			return coldata.ZeroBatch
 		}
-	})
+		// Note that distinctBuild might panic with a memory budget exceeded
+		// error, in which case no tuples from the last input batch are output.
+		// In such scenario, we don't know at which point of distinctBuild that
+		// happened, but it doesn't matter - we will export the last input batch
+		// when falling back to disk.
+		op.ht.distinctBuild(ctx, op.lastInputBatch)
+		if op.lastInputBatch.Length() > 0 {
+			// We've just appended some distinct tuples to the hash table, so we
+			// will emit all of them as the output. Note that the selection
+			// vector on batch is set in such a manner that only the distinct
+			// tuples are selected, so we can just emit batch directly.
+			return op.lastInputBatch
+		}
+	}
+}
 
-	op.outputBatchStart = batchEnd
-	op.output.SetLength(nSelected)
-	return op.output
+func (op *unorderedDistinct) ExportBuffered(colexecbase.Operator) coldata.Batch {
+	// We have output all the distinct tuples except for the ones that are part
+	// of the last input batch, so we only need to export that batch, and then
+	// we're done exporting.
+	if op.lastInputBatch != nil {
+		batch := op.lastInputBatch
+		op.lastInputBatch = nil
+		return batch
+	}
+	return coldata.ZeroBatch
 }
 
 // reset resets the unorderedDistinct.
@@ -126,10 +101,5 @@ func (op *unorderedDistinct) reset(ctx context.Context) {
 	if r, ok := op.input.(resetter); ok {
 		r.reset(ctx)
 	}
-	op.ht.vals.ResetInternalBatch()
-	op.ht.vals.SetLength(0)
-	op.buildFinished = false
 	op.ht.reset(ctx)
-	op.distinctCount = 0
-	op.outputBatchStart = 0
 }

@@ -89,7 +89,7 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
-      │         │    ├── tight: false
+      │         │    ├── tight: false, unique: false
       │         │    └── union spans
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
@@ -141,7 +141,7 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /7
-      │         │    ├── tight: false
+      │         │    ├── tight: false, unique: false
       │         │    └── union spans
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
@@ -204,7 +204,7 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /6
-      │         │    ├── tight: false
+      │         │    ├── tight: false, unique: false
       │         │    └── union spans
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
@@ -259,7 +259,7 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /8
-      │         │    ├── tight: false
+      │         │    ├── tight: false, unique: false
       │         │    └── union spans
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
@@ -322,7 +322,7 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /9
-      │         │    ├── tight: false
+      │         │    ├── tight: false, unique: false
       │         │    └── union spans
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
@@ -378,7 +378,7 @@ project
       │    └── inverted-filter
       │         ├── columns: k:1(int!null)
       │         ├── inverted expression: /9
-      │         │    ├── tight: false
+      │         │    ├── tight: false, unique: false
       │         │    └── union spans
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")

@@ -47,16 +47,16 @@ NULL       /1       {5}       5
 /4         /5       {4}       4
 /5         NULL     {5}       5
 
-# Verify that EXPLAIN ANALYZE works in a distributed setting.
+# Verify that EXPLAIN ANALYZE (DISTSQL) works in a distributed setting.
 query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM kv]
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT count(*) FROM kv]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzclV1v2jwUx--fT2GdK_rIKOSFluaqrGMSGg0doXurospNjljUEGe2Q9shvvuUBLqAuiTVNMF66WP_c87__E7sJcjvEdjgDkaD8ylJRUTeTcYX5Hrw-XLUHzqk7_RHX74OSOvt0J26H0ZHZH3U52msWv8fFefvFh5QiHmADpujBPsadKBgAAUTKFhAoQsehURwH6XkIjuyzAXD4AHsDoUwTlKVhT0KPhcI9hJUqCIEG6bsNsIJsgCF1gEKASoWRnmau8VZIsI5E49AwU1YLG3S1rLE41TZxOExAoX3H4kK52iTjlyv0iRCSQSywCZ6Ebt9VE-hHnkDFG6Z8r-hJDxVSfa1LPdauQnp4K0oFKt19VKxGYKtr2hzh_3ZTOCMKS607rbB8_GVM72ZjD-5rSOggA_opyrkcdnQH9Vp_LbOX-WlMRcBCgy2avNW1U70HVbu1cXN0Jm2zvS_48TccqI3nym9fqY0o62ZBzdVNR5LLI73OlVGcxZGAxZmW7MOjkWNxxKLk72yMJuzMBuwsNr5jXVYLGo8llj09srCas7CasCi2z44EjUOSyROD-bde6bOCcqExxJ33r_nv9zJ3kUMZlg8opKnwsdLwf08TbEc57o8EKBUxa5eLIZxsZUVWBbrlWJjS6zvio3qzDWpzUq1VS22XlJ33sW8oRCjuufijtyzUJWxByhRhCwKf7DdidhInubcx3CB61nfbG4GfrP3sqHf9tat9HZc3ZjjV9yYk0pvverG9F5xY06rf8ROzR1QfYP8Y63xVv_9DAAA__-A7b52
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzkVdtO20AQfe9XrOYpVBslvgSCn0hpKkUNCY1Db8hCiz1KLcyuu7vmUpTP6g_0yyrbMY2B2kZVRVMed8bHM-ecmd0bUF8jcMAdjof7c5LIiLyZTQ_I8fDj4XgwmpDBZDD-9HlIWq9H7tx9N94iq099kXDdermVf3924QEFLgKcsHNU4ByDARRMoGABBRso9MCjEEvho1JCpp_cZIBRcAVOl0LI40SnYY-CLySCcwM61BGCA3N2GuEMWYCy0wUKAWoWRlmZs4u9WIbnTF4DBTdmXDmk3UkLTxPtkIngCBTevic6PEeHdH98V_nZF1wj16Hg91I6iSNURCILHGLksdNrfRvqk1dA4ZRp_wsqIhIdp6XSxlbIImSAt6SQn1bUlGYLBMdY0ub0B4uFxAXTQnZ6Zfb706PJ_GQ2_eC2toACXqGf3Kf0R52av-30V4MJFzJAiUGpO29ZzcW4Y6V7dHAymsxbe8bf4mKVuBjNh86oH7qO2e5YmzV2NQKsWbX9xGNnNrfKbGCV1e7Ym2VVjQBrVu08sVVWc6usBlbZ7ezO2yCragRYs6r_xFbZza2yG1jVa2-WUTX014za_Yde3Qc6naGKBVd45_V9-M_d9FXGYIH5E65EIn08lMLPyuTHaYbLAgEqnWeN_DDieSptcB1sVILNEti4CzarK9eUtirRdjXYfkzfmYqZoMBRXwp5RiKmkfvXt7YX8UsW6vJABKhQhiwKv7H701LAbrfAx_ACV5tQJIt1KHKPW4ky714l7-1q0bafqWg7lbz71aL1n6lou9XL3a25V6pvpf9INm_54mcAAAD__-ZmLts=
 
 query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT * FROM kv JOIN kw ON kv.k = kw.k]
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT * FROM kv JOIN kw ON kv.k = kw.k]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzcmt9v4kYQx9_7V6zm6a63nFkbcomlk0jbVOKag2sSVW1PPGzwNFg2Nt1dQtIo_3tlHJJA8A8sYXb9Ftu7eD8z85182eUB5L8huHB5dn728xWZi5D8ejH8Sr6f_fnt_LQ_IKeD0_O__j4j737pX15d_n7-njwN_TEdGNySL8P-gAQLMhyQ4PZjQD6TYPExGAGFKPZwwKcowf0ODCjYQMEBCh2g0IURhZmIxyhlLJIhD8sJfe8O3DYFP5rNVXJ7RGEcCwT3AZSvQgQXrvh1iBfIPRRWGyh4qLgfLl8T3PZmwp9ycQ8ULmc8ki5pWcmLf_uDKH-KLmnLp6v5LERJBHLPJSy9d32vnm8dk5-AwjVX4wlKEs_VbK5ckrzvaebqFoPRI4X0KgVZLfT6nky4nKwvsZeMH1GQit8guOyRViM_2iBfvCW3mN7sdib7y-fEwkOB3ubnfEheXGrUljB-RXGDX2I_QmGxjQoK8R_1rsc-vP8s_JtJ-idQGCa0PUZ7Nu05tJeUMN7heK78OHod3Cm_I1OcxuKe8DCMx1yh55L2Mp7JMzkWSVSJ58vg7YgKEX-JplMimvNoW6S2BmkQt-KZxbrr4dkKXWLZ3cxld9aWzcoLgBVL37JblqOxAFhV9k8lxK85u53JXqP4WTPFb5evJLuEipyW1dG4klhV9uMSKtKc3c5kr1FFdjNV5JSvJKeEijotq6txJbGq7CclVKQ5u53JXqOKnGaqqFO-kjolVNRtaVxHrCp5t1hDLYsRHnmEkVhNUGgcBTszCjWqqdNMNRVsEFygnMWRxI2vd9s_uZ0EEb0bTFMj47kY4zcRj5evSS-Hy3lLf-6hVOlTO73oR6tHUnGV_fVw78Frp1VTHuAoEyBCtYhFQBbcV68ZPJQofB76__FNvNWUZ_WN0b9drv_Vw5UMn5_tje2kFjaWw7Zbm9mFjWVXnvmJY12j4dgOLcPWsWXkAxxlApifnJNa2PbVMvLZWHblmZ-4jZZhGpy9Cdd-Deest8PNyU7uZLau17aODadT0WSZkNp8tmz_ZUhy6jFZh0mO4SarAK4ek7Wv_3XdiibLhMTls2X7L21aRj5APSbrMMkx3GQVwNVjsvbVMo52MVmGsX1qsIPKZzN7ByufLdtcadPq8wFqclCHUZXh21THDXZQ-Wxm72Dls2WbK21aRj5ATQ5qXy2jAM7sbaqTBjsoVvWkz4TEFcDV46EOlDmzd6gK4HIMljb9vgjBbBvFqh73NQCuHiO1t76hw1nggTKX47L06RuNPvJjO535mSatN2eSBzBTB4Ize0OqAM5wM5UPZ_h5XxFdts_Sp-Xv8ksA4_zGLj8FMO7f2S4_E2gYnOGHfkV02T5Ln77x5uDSZDM1evzh_wAAAP__EReExg==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzkmt9u4kYUxu_7FKNztds1a8aGbGJpJdI2lbLNwjaJqrYrLib2abAwNp0ZQmiUx-oL9Mkq4yW7QDwYS87Ywx22Z7B_3_njjxkeQPwdgQdXZxdnP16TGY_Iz5eDj-Tz2e-fLk7P--S0f3rxx59n5NVP51fXV79evCZfhn6fDRzfkQ-D8z4Zz8mgT8Z3b8fkPRnP346HYEGcBNhnExTgfQYKFjhggQsWdMCCLgwtmPLERyESng55WE44D-7Ba1sQxtOZTE8PLfATjuA9gAxlhODBNbuJ8BJZgNxugwUBShZGy9uM73pTHk4YX4AFV1MWC4-07PTGv_xGZDhBj7T_-1dkx34SS4xlmMRbl-RsGqEgHFngEZqdu1nIp1PH5Aew4IZJf4SCJDM5nUmPpA_zZebqFIXhowXZUUa5orhZkBETo_Xn76XjhxYIyW4RPPpolZPlaEOW-bYsNm2wME6uMF-_J-EBcgw2v-dNeuNCo57R-CPyW_yQhDFym27kXoR_yVc9-ub1ex7ejrKPYMEgpe1Rq-dYPdfqpcmP9-jPtuWdsHsywUnCF4RFUeIziYFH2ktF02vC56muJAjFeHtECc2_6ukW0HMWP6fVszL1k1YytWl3XaAc7AIP3s198M7ag9PiFUJ3Nw7badluUyuElhXmXYHW0WRhnFxhXrB1UFNbh1M80ZwCFei27E5TE42WFea4QAU2WRgnV5gXrEDH1Ap0iyeaW6ACOy2729REo2WFOSlQgU0WxskV5gUr0DW1AjvFE61ToAK7raamGS0rS3d3_bVsSlgcEEoSOULeVImcXIlesBI7plbijhWTSxTTJBa48YP2-W9upzJicItZcEQy4z5-4om_vE12OFjOW_6qCFDI7KqTHZzHq0tCMqn6QVy5fO0sc4ojHOUixCjnCR-TiEmM_cUTw-r8nIVynS5AgTxkUfgP20ZfTXuqTh_DuyXbNxdXZfp0rTLuE-3cVMG9X4vah5vm56zZAaddY8HpHk3KqWeTUiMc5SKYHboT7dxVNSk1N83PWbMDvtGkTAJ3NsHb34K76815c7KrnEzX-0O7ni2uU9JKNj3wau58_9mY0Om3knpCZ7CV3AGu30pW9V7ulrSSTQ-4mjvff9aoSakR9FtJPaEz2EruANdvJatqUkf7WEmDuN8dqINUc5u7gqnmzredNXopqRFq4CD11GoNHGRVSXt8oA5SzW3uCqaaO9921qhJqRFq4CCralI7wPU7yKqS9uRAHSQtu5_d9IDvANfvITVF3Ny1yx3gCutZozfTLghzbSQtu6ltOLh-I1lZp6r7XrimiCv8Z5061cFubNO9drZNKtitXfmamUlN4PrNZGWprgY32EyqwWuwjqmLPN-B1unltM9_b4zyVPv8-caol_I-f9k5IPAaLGbqIs93oHXqVFub-qaayeHjd_8HAAD__6LdGiI=
 
 # Verify execution.
 statement ok
@@ -93,17 +93,16 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 ├ Node 1
 │ └ *colexec.Materializer
 │   └ *colexec.orderedAggregator
-│     └ *colexec.oneShotOp
-│       └ *colexec.distinctChainOps
-│         └ *colexec.ParallelUnorderedSynchronizer
-│           ├ *colexec.countOp
-│           │ └ *colexec.simpleProjectOp
-│           │   └ *colexec.CancelChecker
-│           │     └ *colfetcher.ColBatchScan
-│           ├ *colrpc.Inbox
-│           ├ *colrpc.Inbox
-│           ├ *colrpc.Inbox
-│           └ *colrpc.Inbox
+│     └ *colexec.distinctChainOps
+│       └ *colexec.ParallelUnorderedSynchronizer
+│         ├ *colexec.countOp
+│         │ └ *colexec.simpleProjectOp
+│         │   └ *colexec.CancelChecker
+│         │     └ *colfetcher.ColBatchScan
+│         ├ *colrpc.Inbox
+│         ├ *colrpc.Inbox
+│         ├ *colrpc.Inbox
+│         └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *colexec.deselectorOp
@@ -140,40 +139,39 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 ├ Node 1
 │ └ *colexec.Materializer
 │   └ *colexec.orderedAggregator
-│     └ *colexec.oneShotOp
-│       └ *colexec.distinctChainOps
-│         └ *colexec.ParallelUnorderedSynchronizer
-│           ├ *colexec.countOp
-│           │ └ *colexec.simpleProjectOp
-│           │   └ *colexec.diskSpillerBase
-│           │     ├ *colexec.hashJoiner
-│           │     │ ├ *colexec.ParallelUnorderedSynchronizer
-│           │     │ │ ├ *colexec.routerOutputOp
-│           │     │ │ │ └ *colexec.HashRouter
-│           │     │ │ │   └ *colexec.CancelChecker
-│           │     │ │ │     └ *colfetcher.ColBatchScan
-│           │     │ │ ├ *colrpc.Inbox
-│           │     │ │ ├ *colrpc.Inbox
-│           │     │ │ ├ *colrpc.Inbox
-│           │     │ │ └ *colrpc.Inbox
-│           │     │ └ *colexec.ParallelUnorderedSynchronizer
-│           │     │   ├ *colexec.routerOutputOp
-│           │     │   │ └ *colexec.HashRouter
-│           │     │   │   └ *colexec.CancelChecker
-│           │     │   │     └ *colfetcher.ColBatchScan
-│           │     │   ├ *colrpc.Inbox
-│           │     │   ├ *colrpc.Inbox
-│           │     │   ├ *colrpc.Inbox
-│           │     │   └ *colrpc.Inbox
-│           │     ├ *colexec.ParallelUnorderedSynchronizer
-│           │     ├ *colexec.ParallelUnorderedSynchronizer
-│           │     └ *colexec.externalHashJoiner
-│           │       ├ *colexec.bufferExportingOperator
-│           │       └ *colexec.bufferExportingOperator
-│           ├ *colrpc.Inbox
-│           ├ *colrpc.Inbox
-│           ├ *colrpc.Inbox
-│           └ *colrpc.Inbox
+│     └ *colexec.distinctChainOps
+│       └ *colexec.ParallelUnorderedSynchronizer
+│         ├ *colexec.countOp
+│         │ └ *colexec.simpleProjectOp
+│         │   └ *colexec.diskSpillerBase
+│         │     ├ *colexec.hashJoiner
+│         │     │ ├ *colexec.ParallelUnorderedSynchronizer
+│         │     │ │ ├ *colexec.routerOutputOp
+│         │     │ │ │ └ *colexec.HashRouter
+│         │     │ │ │   └ *colexec.CancelChecker
+│         │     │ │ │     └ *colfetcher.ColBatchScan
+│         │     │ │ ├ *colrpc.Inbox
+│         │     │ │ ├ *colrpc.Inbox
+│         │     │ │ ├ *colrpc.Inbox
+│         │     │ │ └ *colrpc.Inbox
+│         │     │ └ *colexec.ParallelUnorderedSynchronizer
+│         │     │   ├ *colexec.routerOutputOp
+│         │     │   │ └ *colexec.HashRouter
+│         │     │   │   └ *colexec.CancelChecker
+│         │     │   │     └ *colfetcher.ColBatchScan
+│         │     │   ├ *colrpc.Inbox
+│         │     │   ├ *colrpc.Inbox
+│         │     │   ├ *colrpc.Inbox
+│         │     │   └ *colrpc.Inbox
+│         │     ├ *colexec.ParallelUnorderedSynchronizer
+│         │     ├ *colexec.ParallelUnorderedSynchronizer
+│         │     └ *colexec.hashBasedPartitioner
+│         │       ├ *colexec.bufferExportingOperator
+│         │       └ *colexec.bufferExportingOperator
+│         ├ *colrpc.Inbox
+│         ├ *colrpc.Inbox
+│         ├ *colrpc.Inbox
+│         └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *colexec.deselectorOp
@@ -201,7 +199,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │   └ *colrpc.Inbox
 │           ├ *colexec.ParallelUnorderedSynchronizer
 │           ├ *colexec.ParallelUnorderedSynchronizer
-│           └ *colexec.externalHashJoiner
+│           └ *colexec.hashBasedPartitioner
 │             ├ *colexec.bufferExportingOperator
 │             └ *colexec.bufferExportingOperator
 ├ Node 3
@@ -231,7 +229,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │   └ *colrpc.Inbox
 │           ├ *colexec.ParallelUnorderedSynchronizer
 │           ├ *colexec.ParallelUnorderedSynchronizer
-│           └ *colexec.externalHashJoiner
+│           └ *colexec.hashBasedPartitioner
 │             ├ *colexec.bufferExportingOperator
 │             └ *colexec.bufferExportingOperator
 ├ Node 4
@@ -261,7 +259,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           │   └ *colrpc.Inbox
 │           ├ *colexec.ParallelUnorderedSynchronizer
 │           ├ *colexec.ParallelUnorderedSynchronizer
-│           └ *colexec.externalHashJoiner
+│           └ *colexec.hashBasedPartitioner
 │             ├ *colexec.bufferExportingOperator
 │             └ *colexec.bufferExportingOperator
 └ Node 5
@@ -291,7 +289,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
             │         └ *colfetcher.ColBatchScan
             ├ *colexec.ParallelUnorderedSynchronizer
             ├ *colexec.ParallelUnorderedSynchronizer
-            └ *colexec.externalHashJoiner
+            └ *colexec.hashBasedPartitioner
               ├ *colexec.bufferExportingOperator
               └ *colexec.bufferExportingOperator
 

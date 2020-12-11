@@ -18,16 +18,16 @@ vectorized: false
 │
 ├── • cross join (inner)
 │   │ columns: (a, a)
-│   │ estimated row count: 1000000 (missing stats)
+│   │ estimated row count: 1,000,000 (missing stats)
 │   │
 │   ├── • scan buffer
 │   │     columns: (a)
-│   │     estimated row count: 1000 (missing stats)
+│   │     estimated row count: 1,000 (missing stats)
 │   │     label: buffer 1 (t)
 │   │
 │   └── • scan buffer
 │         columns: (a)
-│         estimated row count: 1000 (missing stats)
+│         estimated row count: 1,000 (missing stats)
 │         label: buffer 1 (t)
 │
 └── • subquery
@@ -41,7 +41,7 @@ vectorized: false
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: y@primary
               spans: FULL SCAN
 
@@ -54,12 +54,12 @@ vectorized: true
 ·
 • render
 │ columns: (a)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: a
 │
 └── • scan
       columns: (a)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: y@primary
       spans: FULL SCAN
 
@@ -121,17 +121,17 @@ vectorized: true
 ·
 • cross join (inner)
 │ columns: (col)
-│ estimated row count: 1000000 (missing stats)
+│ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
 │     columns: ()
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: table39010@primary
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (col)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: table39010@primary
       spans: FULL SCAN
 

@@ -1167,6 +1167,7 @@ var DebugCmdsForRocksDB = []*cobra.Command{
 // All other debug commands go here.
 var debugCmds = append(DebugCmdsForRocksDB,
 	debugBallastCmd,
+	debugCheckLogConfigCmd,
 	debugDecodeKeyCmd,
 	debugDecodeValueCmd,
 	debugDecodeProtoCmd,
@@ -1178,6 +1179,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugEnvCmd,
 	debugZipCmd,
 	debugMergeLogsCommand,
+	debugResetQuorumCmd,
 )
 
 // DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
@@ -1267,4 +1269,7 @@ func init() {
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",
 		"fully qualified name of the proto to decode")
+
+	f = debugCheckLogConfigCmd.Flags()
+	f.Var(&debugLogChanSel, "only-channels", "selection of channels to include in the output diagram.")
 }

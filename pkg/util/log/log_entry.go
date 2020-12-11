@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -29,42 +29,43 @@ import (
 
 const severityChar = "IWEF"
 
-// makeStartLine creates a log entry suitable for the start of a logging
-// output using the canonical logging format.
-func (l *loggerT) makeStartLine(format string, args ...interface{}) logpb.Entry {
+// makeStartLine creates a formatted log entry suitable for the start
+// of a logging output using the canonical logging format.
+func makeStartLine(formatter logFormatter, format string, args ...interface{}) *buffer {
 	entry := MakeEntry(
 		context.Background(),
 		severity.INFO,
-		nil,  /* logCounter */
-		2,    /* depth */
-		true, /* redactable */
+		channel.DEV, /* DEV ensures the channel number is omitted in headers. */
+		2,           /* depth */
+		true,        /* redactable */
 		format,
 		args...)
 	entry.Tags = "config"
-	return entry
+	return formatter.formatEntry(entry, nil)
 }
 
 // getStartLines retrieves the log entries for the start
-// of a new logging output.
-func (l *loggerT) getStartLines(now time.Time) []logpb.Entry {
-	messages := make([]logpb.Entry, 0, 6)
+// of a new log file output.
+func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
+	f := l.formatter
+	messages := make([]*buffer, 0, 6)
 	messages = append(messages,
-		l.makeStartLine("file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
-		l.makeStartLine("running on machine: %s", host),
-		l.makeStartLine("binary: %s", Safe(build.GetInfo().Short())),
-		l.makeStartLine("arguments: %s", os.Args),
+		makeStartLine(f, "file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
+		makeStartLine(f, "running on machine: %s", host),
+		makeStartLine(f, "binary: %s", Safe(build.GetInfo().Short())),
+		makeStartLine(f, "arguments: %s", os.Args),
 	)
 
 	logging.mu.Lock()
 	if logging.mu.clusterID != "" {
-		messages = append(messages, l.makeStartLine("clusterID: %s", logging.mu.clusterID))
+		messages = append(messages, makeStartLine(f, "clusterID: %s", logging.mu.clusterID))
 	}
 	logging.mu.Unlock()
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
 	messages = append(messages,
-		l.makeStartLine("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713"))
+		makeStartLine(f, "line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713"))
 	return messages
 }
 
@@ -72,7 +73,7 @@ func (l *loggerT) getStartLines(now time.Time) []logpb.Entry {
 func MakeEntry(
 	ctx context.Context,
 	s Severity,
-	lc *EntryCounter,
+	c Channel,
 	depth int,
 	redactable bool,
 	format string,
@@ -80,6 +81,7 @@ func MakeEntry(
 ) (res logpb.Entry) {
 	res = logpb.Entry{
 		Severity:   s,
+		Channel:    c,
 		Time:       timeutil.Now().UnixNano(),
 		Goroutine:  goid.Get(),
 		Redactable: redactable,
@@ -89,12 +91,6 @@ func MakeEntry(
 	file, line, _ := caller.Lookup(depth + 1)
 	res.File = file
 	res.Line = int64(line)
-
-	// Optionally populate the counter.
-	if lc != nil && lc.EnableMsgCount {
-		// Add a counter. This is important for e.g. the SQL audit logs.
-		res.Counter = atomic.AddUint64(&lc.msgCount, 1)
-	}
 
 	// Populate the tags.
 	var buf strings.Builder

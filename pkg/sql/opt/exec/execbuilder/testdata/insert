@@ -329,12 +329,12 @@ vectorized: false
         └── • sort
             │ columns: (x, v)
             │ ordering: -v
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │ order: -v
             │
             └── • scan
                   columns: (x, v)
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: select_t@primary
                   spans: FULL SCAN
 
@@ -480,19 +480,19 @@ vectorized: false
             └── • sort
                 │ columns: (length, "?column?", column12)
                 │ ordering: +column12
-                │ estimated row count: 1000 (missing stats)
+                │ estimated row count: 1,000 (missing stats)
                 │ order: +column12
                 │
                 └── • render
                     │ columns: (length, "?column?", column12)
-                    │ estimated row count: 1000 (missing stats)
+                    │ estimated row count: 1,000 (missing stats)
                     │ render 0: length(k)
                     │ render 1: 2
                     │ render 2: k::STRING || v::STRING
                     │
                     └── • scan
                           columns: (k, v)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: kv@primary
                           spans: FULL SCAN
 
@@ -572,12 +572,12 @@ vectorized: false
 ├── • sort
 │   │ columns: (z)
 │   │ ordering: +z
-│   │ estimated row count: 1000 (missing stats)
+│   │ estimated row count: 1,000 (missing stats)
 │   │ order: +z
 │   │
 │   └── • scan buffer
 │         columns: (z)
-│         estimated row count: 1000 (missing stats)
+│         estimated row count: 1,000 (missing stats)
 │         label: buffer 1
 │
 └── • subquery
@@ -591,16 +591,16 @@ vectorized: false
         │
         └── • project
             │ columns: (z)
-            │ estimated row count: 1000 (missing stats)
+            │ estimated row count: 1,000 (missing stats)
             │
             └── • insert
                 │ columns: (z, rowid)
-                │ estimated row count: 1000 (missing stats)
+                │ estimated row count: 1,000 (missing stats)
                 │ into: xyz(x, y, z, rowid)
                 │
                 └── • render
                     │ columns: (a, b, c, column13)
-                    │ estimated row count: 1000 (missing stats)
+                    │ estimated row count: 1,000 (missing stats)
                     │ render 0: unique_rowid()
                     │ render 1: a
                     │ render 2: b
@@ -608,7 +608,7 @@ vectorized: false
                     │
                     └── • scan
                           columns: (a, b, c)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: abc@primary
                           spans: FULL SCAN
 

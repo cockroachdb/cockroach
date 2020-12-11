@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -261,7 +260,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// upgraded to the 20.1 betas with the problem.
 		name:                "create new system.namespace table v2",
 		workFn:              createNewSystemNamespaceDescriptor,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.NamespaceTableWithSchemas),
 		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
 	},
 	{
@@ -269,7 +268,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// StartSystemNamespaceMigration post-finalization-style migration.
 		name: "migrate system.namespace_deprecated entries into system.namespace",
 		// workFn:              migrateSystemNamespace,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.NamespaceTableWithSchemas),
 	},
 	{
 		// Introduced in v20.1, baked into v20.2.
@@ -289,22 +288,22 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v20.2.
 		name:   "add created_by columns to system.jobs",
 		workFn: alterSystemJobsAddCreatedByColumns,
-		includedInBootstrap: clusterversion.VersionByKey(
-			clusterversion.VersionAlterSystemJobsAddCreatedByColumns),
+		includedInBootstrap: clusterversion.ByKey(
+			clusterversion.AlterSystemJobsAddCreatedByColumns),
 	},
 	{
 		// Introduced in v20.2.
 		name:                "create new system.scheduled_jobs table",
 		workFn:              createScheduledJobsTable,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAddScheduledJobsTable),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.AddScheduledJobsTable),
 		newDescriptorIDs:    staticIDs(keys.ScheduledJobsTableID),
 	},
 	{
 		// Introduced in v20.2.
 		name:   "add new sqlliveness table and claim columns to system.jobs",
 		workFn: alterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-		includedInBootstrap: clusterversion.VersionByKey(
-			clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable),
+		includedInBootstrap: clusterversion.ByKey(
+			clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable),
 	},
 	{
 		// Introduced in v20.2.
@@ -313,14 +312,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// NB: no dedicated cluster version was introduced for this table at the
 		// time (4272248e573cbaa4fac436b0ea07195fcd648845). The below is the first
 		// cluster version that was added after the system.tenants table.
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAlterColumnTypeGeneral),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.AlterColumnTypeGeneral),
 		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
 	{
 		// Introduced in v20.2.
 		name:                "alter scheduled jobs",
 		workFn:              alterSystemScheduledJobsFixTableSchema,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionUpdateScheduledJobsSchema),
+		includedInBootstrap: clusterversion.ByKey(clusterversion.UpdateScheduledJobsSchema),
 	},
 	{
 		// Introduced in v20.2.
@@ -329,9 +328,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v20.2.
-		name:                "mark non-terminal schema change jobs with a pre-20.1 format version as failed",
-		workFn:              markDeprecatedSchemaChangeJobsFailed,
-		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionLeasedDatabaseDescriptors),
+		name: "mark non-terminal schema change jobs with a pre-20.1 format version as failed",
 	},
 }
 
@@ -719,7 +716,7 @@ var systemNamespaceMigrationEnabled = settings.RegisterBoolSetting(
 func (m *Manager) StartSystemNamespaceMigration(
 	ctx context.Context, bootstrapVersion roachpb.Version,
 ) error {
-	if !bootstrapVersion.Less(clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas)) {
+	if !bootstrapVersion.Less(clusterversion.ByKey(clusterversion.NamespaceTableWithSchemas)) {
 		// Our bootstrap version is equal to or greater than 20.1, where no old
 		// namespace table is created: we can skip this migration.
 		return nil
@@ -738,7 +735,7 @@ func (m *Manager) StartSystemNamespaceMigration(
 			if !systemNamespaceMigrationEnabled.Get(&m.settings.SV) {
 				continue
 			}
-			if m.settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
+			if m.settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) {
 				break
 			}
 		}
@@ -792,7 +789,7 @@ func (m *Manager) StartSystemNamespaceMigration(
 // Only entries that do not exist in the new table are copied.
 //
 // New database and table entries continue to be written to the deprecated
-// namespace table until VersionNamespaceTableWithSchemas is active. This means
+// namespace table until NamespaceTableWithSchemas is active. This means
 // that an additional migration will be necessary in 20.2 to catch any new
 // entries which may have been missed by this one. In the meantime, namespace
 // lookups fall back to the deprecated table if a name is not found in the new
@@ -986,76 +983,6 @@ func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {
 		upsertCreateRoleStmt)
 }
 
-func markDeprecatedSchemaChangeJobsFailed(ctx context.Context, r runner) error {
-	ctx = logtags.AddTag(ctx, "mark-deprecated-schema-changes-failed", nil)
-	const batchSize = 100
-	workLeft := true
-	prevBatchSize := 0
-	for workLeft {
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			// Get jobs in a non-terminal state.
-			rows, err := r.sqlExecutor.QueryEx(
-				ctx, "get-deprecated-schema-change-jobs", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-				`SELECT id, status, payload FROM system.jobs WHERE status NOT IN ($1, $2, $3) LIMIT $4`,
-				jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, batchSize,
-			)
-			if err != nil {
-				return err
-			}
-			prevBatchSize = len(rows)
-			if len(rows) < batchSize {
-				workLeft = false
-			}
-			for _, row := range rows {
-				id := tree.MustBeDInt(row[0])
-				status := tree.MustBeDString(row[1])
-				payload, err := jobs.UnmarshalPayload(row[2])
-				if err != nil {
-					log.Errorf(ctx, "error unmarshaling job payload for id %d, skipping", id)
-					continue
-				}
-				schemaChangeDetails := payload.GetSchemaChange()
-				if schemaChangeDetails == nil {
-					log.VEventf(ctx, 3, "job %d is not a schema change job, skipping", id)
-					continue
-				}
-				if v := schemaChangeDetails.FormatVersion; v > jobspb.BaseFormatVersion {
-					log.VEventf(ctx, 2, "job %d is a schema change job with format version %d, skipping", id, v)
-					continue
-				}
-
-				// Update the job status and error.
-				payload.Error = "schema change jobs started prior to v20.1 that have " +
-					"not yet undergone the automatic internal migration in v20.1 cannot" +
-					"be run in v20.2, and are automatically marked as failed"
-				newPayloadBytes, err := protoutil.Marshal(payload)
-				if err != nil {
-					log.Errorf(ctx, "error marshaling job payload for id %d, skipping", id)
-					continue
-				}
-				if _, err := r.sqlExecutor.ExecEx(
-					ctx, "update-deprecated-schema-change-job", txn,
-					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-					`UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3`,
-					jobs.StatusFailed, newPayloadBytes, id,
-				); err != nil {
-					return err
-				}
-				log.Warningf(ctx,
-					"job %d (previously %s) is a schema change job started prior to v20.1 "+
-						"that will be marked as failed as part of the v20.2 upgrade: %+v",
-					id, status, payload)
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-		log.Infof(ctx, "checked %d jobs for existence of deprecated schema change jobs", prevBatchSize)
-	}
-	return nil
-}
-
 // SettingsDefaultOverrides documents the effect of several migrations that add
 // an explicit value for a setting, effectively changing the "default value"
 // from what was defined in code.
@@ -1106,7 +1033,7 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 	if err := r.execAsRoot(
 		ctx,
 		"insert-setting",
-		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'v') ON CONFLICT(name) DO NOTHING`, b),
+		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'm') ON CONFLICT(name) DO NOTHING`, b),
 	); err != nil {
 		return err
 	}

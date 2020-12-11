@@ -271,10 +271,19 @@ CREATE TABLE y (
   a INT AS (3)
 )
 
-statement error at or near "virtual": syntax error: unimplemented
+statement error unimplemented: virtual computed columns
 CREATE TABLE y (
   a INT AS (3) VIRTUAL
 )
+
+statement ok
+CREATE TABLE tmp (x INT)
+
+statement error unimplemented: virtual computed columns
+ALTER TABLE tmp ADD COLUMN y INT AS (x+1) VIRTUAL
+
+statement ok
+DROP TABLE tmp
 
 statement error expected computed column expression to have type int, but .* has type string
 CREATE TABLE y (

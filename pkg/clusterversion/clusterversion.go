@@ -82,7 +82,7 @@ type Handle interface {
 	//
 	// If this returns true then all nodes in the cluster will eventually see
 	// this version. However, this is not atomic because version gates (for a
-	// given version) are pushed through to each node in parallel. Because of
+	// given version) are pushed through to each node concurrently. Because of
 	// this, nodes should not be gating proper handling of remotely initiated
 	// requests that their binary knows how to handle on this state. The
 	// following example shows why this is important:
@@ -99,7 +99,7 @@ type Handle interface {
 	// outbound requests. When receiving these "new" inbound requests, despite
 	// not seeing the latest active version, node2 is aware that the sending
 	// node has, and it will too, eventually.
-	IsActive(context.Context, VersionKey) bool
+	IsActive(context.Context, Key) bool
 
 	// BinaryVersion returns the build version of this binary.
 	BinaryVersion() roachpb.Version
@@ -206,7 +206,7 @@ func (v *handleImpl) SetActiveVersion(ctx context.Context, cv ClusterVersion) er
 }
 
 // IsActive implements the Handle interface.
-func (v *handleImpl) IsActive(ctx context.Context, key VersionKey) bool {
+func (v *handleImpl) IsActive(ctx context.Context, key Key) bool {
 	return version.isActive(ctx, v.sv, key)
 }
 
@@ -228,16 +228,31 @@ func (cv ClusterVersion) IsActiveVersion(v roachpb.Version) bool {
 
 // IsActive returns true if the features of the supplied version are active at
 // the running version.
-func (cv ClusterVersion) IsActive(versionKey VersionKey) bool {
-	v := VersionByKey(versionKey)
+func (cv ClusterVersion) IsActive(versionKey Key) bool {
+	v := ByKey(versionKey)
 	return cv.IsActiveVersion(v)
 }
 
-func (cv ClusterVersion) String() string { return redact.StringWithoutMarkers(cv) }
+func (cv ClusterVersion) String() string {
+	return redact.StringWithoutMarkers(cv)
+}
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (cv ClusterVersion) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Print(cv.Version)
+}
+
+// PrettyPrint returns the value in a format that makes it apparent whether or
+// not it is a fence version.
+func (cv ClusterVersion) PrettyPrint() string {
+	// If we're a version greater than v20.2 and have an odd internal version,
+	// we're a fence version. See fenceVersionFor in pkg/migration to understand
+	// what these are.
+	fenceVersion := !cv.Version.LessEq(roachpb.Version{Major: 20, Minor: 2}) && (cv.Internal%2) == 1
+	if !fenceVersion {
+		return cv.String()
+	}
+	return redact.Sprintf("%s%s", cv.String(), "(fence)").StripMarkers()
 }
 
 // ClusterVersionImpl implements the settings.ClusterVersionImpl interface.

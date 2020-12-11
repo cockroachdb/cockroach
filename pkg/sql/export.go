@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -92,11 +93,15 @@ func (ef *execFactory) ConstructExport(
 	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {
 	if !featureExportEnabled.Get(&ef.planner.ExecCfg().Settings.SV) {
-		return nil, pgerror.Newf(pgcode.OperatorIntervention,
-			"EXPORT feature was disabled by the database administrator")
+		return nil, pgerror.Newf(
+			pgcode.OperatorIntervention,
+			"feature EXPORT was disabled by the database administrator",
+		)
 	}
 
-	if err := featureflag.CheckEnabled(featureExportEnabled,
+	if err := featureflag.CheckEnabled(
+		ef.planner.EvalContext().Context,
+		featureExportEnabled,
 		&ef.planner.ExecCfg().Settings.SV,
 		"EXPORT",
 	); err != nil {
@@ -119,6 +124,21 @@ func (ef *execFactory) ConstructExport(
 	destination, ok := destinationDatum.(*tree.DString)
 	if !ok {
 		return nil, errors.Errorf("expected string value for the file location")
+	}
+	admin, err := ef.planner.HasAdminRole(ef.planner.EvalContext().Context)
+	if err != nil {
+		panic(err)
+	}
+	if !admin {
+		hasExplicitAuth, _, err := cloud.AccessIsWithExplicitAuth(string(*destination))
+		if err != nil {
+			panic(err)
+		}
+		if !hasExplicitAuth {
+			panic(pgerror.Newf(
+				pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to EXPORT to the specified URI"))
+		}
 	}
 
 	optVals, err := evalStringOptions(ef.planner.EvalContext(), options, exportOptionExpectValues)

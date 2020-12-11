@@ -2165,10 +2165,8 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 		"expected one of racing AdminChangeReplicasRequests to fail but neither did")
 	// It is possible that an error can occur due to a rejected snapshot from the
 	// target range. We don't want to fail the test if we got one of those.
-	isSnapshotErr := func(err error) bool {
-		return testutils.IsError(err, "snapshot failed:")
-	}
-	atLeastOneIsSnapshotErr := isSnapshotErr(err1) || isSnapshotErr(err2)
+	atLeastOneIsSnapshotErr := kvserver.IsRetriableReplicationChangeError(err1) ||
+		kvserver.IsRetriableReplicationChangeError(err2)
 	assert.Falsef(t, err1 != nil && err2 != nil && !atLeastOneIsSnapshotErr,
 		"expected only one of racing AdminChangeReplicasRequests to fail but both "+
 			"had errors and neither were snapshot: %v %v", err1, err2)
@@ -2189,7 +2187,7 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 
 // TestRandomConcurrentAdminChangeReplicasRequests ensures that when multiple
 // AdminChangeReplicasRequests are issued concurrently, so long as requests
-// provide the the value of the RangeDescriptor they will not accidentally
+// provide the value of the RangeDescriptor they will not accidentally
 // perform replication changes. In particular this test runs a number of
 // concurrent actors which all use the same expectations of the RangeDescriptor
 // and verifies that at most one actor succeeds in making all of its changes.
@@ -2240,9 +2238,7 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	var gotSuccess bool
 	for _, err := range errors {
 		if err != nil {
-			const exp = "change replicas of .* failed: descriptor changed" +
-				"|snapshot failed:"
-			assert.True(t, testutils.IsError(err, exp), err)
+			assert.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 		} else if gotSuccess {
 			t.Error("expected only one success")
 		} else {
@@ -3565,4 +3561,24 @@ func TestTenantID(t *testing.T) {
 		require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
 	})
 
+}
+
+func TestRaftSchedulerPrioritizesNodeLiveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Determine the node liveness range ID.
+	livenessRepl := store.LookupReplica(roachpb.RKey(keys.NodeLivenessPrefix))
+	livenessRangeID := livenessRepl.RangeID
+
+	// Assert that the node liveness range is prioritized.
+	priorityID := store.RaftSchedulerPriorityID()
+	require.Equal(t, livenessRangeID, priorityID)
 }

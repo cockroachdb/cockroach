@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -36,6 +35,14 @@ type renameIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		&p.ExecCfg().Settings.SV,
+		"RENAME INDEX",
+	); err != nil {
+		return nil, err
+	}
+
 	_, tableDesc, err := expandMutableIndexName(ctx, p, n.Index, !n.IfExists /* requireTable */)
 	if err != nil {
 		return nil, err
@@ -92,7 +99,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 	}
 
 	if _, _, err := tableDesc.FindIndexByName(string(n.n.NewName)); err == nil {
-		return fmt.Errorf("index name %q already exists", string(n.n.NewName))
+		return pgerror.Newf(pgcode.DuplicateRelation, "index name %q already exists", string(n.n.NewName))
 	}
 
 	if err := tableDesc.RenameIndexDescriptor(idx, string(n.n.NewName)); err != nil {

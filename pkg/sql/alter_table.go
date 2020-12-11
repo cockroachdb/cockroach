@@ -53,6 +53,14 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		&p.ExecCfg().Settings.SV,
+		"ALTER TABLE",
+	); err != nil {
+		return nil, err
+	}
+
 	tableDesc, err := p.ResolveMutableTableDescriptorEx(
 		ctx, n.Table, !n.IfExists, tree.ResolveRequireTableDesc,
 	)
@@ -152,6 +160,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
+			if t.ColumnDef.Unique.WithoutIndex {
+				return pgerror.New(pgcode.FeatureNotSupported,
+					"unique constraints without an index are not yet supported",
+				)
+			}
 			var err error
 			params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
 				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t)
@@ -182,12 +195,21 @@ func (n *alterTableNode) startExec(params runParams) error {
 						Columns:    d.Columns,
 						Sharded:    d.Sharded,
 						Interleave: d.Interleave,
+						Name:       d.Name,
 					}
 					if err := params.p.AlterPrimaryKey(params.ctx, n.tableDesc, alterPK); err != nil {
 						return err
 					}
 					continue
 				}
+
+				// Check if the columns exist on the table.
+				for _, column := range d.Columns {
+					if _, _, err := n.tableDesc.FindColumnByName(column.Column); err != nil {
+						return err
+					}
+				}
+
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
@@ -220,7 +242,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				var err error
 				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
 					info, infoErr := n.tableDesc.GetConstraintInfo(params.ctx, nil)
-					if err != nil {
+					if infoErr != nil {
 						err = infoErr
 						return
 					}
@@ -273,7 +295,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						err = scanErr
 						return
 					}
-					var tableState FKTableState
+					var tableState TableState
 					if len(kvs) == 0 {
 						tableState = EmptyTable
 					} else {
@@ -497,6 +519,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
+			// Drop unique constraints that reference the column.
+			sliceIdx := 0
+			for i := range n.tableDesc.UniqueWithoutIndexConstraints {
+				constraint := &n.tableDesc.UniqueWithoutIndexConstraints[i]
+				n.tableDesc.UniqueWithoutIndexConstraints[sliceIdx] = *constraint
+				sliceIdx++
+				if descpb.ColumnIDs(constraint.ColumnIDs).Contains(colToDrop.ID) {
+					sliceIdx--
+				}
+			}
+			n.tableDesc.UniqueWithoutIndexConstraints = n.tableDesc.UniqueWithoutIndexConstraints[:sliceIdx]
+
 			// Drop check constraints which reference the column.
 			validChecks := n.tableDesc.Checks[:0]
 			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
@@ -527,7 +561,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Since we are able to drop indexes used by foreign keys on the origin side,
 			// the drop index codepaths aren't going to remove dependent FKs, so we
 			// need to do that here.
-			if params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionNoOriginFKIndexes) {
+			if params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.NoOriginFKIndexes) {
 				// We update the FK's slice in place here.
 				sliceIdx := 0
 				for i := range n.tableDesc.OutboundFKs {
@@ -613,7 +647,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				found := false
 				var ck *descpb.TableDescriptor_CheckConstraint
 				for _, c := range n.tableDesc.Checks {
-					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
+					// If the constraint is still being validated, don't allow
+					// VALIDATE CONSTRAINT to run.
 					if c.Name == name && c.Validity != descpb.ConstraintValidity_Validating {
 						found = true
 						ck = c
@@ -635,7 +670,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				var foundFk *descpb.ForeignKeyConstraint
 				for i := range n.tableDesc.OutboundFKs {
 					fk := &n.tableDesc.OutboundFKs[i]
-					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
+					// If the constraint is still being validated, don't allow
+					// VALIDATE CONSTRAINT to run.
 					if fk.Name == name && fk.Validity != descpb.ConstraintValidity_Validating {
 						foundFk = fk
 						break
@@ -652,10 +688,36 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				foundFk.Validity = descpb.ConstraintValidity_Validated
 
+			case descpb.ConstraintTypeUnique:
+				if constraint.Index == nil {
+					var foundUnique *descpb.UniqueWithoutIndexConstraint
+					for i := range n.tableDesc.UniqueWithoutIndexConstraints {
+						uc := &n.tableDesc.UniqueWithoutIndexConstraints[i]
+						// If the constraint is still being validated, don't allow
+						// VALIDATE CONSTRAINT to run.
+						if uc.Name == name && uc.Validity != descpb.ConstraintValidity_Validating {
+							foundUnique = uc
+							break
+						}
+					}
+					if foundUnique == nil {
+						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+							"constraint %q in the middle of being added, try again later", t.Constraint)
+					}
+					// TODO(rytaft): Call validateUniqueConstraint once supported.
+					return pgerror.New(pgcode.FeatureNotSupported,
+						"validation of unique constraints without an index are not yet supported",
+					)
+				}
+
+				// This unique constraint is enforced by an index, so fall through to
+				// the error below.
+				fallthrough
+
 			default:
 				return pgerror.Newf(pgcode.WrongObjectType,
-					"constraint %q of relation %q is not a foreign key or check constraint",
-					tree.ErrString(&t.Constraint), tree.ErrString(n.n.Table))
+					"constraint %q of relation %q is not a foreign key, check, or unique without index"+
+						" constraint", tree.ErrString(&t.Constraint), tree.ErrString(n.n.Table))
 			}
 			descriptorChanged = true
 

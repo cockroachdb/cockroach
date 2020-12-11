@@ -78,7 +78,10 @@ const (
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
+	InformationSchemaCharacterSets
 	InformationSchemaCheckConstraints
+	InformationSchemaCollationCharacterSetApplicability
+	InformationSchemaCollations
 	InformationSchemaColumnPrivilegesID
 	InformationSchemaColumnsTableID
 	InformationSchemaColumnUDTUsageID

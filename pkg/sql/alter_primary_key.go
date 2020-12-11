@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -30,6 +31,16 @@ import (
 func (p *planner) AlterPrimaryKey(
 	ctx context.Context, tableDesc *tabledesc.Mutable, alterPKNode *tree.AlterTableAlterPrimaryKey,
 ) error {
+	if alterPKNode.Interleave != nil {
+		p.BufferClientNotice(
+			ctx,
+			errors.WithIssueLink(
+				pgnotice.Newf("interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2"),
+				errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
+			),
+		)
+	}
+
 	if alterPKNode.Sharded != nil {
 		if !p.EvalContext().SessionData.HashShardedIndexesEnabled {
 			return hashShardedIndexesDisabledError
@@ -118,6 +129,12 @@ func (p *planner) AlterPrimaryKey(
 		"new_primary_key",
 		nameExists,
 	)
+	if alterPKNode.Name != "" &&
+		// Allow reuse of existing primary key's name.
+		tableDesc.PrimaryIndex.Name != string(alterPKNode.Name) &&
+		nameExists(string(alterPKNode.Name)) {
+		return pgerror.Newf(pgcode.DuplicateObject, "constraint with name %s already exists", alterPKNode.Name)
+	}
 	newPrimaryIndexDesc := &descpb.IndexDescriptor{
 		Name:              name,
 		Unique:            true,
@@ -288,10 +305,11 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	swapArgs := &descpb.PrimaryKeySwap{
-		OldPrimaryIndexId: tableDesc.PrimaryIndex.ID,
-		NewPrimaryIndexId: newPrimaryIndexDesc.ID,
-		NewIndexes:        newIndexIDs,
-		OldIndexes:        oldIndexIDs,
+		OldPrimaryIndexId:   tableDesc.PrimaryIndex.ID,
+		NewPrimaryIndexId:   newPrimaryIndexDesc.ID,
+		NewIndexes:          newIndexIDs,
+		OldIndexes:          oldIndexIDs,
+		NewPrimaryIndexName: string(alterPKNode.Name),
 	}
 	tableDesc.AddPrimaryKeySwapMutation(swapArgs)
 

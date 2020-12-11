@@ -15,7 +15,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -72,7 +72,7 @@ var _ kvserverbase.BulkAdder = &BufferingAdder{}
 func MakeBulkAdder(
 	ctx context.Context,
 	db SSTSender,
-	rangeCache *kvcoord.RangeDescriptorCache,
+	rangeCache *rangecache.RangeCache,
 	settings *cluster.Settings,
 	timestamp hlc.Timestamp,
 	opts kvserverbase.BulkAdderOptions,
@@ -94,6 +94,8 @@ func MakeBulkAdder(
 		// splitting _before_ hitting max reduces chance of auto-splitting after the
 		// range is full and is more expensive to split/move.
 		opts.SplitAndScatterAfter = func() int64 { return 48 << 20 }
+	} else if opts.SplitAndScatterAfter() == -1 {
+		opts.SplitAndScatterAfter = nil
 	}
 
 	b := &BufferingAdder{

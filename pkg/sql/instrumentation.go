@@ -18,6 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // instrumentationHelper encapsulates the logic around extracting information
@@ -78,6 +82,8 @@ type instrumentationHelper struct {
 	explainPlan  *explain.Plan
 	distribution physicalplan.PlanDistribution
 	vectorized   bool
+
+	traceMetadata execNodeTraceMetadata
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -139,6 +145,7 @@ func (ih *instrumentationHelper) Setup(
 		return ctx, false
 	}
 
+	ih.traceMetadata = make(execNodeTraceMetadata)
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.StartSnowballTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
@@ -165,11 +172,42 @@ func (ih *instrumentationHelper) Finish(
 	ctx := ih.origCtx
 
 	trace := ih.sp.GetRecording()
-	ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
-	placeholders := p.extendedEvalCtx.Placeholders
+
+	if ih.withStatementTrace != nil {
+		ih.withStatementTrace(trace, stmtRawSQL)
+	}
+
+	if ih.traceMetadata != nil && ih.explainPlan != nil {
+		ih.traceMetadata.annotateExplain(ih.explainPlan, trace, cfg.TestingKnobs.DeterministicExplainAnalyze)
+	}
+
+	// TODO(radu): this should be unified with other stmt stats accesses.
+	stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
+	if stmtStats != nil {
+		var flowMetadata []*execstats.FlowMetadata
+		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
+			flowMetadata = append(flowMetadata, flowInfo.flowMetadata)
+		}
+		queryLevelStats, errors := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowMetadata)
+		for i := 0; i < len(errors); i++ {
+			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %v", ast, errors[i])
+		}
+
+		stmtStats.mu.Lock()
+		// Record trace-related statistics. A count of 1 is passed given that this
+		// statistic is only recorded when statement diagnostics are enabled.
+		// TODO(asubiotto): NumericStat properties will be properly calculated
+		//  once this statistic is always collected.
+		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(queryLevelStats.NetworkBytesSent))
+		stmtStats.mu.Unlock()
+	}
+
 	if ih.collectBundle {
+		ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
+		placeholders := p.extendedEvalCtx.Placeholders
+		planStr := ih.planStringForBundle(&statsCollector.phaseTimes)
 		bundle := buildStatementBundle(
-			ih.origCtx, cfg.DB, ie, &p.curPlan, ih.planStringForBundle(), trace, placeholders,
+			ih.origCtx, cfg.DB, ie, &p.curPlan, planStr, trace, placeholders,
 		)
 		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
 		if ih.finishCollectionDiagnostics != nil {
@@ -184,43 +222,9 @@ func (ih *instrumentationHelper) Finish(
 		}
 	}
 
-	if ih.withStatementTrace != nil {
-		ih.withStatementTrace(trace, stmtRawSQL)
-	}
-
 	if ih.outputMode == explainAnalyzePlanOutput && retErr == nil {
 		phaseTimes := &statsCollector.phaseTimes
 		retErr = ih.setExplainAnalyzePlanResult(ctx, res, phaseTimes)
-	}
-
-	// TODO(radu): this should be unified with other stmt stats accesses.
-	stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
-	if stmtStats != nil {
-		networkBytesSent := int64(0)
-		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
-			analyzer := flowInfo.analyzer
-			if err := analyzer.AddTrace(trace); err != nil {
-				log.VInfof(ctx, 1, "error analyzing trace statistics for stmt %s: %v", ast, err)
-				continue
-			}
-
-			networkBytesSentGroupedByNode, err := analyzer.GetNetworkBytesSent()
-			if err != nil {
-				log.VInfof(ctx, 1, "error calculating network bytes sent for stmt %s: %v", ast, err)
-				continue
-			}
-			for _, bytesSentByNode := range networkBytesSentGroupedByNode {
-				networkBytesSent += bytesSentByNode
-			}
-		}
-
-		stmtStats.mu.Lock()
-		// Record trace-related statistics. A count of 1 is passed given that this
-		// statistic is only recorded when statement diagnostics are enabled.
-		// TODO(asubiotto): NumericStat properties will be properly calculated
-		//  once this statistic is always collected.
-		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(networkBytesSent))
-		stmtStats.mu.Unlock()
 	}
 
 	return retErr
@@ -241,6 +245,14 @@ func (ih *instrumentationHelper) ShouldDiscardRows() bool {
 // ShouldCollectBundle is true if we are collecting a support bundle.
 func (ih *instrumentationHelper) ShouldCollectBundle() bool {
 	return ih.collectBundle
+}
+
+// ShouldUseJobForCreateStats indicates if we should run CREATE STATISTICS as a
+// job (normally true). It is false if we are running a statement under
+// EXPLAIN ANALYZE, in which case we want to run the CREATE STATISTICS plan
+// directly.
+func (ih *instrumentationHelper) ShouldUseJobForCreateStats() bool {
+	return ih.outputMode != explainAnalyzePlanOutput && ih.outputMode != explainAnalyzeDebugOutput
 }
 
 // ShouldBuildExplainPlan returns true if we should build an explain plan and
@@ -281,7 +293,7 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 }
 
 // planStringForBundle generates the plan tree as a string; used internally for bundles.
-func (ih *instrumentationHelper) planStringForBundle() string {
+func (ih *instrumentationHelper) planStringForBundle(phaseTimes *phaseTimes) string {
 	if ih.explainPlan == nil {
 		return ""
 	}
@@ -289,6 +301,8 @@ func (ih *instrumentationHelper) planStringForBundle() string {
 		Verbose:   true,
 		ShowTypes: true,
 	})
+	ob.AddPlanningTime(phaseTimes.getPlanningLatency())
+	ob.AddExecutionTime(phaseTimes.getRunLatency())
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
 		return fmt.Sprintf("error emitting plan: %v", err)
 	}
@@ -334,4 +348,70 @@ func (ih *instrumentationHelper) setExplainAnalyzePlanResult(
 		}
 	}
 	return nil
+}
+
+// execNodeTraceMetadata associates exec.Nodes with metadata for corresponding
+// execution components.
+// Currently, we only store info about processors. A node can correspond to
+// multiple processors if the plan is distributed.
+//
+// TODO(radu): we perform similar processing of execution traces in various
+// parts of the code. Come up with some common infrastructure that makes this
+// easier.
+type execNodeTraceMetadata map[exec.Node]execComponents
+
+type execComponents []execinfrapb.ComponentID
+
+// associateNodeWithComponents is called during planning, as processors are
+// planned for an execution operator.
+func (m execNodeTraceMetadata) associateNodeWithComponents(
+	node exec.Node, components execComponents,
+) {
+	m[node] = components
+}
+
+// annotateExplain aggregates the statistics in the trace and annotates
+// explain.Nodes with execution stats.
+func (m execNodeTraceMetadata) annotateExplain(
+	plan *explain.Plan, spans []tracingpb.RecordedSpan, makeDeterministic bool,
+) {
+	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
+
+	var walk func(n *explain.Node)
+	walk = func(n *explain.Node) {
+		wrapped := n.WrappedNode()
+		if components, ok := m[wrapped]; ok {
+			var nodeStats exec.ExecutionStats
+
+			incomplete := false
+			for i := range components {
+				stats := statsMap[components[i]]
+				if stats == nil {
+					incomplete = true
+					break
+				}
+				nodeStats.RowCount.MaybeAdd(stats.Output.NumTuples)
+				nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
+				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
+			}
+			// If we didn't get statistics for all processors, we don't show the
+			// incomplete results. In the future, we may consider an incomplete flag
+			// if we want to show them with a warning.
+			if !incomplete {
+				n.Annotate(exec.ExecutionStatsID, &nodeStats)
+			}
+		}
+
+		for i := 0; i < n.ChildCount(); i++ {
+			walk(n.Child(i))
+		}
+	}
+
+	walk(plan.Root)
+	for i := range plan.Subqueries {
+		walk(plan.Subqueries[i].Root.(*explain.Node))
+	}
+	for i := range plan.Checks {
+		walk(plan.Checks[i])
+	}
 }

@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -414,7 +416,9 @@ func (s storage) getForExpiration(
 			return err
 		}
 		if prevTimestamp.LessEq(desc.GetModificationTime()) {
-			return errors.AssertionFailedf("unable to read descriptor (%d, %s)", id, expiration)
+			return errors.AssertionFailedf("unable to read descriptor"+
+				" (%d, %s) found descriptor with modificationTime %s",
+				id, expiration, desc.GetModificationTime())
 		}
 		// Create a descriptorVersionState with the descriptor and without a lease.
 		descVersionState = &descriptorVersionState{
@@ -1642,6 +1646,11 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 	t := m.mu.descriptors[id]
 	if t == nil && create {
 		t = &descriptorState{id: id, stopper: m.stopper}
+		if id >= 4294867200 {
+			stack := debug.Stack()
+			log.Warningf(context.TODO(), "adding questionable descriptor %d to lease manager: %v %s",
+				id, t, string(stack))
+		}
 		m.mu.descriptors[id] = t
 	}
 	return t
@@ -1650,7 +1659,7 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 // RefreshLeases starts a goroutine that refreshes the lease manager
 // leases for descriptors received in the latest system configuration via gossip or
 // rangefeeds. This function must be passed a non-nil gossip if
-// VersionRangefeedLeases is not active.
+// RangefeedLeases is not active.
 func (m *Manager) RefreshLeases(
 	ctx context.Context, s *stop.Stopper, db *kv.DB, g gossip.OptionalGossip,
 ) {
@@ -1715,7 +1724,7 @@ func (m *Manager) watchForUpdates(
 	descUpdateCh chan *descpb.Descriptor,
 ) {
 	useRangefeeds := m.testingKnobs.AlwaysUseRangefeeds ||
-		m.storage.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases)
+		m.storage.settings.Version.IsActive(ctx, clusterversion.RangefeedLeases)
 	if useRangefeeds {
 		m.watchForRangefeedUpdates(ctx, s, db, descUpdateCh)
 		return
@@ -1758,8 +1767,8 @@ func (m *Manager) watchForGossipUpdates(
 ) {
 	rawG, err := g.OptionalErr(47150)
 	if err != nil {
-		if v := clusterversion.VersionRangefeedLeases; !m.storage.settings.Version.IsActive(ctx, v) {
-			log.Fatalf(ctx, "required gossip until %v is active: %v", clusterversion.VersionRangefeedLeases, err)
+		if v := clusterversion.RangefeedLeases; !m.storage.settings.Version.IsActive(ctx, v) {
+			log.Fatalf(ctx, "required gossip until %v is active: %v", clusterversion.RangefeedLeases, err)
 		}
 		return
 	}
@@ -1768,7 +1777,7 @@ func (m *Manager) watchForGossipUpdates(
 		descKeyPrefix := m.storage.codec.TablePrefix(uint32(systemschema.DescriptorTable.ID))
 		// TODO(ajwerner): Add a mechanism to unregister this channel upon
 		// return. NB: this call is allowed to bypass OptionalGossip because
-		// we'll never get here after VersionRangefeedLeases.
+		// we'll never get here after RangefeedLeases.
 		gossipUpdateC := rawG.RegisterSystemConfigChannel()
 		filter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 
@@ -1844,7 +1853,7 @@ func (m *Manager) watchForRangefeedUpdates(
 		}
 		var descriptor descpb.Descriptor
 		if err := ev.Value.GetProto(&descriptor); err != nil {
-			log.ReportOrPanic(ctx, &m.storage.settings.SV,
+			logcrash.ReportOrPanic(ctx, &m.storage.settings.SV,
 				"%s: unable to unmarshal descriptor %v", ev.Key, ev.Value)
 			return
 		}
@@ -1952,7 +1961,7 @@ func (m *Manager) waitForRangefeedsToBeUsable(ctx context.Context, s *stop.Stopp
 			select {
 			case <-timer.C:
 				timer.Read = true
-				if m.storage.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases) {
+				if m.storage.settings.Version.IsActive(ctx, clusterversion.RangefeedLeases) {
 					close(upgradeChan)
 					return
 				}

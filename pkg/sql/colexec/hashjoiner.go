@@ -179,7 +179,8 @@ type hashJoiner struct {
 	// spec holds the specification for the current hash join process.
 	spec HashJoinerSpec
 	// state stores the current state of the hash joiner.
-	state hashJoinerState
+	state                      hashJoinerState
+	hashTableInitialNumBuckets uint64
 	// ht holds the hashTable that is populated during the build phase and used
 	// during the probe phase.
 	ht *hashTable
@@ -232,6 +233,12 @@ type hashJoiner struct {
 var _ colexecbase.BufferingInMemoryOperator = &hashJoiner{}
 var _ resetter = &hashJoiner{}
 
+// HashJoinerInitialNumBuckets is the number of the hash buckets initially
+// allocated by the hash table that is used by the in-memory hash joiner.
+// This number was chosen after running the micro-benchmarks and relevant
+// TPCH queries using tpchvec/bench.
+const HashJoinerInitialNumBuckets = 256
+
 func (hj *hashJoiner) Init() {
 	hj.inputOne.Init()
 	hj.inputTwo.Init()
@@ -243,16 +250,13 @@ func (hj *hashJoiner) Init() {
 	}
 	// This number was chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
-	const hashTableLoadFactor = 8.0
+	const hashTableLoadFactor = 1.0
 	hj.ht = newHashTable(
 		hj.buildSideAllocator,
 		hashTableLoadFactor,
+		hj.hashTableInitialNumBuckets,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
-		// Store all columns from the right source since we need to be able to
-		// export the full batches when falling back to the external hash
-		// joiner.
-		nil, /* colsToStore */
 		allowNullEquality,
 		hashTableFullBuildMode,
 		probeMode,
@@ -306,7 +310,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 }
 
 func (hj *hashJoiner) build(ctx context.Context) {
-	hj.ht.build(ctx, hj.inputTwo)
+	hj.ht.fullBuild(ctx, hj.inputTwo)
 
 	// We might have duplicates in the hash table, so we need to set up
 	// same and visited slices for the prober.
@@ -770,7 +774,8 @@ func NewHashJoiner(
 	buildSideAllocator, outputUnlimitedAllocator *colmem.Allocator,
 	spec HashJoinerSpec,
 	leftSource, rightSource colexecbase.Operator,
-) colexecbase.Operator {
+	initialNumBuckets uint64,
+) ResettableOperator {
 	var outputTypes []*types.T
 	if spec.joinType.ShouldIncludeLeftColsInOutput() {
 		outputTypes = append(outputTypes, spec.left.sourceTypes...)
@@ -779,10 +784,11 @@ func NewHashJoiner(
 		outputTypes = append(outputTypes, spec.right.sourceTypes...)
 	}
 	return &hashJoiner{
-		twoInputNode:             newTwoInputNode(leftSource, rightSource),
-		buildSideAllocator:       buildSideAllocator,
-		outputUnlimitedAllocator: outputUnlimitedAllocator,
-		spec:                     spec,
-		outputTypes:              outputTypes,
+		twoInputNode:               newTwoInputNode(leftSource, rightSource),
+		buildSideAllocator:         buildSideAllocator,
+		outputUnlimitedAllocator:   outputUnlimitedAllocator,
+		spec:                       spec,
+		outputTypes:                outputTypes,
+		hashTableInitialNumBuckets: initialNumBuckets,
 	}
 }

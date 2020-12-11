@@ -26,12 +26,10 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// distBackup is used to plan the processors for a distributed backup. It
-// streams back progress updates over progCh, which is used to incrementally
-// build up the BulkOpSummary.
-func distBackup(
-	ctx context.Context,
+func distBackupPlanSpecs(
+	planCtx *sql.PlanningCtx,
 	execCtx sql.JobExecContext,
+	dsp *sql.DistSQLPlanner,
 	spans roachpb.Spans,
 	introducedSpans roachpb.Spans,
 	pkIDs map[uint64]bool,
@@ -40,20 +38,8 @@ func distBackup(
 	encryption *jobspb.BackupEncryptionOptions,
 	mvccFilter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
-	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-) error {
-	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
-	var noTxn *kv.Txn
-
-	dsp := execCtx.DistSQLPlanner()
-	evalCtx := execCtx.ExtendedEvalContext()
-
-	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
-	if err != nil {
-		return err
-	}
-
-	backupSpecs, err := makeBackupDataProcessorSpecs(
+) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
+	return makeBackupDataProcessorSpecs(
 		planCtx,
 		dsp,
 		spans,
@@ -67,16 +53,27 @@ func distBackup(
 		execCtx.User(),
 		execCtx.ExecCfg(),
 	)
-	if err != nil {
-		return err
-	}
+}
+
+// distBackup is used to plan the processors for a distributed backup. It
+// streams back progress updates over progCh, which is used to incrementally
+// build up the BulkOpSummary.
+func distBackup(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	planCtx *sql.PlanningCtx,
+	dsp *sql.DistSQLPlanner,
+	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	backupSpecs map[roachpb.NodeID]*execinfrapb.BackupDataSpec,
+) error {
+	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
+	evalCtx := execCtx.ExtendedEvalContext()
+	var noTxn *kv.Txn
 
 	if len(backupSpecs) == 0 {
 		close(progCh)
 		return nil
 	}
-
-	p := planCtx.NewPhysicalPlan()
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
@@ -87,6 +84,7 @@ func distBackup(
 		i++
 	}
 
+	p := planCtx.NewPhysicalPlan()
 	// All of the progress information is sent through the metadata stream, so we
 	// have an empty result stream.
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
@@ -110,7 +108,7 @@ func distBackup(
 		tree.Rows,
 		nil,   /* rangeCache */
 		noTxn, /* txn - the flow does not read or write the database */
-		func(ts hlc.Timestamp) {},
+		nil,   /* clockUpdater */
 		evalCtx.Tracing,
 	)
 	defer recv.Release()

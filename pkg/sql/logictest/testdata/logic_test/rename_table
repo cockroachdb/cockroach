@@ -19,10 +19,10 @@ SELECT * FROM kv
 1 2
 3 4
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  kv  table  root  0
+public  kv  table  root  0  NULL
 
 statement ok
 ALTER TABLE kv RENAME TO new_kv
@@ -36,10 +36,10 @@ SELECT * FROM new_kv
 1 2
 3 4
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  new_kv  table  root  0
+public  new_kv  table  root  0  NULL
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
 query TTTTT
@@ -95,11 +95,11 @@ GRANT CREATE ON DATABASE test TO testuser
 statement ok
 ALTER TABLE test.t RENAME TO t2
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  new_kv  table  root  0
-public  t2      table  root  0
+public  new_kv  table  root  0  NULL
+public  t2      table  root  0  NULL
 
 user testuser
 
@@ -122,15 +122,15 @@ ALTER TABLE test.new_kv RENAME TO test2.t
 statement ok
 ALTER TABLE test.t2 RENAME TO test2.t2
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM test2
 ----
-public  t   table  root  NULL
-public  t2  table  root  NULL
+public  t   table  root  NULL  NULL
+public  t2  table  root  NULL  NULL
 
 user root
 
@@ -244,10 +244,10 @@ INSERT INTO d.kv2 (k,v) VALUES ('c', 'd')
 statement ok
 USE d
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  kv  table  root  0
+public  kv  table  root  0  NULL
 
 query T
 EXPLAIN ALTER TABLE kv RENAME TO kv2
@@ -258,10 +258,10 @@ vectorized: false
 • rename table
 
 # Verify that the EXPLAIN above does not actually rename the table (#30543)
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  kv  table  root  0
+public  kv  table  root  0  NULL
 
 # Test that tables can't be renamed to a different database unless both the
 # old and new schemas are in the public schema.

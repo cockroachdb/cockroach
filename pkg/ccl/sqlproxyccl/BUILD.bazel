@@ -41,6 +41,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/jackc/pgx/v4:pgx",
         "//vendor/github.com/stretchr/testify/require",

@@ -31,56 +31,56 @@ func newBoolAndHashAggAlloc(
 
 type boolAndHashAgg struct {
 	hashAggregateFuncBase
+	col        []bool
 	sawNonNull bool
-	vec        []bool
 	curAgg     bool
 }
 
 var _ AggregateFunc = &boolAndHashAgg{}
 
-func (a *boolAndHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
-	a.vec = vec.Bool()
-	a.Reset()
-}
-
-func (a *boolAndHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	// true indicates whether we are doing an AND aggregate or OR aggregate.
-	// For bool_and the true is true and for bool_or the true is false.
-	a.curAgg = true
+func (a *boolAndHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Bool()
 }
 
 func (a *boolAndHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	{
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.curAgg = a.curAgg && col[i]
-					a.sawNonNull = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg && col[i]
+						a.sawNonNull = true
+					}
+
 				}
+			} else {
+				for _, i := range sel {
 
-			}
-		} else {
-			for _, i := range sel {
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg && col[i]
+						a.sawNonNull = true
+					}
 
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.curAgg = a.curAgg && col[i]
-					a.sawNonNull = true
 				}
-
 			}
 		}
+	},
+	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -88,7 +88,7 @@ func (a *boolAndHashAgg) Flush(outputIdx int) {
 	if !a.sawNonNull {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.vec[outputIdx] = a.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -108,7 +108,9 @@ func (a *boolAndHashAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]boolAndHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
+	f.curAgg = true
 	return f
 }
 
@@ -123,56 +125,56 @@ func newBoolOrHashAggAlloc(
 
 type boolOrHashAgg struct {
 	hashAggregateFuncBase
+	col        []bool
 	sawNonNull bool
-	vec        []bool
 	curAgg     bool
 }
 
 var _ AggregateFunc = &boolOrHashAgg{}
 
-func (a *boolOrHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
-	a.vec = vec.Bool()
-	a.Reset()
-}
-
-func (a *boolOrHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	// false indicates whether we are doing an AND aggregate or OR aggregate.
-	// For bool_and the false is true and for bool_or the false is false.
-	a.curAgg = false
+func (a *boolOrHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Bool()
 }
 
 func (a *boolOrHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	{
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.curAgg = a.curAgg || col[i]
-					a.sawNonNull = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg || col[i]
+						a.sawNonNull = true
+					}
+
 				}
+			} else {
+				for _, i := range sel {
 
-			}
-		} else {
-			for _, i := range sel {
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg || col[i]
+						a.sawNonNull = true
+					}
 
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.curAgg = a.curAgg || col[i]
-					a.sawNonNull = true
 				}
-
 			}
 		}
+	},
+	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -180,7 +182,7 @@ func (a *boolOrHashAgg) Flush(outputIdx int) {
 	if !a.sawNonNull {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.vec[outputIdx] = a.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -200,6 +202,8 @@ func (a *boolOrHashAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]boolOrHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
+	f.curAgg = false
 	return f
 }

@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -153,7 +155,22 @@ var allowCrossDatabaseSeqOwner = settings.RegisterPublicBoolSetting(
 // if they are not output.
 var traceTxnThreshold = settings.RegisterPublicDurationSetting(
 	"sql.trace.txn.enable_threshold",
-	"duration beyond which all transactions are traced (set to 0 to disable)", 0,
+	"duration beyond which all transactions are traced (set to 0 to "+
+		"disable). This setting is coarser grained than"+
+		"sql.trace.stmt.enable_threshold because it applies to all statements "+
+		"within a transaction as well as client communication (e.g. retries).", 0,
+)
+
+// traceStmtThreshold is identical to traceTxnThreshold except it applies to
+// individual statements in a transaction. The motivation for this setting is
+// to be able to reduce the noise associated with a larger transaction (e.g.
+// round trips to client).
+var traceStmtThreshold = settings.RegisterPublicDurationSetting(
+	"sql.trace.stmt.enable_threshold",
+	"duration beyond which all statements are traced (set to 0 to disable). "+
+		"This applies to individual statements within a transaction and is therefore "+
+		"finer-grained than sql.trace.txn.enable_threshold.",
+	0,
 )
 
 // traceSessionEventLogEnabled can be used to enable the event log
@@ -282,6 +299,15 @@ var experimentalMultiColumnInvertedIndexesMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_multi_column_inverted_indexes.enabled",
 	"default value for experimental_enable_multi_column_inverted_indexes session setting;"+
 		"disables multi column inverted indexes by default",
+	false,
+)
+
+// TODO(rytaft): remove this once unique without index constraints are fully
+// supported.
+var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_enable_unique_without_index_constraints.enabled",
+	"default value for experimental_enable_unique_without_index_constraints session setting;"+
+		"disables unique without index constraints by default",
 	false,
 )
 
@@ -685,22 +711,17 @@ type ExecutorConfig struct {
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
-	SQLStatusServer         serverpb.SQLStatusServer
-	MetricsRecorder         nodeStatusGenerator
-	SessionRegistry         *SessionRegistry
-	SQLLivenessReader       sqlliveness.Reader
-	JobRegistry             *jobs.Registry
-	VirtualSchemas          *VirtualSchemaHolder
-	DistSQLPlanner          *DistSQLPlanner
-	TableStatsCache         *stats.TableStatisticsCache
-	StatsRefresher          *stats.Refresher
-	ExecLogger              *log.SecondaryLogger
-	AuditLogger             *log.SecondaryLogger
-	SlowQueryLogger         *log.SecondaryLogger
-	SlowInternalQueryLogger *log.SecondaryLogger
-	AuthLogger              *log.SecondaryLogger
-	InternalExecutor        *InternalExecutor
-	QueryCache              *querycache.C
+	SQLStatusServer   serverpb.SQLStatusServer
+	MetricsRecorder   nodeStatusGenerator
+	SessionRegistry   *SessionRegistry
+	SQLLivenessReader sqlliveness.Reader
+	JobRegistry       *jobs.Registry
+	VirtualSchemas    *VirtualSchemaHolder
+	DistSQLPlanner    *DistSQLPlanner
+	TableStatsCache   *stats.TableStatisticsCache
+	StatsRefresher    *stats.Refresher
+	InternalExecutor  *InternalExecutor
+	QueryCache        *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 
@@ -718,7 +739,7 @@ type ExecutorConfig struct {
 
 	// RangeDescriptorCache is updated by DistSQL when it finds out about
 	// misplanned spans.
-	RangeDescriptorCache *kvcoord.RangeDescriptorCache
+	RangeDescriptorCache *rangecache.RangeCache
 
 	// Role membership cache.
 	RoleMemberCache *MembershipCache
@@ -740,7 +761,7 @@ type ExecutorConfig struct {
 	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
-	VersionUpgradeHook func(ctx context.Context, to roachpb.Version) error
+	VersionUpgradeHook func(ctx context.Context, from, to clusterversion.ClusterVersion) error
 }
 
 // Organization returns the value of cluster.organization.
@@ -835,9 +856,6 @@ type ExecutorTestingKnobs struct {
 
 	// DeterministicExplainAnalyze, if set, will result in overriding fields in
 	// EXPLAIN ANALYZE (PLAN) that can vary between runs (like elapsed times).
-	//
-	// Should be set together with execinfra.TestingKnobs.DeterministicStats.
-	// TODO(radu): figure out how to unify these two.
 	DeterministicExplainAnalyze bool
 }
 
@@ -882,6 +900,15 @@ type BackupRestoreTestingKnobs struct {
 	// AllowImplicitAccess allows implicit access to data sources for non-admin
 	// users. This enables using nodelocal for testing BACKUP/RESTORE permissions.
 	AllowImplicitAccess bool
+
+	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
+	// resolved during backup planning, and will eventually be backed up during
+	// execution.
+	CaptureResolvedTableDescSpans func([]roachpb.Span)
+
+	// RunAfterProcessingRestoreSpanEntry allows blocking the RESTORE job after a
+	// single RestoreSpanEntry has been processed and added to the SSTBatcher.
+	RunAfterProcessingRestoreSpanEntry func(ctx context.Context)
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
@@ -1373,8 +1400,8 @@ func WithAnonymizedStatement(err error, stmt tree.Statement) error {
 		"while executing: %s", errors.Safe(anonStmtStr))
 }
 
-// SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
-// the context of one SQL session.
+// SessionTracing holds the state used by SET TRACING statements in the context
+// of one SQL session.
 // It holds the current trace being collected (or the last trace collected, if
 // tracing is not currently ongoing).
 //
@@ -1472,9 +1499,6 @@ func (st *SessionTracing) StartTracing(
 				comma = ", "
 			}
 			recOption := "cluster"
-			if recType == tracing.SingleNodeRecording {
-				recOption = "local"
-			}
 			fmt.Fprintf(&desiredOptions, "%s%s", comma, recOption)
 
 			err := pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -1511,7 +1535,7 @@ func (st *SessionTracing) StartTracing(
 		// Create a child span while recording.
 		sp = parentSp.Tracer().StartSpan(
 			opName,
-			tracing.WithParent(parentSp),
+			tracing.WithParentAndAutoCollection(parentSp),
 			tracing.WithCtxLogTags(connCtx),
 			tracing.WithForceRealSpan(),
 		)
@@ -1561,11 +1585,6 @@ func (st *SessionTracing) StopTracing() error {
 	var err error
 	st.lastRecording, err = generateSessionTraceVTable(spans)
 	return err
-}
-
-// RecordingType returns which type of tracing is currently being done.
-func (st *SessionTracing) RecordingType() tracing.RecordingType {
-	return st.recordingType
 }
 
 // KVTracingEnabled checks whether KV tracing is currently enabled.
@@ -2167,6 +2186,12 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 // supported.
 func (m *sessionDataMutator) SetMutliColumnInvertedIndexes(val bool) {
 	m.data.EnableMultiColumnInvertedIndexes = val
+}
+
+// TODO(rytaft): remove this once unique without index constraints are fully
+// supported.
+func (m *sessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {
+	m.data.EnableUniqueWithoutIndexConstraints = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

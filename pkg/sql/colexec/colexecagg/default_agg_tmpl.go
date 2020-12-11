@@ -39,14 +39,12 @@ type default_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
-	allocator *colmem.Allocator
-	fn        tree.AggregateFunc
-	ctx       context.Context
+	fn  tree.AggregateFunc
+	ctx context.Context
 	// inputArgsConverter is managed by the aggregator, and this function can
 	// simply call GetDatumColumn.
 	inputArgsConverter *colconv.VecToDatumConverter
 	resultConverter    func(tree.Datum) interface{}
-	vec                coldata.Vec
 	scratch            struct {
 		// Note that this scratch space is shared among all aggregate function
 		// instances created by the same alloc object.
@@ -56,23 +54,12 @@ type default_AGGKINDAgg struct {
 
 var _ AggregateFunc = &default_AGGKINDAgg{}
 
-func (a *default_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *default_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.Init(groups, vec)
+	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.vec = vec
-	a.Reset()
-}
-
-func (a *default_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	a.fn.Reset(a.ctx)
 }
 
 func (a *default_AGGKINDAgg) Compute(
@@ -196,12 +183,12 @@ func (a *default_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	*f = default_AGGKINDAgg{
-		allocator:          a.allocator,
 		fn:                 a.constructor(a.evalCtx, a.arguments),
 		ctx:                a.evalCtx.Context,
 		inputArgsConverter: a.inputArgsConverter,
 		resultConverter:    a.resultConverter,
 	}
+	f.allocator = a.allocator
 	f.scratch.otherArgs = a.otherArgsScratch
 	a.allocator.AdjustMemoryUsage(f.fn.Size())
 	a.aggFuncs = a.aggFuncs[1:]
@@ -225,17 +212,20 @@ func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupl
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if a.groups[tupleIdx] {
-		res, err := a.fn.Result()
-		if err != nil {
-			colexecerror.ExpectedError(err)
+		if !a.isFirstGroup {
+			res, err := a.fn.Result()
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			if res == tree.DNull {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
+			}
+			a.curIdx++
+			a.fn.Reset(a.ctx)
 		}
-		if res == tree.DNull {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
-		}
-		a.curIdx++
-		a.fn.Reset(a.ctx)
+		a.isFirstGroup = false
 	}
 	// {{end}}
 	// Note that the only function that takes no arguments is COUNT_ROWS, and

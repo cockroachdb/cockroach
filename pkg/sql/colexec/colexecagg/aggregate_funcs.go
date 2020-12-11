@@ -48,32 +48,29 @@ func IsAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
 
 // AggregateFunc is an aggregate function that performs computation on a batch
 // when Compute(batch) is called and writes the output to the Vec passed in
-// in Init. The AggregateFunc performs an aggregation per group and outputs the
-// aggregation once the start of the new group is reached. If the end of the
+// in SetOutput. The AggregateFunc performs an aggregation per group and outputs
+// the aggregation once the start of the new group is reached. If the end of the
 // group is not reached before the batch is finished, the AggregateFunc will
-// store a carry value that it will use next time Compute is called. Note that
-// this carry value is stored at the output index. Therefore if any memory
-// modification of the output vector is made, the caller *MUST* copy the value
-// at the current index inclusive for a correct aggregation.
+// store a carry value itself that it will use next time Compute is called to
+// continue the aggregation of the last group.
 type AggregateFunc interface {
-	// Init sets the groups for the aggregation and the output vector. Each index
-	// in groups corresponds to a column value in the input batch. true represents
-	// the start of a new group. Note that the very first group in the whole
-	// input should *not* be marked as a start of a new group.
-	Init(groups []bool, vec coldata.Vec)
+	// Init sets the groups for the aggregation. Each index in groups
+	// corresponds to a column value in the input batch. true represents the
+	// start of a new group (the first group must also have 'true' set for the
+	// very first tuple).
+	Init(groups []bool)
 
-	// Reset resets the aggregate function for another run. Primarily used for
-	// benchmarks.
-	Reset()
+	// SetOutput sets the output vector to write the results of aggregation
+	// into. If the output vector changes, it is up to the caller to make sure
+	// that results already written to the old vector are propagated further.
+	SetOutput(vec coldata.Vec)
 
-	// CurrentOutputIndex returns the current index in the output vector that the
-	// aggregate function is writing to. All indices < the index returned are
-	// finished aggregations for previous groups. A negative index may be returned
-	// to signify an aggregate function that has not yet performed any
-	// computation.
+	// CurrentOutputIndex returns the current index in the output vector that
+	// the aggregate function is writing to. All indices < the index returned
+	// are finished aggregations for previous groups.
 	CurrentOutputIndex() int
-	// SetOutputIndex sets the output index to write to. The value for the current
-	// index is carried over.
+
+	// SetOutputIndex sets the output index to write to.
 	SetOutputIndex(idx int)
 
 	// Compute computes the aggregation on the input batch.
@@ -88,8 +85,6 @@ type AggregateFunc interface {
 	// function itself should maintain the output index to write to.
 	// The caller *must* ensure that the memory accounting is done on the
 	// output vector of the aggregate function.
-	// Note: the implementations are free to not account for the memory used
-	// for the result of aggregation of the last group.
 	Flush(outputIdx int)
 
 	// HandleEmptyInputScalar populates the output for a case of an empty input
@@ -101,19 +96,25 @@ type AggregateFunc interface {
 type orderedAggregateFuncBase struct {
 	groups []bool
 	// curIdx tracks the current output index of this function.
-	curIdx int
+	curIdx    int
+	allocator *colmem.Allocator
+	// vec is the output vector of this function.
+	vec coldata.Vec
 	// nulls is the nulls vector of the output vector of this function.
 	nulls *coldata.Nulls
+	// isFirstGroup tracks whether the new group (indicated by 'true' in
+	// 'groups') is actually the first group in the whole input.
+	isFirstGroup bool
 }
 
-func (o *orderedAggregateFuncBase) Init(groups []bool, vec coldata.Vec) {
+func (o *orderedAggregateFuncBase) Init(groups []bool) {
 	o.groups = groups
-	o.nulls = vec.Nulls()
+	o.isFirstGroup = true
 }
 
-func (o *orderedAggregateFuncBase) Reset() {
-	o.curIdx = 0
-	o.nulls.UnsetNulls()
+func (o *orderedAggregateFuncBase) SetOutput(vec coldata.Vec) {
+	o.vec = vec
+	o.nulls = vec.Nulls()
 }
 
 func (o *orderedAggregateFuncBase) CurrentOutputIndex() int {
@@ -132,16 +133,18 @@ func (o *orderedAggregateFuncBase) HandleEmptyInputScalar() {
 }
 
 type hashAggregateFuncBase struct {
+	allocator *colmem.Allocator
+	// vec is the output vector of this function.
+	vec coldata.Vec
 	// nulls is the nulls vector of the output vector of this function.
 	nulls *coldata.Nulls
 }
 
-func (h *hashAggregateFuncBase) Init(_ []bool, vec coldata.Vec) {
-	h.nulls = vec.Nulls()
-}
+func (h *hashAggregateFuncBase) Init(_ []bool) {}
 
-func (h *hashAggregateFuncBase) Reset() {
-	h.nulls.UnsetNulls()
+func (h *hashAggregateFuncBase) SetOutput(vec coldata.Vec) {
+	h.vec = vec
+	h.nulls = vec.Nulls()
 }
 
 func (h *hashAggregateFuncBase) CurrentOutputIndex() int {

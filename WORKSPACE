@@ -9,17 +9,17 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "ac03931e56c3b229c145f1a8b2a2ad3e8d8f1af57e43ef28a26123362a1e3c7e",
+    sha256 = "81eff5df9077783b18e93d0c7ff990d8ad7a3b8b3ca5b785e1c483aacdb342d7",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.24.4/rules_go-v0.24.4.tar.gz",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.24.4/rules_go-v0.24.4.tar.gz",
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.24.9/rules_go-v0.24.9.tar.gz",
+        "https://github.com/bazelbuild/rules_go/releases/download/v0.24.9/rules_go-v0.24.9.tar.gz",
     ],
 )
 
 # Load the go dependencies and invoke them.
 load("@io_bazel_rules_go//go:deps.bzl", "go_rules_dependencies", "go_register_toolchains")
 go_rules_dependencies()
-go_register_toolchains()
+go_register_toolchains(go_version="1.15.6")
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
 # repo.
@@ -66,14 +66,17 @@ load("//c-deps:REPOSITORIES.bzl", "c_deps")
 c_deps()
 
 
-# Load the bazel utility that lets us build C/C++ projects using cmake/make/etc.
+# Load the bazel utility that lets us build C/C++ projects using
+# cmake/make/etc. We point our fork which adds autoconf support
+# (https://github.com/bazelbuild/rules_foreign_cc/pull/432) and BSD support
+# (https://github.com/bazelbuild/rules_foreign_cc/pull/387).
 #
-# TODO(irfansharif): Point to an upstream SHA once it picks up Oliver's changes
-# that add autoconf support.
+# TODO(irfansharif): Point to an upstream SHA once maintainers pick up the
+# aforementioned PRs.
 git_repository(
    name = "rules_foreign_cc",
-   commit = "605c77171f20840464301d7d01d6cd9e3a982888",
-   remote = "https://github.com/otan-cockroach/rules_foreign_cc",
+   commit = "8fdca4480f3fa9c084f4a73749a46fa17996beb1",
+   remote = "https://github.com/cockroachdb/rules_foreign_cc",
 )
 load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
 rules_foreign_cc_dependencies()

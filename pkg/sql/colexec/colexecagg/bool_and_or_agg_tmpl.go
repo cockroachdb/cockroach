@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/errors"
@@ -59,71 +60,67 @@ type bool_OP_TYPE_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
+	col        []bool
 	sawNonNull bool
-	vec        []bool
 	curAgg     bool
 }
 
 var _ AggregateFunc = &bool_OP_TYPE_AGGKINDAgg{}
 
-func (a *bool_OP_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *bool_OP_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.orderedAggregateFuncBase.SetOutput(vec)
 	// {{else}}
-	a.hashAggregateFuncBase.Init(groups, vec)
+	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.vec = vec.Bool()
-	a.Reset()
-}
-
-func (a *bool_OP_TYPE_AGGKINDAgg) Reset() {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.Reset()
-	// {{else}}
-	a.hashAggregateFuncBase.Reset()
-	// {{end}}
-	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR aggregate.
-	// For bool_and the _DEFAULT_VAL is true and for bool_or the _DEFAULT_VAL is false.
-	a.curAgg = _DEFAULT_VAL
+	a.col = vec.Bool()
 }
 
 func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	// {{if eq "_AGGKIND" "Ordered"}}
-	groups := a.groups
-	// {{/*
-	// We don't need to check whether sel is non-nil when performing
-	// hash aggregation because the hash aggregator always uses non-nil
-	// sel to specify the tuples to be aggregated.
-	// */}}
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
-				_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// {{if eq "_AGGKIND" "Ordered"}}
+		groups := a.groups
+		// {{/*
+		// We don't need to check whether sel is non-nil when performing
+		// hash aggregation because the hash aggregator always uses non-nil
+		// sel to specify the tuples to be aggregated.
+		// */}}
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+				}
+			} else {
+				for i := range col {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+				}
 			}
-		} else {
-			for i := range col {
-				_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+		} else
+		// {{end}}
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+				}
+			} else {
+				for _, i := range sel {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+				}
 			}
 		}
-	} else
-	// {{end}}
-	{
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-				_ACCUMULATE_BOOLEAN(a, nulls, i, true)
-			}
-		} else {
-			for _, i := range sel {
-				_ACCUMULATE_BOOLEAN(a, nulls, i, false)
-			}
-		}
+	},
+	)
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -137,7 +134,7 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.sawNonNull {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.vec[outputIdx] = a.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -157,7 +154,14 @@ func (a *bool_OP_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]bool_OP_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
+	// {{/*
+	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR
+	// aggregate. For bool_and the _DEFAULT_VAL is true and for bool_or the
+	// _DEFAULT_VAL is false.
+	// */}}
+	f.curAgg = _DEFAULT_VAL
 	return f
 }
 
@@ -170,16 +174,19 @@ func _ACCUMULATE_BOOLEAN(a *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		if !a.sawNonNull {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			a.vec[a.curIdx] = a.curAgg
+		if !a.isFirstGroup {
+			if !a.sawNonNull {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				a.col[a.curIdx] = a.curAgg
+			}
+			a.curIdx++
+			// {{with .Global}}
+			a.curAgg = _DEFAULT_VAL
+			// {{end}}
+			a.sawNonNull = false
 		}
-		a.curIdx++
-		// {{with .Global}}
-		a.curAgg = _DEFAULT_VAL
-		// {{end}}
-		a.sawNonNull = false
+		a.isFirstGroup = false
 	}
 	// {{end}}
 

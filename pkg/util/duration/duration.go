@@ -160,7 +160,7 @@ func Age(lhs, rhs time.Time) Duration {
 
 	// For each field that is now negative, promote them to positive.
 	// We could probably use smarter math here, but to keep things simple and postgres-esque,
-	// we'll do the the same way postgres does. We do not expect these overflow values
+	// we'll do the same way postgres does. We do not expect these overflow values
 	// to be too large from the math above anyway.
 	for nanos < 0 {
 		nanos += int64(time.Second)

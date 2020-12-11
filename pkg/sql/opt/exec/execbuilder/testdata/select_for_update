@@ -21,7 +21,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -34,7 +34,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for no key update
@@ -47,7 +47,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for share
@@ -60,7 +60,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for key share
@@ -73,7 +73,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for share
@@ -86,7 +86,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for no key update
@@ -99,7 +99,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -112,7 +112,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -128,12 +128,12 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: 1
 │
 └── • scan
       columns: ()
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: t@primary
       spans: FULL SCAN
       locking strength: for update
@@ -275,7 +275,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -291,7 +291,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -309,7 +309,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -322,7 +322,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -342,7 +342,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -355,7 +355,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -381,7 +381,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -397,7 +397,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -418,7 +418,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -431,7 +431,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -444,7 +444,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for no key update
@@ -457,7 +457,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for no key update
@@ -473,7 +473,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -486,7 +486,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -499,7 +499,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -515,7 +515,7 @@ vectorized: true
 ·
 • scan
   columns: (a)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -545,7 +545,7 @@ vectorized: false
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
 
@@ -574,7 +574,7 @@ vectorized: false
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
               locking strength: for update
@@ -607,7 +607,7 @@ vectorized: false
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
               locking strength: for update
@@ -637,7 +637,7 @@ vectorized: false
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
 
@@ -666,7 +666,7 @@ vectorized: false
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
               locking strength: for update
@@ -699,7 +699,7 @@ vectorized: false
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
               locking strength: for update
@@ -728,7 +728,7 @@ vectorized: true
         │
         └── • scan
               columns: (b)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
 
@@ -756,7 +756,7 @@ vectorized: true
         │
         └── • scan
               columns: (b)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
               locking strength: for update
@@ -785,7 +785,7 @@ vectorized: true
         │
         └── • scan
               columns: (b)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
 
@@ -813,7 +813,7 @@ vectorized: true
         │
         └── • scan
               columns: (b)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
               locking strength: for update
@@ -837,12 +837,12 @@ vectorized: true
 ·
 • render
 │ columns: (a)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: a
 │
 └── • scan
       columns: (a)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: t@primary
       spans: FULL SCAN
 
@@ -854,12 +854,12 @@ vectorized: true
 ·
 • render
 │ columns: (a)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: a
 │
 └── • scan
       columns: (a)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: t@primary
       spans: FULL SCAN
 
@@ -874,7 +874,7 @@ vectorized: false
 │
 ├── • scan buffer
 │     columns: (a)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     label: buffer 1
 │
 └── • subquery
@@ -888,7 +888,7 @@ vectorized: false
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
               locking strength: for update
@@ -904,7 +904,7 @@ vectorized: false
 │
 ├── • scan buffer
 │     columns: (a)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     label: buffer 1 (cte)
 │
 └── • subquery
@@ -918,7 +918,7 @@ vectorized: false
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
               locking strength: for update
@@ -937,7 +937,7 @@ vectorized: true
 │
 ├── • scan
 │     columns: (c)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: u@primary
 │     spans: FULL SCAN
 │
@@ -952,7 +952,7 @@ vectorized: true
         │
         └── • scan
               columns: (a)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
               locking strength: for update
@@ -969,11 +969,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -982,7 +982,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -990,7 +990,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1003,11 +1003,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1016,7 +1016,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1024,7 +1024,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
 
@@ -1036,11 +1036,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1049,14 +1049,14 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1069,11 +1069,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1082,7 +1082,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1090,7 +1090,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1103,11 +1103,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1116,7 +1116,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1124,7 +1124,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for share
@@ -1140,11 +1140,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1153,7 +1153,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1161,7 +1161,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for share
@@ -1174,11 +1174,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1187,7 +1187,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1195,7 +1195,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1208,11 +1208,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1221,7 +1221,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for no key update
@@ -1229,7 +1229,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for key share
@@ -1242,11 +1242,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1255,7 +1255,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for no key update
@@ -1263,7 +1263,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1280,11 +1280,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1293,7 +1293,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1301,7 +1301,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1323,11 +1323,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1336,7 +1336,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1344,7 +1344,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
 
@@ -1356,11 +1356,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1369,14 +1369,14 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1389,11 +1389,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1402,7 +1402,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1410,7 +1410,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1427,11 +1427,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1440,7 +1440,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1448,7 +1448,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1470,11 +1470,11 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
     │ right cols are key
@@ -1483,7 +1483,7 @@ vectorized: true
     ├── • scan
     │     columns: (a, b)
     │     ordering: +a
-    │     estimated row count: 1000 (missing stats)
+    │     estimated row count: 1,000 (missing stats)
     │     table: t@primary
     │     spans: FULL SCAN
     │     locking strength: for update
@@ -1491,7 +1491,7 @@ vectorized: true
     └── • scan
           columns: (a, c)
           ordering: +a
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: u@primary
           spans: FULL SCAN
           locking strength: for update
@@ -1508,18 +1508,18 @@ vectorized: true
 ·
 • cross join (inner)
 │ columns: (a, b, a, c)
-│ estimated row count: 1000000 (missing stats)
+│ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
 │     columns: (a, b)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: t@primary
 │     spans: FULL SCAN
 │     locking strength: for update
 │
 └── • scan
       columns: (a, c)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: u@primary
       spans: FULL SCAN
       locking strength: for update
@@ -1532,18 +1532,18 @@ vectorized: true
 ·
 • cross join (inner)
 │ columns: (a, b, a, c)
-│ estimated row count: 1000000 (missing stats)
+│ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
 │     columns: (a, b)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: t@primary
 │     spans: FULL SCAN
 │     locking strength: for update
 │
 └── • scan
       columns: (a, c)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: u@primary
       spans: FULL SCAN
 
@@ -1555,18 +1555,18 @@ vectorized: true
 ·
 • cross join (inner)
 │ columns: (a, b, a, c)
-│ estimated row count: 1000000 (missing stats)
+│ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
 │     columns: (a, b)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: t@primary
 │     spans: FULL SCAN
 │     locking strength: for share
 │
 └── • scan
       columns: (a, c)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: u@primary
       spans: FULL SCAN
       locking strength: for update
@@ -1579,18 +1579,18 @@ vectorized: true
 ·
 • cross join (inner)
 │ columns: (a, b, a, c)
-│ estimated row count: 1000000 (missing stats)
+│ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
 │     columns: (a, b)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: t@primary
 │     spans: FULL SCAN
 │     locking strength: for update
 │
 └── • scan
       columns: (a, c)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: u@primary
       spans: FULL SCAN
       locking strength: for update
@@ -1606,17 +1606,17 @@ vectorized: true
 ·
 • cross join (inner)
 │ columns: (a, b, a, c)
-│ estimated row count: 1000000 (missing stats)
+│ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
 │     columns: (a, b)
-│     estimated row count: 1000 (missing stats)
+│     estimated row count: 1,000 (missing stats)
 │     table: t@primary
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (a, c)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: u@primary
       spans: FULL SCAN
       locking strength: for update
@@ -1633,7 +1633,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -1647,7 +1647,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for no key update
@@ -1661,7 +1661,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for share
@@ -1675,7 +1675,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for key share
@@ -1689,7 +1689,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for share
@@ -1703,7 +1703,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for no key update
@@ -1717,7 +1717,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -1731,7 +1731,7 @@ vectorized: true
 ·
 • scan
   columns: (a, b)
-  estimated row count: 1000 (missing stats)
+  estimated row count: 1,000 (missing stats)
   table: t@primary
   spans: FULL SCAN
   locking strength: for update
@@ -1748,12 +1748,12 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ render 0: 1
 │
 └── • scan
       columns: ()
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: t@primary
       spans: FULL SCAN
       locking strength: for update

@@ -318,6 +318,13 @@ func (b *Builder) buildStmt(
 	case *tree.CancelSessions:
 		return b.buildCancelSessions(stmt, inScope)
 
+	case *tree.CreateStats:
+		return b.buildCreateStatistics(stmt, inScope)
+
+	case *tree.Analyze:
+		// ANALYZE is syntactic sugar for CREATE STATISTICS.
+		return b.buildCreateStatistics(&tree.CreateStats{Table: stmt.Table}, inScope)
+
 	case *tree.Export:
 		return b.buildExport(stmt, inScope)
 
@@ -386,7 +393,7 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 					panic(err)
 				}
 				tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
-				ds, _ := b.resolveDataSource(&tn, privilege.SELECT)
+				ds, _, _ := b.resolveDataSource(&tn, privilege.SELECT)
 
 				b.viewDeps = append(b.viewDeps, opt.ViewDep{
 					DataSource: ds,

@@ -181,6 +181,14 @@ var aggregates = map[string]builtinDefinition{
 		"Calculates the sample covariance of the selected values.",
 	),
 
+	"regr_avgx": makeRegressionAggregateBuiltin(
+		newRegressionAvgXAggregate, "Calculates the average of the independent variable (sum(X)/N).",
+	),
+
+	"regr_avgy": makeRegressionAggregateBuiltin(
+		newRegressionAvgYAggregate, "Calculates the average of the dependent variable (sum(Y)/N).",
+	),
+
 	"regr_intercept": makeRegressionAggregateBuiltin(
 		newRegressionInterceptAggregate, "Calculates y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs.",
 	),
@@ -203,6 +211,27 @@ var aggregates = map[string]builtinDefinition{
 
 	"regr_syy": makeRegressionAggregateBuiltin(
 		newRegressionSYYAggregate, "Calculates sum of squares of the dependent variable.",
+	),
+
+	"regr_count": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Float, types.Float}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Int}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal, types.Decimal}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float, types.Int}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float, types.Decimal}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Float}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Int, types.Decimal}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal, types.Float}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal, types.Int}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull.", tree.VolatilityImmutable),
 	),
 
 	"count": makeBuiltin(aggPropsNullableArgs(),
@@ -1063,11 +1092,15 @@ var _ tree.AggregateFunc = &regressionSlopeAggregate{}
 var _ tree.AggregateFunc = &regressionSXXAggregate{}
 var _ tree.AggregateFunc = &regressionSXYAggregate{}
 var _ tree.AggregateFunc = &regressionSYYAggregate{}
+var _ tree.AggregateFunc = &regressionCountAggregate{}
+var _ tree.AggregateFunc = &regressionAvgXAggregate{}
+var _ tree.AggregateFunc = &regressionAvgYAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
 const sizeOfRegressionAccumulatorBase = int64(unsafe.Sizeof(regressionAccumulatorBase{}))
 const sizeOfCountAggregate = int64(unsafe.Sizeof(countAggregate{}))
+const sizeOfRegressionCountAggregate = int64(unsafe.Sizeof(regressionCountAggregate{}))
 const sizeOfCountRowsAggregate = int64(unsafe.Sizeof(countRowsAggregate{}))
 const sizeOfMaxAggregate = int64(unsafe.Sizeof(maxAggregate{}))
 const sizeOfMinAggregate = int64(unsafe.Sizeof(minAggregate{}))
@@ -1991,6 +2024,44 @@ func (a *covarSampAggregate) Result() (tree.Datum, error) {
 	return tree.NewDFloat(tree.DFloat(a.sxy / (a.n - 1))), nil
 }
 
+// regressionAvgXAggregate represents SQL:2003 average of the independent
+// variable (sum(X)/N).
+type regressionAvgXAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionAvgXAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionAvgXAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionAvgXAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sx / a.n)), nil
+}
+
+// regressionAvgYAggregate represents SQL:2003 average of the dependent
+// variable (sum(Y)/N).
+type regressionAvgYAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionAvgYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionAvgYAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionAvgYAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sy / a.n)), nil
+}
+
 // regressionInterceptAggregate represents y-intercept.
 type regressionInterceptAggregate struct {
 	regressionAccumulatorBase
@@ -2113,6 +2184,50 @@ func (a *regressionSYYAggregate) Result() (tree.Datum, error) {
 	}
 
 	return tree.NewDFloat(tree.DFloat(a.syy)), nil
+}
+
+// regressionCountAggregate calculates number of input rows in which both
+// expressions are nonnull.
+type regressionCountAggregate struct {
+	count int
+}
+
+func newRegressionCountAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionCountAggregate{}
+}
+
+func (a *regressionCountAggregate) Add(
+	_ context.Context, datumY tree.Datum, otherArgs ...tree.Datum,
+) error {
+	if datumY == tree.DNull {
+		return nil
+	}
+
+	datumX := otherArgs[0]
+	if datumX == tree.DNull {
+		return nil
+	}
+
+	a.count++
+	return nil
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionCountAggregate) Result() (tree.Datum, error) {
+	return tree.NewDInt(tree.DInt(a.count)), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *regressionCountAggregate) Reset(context.Context) {
+	a.count = 0
+}
+
+// Close is part of the tree.AggregateFunc interface.
+func (a *regressionCountAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *regressionCountAggregate) Size() int64 {
+	return sizeOfRegressionCountAggregate
 }
 
 type countAggregate struct {
@@ -2415,7 +2530,7 @@ func (a *intSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.D
 			if err != nil {
 				return err
 			}
-			if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(a.decSum))); err != nil {
+			if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(&a.decSum))); err != nil {
 				return err
 			}
 		}
@@ -2483,7 +2598,7 @@ func (a *decimalSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tr
 		return err
 	}
 
-	if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(a.sum))); err != nil {
+	if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(&a.sum))); err != nil {
 		return err
 	}
 
@@ -2783,11 +2898,11 @@ func (a *decimalSqrDiffAggregate) Add(
 	a.ed.Sub(&a.tmp, d, &a.mean)
 	a.ed.Add(&a.sqrDiff, &a.sqrDiff, a.ed.Mul(&a.delta, &a.delta, &a.tmp))
 
-	size := int64(tree.SizeOfDecimal(a.count) +
-		tree.SizeOfDecimal(a.mean) +
-		tree.SizeOfDecimal(a.sqrDiff) +
-		tree.SizeOfDecimal(a.delta) +
-		tree.SizeOfDecimal(a.tmp))
+	size := int64(tree.SizeOfDecimal(&a.count) +
+		tree.SizeOfDecimal(&a.mean) +
+		tree.SizeOfDecimal(&a.sqrDiff) +
+		tree.SizeOfDecimal(&a.delta) +
+		tree.SizeOfDecimal(&a.tmp))
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}
@@ -2982,13 +3097,13 @@ func (a *decimalSumSqrDiffsAggregate) Add(
 	// Update running mean.
 	a.ed.Add(&a.mean, &a.mean, &a.tmp)
 
-	size := int64(tree.SizeOfDecimal(a.count) +
-		tree.SizeOfDecimal(a.mean) +
-		tree.SizeOfDecimal(a.sqrDiff) +
-		tree.SizeOfDecimal(a.tmpCount) +
-		tree.SizeOfDecimal(a.tmpMean) +
-		tree.SizeOfDecimal(a.delta) +
-		tree.SizeOfDecimal(a.tmp))
+	size := int64(tree.SizeOfDecimal(&a.count) +
+		tree.SizeOfDecimal(&a.mean) +
+		tree.SizeOfDecimal(&a.sqrDiff) +
+		tree.SizeOfDecimal(&a.tmpCount) +
+		tree.SizeOfDecimal(&a.tmpMean) +
+		tree.SizeOfDecimal(&a.delta) +
+		tree.SizeOfDecimal(&a.tmp))
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}

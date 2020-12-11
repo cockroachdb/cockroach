@@ -1,0 +1,170 @@
+# Populate some values
+
+run ok
+with ts=44 v=abc
+  put  k=a
+  put  k=a/123
+  put  k=b
+  put  k=b/123
+  put  k=c
+  put  k=c/123
+  put  k=d
+  put  k=d/123
+----
+>> at end:
+data: "a"/0.000000044,0 -> /BYTES/abc
+data: "a/123"/0.000000044,0 -> /BYTES/abc
+data: "b"/0.000000044,0 -> /BYTES/abc
+data: "b/123"/0.000000044,0 -> /BYTES/abc
+data: "c"/0.000000044,0 -> /BYTES/abc
+data: "c/123"/0.000000044,0 -> /BYTES/abc
+data: "d"/0.000000044,0 -> /BYTES/abc
+data: "d/123"/0.000000044,0 -> /BYTES/abc
+
+
+# A simple non-txn that deletes a range of keys.
+## The delete tombstone is placed alongside each of the previous values, at the newer timestamp.
+
+run ok
+del_range k=a end=b ts=45
+----
+del_range: "a"-"b" -> deleted 2 key(s)
+>> at end:
+data: "a"/0.000000045,0 -> /<empty>
+data: "a"/0.000000044,0 -> /BYTES/abc
+data: "a/123"/0.000000045,0 -> /<empty>
+data: "a/123"/0.000000044,0 -> /BYTES/abc
+data: "b"/0.000000044,0 -> /BYTES/abc
+data: "b/123"/0.000000044,0 -> /BYTES/abc
+data: "c"/0.000000044,0 -> /BYTES/abc
+data: "c/123"/0.000000044,0 -> /BYTES/abc
+data: "d"/0.000000044,0 -> /BYTES/abc
+data: "d/123"/0.000000044,0 -> /BYTES/abc
+
+
+# A simple txn that deletes a range of keys.
+## The delete tombstone is placed alongside each of the previous values, at the newer timestamp.
+## The deleted keys are returned.
+
+run ok
+with t=A
+  txn_begin ts=46
+  del_range k=b end=c returnKeys
+  txn_remove
+----
+del_range: "b"-"c" -> deleted 2 key(s)
+del_range: returned "b"
+del_range: returned "b/123"
+>> at end:
+data: "a"/0.000000045,0 -> /<empty>
+data: "a"/0.000000044,0 -> /BYTES/abc
+data: "a/123"/0.000000045,0 -> /<empty>
+data: "a/123"/0.000000044,0 -> /BYTES/abc
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
+data: "b"/0.000000046,0 -> /<empty>
+data: "b"/0.000000044,0 -> /BYTES/abc
+meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
+data: "b/123"/0.000000046,0 -> /<empty>
+data: "b/123"/0.000000044,0 -> /BYTES/abc
+data: "c"/0.000000044,0 -> /BYTES/abc
+data: "c/123"/0.000000044,0 -> /BYTES/abc
+data: "d"/0.000000044,0 -> /BYTES/abc
+data: "d/123"/0.000000044,0 -> /BYTES/abc
+
+
+# A limited non-txn that deletes a range of keys.
+## Only up to two keys are deleted.
+## The deleted keys are returned.
+
+run ok
+del_range k=c end=z ts=47 max=2 returnKeys
+----
+del_range: "c"-"z" -> deleted 2 key(s)
+del_range: returned "c"
+del_range: returned "c/123"
+del_range: resume span ["d","z")
+>> at end:
+data: "a"/0.000000045,0 -> /<empty>
+data: "a"/0.000000044,0 -> /BYTES/abc
+data: "a/123"/0.000000045,0 -> /<empty>
+data: "a/123"/0.000000044,0 -> /BYTES/abc
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
+data: "b"/0.000000046,0 -> /<empty>
+data: "b"/0.000000044,0 -> /BYTES/abc
+meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
+data: "b/123"/0.000000046,0 -> /<empty>
+data: "b/123"/0.000000044,0 -> /BYTES/abc
+data: "c"/0.000000047,0 -> /<empty>
+data: "c"/0.000000044,0 -> /BYTES/abc
+data: "c/123"/0.000000047,0 -> /<empty>
+data: "c/123"/0.000000044,0 -> /BYTES/abc
+data: "d"/0.000000044,0 -> /BYTES/abc
+data: "d/123"/0.000000044,0 -> /BYTES/abc
+
+
+# A txn that performs a delete range at a lower timestamp returns a WriteTooOld error.
+
+run error
+with t=A
+  txn_begin ts=46
+  del_range k=c end=z returnKeys
+  txn_remove
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000046,0 wto=false max=0,0
+data: "a"/0.000000045,0 -> /<empty>
+data: "a"/0.000000044,0 -> /BYTES/abc
+data: "a/123"/0.000000045,0 -> /<empty>
+data: "a/123"/0.000000044,0 -> /BYTES/abc
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
+data: "b"/0.000000046,0 -> /<empty>
+data: "b"/0.000000044,0 -> /BYTES/abc
+meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
+data: "b/123"/0.000000046,0 -> /<empty>
+data: "b/123"/0.000000044,0 -> /BYTES/abc
+data: "c"/0.000000047,0 -> /<empty>
+data: "c"/0.000000044,0 -> /BYTES/abc
+data: "c/123"/0.000000047,0 -> /<empty>
+data: "c/123"/0.000000044,0 -> /BYTES/abc
+data: "d"/0.000000044,0 -> /BYTES/abc
+data: "d/123"/0.000000044,0 -> /BYTES/abc
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000046,0 too old; wrote at 0.000000047,1
+
+run ok
+txn_remove t=A
+----
+>> at end:
+
+
+# A txn that performs a delete range at a higher timestamp does not place duplicate tombstones.
+
+run ok
+with t=A
+  txn_begin ts=48
+  del_range k=c end=z returnKeys
+  txn_remove
+----
+del_range: "c"-"z" -> deleted 2 key(s)
+del_range: returned "d"
+del_range: returned "d/123"
+>> at end:
+data: "a"/0.000000045,0 -> /<empty>
+data: "a"/0.000000044,0 -> /BYTES/abc
+data: "a/123"/0.000000045,0 -> /<empty>
+data: "a/123"/0.000000044,0 -> /BYTES/abc
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
+data: "b"/0.000000046,0 -> /<empty>
+data: "b"/0.000000044,0 -> /BYTES/abc
+meta: "b/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000046,0 min=0,0 seq=0} ts=0.000000046,0 del=true klen=12 vlen=0
+data: "b/123"/0.000000046,0 -> /<empty>
+data: "b/123"/0.000000044,0 -> /BYTES/abc
+data: "c"/0.000000047,0 -> /<empty>
+data: "c"/0.000000044,0 -> /BYTES/abc
+data: "c/123"/0.000000047,0 -> /<empty>
+data: "c/123"/0.000000044,0 -> /BYTES/abc
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000048,0 min=0,0 seq=0} ts=0.000000048,0 del=true klen=12 vlen=0
+data: "d"/0.000000048,0 -> /<empty>
+data: "d"/0.000000044,0 -> /BYTES/abc
+meta: "d/123"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000048,0 min=0,0 seq=0} ts=0.000000048,0 del=true klen=12 vlen=0
+data: "d/123"/0.000000048,0 -> /<empty>
+data: "d/123"/0.000000044,0 -> /BYTES/abc

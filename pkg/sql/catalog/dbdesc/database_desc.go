@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -47,24 +48,47 @@ type Mutable struct {
 	ClusterVersion *Immutable
 }
 
+// NewInitialOption is an optional argument for NewInitial.
+type NewInitialOption func(*descpb.DatabaseDescriptor)
+
+// NewInitialOptionDatabaseRegionConfig is an option allowing an optional
+// regional configuration to be set on the database descriptor.
+func NewInitialOptionDatabaseRegionConfig(
+	regionConfig *descpb.DatabaseDescriptor_RegionConfig,
+) NewInitialOption {
+	return func(desc *descpb.DatabaseDescriptor) {
+		desc.RegionConfig = regionConfig
+	}
+}
+
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
-func NewInitial(id descpb.ID, name string, owner security.SQLUsername) *Mutable {
-	return NewInitialWithPrivileges(id, name,
-		descpb.NewDefaultPrivilegeDescriptor(owner))
+func NewInitial(
+	id descpb.ID, name string, owner security.SQLUsername, options ...NewInitialOption,
+) *Mutable {
+	return NewInitialWithPrivileges(
+		id,
+		name,
+		descpb.NewDefaultPrivilegeDescriptor(owner),
+		options...,
+	)
 }
 
 // NewInitialWithPrivileges constructs a new Mutable for an initial version
 // from an id and name and custom privileges.
 func NewInitialWithPrivileges(
-	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor,
+	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor, options ...NewInitialOption,
 ) *Mutable {
-	return NewCreatedMutable(descpb.DatabaseDescriptor{
+	ret := descpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,
 		Version:    1,
 		Privileges: privileges,
-	})
+	}
+	for _, option := range options {
+		option(&ret)
+	}
+	return NewCreatedMutable(ret)
 }
 
 func makeImmutable(desc descpb.DatabaseDescriptor) Immutable {
@@ -182,6 +206,30 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// IsMultiRegion returns whether the database has multi-region properties
+// configured. If so, desc.RegionConfig can be used.
+func (desc *Immutable) IsMultiRegion() bool {
+	return desc.RegionConfig != nil
+}
+
+// Regions returns the multi-region regions that have been added to a database.
+func (desc *Immutable) Regions() (descpb.Regions, error) {
+	if !desc.IsMultiRegion() {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region database")
+	}
+	return desc.RegionConfig.Regions, nil
+}
+
+// PrimaryRegion returns the primary region for a multi-region database.
+func (desc *Immutable) PrimaryRegion() (descpb.Region, error) {
+	if !desc.IsMultiRegion() {
+		return "", errors.AssertionFailedf(
+			"can not get the primary region of a non multi-region database")
+	}
+	return desc.RegionConfig.PrimaryRegion, nil
+}
+
 // SetName sets the name on the descriptor.
 func (desc *Mutable) SetName(name string) {
 	desc.Name = name
@@ -196,6 +244,30 @@ func (desc *Immutable) Validate() error {
 	}
 	if desc.GetID() == 0 {
 		return fmt.Errorf("invalid database ID %d", desc.GetID())
+	}
+
+	if desc.IsMultiRegion() {
+		// Ensure no regions are duplicated.
+		regions := make(map[descpb.Region]struct{})
+		dbRegions, err := desc.Regions()
+		if err != nil {
+			return err
+		}
+		for _, region := range dbRegions {
+			if _, seen := regions[region]; seen {
+				return errors.AssertionFailedf("region %q seen twice on db %d", region, desc.GetID())
+			}
+			regions[region] = struct{}{}
+		}
+
+		if desc.RegionConfig.PrimaryRegion == "" {
+			return errors.AssertionFailedf("primary region unset on a multi-region db %d", desc.GetID())
+		}
+
+		if _, found := regions[desc.RegionConfig.PrimaryRegion]; !found {
+			return errors.AssertionFailedf(
+				"primary region not found in list of regions on db %d", desc.GetID())
+		}
 	}
 
 	// Fill in any incorrect privileges that may have been missed due to mixed-versions.

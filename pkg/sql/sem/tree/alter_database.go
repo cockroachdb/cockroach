@@ -60,6 +60,22 @@ func (node *AlterDatabaseDropRegion) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Region)
 }
 
+// AlterDatabasePrimaryRegion represents a ALTER DATABASE PRIMARY REGION ... statement.
+type AlterDatabasePrimaryRegion struct {
+	Name          Name
+	PrimaryRegion Name
+}
+
+var _ Statement = &AlterDatabasePrimaryRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabasePrimaryRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.Name)
+	ctx.WriteString(" PRIMARY REGION ")
+	node.PrimaryRegion.Format(ctx)
+}
+
 // AlterDatabaseSurvivalGoal represents a ALTER DATABASE SURVIVE ... statement.
 type AlterDatabaseSurvivalGoal struct {
 	Name         Name

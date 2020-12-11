@@ -306,7 +306,7 @@ func (p *planner) MemberOfWithAdminOption(
 	roleMembersCache := p.execCfg.RoleMemberCache
 
 	// Lookup table version.
-	tableDesc, err := p.Descriptors().GetTableVersion(
+	tableDesc, err := p.Descriptors().GetTableByName(
 		ctx,
 		p.txn,
 		&roleMembersTableName,
@@ -626,7 +626,13 @@ func (p *planner) checkCanAlterToNewOwner(
 // HasOwnershipOnSchema checks if the current user has ownership on the schema.
 // For schemas, we cannot always use HasOwnership as not every schema has a
 // descriptor.
-func (p *planner) HasOwnershipOnSchema(ctx context.Context, schemaID descpb.ID) (bool, error) {
+func (p *planner) HasOwnershipOnSchema(
+	ctx context.Context, schemaID descpb.ID, dbID descpb.ID,
+) (bool, error) {
+	if dbID == keys.SystemDatabaseID {
+		// Only the node user has ownership over the system database.
+		return p.User().IsNodeUser(), nil
+	}
 	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(
 		ctx, p.Txn(), schemaID,
 	)

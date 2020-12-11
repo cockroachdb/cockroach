@@ -726,16 +726,22 @@ t  CREATE TABLE public.t (
 statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (x INT NOT NULL);
-ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (x)
+ALTER TABLE t ADD CONSTRAINT "my_pk" PRIMARY KEY (x)
 
 query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
-   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   CONSTRAINT my_pk PRIMARY KEY (x ASC),
    FAMILY "primary" (x, rowid)
 )
+
+statement ok
+CREATE INDEX i ON t (x);
+
+statement error pq: constraint with name i already exists
+ALTER TABLE t DROP CONSTRAINT "my_pk", ADD CONSTRAINT "i" PRIMARY KEY (x);
 
 # Regression for #45362.
 statement ok

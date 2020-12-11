@@ -48,7 +48,7 @@ type boolVecToSelOp struct {
 	outputCol []bool
 }
 
-var _ colexecbase.Operator = &boolVecToSelOp{}
+var _ ResettableOperator = &boolVecToSelOp{}
 
 func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 	// Loop until we have non-zero amount of output to return, or our input's been
@@ -105,6 +105,12 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 
 func (p *boolVecToSelOp) Init() {
 	p.input.Init()
+}
+
+func (p *boolVecToSelOp) reset(ctx context.Context) {
+	if r, ok := p.input.(resetter); ok {
+		r.reset(ctx)
+	}
 }
 
 func boolVecToSel64(vec []bool, sel []int) []int {

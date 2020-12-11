@@ -94,3 +94,7 @@ cockroachdb/http-api-prs:
   email: TODO@cockroachlabs.com
   slack: TODO
   triage_column_id: 0 # TODO
+cockroachdb/sqlproxy-prs:
+  email: TODO@cockroachlabs.com
+  slack: cc-intrusion-team
+  triage_column_id: 0 # TODO

@@ -175,6 +175,7 @@ reset_stmt ::=
 
 restore_stmt ::=
 	'RESTORE' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' targets 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 
@@ -217,6 +218,7 @@ show_stmt ::=
 	| show_ranges_stmt
 	| show_range_for_row_stmt
 	| show_regions_stmt
+	| show_survival_goal_stmt
 	| show_roles_stmt
 	| show_savepoint_stmt
 	| show_schemas_stmt
@@ -612,6 +614,8 @@ show_databases_stmt ::=
 
 show_enums_stmt ::=
 	'SHOW' 'ENUMS'
+	| 'SHOW' 'ENUMS' 'FROM' name '.' name
+	| 'SHOW' 'ENUMS' 'FROM' name
 
 show_types_stmt ::=
 	'SHOW' 'TYPES'
@@ -665,7 +669,13 @@ show_range_for_row_stmt ::=
 
 show_regions_stmt ::=
 	'SHOW' 'REGIONS' 'FROM' 'CLUSTER'
+	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE'
+	| 'SHOW' 'REGIONS' 'FROM' 'ALL' 'DATABASES'
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE' database_name
+
+show_survival_goal_stmt ::=
+	'SHOW' 'SURVIVAL' 'GOAL' 'FROM' 'DATABASE'
+	| 'SHOW' 'SURVIVAL' 'GOAL' 'FROM' 'DATABASE' database_name
 
 show_roles_stmt ::=
 	'SHOW' 'ROLES'
@@ -863,6 +873,7 @@ unreserved_keyword ::=
 	| 'GEOMETRYCOLLECTIONZ'
 	| 'GEOMETRYCOLLECTIONZM'
 	| 'GLOBAL'
+	| 'GOAL'
 	| 'GRANTS'
 	| 'GROUPS'
 	| 'HASH'
@@ -1055,6 +1066,7 @@ unreserved_keyword ::=
 	| 'STRICT'
 	| 'SUBSCRIPTION'
 	| 'SURVIVE'
+	| 'SURVIVAL'
 	| 'SYNTAX'
 	| 'SYSTEM'
 	| 'TABLES'
@@ -1215,7 +1227,7 @@ alter_table_stmt ::=
 	| alter_zone_table_stmt
 	| alter_rename_table_stmt
 	| alter_table_set_schema_stmt
-	| alter_table_regional_affinity_stmt
+	| alter_table_locality_stmt
 
 alter_index_stmt ::=
 	alter_oneindex_stmt
@@ -1241,7 +1253,8 @@ alter_database_stmt ::=
 	| alter_database_to_schema_stmt
 	| alter_database_add_region_stmt
 	| alter_database_drop_region_stmt
-	| alter_database_survive_stmt
+	| alter_database_survival_goal_stmt
+	| alter_database_primary_region_stmt
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
@@ -1286,8 +1299,8 @@ create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
 
 create_database_stmt ::=
-	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_regions_list opt_survive_clause
-	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_regions_list opt_survive_clause
+	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause
 
 create_index_stmt ::=
 	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
@@ -1302,8 +1315,8 @@ create_schema_stmt ::=
 	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' opt_schema_name 'AUTHORIZATION' role_spec
 
 create_table_stmt ::=
-	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
-	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
+	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit opt_locality
+	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit opt_locality
 
 create_table_as_stmt ::=
 	'CREATE' opt_persistence_temp_table 'TABLE' table_name create_as_opt_col_list opt_table_with 'AS' select_stmt opt_create_table_on_commit
@@ -1604,9 +1617,9 @@ alter_table_set_schema_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'SET' 'SCHEMA' schema_name
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' 'SCHEMA' schema_name
 
-alter_table_regional_affinity_stmt ::=
-	'ALTER' 'TABLE' relation_expr 'SET' regional_affinity
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' regional_affinity
+alter_table_locality_stmt ::=
+	'ALTER' 'TABLE' relation_expr 'SET' locality
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' locality
 
 alter_oneindex_stmt ::=
 	'ALTER' 'INDEX' table_index_name alter_index_cmds
@@ -1673,8 +1686,11 @@ alter_database_add_region_stmt ::=
 alter_database_drop_region_stmt ::=
 	'ALTER' 'DATABASE' database_name 'DROP' 'REGION' region_name
 
-alter_database_survive_stmt ::=
-	'ALTER' 'DATABASE' database_name survive_clause
+alter_database_survival_goal_stmt ::=
+	'ALTER' 'DATABASE' database_name survival_goal_clause
+
+alter_database_primary_region_stmt ::=
+	'ALTER' 'DATABASE' database_name primary_region_clause
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
@@ -1763,12 +1779,16 @@ opt_connection_limit ::=
 	'CONNECTION' 'LIMIT' opt_equal signed_iconst
 	| 
 
+opt_primary_region_clause ::=
+	primary_region_clause
+	| 
+
 opt_regions_list ::=
 	region_or_regions opt_equal region_name_list
 	| 
 
-opt_survive_clause ::=
-	survive_clause
+opt_survival_goal_clause ::=
+	survival_goal_clause
 	| 
 
 opt_unique ::=
@@ -1825,6 +1845,10 @@ opt_table_with ::=
 
 opt_create_table_on_commit ::=
 	'ON' 'COMMIT' 'PRESERVE' 'ROWS'
+
+opt_locality ::=
+	locality
+	| 
 
 create_as_opt_col_list ::=
 	'(' create_as_table_defs ')'
@@ -2117,18 +2141,23 @@ set_zone_config ::=
 	'CONFIGURE' 'ZONE' 'USING' var_set_list
 	| 'CONFIGURE' 'ZONE' 'DISCARD'
 
-regional_affinity ::=
+locality ::=
 	'LOCALITY' 'GLOBAL'
 	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE' 'IN' region_name
+	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE' 'IN' 'PRIMARY' 'REGION'
+	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE'
 	| 'LOCALITY' 'REGIONAL' 'BY' 'ROW'
 	| 'REGIONAL' 'AFFINITY' 'TO' 'NONE'
 	| 'REGIONAL' 'AFFINITY' 'TO' region_name
+	| 'REGIONAL' 'AFFINITY' 'TO' 'PRIMARY' 'REGION'
 	| 'REGIONAL' 'AFFINITY' 'AT' 'ROW' 'LEVEL'
 	| 'REGIONAL' 'AFFINITY' 'NONE'
 	| 'REGIONAL' 'AFFINITY' region_name
+	| 'REGIONAL' 'AFFINITY' 'PRIMARY' 'REGION'
 	| 'REGIONAL' 'AFFINITY' 'ROW' 'LEVEL'
 	| 'NO' 'REGIONAL' 'AFFINITY'
 	| 'TABLE' 'LEVEL' 'REGIONAL' 'AFFINITY' 'TO' region_name
+	| 'TABLE' 'LEVEL' 'REGIONAL' 'AFFINITY' 'TO' 'PRIMARY' 'REGION'
 	| 'ROW' 'LEVEL' 'REGIONAL' 'AFFINITY'
 
 alter_index_cmds ::=
@@ -2140,9 +2169,12 @@ sequence_option_list ::=
 region_name ::=
 	name
 
-survive_clause ::=
-	'SURVIVE' 'REGION' 'FAILURE'
-	| 'SURVIVE' 'ZONE' 'FAILURE'
+survival_goal_clause ::=
+	'SURVIVE' opt_equal 'REGION' 'FAILURE'
+	| 'SURVIVE' opt_equal 'ZONE' 'FAILURE'
+
+primary_region_clause ::=
+	'PRIMARY' 'REGION' opt_equal region_name
 
 role_option ::=
 	'CREATEROLE'
@@ -2231,8 +2263,7 @@ signed_iconst ::=
 	| only_signed_iconst
 
 region_or_regions ::=
-	'REGION'
-	| 'REGIONS'
+	'REGIONS'
 
 region_name_list ::=
 	name_list
@@ -2843,6 +2874,7 @@ col_qualification_elem ::=
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| generated_as '(' a_expr ')' 'STORED'
+	| generated_as '(' a_expr ')' 'VIRTUAL'
 
 family_name ::=
 	name

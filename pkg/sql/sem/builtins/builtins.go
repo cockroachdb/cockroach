@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -93,22 +94,23 @@ const maxAllocatedStringSize = 128 * 1024 * 1024
 const errInsufficientArgsFmtString = "unknown signature: %s()"
 
 const (
-	categoryArray          = "Array"
-	categoryComparison     = "Comparison"
-	categoryCompatibility  = "Compatibility"
-	categoryDateAndTime    = "Date and time"
-	categoryEnum           = "Enum"
-	categoryFullTextSearch = "Full Text Search"
-	categoryGenerator      = "Set-returning"
-	categoryTrigram        = "Trigrams"
-	categoryIDGeneration   = "ID generation"
-	categoryJSON           = "JSONB"
-	categoryMultiTenancy   = "Multi-tenancy"
-	categorySequences      = "Sequence"
-	categorySpatial        = "Spatial"
-	categoryString         = "String and byte"
-	categorySystemInfo     = "System info"
-	categorySystemRepair   = "System repair"
+	categoryArray               = "Array"
+	categoryComparison          = "Comparison"
+	categoryCompatibility       = "Compatibility"
+	categoryDateAndTime         = "Date and time"
+	categoryEnum                = "Enum"
+	categoryFullTextSearch      = "Full Text Search"
+	categoryGenerator           = "Set-returning"
+	categoryTrigram             = "Trigrams"
+	categoryFuzzyStringMatching = "Fuzzy String Matching"
+	categoryIDGeneration        = "ID generation"
+	categoryJSON                = "JSONB"
+	categoryMultiTenancy        = "Multi-tenancy"
+	categorySequences           = "Sequence"
+	categorySpatial             = "Spatial"
+	categoryString              = "String and byte"
+	categorySystemInfo          = "System info"
+	categorySystemRepair        = "System repair"
 )
 
 func categorizeType(t *types.T) string {
@@ -551,21 +553,8 @@ var builtins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityImmutable,
 		}),
 
-	"gen_random_uuid": makeBuiltin(
-		tree.FunctionProperties{
-			Category: categoryIDGeneration,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.Uuid),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				uv := uuid.MakeV4()
-				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
-			},
-			Info:       "Generates a random UUID and returns it as a value of UUID type.",
-			Volatility: tree.VolatilityVolatile,
-		},
-	),
+	"gen_random_uuid":  generateRandomUUIDImpl,
+	"uuid_generate_v4": generateRandomUUIDImpl,
 
 	"to_uuid": makeBuiltin(defProps(),
 		tree.Overload{
@@ -2939,6 +2928,49 @@ may increase either contention or retry errors, or both.`,
 	"tsvector_update_trigger":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
 	"tsvector_update_trigger_column": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
 
+	// Fuzzy String Matching
+	"soundex":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"difference": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"levenshtein": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"source", types.String}, {"target", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				const maxLen = 255
+				if len(s) > maxLen || len(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein argument exceeds maximum length of %d characters", maxLen)
+				}
+				ld := fuzzystrmatch.LevenshteinDistance(s, t)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info:       "Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.",
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{{"source", types.String}, {"target", types.String},
+				{"ins_cost", types.Int}, {"del_cost", types.Int}, {"sub_cost", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				ins, del, sub := int(tree.MustBeDInt(args[2])), int(tree.MustBeDInt(args[3])), int(tree.MustBeDInt(args[4]))
+				const maxLen = 255
+				if len(s) > maxLen || len(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein argument exceeds maximum length of %d characters", maxLen)
+				}
+				ld := fuzzystrmatch.LevenshteinDistanceWithCost(s, t, ins, del, sub)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info: "Calculates the Levenshtein distance between two strings. The cost parameters specify how much to " +
+				"charge for each edit operation. Maximum input length is 255 characters.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"metaphone":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"dmetaphone_alt":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+
 	// Trigram functions.
 	"similarity":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
 	"show_trgm":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
@@ -4306,7 +4338,27 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if err := ctx.Planner.UnsafeUpsertDescriptor(ctx.Context,
 					int64(*args[0].(*tree.DInt)),
-					[]byte(*args[1].(*tree.DBytes))); err != nil {
+					[]byte(*args[1].(*tree.DBytes)),
+					false /* force */); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"desc", types.Bytes},
+				{"force", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeUpsertDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+					[]byte(*args[1].(*tree.DBytes)),
+					bool(*args[2].(*tree.DBool))); err != nil {
 					return nil, err
 				}
 				return tree.DBoolTrue, nil
@@ -4329,6 +4381,25 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if err := ctx.Planner.UnsafeDeleteDescriptor(ctx.Context,
 					int64(*args[0].(*tree.DInt)),
+					false, /* force */
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"force", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteDescriptor(ctx.Context,
+					int64(*args[0].(*tree.DInt)),
+					bool(*args[1].(*tree.DBool)),
 				); err != nil {
 					return nil, err
 				}
@@ -4414,7 +4485,33 @@ may increase either contention or retry errors, or both.`,
 					int64(*args[0].(*tree.DInt)),     // parentID
 					int64(*args[1].(*tree.DInt)),     // parentSchemaID
 					string(*args[2].(*tree.DString)), // name
-					int64(*args[3].(*tree.DInt)),     // descID
+					int64(*args[3].(*tree.DInt)),     // id
+					false,                            // force
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String},
+				{"desc_id", types.Int},
+				{"force", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := ctx.Planner.UnsafeDeleteNamespaceEntry(
+					ctx.Context,
+					int64(*args[0].(*tree.DInt)),     // parentID
+					int64(*args[1].(*tree.DInt)),     // parentSchemaID
+					string(*args[2].(*tree.DString)), // name
+					int64(*args[3].(*tree.DInt)),     // id
+					bool(*args[4].(*tree.DBool)),     // force
 				); err != nil {
 					return nil, err
 				}
@@ -4737,6 +4834,22 @@ func getSubstringFromIndexOfLength(str, errMsg string, start, length int) (strin
 	}
 	return string(runes[start:end]), nil
 }
+
+var generateRandomUUIDImpl = makeBuiltin(
+	tree.FunctionProperties{
+		Category: categoryIDGeneration,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{},
+		ReturnType: tree.FixedReturnType(types.Uuid),
+		Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+			uv := uuid.MakeV4()
+			return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+		},
+		Info:       "Generates a random UUID and returns it as a value of UUID type.",
+		Volatility: tree.VolatilityVolatile,
+	},
+)
 
 var uuidV4Impl = makeBuiltin(
 	tree.FunctionProperties{
@@ -6611,7 +6724,7 @@ func arrayNumInvertedIndexEntries(
 	v := descpb.SecondaryIndexFamilyFormatVersion
 	if version == tree.DNull {
 		if ctx.Settings.Version.IsActive(
-			ctx.Context, clusterversion.VersionEmptyArraysInInvertedIndexes,
+			ctx.Context, clusterversion.EmptyArraysInInvertedIndexes,
 		) {
 			v = descpb.EmptyArraysInInvertedIndexesVersion
 		}

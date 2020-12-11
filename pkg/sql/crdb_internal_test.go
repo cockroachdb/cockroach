@@ -96,7 +96,7 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	assert.EqualValues(t, 1, tc.Servers[len(tc.Servers)-1].GetFirstStoreID())
 
-	// Set to 2 so the the next store id will be 3.
+	// Set to 2 so the next store id will be 3.
 	assert.NoError(t, tc.Servers[0].DB().Put(ctx, keys.StoreIDGenerator, 2))
 
 	// NodeID=2, StoreID=3

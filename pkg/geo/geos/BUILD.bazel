@@ -57,6 +57,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/geo/geos",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/docs",
         "//pkg/geo/geopb",
         "//vendor/github.com/cockroachdb/errors",
     ],

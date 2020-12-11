@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -161,11 +162,11 @@ func alterColumnTypeGeneral(
 	// general alter column type conversions.
 	if !params.p.ExecCfg().Settings.Version.IsActive(
 		params.ctx,
-		clusterversion.VersionAlterColumnTypeGeneral,
+		clusterversion.AlterColumnTypeGeneral,
 	) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"version %v must be finalized to run this alter column type",
-			clusterversion.VersionAlterColumnTypeGeneral)
+			clusterversion.AlterColumnTypeGeneral)
 	}
 	if !params.SessionData().AlterColumnTypeGeneralEnabled {
 		return pgerror.WithCandidateCode(
@@ -174,7 +175,7 @@ func alterColumnTypeGeneral(
 					errors.Newf("ALTER COLUMN TYPE from %v to %v is only "+
 						"supported experimentally",
 						col.Type, toType),
-					errors.IssueLink{IssueURL: unimplemented.MakeURL(49329)}),
+					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
 				"you can enable alter column type general support by running "+
 					"`SET enable_experimental_alter_column_type_general = true`"),
 			pgcode.FeatureNotSupported)
@@ -185,7 +186,8 @@ func alterColumnTypeGeneral(
 		return colOwnsSequenceNotSupportedErr
 	}
 
-	// Disallow ALTER COLUMN TYPE general for columns that have a constraint.
+	// Disallow ALTER COLUMN TYPE general for columns that have a check
+	// constraint.
 	for i := range tableDesc.Checks {
 		uses, err := tableDesc.CheckConstraintUsesColumn(tableDesc.Checks[i], col.ID)
 		if err != nil {
@@ -196,6 +198,18 @@ func alterColumnTypeGeneral(
 		}
 	}
 
+	// Disallow ALTER COLUMN TYPE general for columns that have a
+	// UNIQUE WITHOUT INDEX constraint.
+	for _, uc := range tableDesc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
+		for _, id := range uc.ColumnIDs {
+			if col.ID == id {
+				return colWithConstraintNotSupportedErr
+			}
+		}
+	}
+
+	// Disallow ALTER COLUMN TYPE general for columns that have a foreign key
+	// constraint.
 	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
 		for _, id := range append(fk.OriginColumnIDs, fk.ReferencedColumnIDs...) {
 			if col.ID == id {

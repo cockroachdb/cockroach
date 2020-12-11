@@ -213,8 +213,8 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-chech.sh.
 RUN apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.15.5.src.tar.gz -o golang.tar.gz \
- && echo 'c1076b90cf94b73ebed62a81d802cd84d43d02dea8c07abdc922c57a071c84f1 golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.15.6.src.tar.gz -o golang.tar.gz \
+ && echo '890bba73c5e2b19ffb1180e385ea225059eb008eb91b694875dd86ea48675817 golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
@@ -275,10 +275,16 @@ RUN curl -fsSL "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-b
   rm -rf awscli-bundle.zip awscli-bundle
 
 # git - Upgrade to a more modern version
-RUN apt-get install -y python-software-properties software-properties-common && \
-    add-apt-repository ppa:git-core/ppa -y && \
-    apt-get update && \
-    apt-get install -y git
+RUN apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
+    curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
+    unzip "git-2.29.2.zip" && \
+    cd git-2.29.2 && \
+    make configure && \
+    ./configure && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf git-2.29.2.zip git-2.29.2
 
 ENV PATH /opt/backtrace/bin:$PATH
 

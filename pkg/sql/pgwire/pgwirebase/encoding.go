@@ -13,7 +13,6 @@ package pgwirebase
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/binary"
 	"io"
 	"math"
@@ -297,20 +296,23 @@ func validateArrayDimensions(nDimensions int, nElements int) error {
 	return nil
 }
 
-// DecodeOidDatum decodes bytes with specified Oid and format code into
-// a datum. If the ParseTimeContext is nil, reasonable defaults
-// will be applied. If res is nil, then user defined types are not attempted
+// DecodeDatum decodes bytes with specified type and format code into
+// a datum. If res is nil, then user defined types are not attempted
 // to be resolved.
-func DecodeOidDatum(
-	ctx context.Context,
-	pCtx tree.ParseTimeContext,
-	id oid.Oid,
-	code FormatCode,
-	b []byte,
-	res tree.TypeReferenceResolver,
+func DecodeDatum(
+	evalCtx *tree.EvalContext, t *types.T, code FormatCode, b []byte,
 ) (tree.Datum, error) {
+	id := t.Oid()
 	switch code {
 	case FormatText:
+		switch t.Family() {
+		case types.EnumFamily:
+			if err := validateStringBytes(b); err != nil {
+				return nil, err
+			}
+			return tree.MakeDEnumFromLogicalRepresentation(t, string(b))
+		}
+
 		switch id {
 		case oid.T_bool:
 			t, err := strconv.ParseBool(string(b))
@@ -330,12 +332,18 @@ func DecodeOidDatum(
 				return nil, err
 			}
 			return tree.NewDInt(tree.DInt(i)), nil
-		case oid.T_oid:
-			u, err := strconv.ParseUint(string(b), 10, 32)
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewDOid(tree.DInt(u)), nil
+		case oid.T_oid,
+			oid.T_regoper,
+			oid.T_regproc,
+			oid.T_regrole,
+			oid.T_regclass,
+			oid.T_regtype,
+			oid.T_regconfig,
+			oid.T_regoperator,
+			oid.T_regnamespace,
+			oid.T_regprocedure,
+			oid.T_regdictionary:
+			return tree.ParseDOid(evalCtx, string(b), t)
 		case oid.T_float4, oid.T_float8:
 			f, err := strconv.ParseFloat(string(b), 64)
 			if err != nil {
@@ -373,19 +381,19 @@ func DecodeOidDatum(
 			}
 			return tree.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
-			d, _, err := tree.ParseDTimestamp(pCtx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimestamp(evalCtx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamp", b)
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, _, err := tree.ParseDTimestampTZ(pCtx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimestampTZ(evalCtx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamptz", b)
 			}
 			return d, nil
 		case oid.T_date:
-			d, _, err := tree.ParseDDate(pCtx, string(b))
+			d, _, err := tree.ParseDDate(evalCtx, string(b))
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as date", b)
 			}
@@ -397,7 +405,7 @@ func DecodeOidDatum(
 			}
 			return d, nil
 		case oid.T_timetz:
-			d, _, err := tree.ParseDTimeTZ(pCtx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimeTZ(evalCtx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timetz", b)
 			}
@@ -757,8 +765,7 @@ func DecodeOidDatum(
 			return &tree.DBitArray{BitArray: ba}, err
 		default:
 			if _, ok := types.ArrayOids[id]; ok {
-				innerOid := types.OidToType[id].ArrayContents().Oid()
-				return decodeBinaryArray(ctx, pCtx, innerOid, b, code, res)
+				return decodeBinaryArray(evalCtx, types.OidToType[id].ArrayContents(), b, code)
 			}
 		}
 	default:
@@ -785,27 +792,6 @@ func DecodeOidDatum(
 			return nil, err
 		}
 		return tree.NewDName(string(b)), nil
-	}
-
-	// Finally, try to resolve the type's oid as a user defined type if a resolver
-	// was provided.
-	if res != nil {
-		typ, err := res.ResolveTypeByOID(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		switch typ.Family() {
-		case types.EnumFamily:
-			if code != FormatText {
-				return nil, pgerror.Newf(pgcode.Syntax, "expected FormatText for ENUM value encoding")
-			}
-			if err := validateStringBytes(b); err != nil {
-				return nil, err
-			}
-			return tree.MakeDEnumFromLogicalRepresentation(typ, string(b))
-		default:
-			return nil, errors.AssertionFailedf("unsupported user defined type family %s", typ.Family().String())
-		}
 	}
 
 	// Fallthrough case.
@@ -909,12 +895,7 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 }
 
 func decodeBinaryArray(
-	ctx context.Context,
-	pCtx tree.ParseTimeContext,
-	elemOid oid.Oid,
-	b []byte,
-	code FormatCode,
-	res tree.TypeReferenceResolver,
+	evalCtx *tree.EvalContext, t *types.T, b []byte, code FormatCode,
 ) (tree.Datum, error) {
 	var hdr struct {
 		Ndims int32
@@ -934,10 +915,10 @@ func decodeBinaryArray(
 	if err := binary.Read(r, binary.BigEndian, &hdr); err != nil {
 		return nil, err
 	}
-	if elemOid != oid.Oid(hdr.ElemOid) {
+	if t.Oid() != oid.Oid(hdr.ElemOid) {
 		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "wrong element type")
 	}
-	arr := tree.NewDArray(types.OidToType[elemOid])
+	arr := tree.NewDArray(types.OidToType[t.Oid()])
 	if hdr.Ndims == 0 {
 		return arr, nil
 	}
@@ -959,7 +940,7 @@ func decodeBinaryArray(
 			continue
 		}
 		buf := r.Next(int(vlen))
-		elem, err := DecodeOidDatum(ctx, pCtx, elemOid, code, buf, res)
+		elem, err := DecodeDatum(evalCtx, t, code, buf)
 		if err != nil {
 			return nil, err
 		}

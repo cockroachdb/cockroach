@@ -517,6 +517,12 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRaftSchedulerLatency = metric.Metadata{
+		Name:        "raft.scheduler.latency",
+		Help:        "Nanoseconds spent waiting for a range to be processed by the Raft scheduler",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	// Raft message metrics.
 	metaRaftRcvdProp = metric.Metadata{
@@ -1126,6 +1132,7 @@ type StoreMetrics struct {
 	RaftCommandCommitLatency  *metric.Histogram
 	RaftHandleReadyLatency    *metric.Histogram
 	RaftApplyCommittedLatency *metric.Histogram
+	RaftSchedulerLatency      *metric.Histogram
 
 	// Raft message metrics.
 	//
@@ -1491,6 +1498,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftCommandCommitLatency:  metric.NewLatency(metaRaftCommandCommitLatency, histogramWindow),
 		RaftHandleReadyLatency:    metric.NewLatency(metaRaftHandleReadyLatency, histogramWindow),
 		RaftApplyCommittedLatency: metric.NewLatency(metaRaftApplyCommittedLatency, histogramWindow),
+		RaftSchedulerLatency:      metric.NewLatency(metaRaftSchedulerLatency, histogramWindow),
 
 		// Raft message metrics.
 		RaftRcvdMessages: [...]*metric.Counter{

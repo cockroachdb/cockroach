@@ -145,6 +145,14 @@ message TableReaderSpec {
   repeated uint32 needed_columns = 15;
 }
 
+// FiltererSpec is the specification for a processor that filters input rows
+// according to a boolean expression.
+message FiltererSpec {
+  // A filtering expression which references the internal columns of the
+  // processor via ordinal references (@1, @2, etc).
+  optional Expression filter = 1 [(gogoproto.nullable) = false];
+}
+
 // IndexSkipTableReaderSpec is the specification for a table reader that
 // is performing a loose index scan over rows in the table. This means that
 // this reader will return distinct rows from the table while using the index
@@ -382,6 +390,10 @@ message DistinctSpec {
   // UPSERT and INSERT..ON CONFLICT statements, both of which prohibit the same
   // row from being changed twice.
   optional string error_on_dup = 4 [(gogoproto.nullable) = false];
+  // OutputOrdering specifies the required ordering of the output produced by
+  // the distinct. The input to the processor *must* already be ordered
+  // according to it.
+  optional Ordering output_ordering = 5 [(gogoproto.nullable) = false];
 }
 
 // The specification for a WITH ORDINALITY processor. It adds a new column to
@@ -578,7 +590,7 @@ message InvertedJoinerSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
   // The ID of the inverted index. The first column in the index is the
-  // inverted column, and the the remaining columns are the primary key.
+  // inverted column, and the remaining columns are the primary key.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
   reserved 3;
@@ -724,6 +736,9 @@ message AggregatorSpec {
     REGR_SXX = 40;
     REGR_SYY = 41;
     REGR_SXY = 42;
+    REGR_COUNT = 43;
+    REGR_AVGX = 44;
+    REGR_AVGY = 45;
   }
 
   enum Type {

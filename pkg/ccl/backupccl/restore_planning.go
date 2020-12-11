@@ -13,10 +13,10 @@ import (
 	"net/url"
 	"path"
 	"sort"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -158,6 +158,46 @@ func maybeFilterMissingViews(
 		}
 	}
 	return filteredTablesByID, nil
+}
+
+func synthesizePGTempSchema(
+	ctx context.Context, p sql.PlanHookState, schemaName string,
+) (descpb.ID, descpb.ID, error) {
+	var synthesizedSchemaID descpb.ID
+	var defaultDBID descpb.ID
+	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		defaultDBID, err = lookupDatabaseID(ctx, txn, p.ExecCfg().Codec,
+			catalogkeys.DefaultDatabaseName)
+		if err != nil {
+			return err
+		}
+
+		sKey := catalogkeys.NewSchemaKey(defaultDBID, schemaName)
+		schemaID, err := catalogkv.GetDescriptorID(ctx, txn, p.ExecCfg().Codec, sKey)
+		if err != nil {
+			return err
+		}
+		if schemaID != descpb.InvalidID {
+			return errors.Newf("attempted to synthesize temp schema during RESTORE but found"+
+				" another schema already using the same schema key %s", sKey.Name())
+		}
+		synthesizedSchemaID, err = catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		if err != nil {
+			return err
+		}
+		return p.CreateSchemaNamespaceEntry(ctx, sKey.Key(p.ExecCfg().Codec), synthesizedSchemaID)
+	})
+
+	return synthesizedSchemaID, defaultDBID, err
+}
+
+// dbSchemaKey is used when generating fake pg_temp schemas for the purpose of
+// restoring temporary objects. Detailed comments can be found where it is being
+// used.
+type dbSchemaKey struct {
+	parentID descpb.ID
+	schemaID descpb.ID
 }
 
 // allocateDescriptorRewrites determines the new ID and parentID (a "DescriptorRewrite")
@@ -330,6 +370,64 @@ func allocateDescriptorRewrites(
 		for _, typ := range typesByID {
 			if typ.GetParentID() == systemschema.SystemDB.ID {
 				descriptorRewrites[typ.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
+			}
+		}
+
+		// When restoring a temporary object, the parent schema which the descriptor
+		// is originally pointing to is never part of the BACKUP. This is because
+		// the "pg_temp" schema in which temporary objects are created is not
+		// represented as a descriptor and thus is not picked up during a full
+		// cluster BACKUP.
+		// To overcome this orphaned schema pointer problem, when restoring a
+		// temporary object we create a "fake" pg_temp schema in defaultdb and add
+		// it to the namespace table. We then remap the temporary object descriptors
+		// to point to this schema. This allows us to piggy back on the temporary
+		// reconciliation job which looks for "pg_temp" schemas linked to temporary
+		// sessions and properly cleans up the temporary objects in it.
+		haveSynthesizedTempSchema := make(map[dbSchemaKey]bool)
+		var defaultDBID descpb.ID
+		var synthesizedTempSchemaCount int
+		for _, table := range tablesByID {
+			if table.IsTemporary() {
+				// We generate a "fake" temporary schema for every unique
+				// <dbID,schemaID> tuple of the backed-up temporary table descriptors.
+				// This is important because post rewrite all the "fake" schemas and
+				// consequently temp table objects are going to be in defaultdb. Placing
+				// them under different "fake" schemas prevents name collisions if the
+				// backed up tables had the same names but were in different temp
+				// schemas/databases in the cluster which was backed up.
+				dbSchemaIDKey := dbSchemaKey{parentID: table.GetParentID(),
+					schemaID: table.GetParentSchemaID()}
+				if _, ok := haveSynthesizedTempSchema[dbSchemaIDKey]; !ok {
+					var synthesizedSchemaID descpb.ID
+					var err error
+					// NB: TemporarySchemaNameForRestorePrefix is a special value that has
+					// been chosen to trick the reconciliation job into performing our
+					// cleanup for us. The reconciliation job strips the "pg_temp" prefix
+					// and parses the remainder of the string into a session ID. It then
+					// checks the session ID against its active sessions, and performs
+					// cleanup on the inactive ones.
+					// We reserve the high bit to be 0 so as to never collide with an
+					// actual session ID as normally the high bit is the hlc.Timestamp at
+					// which the cluster was started.
+					schemaName := sql.TemporarySchemaNameForRestorePrefix +
+						strconv.Itoa(synthesizedTempSchemaCount)
+					synthesizedSchemaID, defaultDBID, err = synthesizePGTempSchema(ctx, p, schemaName)
+					if err != nil {
+						return nil, err
+					}
+					// Write a schema descriptor rewrite so that we can remap all
+					// temporary table descs which were under the original session
+					// specific pg_temp schema to point to this synthesized schema when we
+					// are performing the table rewrites.
+					descriptorRewrites[table.GetParentSchemaID()] = &jobspb.RestoreDetails_DescriptorRewrite{ID: synthesizedSchemaID}
+					haveSynthesizedTempSchema[dbSchemaIDKey] = true
+					synthesizedTempSchemaCount++
+				}
+
+				// Remap the temp table descriptors to belong to the defaultdb where we
+				// have synthesized the temp schema.
+				descriptorRewrites[table.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: defaultDBID}
 			}
 		}
 	}
@@ -820,7 +918,8 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 		typ.ModificationTime = hlc.Timestamp{}
 
 		typ.ID = rewrite.ID
-		typ.ParentSchemaID = maybeRewriteSchemaID(typ.ParentSchemaID, descriptorRewrites)
+		typ.ParentSchemaID = maybeRewriteSchemaID(typ.ParentSchemaID, descriptorRewrites,
+			false /* isTemporaryDesc */)
 		typ.ParentID = rewrite.ParentID
 		for i := range typ.ReferencingDescriptorIDs {
 			id := typ.ReferencingDescriptorIDs[i]
@@ -829,7 +928,7 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 			}
 		}
 		switch t := typ.Kind; t {
-		case descpb.TypeDescriptor_ENUM:
+		case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 			if rw, ok := descriptorRewrites[typ.ArrayTypeID]; ok {
 				typ.ArrayTypeID = rw.ID
 			}
@@ -861,10 +960,12 @@ func rewriteSchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites DescRe
 	return nil
 }
 
-func maybeRewriteSchemaID(curSchemaID descpb.ID, descriptorRewrites DescRewriteMap) descpb.ID {
+func maybeRewriteSchemaID(
+	curSchemaID descpb.ID, descriptorRewrites DescRewriteMap, isTemporaryDesc bool,
+) descpb.ID {
 	// If the current schema is the public schema, then don't attempt to
 	// do any rewriting.
-	if curSchemaID == keys.PublicSchemaID {
+	if curSchemaID == keys.PublicSchemaID && !isTemporaryDesc {
 		return curSchemaID
 	}
 	rw, ok := descriptorRewrites[curSchemaID]
@@ -876,17 +977,9 @@ func maybeRewriteSchemaID(curSchemaID descpb.ID, descriptorRewrites DescRewriteM
 
 // RewriteTableDescs mutates tables to match the ID and privilege specified
 // in descriptorRewrites, as well as adjusting cross-table references to use the
-// new IDs. overrideDB can be specified to set database names in views. The
-// canResetModTime parameter is set based on the cluster version. It is unsafe
-// to reset the mod time in a mixed version state as 20.1 nodes expect the mod
-// time to be set on all descriptors which are deserialized, even at version 1.
-//
-// TODO(ajwerner): Remove canResetModTime in 21.1.
+// new IDs. overrideDB can be specified to set database names in views.
 func RewriteTableDescs(
-	tables []*tabledesc.Mutable,
-	descriptorRewrites DescRewriteMap,
-	overrideDB string,
-	canResetModTime bool,
+	tables []*tabledesc.Mutable, descriptorRewrites DescRewriteMap, overrideDB string,
 ) error {
 	for _, table := range tables {
 		tableRewrite, ok := descriptorRewrites[table.ID]
@@ -895,9 +988,7 @@ func RewriteTableDescs(
 		}
 		// Reset the version and modification time on this new descriptor.
 		table.Version = 1
-		if canResetModTime {
-			table.ModificationTime = hlc.Timestamp{}
-		}
+		table.ModificationTime = hlc.Timestamp{}
 
 		if table.IsView() && overrideDB != "" {
 			// restore checks that all dependencies are also being restored, but if
@@ -912,7 +1003,8 @@ func RewriteTableDescs(
 		}
 
 		table.ID = tableRewrite.ID
-		table.UnexposedParentSchemaID = maybeRewriteSchemaID(table.GetParentSchemaID(), descriptorRewrites)
+		table.UnexposedParentSchemaID = maybeRewriteSchemaID(table.GetParentSchemaID(),
+			descriptorRewrites, table.IsTemporary())
 		table.ParentID = tableRewrite.ParentID
 
 		// Remap type IDs in all serialized expressions within the TableDescriptor.
@@ -1184,7 +1276,9 @@ func restorePlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	if err := featureflag.CheckEnabled(featureRestoreEnabled,
+	if err := featureflag.CheckEnabled(
+		ctx,
+		featureRestoreEnabled,
 		&p.ExecCfg().Settings.SV,
 		"RESTORE",
 	); err != nil {
@@ -1360,7 +1454,7 @@ func checkPrivilegesForRestore(
 	for i := range from {
 		for j := range from[i] {
 			uri := from[i][j]
-			hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(uri)
+			hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
 			if err != nil {
 				return err
 			}
@@ -1555,13 +1649,7 @@ func doRestorePlan(
 
 	// We attempt to rewrite ID's in the collected type and table descriptors
 	// to catch errors during this process here, rather than in the job itself.
-	//
-	// TODO(ajwerner): Remove this version check in 21.1.
-	canResetModTime := p.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
-	if err := RewriteTableDescs(
-		tables, descriptorRewrites, intoDB, canResetModTime,
-	); err != nil {
+	if err := RewriteTableDescs(tables, descriptorRewrites, intoDB); err != nil {
 		return err
 	}
 	if err := rewriteDatabaseDescs(databases, descriptorRewrites); err != nil {

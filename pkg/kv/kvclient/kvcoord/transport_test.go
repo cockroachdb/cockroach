@@ -140,6 +140,12 @@ type mockInternalClient struct {
 
 var _ roachpb.InternalClient = &mockInternalClient{}
 
+func (*mockInternalClient) ResetQuorum(
+	context.Context, *roachpb.ResetQuorumRequest, ...grpc.CallOption,
+) (*roachpb.ResetQuorumResponse, error) {
+	panic("unimplemented")
+}
+
 // Batch is part of the roachpb.InternalClient interface.
 func (m *mockInternalClient) Batch(
 	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,

@@ -23,14 +23,10 @@ import "sql/execinfrapb/data.proto";
 import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
 
-// PostProcessSpec describes the processing required to obtain the output
-// (filtering, projection). It operates on the internal schema of the processor
-// (see ProcessorSpec).
+// PostProcessSpec describes the processing required to obtain the output (e.g.
+// projection). It operates on the internal schema of the processor (see
+// ProcessorSpec).
 message PostProcessSpec {
-  // A filtering expression which references the internal columns of the
-  // processor via ordinal references (@1, @2, etc).
-  optional Expression filter = 1 [(gogoproto.nullable) = false];
-
   // If true, output_columns describes a projection. Used to differentiate
   // between an empty projection and no projection.
   //
@@ -56,6 +52,8 @@ message PostProcessSpec {
   // If nonzero, the processor will stop after emitting this many rows. The rows
   // suppressed by <offset>, if any, do not count towards this limit.
   optional uint64 limit = 6 [(gogoproto.nullable) = false];
+
+  reserved 1;
 }
 
 message Columns {

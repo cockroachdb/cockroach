@@ -6,10 +6,7 @@ package execinfrapb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-
-import time "time"
-
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+import optional "github.com/cockroachdb/cockroach/pkg/util/optional"
 
 import io "io"
 
@@ -17,13 +14,91 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
-var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
+type ComponentID_Type int32
+
+const (
+	ComponentID_UNSET     ComponentID_Type = 0
+	ComponentID_PROCESSOR ComponentID_Type = 1
+	ComponentID_STREAM    ComponentID_Type = 2
+)
+
+var ComponentID_Type_name = map[int32]string{
+	0: "UNSET",
+	1: "PROCESSOR",
+	2: "STREAM",
+}
+var ComponentID_Type_value = map[string]int32{
+	"UNSET":     0,
+	"PROCESSOR": 1,
+	"STREAM":    2,
+}
+
+func (x ComponentID_Type) Enum() *ComponentID_Type {
+	p := new(ComponentID_Type)
+	*p = x
+	return p
+}
+func (x ComponentID_Type) String() string {
+	return proto.EnumName(ComponentID_Type_name, int32(x))
+}
+func (x *ComponentID_Type) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(ComponentID_Type_value, data, "ComponentID_Type")
+	if err != nil {
+		return err
+	}
+	*x = ComponentID_Type(value)
+	return nil
+}
+func (ComponentID_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_component_stats_792af551832510a2, []int{0, 0}
+}
+
+// ComponentID identifies a component in a flow. There are multiple types of
+// components (e.g. processors, streams); each component of a certain type has
+// an integer identifier.
+type ComponentID struct {
+	FlowID FlowID           `protobuf:"bytes,1,opt,name=flow_id,json=flowId,customtype=FlowID" json:"flow_id"`
+	Type   ComponentID_Type `protobuf:"varint,2,opt,name=type,enum=cockroach.sql.distsqlrun.ComponentID_Type" json:"type"`
+	// Identifier of this component, within the domain of components of the same
+	// type.
+	ID int32 `protobuf:"varint,3,opt,name=id" json:"id"`
+}
+
+func (m *ComponentID) Reset()         { *m = ComponentID{} }
+func (m *ComponentID) String() string { return proto.CompactTextString(m) }
+func (*ComponentID) ProtoMessage()    {}
+func (*ComponentID) Descriptor() ([]byte, []int) {
+	return fileDescriptor_component_stats_792af551832510a2, []int{0}
+}
+func (m *ComponentID) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ComponentID) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ComponentID) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ComponentID.Merge(dst, src)
+}
+func (m *ComponentID) XXX_Size() int {
+	return m.Size()
+}
+func (m *ComponentID) XXX_DiscardUnknown() {
+	xxx_messageInfo_ComponentID.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ComponentID proto.InternalMessageInfo
 
 // ComponentStats contains statistics for an execution component. A component is
 // an arbitrary unit in the execution infrastructure; it can correspond to an
@@ -32,21 +107,22 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 // Depending on the component, not all statistics apply. For all fields, the zero
 // value indicates that the particular stat is not available.
 type ComponentStats struct {
-	ComponentID int32          `protobuf:"varint,1,opt,name=component_id,json=componentId" json:"component_id"`
-	NetRx       NetworkRxStats `protobuf:"bytes,2,opt,name=net_rx,json=netRx" json:"net_rx"`
-	NetTx       NetworkTxStats `protobuf:"bytes,3,opt,name=net_tx,json=netTx" json:"net_tx"`
-	KV          KVStats        `protobuf:"bytes,4,opt,name=kv" json:"kv"`
-	Exec        ExecStats      `protobuf:"bytes,5,opt,name=exec" json:"exec"`
-	Output      OutputStats    `protobuf:"bytes,6,opt,name=output" json:"output"`
+	Component ComponentID    `protobuf:"bytes,1,opt,name=component" json:"component"`
+	NetRx     NetworkRxStats `protobuf:"bytes,2,opt,name=net_rx,json=netRx" json:"net_rx"`
+	NetTx     NetworkTxStats `protobuf:"bytes,3,opt,name=net_tx,json=netTx" json:"net_tx"`
+	KV        KVStats        `protobuf:"bytes,4,opt,name=kv" json:"kv"`
+	Exec      ExecStats      `protobuf:"bytes,5,opt,name=exec" json:"exec"`
+	Output    OutputStats    `protobuf:"bytes,6,opt,name=output" json:"output"`
 	// Stats for the inputs of an operator (only in the row execution engine).
-	Inputs []InputStats `protobuf:"bytes,7,rep,name=inputs" json:"inputs"`
+	Inputs    []InputStats `protobuf:"bytes,7,rep,name=inputs" json:"inputs"`
+	FlowStats FlowStats    `protobuf:"bytes,8,opt,name=flow_stats,json=flowStats" json:"flow_stats"`
 }
 
 func (m *ComponentStats) Reset()         { *m = ComponentStats{} }
 func (m *ComponentStats) String() string { return proto.CompactTextString(m) }
 func (*ComponentStats) ProtoMessage()    {}
 func (*ComponentStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_b0b131113a063b54, []int{0}
+	return fileDescriptor_component_stats_792af551832510a2, []int{1}
 }
 func (m *ComponentStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -74,16 +150,16 @@ var xxx_messageInfo_ComponentStats proto.InternalMessageInfo
 // InputStats contains statistics about the rows received as an input to a
 // processor. Currently only used in the row execution engine.
 type InputStats struct {
-	NumTuples IntValue `protobuf:"varint,1,opt,name=num_tuples,json=numTuples,customtype=IntValue" json:"num_tuples"`
+	NumTuples optional.Uint `protobuf:"bytes,1,opt,name=num_tuples,json=numTuples" json:"num_tuples"`
 	// Cumulated time spent waiting for rows from the input operator.
-	WaitTime time.Duration `protobuf:"bytes,2,opt,name=wait_time,json=waitTime,stdduration" json:"wait_time"`
+	WaitTime optional.Duration `protobuf:"bytes,2,opt,name=wait_time,json=waitTime" json:"wait_time"`
 }
 
 func (m *InputStats) Reset()         { *m = InputStats{} }
 func (m *InputStats) String() string { return proto.CompactTextString(m) }
 func (*InputStats) ProtoMessage()    {}
 func (*InputStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_b0b131113a063b54, []int{1}
+	return fileDescriptor_component_stats_792af551832510a2, []int{2}
 }
 func (m *InputStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -112,20 +188,20 @@ var xxx_messageInfo_InputStats proto.InternalMessageInfo
 // over the network. Note: Rx is shorthand for Receive.
 type NetworkRxStats struct {
 	// Observed network latency (round-trip time between the two nodes).
-	Latency time.Duration `protobuf:"bytes,1,opt,name=latency,stdduration" json:"latency"`
+	Latency optional.Duration `protobuf:"bytes,1,opt,name=latency" json:"latency"`
 	// Cumulated time spent waiting to receive or transmit tuple data.
-	WaitTime time.Duration `protobuf:"bytes,2,opt,name=wait_time,json=waitTime,stdduration" json:"wait_time"`
+	WaitTime optional.Duration `protobuf:"bytes,2,opt,name=wait_time,json=waitTime" json:"wait_time"`
 	// Time spent deserializing network data.
-	DeserializationTime time.Duration `protobuf:"bytes,3,opt,name=deserialization_time,json=deserializationTime,stdduration" json:"deserialization_time"`
-	TuplesReceived      IntValue      `protobuf:"varint,4,opt,name=tuples_received,json=tuplesReceived,customtype=IntValue" json:"tuples_received"`
-	BytesReceived       IntValue      `protobuf:"varint,5,opt,name=bytes_received,json=bytesReceived,customtype=IntValue" json:"bytes_received"`
+	DeserializationTime optional.Duration `protobuf:"bytes,3,opt,name=deserialization_time,json=deserializationTime" json:"deserialization_time"`
+	TuplesReceived      optional.Uint     `protobuf:"bytes,4,opt,name=tuples_received,json=tuplesReceived" json:"tuples_received"`
+	BytesReceived       optional.Uint     `protobuf:"bytes,5,opt,name=bytes_received,json=bytesReceived" json:"bytes_received"`
 }
 
 func (m *NetworkRxStats) Reset()         { *m = NetworkRxStats{} }
 func (m *NetworkRxStats) String() string { return proto.CompactTextString(m) }
 func (*NetworkRxStats) ProtoMessage()    {}
 func (*NetworkRxStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_b0b131113a063b54, []int{2}
+	return fileDescriptor_component_stats_792af551832510a2, []int{3}
 }
 func (m *NetworkRxStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -153,15 +229,15 @@ var xxx_messageInfo_NetworkRxStats proto.InternalMessageInfo
 // NetworkTxStats contains statistics for components that send row data over the
 // network. Note: Tx is shorthand for Transmit.
 type NetworkTxStats struct {
-	TuplesSent IntValue `protobuf:"varint,1,opt,name=tuples_sent,json=tuplesSent,customtype=IntValue" json:"tuples_sent"`
-	BytesSent  IntValue `protobuf:"varint,2,opt,name=bytes_sent,json=bytesSent,customtype=IntValue" json:"bytes_sent"`
+	TuplesSent optional.Uint `protobuf:"bytes,1,opt,name=tuples_sent,json=tuplesSent" json:"tuples_sent"`
+	BytesSent  optional.Uint `protobuf:"bytes,2,opt,name=bytes_sent,json=bytesSent" json:"bytes_sent"`
 }
 
 func (m *NetworkTxStats) Reset()         { *m = NetworkTxStats{} }
 func (m *NetworkTxStats) String() string { return proto.CompactTextString(m) }
 func (*NetworkTxStats) ProtoMessage()    {}
 func (*NetworkTxStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_b0b131113a063b54, []int{3}
+	return fileDescriptor_component_stats_792af551832510a2, []int{4}
 }
 func (m *NetworkTxStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -188,18 +264,21 @@ var xxx_messageInfo_NetworkTxStats proto.InternalMessageInfo
 
 // KVStats contains statistics for components that perform KV operations.
 type KVStats struct {
-	BytesRead  IntValue `protobuf:"varint,1,opt,name=bytes_read,json=bytesRead,customtype=IntValue" json:"bytes_read"`
-	TuplesRead IntValue `protobuf:"varint,2,opt,name=tuples_read,json=tuplesRead,customtype=IntValue" json:"tuples_read"`
+	BytesRead  optional.Uint `protobuf:"bytes,1,opt,name=bytes_read,json=bytesRead" json:"bytes_read"`
+	TuplesRead optional.Uint `protobuf:"bytes,2,opt,name=tuples_read,json=tuplesRead" json:"tuples_read"`
 	// Cumulated time spent waiting for a KV request. This includes disk IO time
 	// and potentially network time (if any of the keys are not local).
-	KVTime time.Duration `protobuf:"bytes,3,opt,name=kv_time,json=kvTime,stdduration" json:"kv_time"`
+	KVTime optional.Duration `protobuf:"bytes,3,opt,name=kv_time,json=kvTime" json:"kv_time"`
+	// ContentionTime is the cumulative time a KV request spent contending with
+	// other transactions. This time accounts for a portion of KVTime above.
+	ContentionTime optional.Duration `protobuf:"bytes,4,opt,name=contention_time,json=contentionTime" json:"contention_time"`
 }
 
 func (m *KVStats) Reset()         { *m = KVStats{} }
 func (m *KVStats) String() string { return proto.CompactTextString(m) }
 func (*KVStats) ProtoMessage()    {}
 func (*KVStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_b0b131113a063b54, []int{4}
+	return fileDescriptor_component_stats_792af551832510a2, []int{5}
 }
 func (m *KVStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -224,21 +303,21 @@ func (m *KVStats) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_KVStats proto.InternalMessageInfo
 
-// ExecStats contains statistics about the execution of an components.
+// ExecStats contains statistics about the execution of a component.
 type ExecStats struct {
 	// Time spent executing the component.
-	ExecTime time.Duration `protobuf:"bytes,1,opt,name=exec_time,json=execTime,stdduration" json:"exec_time"`
+	ExecTime optional.Duration `protobuf:"bytes,1,opt,name=exec_time,json=execTime" json:"exec_time"`
 	// Maximum memory allocated by the component.
-	MaxAllocatedMem IntValue `protobuf:"varint,2,opt,name=max_allocated_mem,json=maxAllocatedMem,customtype=IntValue" json:"max_allocated_mem"`
+	MaxAllocatedMem optional.Uint `protobuf:"bytes,2,opt,name=max_allocated_mem,json=maxAllocatedMem" json:"max_allocated_mem"`
 	// Maximum scratch disk allocated by the component.
-	MaxAllocatedDisk IntValue `protobuf:"varint,3,opt,name=max_allocated_disk,json=maxAllocatedDisk,customtype=IntValue" json:"max_allocated_disk"`
+	MaxAllocatedDisk optional.Uint `protobuf:"bytes,3,opt,name=max_allocated_disk,json=maxAllocatedDisk" json:"max_allocated_disk"`
 }
 
 func (m *ExecStats) Reset()         { *m = ExecStats{} }
 func (m *ExecStats) String() string { return proto.CompactTextString(m) }
 func (*ExecStats) ProtoMessage()    {}
 func (*ExecStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_b0b131113a063b54, []int{5}
+	return fileDescriptor_component_stats_792af551832510a2, []int{6}
 }
 func (m *ExecStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -263,19 +342,19 @@ func (m *ExecStats) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ExecStats proto.InternalMessageInfo
 
-// OutputStats contains statistics about the output (results) of an component.
+// OutputStats contains statistics about the output (results) of a component.
 type OutputStats struct {
 	// Number of batches produced by the component.
-	NumBatches IntValue `protobuf:"varint,1,opt,name=num_batches,json=numBatches,customtype=IntValue" json:"num_batches"`
+	NumBatches optional.Uint `protobuf:"bytes,1,opt,name=num_batches,json=numBatches" json:"num_batches"`
 	// Number of tuples produced by the component.
-	NumTuples IntValue `protobuf:"varint,2,opt,name=num_tuples,json=numTuples,customtype=IntValue" json:"num_tuples"`
+	NumTuples optional.Uint `protobuf:"bytes,2,opt,name=num_tuples,json=numTuples" json:"num_tuples"`
 }
 
 func (m *OutputStats) Reset()         { *m = OutputStats{} }
 func (m *OutputStats) String() string { return proto.CompactTextString(m) }
 func (*OutputStats) ProtoMessage()    {}
 func (*OutputStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_component_stats_b0b131113a063b54, []int{6}
+	return fileDescriptor_component_stats_792af551832510a2, []int{7}
 }
 func (m *OutputStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -300,7 +379,42 @@ func (m *OutputStats) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_OutputStats proto.InternalMessageInfo
 
+// FlowStats contains flow level statistics.
+type FlowStats struct {
+	MaxMemUsage optional.Uint `protobuf:"bytes,1,opt,name=max_mem_usage,json=maxMemUsage" json:"max_mem_usage"`
+}
+
+func (m *FlowStats) Reset()         { *m = FlowStats{} }
+func (m *FlowStats) String() string { return proto.CompactTextString(m) }
+func (*FlowStats) ProtoMessage()    {}
+func (*FlowStats) Descriptor() ([]byte, []int) {
+	return fileDescriptor_component_stats_792af551832510a2, []int{8}
+}
+func (m *FlowStats) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *FlowStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *FlowStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_FlowStats.Merge(dst, src)
+}
+func (m *FlowStats) XXX_Size() int {
+	return m.Size()
+}
+func (m *FlowStats) XXX_DiscardUnknown() {
+	xxx_messageInfo_FlowStats.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_FlowStats proto.InternalMessageInfo
+
 func init() {
+	proto.RegisterType((*ComponentID)(nil), "cockroach.sql.distsqlrun.ComponentID")
 	proto.RegisterType((*ComponentStats)(nil), "cockroach.sql.distsqlrun.ComponentStats")
 	proto.RegisterType((*InputStats)(nil), "cockroach.sql.distsqlrun.InputStats")
 	proto.RegisterType((*NetworkRxStats)(nil), "cockroach.sql.distsqlrun.NetworkRxStats")
@@ -308,7 +422,41 @@ func init() {
 	proto.RegisterType((*KVStats)(nil), "cockroach.sql.distsqlrun.KVStats")
 	proto.RegisterType((*ExecStats)(nil), "cockroach.sql.distsqlrun.ExecStats")
 	proto.RegisterType((*OutputStats)(nil), "cockroach.sql.distsqlrun.OutputStats")
+	proto.RegisterType((*FlowStats)(nil), "cockroach.sql.distsqlrun.FlowStats")
+	proto.RegisterEnum("cockroach.sql.distsqlrun.ComponentID_Type", ComponentID_Type_name, ComponentID_Type_value)
 }
+func (m *ComponentID) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ComponentID) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.FlowID.Size()))
+	n1, err := m.FlowID.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	dAtA[i] = 0x10
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.Type))
+	dAtA[i] = 0x18
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.ID))
+	return i, nil
+}
+
 func (m *ComponentStats) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -324,49 +472,54 @@ func (m *ComponentStats) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.ComponentID))
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.NetRx.Size()))
-	n1, err := m.NetRx.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.NetTx.Size()))
-	n2, err := m.NetTx.MarshalTo(dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.Component.Size()))
+	n2, err := m.Component.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n2
-	dAtA[i] = 0x22
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.KV.Size()))
-	n3, err := m.KV.MarshalTo(dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.NetRx.Size()))
+	n3, err := m.NetRx.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n3
-	dAtA[i] = 0x2a
+	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.Exec.Size()))
-	n4, err := m.Exec.MarshalTo(dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.NetTx.Size()))
+	n4, err := m.NetTx.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n4
-	dAtA[i] = 0x32
+	dAtA[i] = 0x22
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.Output.Size()))
-	n5, err := m.Output.MarshalTo(dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.KV.Size()))
+	n5, err := m.KV.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n5
+	dAtA[i] = 0x2a
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.Exec.Size()))
+	n6, err := m.Exec.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
+	dAtA[i] = 0x32
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.Output.Size()))
+	n7, err := m.Output.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n7
 	if len(m.Inputs) > 0 {
 		for _, msg := range m.Inputs {
 			dAtA[i] = 0x3a
@@ -379,6 +532,14 @@ func (m *ComponentStats) MarshalTo(dAtA []byte) (int, error) {
 			i += n
 		}
 	}
+	dAtA[i] = 0x42
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.FlowStats.Size()))
+	n8, err := m.FlowStats.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n8
 	return i, nil
 }
 
@@ -397,17 +558,22 @@ func (m *InputStats) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.NumTuples))
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.WaitTime)))
-	n6, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.WaitTime, dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.NumTuples.Size()))
+	n9, err := m.NumTuples.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n9
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.WaitTime.Size()))
+	n10, err := m.WaitTime.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n10
 	return i, nil
 }
 
@@ -428,34 +594,44 @@ func (m *NetworkRxStats) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0xa
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.Latency)))
-	n7, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.Latency, dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.Latency.Size()))
+	n11, err := m.Latency.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n7
+	i += n11
 	dAtA[i] = 0x12
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.WaitTime)))
-	n8, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.WaitTime, dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.WaitTime.Size()))
+	n12, err := m.WaitTime.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n8
+	i += n12
 	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.DeserializationTime)))
-	n9, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.DeserializationTime, dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.DeserializationTime.Size()))
+	n13, err := m.DeserializationTime.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n9
-	dAtA[i] = 0x20
+	i += n13
+	dAtA[i] = 0x22
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.TuplesReceived))
-	dAtA[i] = 0x28
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.TuplesReceived.Size()))
+	n14, err := m.TuplesReceived.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n14
+	dAtA[i] = 0x2a
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.BytesReceived))
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.BytesReceived.Size()))
+	n15, err := m.BytesReceived.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n15
 	return i, nil
 }
 
@@ -474,12 +650,22 @@ func (m *NetworkTxStats) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.TuplesSent))
-	dAtA[i] = 0x10
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.TuplesSent.Size()))
+	n16, err := m.TuplesSent.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n16
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.BytesSent))
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.BytesSent.Size()))
+	n17, err := m.BytesSent.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n17
 	return i, nil
 }
 
@@ -498,20 +684,38 @@ func (m *KVStats) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.BytesRead))
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.TuplesRead))
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.KVTime)))
-	n10, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.KVTime, dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.BytesRead.Size()))
+	n18, err := m.BytesRead.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n10
+	i += n18
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.TuplesRead.Size()))
+	n19, err := m.TuplesRead.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n19
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.KVTime.Size()))
+	n20, err := m.KVTime.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n20
+	dAtA[i] = 0x22
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.ContentionTime.Size()))
+	n21, err := m.ContentionTime.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n21
 	return i, nil
 }
 
@@ -532,18 +736,28 @@ func (m *ExecStats) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0xa
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.ExecTime)))
-	n11, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.ExecTime, dAtA[i:])
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.ExecTime.Size()))
+	n22, err := m.ExecTime.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n11
-	dAtA[i] = 0x10
+	i += n22
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.MaxAllocatedMem))
-	dAtA[i] = 0x18
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.MaxAllocatedMem.Size()))
+	n23, err := m.MaxAllocatedMem.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n23
+	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.MaxAllocatedDisk))
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.MaxAllocatedDisk.Size()))
+	n24, err := m.MaxAllocatedDisk.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n24
 	return i, nil
 }
 
@@ -562,12 +776,48 @@ func (m *OutputStats) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.NumBatches))
-	dAtA[i] = 0x10
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.NumBatches.Size()))
+	n25, err := m.NumBatches.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n25
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintComponentStats(dAtA, i, uint64(m.NumTuples))
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.NumTuples.Size()))
+	n26, err := m.NumTuples.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n26
+	return i, nil
+}
+
+func (m *FlowStats) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *FlowStats) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintComponentStats(dAtA, i, uint64(m.MaxMemUsage.Size()))
+	n27, err := m.MaxMemUsage.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n27
 	return i, nil
 }
 
@@ -580,13 +830,27 @@ func encodeVarintComponentStats(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
+func (m *ComponentID) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.FlowID.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	n += 1 + sovComponentStats(uint64(m.Type))
+	n += 1 + sovComponentStats(uint64(m.ID))
+	return n
+}
+
 func (m *ComponentStats) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	n += 1 + sovComponentStats(uint64(m.ComponentID))
+	l = m.Component.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
 	l = m.NetRx.Size()
 	n += 1 + l + sovComponentStats(uint64(l))
 	l = m.NetTx.Size()
@@ -603,6 +867,8 @@ func (m *ComponentStats) Size() (n int) {
 			n += 1 + l + sovComponentStats(uint64(l))
 		}
 	}
+	l = m.FlowStats.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
 	return n
 }
 
@@ -612,8 +878,9 @@ func (m *InputStats) Size() (n int) {
 	}
 	var l int
 	_ = l
-	n += 1 + sovComponentStats(uint64(m.NumTuples))
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.WaitTime)
+	l = m.NumTuples.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	l = m.WaitTime.Size()
 	n += 1 + l + sovComponentStats(uint64(l))
 	return n
 }
@@ -624,14 +891,16 @@ func (m *NetworkRxStats) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.Latency)
+	l = m.Latency.Size()
 	n += 1 + l + sovComponentStats(uint64(l))
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.WaitTime)
+	l = m.WaitTime.Size()
 	n += 1 + l + sovComponentStats(uint64(l))
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.DeserializationTime)
+	l = m.DeserializationTime.Size()
 	n += 1 + l + sovComponentStats(uint64(l))
-	n += 1 + sovComponentStats(uint64(m.TuplesReceived))
-	n += 1 + sovComponentStats(uint64(m.BytesReceived))
+	l = m.TuplesReceived.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	l = m.BytesReceived.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
 	return n
 }
 
@@ -641,8 +910,10 @@ func (m *NetworkTxStats) Size() (n int) {
 	}
 	var l int
 	_ = l
-	n += 1 + sovComponentStats(uint64(m.TuplesSent))
-	n += 1 + sovComponentStats(uint64(m.BytesSent))
+	l = m.TuplesSent.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	l = m.BytesSent.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
 	return n
 }
 
@@ -652,9 +923,13 @@ func (m *KVStats) Size() (n int) {
 	}
 	var l int
 	_ = l
-	n += 1 + sovComponentStats(uint64(m.BytesRead))
-	n += 1 + sovComponentStats(uint64(m.TuplesRead))
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.KVTime)
+	l = m.BytesRead.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	l = m.TuplesRead.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	l = m.KVTime.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	l = m.ContentionTime.Size()
 	n += 1 + l + sovComponentStats(uint64(l))
 	return n
 }
@@ -665,10 +940,12 @@ func (m *ExecStats) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.ExecTime)
+	l = m.ExecTime.Size()
 	n += 1 + l + sovComponentStats(uint64(l))
-	n += 1 + sovComponentStats(uint64(m.MaxAllocatedMem))
-	n += 1 + sovComponentStats(uint64(m.MaxAllocatedDisk))
+	l = m.MaxAllocatedMem.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	l = m.MaxAllocatedDisk.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
 	return n
 }
 
@@ -678,8 +955,21 @@ func (m *OutputStats) Size() (n int) {
 	}
 	var l int
 	_ = l
-	n += 1 + sovComponentStats(uint64(m.NumBatches))
-	n += 1 + sovComponentStats(uint64(m.NumTuples))
+	l = m.NumBatches.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	l = m.NumTuples.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
+	return n
+}
+
+func (m *FlowStats) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.MaxMemUsage.Size()
+	n += 1 + l + sovComponentStats(uint64(l))
 	return n
 }
 
@@ -695,6 +985,124 @@ func sovComponentStats(x uint64) (n int) {
 }
 func sozComponentStats(x uint64) (n int) {
 	return sovComponentStats(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *ComponentID) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowComponentStats
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ComponentID: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ComponentID: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FlowID", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComponentStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.FlowID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			m.Type = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComponentStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Type |= (ComponentID_Type(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			m.ID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComponentStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ID |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipComponentStats(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *ComponentStats) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -726,10 +1134,10 @@ func (m *ComponentStats) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ComponentID", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Component", wireType)
 			}
-			m.ComponentID = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -739,11 +1147,22 @@ func (m *ComponentStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ComponentID |= (int32(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Component.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NetRx", wireType)
@@ -925,6 +1344,36 @@ func (m *ComponentStats) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FlowStats", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComponentStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.FlowStats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipComponentStats(dAtA[iNdEx:])
@@ -976,10 +1425,10 @@ func (m *InputStats) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NumTuples", wireType)
 			}
-			m.NumTuples = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -989,11 +1438,22 @@ func (m *InputStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.NumTuples |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.NumTuples.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field WaitTime", wireType)
@@ -1020,7 +1480,7 @@ func (m *InputStats) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.WaitTime, dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.WaitTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1100,7 +1560,7 @@ func (m *NetworkRxStats) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.Latency, dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Latency.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1130,7 +1590,7 @@ func (m *NetworkRxStats) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.WaitTime, dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.WaitTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1160,15 +1620,15 @@ func (m *NetworkRxStats) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.DeserializationTime, dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.DeserializationTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 4:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field TuplesReceived", wireType)
 			}
-			m.TuplesReceived = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1178,16 +1638,27 @@ func (m *NetworkRxStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.TuplesReceived |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TuplesReceived.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 5:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field BytesReceived", wireType)
 			}
-			m.BytesReceived = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1197,11 +1668,22 @@ func (m *NetworkRxStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.BytesReceived |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.BytesReceived.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipComponentStats(dAtA[iNdEx:])
@@ -1253,10 +1735,10 @@ func (m *NetworkTxStats) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field TuplesSent", wireType)
 			}
-			m.TuplesSent = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1266,16 +1748,27 @@ func (m *NetworkTxStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.TuplesSent |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TuplesSent.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 2:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field BytesSent", wireType)
 			}
-			m.BytesSent = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1285,11 +1778,22 @@ func (m *NetworkTxStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.BytesSent |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.BytesSent.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipComponentStats(dAtA[iNdEx:])
@@ -1341,10 +1845,10 @@ func (m *KVStats) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field BytesRead", wireType)
 			}
-			m.BytesRead = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1354,16 +1858,27 @@ func (m *KVStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.BytesRead |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.BytesRead.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 2:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field TuplesRead", wireType)
 			}
-			m.TuplesRead = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1373,11 +1888,22 @@ func (m *KVStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.TuplesRead |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TuplesRead.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field KVTime", wireType)
@@ -1404,7 +1930,37 @@ func (m *KVStats) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.KVTime, dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.KVTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContentionTime", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComponentStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ContentionTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1484,15 +2040,15 @@ func (m *ExecStats) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.ExecTime, dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.ExecTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 2:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MaxAllocatedMem", wireType)
 			}
-			m.MaxAllocatedMem = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1502,16 +2058,27 @@ func (m *ExecStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxAllocatedMem |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.MaxAllocatedMem.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 3:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MaxAllocatedDisk", wireType)
 			}
-			m.MaxAllocatedDisk = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1521,11 +2088,22 @@ func (m *ExecStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxAllocatedDisk |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.MaxAllocatedDisk.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipComponentStats(dAtA[iNdEx:])
@@ -1577,10 +2155,10 @@ func (m *OutputStats) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NumBatches", wireType)
 			}
-			m.NumBatches = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1590,16 +2168,27 @@ func (m *OutputStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.NumBatches |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.NumBatches.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 2:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NumTuples", wireType)
 			}
-			m.NumTuples = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowComponentStats
@@ -1609,11 +2198,102 @@ func (m *OutputStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.NumTuples |= (IntValue(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.NumTuples.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipComponentStats(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *FlowStats) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowComponentStats
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: FlowStats: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: FlowStats: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxMemUsage", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowComponentStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthComponentStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.MaxMemUsage.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipComponentStats(dAtA[iNdEx:])
@@ -1741,54 +2421,64 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/component_stats.proto", fileDescriptor_component_stats_b0b131113a063b54)
+	proto.RegisterFile("sql/execinfrapb/component_stats.proto", fileDescriptor_component_stats_792af551832510a2)
 }
 
-var fileDescriptor_component_stats_b0b131113a063b54 = []byte{
-	// 712 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x95, 0xcd, 0x6e, 0xd3, 0x40,
-	0x14, 0x85, 0x63, 0xe7, 0xb7, 0x13, 0x48, 0xcb, 0xb4, 0x0b, 0xd3, 0x85, 0x53, 0x02, 0x95, 0xb2,
-	0xc1, 0x11, 0x5d, 0x80, 0x90, 0x28, 0x82, 0xb4, 0x45, 0x8a, 0x2a, 0x40, 0x72, 0xa3, 0x2c, 0xd8,
-	0x58, 0x13, 0x7b, 0x9a, 0x5a, 0xb6, 0x67, 0x12, 0x7b, 0x9c, 0xba, 0x6c, 0x78, 0x05, 0x96, 0xbc,
-	0x08, 0xef, 0x50, 0x89, 0x4d, 0x97, 0x15, 0x52, 0x0b, 0xa4, 0x2f, 0x82, 0x66, 0xec, 0xa4, 0x6e,
-	0xa9, 0x4b, 0x10, 0xbb, 0x56, 0x3e, 0xe7, 0xbb, 0x77, 0xe6, 0x9e, 0x3b, 0x01, 0xeb, 0xc1, 0xc8,
-	0x6d, 0xe1, 0x08, 0x9b, 0x36, 0xd9, 0xf7, 0xd1, 0xb0, 0xdf, 0x32, 0xa9, 0x37, 0xa4, 0x04, 0x13,
-	0x66, 0x04, 0x0c, 0xb1, 0x40, 0x1b, 0xfa, 0x94, 0x51, 0xa8, 0x98, 0xd4, 0x74, 0x7c, 0x8a, 0xcc,
-	0x03, 0x2d, 0x18, 0xb9, 0x9a, 0x65, 0x07, 0x2c, 0x18, 0xb9, 0x7e, 0x48, 0x56, 0x57, 0x06, 0x74,
-	0x40, 0x85, 0xa8, 0xc5, 0xff, 0x8a, 0xf5, 0xab, 0xea, 0x80, 0xd2, 0x81, 0x8b, 0x5b, 0xe2, 0xbf,
-	0x7e, 0xb8, 0xdf, 0xb2, 0x42, 0x1f, 0x31, 0x9b, 0x92, 0xf8, 0x7b, 0xe3, 0x2c, 0x0f, 0x6a, 0x5b,
-	0xd3, 0x4a, 0x7b, 0xbc, 0x10, 0x7c, 0x0a, 0xee, 0x5c, 0xd6, 0xb6, 0x2d, 0x45, 0x5a, 0x93, 0x9a,
-	0xc5, 0xf6, 0xf2, 0xf1, 0x79, 0x3d, 0x37, 0x39, 0xaf, 0x57, 0x67, 0xea, 0xce, 0xb6, 0x5e, 0x9d,
-	0x09, 0x3b, 0x16, 0xdc, 0x01, 0x25, 0x82, 0x99, 0xe1, 0x47, 0x8a, 0xbc, 0x26, 0x35, 0xab, 0x1b,
-	0x4d, 0x2d, 0xab, 0x57, 0xed, 0x1d, 0x66, 0x87, 0xd4, 0x77, 0xf4, 0x48, 0x54, 0x6c, 0x17, 0x38,
-	0x5b, 0x2f, 0x12, 0xcc, 0xf4, 0x68, 0x8a, 0x61, 0x91, 0x92, 0x9f, 0x13, 0xd3, 0xfd, 0x03, 0xd3,
-	0x8d, 0xe0, 0x26, 0x90, 0x9d, 0xb1, 0x52, 0x10, 0x88, 0x07, 0xd9, 0x88, 0xdd, 0x5e, 0xec, 0x05,
-	0xc9, 0xf1, 0xe4, 0xdd, 0x9e, 0x2e, 0x3b, 0x63, 0xb8, 0x09, 0x0a, 0x7c, 0x18, 0x4a, 0x51, 0x00,
-	0x1e, 0x66, 0x03, 0x76, 0x22, 0x6c, 0xa6, 0xcb, 0x0b, 0x1b, 0xdc, 0x02, 0x25, 0x1a, 0xb2, 0x61,
-	0xc8, 0x94, 0x92, 0x00, 0xac, 0x67, 0x03, 0xde, 0x0b, 0x5d, 0x1a, 0x91, 0x58, 0x61, 0x1b, 0x94,
-	0x6c, 0x32, 0x0c, 0x59, 0xa0, 0x94, 0xd7, 0xf2, 0xcd, 0xea, 0xc6, 0xa3, 0x6c, 0x48, 0x87, 0x5c,
-	0x67, 0xc4, 0xce, 0xc6, 0x27, 0x00, 0x2e, 0xbf, 0xc1, 0x16, 0x00, 0x24, 0xf4, 0x0c, 0x16, 0x0e,
-	0x5d, 0x1c, 0x88, 0xc1, 0x16, 0xda, 0x4b, 0x5c, 0xff, 0xfd, 0xbc, 0x5e, 0xe9, 0x10, 0xd6, 0x43,
-	0x6e, 0x88, 0xf5, 0x05, 0x12, 0x7a, 0x5d, 0x21, 0x81, 0xaf, 0xc0, 0xc2, 0x21, 0xb2, 0x99, 0xc1,
-	0x6c, 0x0f, 0x27, 0x63, 0xbd, 0xaf, 0xc5, 0x91, 0xd2, 0xa6, 0x91, 0xd2, 0xb6, 0x93, 0x48, 0xb5,
-	0x2b, 0x1c, 0xf5, 0xe5, 0x47, 0x5d, 0xd2, 0x2b, 0xdc, 0xd5, 0xb5, 0x3d, 0xdc, 0x38, 0x93, 0x41,
-	0xed, 0xea, 0xb8, 0xe1, 0x26, 0x28, 0xbb, 0x88, 0x61, 0x62, 0x1e, 0x89, 0x16, 0xe6, 0x44, 0x4e,
-	0x3d, 0xff, 0xdf, 0x13, 0xec, 0x81, 0x15, 0x0b, 0x07, 0xd8, 0xb7, 0x91, 0x6b, 0x7f, 0x14, 0xb2,
-	0x18, 0x96, 0x9f, 0x1f, 0xb6, 0x7c, 0x0d, 0x20, 0xb8, 0xcf, 0xc1, 0x62, 0x7c, 0xb5, 0x86, 0x8f,
-	0x4d, 0x6c, 0x8f, 0xb1, 0x25, 0x02, 0x78, 0xd3, 0x1d, 0xd7, 0x62, 0xa1, 0x9e, 0xe8, 0xe0, 0x33,
-	0x50, 0xeb, 0x1f, 0xb1, 0xb4, 0xb3, 0x98, 0xe1, 0xbc, 0x2b, 0x74, 0x53, 0x63, 0x83, 0xcd, 0xae,
-	0x37, 0x59, 0x03, 0xf8, 0x04, 0x54, 0x93, 0x2e, 0x02, 0x4c, 0x58, 0xe6, 0x94, 0x41, 0x2c, 0xda,
-	0xc3, 0x84, 0xf1, 0x5c, 0xc4, 0xd5, 0x85, 0x43, 0xce, 0xca, 0x85, 0xd0, 0x70, 0x43, 0xe3, 0xab,
-	0x04, 0xca, 0xc9, 0xea, 0x5c, 0x9a, 0x7d, 0x8c, 0xac, 0xec, 0x50, 0x25, 0x6d, 0x23, 0x2b, 0xd5,
-	0xa0, 0x70, 0xc8, 0xb7, 0x37, 0x28, 0x2c, 0x6f, 0x40, 0xd9, 0x19, 0xcf, 0x39, 0x24, 0x98, 0xac,
-	0x72, 0x69, 0xb7, 0xc7, 0xa7, 0x22, 0xc6, 0x55, 0x72, 0xc6, 0x22, 0x8d, 0xdf, 0x24, 0xb0, 0x30,
-	0xdb, 0x58, 0x9e, 0x24, 0xbe, 0xad, 0x31, 0xf7, 0x1f, 0xa2, 0x58, 0xe1, 0x2e, 0x31, 0xf1, 0x17,
-	0xe0, 0x9e, 0x87, 0x22, 0x03, 0xb9, 0x2e, 0x35, 0x11, 0xc3, 0x96, 0xe1, 0x61, 0x2f, 0xf3, 0x40,
-	0x8b, 0x1e, 0x8a, 0x5e, 0x4f, 0x95, 0x6f, 0xb1, 0x07, 0x5f, 0x02, 0x78, 0xd5, 0x6d, 0xd9, 0x81,
-	0x23, 0x0e, 0x78, 0x93, 0x7d, 0x29, 0x6d, 0xdf, 0xb6, 0x03, 0xa7, 0x31, 0x02, 0xd5, 0xd4, 0xeb,
-	0xc1, 0xef, 0x95, 0x6f, 0x77, 0x1f, 0x31, 0xf3, 0xe0, 0x96, 0xf5, 0xe6, 0x4f, 0x40, 0x3b, 0xd6,
-	0x5c, 0x7b, 0x10, 0xe4, 0xbf, 0x3e, 0x08, 0xed, 0xc7, 0xc7, 0xbf, 0xd4, 0xdc, 0xf1, 0x44, 0x95,
-	0x4e, 0x26, 0xaa, 0x74, 0x3a, 0x51, 0xa5, 0x9f, 0x13, 0x55, 0xfa, 0x7c, 0xa1, 0xe6, 0x4e, 0x2e,
-	0xd4, 0xdc, 0xe9, 0x85, 0x9a, 0xfb, 0x50, 0x4d, 0xfd, 0x88, 0xfd, 0x0e, 0x00, 0x00, 0xff, 0xff,
-	0x67, 0xf3, 0x03, 0x14, 0xd6, 0x06, 0x00, 0x00,
+var fileDescriptor_component_stats_792af551832510a2 = []byte{
+	// 877 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x96, 0x41, 0x6f, 0xe3, 0x44,
+	0x14, 0xc7, 0x63, 0x37, 0x71, 0x9a, 0x17, 0x9a, 0x96, 0x61, 0x0f, 0x56, 0x05, 0x69, 0xd7, 0xb0,
+	0x52, 0x84, 0x20, 0x15, 0xbd, 0xef, 0xa1, 0x69, 0x02, 0x64, 0x4b, 0xb7, 0x8b, 0x93, 0xf6, 0xb0,
+	0x17, 0x6b, 0x6a, 0x4f, 0xbb, 0xa3, 0xd8, 0x1e, 0xd7, 0x1e, 0xa7, 0x2e, 0x5f, 0x02, 0x4e, 0x20,
+	0xf1, 0x2d, 0xb8, 0xf2, 0x09, 0x7a, 0xec, 0x71, 0xc5, 0xa1, 0x82, 0xf4, 0x33, 0x70, 0x47, 0x33,
+	0x76, 0x1c, 0x6f, 0x51, 0xb4, 0x31, 0xe2, 0x36, 0x72, 0xde, 0xff, 0x37, 0xef, 0xbd, 0xf9, 0xbf,
+	0xa7, 0xc0, 0xb3, 0xe8, 0xca, 0xdd, 0x23, 0x09, 0xb1, 0xa9, 0x7f, 0x11, 0xe2, 0xe0, 0x7c, 0xcf,
+	0x66, 0x5e, 0xc0, 0x7c, 0xe2, 0x73, 0x2b, 0xe2, 0x98, 0x47, 0xdd, 0x20, 0x64, 0x9c, 0x21, 0xdd,
+	0x66, 0xf6, 0x24, 0x64, 0xd8, 0x7e, 0xd3, 0x8d, 0xae, 0xdc, 0xae, 0x43, 0x23, 0x1e, 0x5d, 0xb9,
+	0x61, 0xec, 0x6f, 0x3f, 0xb9, 0x64, 0x97, 0x4c, 0x06, 0xed, 0x89, 0x53, 0x1a, 0xbf, 0xfd, 0x71,
+	0xcc, 0xa9, 0xbb, 0xc7, 0x02, 0x4e, 0x99, 0x8f, 0x17, 0x87, 0xf4, 0x57, 0xe3, 0x4e, 0x81, 0xe6,
+	0xe1, 0xfc, 0x9e, 0x61, 0x1f, 0x7d, 0x05, 0xf5, 0x0b, 0x97, 0x5d, 0x5b, 0xd4, 0xd1, 0x95, 0x5d,
+	0xa5, 0xf3, 0x41, 0x4f, 0xbf, 0xbd, 0xdf, 0xa9, 0xfc, 0x71, 0xbf, 0xa3, 0x7d, 0xed, 0xb2, 0xeb,
+	0x61, 0x7f, 0x96, 0x9f, 0x4c, 0x4d, 0x04, 0x0e, 0x1d, 0xd4, 0x87, 0x2a, 0xbf, 0x09, 0x88, 0xae,
+	0xee, 0x2a, 0x9d, 0xd6, 0xfe, 0xe7, 0xdd, 0x65, 0xf9, 0x75, 0x0b, 0xf7, 0x74, 0xc7, 0x37, 0x01,
+	0xe9, 0x55, 0x05, 0xdb, 0x94, 0x6a, 0xb4, 0x0d, 0x2a, 0x75, 0xf4, 0xb5, 0x5d, 0xa5, 0x53, 0xeb,
+	0x81, 0xf8, 0x3e, 0xbb, 0xdf, 0x51, 0x87, 0x7d, 0x53, 0xa5, 0x8e, 0xf1, 0x05, 0x54, 0x45, 0x3c,
+	0x6a, 0x40, 0xed, 0xf4, 0xe5, 0x68, 0x30, 0xde, 0xaa, 0xa0, 0x0d, 0x68, 0xbc, 0x32, 0x4f, 0x0e,
+	0x07, 0xa3, 0xd1, 0x89, 0xb9, 0xa5, 0x20, 0x00, 0x6d, 0x34, 0x36, 0x07, 0x07, 0xc7, 0x5b, 0xaa,
+	0xf1, 0x7b, 0x15, 0x5a, 0xf9, 0x55, 0x23, 0xd1, 0x39, 0x34, 0x84, 0x46, 0xde, 0x4c, 0x59, 0x57,
+	0x73, 0xff, 0xd9, 0x4a, 0x79, 0x66, 0x29, 0x2e, 0xd4, 0x68, 0x00, 0x9a, 0x4f, 0xb8, 0x15, 0x26,
+	0xb2, 0xde, 0xe6, 0x7e, 0x67, 0x39, 0xe7, 0x25, 0xe1, 0xd7, 0x2c, 0x9c, 0x98, 0x89, 0x4c, 0x22,
+	0x43, 0xd5, 0x7c, 0xc2, 0xcd, 0x64, 0x8e, 0xe1, 0x89, 0x2c, 0x79, 0x15, 0xcc, 0xf8, 0x5f, 0x98,
+	0x71, 0x82, 0x9e, 0x83, 0x3a, 0x99, 0xea, 0x55, 0x89, 0x78, 0xba, 0x1c, 0x71, 0x74, 0x96, 0x6a,
+	0xf3, 0xc6, 0x1e, 0x9d, 0x99, 0xea, 0x64, 0x8a, 0x9e, 0x43, 0x55, 0x18, 0x4e, 0xaf, 0x49, 0xc0,
+	0xa7, 0xcb, 0x01, 0x83, 0x84, 0xd8, 0xc5, 0xeb, 0xa5, 0x0c, 0x1d, 0x82, 0xc6, 0x62, 0x1e, 0xc4,
+	0x5c, 0xd7, 0xde, 0xd7, 0xd3, 0x13, 0x19, 0x57, 0x44, 0x64, 0x52, 0xd4, 0x03, 0x8d, 0xfa, 0x41,
+	0xcc, 0x23, 0xbd, 0xbe, 0xbb, 0xd6, 0x69, 0xee, 0x7f, 0xb6, 0x1c, 0x32, 0xf4, 0x1f, 0x33, 0x52,
+	0x25, 0xfa, 0x16, 0x40, 0xba, 0x56, 0xce, 0x89, 0xbe, 0xfe, 0xbe, 0x6a, 0x84, 0x81, 0x8b, 0x98,
+	0xc6, 0xc5, 0xfc, 0x83, 0xf1, 0xb3, 0x02, 0xb0, 0xb8, 0x06, 0xf5, 0x00, 0xfc, 0xd8, 0xb3, 0x78,
+	0x1c, 0xb8, 0x24, 0xca, 0x9c, 0xf3, 0x49, 0x01, 0x2c, 0x66, 0xab, 0x9b, 0x8f, 0xd4, 0x29, 0xf5,
+	0xf9, 0x1c, 0xe9, 0xc7, 0xde, 0x58, 0xaa, 0x50, 0x1f, 0x1a, 0xd7, 0x98, 0x72, 0x8b, 0x53, 0x8f,
+	0x64, 0xa6, 0x79, 0xba, 0x14, 0xd1, 0x8f, 0x43, 0x2c, 0x8e, 0x19, 0x66, 0x5d, 0x28, 0xc7, 0xd4,
+	0x23, 0xc6, 0x8f, 0x6b, 0xd0, 0x7a, 0xd7, 0x50, 0xe8, 0x00, 0xea, 0x2e, 0xe6, 0xc4, 0xb7, 0x6f,
+	0xb2, 0xcc, 0x56, 0xc6, 0xce, 0x75, 0xff, 0x4f, 0x6e, 0xe8, 0x35, 0x3c, 0x71, 0x48, 0x44, 0x42,
+	0x8a, 0x5d, 0xfa, 0x83, 0x0c, 0x49, 0x81, 0x6b, 0xe5, 0x80, 0x1f, 0x3d, 0x82, 0x48, 0xf6, 0x77,
+	0xb0, 0x99, 0x76, 0xdf, 0x0a, 0x89, 0x4d, 0xe8, 0x94, 0x38, 0x99, 0xdd, 0x57, 0x7a, 0x86, 0x56,
+	0xaa, 0x35, 0x33, 0x29, 0x7a, 0x01, 0xad, 0xf3, 0x1b, 0x5e, 0x84, 0xd5, 0x56, 0x87, 0x6d, 0x48,
+	0xe9, 0x9c, 0x65, 0xfc, 0xaa, 0xe4, 0x2f, 0x92, 0xcd, 0x26, 0xea, 0x43, 0x33, 0x4b, 0x36, 0x5a,
+	0x6c, 0x9a, 0x95, 0xd8, 0x90, 0xea, 0x46, 0x62, 0xc5, 0xf4, 0x00, 0xd2, 0x24, 0x25, 0x44, 0x2d,
+	0x61, 0x3a, 0x29, 0x13, 0x0c, 0xe3, 0x37, 0x15, 0xea, 0xd9, 0xd4, 0x2f, 0x78, 0x21, 0xc1, 0x4e,
+	0x29, 0x13, 0x67, 0x05, 0x63, 0xa7, 0x50, 0x99, 0x84, 0xa8, 0xa5, 0x2b, 0x93, 0x94, 0x17, 0x50,
+	0x9f, 0x4c, 0x4b, 0x7a, 0xa3, 0x95, 0xed, 0x2c, 0xed, 0xe8, 0x4c, 0x18, 0xc2, 0xd4, 0x26, 0x53,
+	0x69, 0x8c, 0x57, 0xb0, 0x69, 0x33, 0x9f, 0x13, 0x7f, 0xe1, 0xb7, 0x6a, 0x39, 0xbf, 0xb5, 0x16,
+	0x7a, 0x39, 0x62, 0x7f, 0x2b, 0xd0, 0xc8, 0x17, 0x9d, 0x18, 0x0d, 0xb1, 0xe4, 0x52, 0x72, 0xc9,
+	0xf9, 0x5a, 0x17, 0x4a, 0x99, 0xe5, 0x09, 0x7c, 0xe8, 0xe1, 0xc4, 0xc2, 0xae, 0xcb, 0x6c, 0xcc,
+	0x89, 0x63, 0x79, 0xc4, 0x2b, 0xd3, 0xbd, 0x4d, 0x0f, 0x27, 0x07, 0x73, 0xf1, 0x31, 0xf1, 0xd0,
+	0xf7, 0x80, 0xde, 0x05, 0x3a, 0x34, 0x9a, 0x64, 0xdd, 0x5c, 0x89, 0xb8, 0x55, 0x24, 0xf6, 0x69,
+	0x34, 0x31, 0x7e, 0x51, 0xa0, 0x59, 0xd8, 0xcf, 0xe2, 0xad, 0xc5, 0xd2, 0x3b, 0xc7, 0xdc, 0x7e,
+	0x53, 0x6e, 0xeb, 0x89, 0x65, 0xd9, 0x4b, 0x65, 0x8f, 0x56, 0xa7, 0xfa, 0x5f, 0x56, 0xa7, 0x31,
+	0x86, 0x46, 0xbe, 0xab, 0xd1, 0x37, 0xb0, 0x21, 0x2a, 0xf7, 0x88, 0x67, 0xc5, 0x11, 0xbe, 0x24,
+	0x65, 0x12, 0x6b, 0x7a, 0x38, 0x39, 0x26, 0xde, 0xa9, 0xd0, 0xf5, 0xbe, 0xbc, 0xfd, 0xab, 0x5d,
+	0xb9, 0x9d, 0xb5, 0x95, 0xbb, 0x59, 0x5b, 0x79, 0x3b, 0x6b, 0x2b, 0x7f, 0xce, 0xda, 0xca, 0x4f,
+	0x0f, 0xed, 0xca, 0xdd, 0x43, 0xbb, 0xf2, 0xf6, 0xa1, 0x5d, 0x79, 0xdd, 0x2c, 0xfc, 0x0d, 0xfb,
+	0x27, 0x00, 0x00, 0xff, 0xff, 0x12, 0x4a, 0x1e, 0xe7, 0x98, 0x09, 0x00, 0x00,
 }

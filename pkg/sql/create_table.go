@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -79,10 +80,10 @@ type createTableRun struct {
 
 // minimumTypeUsageVersions defines the minimum version needed for a new
 // data type.
-var minimumTypeUsageVersions = map[types.Family]clusterversion.VersionKey{
-	types.GeographyFamily: clusterversion.VersionGeospatialType,
-	types.GeometryFamily:  clusterversion.VersionGeospatialType,
-	types.Box2DFamily:     clusterversion.VersionBox2DType,
+var minimumTypeUsageVersions = map[types.Family]clusterversion.Key{
+	types.GeographyFamily: clusterversion.GeospatialType,
+	types.GeometryFamily:  clusterversion.GeospatialType,
+	types.Box2DFamily:     clusterversion.Box2DType,
 }
 
 // isTypeSupportedInVersion returns whether a given type is supported in the given version.
@@ -147,7 +148,7 @@ func getTableCreateParams(
 					errors.WithHint(
 						errors.WithIssueLink(
 							errors.Newf("temporary tables are only supported experimentally"),
-							errors.IssueLink{IssueURL: unimplemented.MakeURL(46260)},
+							errors.IssueLink{IssueURL: build.MakeIssueURL(46260)},
 						),
 						"You can enable temporary tables by running `SET experimental_enable_temp_tables = 'on'`.",
 					),
@@ -220,6 +221,13 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	if n.n.Interleave != nil {
 		telemetry.Inc(sqltelemetry.CreateInterleavedTableCounter)
+		params.p.BufferClientNotice(
+			params.ctx,
+			errors.WithIssueLink(
+				pgnotice.Newf("interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2"),
+				errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
+			),
+		)
 	}
 	if n.n.Persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
@@ -352,6 +360,28 @@ func (n *createTableNode) startExec(params runParams) error {
 	// Install back references to types used by this table.
 	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, desc); err != nil {
 		return err
+	}
+
+	// TODO(otan): for MR databases with no locality set, set a default locality
+	// and add a notice.
+	if desc.LocalityConfig != nil {
+		dbDesc, err := params.p.Descriptors().GetDatabaseVersionByID(
+			params.ctx,
+			params.p.txn,
+			desc.ParentID,
+			tree.DatabaseLookupFlags{Required: true},
+		)
+		if err != nil {
+			return errors.Wrap(err, "error resolving database for multi-region")
+		}
+		if err := params.p.applyZoneConfigFromTableLocalityConfig(
+			params.ctx,
+			n.n.Table,
+			*desc.LocalityConfig,
+			*dbDesc.RegionConfig,
+		); err != nil {
+			return err
+		}
 	}
 
 	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
@@ -516,13 +546,14 @@ func qualifyFKColErrorWithDB(
 	return tree.ErrString(tree.NewUnresolvedName(db.GetName(), schema, tbl.Name, col))
 }
 
-// FKTableState is the state of the referencing table ResolveFK() is called on.
-type FKTableState int
+// TableState is the state of the referencing table ResolveFK() or
+// ResolveUniqueWithoutIndexConstraint() is called on.
+type TableState int
 
 const (
-	// NewTable represents a new table, where the FK constraint is specified in the
+	// NewTable represents a new table, where the constraint is specified in the
 	// CREATE TABLE
-	NewTable FKTableState = iota
+	NewTable TableState = iota
 	// EmptyTable represents an existing table that is empty
 	EmptyTable
 	// NonEmptyTable represents an existing non-empty table
@@ -572,6 +603,90 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 	return nil
 }
 
+// ResolveUniqueWithoutIndexConstraint looks up the columns mentioned in a
+// UNIQUE WITHOUT INDEX constraint and adds metadata representing that
+// constraint to the descriptor.
+//
+// The passed validationBehavior is used to determine whether or not preexisting
+// entries in the table need to be validated against the unique constraint being
+// added. This only applies for existing tables, not new tables.
+func ResolveUniqueWithoutIndexConstraint(
+	ctx context.Context,
+	tbl *tabledesc.Mutable,
+	constraintName string,
+	colNames []string,
+	ts TableState,
+	validationBehavior tree.ValidationBehavior,
+) error {
+	var colSet catalog.TableColSet
+	cols := make([]*descpb.ColumnDescriptor, len(colNames))
+	for i, name := range colNames {
+		col, err := tbl.FindActiveOrNewColumnByName(tree.Name(name))
+		if err != nil {
+			return err
+		}
+		// Ensure that the columns don't have duplicates.
+		if colSet.Contains(col.ID) {
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"column %q appears twice in unique constraint", col.Name)
+		}
+		colSet.Add(col.ID)
+		cols[i] = col
+	}
+
+	// Verify we are not writing a constraint over the same name.
+	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if constraintName == "" {
+		constraintName = tabledesc.GenerateUniqueConstraintName(
+			fmt.Sprintf("unique_%s", strings.Join(colNames, "_")),
+			func(p string) bool {
+				_, ok := constraintInfo[p]
+				return ok
+			},
+		)
+	} else {
+		if _, ok := constraintInfo[constraintName]; ok {
+			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
+		}
+	}
+
+	columnIDs := make(descpb.ColumnIDs, len(cols))
+	for i, col := range cols {
+		columnIDs[i] = col.ID
+	}
+
+	validity := descpb.ConstraintValidity_Validated
+	if ts != NewTable {
+		if validationBehavior == tree.ValidationSkip {
+			validity = descpb.ConstraintValidity_Unvalidated
+		} else {
+			validity = descpb.ConstraintValidity_Validating
+		}
+	}
+
+	uc := descpb.UniqueWithoutIndexConstraint{
+		Name:      constraintName,
+		TableID:   tbl.ID,
+		ColumnIDs: columnIDs,
+		Validity:  validity,
+	}
+
+	if ts == NewTable {
+		tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints, uc)
+	} else {
+		// TODO(rytaft): call AddUniqueConstraintMutation and remove the error
+		//  below.
+		return errors.AssertionFailedf(
+			"resolving unique constraints on existing tables not yet supported",
+		)
+	}
+
+	return nil
+}
+
 // ResolveFK looks up the tables and columns mentioned in a `REFERENCES`
 // constraint and adds metadata representing that constraint to the descriptor.
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
@@ -604,7 +719,7 @@ func ResolveFK(
 	tbl *tabledesc.Mutable,
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
-	ts FKTableState,
+	ts TableState,
 	validationBehavior tree.ValidationBehavior,
 	evalCtx *tree.EvalContext,
 ) error {
@@ -766,7 +881,7 @@ func ResolveFK(
 
 	// Check if the version is high enough to stop creating origin indexes.
 	if evalCtx.Settings != nil &&
-		!evalCtx.Settings.Version.IsActive(ctx, clusterversion.VersionNoOriginFKIndexes) {
+		!evalCtx.Settings.Version.IsActive(ctx, clusterversion.NoOriginFKIndexes) {
 		// Search for an index on the origin table that matches. If one doesn't exist,
 		// we create one automatically if the table to alter is new or empty. We also
 		// search if an index for the set of columns was created in this transaction.
@@ -842,7 +957,7 @@ func addIndexForFK(
 	tbl *tabledesc.Mutable,
 	srcCols []*descpb.ColumnDescriptor,
 	constraintName string,
-	ts FKTableState,
+	ts TableState,
 ) (descpb.IndexID, error) {
 	autoIndexName := tabledesc.GenerateUniqueConstraintName(
 		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
@@ -1171,7 +1286,7 @@ func newTableDescIfAs(
 // bootstrap when creating descriptors for virtual tables.
 //
 // parentID refers to the databaseID under which the descriptor is being
-// created,and parentSchemaID refers to the schemaID of the schema under which
+// created and parentSchemaID refers to the schemaID of the schema under which
 // the descriptor is being created.
 //
 // evalCtx can be nil if the table to be created has no default expression for
@@ -1227,7 +1342,7 @@ func NewTableDesc(
 	// server setup before the cluster version has been initialized.
 	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if version != (clusterversion.ClusterVersion{}) {
-		if version.IsActive(clusterversion.VersionEmptyArraysInInvertedIndexes) {
+		if version.IsActive(clusterversion.EmptyArraysInInvertedIndexes) {
 			indexEncodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
 		}
 	}
@@ -1289,6 +1404,10 @@ func NewTableDesc(
 				n.Defs = append(n.Defs, checkConstraint)
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
+			if d.IsVirtual() {
+				return nil, unimplemented.NewWithIssue(57608, "virtual computed columns")
+			}
+
 			col, idx, expr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
 			if err != nil {
 				return nil, err
@@ -1458,9 +1577,8 @@ func NewTableDesc(
 			}
 		case *tree.UniqueConstraintTableDef:
 			if d.WithoutIndex {
-				return nil, pgerror.New(pgcode.FeatureNotSupported,
-					"unique constraints without an index are not yet supported",
-				)
+				// We will add the unique constraint below.
+				break
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
@@ -1636,9 +1754,73 @@ func NewTableDesc(
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
-			// Check after all ResolveFK calls.
+			if d.Unique.WithoutIndex {
+				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
+					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+						"version %v must be finalized to use UNIQUE WITHOUT INDEX",
+						clusterversion.UniqueWithoutIndexConstraints)
+				}
+				if !sessionData.EnableUniqueWithoutIndexConstraints {
+					return nil, pgerror.New(pgcode.FeatureNotSupported,
+						"unique constraints without an index are not yet supported",
+					)
+				}
+				// Add a unique constraint.
+				if err := ResolveUniqueWithoutIndexConstraint(
+					ctx, &desc, string(d.Unique.ConstraintName), []string{string(d.Name)}, NewTable,
+					tree.ValidationDefault,
+				); err != nil {
+					return nil, err
+				}
+			}
 
-		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef, *tree.LikeTableDef:
+		case *tree.UniqueConstraintTableDef:
+			if d.WithoutIndex {
+				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.UniqueWithoutIndexConstraints) {
+					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+						"version %v must be finalized to use UNIQUE WITHOUT INDEX",
+						clusterversion.UniqueWithoutIndexConstraints)
+				}
+				if !sessionData.EnableUniqueWithoutIndexConstraints {
+					return nil, pgerror.New(pgcode.FeatureNotSupported,
+						"unique constraints without an index are not yet supported",
+					)
+				}
+				if len(d.Storing) > 0 {
+					return nil, pgerror.New(pgcode.FeatureNotSupported,
+						"unique constraints without an index cannot store columns",
+					)
+				}
+				if d.Interleave != nil {
+					return nil, pgerror.New(pgcode.FeatureNotSupported,
+						"interleaved unique constraints without an index are not supported",
+					)
+				}
+				if d.PartitionBy != nil {
+					return nil, pgerror.New(pgcode.FeatureNotSupported,
+						"partitioned unique constraints without an index are not supported",
+					)
+				}
+				if d.Predicate != nil {
+					// TODO(rytaft): It may be necessary to support predicates so that partial
+					// unique indexes will work correctly in multi-region deployments.
+					return nil, pgerror.New(pgcode.FeatureNotSupported,
+						"unique constraints with a predicate but without an index are not supported",
+					)
+				}
+				// Add a unique constraint.
+				colNames := make([]string, len(d.Columns))
+				for i := range colNames {
+					colNames[i] = string(d.Columns[i].Column)
+				}
+				if err := ResolveUniqueWithoutIndexConstraint(
+					ctx, &desc, string(d.Name), colNames, NewTable, tree.ValidationDefault,
+				); err != nil {
+					return nil, err
+				}
+			}
+
+		case *tree.IndexTableDef, *tree.FamilyTableDef, *tree.LikeTableDef:
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
@@ -1705,6 +1887,44 @@ func NewTableDesc(
 		return nil
 	}); err != nil {
 		return nil, err
+	}
+
+	if n.Locality != nil {
+		db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
+		if err != nil {
+			return nil, errors.Wrap(err, "error fetching database descriptor for locality checks")
+		}
+
+		desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+		switch n.Locality.LocalityLevel {
+		case tree.LocalityLevelGlobal:
+			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_Global_{
+				Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+			}
+		case tree.LocalityLevelTable:
+			l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+				RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
+			}
+			if n.Locality.TableRegion != "" {
+				region := descpb.Region(n.Locality.TableRegion)
+				l.RegionalByTable.Region = &region
+			}
+			desc.LocalityConfig.Locality = l
+		case tree.LocalityLevelRow:
+			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+				RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+			}
+		default:
+			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
+		}
+
+		if err := tabledesc.ValidateTableLocalityConfig(
+			n.Table.Table(),
+			desc.LocalityConfig,
+			db,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	return &desc, nil
@@ -1879,6 +2099,23 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				def.Expr, err = parser.ParseExpr(c.Expr)
 				if err != nil {
 					return nil, err
+				}
+				defs = append(defs, &def)
+			}
+			for _, c := range td.UniqueWithoutIndexConstraints {
+				def := tree.UniqueConstraintTableDef{
+					IndexTableDef: tree.IndexTableDef{
+						Name:    tree.Name(c.Name),
+						Columns: make(tree.IndexElemList, 0, len(c.ColumnIDs)),
+					},
+					WithoutIndex: true,
+				}
+				colNames, err := td.NamesForColumnIDs(c.ColumnIDs)
+				if err != nil {
+					return nil, err
+				}
+				for i := range colNames {
+					def.Columns = append(def.Columns, tree.IndexElem{Column: tree.Name(colNames[i])})
 				}
 				defs = append(defs, &def)
 			}

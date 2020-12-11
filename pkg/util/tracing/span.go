@@ -66,17 +66,15 @@ type SpanMeta struct {
 const (
 	// TagPrefix is prefixed to all tags that should be output in SHOW TRACE.
 	TagPrefix = "cockroach."
-	// StatTagPrefix is prefixed to all stats output in Span tags.
-	StatTagPrefix = TagPrefix + "stat."
 )
 
 // SpanStats are stats that can be added to a Span.
 type SpanStats interface {
 	proto.Message
-	// Stats returns the stats that the object represents as a map from stat name
-	// to value to be added to Span tags. The keys will be prefixed with
-	// StatTagPrefix.
-	Stats() map[string]string
+	// StatsTags returns the stats that the object represents as a map of
+	// key/value tags that will be added to the Span tags. The tag keys should
+	// start with TagPrefix.
+	StatsTags() map[string]string
 }
 
 type crdbSpanMu struct {
@@ -153,33 +151,26 @@ type otSpan struct {
 }
 
 // Span is the tracing Span that we use in CockroachDB. Depending on the tracing configuration,
-// it can hold anywhere between zero and three destinations for trace information.
+// it can hold anywhere between zero and three destinations for trace information:
 //
-// The net/trace and opentracing spans are straightforward. If they are
-// set, we forward information to them; and depending on whether they are
-// set, spans descending from a parent will have these created as well.
+// 1. external OpenTracing-compatible trace collector (Jaeger, Zipkin, Lightstep),
+// 2. /debug/requests endpoint (net/trace package); mostly useful for local debugging
+// 3. CRDB-internal trace span (powers SQL session tracing).
 //
-// The CockroachDB-internal Span (crdbSpan) is more complex as it has multiple features:
+// When there is no need to allocate either of these three destinations,
+// a "noop span", i.e. an immutable *Span wrapping the *Tracer, may be
+// returned, to allow starting additional nontrivial Spans from the return
+// value later, when direct access to the tracer may no longer be available.
 //
-// 1. recording: crdbSpan supports "recordings", meaning that it provides a way to extract
-//    the data logged into a trace Span.
-// 2. optimizations for the non-tracing case. If tracing is off and the Span is not required
-//    to support recording (NoRecording), we still want to be able to have a cheap Span
-//    to give to the caller. This is a) because it frees the caller from
-//    distinguishing the tracing and non-tracing cases, and b) because the Span
-//    has the dual purpose of propagating the *Tracer around, which is needed
-//    in case at some point down the line there is a need to create an actual
-//    Span (for example, because a "recordable" child Span is requested).
+// The CockroachDB-internal Span (crdbSpan) is more complex because
+// rather than reporting to some external sink, the caller's "owner"
+// must propagate the trace data back across process boundaries towards
+// the root of the trace span tree; see WithParentAndAutoCollection
+// and WithParentAndManualCollection, respectively.
 //
-//    In these cases, we return a singleton Span that is empty save for the tracer.
-// 3. snowball recording. As a special case of 1), we support a recording mode
-//    (SnowballRecording) which propagates to child spans across RPC boundaries.
-// 4. parent Span recording. To make matters even more complex, there is a single-node
-//    recording option (SingleNodeRecording) in which the parent Span keeps track of
-//    its local children and returns their recording in its own.
-//
-// TODO(tbg): investigate whether the tracer in 2) is really needed.
-// TODO(tbg): simplify the functionality of crdbSpan, which seems overly complex.
+// Additionally, the internal span type also supports turning on, stopping,
+// and restarting its data collection (see Span.StartRecording), and this is
+// used extensively in SQL session tracing.
 type Span struct {
 	tracer *Tracer // never nil
 
@@ -213,14 +204,12 @@ func (s *Span) IsRecording() bool {
 // parent.
 // If separate recording is specified, the child is not registered with the
 // parent. Thus, the parent's recording will not include this child.
-func (s *crdbSpan) enableRecording(
-	parent *crdbSpan, recType RecordingType, separateRecording bool,
-) {
+func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	atomic.StoreInt32(&s.recording, 1)
 	s.mu.recording.recordingType = recType
-	if parent != nil && !separateRecording {
+	if parent != nil {
 		parent.addChild(s)
 	}
 	if recType == SnowballRecording {
@@ -257,7 +246,7 @@ func (s *Span) StartRecording(recType RecordingType) {
 	// If we're already recording (perhaps because the parent was recording when
 	// this Span was created), there's nothing to do.
 	if !s.crdb.isRecording() {
-		s.crdb.enableRecording(nil /* parent */, recType, false /* separateRecording */)
+		s.crdb.enableRecording(nil /* parent */, recType)
 	}
 }
 
@@ -367,7 +356,7 @@ func (s *Span) IsBlackHole() bool {
 // or corresponds to a "no-op" Span. If this is true, any Span
 // derived from this context will be a "black hole Span".
 func (sc *SpanMeta) isNilOrNoop() bool {
-	return sc.recordingType == NoRecording && sc.shadowTracerType == ""
+	return sc == nil || (sc.recordingType == NoRecording && sc.shadowTracerType == "")
 }
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
@@ -378,8 +367,8 @@ func (s *Span) SetSpanStats(stats SpanStats) {
 	}
 	s.crdb.mu.Lock()
 	s.crdb.mu.stats = stats
-	for name, value := range stats.Stats() {
-		s.setTagInner(StatTagPrefix+name, value, true /* locked */)
+	for name, value := range stats.StatsTags() {
+		s.setTagInner(name, value, true /* locked */)
 	}
 	s.crdb.mu.Unlock()
 }
@@ -406,7 +395,7 @@ func (s *Span) Finish() {
 
 // Meta returns the information which needs to be propagated across
 // process boundaries in order to derive child spans from this Span.
-// This may return nil, which is a valid input to `WithRemoteParent`,
+// This may return nil, which is a valid input to `WithParentAndManualCollection`,
 // if the Span has been optimized out.
 func (s *Span) Meta() *SpanMeta {
 	var traceID uint64
@@ -438,6 +427,14 @@ func (s *Span) Meta() *SpanMeta {
 		shadowCtx = s.ot.shadowSpan.Context()
 	}
 
+	if traceID == 0 &&
+		spanID == 0 &&
+		shadowTrTyp == "" &&
+		shadowCtx == nil &&
+		recordingType == 0 &&
+		baggage == nil {
+		return nil
+	}
 	return &SpanMeta{
 		traceID:          traceID,
 		spanID:           spanID,

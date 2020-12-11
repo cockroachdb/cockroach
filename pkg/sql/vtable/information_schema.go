@@ -101,6 +101,22 @@ CREATE TABLE information_schema.applicable_roles (
 	IS_GRANTABLE STRING NOT NULL
 )`
 
+// InformationSchemaCharacterSets describes the schema of the
+// information_schema.character_sets table.
+// Postgres: https://www.postgresql.org/docs/9.5/infoschema-character-sets.html
+// MySQL:	 https://dev.mysql.com/doc/refman/5.7/en/information-schema-character-sets-table.html
+const InformationSchemaCharacterSets = `
+CREATE TABLE information_schema.character_sets (
+    CHARACTER_SET_CATALOG   STRING,
+    CHARACTER_SET_SCHEMA    STRING,
+    CHARACTER_SET_NAME      STRING NOT NULL,
+    CHARACTER_REPERTOIRE    STRING NOT NULL,
+    FORM_OF_USE             STRING NOT NULL,
+    DEFAULT_COLLATE_CATALOG STRING,
+    DEFAULT_COLLATE_SCHEMA  STRING,
+    DEFAULT_COLLATE_NAME    STRING
+)`
+
 // InformationSchemaCheckConstraints describes the schema of the
 // information_schema.check_constraints table.
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-check-constraints.html
@@ -152,4 +168,30 @@ CREATE TABLE information_schema.tables (
 	TABLE_TYPE         STRING NOT NULL,
 	IS_INSERTABLE_INTO STRING NOT NULL,
 	VERSION            INT
+)`
+
+// InformationSchemaCollationCharacterSetApplicability describes the schema of
+// the information_schema.collation_character_set_applicability table.
+// Postgres: https://www.postgresql.org/docs/current/infoschema-collation-character-set-applicab.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.0/en/information-schema-collation-character-set-applicability-table.html
+const InformationSchemaCollationCharacterSetApplicability = `
+CREATE TABLE information_schema.collation_character_set_applicability (
+	COLLATION_CATALOG     STRING NOT NULL,
+	COLLATION_SCHEMA      STRING NOT NULL,
+	COLLATION_NAME        STRING NOT NULL,
+	CHARACTER_SET_CATALOG STRING,
+	CHARACTER_SET_SCHEMA  STRING,
+	CHARACTER_SET_NAME    STRING NOT NULL
+)`
+
+// InformationSchemaCollations describes the schema of the
+// information_schema.collations table.
+// Postgres: https://www.postgresql.org/docs/current/infoschema-collations.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html
+const InformationSchemaCollations = `
+CREATE TABLE information_schema.collations (
+	COLLATION_CATALOG STRING NOT NULL,
+	COLLATION_SCHEMA  STRING NOT NULL,
+	COLLATION_NAME    STRING NOT NULL,
+	PAD_ATTRIBUTE     STRING NOT NULL
 )`

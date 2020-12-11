@@ -15,7 +15,7 @@ import {getMatchParamByName} from "src/util/query";
 import {appAttr} from "src/util/constants";
 import {makeSessionsColumns, SessionInfo, SessionsSortedTable} from "src/views/sessions/sessionsTable";
 import Helmet from "react-helmet";
-import Loading from "src/views/shared/components/loading";
+import { Loading } from "@cockroachlabs/admin-ui-components";
 import {Pick} from "src/util/pick";
 import {RouteComponentProps, withRouter} from "react-router-dom";
 import {connect} from "react-redux";
@@ -30,8 +30,11 @@ import {createSelector} from "reselect";
 import {SessionsResponseMessage} from "src/util/api";
 import TerminateSessionModal, {TerminateSessionModalRef} from "src/views/sessions/terminateSessionModal";
 import TerminateQueryModal, {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
-import {showSessions} from "src/util/docs";
+import { sessionsTable } from "src/util/docs";
 import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/admin-ui-components";
+import emptyTableResultsIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
+import { Anchor } from "src/components";
+import { EmptyTable } from "@cockroachlabs/admin-ui-components";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 const cx = classNames.bind(styles);
@@ -159,14 +162,21 @@ export class SessionsPage extends React.Component<SessionsPageProps, SessionsPag
             columns={
               makeSessionsColumns(this.terminateSessionRef, this.terminateQueryRef)
             }
-            empty={sessionsData.length === 0}
-            emptyProps={{
-              title: "There are no currently running sessions.",
-              description: "Sessions shows you what statements and transactions the currently active sessions are running.",
-              label: "Learn more",
-              // TODO(jordan): point this to a more appropriate page.
-              buttonHref: showSessions,
-            }}
+            renderNoResult={
+              <EmptyTable
+                title="No sessions are currently running"
+                icon={emptyTableResultsIcon}
+                message="Sessions show you which statements and transactions are running for the active session."
+                footer={
+                  <Anchor
+                    href={sessionsTable}
+                    target="_blank"
+                  >
+                    Learn more about sessions
+                  </Anchor>
+                }
+              />
+            }
             sortSetting={this.state.sortSetting}
             onChangeSortSetting={this.changeSortSetting}
             pagination={pagination}

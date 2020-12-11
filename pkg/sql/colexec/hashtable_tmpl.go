@@ -52,7 +52,7 @@ const _RIGHT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
 const _RIGHT_TYPE_WIDTH = 0
 
 // _ASSIGN_NE is the template equality function for assigning the first input
-// to the result of the the second input != the third input.
+// to the result of the second input != the third input.
 func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }

@@ -51,30 +51,22 @@ func newSumOrderedAggAlloc(
 
 type sumInt16OrderedAgg struct {
 	orderedAggregateFuncBase
-	scratch struct {
-		// curAgg holds the running total, so we can index into the slice once per
-		// group, instead of on each iteration.
-		curAgg apd.Decimal
-		// vec points to the output vector we are updating.
-		vec []apd.Decimal
-		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-		// for the group that is currently being aggregated.
-		foundNonNullForCurrentGroup bool
-	}
-	overloadHelper execgen.OverloadHelper
+	// curAgg holds the running total, so we can index into the slice once per
+	// group, instead of on each iteration.
+	curAgg apd.Decimal
+	// col points to the output vector we are updating.
+	col []apd.Decimal
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+	overloadHelper              execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &sumInt16OrderedAgg{}
 
-func (a *sumInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
-	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumInt16OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
+func (a *sumInt16OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Decimal()
 }
 
 func (a *sumInt16OrderedAgg) Compute(
@@ -83,146 +75,169 @@ func (a *sumInt16OrderedAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
 
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
+							a.foundNonNullForCurrentGroup = false
 						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for i := range col {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		} else {
-			for i := range col {
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
 
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
+							a.foundNonNullForCurrentGroup = false
 						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		}
-	} else {
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
-
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
-
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
+	},
+	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -234,10 +249,10 @@ func (a *sumInt16OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.scratch.foundNonNullForCurrentGroup {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.scratch.vec[outputIdx] = a.scratch.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -257,36 +272,29 @@ func (a *sumInt16OrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]sumInt16OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
 
 type sumInt32OrderedAgg struct {
 	orderedAggregateFuncBase
-	scratch struct {
-		// curAgg holds the running total, so we can index into the slice once per
-		// group, instead of on each iteration.
-		curAgg apd.Decimal
-		// vec points to the output vector we are updating.
-		vec []apd.Decimal
-		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-		// for the group that is currently being aggregated.
-		foundNonNullForCurrentGroup bool
-	}
-	overloadHelper execgen.OverloadHelper
+	// curAgg holds the running total, so we can index into the slice once per
+	// group, instead of on each iteration.
+	curAgg apd.Decimal
+	// col points to the output vector we are updating.
+	col []apd.Decimal
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+	overloadHelper              execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &sumInt32OrderedAgg{}
 
-func (a *sumInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
-	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumInt32OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
+func (a *sumInt32OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Decimal()
 }
 
 func (a *sumInt32OrderedAgg) Compute(
@@ -295,146 +303,169 @@ func (a *sumInt32OrderedAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
 
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
+							a.foundNonNullForCurrentGroup = false
 						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for i := range col {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		} else {
-			for i := range col {
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
 
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
+							a.foundNonNullForCurrentGroup = false
 						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		}
-	} else {
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
-
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
-
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
+	},
+	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -446,10 +477,10 @@ func (a *sumInt32OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.scratch.foundNonNullForCurrentGroup {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.scratch.vec[outputIdx] = a.scratch.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -469,36 +500,29 @@ func (a *sumInt32OrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]sumInt32OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
 
 type sumInt64OrderedAgg struct {
 	orderedAggregateFuncBase
-	scratch struct {
-		// curAgg holds the running total, so we can index into the slice once per
-		// group, instead of on each iteration.
-		curAgg apd.Decimal
-		// vec points to the output vector we are updating.
-		vec []apd.Decimal
-		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-		// for the group that is currently being aggregated.
-		foundNonNullForCurrentGroup bool
-	}
-	overloadHelper execgen.OverloadHelper
+	// curAgg holds the running total, so we can index into the slice once per
+	// group, instead of on each iteration.
+	curAgg apd.Decimal
+	// col points to the output vector we are updating.
+	col []apd.Decimal
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+	overloadHelper              execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &sumInt64OrderedAgg{}
 
-func (a *sumInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
-	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumInt64OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
+func (a *sumInt64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Decimal()
 }
 
 func (a *sumInt64OrderedAgg) Compute(
@@ -507,146 +531,169 @@ func (a *sumInt64OrderedAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
 
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
+							a.foundNonNullForCurrentGroup = false
 						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for i := range col {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		} else {
-			for i := range col {
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
 
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
+							a.foundNonNullForCurrentGroup = false
 						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+
+						{
+
+							tmpDec := &_overloadHelper.TmpDec1
+							tmpDec.SetInt64(int64(col[i]))
+							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		}
-	} else {
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
-
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
-
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
+	},
+	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -658,10 +705,10 @@ func (a *sumInt64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.scratch.foundNonNullForCurrentGroup {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.scratch.vec[outputIdx] = a.scratch.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -681,176 +728,192 @@ func (a *sumInt64OrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]sumInt64OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
 
 type sumDecimalOrderedAgg struct {
 	orderedAggregateFuncBase
-	scratch struct {
-		// curAgg holds the running total, so we can index into the slice once per
-		// group, instead of on each iteration.
-		curAgg apd.Decimal
-		// vec points to the output vector we are updating.
-		vec []apd.Decimal
-		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-		// for the group that is currently being aggregated.
-		foundNonNullForCurrentGroup bool
-	}
+	// curAgg holds the running total, so we can index into the slice once per
+	// group, instead of on each iteration.
+	curAgg apd.Decimal
+	// col points to the output vector we are updating.
+	col []apd.Decimal
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &sumDecimalOrderedAgg{}
 
-func (a *sumDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
-	a.scratch.vec = vec.Decimal()
-	a.Reset()
-}
-
-func (a *sumDecimalOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
+func (a *sumDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Decimal()
 }
 
 func (a *sumDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
 
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						_, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, &col[i])
-						if err != nil {
-							colexecerror.ExpectedError(err)
+							a.foundNonNullForCurrentGroup = false
 						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &col[i])
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for i := range col {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+
+						{
+
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &col[i])
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		} else {
-			for i := range col {
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
 
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						_, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, &col[i])
-						if err != nil {
-							colexecerror.ExpectedError(err)
+							a.foundNonNullForCurrentGroup = false
 						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &col[i])
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroDecimalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+
+						{
+
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &col[i])
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		}
-	} else {
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
-
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						_, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, &col[i])
-						if err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroDecimalValue
-
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						_, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, &col[i])
-						if err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
+	},
+	)
+	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -862,10 +925,10 @@ func (a *sumDecimalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.scratch.foundNonNullForCurrentGroup {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.scratch.vec[outputIdx] = a.scratch.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -885,164 +948,180 @@ func (a *sumDecimalOrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]sumDecimalOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
 
 type sumFloat64OrderedAgg struct {
 	orderedAggregateFuncBase
-	scratch struct {
-		// curAgg holds the running total, so we can index into the slice once per
-		// group, instead of on each iteration.
-		curAgg float64
-		// vec points to the output vector we are updating.
-		vec []float64
-		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-		// for the group that is currently being aggregated.
-		foundNonNullForCurrentGroup bool
-	}
+	// curAgg holds the running total, so we can index into the slice once per
+	// group, instead of on each iteration.
+	curAgg float64
+	// col points to the output vector we are updating.
+	col []float64
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &sumFloat64OrderedAgg{}
 
-func (a *sumFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
-	a.scratch.vec = vec.Float64()
-	a.Reset()
-}
-
-func (a *sumFloat64OrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
+func (a *sumFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Float64()
 }
 
 func (a *sumFloat64OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroFloat64Value
+
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
 					}
-					a.curIdx++
-					a.scratch.curAgg = zeroFloat64Value
 
-					a.scratch.foundNonNullForCurrentGroup = false
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							a.curAgg = float64(a.curAgg) + float64(col[i])
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
+			} else {
+				for i := range col {
 
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroFloat64Value
 
-					{
-
-						a.scratch.curAgg = float64(a.scratch.curAgg) + float64(col[i])
+						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			for i := range col {
+					var isNull bool
+					isNull = false
+					if !isNull {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
+						{
+
+							a.curAgg = float64(a.curAgg) + float64(col[i])
+						}
+
+						a.foundNonNullForCurrentGroup = true
 					}
-					a.curIdx++
-					a.scratch.curAgg = zeroFloat64Value
-
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						a.scratch.curAgg = float64(a.scratch.curAgg) + float64(col[i])
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroFloat64Value
-
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						a.scratch.curAgg = float64(a.scratch.curAgg) + float64(col[i])
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
 				}
 			}
 		} else {
-			for _, i := range sel {
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroFloat64Value
+
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
 					}
-					a.curIdx++
-					a.scratch.curAgg = zeroFloat64Value
 
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+
+						{
+
+							a.curAgg = float64(a.curAgg) + float64(col[i])
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
+			} else {
+				for _, i := range sel {
 
-				var isNull bool
-				isNull = false
-				if !isNull {
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroFloat64Value
 
-					{
-
-						a.scratch.curAgg = float64(a.scratch.curAgg) + float64(col[i])
+						}
+						a.isFirstGroup = false
 					}
 
-					a.scratch.foundNonNullForCurrentGroup = true
+					var isNull bool
+					isNull = false
+					if !isNull {
+
+						{
+
+							a.curAgg = float64(a.curAgg) + float64(col[i])
+						}
+
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		}
+	},
+	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -1054,10 +1133,10 @@ func (a *sumFloat64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.scratch.foundNonNullForCurrentGroup {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.scratch.vec[outputIdx] = a.scratch.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -1077,144 +1156,160 @@ func (a *sumFloat64OrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]sumFloat64OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
 
 type sumIntervalOrderedAgg struct {
 	orderedAggregateFuncBase
-	scratch struct {
-		// curAgg holds the running total, so we can index into the slice once per
-		// group, instead of on each iteration.
-		curAgg duration.Duration
-		// vec points to the output vector we are updating.
-		vec []duration.Duration
-		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-		// for the group that is currently being aggregated.
-		foundNonNullForCurrentGroup bool
-	}
+	// curAgg holds the running total, so we can index into the slice once per
+	// group, instead of on each iteration.
+	curAgg duration.Duration
+	// col points to the output vector we are updating.
+	col []duration.Duration
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &sumIntervalOrderedAgg{}
 
-func (a *sumIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.orderedAggregateFuncBase.Init(groups, vec)
-	a.scratch.vec = vec.Interval()
-	a.Reset()
-}
-
-func (a *sumIntervalOrderedAgg) Reset() {
-	a.orderedAggregateFuncBase.Reset()
-	a.scratch.foundNonNullForCurrentGroup = false
+func (a *sumIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Interval()
 }
 
 func (a *sumIntervalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
-	groups := a.groups
-	if sel == nil {
-		_ = groups[inputLen-1]
-		col = col[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for i := range col {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		groups := a.groups
+		if sel == nil {
+			_ = groups[inputLen-1]
+			col = col[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for i := range col {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroIntervalValue
+
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
 					}
-					a.curIdx++
-					a.scratch.curAgg = zeroIntervalValue
 
-					a.scratch.foundNonNullForCurrentGroup = false
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg.Add(col[i])
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
+			} else {
+				for i := range col {
 
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.scratch.curAgg = a.scratch.curAgg.Add(col[i])
-					a.scratch.foundNonNullForCurrentGroup = true
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroIntervalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg.Add(col[i])
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		} else {
-			for i := range col {
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroIntervalValue
+
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
 					}
-					a.curIdx++
-					a.scratch.curAgg = zeroIntervalValue
 
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = a.curAgg.Add(col[i])
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
+			} else {
+				for _, i := range sel {
 
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.scratch.curAgg = a.scratch.curAgg.Add(col[i])
-					a.scratch.foundNonNullForCurrentGroup = true
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col[a.curIdx] = a.curAgg
+							}
+							a.curIdx++
+							a.curAgg = zeroIntervalValue
+
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = a.curAgg.Add(col[i])
+						a.foundNonNullForCurrentGroup = true
+					}
 				}
 			}
 		}
-	} else {
-		sel = sel[:inputLen]
-		if nulls.MaybeHasNulls() {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroIntervalValue
-
-					a.scratch.foundNonNullForCurrentGroup = false
-				}
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.scratch.curAgg = a.scratch.curAgg.Add(col[i])
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			for _, i := range sel {
-
-				if groups[i] {
-					// If we encounter a new group, and we haven't found any non-nulls for the
-					// current group, the output for this group should be null.
-					if !a.scratch.foundNonNullForCurrentGroup {
-						a.nulls.SetNull(a.curIdx)
-					} else {
-						a.scratch.vec[a.curIdx] = a.scratch.curAgg
-					}
-					a.curIdx++
-					a.scratch.curAgg = zeroIntervalValue
-
-				}
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.scratch.curAgg = a.scratch.curAgg.Add(col[i])
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
+	},
+	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -1226,10 +1321,10 @@ func (a *sumIntervalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.scratch.foundNonNullForCurrentGroup {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.scratch.vec[outputIdx] = a.scratch.curAgg
+		a.col[outputIdx] = a.curAgg
 	}
 }
 
@@ -1249,6 +1344,7 @@ func (a *sumIntervalOrderedAggAlloc) newAggFunc() AggregateFunc {
 		a.aggFuncs = make([]sumIntervalOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }

@@ -19,7 +19,11 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/lex"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+)
 
 // ShowVar represents a SHOW statement.
 type ShowVar struct {
@@ -148,7 +152,9 @@ func (node *ShowDatabases) Format(ctx *FmtCtx) {
 }
 
 // ShowEnums represents a SHOW ENUMS statement.
-type ShowEnums struct{}
+type ShowEnums struct {
+	ObjectNamePrefix
+}
 
 // Format implements the NodeFormatter interface.
 func (node *ShowEnums) Format(ctx *FmtCtx) {
@@ -278,19 +284,54 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowSurvivalGoal represents a SHOW REGIONS statement
+type ShowSurvivalGoal struct {
+	DatabaseName Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowSurvivalGoal) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW SURVIVAL GOAL FROM DATABASE")
+	if node.DatabaseName != "" {
+		ctx.WriteString(" ")
+		node.DatabaseName.Format(ctx)
+	}
+}
+
+// ShowRegionsFrom denotes what kind of SHOW REGIONS command is being used.
+type ShowRegionsFrom int
+
+const (
+	// ShowRegionsFromCluster represents SHOW REGIONS FROM CLUSTER.
+	ShowRegionsFromCluster ShowRegionsFrom = iota
+	// ShowRegionsFromDatabase represents SHOW REGIONS FROM DATABASE.
+	ShowRegionsFromDatabase
+	// ShowRegionsFromAllDatabases represents SHOW REGIONS FROM ALL DATABASES.
+	ShowRegionsFromAllDatabases
+)
+
 // ShowRegions represents a SHOW REGIONS statement
 type ShowRegions struct {
-	Database Name
+	ShowRegionsFrom ShowRegionsFrom
+	DatabaseName    Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRegions) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW REGIONS ")
-	if node.Database != "" {
-		ctx.WriteString("FROM DATABASE ")
-		node.Database.Format(ctx)
-	} else {
+	switch node.ShowRegionsFrom {
+	case ShowRegionsFromAllDatabases:
+		ctx.WriteString("FROM ALL DATABASES")
+	case ShowRegionsFromDatabase:
+		ctx.WriteString("FROM DATABASE")
+		if node.DatabaseName != "" {
+			ctx.WriteString(" ")
+			node.DatabaseName.Format(ctx)
+		}
+	case ShowRegionsFromCluster:
 		ctx.WriteString("FROM CLUSTER")
+	default:
+		panic(fmt.Sprintf("unknown ShowRegionsFrom: %v", node.ShowRegionsFrom))
 	}
 }
 

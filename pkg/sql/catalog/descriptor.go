@@ -82,6 +82,11 @@ type DatabaseDescriptor interface {
 	// schemas.
 	tree.SchemaMeta
 	DatabaseDesc() *descpb.DatabaseDescriptor
+
+	Regions() (descpb.Regions, error)
+	IsMultiRegion() bool
+	PrimaryRegion() (descpb.Region, error)
+	Validate() error
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
@@ -168,6 +173,7 @@ type TableDescriptor interface {
 	GetChecks() []*descpb.TableDescriptor_CheckConstraint
 	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
 	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
+	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
 	WritableColumns() []descpb.ColumnDescriptor
@@ -182,6 +188,8 @@ type TypeDescriptor interface {
 	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	HasPendingSchemaChanges() bool
 	GetIDClosure() map[descpb.ID]struct{}
+
+	PrimaryRegion() (descpb.Region, error)
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type

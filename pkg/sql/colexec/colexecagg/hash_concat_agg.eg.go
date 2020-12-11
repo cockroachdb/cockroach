@@ -25,29 +25,18 @@ func newConcatHashAggAlloc(allocator *colmem.Allocator, allocSize int64) aggrega
 
 type concatHashAgg struct {
 	hashAggregateFuncBase
-	allocator *colmem.Allocator
 	// curAgg holds the running total.
 	curAgg []byte
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
 }
 
-func (a *concatHashAgg) Init(groups []bool, vec coldata.Vec) {
-	a.hashAggregateFuncBase.Init(groups, vec)
-	a.vec = vec
+func (a *concatHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bytes()
-	a.Reset()
-}
-
-func (a *concatHashAgg) Reset() {
-	a.hashAggregateFuncBase.Reset()
-	a.foundNonNullForCurrentGroup = false
-	a.curAgg = zeroBytesValue
 }
 
 func (a *concatHashAgg) Compute(
@@ -56,37 +45,37 @@ func (a *concatHashAgg) Compute(
 	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
-	a.allocator.PerformOperation(
-		[]coldata.Vec{a.vec},
-		func() {
-			{
-				sel = sel[:inputLen]
-				if nulls.MaybeHasNulls() {
-					for _, i := range sel {
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
 
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							a.curAgg = append(a.curAgg, col.Get(i)...)
-							a.foundNonNullForCurrentGroup = true
-						}
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						a.curAgg = append(a.curAgg, col.Get(i)...)
+						a.foundNonNullForCurrentGroup = true
 					}
-				} else {
-					for _, i := range sel {
+				}
+			} else {
+				for _, i := range sel {
 
-						var isNull bool
-						isNull = false
-						if !isNull {
-							a.curAgg = append(a.curAgg, col.Get(i)...)
-							a.foundNonNullForCurrentGroup = true
-						}
+					var isNull bool
+					isNull = false
+					if !isNull {
+						a.curAgg = append(a.curAgg, col.Get(i)...)
+						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
-		},
+		}
+	},
 	)
 	newCurAggSize := len(a.curAgg)
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *concatHashAgg) Flush(outputIdx int) {

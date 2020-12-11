@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -33,9 +34,9 @@ const escapeMark = "?"
 // when redactable logs are enabled, and no mark indicator when they
 // are not.
 func TestRedactedLogOutput(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	setFlags()
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
 	defer capture()()
 
 	defer TestingSetRedactable(false)()
@@ -125,6 +126,8 @@ func TestRedactTags(t *testing.T) {
 }
 
 func TestRedactedDecodeFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	testData := []struct {
 		redactMode    EditSensitiveData
 		expRedactable bool
@@ -133,6 +136,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 		{WithMarkedSensitiveData, true, "marker: this is safe, stray marks ??, ‹this is not safe›"},
 		{WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ??, this is not safe"},
 		{WithoutSensitiveData, true, "marker: this is safe, stray marks ??, ‹×›"},
+		{WithoutSensitiveDataNorMarkers, false, "marker: this is safe, stray marks ??, ×"},
 	}
 
 	for _, tc := range testData {
@@ -142,8 +146,6 @@ func TestRedactedDecodeFile(t *testing.T) {
 			// The log file go to a different directory in each sub-test.
 			s := ScopeWithoutShowLogs(t)
 			defer s.Close(t)
-			setFlags()
-			defer TestingSetRedactable(true)()
 
 			// Force file re-initialization.
 			s.Rotate(t)
@@ -190,5 +192,20 @@ func TestRedactedDecodeFile(t *testing.T) {
 				t.Error("expected marked message in log, found none")
 			}
 		})
+	}
+}
+
+// TestDefaultRedactable checks that redaction markers are enabled by
+// default.
+func TestDefaultRedactable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
+	// Check redaction markers in the output.
+	defer capture()()
+	Infof(context.Background(), "safe %s", "unsafe")
+
+	if !contains("safe "+startRedactable+"unsafe"+endRedactable, t) {
+		t.Errorf("expected marked data, got %q", contents())
 	}
 }

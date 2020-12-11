@@ -567,6 +567,15 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 func (expr *CollateExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
+	if strings.ToLower(expr.Locale) == DefaultCollationTag {
+		return nil, errors.WithHint(
+			unimplemented.NewWithIssuef(
+				57255,
+				"DEFAULT collations are not supported",
+			),
+			`omit the 'COLLATE "default"' clause in your statement`,
+		)
+	}
 	_, err := language.Parse(expr.Locale)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,

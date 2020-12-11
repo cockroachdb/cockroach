@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -100,11 +100,18 @@ const (
 )
 
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
-	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
+	// For small machines, we scale the scheduler concurrency by the number of
+	// CPUs. 8*runtime.NumCPU() was determined in 9a68241 (April 2017) as the
+	// optimal concurrency level on 8 CPU machines. For larger machines, we've
+	// seen (#56851) that this scaling curve can be too aggressive and lead to
+	// too much contention in the Raft scheduler, so we cap the concurrency
+	// level at 96.
+	//
+	// As of November 2020, this default value could be re-tuned.
+	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.NumCPU(), 96))
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
-	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60,
-)
+	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterPublicByteSizeSetting(
@@ -651,7 +658,7 @@ type StoreConfig struct {
 	Transport               *RaftTransport
 	NodeDialer              *nodedialer.Dialer
 	RPCContext              *rpc.Context
-	RangeDescriptorCache    kvbase.RangeDescriptorCache
+	RangeDescriptorCache    *rangecache.RangeCache
 
 	ClosedTimestamp *container.Container
 
@@ -1128,23 +1135,21 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 
 					if needsLeaseTransfer {
 						desc, zone := r.DescAndZone()
-						leaseTransferred, err := s.replicateQueue.findTargetAndTransferLease(
+						transferStatus, err := s.replicateQueue.shedLease(
 							ctx,
 							r,
 							desc,
 							zone,
 							transferLeaseOptions{},
 						)
-						if log.V(1) && !leaseTransferred {
-							// Note that a nil error means that there were no suitable
-							// candidates.
-							log.Errorf(
-								ctx,
-								"did not transfer lease %s for replica %s when draining: %v",
-								drainingLease,
-								desc,
-								err,
-							)
+						if transferStatus != transferOK {
+							if err != nil {
+								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
+									drainingLease, desc, err)
+							} else {
+								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
+									drainingLease, desc, transferStatus)
+							}
 						}
 					}
 				}); err != nil {
@@ -1415,6 +1420,12 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Create the intent resolver.
+	var intentResolverRangeCache intentresolver.RangeCache
+	rngCache := s.cfg.RangeDescriptorCache
+	if s.cfg.RangeDescriptorCache != nil {
+		intentResolverRangeCache = rngCache
+	}
+
 	s.intentResolver = intentresolver.New(intentresolver.Config{
 		Clock:                s.cfg.Clock,
 		DB:                   s.db,
@@ -1422,7 +1433,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		TaskLimit:            s.cfg.IntentResolverTaskLimit,
 		AmbientCtx:           s.cfg.AmbientCtx,
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
-		RangeDescriptorCache: s.cfg.RangeDescriptorCache,
+		RangeDescriptorCache: intentResolverRangeCache,
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 
@@ -2766,7 +2777,7 @@ func WriteClusterVersion(
 	return storage.MVCCPutProto(ctx, writer, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
 }
 
-// ReadClusterVersion reads the the cluster version from the store-local version
+// ReadClusterVersion reads the cluster version from the store-local version
 // key. Returns an empty version if the key is not found.
 func ReadClusterVersion(
 	ctx context.Context, reader storage.Reader,
@@ -2779,4 +2790,11 @@ func ReadClusterVersion(
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

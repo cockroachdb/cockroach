@@ -446,6 +446,7 @@ func TestLint(t *testing.T) {
 					":!ccl/workloadccl/fixture_test.go",
 					":!internal/gopath/gopath.go",
 					":!cmd",
+					":!util/cgroups/cgroups.go",
 					":!nightly",
 					":!testutils/lint",
 					":!util/envutil/env.go",
@@ -1233,8 +1234,9 @@ func TestLint(t *testing.T) {
 
 		ignoredRules := []string{
 			"licence",
-			"mitre",   // PostGIS commands spell these as mitre.
-			"analyse", // required by SQL grammar
+			"mitre",     // PostGIS commands spell these as mitre.
+			"analyse",   // required by SQL grammar
+			"seperator", // pkg/ui depends on 3rd party package (rc-calendar) with spelling
 		}
 
 		if err := stream.ForEach(stream.Sequence(
@@ -1246,6 +1248,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^geo/geoprojbase/projections.go$`),
 			stream.GrepNot(`^sql/logictest/testdata/logic_test/pg_extension$`),
 			stream.GrepNot(`^sql/opt/testutils/opttester/testfixtures/.*`),
+			stream.GrepNot(`^util/timeutil/lowercase_timezones.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkgDir, s)
 			}),
@@ -1453,7 +1456,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/util/log: github\.com/pkg/errors$`),
 			stream.GrepNot(`cockroach/pkg/(base|release|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
-
+			stream.GrepNot(`cockroachdb/cockroach/pkg/sql/lex/allkeywords: log$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
 			pkgStr := strings.Split(s, ": ")
@@ -1762,6 +1765,7 @@ func TestLint(t *testing.T) {
 			"sql/col*",
 			":!sql/colexec/operator.go",
 			":!sql/colmem/allocator.go",
+			":!sql/colmem/allocator_test.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1973,20 +1977,11 @@ func TestLint(t *testing.T) {
 			// that function to a different file to limit the scope
 			// of the exception.
 			stream.GrepNot(`pkg/sql/pgwire/pgerror/pgcode\.go:.*invalid direct cast on error object`),
-			// The crash reporting code uses its own custom cause recursion
-			// algorithm and thus cannot use errors.Is.  However, it's also
-			// due an overhaul - it's really redundant with the error
-			// redaction code already present in the errors library.
-			//
-			// TODO(knz): remove the code in log and replace by the errors'
-			// own redact code.
-			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct cast on error object`),
-			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct comparison of error object`),
 			// The logging package translates log.Fatal calls into errors.
 			// We can't use the regular exception mechanism via functions.go
 			// because addStructured takes its positional argument as []interface{},
 			// instead of ...interface{}.
-			stream.GrepNot(`pkg/util/log/structured\.go:\d+:\d+: addStructured\(\): format argument is not a constant expression`),
+			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepth\(\): format argument is not a constant expression`),
 			// roachtest is not collecting redactable logs so we don't care
 			// about printf hygiene there as much.
 			stream.GrepNot(`pkg/cmd/roachtest/log\.go:.*format argument is not a constant expression`),

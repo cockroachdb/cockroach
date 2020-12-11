@@ -595,6 +595,8 @@ type optTable struct {
 	// one family.
 	families []optFamily
 
+	uniqueConstraints []optUniqueConstraint
+
 	outboundFKs []optForeignKeyConstraint
 	inboundFKs  []optForeignKeyConstraint
 
@@ -748,6 +750,18 @@ func newOptTable(
 		} else {
 			ot.indexes[i].init(ot, i, idxDesc, idxZone, -1 /* virtualColOrd */)
 		}
+	}
+
+	ot.uniqueConstraints = make([]optUniqueConstraint, 0, len(ot.desc.UniqueWithoutIndexConstraints))
+	for i := range ot.desc.UniqueWithoutIndexConstraints {
+		u := &ot.desc.UniqueWithoutIndexConstraints[i]
+		ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+			name:         u.Name,
+			table:        ot.ID(),
+			columns:      u.ColumnIDs,
+			withoutIndex: true,
+			validity:     u.Validity,
+		})
 	}
 
 	for i := range ot.desc.OutboundFKs {
@@ -1439,6 +1453,58 @@ func (oi *optFamily) Table() cat.Table {
 	return oi.tab
 }
 
+// optUniqueConstraint implements cat.UniqueConstraint and represents a
+// unique constraint.
+type optUniqueConstraint struct {
+	name string
+
+	table   cat.StableID
+	columns []descpb.ColumnID
+
+	withoutIndex bool
+	validity     descpb.ConstraintValidity
+}
+
+var _ cat.UniqueConstraint = &optUniqueConstraint{}
+
+// Name is part of the cat.UniqueConstraint interface.
+func (u *optUniqueConstraint) Name() string {
+	return u.name
+}
+
+// TableID is part of the cat.UniqueConstraint interface.
+func (u *optUniqueConstraint) TableID() cat.StableID {
+	return u.table
+}
+
+// ColumnCount is part of the cat.UniqueConstraint interface.
+func (u *optUniqueConstraint) ColumnCount() int {
+	return len(u.columns)
+}
+
+// ColumnOrdinal is part of the cat.UniqueConstraint interface.
+func (u *optUniqueConstraint) ColumnOrdinal(tab cat.Table, i int) int {
+	if tab.ID() != u.table {
+		panic(errors.AssertionFailedf(
+			"invalid table %d passed to ColumnOrdinal (expected %d)",
+			tab.ID(), u.table,
+		))
+	}
+	optTab := tab.(*optTable)
+	ord, _ := optTab.lookupColumnOrdinal(u.columns[i])
+	return ord
+}
+
+// WithoutIndex is part of the cat.UniqueConstraint interface.
+func (u *optUniqueConstraint) WithoutIndex() bool {
+	return u.withoutIndex
+}
+
+// Validated is part of the cat.UniqueConstraint interface.
+func (u *optUniqueConstraint) Validated() bool {
+	return u.validity == descpb.ConstraintValidity_Validated
+}
+
 // optForeignKeyConstraint implements cat.ForeignKeyConstraint and represents a
 // foreign key relationship. Both the origin and the referenced table store the
 // same optForeignKeyConstraint (as an outbound and inbound reference,
@@ -1661,7 +1727,7 @@ func newOptVirtualTable(
 			panic(errors.AssertionFailedf("virtual indexes with more than 1 col not supported"))
 		}
 
-		// Add 1, since the 0th index will the the primary that we added above.
+		// Add 1, since the 0th index will the primary that we added above.
 		ot.indexes[i+1] = optVirtualIndex{
 			tab:          ot,
 			desc:         idxDesc,

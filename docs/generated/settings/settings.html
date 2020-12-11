@@ -18,6 +18,8 @@
 <tr><td><code>feature.export.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable exports, false to disable; default is true</td></tr>
 <tr><td><code>feature.import.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable imports, false to disable; default is true</td></tr>
 <tr><td><code>feature.restore.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable restore, false to disable; default is true</td></tr>
+<tr><td><code>feature.schema_change.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable schema changes, false to disable; default is true</td></tr>
+<tr><td><code>feature.stats.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true</td></tr>
 <tr><td><code>jobs.retention_time</code></td><td>duration</td><td><code>336h0m0s</code></td><td>the amount of time to retain records for completed jobs before</td></tr>
 <tr><td><code>kv.allocator.load_based_lease_rebalancing.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to enable rebalancing of range leases based on load and latency</td></tr>
 <tr><td><code>kv.allocator.load_based_rebalancing</code></td><td>enumeration</td><td><code>leases and replicas</code></td><td>whether to rebalance based on the distribution of QPS across stores [off = 0, leases = 1, leases and replicas = 2]</td></tr>
@@ -43,12 +45,12 @@
 <tr><td><code>server.consistency_check.max_rate</code></td><td>byte size</td><td><code>8.0 MiB</code></td><td>the rate limit (bytes/sec) to use for consistency checks; used in conjunction with server.consistency_check.interval to control the frequency of consistency checks. Note that setting this too high can negatively impact performance.</td></tr>
 <tr><td><code>server.eventlog.ttl</code></td><td>duration</td><td><code>2160h0m0s</code></td><td>if nonzero, event log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.</td></tr>
 <tr><td><code>server.host_based_authentication.configuration</code></td><td>string</td><td><code></code></td><td>host-based authentication configuration to use during connection authentication</td></tr>
-<tr><td><code>server.oidc_authentication.autologin</code></td><td>boolean</td><td><code>false</code></td><td>if true, logged-out visitors to the Admin UI will be automatically redirected to the OIDC login endpoint (this feature is experimental)</td></tr>
-<tr><td><code>server.oidc_authentication.button_text</code></td><td>string</td><td><code>Login with your OIDC provider</code></td><td>text to show on button on Admin UI login page to login with your OIDC provider (only shown if OIDC is enabled) (this feature is experimental)</td></tr>
+<tr><td><code>server.oidc_authentication.autologin</code></td><td>boolean</td><td><code>false</code></td><td>if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint (this feature is experimental)</td></tr>
+<tr><td><code>server.oidc_authentication.button_text</code></td><td>string</td><td><code>Login with your OIDC provider</code></td><td>text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled) (this feature is experimental)</td></tr>
 <tr><td><code>server.oidc_authentication.claim_json_key</code></td><td>string</td><td><code></code></td><td>sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid) (this feature is experimental)</td></tr>
 <tr><td><code>server.oidc_authentication.client_id</code></td><td>string</td><td><code></code></td><td>sets OIDC client id (this feature is experimental)</td></tr>
 <tr><td><code>server.oidc_authentication.client_secret</code></td><td>string</td><td><code></code></td><td>sets OIDC client secret (this feature is experimental)</td></tr>
-<tr><td><code>server.oidc_authentication.enabled</code></td><td>boolean</td><td><code>false</code></td><td>enables or disabled OIDC login for the Admin UI (this feature is experimental)</td></tr>
+<tr><td><code>server.oidc_authentication.enabled</code></td><td>boolean</td><td><code>false</code></td><td>enables or disabled OIDC login for the DB Console (this feature is experimental)</td></tr>
 <tr><td><code>server.oidc_authentication.principal_regex</code></td><td>string</td><td><code>(.+)</code></td><td>regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract) (this feature is experimental)</td></tr>
 <tr><td><code>server.oidc_authentication.provider_url</code></td><td>string</td><td><code></code></td><td>sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve) (this feature is experimental)</td></tr>
 <tr><td><code>server.oidc_authentication.redirect_url</code></td><td>string</td><td><code>https://localhost:8080/oidc/v1/callback</code></td><td>sets OIDC redirect URL (base HTTP URL, likely your load balancer, must route to the path /oidc/v1/callback) (this feature is experimental)</td></tr>
@@ -89,13 +91,14 @@
 <tr><td><code>sql.temp_object_cleaner.cleanup_interval</code></td><td>duration</td><td><code>30m0s</code></td><td>how often to clean up orphaned temporary objects</td></tr>
 <tr><td><code>sql.trace.log_statement_execute</code></td><td>boolean</td><td><code>false</code></td><td>set to true to enable logging of executed statements</td></tr>
 <tr><td><code>sql.trace.session_eventlog.enabled</code></td><td>boolean</td><td><code>false</code></td><td>set to true to enable session tracing. Note that enabling this may have a non-trivial negative performance impact.</td></tr>
-<tr><td><code>sql.trace.txn.enable_threshold</code></td><td>duration</td><td><code>0s</code></td><td>duration beyond which all transactions are traced (set to 0 to disable)</td></tr>
+<tr><td><code>sql.trace.stmt.enable_threshold</code></td><td>duration</td><td><code>0s</code></td><td>duration beyond which all statements are traced (set to 0 to disable). This applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold.</td></tr>
+<tr><td><code>sql.trace.txn.enable_threshold</code></td><td>duration</td><td><code>0s</code></td><td>duration beyond which all transactions are traced (set to 0 to disable). This setting is coarser grained thansql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries).</td></tr>
 <tr><td><code>timeseries.storage.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere</td></tr>
 <tr><td><code>timeseries.storage.resolution_10s.ttl</code></td><td>duration</td><td><code>240h0m0s</code></td><td>the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.</td></tr>
 <tr><td><code>timeseries.storage.resolution_30m.ttl</code></td><td>duration</td><td><code>2160h0m0s</code></td><td>the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.</td></tr>
 <tr><td><code>trace.debug.enable</code></td><td>boolean</td><td><code>false</code></td><td>if set, traces for recent requests can be seen in the /debug page</td></tr>
 <tr><td><code>trace.lightstep.token</code></td><td>string</td><td><code></code></td><td>if set, traces go to Lightstep using this token</td></tr>
 <tr><td><code>trace.zipkin.collector</code></td><td>string</td><td><code></code></td><td>if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set</td></tr>
-<tr><td><code>version</code></td><td>version</td><td><code>20.2-2</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
+<tr><td><code>version</code></td><td>version</td><td><code>20.2-6</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
 </tbody>
 </table>

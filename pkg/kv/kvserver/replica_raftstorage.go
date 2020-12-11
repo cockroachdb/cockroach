@@ -467,7 +467,7 @@ type OutgoingSnapshot struct {
 	Iter *rditer.ReplicaEngineDataIterator
 	// The replica state within the snapshot.
 	State kvserverpb.ReplicaState
-	// Allows access the the original Replica's sideloaded storage. Note that
+	// Allows access the original Replica's sideloaded storage. Note that
 	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
 	// or RaftSnap -- a log truncation could have removed files from the
 	// sideloaded storage in the meantime.
@@ -1038,14 +1038,11 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	subsumedRepls []*Replica,
 	subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
-	getKeyRanges := func(desc *roachpb.RangeDescriptor) [2]rditer.KeyRange {
-		return [...]rditer.KeyRange{
-			rditer.MakeRangeLocalKeyRange(desc),
-			rditer.MakeUserKeyRange(desc),
-		}
-	}
+	// NB: we don't clear RangeID local key ranges here. That happens
+	// via the call to preDestroyRaftMuLocked.
+	getKeyRanges := rditer.MakeReplicatedKeyRangesExceptRangeID
 	keyRanges := getKeyRanges(desc)
-	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)
+	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges...)
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
@@ -1098,10 +1095,10 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		}
 	}
 
-	// We might have to create SSTs for the range local keys and user keys
-	// depending on if the subsumed replicas are not fully contained by the
-	// replica in our snapshot. The following is an example to this case
-	// happening.
+	// We might have to create SSTs for the range local keys, lock table keys,
+	// and user keys depending on if the subsumed replicas are not fully
+	// contained by the replica in our snapshot. The following is an example to
+	// this case happening.
 	//
 	// a       b       c       d
 	// |---1---|-------2-------|  S1

@@ -42,6 +42,14 @@ type dropIndexNode struct {
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		&p.ExecCfg().Settings.SV,
+		"DROP INDEX",
+	); err != nil {
+		return nil, err
+	}
+
 	// Keep a track of the indexes that exist to check. When the IF EXISTS
 	// options are provided, we will simply not include any indexes that
 	// don't exist and continue execution.
@@ -349,7 +357,7 @@ func (p *planner) dropIndexByName(
 
 	// If the we aren't at a high enough version to drop indexes on the origin
 	// side then we have to attempt to delete them.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionNoOriginFKIndexes) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.NoOriginFKIndexes) {
 		// Index for updating the FK slices in place when removing FKs.
 		sliceIdx := 0
 		for i := range tableDesc.OutboundFKs {
@@ -439,6 +447,16 @@ func (p *planner) dropIndexByName(
 	// Overwriting tableDesc.Index may mess up with the idx object we collected above. Make a copy.
 	idxCopy := *idx
 	idx = &idxCopy
+
+	// Currently, a replacement primary index must be specified when dropping the primary index,
+	// and this cannot be done with DROP INDEX.
+	if idx.ID == tableDesc.PrimaryIndex.ID {
+		return errors.WithHint(
+			pgerror.Newf(pgcode.FeatureNotSupported, "cannot drop the primary index of a table using DROP INDEX"),
+			"instead, use ALTER TABLE ... ALTER PRIMARY KEY or"+
+				"use DROP CONSTRAINT ... PRIMARY KEY followed by ADD CONSTRAINT ... PRIMARY KEY in a transaction",
+		)
+	}
 
 	found := false
 	for i, idxEntry := range tableDesc.Indexes {

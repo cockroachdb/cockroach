@@ -13,6 +13,7 @@ package log
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
@@ -29,11 +30,11 @@ func Intercept(ctx context.Context, f InterceptorFn) {
 	// TODO(tschottdorf): restore sanity so that all methods have a *loggingT
 	// receiver.
 	if f != nil {
-		logDepth(ctx, 0, severity.WARNING, "log traffic is now intercepted; log files will be incomplete", nil)
+		logfDepth(ctx, 1, severity.WARNING, channel.DEV, "log traffic is now intercepted; log files will be incomplete")
 	}
 	logging.interceptor.Store(f) // intentionally also when f == nil
 	if f == nil {
-		logDepth(ctx, 0, severity.INFO, "log interception is now stopped; normal logging resumes", nil)
+		logfDepth(ctx, 1, severity.INFO, channel.DEV, "log interception is now stopped; normal logging resumes")
 	}
 }
 

@@ -52,9 +52,10 @@ func (s *Store) Transport() *RaftTransport {
 func (s *Store) FindTargetAndTransferLease(
 	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, zone *zonepb.ZoneConfig,
 ) (bool, error) {
-	return s.replicateQueue.findTargetAndTransferLease(
+	transferStatus, err := s.replicateQueue.shedLease(
 		ctx, repl, desc, zone, transferLeaseOptions{},
 	)
+	return transferStatus == transferOK, err
 }
 
 // AddReplica adds the replica to the store's replica map and to the sorted
@@ -196,6 +197,11 @@ func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) erro
 
 func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
+}
+
+// RaftSchedulerPriorityID returns the Raft scheduler's prioritized range.
+func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
+	return s.scheduler.PriorityID()
 }
 
 // ClearClosedTimestampStorage clears the closed timestamp storage of all

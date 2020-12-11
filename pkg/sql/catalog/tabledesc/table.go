@@ -64,11 +64,6 @@ func MakeColumnDefDescs(
 		// Should never happen since `HoistConstraints` moves these to table level
 		return nil, nil, nil, errors.New("unexpected column REFERENCED constraint")
 	}
-	if d.Unique.WithoutIndex {
-		return nil, nil, nil, pgerror.New(pgcode.FeatureNotSupported,
-			"unique constraints without an index are not yet supported",
-		)
-	}
 
 	col := &descpb.ColumnDescriptor{
 		Name:     string(d.Name),
@@ -214,7 +209,7 @@ func (desc *Immutable) collectConstraintInfo(
 ) (map[string]descpb.ConstraintDetail, error) {
 	info := make(map[string]descpb.ConstraintDetail)
 
-	// Indexes provide PK and Unique constraints.
+	// Indexes provide PK and Unique constraints that are enforced by an index.
 	indexes := desc.AllNonDropIndexes()
 	for _, index := range indexes {
 		if index.ID == desc.PrimaryIndex.ID {
@@ -254,6 +249,23 @@ func (desc *Immutable) collectConstraintInfo(
 			detail.Index = index
 			info[index.Name] = detail
 		}
+	}
+
+	// Get the unique constraints that are not enforced by an index.
+	ucs := desc.AllActiveAndInactiveUniqueWithoutIndexConstraints()
+	for _, uc := range ucs {
+		if _, ok := info[uc.Name]; ok {
+			return nil, pgerror.Newf(pgcode.DuplicateObject,
+				"duplicate constraint name: %q", uc.Name)
+		}
+		detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeUnique}
+		var err error
+		detail.Columns, err = desc.NamesForColumnIDs(uc.ColumnIDs)
+		if err != nil {
+			return nil, err
+		}
+		detail.UniqueWithoutIndexConstraint = uc
+		info[uc.Name] = detail
 	}
 
 	fks := desc.AllActiveAndInactiveForeignKeys()

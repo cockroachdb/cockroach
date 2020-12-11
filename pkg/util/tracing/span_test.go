@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -40,7 +41,7 @@ func TestRecordingString(t *testing.T) {
 	err := tr.Inject(root.Meta(), opentracing.HTTPHeaders, carrier)
 	require.NoError(t, err)
 	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
-	remoteChild := tr2.StartSpan("remote child", WithRemoteParent(wireContext))
+	remoteChild := tr2.StartSpan("remote child", WithParentAndManualCollection(wireContext))
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 2"))
 	remoteChild.LogFields(otlog.String(tracingpb.LogMessageField, "remote child 1"))
 	require.NoError(t, err)
@@ -52,7 +53,7 @@ func TestRecordingString(t *testing.T) {
 
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 3"))
 
-	ch2 := tr.StartSpan("local child", WithParent(root))
+	ch2 := tr.StartSpan("local child", WithParentAndAutoCollection(root))
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 4"))
 	ch2.LogFields(otlog.String(tracingpb.LogMessageField, "local child 1"))
 	ch2.Finish()
@@ -147,12 +148,12 @@ func TestRecordingInRecording(t *testing.T) {
 
 	root := tr.StartSpan("root", WithForceRealSpan())
 	root.StartRecording(SnowballRecording)
-	child := tr.StartSpan("child", WithParent(root), WithForceRealSpan())
+	child := tr.StartSpan("child", WithParentAndAutoCollection(root), WithForceRealSpan())
 	child.StartRecording(SnowballRecording)
 	// The remote grandchild is also recording, however since it's remote the spans
 	// have to be imported into the parent manually (this would usually happen via
 	// code at the RPC boundaries).
-	grandChild := tr.StartSpan("grandchild", WithRemoteParent(child.Meta()))
+	grandChild := tr.StartSpan("grandchild", WithParentAndManualCollection(child.Meta()))
 	grandChild.Finish()
 	require.NoError(t, child.ImportRemoteSpans(grandChild.GetRecording()))
 	child.Finish()
@@ -180,4 +181,20 @@ Span grandchild:
     === operation:grandchild sb:1
 `
 	require.Equal(t, exp, recToStrippedString(childRec))
+}
+
+func TestChildSpan(t *testing.T) {
+	tr := NewTracer()
+	// Set up non-recording span.
+	sp := tr.StartSpan("foo", WithForceRealSpan())
+	ctx := ContextWithSpan(context.Background(), sp)
+	// Since the parent span was not recording, we would expect the
+	// noop span back. However - we don't, we get our inputs instead.
+	// This is a performance optimization; there is a to-do in
+	// childSpan asking for its removal, but for now it's here to stay.
+	{
+		newCtx, newSp := ChildSpan(ctx, "foo")
+		require.Equal(t, ctx, newCtx)
+		require.Equal(t, sp, newSp)
+	}
 }

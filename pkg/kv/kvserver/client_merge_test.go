@@ -202,7 +202,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 	delete(postKeys, tombstoneKey)
 
-	// Keep only the subsumed range's local keys.
+	// Keep only the subsumed range's local range-ID keys.
 	localRangeKeyPrefix := string(keys.MakeRangeIDPrefix(rhsDesc.RangeID))
 	for k := range postKeys {
 		if !strings.HasPrefix(k, localRangeKeyPrefix) {
@@ -1100,7 +1100,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		}
 		rhsKey := roachpb.Key("cc")
 
-		// Set a timeout, and set the the transaction liveness threshold to
+		// Set a timeout, and set the transaction liveness threshold to
 		// something much larger than our timeout. We want transactions to get stuck
 		// in the transaction wait queue and trigger the timeout if we forget to
 		// clear it.
@@ -1484,7 +1484,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// considered live. The automatic heartbeat might not come for a while.
 	require.NoError(t, mtc.heartbeatLiveness(ctx, 0))
 
-	// Send several get and put requests to the the RHS. The first of these to
+	// Send several get and put requests to the RHS. The first of these to
 	// arrive will acquire the lease; the remaining requests will wait for that
 	// lease acquisition to complete. Then all requests should block waiting for
 	// the Subsume request to complete. By sending several of these requests in
@@ -1569,7 +1569,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	}
 }
 
-// TestStoreRangeMergeCheckConsistencyAfterSubsumption verifies the the following:
+// TestStoreRangeMergeCheckConsistencyAfterSubsumption verifies the following:
 // 1. While a range is subsumed, ComputeChecksum requests wait until the merge
 // is complete before proceeding.
 // 2. Once a merge is aborted, pending (and future) requests will be allowed to
@@ -1983,7 +1983,7 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 
 	const acceptableMergeErr = `unexpected value: raw_bytes|ranges not collocated` +
 		`|cannot merge range with non-voter replicas`
-	if mergeErr == nil && testutils.IsError(addErr, `descriptor changed: \[expected\]`) {
+	if mergeErr == nil && kvserver.IsRetriableReplicationChangeError(addErr) {
 		// Merge won the race, no add happened.
 		require.Len(t, afterDesc.Replicas().Voters(), 1)
 		require.Equal(t, origDesc.EndKey, afterDesc.EndKey)
@@ -2030,7 +2030,7 @@ func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 
 	_, err := tc.Server(0).DB().AdminChangeReplicas(
 		ctx, scratchStartKey, origDesc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)))
-	if !testutils.IsError(err, `descriptor changed`) {
+	if !kvserver.IsRetriableReplicationChangeError(err) {
 		t.Fatalf(`expected "descriptor changed" error got: %+v`, err)
 	}
 }
@@ -2235,7 +2235,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	// it may require the replica GC queue. In rare cases the LHS will never
 	// hear about the merge and may need to be GC'd on its own.
 	testutils.SucceedsSoon(t, func() error {
-		// Make the the LHS gets destroyed.
+		// Make the LHS gets destroyed.
 		if lhsRepl, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
 			if err := store2.ManualReplicaGC(lhsRepl); err != nil {
 				t.Fatal(err)
@@ -3082,39 +3082,59 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			inSnap.State.Desc.RangeID != roachpb.RangeID(2) {
 			return nil
 		}
-		// The seven SSTs we are expecting to ingest are in the following order:
-		// 1. Replicated range-id local keys of the range in the snapshot.
-		// 2. Range-local keys of the range in the snapshot.
-		// 3. User keys of the range in the snapshot.
-		// 4. Unreplicated range-id local keys of the range in the snapshot.
-		// 5. SST to clear range-id local keys of the subsumed replica with
-		//    RangeID 3.
-		// 6. SST to clear range-id local keys of the subsumed replica with
-		//    RangeID 4.
-		// 7. SST to clear the user keys of the subsumed replicas.
+		// TODO(sumeer): fix this test (and others in this file) when
+		// DisallowSeparatedIntents=false
+
+		// The seven to nine SSTs we are expecting to ingest are in the following order:
+		// - Replicated range-id local keys of the range in the snapshot.
+		// - Range-local keys of the range in the snapshot.
+		// - Optionally, two SSTs for the lock table keys of the range in the
+		//   snapshot
+		// - User keys of the range in the snapshot.
+		// - Unreplicated range-id local keys of the range in the snapshot.
+		// - SST to clear range-id local keys of the subsumed replica with
+		//   RangeID 3.
+		// - SST to clear range-id local keys of the subsumed replica with
+		//   RangeID 4.
+		// - SST to clear the user keys of the subsumed replicas.
 		//
-		// NOTE: There are no range-local keys in [d, /Max) in the store we're
-		// sending a snapshot to, so we aren't expecting an SST to clear those
-		// keys.
-		if len(sstNames) != 7 {
-			return errors.Errorf("expected to ingest 7 SSTs, got %d SSTs", len(sstNames))
+		// NOTE: There are no range-local keys or lock table keys, in [d, /Max) in
+		// the store we're sending a snapshot to, so we aren't expecting SSTs to
+		// clear those keys.
+		expectedSSTCount := 7
+		indexAdjustment := 0
+		if !storage.DisallowSeparatedIntents {
+			expectedSSTCount += 2
+			indexAdjustment = 2
+		}
+		if len(sstNames) != expectedSSTCount {
+			return errors.Errorf("expected to ingest %d SSTs, got %d SSTs",
+				expectedSSTCount, len(sstNames))
 		}
 
-		// Only try to predict SSTs 3 and 5-7. SSTs 1, 2 and 4 are excluded in
-		// the test since the state of the Raft log can be non-deterministic
-		// with extra entries being appended to the sender's log after the
-		// snapshot has already been sent.
+		// Only try to predict SSTs for:
+		// - The user keys in the snapshot
+		// - Clearing rhe range-id local keys of the subsumed replicas.
+		// - Clearing the user keys of the subsumed replicas.
+		// The snapshot SSTs that are excluded from this checking are the
+		// replicated range-id, range-local keys, lock table keys in the snapshot,
+		// and the unreplicated range-id local keys in the snapshot. The latter is
+		// excluded since the state of the Raft log can be non-deterministic with
+		// extra entries being appended to the sender's log after the snapshot has
+		// already been sent.
 		var sstNamesSubset []string
-		sstNamesSubset = append(sstNamesSubset, sstNames[2])
-		sstNamesSubset = append(sstNamesSubset, sstNames[4:]...)
+		// The SST with the user keys in the snapshot.
+		sstNamesSubset = append(sstNamesSubset, sstNames[2+indexAdjustment])
+		// Remaining ones from the predict list above.
+		sstNamesSubset = append(sstNamesSubset, sstNames[4+indexAdjustment:]...)
 
 		// Construct the expected SSTs and ensure that they are byte-by-byte
 		// equal. This verification ensures that the SSTs have the same
 		// tombstones and range deletion tombstones.
 		var expectedSSTs [][]byte
 
-		// Construct SST #1 through #3 as numbered above, but only ultimately
-		// keep the 3rd one.
+		// Construct SSTs for the the first 4 bullets as numbered above, but only
+		// ultimately keep the last one.
 		keyRanges := rditer.MakeReplicatedKeyRanges(inSnap.State.Desc)
 		it := rditer.NewReplicaEngineDataIterator(inSnap.State.Desc, sendingEng, true /* replicatedOnly */)
 		defer it.Close()
@@ -3127,14 +3147,14 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				return err
 			}
 
-			// Keep adding kv data to the SST until the the key exceeds the
+			// Keep adding kv data to the SST until the key exceeds the
 			// bounds of the range, then proceed to the next range.
 			for ; ; it.Next() {
 				valid, err := it.Valid()
 				if err != nil {
 					return err
 				}
-				if !valid || r.End.Key.Compare(it.Key().Key) <= 0 {
+				if !valid || r.End.Key.Compare(it.UnsafeKey().Key) <= 0 {
 					if err := sst.Finish(); err != nil {
 						return err
 					}
@@ -3142,14 +3162,19 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					expectedSSTs = append(expectedSSTs, sstFile.Data())
 					break
 				}
-				if err := sst.PutEngineKey(it.Key(), it.Value()); err != nil {
+				if err := sst.PutEngineKey(it.UnsafeKey(), it.Value()); err != nil {
 					return err
 				}
 			}
 		}
-		expectedSSTs = expectedSSTs[2:]
+		if len(expectedSSTs) != 3+indexAdjustment {
+			return errors.Errorf("len of expectedSSTs should expected to be %d, but got %d",
+				3+indexAdjustment, len(expectedSSTs))
+		}
+		// Keep the last one which contains the user keys.
+		expectedSSTs = expectedSSTs[len(expectedSSTs)-1:]
 
-		// Construct SSTs #5 and #6: range-id local keys of subsumed replicas
+		// Construct SSTs for the range-id local keys of the subsumed replicas.
 		// with RangeIDs 3 and 4.
 		for _, rangeID := range []roachpb.RangeID{roachpb.RangeID(3), roachpb.RangeID(4)} {
 			sstFile := &storage.MemFile{}
@@ -3171,7 +3196,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			expectedSSTs = append(expectedSSTs, sstFile.Data())
 		}
 
-		// Construct SST #7: user key range of subsumed replicas.
+		// Construct an SST for the user key range of the subsumed replicas.
 		sstFile := &storage.MemFile{}
 		sst := storage.MakeIngestionSSTWriter(sstFile)
 		defer sst.Close()

@@ -75,21 +75,21 @@ vectorized: true
 ·
 • cross join (inner)
 │ columns: (a, b, generate_series, generate_series)
-│ estimated row count: 10000000 (missing stats)
+│ estimated row count: 10,000,000 (missing stats)
 │
 ├── • cross join (inner)
 │   │ columns: (a, b)
-│   │ estimated row count: 1000000 (missing stats)
+│   │ estimated row count: 1,000,000 (missing stats)
 │   │
 │   ├── • scan
 │   │     columns: (a)
-│   │     estimated row count: 1000 (missing stats)
+│   │     estimated row count: 1,000 (missing stats)
 │   │     table: t@primary
 │   │     spans: FULL SCAN
 │   │
 │   └── • scan
 │         columns: (b)
-│         estimated row count: 1000 (missing stats)
+│         estimated row count: 1,000 (missing stats)
 │         table: u@primary
 │         spans: FULL SCAN
 │
@@ -116,17 +116,17 @@ vectorized: true
 • sort
 │ columns: (a, generate_series)
 │ ordering: +a,+generate_series
-│ estimated row count: 10000 (missing stats)
+│ estimated row count: 10,000 (missing stats)
 │ order: +a,+generate_series
 │
 └── • project set
     │ columns: (a, generate_series)
-    │ estimated row count: 10000 (missing stats)
+    │ estimated row count: 10,000 (missing stats)
     │ render 0: generate_series(a, a + 1)
     │
     └── • scan
           columns: (a)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: data@primary
           spans: FULL SCAN
 
@@ -146,12 +146,12 @@ vectorized: true
 • sort
 │ columns: (x, y, z, "information_schema._pg_expandarray")
 │ ordering: +x
-│ estimated row count: 3267 (missing stats)
+│ estimated row count: 3,267 (missing stats)
 │ order: +x
 │
 └── • render
     │ columns: ("information_schema._pg_expandarray", x, y, z)
-    │ estimated row count: 3267 (missing stats)
+    │ estimated row count: 3,267 (missing stats)
     │ render 0: ((x, n) AS x, n)
     │ render 1: x
     │ render 2: y
@@ -159,7 +159,7 @@ vectorized: true
     │
     └── • project set
         │ columns: (x, y, x, z, x, n)
-        │ estimated row count: 3267 (missing stats)
+        │ estimated row count: 3,267 (missing stats)
         │ render 0: information_schema._pg_expandarray(ARRAY[x, y, z])
         │
         └── • merge join (inner)
@@ -174,14 +174,14 @@ vectorized: true
             ├── • scan
             │     columns: (x, y)
             │     ordering: +x
-            │     estimated row count: 1000 (missing stats)
+            │     estimated row count: 1,000 (missing stats)
             │     table: xy@primary
             │     spans: FULL SCAN
             │
             └── • scan
                   columns: (x, z)
                   ordering: +x
-                  estimated row count: 1000 (missing stats)
+                  estimated row count: 1,000 (missing stats)
                   table: xz@primary
                   spans: FULL SCAN
 
@@ -193,11 +193,11 @@ vectorized: true
 ·
 • project
 │ columns: (generate_series)
-│ estimated row count: 3333 (missing stats)
+│ estimated row count: 3,333 (missing stats)
 │
 └── • project set
     │ columns: (x, z, generate_series)
-    │ estimated row count: 3333 (missing stats)
+    │ estimated row count: 3,333 (missing stats)
     │ render 0: generate_series(x, z)
     │
     └── • cross join (right semi)
@@ -207,18 +207,18 @@ vectorized: true
         │
         ├── • project set
         │   │ columns: (x, y, generate_series)
-        │   │ estimated row count: 10000 (missing stats)
+        │   │ estimated row count: 10,000 (missing stats)
         │   │ render 0: generate_series(x, y)
         │   │
         │   └── • scan
         │         columns: (x, y)
-        │         estimated row count: 1000 (missing stats)
+        │         estimated row count: 1,000 (missing stats)
         │         table: xy@primary
         │         spans: FULL SCAN
         │
         └── • scan
               columns: (x, z)
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: xz@primary
               spans: FULL SCAN
 
@@ -231,18 +231,18 @@ vectorized: true
 ·
 • project
 │ columns: (generate_subscripts, generate_series, unnest, y, z)
-│ estimated row count: 10000 (missing stats)
+│ estimated row count: 10,000 (missing stats)
 │
 └── • project set
     │ columns: (x, y, x, z, generate_subscripts, generate_series, unnest)
-    │ estimated row count: 10000 (missing stats)
+    │ estimated row count: 10,000 (missing stats)
     │ render 0: generate_subscripts(ARRAY[0, x, 1, 2])
     │ render 1: generate_series(x, y)
     │ render 2: unnest(ARRAY[0, x, y, z])
     │
     └── • merge join (left outer)
         │ columns: (x, y, x, z)
-        │ estimated row count: 1000 (missing stats)
+        │ estimated row count: 1,000 (missing stats)
         │ equality: (x) = (x)
         │ left cols are key
         │ right cols are key
@@ -251,14 +251,14 @@ vectorized: true
         ├── • scan
         │     columns: (x, y)
         │     ordering: +x
-        │     estimated row count: 1000 (missing stats)
+        │     estimated row count: 1,000 (missing stats)
         │     table: xy@primary
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (x, z)
               ordering: +x
-              estimated row count: 1000 (missing stats)
+              estimated row count: 1,000 (missing stats)
               table: xz@primary
               spans: FULL SCAN
 
@@ -273,16 +273,16 @@ vectorized: true
 │
 ├── • project
 │   │ columns: (generate_series)
-│   │ estimated row count: 10000 (missing stats)
+│   │ estimated row count: 10,000 (missing stats)
 │   │
 │   └── • project set
 │       │ columns: (z, generate_series)
-│       │ estimated row count: 10000 (missing stats)
+│       │ estimated row count: 10,000 (missing stats)
 │       │ render 0: generate_series(@S1, z)
 │       │
 │       └── • scan
 │             columns: (z)
-│             estimated row count: 1000 (missing stats)
+│             estimated row count: 1,000 (missing stats)
 │             table: xz@primary
 │             spans: FULL SCAN
 │
@@ -297,15 +297,15 @@ vectorized: true
         │
         └── • project
             │ columns: (unnest)
-            │ estimated row count: 2000 (missing stats)
+            │ estimated row count: 2,000 (missing stats)
             │
             └── • apply join (inner)
                 │ columns: (x, y, unnest)
-                │ estimated row count: 2000 (missing stats)
+                │ estimated row count: 2,000 (missing stats)
                 │
                 └── • scan
                       columns: (x, y)
-                      estimated row count: 1000 (missing stats)
+                      estimated row count: 1,000 (missing stats)
                       table: xy@primary
                       spans: FULL SCAN
 
@@ -329,18 +329,18 @@ vectorized: true
 ·
 • render
 │ columns: (group_name, jsonb_array_elements)
-│ estimated row count: 100000 (missing stats)
+│ estimated row count: 100,000 (missing stats)
 │ render 0: data->>'name'
 │ render 1: jsonb_array_elements
 │
 └── • project set
     │ columns: (id, data, "?column?", jsonb_array_elements)
-    │ estimated row count: 100000 (missing stats)
+    │ estimated row count: 100,000 (missing stats)
     │ render 0: jsonb_array_elements("?column?")
     │
     └── • distinct
         │ columns: (id, data, "?column?")
-        │ estimated row count: 10000 (missing stats)
+        │ estimated row count: 10,000 (missing stats)
         │ distinct on: id
         │ error on duplicate
         │
@@ -349,31 +349,31 @@ vectorized: true
             │
             └── • hash join (left outer)
                 │ columns: (column12, id, data, column13, "?column?")
-                │ estimated row count: 10000 (missing stats)
+                │ estimated row count: 10,000 (missing stats)
                 │ equality: (column12) = (column13)
                 │
                 ├── • render
                 │   │ columns: (column12, id, data)
-                │   │ estimated row count: 1000 (missing stats)
+                │   │ estimated row count: 1,000 (missing stats)
                 │   │ render 0: data->>'name'
                 │   │ render 1: id
                 │   │ render 2: data
                 │   │
                 │   └── • scan
                 │         columns: (id, data)
-                │         estimated row count: 1000 (missing stats)
+                │         estimated row count: 1,000 (missing stats)
                 │         table: groups@primary
                 │         spans: FULL SCAN
                 │
                 └── • render
                     │ columns: (column13, "?column?")
-                    │ estimated row count: 1000 (missing stats)
+                    │ estimated row count: 1,000 (missing stats)
                     │ render 0: data->>'name'
                     │ render 1: data->'members'
                     │
                     └── • scan
                           columns: (data)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: groups@primary
                           spans: FULL SCAN
 
@@ -451,12 +451,12 @@ vectorized: true
                 │
                 └── • project set
                     │ columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)
-                    │ estimated row count: 10000 (missing stats)
+                    │ estimated row count: 10,000 (missing stats)
                     │ render 0: unnest(tag_list)
                     │
                     └── • scan
                           columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)
-                          estimated row count: 1000 (missing stats)
+                          estimated row count: 1,000 (missing stats)
                           table: articles@primary
                           spans: FULL SCAN
 

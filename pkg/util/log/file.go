@@ -15,7 +15,6 @@ package log
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"math"
 	"os"
@@ -27,7 +26,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -82,20 +80,12 @@ type fileSink struct {
 	// temporarily be up to logFileMaxSize larger.
 	logFilesCombinedMaxSize int64
 
-	// Level beyond which entries submitted to this sink are written
-	// to the output file. This acts as a filter between the log entry
-	// producers and the file sink.
-	threshold Severity
-
-	// formatter for entries.
-	formatter logFormatter
-
 	// notify GC daemon that a new log file was created.
 	gcNotify chan struct{}
 
 	// getStartLines retrieves a list of log entries to
 	// include at the start of a log file.
-	getStartLines func(time.Time) []logpb.Entry
+	getStartLines func(time.Time) []*buffer
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize output to this file sink..
@@ -139,9 +129,8 @@ type fileSink struct {
 func newFileSink(
 	dir, fileNamePrefix string,
 	forceSyncWrites bool,
-	fileThreshold Severity,
 	fileMaxSize, combinedMaxSize int64,
-	getStartLines func(time.Time) []logpb.Entry,
+	getStartLines func(time.Time) []*buffer,
 ) *fileSink {
 	prefix := program
 	if fileNamePrefix != "" {
@@ -149,8 +138,6 @@ func newFileSink(
 	}
 	f := &fileSink{
 		prefix:                  prefix,
-		threshold:               fileThreshold,
-		formatter:               formatCrdbV1WithCounter{},
 		syncWrites:              forceSyncWrites,
 		logFileMaxSize:          fileMaxSize,
 		logFilesCombinedMaxSize: combinedMaxSize,
@@ -163,8 +150,8 @@ func newFileSink(
 }
 
 // activeAtSeverity implements the logSink interface.
-func (l *fileSink) activeAtSeverity(sev logpb.Severity) bool {
-	return l.enabled.Get() && sev >= l.threshold
+func (l *fileSink) active() bool {
+	return l.enabled.Get()
 }
 
 // attachHints implements the logSink interface.
@@ -178,11 +165,6 @@ func (l *fileSink) attachHints(stacks []byte) []byte {
 		"\nFor more context, check log files in: %s\n", l.mu.logDir))...)
 	l.mu.Unlock()
 	return stacks
-}
-
-// getFormatter implements the logSink interface.
-func (l *fileSink) getFormatter() logFormatter {
-	return l.formatter
 }
 
 // output implements the logSink interface.
@@ -279,52 +261,6 @@ func (l *fileSink) flushAndSyncLocked(doSync bool) {
 		_ = l.mu.file.Sync() // ignore error
 	}
 }
-
-// DirName overrides (if non-empty) the choice of directory in
-// which to write logs.
-type DirName string
-
-var _ flag.Value = (*DirName)(nil)
-
-// Set implements the flag.Value interface.
-func (l *DirName) Set(dir string) error {
-	if len(dir) > 0 && dir[0] == '~' {
-		return fmt.Errorf("log directory cannot start with '~': %s", dir)
-	}
-	if len(dir) > 0 {
-		absDir, err := filepath.Abs(dir)
-		if err != nil {
-			return err
-		}
-		dir = absDir
-	}
-	*l = DirName(dir)
-	return nil
-}
-
-// Type implements the flag.Value interface.
-func (l *DirName) Type() string {
-	return "string"
-}
-
-// String implements the flag.Value interface.
-func (l *DirName) String() string {
-	return string(*l)
-}
-
-func (l *DirName) get() (dirName string, isSet bool) {
-	return string(*l), *l != ""
-}
-
-// IsSet returns true iff the directory name is set.
-func (l *DirName) IsSet() bool {
-	res := *l != ""
-	return res
-}
-
-// DirSet returns true iff the log directory has been changed from the
-// command line.
-func DirSet() bool { return logging.logDir.IsSet() }
 
 var (
 	pid      = os.Getpid()

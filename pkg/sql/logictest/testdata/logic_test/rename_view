@@ -25,11 +25,11 @@ SELECT * FROM v
 1 2
 3 4
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  kv  table  root  0
-public  v   view   root  0
+public  kv  table  root  0  NULL
+public  v   view   root  0  NULL
 
 statement error pgcode 42809 "kv" is not a view
 ALTER VIEW kv RENAME TO new_kv
@@ -47,11 +47,11 @@ SELECT * FROM new_v
 1 2
 3 4
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  kv     table  root  0
-public  new_v  view   root  0
+public  kv     table  root  0  NULL
+public  new_v  view   root  0  NULL
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
 query TTTTT
@@ -110,13 +110,13 @@ GRANT CREATE ON DATABASE test TO testuser
 statement ok
 ALTER VIEW test.v RENAME TO v2
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM test
 ----
-public  kv     table  root  0
-public  new_v  view   root  0
-public  t      table  root  0
-public  v2     view   root  0
+public  kv     table  root  0  NULL
+public  new_v  view   root  0  NULL
+public  t      table  root  0  NULL
+public  v2     view   root  0  NULL
 
 user testuser
 
@@ -139,15 +139,15 @@ ALTER VIEW test.new_v RENAME TO test2.v
 statement ok
 ALTER VIEW test.v2 RENAME TO test2.v2
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM test
 ----
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM test2
 ----
-public  v   view  root  NULL
-public  v2  view  root  NULL
+public  v   view  root  NULL  NULL
+public  v2  view  root  NULL  NULL
 
 user root
 
