@@ -4645,6 +4645,7 @@ project
 exec-ddl
 CREATE TABLE json_arr1 (
   k INT PRIMARY KEY,
+  i INT,
   j JSONB,
   a STRING[],
   INVERTED INDEX j_idx (j),
@@ -4693,20 +4694,20 @@ project
  ├── columns: k:1!null
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t1.k:1!null t1.j:2 t2.j:8
+      ├── columns: t1.k:1!null t1.j:3 t2.j:9
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── fd: (1)-->(2)
+      ├── fd: (1)-->(3)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t1.k:1!null t2.j:8
+      │    ├── columns: t1.k:1!null t2.j:9
       │    ├── inverted-expr
-      │    │    └── t1.j:2 @> t2.j:8
+      │    │    └── t1.j:3 @> t2.j:9
       │    ├── scan json_arr2 [as=t2]
-      │    │    └── columns: t2.j:8
+      │    │    └── columns: t2.j:9
       │    └── filters (true)
       └── filters
-           └── t1.j:2 @> t2.j:8 [outer=(2,8), immutable]
+           └── t1.j:3 @> t2.j:9 [outer=(3,9), immutable]
 
 # Inner join with no additional filters.
 opt expect=GenerateInvertedJoins
@@ -4719,20 +4720,20 @@ project
  ├── columns: k:1!null
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t1.k:1!null t1.a:3 t2.a:9
+      ├── columns: t1.k:1!null t1.a:4 t2.a:10
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── fd: (1)-->(3)
+      ├── fd: (1)-->(4)
       ├── inner-join (inverted json_arr1@a_idx [as=t1])
-      │    ├── columns: t1.k:1!null t2.a:9
+      │    ├── columns: t1.k:1!null t2.a:10
       │    ├── inverted-expr
-      │    │    └── t1.a:3 @> t2.a:9
+      │    │    └── t1.a:4 @> t2.a:10
       │    ├── scan json_arr2 [as=t2]
-      │    │    └── columns: t2.a:9
+      │    │    └── columns: t2.a:10
       │    └── filters (true)
       └── filters
-           └── t1.a:3 @> t2.a:9 [outer=(3,9), immutable]
+           └── t1.a:4 @> t2.a:10 [outer=(4,10), immutable]
 
 # Left join with no additional filters.
 opt expect=GenerateInvertedJoins
@@ -4745,21 +4746,21 @@ project
  ├── columns: k:5
  ├── immutable
  └── left-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.j:2 t1.k:5 t1.j:6
+      ├── columns: t2.j:2 t1.k:5 t1.j:7
       ├── key columns: [5] = [5]
       ├── lookup columns are key
       ├── immutable
-      ├── fd: (5)-->(6)
+      ├── fd: (5)-->(7)
       ├── left-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.j:2 t1.k:5 continuation:11
+      │    ├── columns: t2.j:2 t1.k:5 continuation:12
       │    ├── inverted-expr
-      │    │    └── t1.j:6 @> t2.j:2
-      │    ├── fd: (5)-->(11)
+      │    │    └── t1.j:7 @> t2.j:2
+      │    ├── fd: (5)-->(12)
       │    ├── scan json_arr2 [as=t2]
       │    │    └── columns: t2.j:2
       │    └── filters (true)
       └── filters
-           └── t1.j:6 @> t2.j:2 [outer=(2,6), immutable]
+           └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
 
 # Left join not possible when the order of tables is switched.
 opt expect-not=GenerateInvertedJoins
@@ -4772,17 +4773,17 @@ project
  ├── columns: k:1!null
  ├── immutable
  └── left-join (cross)
-      ├── columns: t1.k:1!null t1.j:2 t2.j:8
+      ├── columns: t1.k:1!null t1.j:3 t2.j:9
       ├── immutable
-      ├── fd: (1)-->(2)
+      ├── fd: (1)-->(3)
       ├── scan json_arr1 [as=t1]
-      │    ├── columns: t1.k:1!null t1.j:2
+      │    ├── columns: t1.k:1!null t1.j:3
       │    ├── key: (1)
-      │    └── fd: (1)-->(2)
+      │    └── fd: (1)-->(3)
       ├── scan json_arr2 [as=t2]
-      │    └── columns: t2.j:8
+      │    └── columns: t2.j:9
       └── filters
-           └── t1.j:2 @> t2.j:8 [outer=(2,8), immutable]
+           └── t1.j:3 @> t2.j:9 [outer=(3,9), immutable]
 
 # Inner join with additional filter.
 opt expect=GenerateInvertedJoinsFromSelect
@@ -4792,27 +4793,27 @@ JOIN json_arr2 AS t2
 ON t1.j @> t2.j AND t1.j @> '{"foo": "bar"}'::jsonb AND t2.k > 5
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null j:2!null a:3 k:7!null j:8 a:9
+ ├── columns: k:1!null i:2 j:3!null a:4 k:8!null j:9 a:10
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
- ├── key: (1,7)
- ├── fd: (1)-->(2,3), (7)-->(8,9)
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-4), (8)-->(9,10)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t1.k:1!null t2.k:7!null t2.j:8 t2.a:9
+ │    ├── columns: t1.k:1!null t2.k:8!null t2.j:9 t2.a:10
  │    ├── inverted-expr
- │    │    └── (t1.j:2 @> t2.j:8) AND (t1.j:2 @> '{"foo": "bar"}')
- │    ├── key: (1,7)
- │    ├── fd: (7)-->(8,9)
+ │    │    └── (t1.j:3 @> t2.j:9) AND (t1.j:3 @> '{"foo": "bar"}')
+ │    ├── key: (1,8)
+ │    ├── fd: (8)-->(9,10)
  │    ├── scan json_arr2 [as=t2]
- │    │    ├── columns: t2.k:7!null t2.j:8 t2.a:9
- │    │    ├── constraint: /7: [/6 - ]
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8,9)
+ │    │    ├── columns: t2.k:8!null t2.j:9 t2.a:10
+ │    │    ├── constraint: /8: [/6 - ]
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9,10)
  │    └── filters (true)
  └── filters
-      ├── t1.j:2 @> t2.j:8 [outer=(2,8), immutable]
-      └── t1.j:2 @> '{"foo": "bar"}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      ├── t1.j:3 @> t2.j:9 [outer=(3,9), immutable]
+      └── t1.j:3 @> '{"foo": "bar"}' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Inner join with additional filter.
 opt expect=GenerateInvertedJoinsFromSelect
@@ -4822,27 +4823,27 @@ JOIN json_arr2 AS t2
 ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null j:2 a:3!null k:7!null j:8 a:9
+ ├── columns: k:1!null i:2 j:3 a:4!null k:8!null j:9 a:10
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
- ├── key: (1,7)
- ├── fd: (1)-->(2,3), (7)-->(8,9)
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-4), (8)-->(9,10)
  ├── inner-join (inverted json_arr1@a_idx [as=t1])
- │    ├── columns: t1.k:1!null t2.k:7!null t2.j:8 t2.a:9
+ │    ├── columns: t1.k:1!null t2.k:8!null t2.j:9 t2.a:10
  │    ├── inverted-expr
- │    │    └── (t1.a:3 @> t2.a:9) AND (t1.a:3 @> ARRAY['foo'])
- │    ├── key: (1,7)
- │    ├── fd: (7)-->(8,9)
+ │    │    └── (t1.a:4 @> t2.a:10) AND (t1.a:4 @> ARRAY['foo'])
+ │    ├── key: (1,8)
+ │    ├── fd: (8)-->(9,10)
  │    ├── scan json_arr2 [as=t2]
- │    │    ├── columns: t2.k:7!null t2.j:8 t2.a:9
- │    │    ├── constraint: /7: [/6 - ]
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8,9)
+ │    │    ├── columns: t2.k:8!null t2.j:9 t2.a:10
+ │    │    ├── constraint: /8: [/6 - ]
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9,10)
  │    └── filters (true)
  └── filters
-      ├── t1.a:3 @> t2.a:9 [outer=(3,9), immutable]
-      └── t1.a:3 @> ARRAY['foo'] [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+      ├── t1.a:4 @> t2.a:10 [outer=(4,10), immutable]
+      └── t1.a:4 @> ARRAY['foo'] [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Left join with additional filter.
 opt expect=GenerateInvertedJoinsFromSelect
@@ -4852,18 +4853,18 @@ LEFT JOIN json_arr1 AS t1
 ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
 ----
 left-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null j:2 a:3 k:5 j:6 a:7
+ ├── columns: k:1!null j:2 a:3 k:5 i:6 j:7 a:8
  ├── key columns: [5] = [5]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1,5)
- ├── fd: (1)-->(2,3), (5)-->(6,7)
+ ├── fd: (1)-->(2,3), (5)-->(6-8)
  ├── left-join (inverted json_arr1@a_idx [as=t1])
- │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5 continuation:11
+ │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5 continuation:12
  │    ├── inverted-expr
- │    │    └── (t1.a:7 @> t2.a:3) AND (t1.a:7 @> ARRAY['foo'])
+ │    │    └── (t1.a:8 @> t2.a:3) AND (t1.a:8 @> ARRAY['foo'])
  │    ├── key: (1,5)
- │    ├── fd: (1)-->(2,3), (5)-->(11)
+ │    ├── fd: (1)-->(2,3), (5)-->(12)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null t2.j:2 t2.a:3
  │    │    ├── key: (1)
@@ -4871,8 +4872,8 @@ left-join (lookup json_arr1 [as=t1])
  │    └── filters
  │         └── t2.k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
  └── filters
-      ├── t1.a:7 @> t2.a:3 [outer=(3,7), immutable]
-      └── t1.a:7 @> ARRAY['foo'] [outer=(7), immutable, constraints=(/7: (/NULL - ])]
+      ├── t1.a:8 @> t2.a:3 [outer=(3,8), immutable]
+      └── t1.a:8 @> ARRAY['foo'] [outer=(8), immutable, constraints=(/8: (/NULL - ])]
 
 # Semi-join.
 opt expect=(GenerateInvertedJoins,ConvertSemiToInnerJoin)
@@ -4889,18 +4890,18 @@ semi-join (lookup json_arr1 [as=t1])
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5!null continuation:11
+ │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5!null continuation:12
  │    ├── inverted-expr
- │    │    └── t1.j:6 @> t2.j:2
+ │    │    └── t1.j:7 @> t2.j:2
  │    ├── key: (1,5)
- │    ├── fd: (1)-->(2,3), (5)-->(11)
+ │    ├── fd: (1)-->(2,3), (5)-->(12)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null t2.j:2 t2.a:3
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2,3)
  │    └── filters (true)
  └── filters
-      └── t1.j:6 @> t2.j:2 [outer=(2,6), immutable]
+      └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
 
 # Anti-join.
 opt expect=GenerateInvertedJoins
@@ -4917,18 +4918,18 @@ anti-join (lookup json_arr1 [as=t1])
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── left-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5 continuation:11
+ │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5 continuation:12
  │    ├── inverted-expr
- │    │    └── t1.j:6 @> t2.j:2
+ │    │    └── t1.j:7 @> t2.j:2
  │    ├── key: (1,5)
- │    ├── fd: (1)-->(2,3), (5)-->(11)
+ │    ├── fd: (1)-->(2,3), (5)-->(12)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null t2.j:2 t2.a:3
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2,3)
  │    └── filters (true)
  └── filters
-      └── t1.j:6 @> t2.j:2 [outer=(2,6), immutable]
+      └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
 
 # Tests for indexes with older descriptor versions.
 
@@ -4961,17 +4962,17 @@ project
  ├── columns: k:1!null
  ├── immutable
  └── inner-join (cross)
-      ├── columns: t1.k:1!null t1.a:3 t2.a:11
+      ├── columns: t1.k:1!null t1.a:4 t2.a:12
       ├── immutable
-      ├── fd: (1)-->(3)
+      ├── fd: (1)-->(4)
       ├── scan json_arr1 [as=t1]
-      │    ├── columns: t1.k:1!null t1.a:3
+      │    ├── columns: t1.k:1!null t1.a:4
       │    ├── key: (1)
-      │    └── fd: (1)-->(3)
+      │    └── fd: (1)-->(4)
       ├── scan json_arr2 [as=t2]
-      │    └── columns: t2.a:11
+      │    └── columns: t2.a:12
       └── filters
-           └── t1.a:3 @> t2.a:11 [outer=(3,11), immutable]
+           └── t1.a:4 @> t2.a:12 [outer=(4,12), immutable]
 
 # We should still plan an inverted join with JSON inverted indexes even if the
 # index version is SecondaryIndexFamilyFormatVersion.
@@ -4985,28 +4986,360 @@ project
  ├── columns: k:1!null
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
-      ├── columns: t1.k:1!null t1.j:2 t2.j:10
+      ├── columns: t1.k:1!null t1.j:3 t2.j:11
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── fd: (1)-->(2)
+      ├── fd: (1)-->(3)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t1.k:1!null t2.j:10
+      │    ├── columns: t1.k:1!null t2.j:11
       │    ├── inverted-expr
-      │    │    └── t1.j:2 @> t2.j:10
+      │    │    └── t1.j:3 @> t2.j:11
       │    ├── scan json_arr2 [as=t2]
-      │    │    └── columns: t2.j:10
+      │    │    └── columns: t2.j:11
       │    └── filters (true)
       └── filters
-           └── t1.j:2 @> t2.j:10 [outer=(2,10), immutable]
+           └── t1.j:3 @> t2.j:11 [outer=(3,11), immutable]
+
+# -------------------------------------------------------
+# GenerateInvertedJoins on multi-column inverted indexes
+# -------------------------------------------------------
+
+# Replace the existing inverted indexes with multi-column inverted indexes.
+exec-ddl
+DROP INDEX nyc_census_blocks_geo_idx
+----
+
+exec-ddl
+DROP INDEX nyc_neighborhoods_geo_idx
+----
+
+exec-ddl
+CREATE INVERTED INDEX nyc_neighborhoods_geo_idx ON nyc_neighborhoods (boroname, geom)
+----
+
+exec-ddl
+DROP INDEX j_idx
+----
+
+exec-ddl
+CREATE INVERTED INDEX j_idx ON json_arr1 (k, j)
+----
+
+exec-ddl
+DROP INDEX a_idx
+----
+
+exec-ddl
+CREATE INVERTED INDEX a_idx ON json_arr1 (k, a)
+----
+
+# Generate an inverted join on a geo-spatial multi-column inverted index.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT c.gid
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_Covers(c.geom, n.geom) AND n.boroname = 'Manhattan'
+----
+project
+ ├── columns: gid:1!null
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods [as=n])
+      ├── columns: c.gid:1!null c.geom:10!null n.boroname:14!null n.geom:16!null
+      ├── key columns: [13] = [13]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: ()-->(14), (1)-->(10)
+      ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
+      │    ├── columns: c.gid:1!null c.geom:10 n.gid:13!null n.boroname:14 "inverted_join_const_col_@14":20!null
+      │    ├── prefix key columns: [20] = [14]
+      │    ├── inverted-expr
+      │    │    └── st_covers(c.geom:10, n.geom:16)
+      │    ├── key: (1,13)
+      │    ├── fd: ()-->(20), (1)-->(10), (13)-->(14)
+      │    ├── project
+      │    │    ├── columns: "inverted_join_const_col_@14":20!null c.gid:1!null c.geom:10
+      │    │    ├── key: (1)
+      │    │    ├── fd: ()-->(20), (1)-->(10)
+      │    │    ├── scan nyc_census_blocks [as=c]
+      │    │    │    ├── columns: c.gid:1!null c.geom:10
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(10)
+      │    │    └── projections
+      │    │         └── 'Manhattan' [as="inverted_join_const_col_@14":20]
+      │    └── filters (true)
+      └── filters
+           └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
+
+# Generate an inverted join on an ARRAY multi-column inverted index.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT t1.k
+FROM json_arr2 AS t2
+INNER INVERTED JOIN json_arr1 AS t1
+ON t1.a @> t2.a AND t1.k = 500
+----
+project
+ ├── columns: k:5!null
+ ├── immutable
+ ├── fd: ()-->(5)
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t2.a:3 t1.k:5!null t1.a:8
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: ()-->(5,8)
+      ├── inner-join (inverted json_arr1@a_idx [as=t1])
+      │    ├── columns: t2.a:3 t1.k:5!null "inverted_join_const_col_@5":17!null
+      │    ├── flags: force inverted join (into right side)
+      │    ├── prefix key columns: [17] = [5]
+      │    ├── inverted-expr
+      │    │    └── t1.a:8 @> t2.a:3
+      │    ├── fd: ()-->(17)
+      │    ├── project
+      │    │    ├── columns: "inverted_join_const_col_@5":17!null t2.a:3
+      │    │    ├── fd: ()-->(17)
+      │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    └── columns: t2.a:3
+      │    │    └── projections
+      │    │         └── 500 [as="inverted_join_const_col_@5":17]
+      │    └── filters (true)
+      └── filters
+           └── t1.a:8 @> t2.a:3 [outer=(3,8), immutable]
+
+# Generate an inverted join on a JSON multi-column inverted index.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT t1.k
+FROM json_arr2 AS t2
+INNER INVERTED JOIN json_arr1 AS t1
+ON t1.j @> t2.j AND t1.k = 500
+----
+project
+ ├── columns: k:5!null
+ ├── immutable
+ ├── fd: ()-->(5)
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t2.j:2 t1.k:5!null t1.j:7
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: ()-->(5,7)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.j:2 t1.k:5!null "inverted_join_const_col_@5":16!null
+      │    ├── flags: force inverted join (into right side)
+      │    ├── prefix key columns: [16] = [5]
+      │    ├── inverted-expr
+      │    │    └── t1.j:7 @> t2.j:2
+      │    ├── fd: ()-->(16)
+      │    ├── project
+      │    │    ├── columns: "inverted_join_const_col_@5":16!null t2.j:2
+      │    │    ├── fd: ()-->(16)
+      │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    └── columns: t2.j:2
+      │    │    └── projections
+      │    │         └── 500 [as="inverted_join_const_col_@5":16]
+      │    └── filters (true)
+      └── filters
+           └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
+
+# Generate an inverted join with remaining filters.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT t1.k
+FROM json_arr2 AS t2
+INNER INVERTED JOIN json_arr1 AS t1
+ON t1.j @> t2.j AND t1.k = 500 AND t1.a @> '{foo}'
+----
+project
+ ├── columns: k:5!null
+ ├── immutable
+ ├── fd: ()-->(5)
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t2.j:2 t1.k:5!null t1.j:7 t1.a:8!null
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: ()-->(5,7,8)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.j:2 t1.k:5!null "inverted_join_const_col_@5":16!null
+      │    ├── flags: force inverted join (into right side)
+      │    ├── prefix key columns: [16] = [5]
+      │    ├── inverted-expr
+      │    │    └── t1.j:7 @> t2.j:2
+      │    ├── fd: ()-->(16)
+      │    ├── project
+      │    │    ├── columns: "inverted_join_const_col_@5":16!null t2.j:2
+      │    │    ├── fd: ()-->(16)
+      │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    └── columns: t2.j:2
+      │    │    └── projections
+      │    │         └── 500 [as="inverted_join_const_col_@5":16]
+      │    └── filters (true)
+      └── filters
+           ├── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
+           └── t1.a:8 @> ARRAY['foo'] [outer=(8), immutable, constraints=(/8: (/NULL - ])]
+
+# Constrain a single prefix column to multiple point values.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT t1.k
+FROM json_arr2 AS t2
+INNER INVERTED JOIN json_arr1 AS t1
+ON t1.j @> t2.j AND t1.k IN (500, 600, 700)
+----
+project
+ ├── columns: k:5!null
+ ├── immutable
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t2.j:2 t1.k:5!null t1.j:7
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (5)-->(7)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.j:2 t1.k:5!null "inverted_join_const_col_@5":16!null
+      │    ├── flags: force inverted join (into right side)
+      │    ├── prefix key columns: [16] = [5]
+      │    ├── inverted-expr
+      │    │    └── t1.j:7 @> t2.j:2
+      │    ├── inner-join (cross)
+      │    │    ├── columns: t2.j:2 "inverted_join_const_col_@5":16!null
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+      │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    └── columns: t2.j:2
+      │    │    ├── values
+      │    │    │    ├── columns: "inverted_join_const_col_@5":16!null
+      │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    ├── (500,)
+      │    │    │    ├── (600,)
+      │    │    │    └── (700,)
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── filters
+           └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
+
+# Do not generate an inverted join when the prefix column is not constrained.
+opt expect-not=GenerateInvertedJoinsFromSelect format=hide-all
+SELECT t1.k
+FROM json_arr2 AS t2
+JOIN json_arr1 AS t1
+ON t1.j @> t2.j
+----
+project
+ └── inner-join (cross)
+      ├── scan json_arr1 [as=t1]
+      ├── scan json_arr2 [as=t2]
+      └── filters
+           └── t1.j @> t2.j
+
+# Do not generate an inverted join when the prefix column is constrained to a
+# range.
+opt expect-not=GenerateInvertedJoinsFromSelect format=hide-all
+SELECT t1.k
+FROM json_arr2 AS t2
+JOIN json_arr1 AS t1
+ON t1.j @> t2.j AND t1.k > 500 AND t1.k < 600
+----
+project
+ └── inner-join (cross)
+      ├── scan json_arr1 [as=t1]
+      │    └── constraint: /5: [/501 - /599]
+      ├── scan json_arr2 [as=t2]
+      └── filters
+           └── t1.j @> t2.j
+
+exec-ddl
+DROP INDEX j_idx
+----
+
+exec-ddl
+CREATE INVERTED INDEX j_idx ON json_arr1 (k, i, j)
+----
+
+# Generate an inverted join when there are multiple non-inverted prefix columns.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT t1.k
+FROM json_arr2 AS t2
+INNER INVERTED JOIN json_arr1 AS t1
+ON t1.j @> t2.j AND t1.k IN (500, 600) AND t1.i IN (3, 4)
+----
+project
+ ├── columns: k:5!null
+ ├── immutable
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t2.j:2 t1.k:5!null i:6!null t1.j:7
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (5)-->(6,7)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.j:2 t1.k:5!null i:6 "inverted_join_const_col_@5":18!null "inverted_join_const_col_@6":19!null
+      │    ├── flags: force inverted join (into right side)
+      │    ├── prefix key columns: [18 19] = [5 6]
+      │    ├── inverted-expr
+      │    │    └── t1.j:7 @> t2.j:2
+      │    ├── fd: (5)-->(6)
+      │    ├── inner-join (cross)
+      │    │    ├── columns: t2.j:2 "inverted_join_const_col_@5":18!null "inverted_join_const_col_@6":19!null
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: t2.j:2 "inverted_join_const_col_@5":18!null
+      │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+      │    │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    │    └── columns: t2.j:2
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: "inverted_join_const_col_@5":18!null
+      │    │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    │    ├── (500,)
+      │    │    │    │    └── (600,)
+      │    │    │    └── filters (true)
+      │    │    ├── values
+      │    │    │    ├── columns: "inverted_join_const_col_@6":19!null
+      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── (3,)
+      │    │    │    └── (4,)
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── filters
+           └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
+
+# Do not generate an inverted join when the first prefix column is not
+# constrained.
+opt expect-not=GenerateInvertedJoinsFromSelect format=hide-all
+SELECT t1.k
+FROM json_arr2 AS t2
+JOIN json_arr1 AS t1
+ON t1.j @> t2.j AND t1.i IN (1, 2)
+----
+project
+ └── inner-join (cross)
+      ├── select
+      │    ├── scan json_arr1 [as=t1]
+      │    └── filters
+      │         └── i IN (1, 2)
+      ├── scan json_arr2 [as=t2]
+      └── filters
+           └── t1.j @> t2.j
+
+# Do not generate an inverted join when the second prefix column is not
+# constrained.
+opt expect-not=GenerateInvertedJoinsFromSelect format=hide-all
+SELECT t1.k
+FROM json_arr2 AS t2
+JOIN json_arr1 AS t1
+ON t1.j @> t2.j AND t1.k IN (500, 600, 700)
+----
+project
+ └── inner-join (cross)
+      ├── scan json_arr2 [as=t2]
+      ├── scan json_arr1 [as=t1]
+      │    └── constraint: /5
+      │         ├── [/500 - /500]
+      │         ├── [/600 - /600]
+      │         └── [/700 - /700]
+      └── filters
+           └── t1.j @> t2.j
 
 # -------------------------------------------------------
 # GenerateInvertedJoinsFromSelect + Partial Indexes
 # -------------------------------------------------------
-
-exec-ddl
-DROP INDEX nyc_census_blocks_geo_idx
-----
 
 exec-ddl
 DROP INDEX nyc_neighborhoods_geo_idx
@@ -5060,17 +5393,17 @@ SELECT * FROM json_arr2 AS t2 INNER INVERTED JOIN json_arr1 AS t1
 ON t1.j @> t2.j AND t1.k > 0 AND t1.k <= 500
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null j:2 a:3 k:5!null j:6 a:7
+ ├── columns: k:1!null j:2 a:3 k:5!null i:6 j:7 a:8
  ├── key columns: [5] = [5]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1,5)
- ├── fd: (1)-->(2,3), (5)-->(6,7)
+ ├── fd: (1)-->(2,3), (5)-->(6-8)
  ├── inner-join (inverted json_arr1@j_idx,partial [as=t1])
  │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5!null
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
- │    │    └── t1.j:6 @> t2.j:2
+ │    │    └── t1.j:7 @> t2.j:2
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2,3)
  │    ├── scan json_arr2 [as=t2]
@@ -5079,7 +5412,7 @@ inner-join (lookup json_arr1 [as=t1])
  │    │    └── fd: (1)-->(2,3)
  │    └── filters (true)
  └── filters
-      └── t1.j:6 @> t2.j:2 [outer=(2,6), immutable]
+      └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
 
 # Inverted inner-join with remaining filters.
 opt expect=GenerateInvertedJoinsFromSelect
@@ -5118,17 +5451,17 @@ SELECT * FROM json_arr2 AS t2 INNER INVERTED JOIN json_arr1 AS t1
 ON t1.j @> t2.j AND t1.k > 0 AND t1.k <= 400
 ----
 inner-join (lookup json_arr1 [as=t1])
- ├── columns: k:1!null j:2 a:3 k:5!null j:6 a:7
+ ├── columns: k:1!null j:2 a:3 k:5!null i:6 j:7 a:8
  ├── key columns: [5] = [5]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1,5)
- ├── fd: (1)-->(2,3), (5)-->(6,7)
+ ├── fd: (1)-->(2,3), (5)-->(6-8)
  ├── inner-join (inverted json_arr1@j_idx,partial [as=t1])
  │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5!null
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
- │    │    └── t1.j:6 @> t2.j:2
+ │    │    └── t1.j:7 @> t2.j:2
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2,3)
  │    ├── scan json_arr2 [as=t2]
@@ -5138,7 +5471,7 @@ inner-join (lookup json_arr1 [as=t1])
  │    └── filters
  │         └── t1.k:5 <= 400 [outer=(5), constraints=(/5: (/NULL - /400]; tight)]
  └── filters
-      └── t1.j:6 @> t2.j:2 [outer=(2,6), immutable]
+      └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
 
 # Inverted "semi-join".
 opt expect=GenerateInvertedJoinsFromSelect
@@ -5156,11 +5489,11 @@ semi-join (lookup nyc_neighborhoods [as=n])
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null continuation:20
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null continuation:21
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:16)
  │    ├── key: (1,13)
- │    ├── fd: (1)-->(2-10), (13)-->(20)
+ │    ├── fd: (1)-->(2-10), (13)-->(21)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -5186,11 +5519,11 @@ anti-join (lookup nyc_neighborhoods [as=n])
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13 continuation:20
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13 continuation:21
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:16)
  │    ├── key: (1,13)
- │    ├── fd: (1)-->(2-10), (13)-->(20)
+ │    ├── fd: (1)-->(2-10), (13)-->(21)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -5239,22 +5572,22 @@ SELECT * FROM json_arr1 AS t1 JOIN json_arr2 AS t2
 ON t1.j @> t2.j AND t1.k > 0 AND t1.k <= 1000
 ----
 inner-join (cross)
- ├── columns: k:1!null j:2 a:3 k:10!null j:11 a:12
+ ├── columns: k:1!null i:2 j:3 a:4 k:14!null j:15 a:16
  ├── immutable
- ├── key: (1,10)
- ├── fd: (1)-->(2,3), (10)-->(11,12)
+ ├── key: (1,14)
+ ├── fd: (1)-->(2-4), (14)-->(15,16)
  ├── scan json_arr1 [as=t1]
- │    ├── columns: t1.k:1!null t1.j:2 t1.a:3
+ │    ├── columns: t1.k:1!null i:2 t1.j:3 t1.a:4
  │    ├── constraint: /1: [/1 - /1000]
  │    ├── cardinality: [0 - 1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  ├── scan json_arr2 [as=t2]
- │    ├── columns: t2.k:10!null t2.j:11 t2.a:12
- │    ├── key: (10)
- │    └── fd: (10)-->(11,12)
+ │    ├── columns: t2.k:14!null t2.j:15 t2.a:16
+ │    ├── key: (14)
+ │    └── fd: (14)-->(15,16)
  └── filters
-      └── t1.j:2 @> t2.j:11 [outer=(2,11), immutable]
+      └── t1.j:3 @> t2.j:15 [outer=(3,15), immutable]
 
 # -----------------------------------------------------
 # ConvertSemiToInnerJoin
