@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1037,12 +1037,7 @@ type connExecutor struct {
 		// statements.
 		transactionStatementsHash util.FNV64
 
-		// useNewSchemaChanger is set to true to enable the new schema changer.
-		newSchemaChanger struct {
-			inUse               bool
-			targetStatesChanged bool
-			targetStates        []targets.TargetState
-		}
+		schemaChangerState SchemaChangerState
 	}
 
 	// sessionData contains the user-configurable connection variables.
@@ -1229,9 +1224,9 @@ func (ns *prepStmtNamespace) resetTo(
 // commits, rolls back or restarts.
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
-	ex.extraTxnState.newSchemaChanger.inUse = ex.sessionData.UseNewSchemaChanger
-	ex.extraTxnState.newSchemaChanger.targetStatesChanged = false
-	ex.extraTxnState.newSchemaChanger.targetStates = nil
+	ex.extraTxnState.schemaChangerState = SchemaChangerState{
+		inUse: ex.sessionData.UseNewSchemaChanger,
+	}
 
 	for k := range ex.extraTxnState.schemaChangeJobsCache {
 		delete(ex.extraTxnState.schemaChangeJobsCache, k)
@@ -2174,6 +2169,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Mon = ex.state.mon
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
+	evalCtx.SchemaChangerState = &ex.extraTxnState.schemaChangerState
 }
 
 // getTransactionState retrieves a text representation of the given state.
@@ -2313,7 +2309,15 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			}
 		}
 		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
-		if ex.extraTxnState.newSchemaChanger.inUse {
+		if ex.extraTxnState.schemaChangerState.inUse {
+			// Wait for new versions.
+			if err := WaitToUpdateLeasesMultiple(
+				ex.Ctx(),
+				ex.server.cfg.LeaseManager,
+				ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(),
+			); err != nil {
+				handleErr(err)
+			}
 			if err := ex.runPostCommitStages(ex.Ctx()); err != nil {
 				handleErr(err)
 			}
@@ -2519,21 +2523,21 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // runPreCommitStages is part of the new schema changer infrastructure to
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
-	if len(ex.extraTxnState.newSchemaChanger.targetStates) == 0 {
+	if len(ex.extraTxnState.schemaChangerState.targetStates) == 0 {
 		return nil
 	}
 	return ex.runNewSchemaChanger(ctx, compiler.PreCommitPhase, ex.withNewSchemaChangeExecutorDuringTxn)
 }
 
 func (ex *connExecutor) runPostStatementStages(ctx context.Context) error {
-	if !ex.extraTxnState.newSchemaChanger.targetStatesChanged {
+	if !ex.extraTxnState.schemaChangerState.targetStatesChanged {
 		return nil
 	}
 	return ex.runNewSchemaChanger(ctx, compiler.PostStatementPhase, ex.withNewSchemaChangeExecutorDuringTxn)
 }
 
 func (ex *connExecutor) runPostCommitStages(ctx context.Context) error {
-	if !ex.extraTxnState.newSchemaChanger.targetStatesChanged {
+	if len(ex.extraTxnState.schemaChangerState.targetStates) == 0 {
 		return nil
 	}
 	return ex.runNewSchemaChanger(ctx, compiler.PostStatementPhase, ex.withNewSchemaChangeExecutorDuringAfterTxn)
@@ -2544,14 +2548,14 @@ func (ex *connExecutor) runNewSchemaChanger(
 	phase compiler.ExecutionPhase,
 	executorRunner func(context.Context, func(context.Context, *executor.Executor) error) error,
 ) error {
-	stages, err := compiler.Compile(ex.extraTxnState.newSchemaChanger.targetStates, compiler.CompileFlags{
+	stages, err := compiler.Compile(ex.extraTxnState.schemaChangerState.targetStates, compiler.CompileFlags{
 		ExecutionPhase: phase,
 		// TODO(ajwerner): Populate the set of new descriptors
 	})
 	if err != nil {
 		return err
 	}
-	var after []targets.TargetState
+	after := ex.extraTxnState.schemaChangerState.targetStates
 	for _, s := range stages {
 		if err := executorRunner(ctx, func(ctx context.Context, e *executor.Executor) error {
 			return e.ExecuteOps(ctx, s.Ops)
@@ -2560,8 +2564,8 @@ func (ex *connExecutor) runNewSchemaChanger(
 		}
 		after = s.NextTargets
 	}
-	ex.extraTxnState.newSchemaChanger.targetStates = after
-	ex.extraTxnState.newSchemaChanger.targetStatesChanged = false
+	ex.extraTxnState.schemaChangerState.targetStates = after
+	ex.extraTxnState.schemaChangerState.targetStatesChanged = false
 	return nil
 }
 
@@ -2574,15 +2578,23 @@ func (ex *connExecutor) withNewSchemaChangeExecutorDuringTxn(
 func (ex *connExecutor) withNewSchemaChangeExecutorDuringAfterTxn(
 	ctx context.Context, f func(context.Context, *executor.Executor) error,
 ) error {
-	return descs.Txn(
+	var descsWithNewVersions []lease.IDVersion
+	if err := descs.Txn(
 		ctx,
 		ex.server.cfg.Settings,
 		ex.server.cfg.LeaseManager,
 		ex.server.cfg.InternalExecutor,
 		ex.server.cfg.DB,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			return f(ctx, executor.New(txn, descriptors))
-		})
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
+			if err := f(ctx, executor.New(txn, descriptors)); err != nil {
+				return err
+			}
+			descsWithNewVersions = descriptors.GetDescriptorsWithNewVersion()
+			return nil
+		}); err != nil {
+		return err
+	}
+	return WaitToUpdateLeasesMultiple(ctx, ex.server.cfg.LeaseManager, descsWithNewVersions)
 }
 
 // StatementCounters groups metrics for counting different types of

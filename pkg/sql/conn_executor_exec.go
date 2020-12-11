@@ -735,7 +735,7 @@ func (ex *connExecutor) commitSQLTransaction(
 func (ex *connExecutor) commitSQLTransactionInternal(
 	ctx context.Context, ast tree.Statement,
 ) error {
-	if ex.extraTxnState.newSchemaChanger.inUse {
+	if ex.extraTxnState.schemaChangerState.inUse {
 		if err := ex.runPreCommitStages(ctx); err != nil {
 			return err
 		}

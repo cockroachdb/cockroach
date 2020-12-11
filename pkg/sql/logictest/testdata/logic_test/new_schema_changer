@@ -1,0 +1,10 @@
+# LogicTest: local-new-schema-changer
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT;
+
+statement ok
+INSERT INTO foo VALUES (1, 1);

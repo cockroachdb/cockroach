@@ -440,6 +440,8 @@ type testClusterConfig struct {
 	overrideAutoStats string
 	// if non-empty, overrides the default experimental DistSQL planning mode.
 	overrideExperimentalDistSQLPlanning string
+	// if non-empty, overrides the new schema changer mode.
+	overrideNewSchemaChanger string
 	// if set, queries using distSQL processors or vectorized operators that can
 	// fall back to disk do so immediately, using only their disk-based
 	// implementation.
@@ -512,6 +514,11 @@ var logicTestConfigs = []testClusterConfig{
 		overrideDistSQLMode:                 "off",
 		overrideAutoStats:                   "false",
 		overrideExperimentalDistSQLPlanning: "on",
+	},
+	{
+		name:                     "local-new-schema-changer",
+		numNodes:                 1,
+		overrideNewSchemaChanger: "true",
 	},
 	{
 		name:                "fakedist",
@@ -1537,6 +1544,13 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 		if cfg.overrideExperimentalDistSQLPlanning != "" {
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.defaults.experimental_distsql_planning = $1::string", cfg.overrideExperimentalDistSQLPlanning,
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if cfg.overrideNewSchemaChanger != "" {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.experimental_new_schema_changer.enabled = $1", cfg.overrideNewSchemaChanger,
 			); err != nil {
 				t.Fatal(err)
 			}

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/builder"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -61,6 +62,15 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		"ALTER TABLE",
 	); err != nil {
 		return nil, err
+	}
+	if scs := p.extendedEvalCtx.SchemaChangerState; scs.inUse {
+		b := builder.NewBuilder(p, p.SemaCtx(), p.EvalContext())
+		updated, err := b.AlterTable(ctx, scs.targetStates, n)
+		if err != nil {
+			return nil, err
+		}
+		scs.setTargetStates(updated)
+		return &alterTableNode{}, nil
 	}
 
 	tableDesc, err := p.ResolveMutableTableDescriptorEx(
@@ -139,6 +149,9 @@ func (n *alterTableNode) ReadingOwnWrites() {}
 
 func (n *alterTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("table"))
+	if params.p.extendedEvalCtx.SchemaChangerState.inUse {
+		return nil
+	}
 
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
