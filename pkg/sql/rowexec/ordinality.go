@@ -67,7 +67,7 @@ func newOrdinalityProcessor(
 		return nil, err
 	}
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
 		o.input = newInputStatCollector(o.input)
 		o.ExecStatsForTrace = o.execStatsForTrace
 	}

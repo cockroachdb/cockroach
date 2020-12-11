@@ -207,11 +207,6 @@ func (s *Span) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.ot == (otSpan{})
 }
 
-// IsRecording returns true if the Span is recording its events.
-func (s *Span) IsRecording() bool {
-	return s.crdb.recordingType() != RecordingOff
-}
-
 // enableRecording start recording on the Span. From now on, log events and child spans
 // will be stored.
 //
@@ -235,6 +230,11 @@ func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	s.mu.recording.recordedLogs = nil
 	s.mu.recording.children = nil
 	s.mu.recording.remoteSpans = nil
+}
+
+// IsVerbose returns true if the Span is verbose. See SetVerbose for details.
+func (s *Span) IsVerbose() bool {
+	return s.crdb.recordingType() == RecordingVerbose
 }
 
 // SetVerbose toggles verbose recording on the Span, which must not be a noop span

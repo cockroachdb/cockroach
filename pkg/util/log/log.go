@@ -68,7 +68,7 @@ func V(level Level) bool {
 //
 func ExpensiveLogEnabled(ctx context.Context, level Level) bool {
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
-		if sp.IsRecording() {
+		if sp.IsVerbose() {
 			return true
 		}
 	}
