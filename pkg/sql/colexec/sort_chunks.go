@@ -110,7 +110,7 @@ func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (c *sortChunksOp) ExportBuffered(colexecbase.Operator) coldata.Batch {
+func (c *sortChunksOp) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
 	// First, we check whether chunker has buffered up any tuples, and if so,
 	// whether we have exported them all.
 	if c.input.bufferedTuples.Length() > 0 {

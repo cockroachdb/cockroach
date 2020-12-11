@@ -195,12 +195,14 @@ func newRouterOutputOp(args routerOutputOpArgs) *routerOutputOp {
 	}
 	o.mu.cond = sync.NewCond(&o.mu)
 	o.mu.data = newSpillingQueue(
-		args.unlimitedAllocator,
-		args.types,
-		args.memoryLimit,
-		args.cfg,
-		args.fdSemaphore,
-		args.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: args.unlimitedAllocator,
+			Types:              args.types,
+			MemoryLimit:        args.memoryLimit,
+			DiskQueueCfg:       args.cfg,
+			FDSemaphore:        args.fdSemaphore,
+			DiskAcc:            args.diskAcc,
+		},
 	)
 
 	return o
